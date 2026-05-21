@@ -21,6 +21,11 @@ tracks:
   - packages/web/tests/unit/components/resource-detail.test.tsx
   - packages/web/tests/unit/api/orgs.test.ts
   - packages/web/tests/unit/components/wizard.test.tsx
+  - packages/core/tests/unit/secret-manager/db.test.ts
+  - packages/core/tests/unit/secret-manager/infisical-client.test.ts
+  - packages/core/tests/unit/secret-manager/infisical.test.ts
+  - packages/core/tests/unit/secret-manager/interface.test.ts
+  - packages/core/tests/integration/infisical.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -358,10 +363,54 @@ les handlers Next.js :
 
 ### SecretManagers (phase 5)
 
-> Couvrira: spec §5.2, §6.2.
+> Couvre: spec §5.2, §6.2, §4.5.
 
-- `secret-managers-crud.int.test.ts` — registration Infisical,
-  is_default partial unique constraint.
+**Wave A — `feature/p5-secret-manager-core`** (livré) :
+
+- [x] `packages/core/tests/unit/secret-manager/db.test.ts` — 7
+      scénarios : `encodeSealedBytea` → `\x<hex>` text literal,
+      `decodeSealedBytea` (null sur JSON corrompu, null sur shape non
+      `v=1`), `put` + `get` round-trip, `get` → null sur ligne absente,
+      `list` enumère les `key` par `resource_id`, `revoke` idempotent.
+- [x] `packages/core/tests/unit/secret-manager/infisical-client.test.ts`
+      — 6 scénarios sur le client REST bas-niveau avec un `fetch`
+      mocké : auth `POST /api/v1/auth/universal-auth/login` exchange
+      `(clientId, clientSecret)` pour un `accessToken` mis en cache
+      jusqu'à `expiresIn - skew`, refus de logger `clientSecret` /
+      `clientId` dans `InfisicalApiError`, `GET /api/v3/secrets/raw`
+      forwarde `workspaceId|environment|secretPath` en query,
+      `POST/PATCH/DELETE /api/v3/secrets/raw/:key` forwardent les
+      mêmes en body + `type:'shared'`, `getSecret` retourne `null`
+      sur 404, `deleteSecret` swallows 404 (idempotent).
+- [x] `packages/core/tests/unit/secret-manager/infisical.test.ts` —
+      6 scénarios sur le SM Infisical avec un `InfisicalClient`
+      injecté en mémoire : `put` + `get` round-trip canonique,
+      stockage en `base64(JSON.stringify(blob))` (recipient `fp` pas
+      visible directement en clair sur la value), `get` null sur
+      missing, `list` enumère par `secretPath = '/<resourceId>'`,
+      `revoke` supprime, refus shape invalide à `put`.
+- [x] `packages/core/tests/unit/secret-manager/interface.test.ts` —
+      3 assertions de type : `createDbSecretManager` /
+      `createInfisicalSecretManager` returnent bien un `SecretManager`,
+      `SealedBlob.v` est figé à `1`.
+- [x] `packages/core/tests/integration/infisical.test.ts` — round-trip
+      réel contre une workspace Infisical (skipped sauf si
+      `INFISICAL_TEST_{ENDPOINT,WORKSPACE_ID,CLIENT_ID,CLIENT_SECRET}`
+      sont dans l'env). Pas exécuté en CI par défaut.
+
+**Wave B — REST + UI (à livrer)** :
+
+- `secret-managers-crud.int.test.ts` — registration Infisical
+  (`POST /orgs/:orgId/secret-managers`), is_default partial unique
+  constraint (un `is_default=true` à la fois par org), rejet
+  `kind=vault|1password` 400 `not_implemented`, DELETE refusé si
+  référencé par une `resources.secret_manager_id` (RESTRICT cascade),
+  `PATCH` set-default unset les autres en transaction, `PATCH` rotate
+  `auth_sealed_blob` n'audite jamais le payload.
+- `needs-reseal.int.test.ts` — `GET /orgs/:orgId/needs-reseal` renvoie
+  les `resource_access` flagués `recipients_stale=true` (RLS-scopé,
+  member ne voit que les blobs visibles), 0 entries si pas de stale,
+  N entries sinon avec `{ resource_id, key, resource_name }`.
 
 ### Provisioning + Rotation (phase 6)
 

@@ -14,6 +14,10 @@
     "./crypto": {
       "types": "./src/crypto/index.ts",
       "import": "./src/crypto/index.ts"
+    },
+    "./secret-manager": {
+      "types": "./src/secret-manager/index.ts",
+      "import": "./src/secret-manager/index.ts"
     }
   },
   "scripts": {
