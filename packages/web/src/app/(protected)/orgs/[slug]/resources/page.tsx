@@ -16,6 +16,7 @@ import { notFound } from 'next/navigation';
 import type { ReactElement } from 'react';
 
 import { ResourceTable, type ResourceRow } from '@/components/resources/ResourceTable';
+import { ProvisionLauncher } from '@/components/wizard/ProvisionLauncher';
 import { createSupabaseServerClient } from '@/lib/supabase/server';
 
 export const dynamic = 'force-dynamic';
@@ -86,15 +87,7 @@ export default async function ResourcesPage({ params }: PageProps): Promise<Reac
           >
             + Register
           </a>
-          <button
-            type="button"
-            data-testid="resources-page-provision-button"
-            disabled
-            title="Available in Phase 6 (Provisioning + Rotation)"
-            className="rounded border border-neutral-300 px-3 py-1 text-sm text-neutral-500"
-          >
-            + Provision via …
-          </button>
+          <ProvisionLauncher orgSlug={org.slug} resources={resources} />
         </div>
       </header>
 

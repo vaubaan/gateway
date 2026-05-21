@@ -161,10 +161,21 @@ admin). Audit : `resource.updated`, `subject = { fields: [...keys] }`.
 ### `DELETE /orgs/:orgId/resources/:rId`
 
 `DELETE` détache la row Vauban — **ne touche pas au provider**. Spec
-§6.5 réserve l'effet provider-side à `/destroy-cloud-resource` (Phase 6).
+§6.5 réserve l'effet provider-side à `/destroy-cloud-resource`.
 Snapshot avant le delete pour auditer `resource.deleted` avec
 `subject = { name, variant }` et différencier 404 (snapshot vide) de
 403 (snapshot OK mais delete sans effet).
+
+### `POST /:adminId/provision` et `DELETE /:rId/destroy-cloud-resource` (Phase 6)
+
+Le workflow `+ Provision via …` est livré en Phase 6 wave B. Voir
+le handbook dédié `docs/handbook/provisioning-rotation.md` pour le
+détail (browser-side createChild + book-keeping CRM, audit
+`resource.provisioned` / `resource.destroyed-cloud-side`).
+
+UI : `<ProvisionLauncher>` sur la liste, `<ProvisionWizard>` sur la
+page wizard, `<RotateAccessButton>` + `<DestroyCloudResourceButton>`
+sur la page détail.
 
 ### `POST /:rId/health` et `POST /:rId/refresh` (stubs Phase 4)
 

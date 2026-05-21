@@ -119,11 +119,27 @@ Les scénarios suivants (spec §12.3) seront ajoutés au fil des phases :
 - [ ] **provision-via-org-admin** — Register OrgResourceAdmin →
       register OrgResource → provision ProjectResource via Admin →
       assert provider-side création effective.
-      Spec §7.2, §7.3.
+      Spec §7.2, §7.3. **Phase 6 wave C livre l'UI** (`<ProvisionWizard>`)
+      et les endpoints REST ; l'E2E reste à câbler contre un projet
+      GitHub/Vercel/Supabase de test.
 - [ ] **rotate-admin-mediated** — Rotation Access en
       `admin-mediated` → assert ancien token invalidé côté provider,
       nouveau token valide.
-      Spec §0.1, §7.4.
+      Spec §0.1, §7.4. **Phase 6 wave C livre l'UI**
+      (`<RotateAccessButton>`) + le dispatcher REST ; l'E2E contre
+      vrais providers attend le harness GH Actions.
+- [ ] **destroy-cloud-resource** — Click `Destroy cloud resource`
+      sur une project Resource provisionnée via Admin → confirm
+      type-name → assert provider-side suppression effective + row
+      CRM supprimée + audit `resource.destroyed-cloud-side`.
+      Spec §6.5, §7.3. Phase 6 wave C livre le bouton ; l'E2E
+      contre vrais providers attend le harness GH Actions.
+- [ ] **rotate-manual-fallback** — Lance une rotation
+      `admin-mediated` sur une clé non-supportée (`SUPABASE_SERVICE_ROLE_KEY`,
+      `VERCEL_TOKEN` project-scoped, ou GitHub PAT App-only) →
+      assert que l'UI bascule sur le flow manual paste avec
+      `err.setupDocs` rendu. Phase 6 wave C couvre ce chemin en
+      unit tests ; l'E2E contre vrais providers attend le harness.
 - [ ] **export-env-project-variant** — Export `.env` pour
       `(project, variant)` → fichier téléchargé, lignes attendues
       présentes, secrets en placeholder pour les blobs

@@ -1,6 +1,11 @@
 /**
  * `<ResourceDetailClient>` — client island inside the Resource detail
- * page. Owns the Health probe button + the "Add access" dialog state.
+ * page. Owns:
+ *   - Health probe button (Phase 4).
+ *   - "Add access" dialog state (Phase 4).
+ *   - Per-access-key "Rotate" button (Phase 6 wave C).
+ *   - Destroy cloud resource button (Phase 6 wave C — only when the
+ *     row is scope='project' AND has a non-null admin_resource_id).
  *
  * The static metadata (provider_metadata, access summary list, audit
  * timeline) is rendered server-side by the parent page; this component
@@ -12,16 +17,31 @@
 import { useState } from 'react';
 
 import { AddAccessDialog } from './AddAccessDialog';
+import { DestroyCloudResourceButton } from './DestroyCloudResourceButton';
+import { RotateAccessButton } from './RotateAccessButton';
 
 export interface ResourceDetailClientProps {
   readonly orgSlug: string;
   readonly resourceId: string;
+  readonly resourceName: string;
   /** Catalog-derived list of expected access keys (from `kind.accessSchema`). */
   readonly accessKeys: ReadonlyArray<string>;
+  /** Phase 6 wave C: enable destroy (project-scoped + admin-provisioned). */
+  readonly destroyEnabled: boolean;
+  readonly providerRef: string | null;
+  readonly adminResourceId: string | null;
 }
 
 export function ResourceDetailClient(props: ResourceDetailClientProps): React.ReactElement {
-  const { orgSlug, resourceId, accessKeys } = props;
+  const {
+    orgSlug,
+    resourceId,
+    resourceName,
+    accessKeys,
+    destroyEnabled,
+    providerRef,
+    adminResourceId,
+  } = props;
   const [healthState, setHealthState] = useState<string | null>(null);
   const [dialogKey, setDialogKey] = useState<string | null>(null);
 
@@ -55,7 +75,6 @@ export function ResourceDetailClient(props: ResourceDetailClientProps): React.Re
         {healthState ? (
           <span data-testid="resource-health-state" className="text-xs text-neutral-700">
             {healthState}
-            {healthState === 'pending-runner' ? ' — Phase 6 will dispatch to the Runner' : ''}
           </span>
         ) : null}
       </div>
@@ -81,16 +100,46 @@ export function ResourceDetailClient(props: ResourceDetailClientProps): React.Re
         </div>
       ) : null}
 
+      {accessKeys.length > 0 ? (
+        <div className="flex flex-col gap-2">
+          <span className="text-xs font-medium">Rotate access</span>
+          <div className="flex flex-wrap gap-2">
+            {accessKeys.map((k) => (
+              <RotateAccessButton
+                key={`rotate-${k}`}
+                orgSlug={orgSlug}
+                resourceId={resourceId}
+                accessKey={k}
+                onRotated={() => {
+                  if (typeof window !== 'undefined') window.location.reload();
+                }}
+              />
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {destroyEnabled && providerRef && adminResourceId ? (
+        <DestroyCloudResourceButton
+          orgSlug={orgSlug}
+          resourceId={resourceId}
+          resourceName={resourceName}
+          providerRef={providerRef}
+          adminResourceId={adminResourceId}
+          onDestroyed={() => {
+            if (typeof window !== 'undefined') {
+              window.location.href = `/orgs/${encodeURIComponent(orgSlug)}/resources`;
+            }
+          }}
+        />
+      ) : null}
+
       {dialogKey ? (
         <AddAccessDialog
           orgSlug={orgSlug}
           resourceId={resourceId}
           accessKey={dialogKey}
           onSubmitted={() => {
-            // The page is a server component — a hard refresh is the
-            // simplest way to re-render with the new audit + access
-            // summary (no router-cache fight, no client refetch
-            // boilerplate). Phase 5+ can swap in `router.refresh()`.
             if (typeof window !== 'undefined') window.location.reload();
           }}
           onClose={() => {

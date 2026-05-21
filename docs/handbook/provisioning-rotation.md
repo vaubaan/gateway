@@ -5,6 +5,7 @@ tracks:
   - vercel-admin-impl
   - supabase-admin-impl
   - provision-rotate-rest
+  - provision-rotate-ui
 last_reviewed: 2026-05-21
 ---
 
@@ -14,7 +15,7 @@ Document l'implémentation effective des workflows de provisioning
 (via un Admin) et de rotation (3 paths : `self`, `admin-mediated`,
 `manual`). Spec §0.1, §6.5, §7.3, §7.4.
 
-## Statut courant (Phase 6, Wave B — done)
+## Statut courant (Phase 6 — done)
 
 | Composant                                                        | État          |
 | ---------------------------------------------------------------- | ------------- |
@@ -25,7 +26,9 @@ Document l'implémentation effective des workflows de provisioning
 | REST `/provision`, `/destroy-cloud-resource`, `/rotate` dispatch | done (Wave B) |
 | Trigger SQL `recipients_stale` on org_members change             | done (Wave B) |
 | `PUT /access/:key` reset `recipients_stale=false`                | done (Wave B) |
-| UI Wizard `+ Provision via …` + `Rotate` button                  | TODO Wave C   |
+| UI `<ProvisionWizard>` + `+ Provision via …` launcher            | done (Wave C) |
+| UI `<RotateAccessButton>` per access key (3 paths)               | done (Wave C) |
+| UI `<DestroyCloudResourceButton>` type-name confirm              | done (Wave C) |
 
 ## REST endpoints (Phase 6 Wave B)
 
@@ -334,6 +337,77 @@ try {
   provisioning.
 - `docs/spec/cloud-resource-manager.md` §7.4 — workflow rotation.
 
+## UI (Phase 6 Wave C)
+
+### `<ProvisionLauncher>` sur `/orgs/:slug/resources`
+
+Bouton `+ Provision via …` qui ouvre un dropdown listant les
+Resources `is_admin=true && scope='org'` de l'org. Cliquer sur un
+admin redirige vers `/orgs/:slug/resources/provision?admin=:rId`.
+
+Si aucun admin n'existe encore, le bouton est désactivé avec un
+tooltip explicite (`Register an org-admin first`).
+
+### `<ProvisionWizard>` sur `/orgs/:slug/resources/provision`
+
+Wizard 3 étapes, state-machine pure (pas de modal en wave C — Phase 7
+peut polish) :
+
+1. **Pick child** — affiche `admin.kind.manages[]` et laisse l'user
+   choisir lequel provisioner (`github-repo`, `vercel-project`,
+   `supabase-project`).
+2. **Fill spec** — formulaire dépendant du childKind (nom +
+   private/framework/region). Bouton "Create cloud resource"
+   désactivé tant que le nom est vide.
+3. **Execute** — séquence :
+   a. Unseal toutes les keys de l'admin's access bundle in-memory.
+   b. Inject les identifiants kind-specific (`GITHUB_ORG`,
+   `SUPABASE_ORG_ID`) depuis `admin.provider_metadata`.
+   c. Pour Supabase : générer un `db_pass` initial CSPRNG +
+   injecter `organization_id`.
+   d. Appel `admin.kind.createChild(access, spec)` (browser → API
+   provider via CORS).
+   e. `unsealedBytes.fill(0)` immédiatement après.
+   f. POST `/provision` avec `providerRef` retourné par l'API.
+   g. Pour chaque key du `childKind.accessSchema` : `<SealedInput>`
+   pour que l'opérateur seal le cleartext (les child tokens
+   générés lors de la création initiale).
+
+### `<RotateAccessButton>` sur la page détail
+
+Bouton par clé d'access. Click → POST `/rotate`. Selon le
+`rotation_method` :
+
+- `manual` / `self` → affiche le `setup_docs` Markdown du kind et un
+  `<SealedInput>` pour paste.
+- `admin-mediated` → tente automatiquement :
+  - unseal admin's access (transitoire),
+  - call `admin.rotateChildAccess(...)` (browser → provider),
+  - seal le nouveau cleartext,
+  - PUT `/access/:key`,
+  - wipe.
+
+Si le provider lève `*RotationNotSupportedError` (GitHub PAT non
+App, Supabase service_role, Vercel project token), on bascule
+proprement sur le flow manual paste avec `err.setupDocs`.
+
+### `<DestroyCloudResourceButton>` sur la page détail (project-scoped, admin-provisioned)
+
+Affiche un confirm type-name (l'opérateur doit taper le nom exact
+de la Resource). À la confirmation : unseal admin's access → appel
+`admin.destroyChild(access, providerRef)` (browser → provider) →
+`DELETE /destroy-cloud-resource` (book-keeping CRM, cascade sur
+`resource_access`).
+
+## ZK invariants UI (spec §4)
+
+Les 3 composants Wave C wipe systématiquement les
+`Uint8Array` unsealed (`.fill(0)`) dès la fin de l'appel provider —
+pas de cleartext qui survit à la trace stack. Les tests
+`provision-wizard.test.tsx` et `rotate-button.test.tsx` couvrent les
+transitions d'état ; le no-leak est garanti structurellement par le
+flow (chaque `unsealAs` est suivi de `decode` puis `bytes.fill(0)`).
+
 ## Roadmap d'implémentation
 
 Phase 6 (build plan `.claude/build-plans/phase-6-provisioning-rotation.json`) :
@@ -342,4 +416,19 @@ Phase 6 (build plan `.claude/build-plans/phase-6-provisioning-rotation.json`) :
   `vercel`, `supabase-cloud`).
 - **Wave B** (done) — REST endpoints + migration trigger SQL + reset
   `recipients_stale=false` sur PUT.
-- **Wave C** (suivante) — UI wizard + boutons.
+- **Wave C** (done) — `<ProvisionWizard>`, `<RotateAccessButton>`,
+  `<DestroyCloudResourceButton>`, ProvisionLauncher.
+
+## TODOs résiduels Phase 6
+
+- Polling UI sur `supabase-project` après `createChild` pour passer
+  `status='pending' → 'active'` (le projet est encore en
+  `PROVISIONING` côté Supabase à la création). Non-bloquant ; la
+  Resource est marquée `pending` côté CRM jusqu'à un futur cron de
+  refresh (Phase 7).
+- Polish modal du wizard (étape indicator visuel, validation des
+  champs framework/region par kind).
+- E2E Playwright `provision` / `rotate` / `destroy` contre vrais
+  clouds (déjà flag dans `docs/tests/e2e-tests.md` Phase 6).
+- Si CORS prouve être bloqué pour un provider en runtime, ajouter un
+  proxy server-side `/api/crm/v1/proxy/*` (Phase 7).
