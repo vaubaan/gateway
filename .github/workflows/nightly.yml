@@ -1,0 +1,31 @@
+name: nightly-e2e
+
+# Integration tests against real provider APIs. Each job needs secrets for
+# its provider; without them the test suite exits green with `describe.skipIf`
+# so partial secret coverage is fine.
+#
+# Trigger manually via the Actions tab (workflow_dispatch) or on the schedule.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-e2e
+  cancel-in-progress: false
+
+jobs:
+  github:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      VAUBAN_CI_GITHUB_ORG: ${{ secrets.VAUBAN_CI_GITHUB_ORG }}
+      VAUBAN_CI_GITHUB_PAT: ${{ secrets.VAUBAN_CI_GITHUB_PAT }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm install
+      - run: npm -w @vauban/core run build
+      - run: npm -w @vauban/plugin-service-github run test:e2e

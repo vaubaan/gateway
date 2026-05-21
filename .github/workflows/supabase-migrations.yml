@@ -1,0 +1,76 @@
+name: supabase-migrations
+
+on:
+  push:
+    branches: [staging]
+    paths:
+      - 'supabase/migrations/**'
+      - 'supabase/config.toml'
+      - '.github/workflows/supabase-migrations.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: supabase-migrations-staging
+  cancel-in-progress: false
+
+jobs:
+  apply-staging:
+    name: apply staging migrations
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+    env:
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_POOLER_HOST: ${{ secrets.SUPABASE_POOLER_HOST }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install psql
+        run: sudo apt-get install -y postgresql-client
+
+      - name: Apply Supabase migrations to staging
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ -z "$SUPABASE_DB_PASSWORD" ] || [ -z "$SUPABASE_PROJECT_REF" ] || [ -z "$SUPABASE_POOLER_HOST" ]; then
+            echo "SUPABASE_DB_PASSWORD, SUPABASE_PROJECT_REF, and SUPABASE_POOLER_HOST secrets are required for automatic migrations." >&2
+            exit 1
+          fi
+
+          # Session pooler (port 5432, IPv4). Direct db.<ref>.supabase.co is
+          # IPv6-only on some Supabase tiers, which GitHub runners cannot reach.
+          CONN="postgresql://postgres.${SUPABASE_PROJECT_REF}@${SUPABASE_POOLER_HOST}:5432/postgres"
+          export PGPASSWORD="$SUPABASE_DB_PASSWORD"
+
+          # Keep using the standard Supabase CLI migration ledger so switching
+          # from `supabase db push` to psql does not replay existing migrations.
+          psql "$CONN" -v ON_ERROR_STOP=1 <<'SQL'
+          create schema if not exists supabase_migrations;
+          create table if not exists supabase_migrations.schema_migrations (
+            version         text primary key,
+            statements      text[],
+            name            text,
+            created_by      text,
+            idempotency_key text,
+            rollback        text[]
+          );
+          SQL
+
+          for f in supabase/migrations/*.sql; do
+            filename="$(basename "$f" .sql)"
+            version="${filename%%_*}"
+            name="${filename#*_}"
+            applied="$(psql "$CONN" -tA -c "select 1 from supabase_migrations.schema_migrations where version = '$version';")"
+            if [ "$applied" = "1" ]; then
+              echo "Skipping $filename (already applied)"
+              continue
+            fi
+
+            echo "Running $filename..."
+            psql "$CONN" -v ON_ERROR_STOP=1 -1 -f "$f"
+            psql "$CONN" -v ON_ERROR_STOP=1 -c "insert into supabase_migrations.schema_migrations (version, name) values ('$version', '$name');"
+          done
+          echo "All migrations applied."
