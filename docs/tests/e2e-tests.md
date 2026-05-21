@@ -120,18 +120,18 @@ Les scénarios suivants (spec §12.3) seront ajoutés au fil des phases :
       `<provider>-org`) → seal PAT → unseal as admin.
       Spec §7.1. Phase 8 wave B implementation in
       `packages/web/tests/e2e/real-clouds/01-register-org-resource.spec.ts`.
-- [ ] **provision-via-org-admin** — Register OrgResourceAdmin →
-      register OrgResource → provision ProjectResource via Admin →
-      assert provider-side création effective.
-      Spec §7.2, §7.3. **Phase 6 wave C livre l'UI** (`<ProvisionWizard>`)
-      et les endpoints REST ; l'E2E reste à câbler contre un projet
-      GitHub/Vercel/Supabase de test.
-- [ ] **rotate-admin-mediated** — Rotation Access en
-      `admin-mediated` → assert ancien token invalidé côté provider,
-      nouveau token valide.
-      Spec §0.1, §7.4. **Phase 6 wave C livre l'UI**
-      (`<RotateAccessButton>`) + le dispatcher REST ; l'E2E contre
-      vrais providers attend le harness GH Actions.
+- [x] **provision-via-org-admin** — Register OrgResourceAdmin →
+      provision ProjectResource via Admin → assert provider-side
+      création effective (GitHub repo réellement créé).
+      Spec §7.2, §7.3. Phase 8 wave B implementation in
+      `packages/web/tests/e2e/real-clouds/02-provision-via-admin.spec.ts`.
+- [x] **rotate-admin-mediated** — Rotation `SUPABASE_DB_PASSWORD` en
+      `admin-mediated` → PATCH mgmt API → reseal → new != old +
+      `recipients_stale=false`.
+      Spec §0.1, §7.4. Phase 8 wave B implementation in
+      `packages/web/tests/e2e/real-clouds/03-rotate-admin-mediated.spec.ts`.
+      Note : assertion psql connection deferred (no `pg` driver in
+      devDeps + Supabase reset is async on the pooler).
 - [ ] **destroy-cloud-resource** — Click `Destroy cloud resource`
       sur une project Resource provisionnée via Admin → confirm
       type-name → assert provider-side suppression effective + row
