@@ -26,6 +26,7 @@ tracks:
   - packages/core/tests/unit/secret-manager/infisical.test.ts
   - packages/core/tests/unit/secret-manager/interface.test.ts
   - packages/core/tests/integration/infisical.test.ts
+  - packages/web/tests/unit/api/secret-managers.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -398,19 +399,29 @@ les handlers Next.js :
       `INFISICAL_TEST_{ENDPOINT,WORKSPACE_ID,CLIENT_ID,CLIENT_SECRET}`
       sont dans l'env). Pas exécuté en CI par défaut.
 
-**Wave B — REST + UI (à livrer)** :
+**Wave B — REST (livré dans `feature/p5-sm-rest-api`)** :
 
-- `secret-managers-crud.int.test.ts` — registration Infisical
-  (`POST /orgs/:orgId/secret-managers`), is_default partial unique
-  constraint (un `is_default=true` à la fois par org), rejet
-  `kind=vault|1password` 400 `not_implemented`, DELETE refusé si
-  référencé par une `resources.secret_manager_id` (RESTRICT cascade),
-  `PATCH` set-default unset les autres en transaction, `PATCH` rotate
-  `auth_sealed_blob` n'audite jamais le payload.
-- `needs-reseal.int.test.ts` — `GET /orgs/:orgId/needs-reseal` renvoie
-  les `resource_access` flagués `recipients_stale=true` (RLS-scopé,
-  member ne voit que les blobs visibles), 0 entries si pas de stale,
-  N entries sinon avec `{ resource_id, key, resource_name }`.
+- [x] `packages/web/tests/unit/api/secret-managers.test.ts` — 21
+      scénarios sur les routes `/secret-managers` + `/needs-reseal` : - `GET /secret-managers` : 401 sans session, 404 org non-visible,
+      list OK. - `POST /secret-managers` : 201 happy path infisical +
+      `audit.subject` = `{kind, name, is_default, recipient_count}`
+      seulement (pas de ct / fp dans le log), 400 `not_implemented`
+      pour `kind=vault|1password`, 400 `invalid_field` pour endpoint
+      non-http(s), 400 pour `auth_sealed_blob.v != 1`, 400 slug
+      invalide, 201 enforce single `is_default` (unset l'ancien),
+      403 si RLS denies. - `PATCH /secret-managers/:smId` : 200 rename + audit
+      `secret_manager.updated`, 200 rotate `auth_sealed_blob` sans
+      leak en audit, 400 refus changement `kind`. - `DELETE /secret-managers/:smId` : 409 `is_default`, 409
+      `referenced` (avec `referenced_resource_ids`), 200 delete + audit
+      `secret_manager.deleted`, 404 inexistant. - `GET /needs-reseal` : 401, 200 count=0 si rien de stale, 200
+      liste les rows `recipients_stale=true` avec `resource_name`
+      joint depuis `resources` (RLS-scopé).
+
+**Wave B — UI (à livrer dans `feature/p5-sm-ui-and-banner`)** :
+
+- `secret-managers-page.test.tsx` — wizard 3-steps connect Infisical
+  - seal du `(clientId, clientSecret)` JSON, banner re-seal qui fetch
+    `/needs-reseal` au mount.
 
 ### Provisioning + Rotation (phase 6)
 
