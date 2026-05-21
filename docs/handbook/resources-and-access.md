@@ -8,7 +8,13 @@ tracks:
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/route.ts
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/health/route.ts
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/refresh/route.ts
+  - packages/web/src/lib/resource-access/db.ts
+  - packages/web/src/lib/validation/sealed-blob.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/access/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/access/[key]/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/access/[key]/rotate/route.ts
   - packages/web/tests/unit/api/resources.test.ts
+  - packages/web/tests/unit/api/resource-access.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -20,19 +26,14 @@ Document l'implémentation effective des tables `public.resources` et
 
 ## Statut courant
 
-**Phase 4, wave A (1/2) livré : Resources REST CRUD.**
+**Phase 4, wave A complète : Resources REST + Access REST CRUD.**
 
 Le scaffold v1 init avait livré le schéma SQL + indices + RLS sur les
-deux tables. La feature `resources-rest-api` (Phase 4, wave A) ajoute
-maintenant la totalité des endpoints `GET / POST / GET :rId / PATCH /
-DELETE` plus les stubs `POST /health` et `POST /refresh`. La feature
-sœur `access-rest-api` (Phase 4, wave A) livre en parallèle les
-endpoints sur `resource_access` (voir section "Access" plus bas une
-fois mergée).
+deux tables. Wave A (deux features en parallèle) ajoute maintenant la
+totalité des endpoints REST §6.3 (Resources) et §6.4 (Access).
 
 **À livrer phase 4** :
 
-- Wave A : `access-rest-api` — endpoints `/resources/:rId/access[/:key][/rotate]`.
 - Wave B : `<SealedInput>` + pages `/orgs/:slug/resources` et detail.
 - Wave C : onboarding + wizard register.
 
@@ -46,6 +47,7 @@ fois mergée).
 - `docs/spec/cloud-resource-manager.md` §3.1 — schéma des tables.
 - `docs/spec/cloud-resource-manager.md` §3.2 — indices.
 - `docs/spec/cloud-resource-manager.md` §3.3 — RLS matrix.
+- `docs/spec/cloud-resource-manager.md` §4.3 — `SealedBlobV1`.
 - `docs/spec/cloud-resource-manager.md` §6.3-§6.4 — endpoints REST.
 - `docs/spec/cloud-resource-manager.md` §7.1-§7.4 — workflows.
 - `docs/spec/cloud-resource-manager.md` §11 — UX (pages, patterns).
@@ -76,13 +78,9 @@ qualifiées) avec `Cache-Control: no-store`.
 ### `GET /orgs/:orgId/resources?scope=&project=&variant=&kind=&isAdmin=`
 
 Liste les Resources visibles à l'user (RLS `resources_select_member`).
-Filtres optionnels — spec §6.3 :
-
-- `scope` ∈ `{org, project}`.
-- `project` (UUID, alias `project_id`).
-- `variant` (slug).
-- `kind` (id du `ResourceKind`).
-- `isAdmin` ∈ `{true, false}`.
+Filtres optionnels — spec §6.3 : `scope` ∈ `{org, project}`, `project`
+(UUID, alias `project_id`), `variant` (slug), `kind` (id du
+`ResourceKind`), `isAdmin` ∈ `{true, false}`.
 
 Réponse `{ resources: ResourceRow[] }` ordonnée par `created_at desc`.
 
@@ -117,17 +115,15 @@ le body n'épingle pas explicitement un `secret_manager_id`, la route
 renvoie `400 { error: 'no_default_secret_manager' }`. Wave-C
 (`onboarding`) provisionne un default au moment de la création d'org.
 
-Audit log : ligne `resource.registered`, `scope = { resource_id, kind,
-scope }`, `subject = { name, variant }`. Le `audit_log.organization_id`
-est le même que celui de la Resource (pas null comme pour
+Audit log : `resource.registered`, `scope = { resource_id, kind, scope }`,
+`subject = { name, variant }`. Le `audit_log.organization_id` est le
+même que celui de la Resource (pas null comme pour
 `user.crypto-key.*` du §4).
 
 Erreurs DB mappées :
 
 - `23505` (unique_violation sur `(org, project_id, name)`) → 409 `conflict`.
-- `23514` (check_violation) → 400 `check_constraint_violation` (filet de
-  sécurité si une nouvelle contrainte SQL n'est pas reflétée dans le
-  validateur côté serveur).
+- `23514` (check_violation) → 400 `check_constraint_violation`.
 - `42501` (insufficient_privilege RLS) → 403 `forbidden`.
 - Autre → 500 `database_error`.
 
@@ -142,38 +138,156 @@ Champs mutables : `name`, `variant`, `provider_ref`, `console_url`,
 `setup_docs_url`, `metadata` (écrit dans `provider_metadata`), `status`
 (énumération `pending|active|failed|detached`).
 
-Si RLS renvoie 0 rows (PostgREST avale silencieusement) la route fait
-une **seconde probe** pour différencier `404` (row absent) de `403`
-(row existe mais membre, pas admin). Audit : `resource.updated`,
-`subject = { fields: [...keys] }`.
+Si RLS renvoie 0 rows, la route fait une **seconde probe** pour
+différencier `404` (row absent) de `403` (row existe mais membre, pas
+admin). Audit : `resource.updated`, `subject = { fields: [...keys] }`.
 
 ### `DELETE /orgs/:orgId/resources/:rId`
 
 `DELETE` détache la row Vauban — **ne touche pas au provider**. Spec
 §6.5 réserve l'effet provider-side à `/destroy-cloud-resource` (Phase 6).
-La route snapshot la row avant le delete pour pouvoir auditer
-`resource.deleted` avec `subject = { name, variant }` et différencier
-404 (snapshot vide) de 403 (snapshot OK mais delete sans effet).
+Snapshot avant le delete pour auditer `resource.deleted` avec
+`subject = { name, variant }` et différencier 404 (snapshot vide) de
+403 (snapshot OK mais delete sans effet).
 
 ### `POST /:rId/health` et `POST /:rId/refresh` (stubs Phase 4)
 
-Response `202 { status: 'pending-runner' }`. Audit `resource.health.requested`
-ou `resource.refresh.requested`. Le dispatch réel sur le Runner arrive
-en Phase 6 quand l'integration côté CAR sera disponible.
+Response `202 { status: 'pending-runner' }`. Audit
+`resource.health.requested` ou `resource.refresh.requested`. Le
+dispatch réel sur le Runner arrive en Phase 6.
+
+## Access REST — `feature/p4-access-rest-api`
+
+Préfixe : `/api/crm/v1/orgs/:orgId/resources/:rId/access`. RLS-gated via
+`resource_access_select_member` (R) et
+`resource_access_{insert,update,delete}_admin` (W).
+
+Toutes les routes sont `dynamic = 'force-dynamic'` + `Cache-Control:
+no-store` — un sealed_blob n'a aucune raison de transiter par un cache
+intermédiaire.
+
+### Format on-disk
+
+`resource_access.sealed_blob` est une colonne **bytea** (cf. migration
+1000). On y stocke les **bytes UTF-8 du JSON canonique** `SealedBlobV1`
+(spec §4.3) :
+
+```jsonc
+{
+  "v": 1,
+  "recipients": [{ "fp": "<32-hex>", "ct": "<base64 of crypto_box_seal output>" }],
+}
+```
+
+Les helpers `sealedBlobToBytea` et `byteaToSealedBlob`
+(`packages/web/src/lib/resource-access/db.ts`) font la conversion à la
+frontière Postgres. La colonne reste opaque côté serveur ; la
+recipient list à l'intérieur est lisible en clair par toute session
+qui a un SELECT sur la row — c'est le contrat spec §4.4
+(fingerprints publics, ciphertexts secrets).
+
+### Endpoints
+
+| Verbe  | Path                                       | RLS       | Status nominaux             |
+| ------ | ------------------------------------------ | --------- | --------------------------- |
+| GET    | `/access`                                  | member    | 200 / 401 / 404             |
+| GET    | `/access/:key`                             | member    | 200 / 401 / 404             |
+| PUT    | `/access/:key`                             | admin (W) | 200 / 400 / 401 / 403 / 404 |
+| DELETE | `/access/:key`                             | admin (W) | 200 / 401 / 403 / 404       |
+| POST   | `/access/:key/rotate` (stub, voir Phase 6) | member    | 202 / 401 / 404             |
+
+### `GET /access`
+
+Retourne **uniquement le résumé** : `{ key, description, rotated_at,
+recipient_count }`. Pas de `sealed_blob`. Le `recipient_count` est
+calculé en parsant la colonne `bytea` côté serveur (le client n'a pas
+besoin du blob entier pour afficher la list page). Test : aucun champ
+`ct` dans la réponse (`expect(JSON.stringify(body)).not.toContain('"ct"')`).
+
+### `GET /access/:key`
+
+Retourne le blob canonique : `{ key, description, rotated_at,
+sealed_blob: { v: 1, recipients: [...] } }`. Un member RLS-visible
+peut le récupérer ; il ne pourra **déchiffrer** que les `recipients`
+qui matchent son fingerprint (spec §3.3 footnote — granularité fine
+côté crypto, pas côté SQL).
+
+### `PUT /access/:key`
+
+Body :
+
+```jsonc
+{
+  "sealed_blob": { "v": 1, "recipients": [{ "fp": "...", "ct": "..." }] },
+  "description": "optional human-readable label",
+}
+```
+
+Validation stricte (`packages/web/src/lib/validation/sealed-blob.ts`) :
+
+- `v` est exactement `1` (literal type).
+- `recipients` est un array non-vide (≥ 1 entry).
+- Pas de doublon de fingerprint.
+- Chaque `fp` matche `^[0-9a-f]{32}$`.
+- Chaque `ct` est base64 valide ET décode à ≥ 48 bytes (taille
+  minimale d'un `crypto_box_seal` envelope = 32 bytes ephemeral pubkey
+  - 16 bytes MAC = 48 minimum).
+- La clé d'URL `:key` matche `^[A-Z][A-Z0-9_]*$` (env-var style,
+  cohérent avec `kind.accessSchema` du catalog).
+
+Côté DB on fait un **upsert** sur `(resource_id, key)` (UNIQUE en
+migration 1000). `rotated_at = now()` à chaque PUT.
+
+Audit log : `resource.access.put`, `subject = { recipient_count }`.
+**Jamais** de `ct` dans le log (vérifié par test :
+`expect(JSON.stringify(audit_row)).not.toContain('"ct"')`).
+
+### `DELETE /access/:key`
+
+Détache la row du sealed_blob. Snapshot pour le `recipient_count`
+d'audit, second probe pour différencier 404 de 403. Audit
+`resource.access.deleted`, même subject que PUT.
+
+### `POST /access/:key/rotate` (stub Phase 4)
+
+Lit `kind.rotationMethod` depuis le catalog et retourne 202 avec :
+
+```jsonc
+{
+  "status": "pending-runner",
+  "rotation_method": "self|admin-mediated|manual",
+  "next_step": "runner-self-rotation|admin-rotate-child|operator-action",
+  "message": "rotation dispatch lands Phase 6",
+}
+```
+
+Audit `resource.access.rotate.requested`, `subject = { rotation_method }`.
+Phase 6 livrera le dispatch réel (Runner pour `self`, parent admin
+pour `admin-mediated`, redirect vers setupDocs pour `manual`).
 
 ## Garanties ZK / audit
 
-Le handler ne stocke **jamais** de sealed_blob — c'est la responsabilité
-de la feature `access-rest-api` (livrée en parallèle). Les seules
-inputs sensibles ici sont les metadata du provider, qui ne contiennent
-**aucune** credential (validé par les tests `accessSchema` côté catalog,
-Phase 3).
+**ZK invariant** (spec §2.3) : aucun cleartext de secret ne transite
+côté serveur. Le validateur `parseSealedBlob` ne décode les `ct` que
+pour en mesurer la taille minimale ; il ne les loggue jamais. Le
+handler `resources` ne stocke jamais de blob ; c'est la responsabilité
+du handler `access`. Les seules inputs sensibles côté `resources` sont
+les metadata du provider, qui ne contiennent **aucune** credential
+(validé par les tests `accessSchema` côté catalog, Phase 3).
 
-Aucun service-role n'est utilisé dans le route handler — toutes les
-queries portent la session de l'user et RLS fait la gating.
-`packages/web/src/lib/resources/db.ts` ne touche jamais à
-`SUPABASE_SERVICE_ROLE_KEY` (audit grep `service-role` doit rester vide
-sur ce dossier).
+**Audit** : seuls `{ resource_id, key, kind, scope, recipient_count,
+fields, name, variant }` (suivant l'action) sont écrits — testé en grep
+dans `packages/web/tests/unit/api/resource-access.test.ts` :
+
+```ts
+expect(JSON.stringify(auditRow)).not.toContain('"ct"');
+```
+
+**Pas de service-role** : toutes les queries portent la session de
+l'user. Aucun fichier sous
+`packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/` ni sous
+`packages/web/src/lib/{resources,resource-access}/` ne lit
+`SUPABASE_SERVICE_ROLE_KEY` (audit grep).
 
 ## Tests
 
@@ -190,16 +304,28 @@ sur ce dossier).
 - DELETE : 200 + audit `resource.deleted`, 404 si resource absent.
 - Stubs health / refresh : 202 `pending-runner` + audit.
 
-Le client Supabase est faké via une in-memory store dans le test (voir
-`makeFakeDb()`). Les tests RLS-aware contre un vrai Supabase de test
-sont planifiés dans `docs/tests/integration-tests.md` ("Resources CRUD
-(phase 4) – TODO integration").
+`packages/web/tests/unit/api/resource-access.test.ts` (17 scénarios) :
+
+- `GET /access` : 401 sans session, summary correct + `recipient_count`
+  exact, aucun `ct` dans la réponse.
+- `GET /access/:key` : 404 si absent, shape canonique `v=1` retournée.
+- `PUT /access/:key` : upsert OK + audit, refus `v != 1`, recipients
+  vides, fp non-hex, ct trop court, ct non-base64, key URL en
+  lowercase, RLS 403 simulé, round-trip PUT → GET équivalence exacte.
+- `DELETE /access/:key` : 200 + audit, 404 si absent.
+- `POST /:key/rotate` : 202 + `rotation_method=manual` pour
+  `github-org`, `admin-mediated` + `admin-rotate-child` pour
+  `github-repo` (project kind).
+
+Le client Supabase est faké via une in-memory store dans les tests
+(`makeFakeDb()`). Les tests RLS-aware contre un vrai Supabase de test
+sont planifiés dans `docs/tests/integration-tests.md`.
 
 ## Roadmap d'implémentation
 
 Phase 4 du roadmap (cf. build plan `phase-4-resources-crud.json`) :
 
 - [x] **Wave A — `resources-rest-api`** : endpoints §6.3 livrés.
-- [ ] Wave A — `access-rest-api` : endpoints §6.4 (parallel feature).
+- [x] **Wave A — `access-rest-api`** : endpoints §6.4 livrés.
 - [ ] Wave B — `<SealedInput>` + pages list / detail.
 - [ ] Wave C — onboarding + wizard register Resource.

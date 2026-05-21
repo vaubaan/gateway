@@ -15,6 +15,7 @@ tracks:
   - packages/crm-catalog/tests/unit/registry.test.ts
   - packages/web/tests/unit/api/catalog.test.ts
   - packages/web/tests/unit/api/resources.test.ts
+  - packages/web/tests/unit/api/resource-access.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -288,8 +289,9 @@ les handlers Next.js :
 
 ### Resources CRUD (phase 4)
 
-> Couvre: spec §3.1, §3.3, §6.3, §7.1.
-> Wave A livré: route handlers + unit tests fakes.
+> Couvre: spec §3.1, §3.3, §6.3, §6.4, §4.3, §7.1.
+> Wave A livré: route handlers + unit tests fakes (sœurs
+> `resources-rest-api` et `access-rest-api`).
 > Wave A à livrer en integration RLS-aware: vrai Supabase test stack.
 
 - [x] `packages/web/tests/unit/api/resources.test.ts` — couvre
@@ -301,14 +303,21 @@ les handlers Next.js :
       `kind` change), `DELETE` (détache + audit, 404 si absent), stubs
       `POST /health` et `/refresh` (202 `pending-runner` + audit). 17
       scénarios verts.
+- [x] `packages/web/tests/unit/api/resource-access.test.ts` —
+      17 scénarios sur `/access` (list summary sans `ct`), `/access/:key`
+      (GET shape canonique, PUT upsert + audit `recipient_count` only,
+      refus `v != 1`, refus recipients vide, refus fp non-hex, refus ct
+      trop court, refus ct non-base64, refus key URL lowercase, RLS 403,
+      PUT/GET round-trip identique), DELETE 200+audit / 404 absent, et
+      `/access/:key/rotate` (202 manual pour `github-org`,
+      `admin-rotate-child` pour `github-repo`).
 - TODO Phase 4 integration: `resources-rls.int.test.ts` — vrai Supabase
   test stack, member 403 sur POST/PATCH/DELETE, admin OK, non-member
   404 sur GET (RLS empty).
-- TODO Phase 4 integration: `resource-access-put.int.test.ts` (livré par
-  la feature `access-rest-api`).
-- TODO Phase 4 integration: `resource-access-rls.int.test.ts` — un member
-  fetch le blob mais ne peut déchiffrer que les recipient-listed
-  (livré par la feature `access-rest-api`).
+- TODO Phase 4 integration: `resource-access-put.int.test.ts` — PUT
+  d'un `sealed_blob` réel multi-recipient + relecture, vrai member RLS.
+- TODO Phase 4 integration: `resource-access-rls.int.test.ts` — un
+  member fetch le blob mais ne peut déchiffrer que les recipient-listed.
 
 ### SecretManagers (phase 5)
 
