@@ -43,8 +43,8 @@ describe('@crm/catalog types surface', () => {
     const blob: SealedBlob = {
       v: 1,
       recipients: [
-        { fingerprint: 'abcd1234', ct: 'YmFzZTY0' },
-        { fingerprint: 'ef015678', ct: 'YmFzZTY0Mg==' },
+        { fp: 'abcd1234', ct: 'YmFzZTY0' },
+        { fp: 'ef015678', ct: 'YmFzZTY0Mg==' },
       ],
     };
     expect(blob.v).toBe(1);

@@ -10,26 +10,9 @@
  * lands in a later phase.
  */
 
-/**
- * One recipient inside a sealed bundle (spec §4.3). `ct` is base64-encoded
- * `crypto_box_seal(cleartext, recipient_pubkey)`.
- */
-export interface SealedRecipient {
-  readonly fingerprint: string;
-  readonly ct: string;
-}
+export type { SealedBlobV1 as SealedBlob, SealedRecipient } from '@crm/core/crypto';
 
-/**
- * Multi-recipient sealed bundle persisted in `resource_access.sealed_blob`
- * (or in the SecretManager's backing store).
- *
- * `v` is fixed to `1` in v1 (spec §4.3). Future versions may add a DEK
- * envelope (spec §4.3 "Pas de DEK envelope en v1").
- */
-export interface SealedBlob {
-  readonly v: 1;
-  readonly recipients: readonly SealedRecipient[];
-}
+import { type SealedBlobV1 } from '@crm/core/crypto';
 
 /**
  * Storage backend for sealed Access bundles. Same interface for CRM and
@@ -46,13 +29,13 @@ export interface SecretManager {
   readonly name: string;
 
   /** Fetch the sealed bundle for `(resourceId, accessKey)`. Throws on 404. */
-  get(resourceId: string, accessKey: string): Promise<SealedBlob>;
+  get(resourceId: string, accessKey: string): Promise<SealedBlobV1>;
 
   /** List access keys known for a resource. Optional — not all backends index. */
   list?(resourceId: string): Promise<readonly string[]>;
 
   /** Persist a sealed bundle. CRM-side only (CAR never calls this). */
-  put(resourceId: string, accessKey: string, blob: SealedBlob): Promise<void>;
+  put(resourceId: string, accessKey: string, blob: SealedBlobV1): Promise<void>;
 
   /** Delete the bundle for `(resourceId, accessKey)`. Idempotent. */
   revoke(resourceId: string, accessKey: string): Promise<void>;
