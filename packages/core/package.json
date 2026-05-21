@@ -18,6 +18,10 @@
     "./secret-manager": {
       "types": "./src/secret-manager/index.ts",
       "import": "./src/secret-manager/index.ts"
+    },
+    "./mcp": {
+      "types": "./src/mcp/index.ts",
+      "import": "./src/mcp/index.ts"
     }
   },
   "scripts": {
