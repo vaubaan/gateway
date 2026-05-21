@@ -19,6 +19,9 @@ tracks:
   - packages/web/src/components/identity/IdentityGate.tsx
   - packages/web/src/components/identity/SignOutButton.tsx
   - packages/web/src/app/(protected)/layout.tsx
+  - packages/web/src/app/(protected)/orgs/[slug]/layout.tsx
+  - packages/web/src/components/needs-reseal/NeedsResealBanner.tsx
+  - packages/web/src/lib/secret-managers/re-seal-blob.ts
   - supabase/migrations/1001_audit_log_org_nullable.sql
 last_reviewed: 2026-05-21
 ---
@@ -47,18 +50,55 @@ comme côté Node (Runner, tests d'intégration). Ils s'appuient sur
 **Reste à livrer** (wave B et au-delà) :
 
 - Hook React `useCryptoIdentity()` qui orchestre bootstrap + cache
-  mémoire de la sk déballée.
+  mémoire de la sk déballée. **Livré Phase 4 wave B**.
 - Composant `<SealedInput>` qui scelle au moment du `put` Access.
+  **Livré Phase 4 wave B**.
 - Banner UI "X blobs need re-sealing" + endpoint `/needs-reseal`
-  (spec §4.5).
+  (spec §4.5). **Livré Phase 5 wave B** —
+  `<NeedsResealBanner>` monté dans `(protected)/orgs/[slug]/layout.tsx`,
+  endpoint REST sous
+  `/api/crm/v1/orgs/[orgId]/needs-reseal/route.ts`, handler per-blob
+  `lib/secret-managers/re-seal-blob.ts::runReseal`.
 - Flow `lost password` côté UI (la backend route gère déjà le
-  `replace=true` ; il manque le wiring browser + le re-seal des blobs
-  staled).
+  `replace=true` ; le re-seal des blobs staled est désormais déclenché
+  par le banner Phase 5).
 
-**Livré dans wave B** :
+**Livré dans wave B (Phase 2)** :
 
 - Endpoint `GET /api/crm/v1/resources/:rId/access/:key/recipients`
   (default list, cf. section "Recipient list endpoint" plus bas).
+
+## Re-seal effective (spec §4.5) — Phase 5
+
+Le flow complet est désormais cliquable :
+
+1. Un trigger (PATCH `me/crypto-key replace=true` côté Phase 4 wave
+   C, ou bientôt un trigger SQL sur INSERT/DELETE org_members en
+   Phase 6+) flippe `resource_access.recipients_stale=true` sur
+   chaque blob où le user concerné est recipient.
+2. À chaque visite d'une page `/orgs/[slug]/*`, le
+   `<NeedsResealBanner>` fait un `GET /needs-reseal` ; s'il y a au
+   moins une row stale visible, le banner jaune s'affiche en haut.
+3. L'admin click `Re-seal now` → pour chaque blob,
+   `runReseal({ orgSlug, resourceId, accessKey })` :
+   - GET `/access/:key` → blob courant
+   - `unsealAs` côté browser avec l'identité unlocked en mémoire
+   - GET `/access/:key/recipients` → liste fraîche
+   - `sealForRecipients(cleartext, fresh)`
+   - PUT `/access/:key { sealed_blob }`
+   - `cleartext.fill(0)` en `finally`
+4. À la fin de l'itération, le banner re-fetch `/needs-reseal`. Si
+   le compteur revient à 0, le banner disparaît.
+
+**TODO Phase 6** : le PUT `/access/:key` actuel (Phase 4 wave A) ne
+flippe pas `recipients_stale=false` côté serveur. C'est un détail
+de finalisation côté route ; tant qu'on n'a pas le trigger SQL qui
+remet le flag à true sur membership change, on peut faire un
+reset explicite côté re-seal handler (PATCH dédié) ou rajouter le
+clear dans le PUT existant. Vu que la spec §4.5 prévoit déjà
+"SM clear recipients_stale", la voie naturelle est de l'ajouter
+dans le PUT. **Marqué pending dans `out_of_scope_for_phase_5`** du
+build plan.
 
 ## Décisions amont (lecture obligatoire)
 

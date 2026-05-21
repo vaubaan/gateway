@@ -17,7 +17,16 @@ tracks:
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/needs-reseal/route.ts
   - packages/web/src/lib/validation/secret-managers.ts
   - packages/web/src/lib/secret-managers/db.ts
+  - packages/web/src/lib/secret-managers/re-seal-blob.ts
+  - packages/web/src/app/(protected)/orgs/[slug]/layout.tsx
+  - packages/web/src/app/(protected)/orgs/[slug]/secret-managers/page.tsx
+  - packages/web/src/app/(protected)/orgs/[slug]/secret-managers/new/page.tsx
+  - packages/web/src/components/secret-managers/SecretManagerList.tsx
+  - packages/web/src/components/secret-managers/SetDefaultButton.tsx
+  - packages/web/src/components/secret-managers/ConnectInfisicalWizard.tsx
+  - packages/web/src/components/needs-reseal/NeedsResealBanner.tsx
   - packages/web/tests/unit/api/secret-managers.test.ts
+  - packages/web/tests/unit/components/secret-managers.test.tsx
   - supabase/migrations/1000_provider_resource_manager.sql
 last_reviewed: 2026-05-21
 ---
@@ -30,17 +39,18 @@ Documente l'implémentation effective de l'interface `SecretManager`
 
 ## Statut courant
 
-**Phase 5 wave A + B (REST) livrées** :
+**Phase 5 wave A + B (complète) livrées** :
 
 - `@crm/core/secret-manager` — deux factories runtime (`db`,
   `infisical`) + un client REST bas-niveau Infisical (22 unit tests).
 - REST `/api/crm/v1/orgs/:orgId/secret-managers` (`GET`, `POST`,
   `GET /:smId`, `PATCH /:smId`, `DELETE /:smId`) + `/needs-reseal`
   (21 unit tests).
+- UI : `/orgs/:slug/secret-managers` (server component) +
+  `/orgs/:slug/secret-managers/new` (wizard 3 steps) +
+  `<NeedsResealBanner>` monté dans le layout org (8 unit tests).
 
-La page UI `/orgs/:slug/secret-managers` + le wizard Connect
-Infisical + le banner re-seal sont livrés en `sm-ui-and-banner` (à
-suivre).
+Total CRM : 270 tests verts.
 
 ## Contrat
 
@@ -254,6 +264,85 @@ Le filtrage RLS est implicite : on lit d'abord la liste des
 404 (org non visible). Un member voit 0 ou N entries selon ce que la
 RLS lui laisse.
 
+## UI
+
+### Page `/orgs/:slug/secret-managers`
+
+Server component qui liste les SMs de l'org via le client Supabase
+session-bound (RLS auto). Header avec le bouton `+ Connect Infisical
+Workspace`. Le composant `<SecretManagerList>` rend :
+
+- Une row par SM avec `name`, `kind`, `config` summary, badge
+  `default` (vert) si `is_default=true`, sinon un bouton
+  `<SetDefaultButton>` qui PATCHe `is_default=true`.
+- Un empty state si la liste est vide.
+
+### Page `/orgs/:slug/secret-managers/new`
+
+Server component qui calcule la liste des recipients candidats
+(`org_members.role IN ('admin','owner')` joined avec
+`user_crypto_keys`) et la passe en prop au wizard client
+`<ConnectInfisicalWizard>`.
+
+Le runner X25519 pubkey n'est pas encore deployé (Phase 6+) — on
+omet pour l'instant, ce qui correspond au stub `defaultRecipients`
+de Phase 2.
+
+Le wizard a 3 étapes :
+
+1. **Config** — `workspace_id`, `endpoint`, `environment`, `name`,
+   `(clientId, clientSecret)`, checkbox `is_default`.
+2. **Seal** — affiche la liste des recipients (cases à cocher),
+   l'admin clique `Seal & continue`. Le browser sérialise
+   `{ clientId, clientSecret }` en JSON, `sealForRecipients` génère
+   le `auth_sealed_blob`, le `Uint8Array` cleartext est immédiatement
+   `fill(0)`, le champ `clientSecret` du form state est remis à `''`.
+3. **Submit** — récap + POST vers `/secret-managers`. Sur 201,
+   redirect vers `/orgs/:slug/secret-managers`.
+
+ZK invariants testés :
+
+- Le `bodyStr` POSTé NE contient pas `clientSecret` en clair.
+- `sealForRecipients` reçoit bien les bytes cleartext (capture mock).
+- Après le seal, le form state n'a plus le `clientSecret`.
+
+### `<NeedsResealBanner>`
+
+Client component monté dans
+`packages/web/src/app/(protected)/orgs/[slug]/layout.tsx`. Visible
+sur **toutes** les routes `/orgs/:slug/*` (Resources, SM, future
+provisioning…).
+
+Comportement :
+
+1. Mount → `GET /needs-reseal`. Si `count === 0` → render `null`
+   (le banner est invisible).
+2. Si `count > 0` → bandeau jaune en haut de page avec
+   `"X access blobs need re-sealing for new members."` + bouton
+   `Re-seal now`.
+3. Click `Re-seal now` → itère `runReseal` (cf.
+   `lib/secret-managers/re-seal-blob.ts`) sur chaque item. Affiche
+   `Re-sealing… done/total` avec compteur de failures. Après la
+   dernière itération, re-fetch `/needs-reseal` pour rafraîchir le
+   compteur.
+
+### `runReseal(input)` (re-seal-blob.ts)
+
+Le coeur du flow de spec §4.5. Pour un `(resourceId, accessKey)`
+donné :
+
+1. `identityStore.get()` — abort `identity_locked` si pas unlocked.
+2. `GET /access/:key` → sealed blob courant.
+3. `unsealAs(blob, me.fp, me)` → cleartext ou `null` (abort
+   `not_a_recipient`).
+4. `GET /access/:key/recipients` → liste fraîche (l'endpoint
+   Phase 2 calcule deja les membres avec keypair).
+5. `sealForRecipients(cleartext, fresh)` → nouveau blob.
+6. `PUT /access/:key { sealed_blob }` (le sweep Phase 4 wave C
+   PATCH `recipients_stale=false` côté serveur — TODO : le PUT
+   actuel ne le fait pas automatiquement, voir TODOs ci-dessous).
+7. `finally`: `cleartext.fill(0)`.
+
 ## Stubs Vault / 1Password
 
 **Volontairement hors-scope Phase 5** (cf. build plan
@@ -339,14 +428,16 @@ Phase 5 wave A (`secret-manager-core`, **livré ce commit**) :
 - [x] Tests unit (22 cas verts) + test intégration optionnel
       (skipped sauf creds env).
 
-Phase 5 wave B (REST livré, UI à suivre) :
+Phase 5 wave B (livré complet) :
 
 - [x] Endpoints REST `/api/crm/v1/orgs/:orgId/secret-managers`
       (`sm-rest-api`).
 - [x] Endpoint `/api/crm/v1/orgs/:orgId/needs-reseal`.
-- [ ] Page UI `/orgs/:slug/secret-managers` + wizard Connect
+- [x] Page UI `/orgs/:slug/secret-managers` + wizard Connect
       Infisical (`sm-ui-and-banner`).
-- [ ] Banner re-seal sur `/resources` et `/secret-managers`.
+- [x] Banner re-seal monté dans le layout `/orgs/[slug]/` (visible
+      sur `/resources`, `/secret-managers`, et toute future page
+      org-scoped).
 
 Hors-scope explicite Phase 5 (vers Phase 6+) :
 

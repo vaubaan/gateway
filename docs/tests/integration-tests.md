@@ -27,6 +27,7 @@ tracks:
   - packages/core/tests/unit/secret-manager/interface.test.ts
   - packages/core/tests/integration/infisical.test.ts
   - packages/web/tests/unit/api/secret-managers.test.ts
+  - packages/web/tests/unit/components/secret-managers.test.tsx
 last_reviewed: 2026-05-21
 ---
 
@@ -417,11 +418,23 @@ les handlers Next.js :
       liste les rows `recipients_stale=true` avec `resource_name`
       joint depuis `resources` (RLS-scopé).
 
-**Wave B — UI (à livrer dans `feature/p5-sm-ui-and-banner`)** :
+**Wave B — UI (livré dans `feature/p5-sm-ui-and-banner`)** :
 
-- `secret-managers-page.test.tsx` — wizard 3-steps connect Infisical
-  - seal du `(clientId, clientSecret)` JSON, banner re-seal qui fetch
-    `/needs-reseal` au mount.
+- [x] `packages/web/tests/unit/components/secret-managers.test.tsx`
+      — 8 scénarios : - `<ConnectInfisicalWizard>` : walk config → seal → submit
+      (vérifie la cleartext capturée + l'absence du `clientSecret`
+      dans le body POST), refus d'avancer si workspace manquant,
+      Seal button désactivé si 0 recipient. - `<SecretManagerList>` : empty state, rendu avec
+      `<SetDefaultButton>` pour les SMs non-default. - `<NeedsResealBanner>` : invisible quand count=0, visible
+      quand count>0 avec le bon message + bouton, iteration
+      `runReseal` per item au click `Re-seal now`.
+
+**TODO Phase 6+** :
+
+- `recipients_stale = false` clear côté PUT `/access/:key` — pour
+  l'instant le banner reste affiché même après un re-seal réussi
+  jusqu'à un PATCH/UPDATE manuel ou un rafraîchissement de la page.
+  Voir `docs/handbook/crypto-zk.md` section "Re-seal effective".
 
 ### Provisioning + Rotation (phase 6)
 
