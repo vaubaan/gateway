@@ -35,3 +35,4 @@ export { CATALOG, findKind } from './registry.js';
 // `instanceof` these to decide between the auto path and the manual
 // paste path in the rotation UI (spec §7.4).
 export { GitHubRotationNotSupportedError } from './providers/github/org-admin.js';
+export { VercelRotationNotSupportedError } from './providers/vercel/team-admin.js';

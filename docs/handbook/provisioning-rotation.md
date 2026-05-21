@@ -2,6 +2,7 @@
 title: Provisioning et Rotation — workflows browser-side
 tracks:
   - github-admin-impl
+  - vercel-admin-impl
 last_reviewed: 2026-05-21
 ---
 
@@ -17,7 +18,7 @@ Document l'implémentation effective des workflows de provisioning
 | ---------------------------------------------------------------- | ------------- |
 | Contrat TS `OrgResourceAdminKind` (Phase 3)                      | done          |
 | `github-org-admin` impl (Phase 6)                                | done (Wave A) |
-| `vercel-team-admin` impl (Phase 6)                               | TODO Wave A   |
+| `vercel-team-admin` impl (Phase 6)                               | done (Wave A) |
 | `supabase-org-admin` impl (Phase 6)                              | TODO Wave A   |
 | REST `/provision`, `/destroy-cloud-resource`, `/rotate` dispatch | TODO Wave B   |
 | Trigger SQL `recipients_stale` on org_members change             | TODO Wave B   |
@@ -90,11 +91,60 @@ try {
 }
 ```
 
-### Flow Vercel provisioning
+## Flow Vercel provisioning
 
-TODO Wave A (vercel-team-admin).
+`vercel-team-admin` → `vercel-project` (spec §5.3).
 
-### Flow Supabase provisioning
+### `listChildren(access)`
+
+`GET https://api.vercel.com/v9/projects?teamId={teamId}&limit=100`.
+Paginé via le curseur `pagination.next` retourné dans le body. Le
+team id est lu sur `access.VERCEL_TEAM_ID` (le sealed bundle de
+l'admin l'inclut déjà — pas de routage spécial).
+
+Retourne `ProviderChild[]` avec `providerRef=projectId` (`prj_...`)
+et `metadata: { framework, rootDirectory, createdAt, accountId }`.
+
+### `createChild(access, spec)`
+
+`POST https://api.vercel.com/v10/projects?teamId={teamId}` avec
+`{ name, framework?, rootDirectory?, gitRepository? }`.
+
+- 201 → `ProviderChild` retourné.
+- 409 → conflit (le nom existe déjà sur la team).
+- 4xx/5xx → thrown `Error` avec body Vercel tronqué.
+
+Note : Vercel renvoie immédiatement le projet créé, les deployments
+suivent un autre cycle de vie indépendant.
+
+### `destroyChild(access, providerRef)`
+
+`DELETE https://api.vercel.com/v9/projects/{projectId}?teamId={teamId}`.
+**Idempotent** : 404 et 204 sont des succès.
+
+### `rotateChildAccess(access, childProviderRef, accessKey)`
+
+**Toujours throw `VercelRotationNotSupportedError`.** Vercel ne
+propose pas d'endpoint pour mint un token _project-scoped_ — les
+tokens sont team-level, donc rotater le token d'un projet revient à
+rotater le token de la team (impossible à scoper).
+
+Le caller (UI Wave C) lit `err.setupDocs` et propose un flux de
+paste manuel :
+
+```ts
+import { VercelRotationNotSupportedError } from '@crm/catalog';
+
+try {
+  newToken = await vercelTeamAdmin.rotateChildAccess(adminAccess, 'prj_x', 'VERCEL_TOKEN');
+} catch (err) {
+  if (err instanceof VercelRotationNotSupportedError) {
+    // Show err.setupDocs and prompt for SealedInput
+  } else throw err;
+}
+```
+
+## Flow Supabase provisioning
 
 TODO Wave A (supabase-org-admin).
 
@@ -105,11 +155,12 @@ TODO Wave A (supabase-org-admin).
 - Les Accesses d'`OrgResourceAdmin` ne sont jamais sealed pour le
   Runner (convention §4.4) — c'est le gate qui empêche un cred
   admin-tier d'arriver en env var dans une Coding Session.
-- **CORS assumption** : api.github.com supporte les requêtes
-  cross-origin avec `Authorization: Bearer` depuis n'importe quelle
-  origine HTTPS (vérifié manuellement). Si le runtime prouve le
-  contraire (rare — possible sur enterprise), le fallback est de
-  router via un proxy server-side **non implémenté** en Phase 6.
+- **CORS assumption** : api.github.com, api.vercel.com et
+  api.supabase.com supportent les requêtes cross-origin avec
+  `Authorization: Bearer` (les dashboards officiels eux-mêmes tapent
+  directement sur leurs APIs depuis le browser). Si le runtime prouve
+  le contraire (rare — possible sur enterprise GitHub), le fallback
+  est de router via un proxy server-side **non implémenté** en Phase 6.
 
 ## Spec de référence
 

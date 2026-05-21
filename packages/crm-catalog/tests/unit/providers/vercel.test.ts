@@ -150,14 +150,16 @@ describe('vercel-team-admin', () => {
     expect(hosts).toContain('mcp.vercel.com');
   });
 
-  it('provider operations are phase-6 stubs that reject with a stable marker', async () => {
-    const access: Readonly<Record<string, string>> = { VERCEL_TOKEN: 't' };
-    await expect(vercelTeamAdmin.listChildren(access)).rejects.toThrow(MARKER_PHASE_6);
-    await expect(vercelTeamAdmin.createChild(access, {})).rejects.toThrow(MARKER_PHASE_6);
-    await expect(vercelTeamAdmin.destroyChild(access, 'ref')).rejects.toThrow(MARKER_PHASE_6);
-    await expect(vercelTeamAdmin.rotateChildAccess(access, 'ref', 'VERCEL_TOKEN')).rejects.toThrow(
-      MARKER_PHASE_6,
-    );
+  // Phase 6 lit up listChildren/createChild/destroyChild and made
+  // rotateChildAccess a structured fallback — see
+  // tests/unit/providers/vercel-admin.test.ts for the mocked-fetch
+  // behaviour tests.
+  it('provider operations are now Phase 6-live (no longer phase-6 stubs)', () => {
+    expect(typeof vercelTeamAdmin.listChildren).toBe('function');
+    expect(typeof vercelTeamAdmin.createChild).toBe('function');
+    expect(typeof vercelTeamAdmin.destroyChild).toBe('function');
+    expect(typeof vercelTeamAdmin.rotateChildAccess).toBe('function');
+    void MARKER_PHASE_6;
   });
 
   it('narrows to OrgResourceAdminKind at the type level', () => {
