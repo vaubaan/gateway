@@ -1,6 +1,7 @@
 ---
 title: Provisioning et Rotation — workflows browser-side
-tracks: []
+tracks:
+  - supabase-admin-impl
 last_reviewed: 2026-05-21
 ---
 
@@ -10,30 +11,99 @@ Document l'implémentation effective des workflows de provisioning
 (via un Admin) et de rotation (3 paths : `self`, `admin-mediated`,
 `manual`). Spec §0.1, §6.5, §7.3, §7.4.
 
-## Statut courant
+## Statut courant (Phase 6, Wave A — partial)
 
-**Pas encore implémenté.**
+| Composant                                                        | État          |
+| ---------------------------------------------------------------- | ------------- |
+| Contrat TS `OrgResourceAdminKind` (Phase 3)                      | done          |
+| `github-org-admin` impl (Phase 6)                                | TODO Wave A   |
+| `vercel-team-admin` impl (Phase 6)                               | TODO Wave A   |
+| `supabase-org-admin` impl (Phase 6)                              | done (Wave A) |
+| REST `/provision`, `/destroy-cloud-resource`, `/rotate` dispatch | TODO Wave B   |
+| Trigger SQL `recipients_stale` on org_members change             | TODO Wave B   |
+| `PUT /access/:key` reset `recipients_stale=false`                | TODO Wave B   |
+| UI Wizard `+ Provision via …` + `Rotate` button                  | TODO Wave C   |
 
-Le scaffold v1 init livre :
+## Principes ZK (spec §4)
 
-- La colonne `resources.admin_resource_id` (`ON DELETE SET NULL`,
-  spec §14.1) et la contrainte CHECK qui force `admin_resource_id`
-  uniquement sur les Resources de `scope='project'`.
-- La colonne `resources.is_admin` + l'index partiel
-  `resources_org_admins_idx where is_admin`.
-- Le contrat TypeScript `OrgResourceAdminKind` dans
-  `packages/crm-catalog/src/resource-kind.ts` (`listChildren`,
-  `createChild`, `destroyChild`, `rotateChildAccess`).
-- L'enum `RotationMethod = 'self' | 'admin-mediated' | 'manual'`.
+Toutes les opérations admin (`createChild`, `destroyChild`,
+`rotateChildAccess`) tournent **côté browser** avec les creds
+unsealed transitorily. Core ne voit jamais les creds.
 
-**Aucun workflow runtime n'existe** :
+Le pattern :
 
-- Endpoint `/api/crm/v1/orgs/:orgId/resources/:adminId/provision`
-  (spec §6.5) — absent.
-- Endpoint `/destroy-cloud-resource` — absent.
-- Endpoint `/access/:key/rotate` (spec §6.4) — absent.
-- Helper browser-side qui appelle les APIs provider via CORS
-  (spec §7.3) — absent.
+1. Browser unseal admin token (`SealedReveal` + `useUserIdentity`).
+2. Browser appelle directement l'API du provider via `fetch`
+   (api.github.com, api.vercel.com, api.supabase.com supportent
+   CORS pour les Bearer tokens).
+3. Browser POST à Core **uniquement** pour enregistrer la nouvelle
+   row + audit (sans cred cleartext).
+4. Browser PUT le sealed_blob via `/access/:key`.
+
+## Flow Supabase provisioning
+
+`supabase-org-admin` → `supabase-project` (spec §5.3).
+
+### `listChildren(access)`
+
+`GET https://api.supabase.com/v1/projects`. La Management API ne
+permet pas de filtrer par org côté serveur : on filtre côté browser
+sur `p.organization_id === access.SUPABASE_ORG_ID` quand cet ID est
+présent. Si absent, on renvoie tout ce que le PAT voit.
+
+Retourne `ProviderChild[]` avec `providerRef=projectRef` (20 chars
+lowercase, ex `abcdefghijklmnopqrst`) et `metadata: { organization_id, region, status, created_at, database_host, database_version }`.
+
+### `createChild(access, spec)`
+
+`POST https://api.supabase.com/v1/projects` avec
+`{ name, region, db_pass, organization_id, plan? }`.
+
+- 201 → `ProviderChild` retourné avec `status='PROVISIONING'` la
+  plupart du temps. La UI Wave C affiche un badge "Provisioning"
+  jusqu'à ce qu'un poll sur `GET /v1/projects/{ref}` voie
+  `ACTIVE_HEALTHY`.
+- 409 → conflit (le nom existe déjà sur l'org).
+- 4xx/5xx → thrown `Error` avec body Supabase tronqué.
+
+### `destroyChild(access, providerRef)`
+
+`DELETE https://api.supabase.com/v1/projects/{ref}`. **Idempotent** :
+404 et 204 sont des succès. Note : Supabase fait du soft-delete ; le
+ref reste réservé ~90 jours après la suppression.
+
+### `rotateChildAccess(access, childProviderRef, accessKey)`
+
+Dispatch par clé :
+
+- `SUPABASE_DB_PASSWORD` → `PATCH /v1/projects/{ref}` avec
+  `{ db_pass: <new> }`. Le nouveau password est généré
+  côté browser (`crypto.getRandomValues`, 32 chars alphanumeric) et
+  retourné cleartext. Le browser seal immédiatement, puis PUT
+  `/access/:key`.
+- `SUPABASE_SERVICE_ROLE_KEY` / `SUPABASE_ANON_KEY` → **throw
+  `SupabaseRotationNotSupportedError`**. La Management API ne propose
+  pas d'endpoint pour rotater les JWT signing keys (cf. issue
+  ouverte côté Supabase). Le fallback est manuel via dashboard
+  (`Settings → API → Reset all API keys`). L'UI lit
+  `err.setupDocs` et bascule sur SealedInput.
+- Autre clé → idem `SupabaseRotationNotSupportedError`.
+
+```ts
+import { SupabaseRotationNotSupportedError } from '@crm/catalog';
+
+try {
+  newPw = await supabaseOrgAdmin.rotateChildAccess(
+    adminAccess,
+    'abcdefghijklmnopqrst',
+    'SUPABASE_DB_PASSWORD',
+  );
+} catch (err) {
+  if (err instanceof SupabaseRotationNotSupportedError) {
+    // Show err.setupDocs and prompt for SealedInput
+  } else throw err;
+}
+```
 
 ## Décisions amont
 
@@ -42,6 +112,11 @@ Le scaffold v1 init livre :
 - Les Accesses d'`OrgResourceAdmin` ne sont jamais sealed pour le
   Runner (convention §4.4) — c'est le gate qui empêche un cred
   admin-tier d'arriver en env var dans une Coding Session.
+- **CORS assumption** : api.supabase.com supporte les requêtes
+  cross-origin avec `Authorization: Bearer` (le dashboard Supabase
+  lui-même tape directement sur l'API depuis le browser). Si le
+  runtime prouve le contraire, le fallback est de router via un
+  proxy server-side **non implémenté** en Phase 6.
 
 ## Spec de référence
 
@@ -56,13 +131,9 @@ Le scaffold v1 init livre :
 
 ## Roadmap d'implémentation
 
-Phase 6 du roadmap (cf. build plan `out_of_scope_for_init`) :
+Phase 6 (build plan `.claude/build-plans/phase-6-provisioning-rotation.json`) :
 
-- Endpoint REST `/provision` + `/destroy-cloud-resource`.
-- Endpoint `/access/:key/rotate` + dispatcher selon
-  `rotationMethod`.
-- Helpers browser-side qui font les round-trips provider (via
-  CORS) en utilisant l'Access unsealed transitoirement.
-- E2E §12.3 contre vrais clouds (GitHub, Vercel, Supabase).
-
-Ce handbook sera rempli au fil de l'implémentation.
+- **Wave A** (en cours) — impl des 3 providers admin (`github`,
+  `vercel`, `supabase-cloud`).
+- **Wave B** (suivante) — REST endpoints + migration trigger SQL.
+- **Wave C** (suivante) — UI wizard + boutons.

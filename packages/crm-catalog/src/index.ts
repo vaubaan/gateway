@@ -30,3 +30,8 @@ export type {
 export type { SealedBlob, SealedRecipient, SecretManager } from './secret-manager.js';
 
 export { CATALOG, findKind } from './registry.js';
+
+// Phase 6 — provider-specific rotation fallback errors. Browsers
+// `instanceof` these to decide between the auto path and the manual
+// paste path in the rotation UI (spec §7.4).
+export { SupabaseRotationNotSupportedError } from './providers/supabase-cloud/org-admin.js';

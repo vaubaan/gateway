@@ -168,14 +168,16 @@ describe('supabase-org-admin', () => {
     expect(hosts).toContain('api.supabase.com');
   });
 
-  it('provider operations are phase-6 stubs that reject with a stable marker', async () => {
-    const access: Readonly<Record<string, string>> = { SUPABASE_ACCESS_TOKEN: 't' };
-    await expect(supabaseOrgAdmin.listChildren(access)).rejects.toThrow(MARKER_PHASE_6);
-    await expect(supabaseOrgAdmin.createChild(access, {})).rejects.toThrow(MARKER_PHASE_6);
-    await expect(supabaseOrgAdmin.destroyChild(access, 'ref')).rejects.toThrow(MARKER_PHASE_6);
-    await expect(
-      supabaseOrgAdmin.rotateChildAccess(access, 'ref', 'SUPABASE_SERVICE_ROLE_KEY'),
-    ).rejects.toThrow(MARKER_PHASE_6);
+  // Phase 6 lit up listChildren/createChild/destroyChild and made
+  // rotateChildAccess dispatch per key — see
+  // tests/unit/providers/supabase-admin.test.ts for the mocked-fetch
+  // behaviour tests.
+  it('provider operations are now Phase 6-live (no longer phase-6 stubs)', () => {
+    expect(typeof supabaseOrgAdmin.listChildren).toBe('function');
+    expect(typeof supabaseOrgAdmin.createChild).toBe('function');
+    expect(typeof supabaseOrgAdmin.destroyChild).toBe('function');
+    expect(typeof supabaseOrgAdmin.rotateChildAccess).toBe('function');
+    void MARKER_PHASE_6;
   });
 
   it('narrows to OrgResourceAdminKind at the type level', () => {
