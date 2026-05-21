@@ -39,5 +39,6 @@ BUILD_PROGRESS.md
 .claude/
 .codex/
 .opencode/
+.mcp.json
 AGENTS.md
 CLAUDE.md
