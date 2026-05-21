@@ -36,8 +36,114 @@ function isVercelTeamAdminMetadata(value: unknown): value is VercelTeamAdminMeta
   );
 }
 
-function notYetImplemented(method: string): Promise<never> {
-  return Promise.reject(new Error(`phase-6: ${method} not implemented (vercel-team-admin)`));
+/**
+ * Thrown when the Vercel API cannot rotate a project-scoped token —
+ * Vercel only issues team-level tokens, not per-project ones, so
+ * rotating a child token means rotating the team token and falls
+ * outside this admin's reach. UI surfaces `setupDocs` and prompts for
+ * a manual paste.
+ */
+export class VercelRotationNotSupportedError extends Error {
+  readonly setupDocs: string;
+  constructor(message: string, setupDocs: string) {
+    super(message);
+    this.name = 'VercelRotationNotSupportedError';
+    this.setupDocs = setupDocs;
+  }
+}
+
+const VERCEL_ROTATION_FALLBACK_DOCS = `## Manual rotation fallback for \`vercel-project\`
+
+Vercel access tokens are **team-scoped, not project-scoped**. There
+is no Vercel API to mint or rotate a token bound to a single project.
+The CRM therefore cannot perform admin-mediated rotation for the
+\`VERCEL_TOKEN\` Access key of a \`vercel-project\` Resource:
+
+1. As a team Owner/Admin, open
+   \`https://vercel.com/account/tokens\`.
+2. **Revoke** the old token (Trash icon).
+3. **Create Token** with the same team scope and Owner/Admin role.
+4. Copy the new token (starts with 24+ alphanumeric chars).
+5. Paste it into the CRM **Rotate Access** dialog for this project.
+   The CRM seals it client-side; cleartext never reaches the server.
+6. Redeploy any pipelines that embed the old token.
+
+The \`VERCEL_TEAM_ID\` and \`VERCEL_PROJECT_ID\` keys are not
+secrets — they are stable identifiers and don't need rotation.
+`;
+
+interface VercelProjectApiResponse {
+  readonly id: string;
+  readonly name: string;
+  readonly accountId?: string;
+  readonly framework?: string | null;
+  readonly rootDirectory?: string | null;
+  readonly createdAt?: number;
+}
+
+function isVercelProjectApiResponse(v: unknown): v is VercelProjectApiResponse {
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, unknown>;
+  return typeof o.id === 'string' && typeof o.name === 'string';
+}
+
+interface VercelTeamProjectSpec {
+  readonly name: string;
+  readonly framework?: string;
+  readonly rootDirectory?: string;
+  readonly gitRepository?: {
+    readonly type: 'github' | 'gitlab' | 'bitbucket';
+    readonly repo: string;
+  };
+}
+
+function isVercelTeamProjectSpec(v: unknown): v is VercelTeamProjectSpec {
+  if (typeof v !== 'object' || v === null) return false;
+  const o = v as Record<string, unknown>;
+  if (typeof o.name !== 'string' || o.name.length === 0) return false;
+  if (o.framework !== undefined && typeof o.framework !== 'string') return false;
+  if (o.rootDirectory !== undefined && typeof o.rootDirectory !== 'string') return false;
+  if (o.gitRepository !== undefined) {
+    if (typeof o.gitRepository !== 'object' || o.gitRepository === null) return false;
+    const g = o.gitRepository as Record<string, unknown>;
+    if (g.type !== 'github' && g.type !== 'gitlab' && g.type !== 'bitbucket') return false;
+    if (typeof g.repo !== 'string') return false;
+  }
+  return true;
+}
+
+function authHeaders(access: Readonly<Record<string, string>>): {
+  headers: Record<string, string>;
+  teamId: string;
+} {
+  const token = access.VERCEL_TOKEN;
+  if (typeof token !== 'string' || token.length === 0) {
+    throw new Error('vercel-team-admin: missing VERCEL_TOKEN in access bundle');
+  }
+  const teamId = access.VERCEL_TEAM_ID;
+  if (typeof teamId !== 'string' || teamId.length === 0) {
+    throw new Error('vercel-team-admin: missing VERCEL_TEAM_ID in access bundle');
+  }
+  return {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/json',
+    },
+    teamId,
+  };
+}
+
+function toProviderChild(p: VercelProjectApiResponse): ProviderChild {
+  return {
+    providerRef: p.id,
+    name: p.name,
+    metadata: {
+      framework: p.framework ?? null,
+      rootDirectory: p.rootDirectory ?? null,
+      createdAt: p.createdAt ?? null,
+      accountId: p.accountId ?? null,
+    },
+  };
 }
 
 const SETUP_DOCS = `## Provision a Vercel admin token for \`vercel-team-admin\`
@@ -154,16 +260,121 @@ export const vercelTeamAdmin: OrgResourceAdminKind = {
   egressHosts(_metadata): readonly string[] {
     return ['api.vercel.com', 'vercel.com', 'mcp.vercel.com'];
   },
-  listChildren(_access): Promise<readonly ProviderChild[]> {
-    return notYetImplemented('listChildren');
+  /**
+   * GET /v9/projects?teamId={teamId}&limit=100 — paginated via the
+   * `pagination.next` cursor on the response body.
+   */
+  async listChildren(access): Promise<readonly ProviderChild[]> {
+    const { headers, teamId } = authHeaders(access);
+    const all: ProviderChild[] = [];
+    let until: string | null = null;
+    while (true) {
+      const u = new URL('https://api.vercel.com/v9/projects');
+      u.searchParams.set('teamId', teamId);
+      u.searchParams.set('limit', '100');
+      if (until !== null) u.searchParams.set('until', until);
+      const resp = await fetch(u.toString(), { headers });
+      if (!resp.ok) {
+        throw new Error(
+          `vercel-team-admin: listChildren failed (${resp.status} ${resp.statusText})`,
+        );
+      }
+      const body: unknown = await resp.json();
+      if (
+        typeof body !== 'object' ||
+        body === null ||
+        !Array.isArray((body as { projects?: unknown }).projects)
+      ) {
+        throw new Error('vercel-team-admin: listChildren expected { projects: [...] }');
+      }
+      const projects = (body as { projects: unknown[] }).projects;
+      for (const p of projects) {
+        if (isVercelProjectApiResponse(p)) all.push(toProviderChild(p));
+      }
+      const pagination = (body as { pagination?: { next?: number | string | null } }).pagination;
+      const nextCursor = pagination?.next;
+      if (nextCursor === null || nextCursor === undefined || nextCursor === '') break;
+      until = String(nextCursor);
+    }
+    return all;
   },
-  createChild(_access, _spec): Promise<ProviderChild> {
-    return notYetImplemented('createChild');
+  /**
+   * POST /v10/projects?teamId={teamId} — create a new project.
+   *
+   * 409 means a project with the same name already exists for the
+   * team. We surface that with a thrown Error that includes the
+   * Vercel error message tail.
+   */
+  async createChild(access, spec): Promise<ProviderChild> {
+    if (!isVercelTeamProjectSpec(spec)) {
+      throw new Error(
+        'vercel-team-admin: createChild expects { name, framework?, rootDirectory?, gitRepository? }',
+      );
+    }
+    const { headers, teamId } = authHeaders(access);
+    const body: Record<string, unknown> = {
+      name: spec.name,
+    };
+    if (spec.framework !== undefined) body.framework = spec.framework;
+    if (spec.rootDirectory !== undefined) body.rootDirectory = spec.rootDirectory;
+    if (spec.gitRepository !== undefined) body.gitRepository = spec.gitRepository;
+    const resp = await fetch(
+      `https://api.vercel.com/v10/projects?teamId=${encodeURIComponent(teamId)}`,
+      {
+        method: 'POST',
+        headers: { ...headers, 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    );
+    if (resp.status === 409) {
+      const text = await resp.text();
+      throw new Error(`vercel-team-admin: createChild conflict (409): ${text.slice(0, 200)}`);
+    }
+    if (!resp.ok) {
+      const text = await resp.text();
+      throw new Error(
+        `vercel-team-admin: createChild failed (${resp.status} ${resp.statusText}): ${text.slice(0, 200)}`,
+      );
+    }
+    const data: unknown = await resp.json();
+    if (!isVercelProjectApiResponse(data)) {
+      throw new Error('vercel-team-admin: createChild returned unexpected shape');
+    }
+    return toProviderChild(data);
   },
-  destroyChild(_access, _providerRef): Promise<void> {
-    return notYetImplemented('destroyChild');
+  /**
+   * DELETE /v9/projects/{projectId}?teamId={teamId} — idempotent. 404
+   * is success (already gone).
+   */
+  async destroyChild(access, providerRef): Promise<void> {
+    const { headers, teamId } = authHeaders(access);
+    if (typeof providerRef !== 'string' || providerRef.length === 0) {
+      throw new Error('vercel-team-admin: destroyChild expects providerRef=projectId');
+    }
+    const resp = await fetch(
+      `https://api.vercel.com/v9/projects/${encodeURIComponent(providerRef)}?teamId=${encodeURIComponent(teamId)}`,
+      { method: 'DELETE', headers },
+    );
+    if (resp.status === 404 || resp.status === 204 || resp.ok) return;
+    const text = await resp.text();
+    throw new Error(
+      `vercel-team-admin: destroyChild failed (${resp.status} ${resp.statusText}): ${text.slice(0, 200)}`,
+    );
   },
-  rotateChildAccess(_access, _childProviderRef, _accessKey): Promise<string> {
-    return notYetImplemented('rotateChildAccess');
+  /**
+   * Vercel does not expose a per-project token mint/rotate endpoint
+   * (tokens are team-level). We always throw
+   * `VercelRotationNotSupportedError` so the UI falls back to a manual
+   * "revoke + recreate team token" flow.
+   *
+   * Spec §0.1 fallback path.
+   */
+  rotateChildAccess(_access, _childProviderRef, accessKey): Promise<string> {
+    return Promise.reject(
+      new VercelRotationNotSupportedError(
+        `vercel-team-admin: cannot rotate ${accessKey} — Vercel only issues team-level tokens; rotate via dashboard and paste manually`,
+        VERCEL_ROTATION_FALLBACK_DOCS,
+      ),
+    );
   },
 };
