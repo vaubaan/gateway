@@ -24,6 +24,7 @@
 
 import { test as base, type BrowserContext, type Page } from '@playwright/test';
 
+import { generateE2EIdentity, identityToCryptoKeyPostBody, type E2EIdentity } from './crypto';
 import { loadE2EEnv, type E2EEnv } from './env';
 import { makeNameContext, type NameContext } from './naming';
 import { GithubClient } from './provider-clients/github';
@@ -42,6 +43,8 @@ export interface AuthedAdmin {
   readonly creds: TestUserCreds;
   readonly context: BrowserContext;
   readonly page: Page;
+  /** Crypto identity seeded for this test user (skip the UI dialog). */
+  readonly identity: E2EIdentity;
 }
 
 interface WorkerFixtures {
@@ -68,21 +71,39 @@ interface TestFixtures {
  *   - first login (sign-up redirected to /sign-in then /onboarding)
  *   - any subsequent login (lands on /onboarding or last visited)
  */
-async function signInAndUnlock(page: Page, creds: TestUserCreds): Promise<void> {
+async function signIn(page: Page, creds: TestUserCreds): Promise<void> {
   await page.goto('/sign-in');
   await page.getByLabel(/email/i).fill(creds.email);
   await page.getByLabel(/password/i).fill(creds.password);
   await page.getByRole('button', { name: /sign in|log in/i }).click();
   // Wait for either /onboarding (no org yet) or any /orgs/* path.
-  await page.waitForURL((url) => /\/onboarding|\/orgs\//.test(url.pathname), { timeout: 15_000 });
+  await page.waitForURL((url) => /\/onboarding|\/orgs\//.test(url.pathname), {
+    timeout: 15_000,
+  });
+}
 
-  // Identity unlock dialog : first login creates the wrapped key,
-  // subsequent ones unwrap it. Same password as Supabase Auth in v1.
-  const unlockBtn = page.getByRole('button', { name: /unlock|create identity/i });
-  if (await unlockBtn.isVisible({ timeout: 3_000 }).catch(() => false)) {
-    await page.getByLabel(/password/i).fill(creds.password);
-    await unlockBtn.click();
-    await page.waitForLoadState('networkidle');
+/**
+ * POSTs the test user's crypto identity directly to
+ * `/api/crm/v1/me/crypto-key` so subsequent UI/HTTP flows can treat
+ * the dialog as already-dismissed. The dialog's UI is exercised
+ * separately by unit tests (cf. `packages/web/tests/unit/...`).
+ */
+async function seedCryptoKey(
+  context: BrowserContext,
+  baseUrl: string,
+  identity: E2EIdentity,
+): Promise<void> {
+  const body = identityToCryptoKeyPostBody(identity);
+  const res = await context.request.post(`${baseUrl}/api/crm/v1/me/crypto-key`, {
+    data: body,
+  });
+  if (res.status() !== 201 && res.status() !== 200) {
+    // 409 conflict (already exists) — re-derive flow is also fine
+    // because we generate a fresh identity per test user.
+    const text = await res.text();
+    if (res.status() !== 409) {
+      throw new Error(`seedCryptoKey failed: ${res.status()} ${text}`);
+    }
   }
 }
 
@@ -156,13 +177,15 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     { scope: 'worker' },
   ],
 
-  authedAdmin: async ({ browser, admin, nameCtx }, use): Promise<void> => {
+  authedAdmin: async ({ browser, admin, env, nameCtx }, use): Promise<void> => {
     const creds = await admin.createTestUser({ runUuid: nameCtx.runUuid, suffix: 'admin' });
+    const identity = await generateE2EIdentity(creds.password);
     const context = await browser.newContext();
     const page = await context.newPage();
     try {
-      await signInAndUnlock(page, creds);
-      await use({ creds, context, page });
+      await signIn(page, creds);
+      await seedCryptoKey(context, env.baseUrl, identity);
+      await use({ creds, context, page, identity });
     } finally {
       await context.close().catch(() => undefined);
       await admin.deleteTestUser(creds.userId).catch(() => undefined);

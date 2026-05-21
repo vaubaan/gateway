@@ -116,14 +116,10 @@ _Aucun scénario implémenté en v1 init._
 
 Les scénarios suivants (spec §12.3) seront ajoutés au fil des phases :
 
-- [ ] **register-org-resource** — Register OrgResource (kind
-      `<provider>-org`) → health check → unseal.
-      Spec §7.1.
-      Phase 4 wave C livre la stack côté code (`/sign-up` →
-      `/onboarding` → `/orgs/:slug/resources/new` wizard → POST
-      `/resources` + PUT `/access/:key`). Playwright E2E à câbler
-      contre un projet Supabase de test et un PAT GitHub jetable —
-      pending un harness sur le workflow GitHub Actions.
+- [x] **register-org-resource** — Register OrgResource (kind
+      `<provider>-org`) → seal PAT → unseal as admin.
+      Spec §7.1. Phase 8 wave B implementation in
+      `packages/web/tests/e2e/real-clouds/01-register-org-resource.spec.ts`.
 - [ ] **provision-via-org-admin** — Register OrgResourceAdmin →
       register OrgResource → provision ProjectResource via Admin →
       assert provider-side création effective.
@@ -148,20 +144,11 @@ Les scénarios suivants (spec §12.3) seront ajoutés au fil des phases :
       assert que l'UI bascule sur le flow manual paste avec
       `err.setupDocs` rendu. Phase 6 wave C couvre ce chemin en
       unit tests ; l'E2E contre vrais providers attend le harness.
-- [ ] **export-env-project-variant** — Export `.env` pour
-      `(project, variant)` → fichier téléchargé, lignes attendues
-      présentes, secrets en placeholder pour les blobs
-      non-decryptables.
-      Spec §7.5. **Phase 7 livre l'UI**
-      (`<DotenvExportButton>` sur la page
-      `/orgs/:slug/projects/:projectSlug/exports`) et les
-      endpoints REST (`/exports/env`) ; l'E2E doit naviguer vers
-      la page, sélectionner le variant `staging` via
-      `<VariantSelector>`, cliquer Download .env, et asserter que
-      le `<a download>` a déclenché un fichier avec les bonnes
-      lignes (et placeholders `# UNAVAILABLE: ...` quand l'user
-      n'est pas recipient). Couvert en unit tests
-      `packages/web/tests/unit/components/exports.test.tsx`.
+- [x] **export-env-project-variant** — Export `.env` pour
+      `(project, variant)` → entrées attendues présentes, sealed_blobs
+      opaques, ZK strict (cleartext absent de la réponse).
+      Spec §7.5. Phase 8 wave B implementation in
+      `packages/web/tests/e2e/real-clouds/04-export-env-project-variant.spec.ts`.
 - [ ] **export-cloud-resource-map** — Sur la page
       `/orgs/:slug/exports`, cliquer "Download
       cloud-resource-map.json" → assert (i) le fichier téléchargé
