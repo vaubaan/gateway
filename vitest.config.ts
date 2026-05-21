@@ -13,13 +13,16 @@ const rootDir = dirname(fileURLToPath(import.meta.url));
 // entry.
 const libsodiumCjsPath = require.resolve('libsodium-wrappers-sumo');
 
+// Mirror packages/web/tsconfig.json `paths` so Next-style `@/*` imports
+// resolve when route handlers are unit-tested via Vitest. Only the web
+// package uses this alias today.
+const webSrc = resolve(rootDir, 'packages/web/src');
+
 export default defineConfig({
   resolve: {
     alias: {
-      // Mirror packages/web/tsconfig.json `paths` so route handlers and
-      // their tests can import via `@/...` under vitest.
-      '@/': `${resolve(rootDir, 'packages/web/src')}/`,
       'libsodium-wrappers-sumo': libsodiumCjsPath,
+      '@/': `${webSrc}/`,
     },
   },
   test: {

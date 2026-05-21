@@ -12,6 +12,7 @@ tracks:
   - packages/crm-catalog/src/secret-manager.ts
   - packages/web/src/app/api/crm/v1/me/crypto-key/route.ts
   - packages/web/src/lib/validation/crypto-key.ts
+  - packages/web/src/app/api/crm/v1/resources/[rId]/access/[key]/recipients/route.ts
   - supabase/migrations/1001_audit_log_org_nullable.sql
 last_reviewed: 2026-05-21
 ---
@@ -47,6 +48,11 @@ comme côté Node (Runner, tests d'intégration). Ils s'appuient sur
 - Flow `lost password` côté UI (la backend route gère déjà le
   `replace=true` ; il manque le wiring browser + le re-seal des blobs
   staled).
+
+**Livré dans wave B** :
+
+- Endpoint `GET /api/crm/v1/resources/:rId/access/:key/recipients`
+  (default list, cf. section "Recipient list endpoint" plus bas).
 
 ## Décisions amont (lecture obligatoire)
 
@@ -287,6 +293,88 @@ passe `audit_log.organization_id` en nullable et ajoute deux policies
 RLS : `audit_log_select_self` (l'actor lit ses propres rows org-less)
 et `audit_log_insert_self` (la route HTTP insère via le client RLS,
 pas le service-role).
+
+## Recipient list endpoint
+
+> Source : spec §4.4. Implémenté sous
+> `packages/web/src/app/api/crm/v1/resources/[rId]/access/[key]/recipients/route.ts`.
+
+Contrat :
+
+```
+GET /api/crm/v1/resources/:rId/access/:key/recipients
+  → 200 { defaults: [ { user_id?, public_key, fingerprint }, ... ] }
+  → 401 { error: 'unauthorized' }     (pas de session)
+  → 404 { error: 'not_found' }        (resource inconnue OU user non-membre de l'org)
+```
+
+- `public_key` est en **base64** (la table `user_crypto_keys` stocke
+  en `bytea` ; PostgREST retourne `\x<hex>`, on convertit côté
+  handler). `fingerprint` est le format canonique sha256(pubkey)[..16]
+  (32 chars hex).
+- `user_id` est inclus pour permettre au browser d'afficher
+  nom/email à côté de chaque fingerprint au moment du seal (TOFU +
+  validation visuelle, §4.4). Le champ est `optional` au schéma pour
+  anticiper la phase 5 où le Runner figurera dans la liste sans
+  `user_id` (mais avec un `runner_id` à terme).
+- `Cache-Control: no-store` sur toutes les réponses : les memberships
+  peuvent changer à tout moment, on ne veut pas servir une liste
+  périmée depuis un cache intermédiaire.
+
+Implémentation (chemin nominal) :
+
+1. `createSupabaseServerClient()` (cookies session de l'user).
+2. `auth.getUser()` — 401 si pas de session.
+3. `select id, organization_id, is_admin from resources where id = :rId`.
+   La policy `resources_select_member` exclut les rows hors-org de
+   l'user — un non-membre voit 0 ligne et reçoit un 404 indistinguable
+   de "ressource inconnue". C'est volontaire (pas de surface de
+   probing).
+4. `select user_id from org_members where organization_id = $1`.
+5. `select user_id, public_key, fingerprint from user_crypto_keys where user_id in (...)`.
+   La policy `user_crypto_keys_select_org_peer` autorise un member à
+   lire les pubkeys de ses pairs.
+6. Compose `orgMembers: PubKeyEntry[]` (en excluant les members sans
+   `user_crypto_keys` row — pas encore d'identité crypto, donc pas
+   recipients).
+7. `defaultRecipients({ orgMembers, runner: undefined, isOrgAdminResource: resource.is_admin })`.
+8. Map back vers le wire format (`{ user_id, public_key, fingerprint }`).
+
+**Spécificités phase 2** :
+
+- Pas de table `runners` encore en place → `runner = undefined`. Le
+  TODO est balisé dans le code (`TODO(phase-5)`). Tant que `runner`
+  est `undefined`, la branche `is_admin=true` vs `is_admin=false` du
+  `defaultRecipients` ne change rien à la liste — c'est juste un
+  no-op qui prépare la suite.
+- Le paramètre d'URL `:key` est **accepté mais ignoré** dans le
+  calcul. Spec §4.4 n'introduit pas de per-key overrides en v1 ; le
+  segment est dans l'URL pour cohérence avec
+  `/access/:key/{...}` (PUT, GET sealed_blob) et pour laisser la
+  porte ouverte à une override par clé en v2 sans changer le shape.
+- Pas de service-role : tout passe par la session de l'user et les
+  RLS. Un audit `grep SUPABASE_SERVICE_ROLE_KEY` sur le dossier
+  `resources/` doit rester vide.
+
+**Tests** :
+
+Unit tests sous `packages/web/tests/unit/api/recipients.test.ts`
+(mocks le client Supabase) couvrent :
+
+- 401 sans session.
+- 404 quand la resource n'est pas visible (RLS retourne 0 row).
+- défauts pour une resource non-admin (2 members avec keypair).
+- défauts pour une resource org-admin (idem en phase 2 — pas de
+  runner à exclure).
+- exclusion d'un member qui n'a pas encore généré sa keypair.
+- décodage du `bytea` au format wire Postgres `\x<hex>`.
+
+Integration tests RLS-aware contre une instance Supabase de test :
+listés dans `docs/tests/integration-tests.md` (scénarios "Crypto ZK
+(phase 2)"). Setup nécessaire = service-role test helper qui crée
+l'org / les users / les rows `user_crypto_keys`, puis appelle le
+handler via une session JWT. À câbler quand le harness `vitest +
+supabase test stack` sera prêt côté CI.
 
 ## Browser flow
 

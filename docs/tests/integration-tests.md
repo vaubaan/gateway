@@ -8,6 +8,7 @@ tracks:
   - packages/core/tests/unit/crypto/recipient-defaults.test.ts
   - packages/web/tests/unit/api/me-crypto-key.test.ts
   - packages/web/tests/unit/validation/crypto-key.test.ts
+  - packages/web/tests/unit/api/recipients.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -110,7 +111,36 @@ encore le harnais d'intégration (pending — voir trous connus).
   d'intégration Supabase (env vars `SUPABASE_TEST_URL` /
   `SUPABASE_TEST_SERVICE_ROLE_KEY` à câbler ; spec §12.2)._
 - `recipient-list-compute.int.test.ts` — endpoint
-  `/access/:key/recipients`, RLS-aware. _Pending wave B._
+  `/access/:key/recipients`, RLS-aware.
+  - **Couverture unit livrée** dans
+    `packages/web/tests/unit/api/recipients.test.ts` (Supabase
+    client mocké, 6 scénarios passants) :
+    - [x] 401 sans session.
+    - [x] 404 quand la resource n'est pas visible (RLS empty).
+    - [x] defaults pour une resource non-admin (2 members avec
+          keypair) — 2 entrées avec `user_id`, `public_key`
+          (base64) et `fingerprint`.
+    - [x] defaults pour une resource org-admin — idem (phase 2
+          stub, pas de runner à exclure).
+    - [x] exclusion d'un member sans `user_crypto_keys` row.
+    - [x] décodage du `bytea` au wire format Postgres `\x<hex>`.
+  - **Integration RLS-aware** (TODO wave B / wave C une fois le
+    harness Supabase test prêt). Setup à câbler :
+    1. service-role test helper (`SUPABASE_PROD_URL` +
+       `SUPABASE_PROD_SERVICE_ROLE_KEY` en local) crée 1 org, 2
+       users + sessions, insère `org_members`, génère 2 keypairs
+       via `@crm/core/crypto` et insère `user_crypto_keys`,
+       insère 1 `secret_managers` (FK obligatoire pour
+       `resources.secret_manager_id NOT NULL`), insère 2
+       `resources` (une `is_admin=false`, une `is_admin=true`).
+    2. signIn comme un user → JWT → invoke `GET /api/.../recipients`
+       via le handler (import direct + fake session) ou via un
+       Next test server.
+    3. Scénarios RLS-aware : (a) member voit ses pairs, (b)
+       non-member → 404, (c) admin resource n'inclut pas le
+       runner même si on en simule un (futur), (d) un user
+       sans `user_crypto_keys` ligne est exclu.
+    4. Cleanup en `afterAll` (delete users → cascade).
 
 **Unit-level (livré dans `feature/crypto-core-lib`)** — couvre les
 primitives pures de `@crm/core/crypto` (KDF Argon2id, X25519 keypair,
@@ -173,10 +203,12 @@ secretbox wrap, multi-recipient sealed-box, defaults). Fichiers sous
 
 ## Trous connus
 
-- **Aucun scénario implémenté à ce jour.** C'est attendu — la phase
-  init ne livre que le squelette.
-- Tous les scénarios listés ci-dessus seront ajoutés dans le commit
-  qui livre la feature correspondante (doc-first, cf. `AGENTS.md`).
+- **Pas d'integration test RLS-aware** sur le recipient list endpoint
+  encore : la couverture côté handler est unit (Supabase mocké). Le
+  TODO est balisé dans la section "Crypto ZK (phase 2)" ci-dessus.
+- Tous les autres scénarios listés ci-dessus seront ajoutés dans le
+  commit qui livre la feature correspondante (doc-first, cf.
+  `AGENTS.md`).
 
 ## Références
 
