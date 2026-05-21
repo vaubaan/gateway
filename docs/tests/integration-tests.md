@@ -6,6 +6,8 @@ tracks:
   - packages/core/tests/unit/crypto/wrap.test.ts
   - packages/core/tests/unit/crypto/sealed-box.test.ts
   - packages/core/tests/unit/crypto/recipient-defaults.test.ts
+  - packages/web/tests/unit/api/me-crypto-key.test.ts
+  - packages/web/tests/unit/validation/crypto-key.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -74,9 +76,39 @@ Les scénarios suivants seront ajoutés au fil des phases (cf.
 
 > Couvrira: `docs/spec/cloud-resource-manager.md` §4.
 
-- `crypto-keypair-bootstrap.int.test.ts` — GET/PUT
-  `/me/crypto-key`, round-trip wrap/unwrap. _Pending wave B
-  (endpoints non encore livrés)._
+**Livré dans `feature/api-me-crypto-key`** — wave B, phase 2. Tests
+unit avec mock du client Supabase (fichier
+`packages/web/tests/unit/api/me-crypto-key.test.ts`). Les vrais tests
+d'intégration "instance Supabase de test + RLS effective" attendent
+encore le harnais d'intégration (pending — voir trous connus).
+
+- [x] `GET sans session` → 401.
+- [x] `GET sans row` → 404.
+- [x] `POST {payload valide}` → 201 + row créée + audit
+      `user.crypto-key.created` (org-less).
+- [x] `GET après POST` → 200 + payload identique (modulo encoding).
+- [x] `POST avec params Argon2id trop faibles` → 400
+      `kdf_params_too_weak`.
+- [x] `POST sur row déjà existante` → 409.
+- [x] `PATCH rotate-password` (sans `replace`) → 200, pubkey
+      inchangée, audit `user.crypto-key.rotated-password`.
+- [x] `PATCH replace=true` → 200, pubkey remplacée, audit
+      `user.crypto-key.replaced-identity` avec `old_fingerprint`.
+- [x] `PATCH` sans row → 404.
+- [x] Invariant ZK : aucun byte de wrapped_sk / kdf_salt / public_key
+      ne fuit dans `audit_log.subject`.
+- [x] Validation (`tests/unit/validation/crypto-key.test.ts`) : tailles
+      des bytea, regex fingerprint, accept defaults Argon2id, refus
+      des params trop faibles, refus alg ≠ `argon2id`.
+
+**TODO — vrais tests d'intégration (instance Supabase de test)** :
+
+- `me-crypto-key.int.test.ts` — créer un user via service-role,
+  signIn, exécuter le contrat HTTP complet contre un projet Supabase
+  de test, vérifier que la RLS bloque effectivement un user A qui
+  PATCHerait la row d'un user B. _Pending : harnais
+  d'intégration Supabase (env vars `SUPABASE_TEST_URL` /
+  `SUPABASE_TEST_SERVICE_ROLE_KEY` à câbler ; spec §12.2)._
 - `recipient-list-compute.int.test.ts` — endpoint
   `/access/:key/recipients`, RLS-aware. _Pending wave B._
 
