@@ -1,6 +1,11 @@
 ---
 title: E2E Tests Plan
-tracks: []
+tracks:
+  - packages/web/src/lib/crypto/identity-store.ts
+  - packages/web/src/lib/crypto/use-user-identity.ts
+  - packages/web/src/components/identity/UnlockIdentityDialog.tsx
+  - packages/web/src/components/identity/IdentityGate.tsx
+  - packages/web/src/components/identity/SignOutButton.tsx
 last_reviewed: 2026-05-21
 ---
 
@@ -126,6 +131,29 @@ Les scénarios suivants (spec §12.3) seront ajoutés au fil des phases :
       `recipients_stale=true` sur les blobs, déclencher re-seal,
       assert blobs déchiffrables par le new member.
       Spec §4.5.
+- [ ] **crypto-identity-first-login** — User vient de signer up, tape
+      son password dans `UnlockIdentityDialog`. Assert : POST
+      `/api/crm/v1/me/crypto-key` part avec un body `public_key`,
+      `fingerprint`, `wrapped_private_key`, `kdf_salt` en base64 ; row
+      `user_crypto_keys` créée ; `IdentityGate` rend ensuite les
+      children. Aucun `localStorage` / `sessionStorage` / `IndexedDB`
+      n'a été touché côté browser (assert via `await page.evaluate(...)`).
+      Spec §4.1 steps 1-6 + §4.1.1.
+- [ ] **crypto-identity-unlock-at-relogin** — User existant, sk
+      cachée dans `identityStore` après unlock. Reload tab ⇒ store
+      vide (memory only) ⇒ dialog re-apparaît ⇒ tape password
+      correct ⇒ unwrap OK ⇒ assert `identity.fingerprint` matche
+      celui de la row Supabase. Re-tape un mauvais password ⇒
+      message d'erreur "wrong password" affiché, pas de fuite du
+      password lui-même dans le DOM ou la console.
+      Spec §4.1 step 4.
+- [ ] **crypto-identity-logout-wipes-memory** — User unlocked,
+      clique `SignOutButton`. Assert : `identityStore.get()`
+      retourne `null` **avant** que `supabase.auth.signOut()` ne
+      complete (l'ordre compte — la sk doit être wipée d'abord).
+      Re-navigue : la page protégée force un nouveau prompt unlock,
+      pas de cache résiduel.
+      Spec §4.1.1.
 
 ## Trous connus
 

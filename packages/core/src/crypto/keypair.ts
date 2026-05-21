@@ -7,7 +7,11 @@ async function sha256(input: Uint8Array): Promise<Uint8Array> {
   // every evergreen browser. libsodium-wrappers 0.7.x doesn't surface
   // `crypto_hash_sha256` (it would be SHA-512 via `crypto_hash`), so we
   // use the platform SHA-256 here. Spec §4.1 mandates SHA-256.
-  const buf = await globalThis.crypto.subtle.digest('SHA-256', input);
+  // Copy into a fresh Uint8Array<ArrayBuffer> so DOM typings accept it
+  // (libsodium returns Uint8Array<ArrayBufferLike>, which is a
+  // SharedArrayBuffer-superset that `crypto.subtle.digest` refuses).
+  const copy = new Uint8Array(input);
+  const buf = await globalThis.crypto.subtle.digest('SHA-256', copy);
   return new Uint8Array(buf);
 }
 
