@@ -7,7 +7,18 @@ async function sha256(input: Uint8Array): Promise<Uint8Array> {
   // every evergreen browser. libsodium-wrappers 0.7.x doesn't surface
   // `crypto_hash_sha256` (it would be SHA-512 via `crypto_hash`), so we
   // use the platform SHA-256 here. Spec §4.1 mandates SHA-256.
-  const buf = await globalThis.crypto.subtle.digest('SHA-256', input);
+  // The `unknown` indirection works around a TS 5.x typed-array generic
+  // that fires only when this file is type-checked under the DOM lib
+  // (e.g. `@crm/web` resolving an import): `subtle.digest` expects an
+  // `ArrayBuffer`-backed view but TS infers `Uint8Array<ArrayBufferLike>`.
+  // The runtime accepts any `Uint8Array`; it's purely a type-level coercion.
+  // ESLint sees this file under core's ES2022 tsconfig where the assertion
+  // is redundant — hence the targeted disable.
+  const buf = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-type-assertion
+    input as unknown as ArrayBuffer,
+  );
   return new Uint8Array(buf);
 }
 

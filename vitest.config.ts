@@ -1,7 +1,10 @@
 import { defineConfig } from 'vitest/config';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
 
 const require = createRequire(import.meta.url);
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 // The ESM build of libsodium-wrappers-sumo (0.7.16) references a sibling
 // `libsodium.mjs` that isn't packaged — only the CJS bundle works under
@@ -10,10 +13,16 @@ const require = createRequire(import.meta.url);
 // entry.
 const libsodiumCjsPath = require.resolve('libsodium-wrappers-sumo');
 
+// Mirror packages/web/tsconfig.json `paths` so Next-style `@/*` imports
+// resolve when route handlers are unit-tested via Vitest. Only the web
+// package uses this alias today.
+const webSrc = path.resolve(__dirname, 'packages/web/src');
+
 export default defineConfig({
   resolve: {
     alias: {
       'libsodium-wrappers-sumo': libsodiumCjsPath,
+      '@/': `${webSrc}/`,
     },
   },
   test: {
