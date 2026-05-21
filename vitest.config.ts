@@ -1,7 +1,10 @@
 import { defineConfig } from 'vitest/config';
 import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { dirname, resolve } from 'node:path';
 
 const require = createRequire(import.meta.url);
+const rootDir = dirname(fileURLToPath(import.meta.url));
 
 // The ESM build of libsodium-wrappers-sumo (0.7.16) references a sibling
 // `libsodium.mjs` that isn't packaged — only the CJS bundle works under
@@ -13,6 +16,9 @@ const libsodiumCjsPath = require.resolve('libsodium-wrappers-sumo');
 export default defineConfig({
   resolve: {
     alias: {
+      // Mirror packages/web/tsconfig.json `paths` so route handlers and
+      // their tests can import via `@/...` under vitest.
+      '@/': `${resolve(rootDir, 'packages/web/src')}/`,
       'libsodium-wrappers-sumo': libsodiumCjsPath,
     },
   },
