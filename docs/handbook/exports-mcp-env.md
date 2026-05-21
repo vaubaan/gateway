@@ -2,6 +2,7 @@
 title: Exports — .env, mcp.json, cloud-resource-map
 tracks:
   - 'feature/p7-mcp-config-regen'
+  - 'feature/p7-exports-rest'
 last_reviewed: 2026-05-21
 ---
 
@@ -127,14 +128,79 @@ Hash = SHA-256 hex de la canonical JSON de `{ mcp_snapshot, env_snapshot }`.
 
 ## Exports REST (.env / mcp / cloud-resource-map)
 
-À implémenter en Phase 7 wave A2. Voir build plan
-`.claude/build-plans/phase-7-mcp-exports.json`.
+Les 3 endpoints suivent un pattern partagé :
+
+1. Auth via `db.auth.getUser()` → 401 sans session.
+2. Lookup org via `findOrgIdBySlugOrId` → 404 si invisible RLS.
+3. Parse + valide le body via `@/lib/validation/exports`.
+4. Résout les Resources visibles via
+   `resolveScopedResources` (cf. section MCP regen ci-dessus).
+5. Joint les `resource_access` via
+   `resolveAccessBlobsForResources` (sealed_blobs uniquement).
+6. Sérialise via les helpers purs dans `@/lib/exports/serialize`.
+7. Audit log `resource.access.exported` (env+mcp) ou
+   `cloud_resource_map.exported` — counts seulement, jamais de blob.
+
+### `POST /exports/env`
+
+Body : `{ scope, scopeId?, variant?, format='dotenv'|'json' }`.
+Réponse : `{ format, entries: [{ key, source_resource_id,
+source_resource_name, source_kind, sealed_blob, recipient_fingerprints }] }`.
+
+Le browser :
+
+1. Itère sur `entries`.
+2. Pour chaque sealed_blob, essaie `unsealAs(blob, fp, identity)`.
+3. Concat `${key}=${cleartext}` (dotenv) ou pair (json). Si unseal
+   échoue → ligne placeholder `# UNAVAILABLE: <key> (request access
+from admin)`.
+
+### `POST /exports/mcp`
+
+Body : `{ scope, scopeId?, variant? }`.
+Réponse :
+
+- `mcp_json` — résultat de `composeMcpConfig(...)`.
+- `env_manifest` — manifest des placeholders `${KEY}`.
+- `env_dotenv_template` — `.env-mcp` skeleton avec placeholders
+  (utile pour preview UI / fallback quand aucun unseal n'est possible).
+- `env_entries` — pour chaque manifest entry, le sealed_blob (`null`
+  si l'Access manque côté DB).
+
+Le browser : (i) écrit `mcp.json` comme tel ; (ii) résout
+`${KEY}` → cleartext via unseal côté client puis écrit le `.env-mcp`
+compagnon.
+
+### `POST /exports/cloud-resource-map`
+
+Body : `{}` (toujours scopé org entière).
+Réponse : `{ version: 1, exported_at, organization_id, resources: [...] }`
+(spec §6.7.1).
+
+Chaque resource carrie :
+
+- `id, scope, project_id, variant, kind, name`.
+- `provider_metadata` (raw).
+- `mcp_fragment` (résultat de `kind.mcpFragment(meta)`, ou `null`).
+- `egress_hosts` (résultat de `kind.egressHosts(meta)`).
+- `access_keys: [{ key, usage }]` où `usage` est
+  `session-injectable` ssi le Runner est recipient du blob (sa
+  pubkey figure dans la recipient list, lecture en clair via le
+  champ public `recipients[].fp`). En Phase 7 aucun Runner n'est
+  enregistré → `runnerFingerprint = null` → toujours `browser-only`.
+- `secret_manager: { kind, name }` projeté depuis
+  `secret_managers` via `pickSecretManagersForResources`.
+
+**ZK strict** : la réponse ne contient AUCUN sealed_blob, ciphertext
+ou cleartext — uniquement des métadonnées + une référence textuelle
+au secret_manager. La query `recipients` lit le champ public de la
+sealed_blob JSON (cf. spec §4.4 — la recipient list est publique).
 
 ## UI exports
 
 À implémenter en Phase 7 wave B. Page
 `/orgs/:slug/projects/:name/exports` et `/orgs/:slug/exports`. Les
 boutons assemblent les bundles via le browser : POST sur les endpoints
-REST (Phase 7 wave A2), unseal des sealed_blobs en mémoire via
+REST ci-dessus, unseal des sealed_blobs en mémoire via
 `useUserIdentity` + `unsealAs`, écriture du fichier via
 `Blob + URL.createObjectURL`.
