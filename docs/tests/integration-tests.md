@@ -16,6 +16,9 @@ tracks:
   - packages/web/tests/unit/api/catalog.test.ts
   - packages/web/tests/unit/api/resources.test.ts
   - packages/web/tests/unit/api/resource-access.test.ts
+  - packages/web/tests/unit/components/sealed.test.tsx
+  - packages/web/tests/unit/components/resources-table.test.tsx
+  - packages/web/tests/unit/components/resource-detail.test.tsx
 last_reviewed: 2026-05-21
 ---
 
@@ -318,6 +321,22 @@ les handlers Next.js :
   d'un `sealed_blob` réel multi-recipient + relecture, vrai member RLS.
 - TODO Phase 4 integration: `resource-access-rls.int.test.ts` — un
   member fetch le blob mais ne peut déchiffrer que les recipient-listed.
+- [x] `packages/web/tests/unit/components/sealed.test.tsx` — 10
+      scénarios sur `<SealedInput>` (recipients render, seal + wipe via
+      `bytes.fill(0)` vérifié, recipient checkbox override, Seal button
+      désactivé si 0 recipient), `<SealedReveal>` (reveal cleartext,
+      `not_a_recipient`, `identity_locked`), `<SealedView>` (summary
+      "sealed for N recipients", toggle vers `<SealedReveal>`),
+      invariant ZK (audit grep sur `Storage.prototype.setItem` =
+      0 appel).
+- [x] `packages/web/tests/unit/components/resources-table.test.tsx` —
+      9 scénarios sur les filtres provider / kindClass / variant /
+      status + le `<ResourceStatusBadge>` (color class par status,
+      fallback neutral pour label inconnu, attribut title).
+- [x] `packages/web/tests/unit/components/resource-detail.test.tsx` —
+      3 scénarios sur `<ResourceDetailClient>` : POST `/health` →
+      affiche `pending-runner`, `<AddAccessDialog>` ouvre/ferme,
+      flow seal → PUT `/access/:key` capture le bon body shape.
 
 ### SecretManagers (phase 5)
 
