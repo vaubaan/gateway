@@ -11,6 +11,7 @@ tracks:
   - packages/web/tests/unit/api/recipients.test.ts
   - packages/crm-catalog/tests/unit/providers/github.test.ts
   - packages/crm-catalog/tests/unit/providers/vercel.test.ts
+  - packages/crm-catalog/tests/unit/providers/supabase-cloud.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -213,8 +214,40 @@ secretbox wrap, multi-recipient sealed-box, defaults). Fichiers sous
       `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`) avec regex appropriées
       (`prj_…`, `team_…`).
 
-**Unit-level — `feature/kinds-supabase`** : à livrer en parallèle
-dans cette wave (cf. handbook `catalog-and-plugins.md`).
+**Unit-level — `feature/kinds-supabase`** :
+`packages/crm-catalog/tests/unit/providers/supabase-cloud.test.ts`
+couvre les 3 kinds Supabase Cloud (`supabase-org`,
+`supabase-org-admin`, `supabase-project`) :
+
+- [x] Contrat ResourceKind respecté (id, provider, kindClass,
+      displayName, rotationMethod, accessSchema, healthTestCmd,
+      egressHosts).
+- [x] `supabase-org-admin` narrow vers `OrgResourceAdminKind` et
+      déclare `manages = ['supabase-project']`.
+- [x] Provider operations (`createChild`, `destroyChild`,
+      `listChildren`, `rotateChildAccess`) rejettent avec le marker
+      `phase-6: …` (Phase 6 livrera les vraies impl Management API).
+- [x] `setupDocs` markdown >100 chars, mentions des sections
+      attendues (PAT creation, org slug, Owner/Administrator,
+      service_role rotation).
+- [x] `healthTestCmd` interpole l'org slug ou le project URL sans
+      jamais embarquer la cleartext du PAT.
+- [x] `supabase-project.healthTestCmd` n'utilise **jamais**
+      `$SUPABASE_SERVICE_ROLE_KEY` (un healthcheck passif ne doit pas
+      leak le service_role).
+- [x] `mcpFragment` conforme à la shape stdio (`npx`, args
+      référençant `@supabase/mcp-server-supabase` avec
+      `--access-token ${SUPABASE_ACCESS_TOKEN}` en placeholder, cf.
+      `.mcp.json` racine). Pas de PAT cleartext (`^sbp_…`) dans les
+      args.
+- [x] `egressHosts` non-vide pour les kinds non-project. Pour
+      `supabase-project`, inclut le hostname `<projectRef>.supabase.co`
+      dérivé de metadata.
+- [x] `supabase-project` déclare les 5 clés (`SUPABASE_URL`,
+      `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`,
+      `SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`) avec regex
+      appropriées (`https://[a-z]{20}\.supabase\.co`, JWT format
+      `eyJ.eyJ.…`, project ref `[a-z]{20}`).
 
 **Wave B — `feature/catalog-registry-and-endpoint`** :
 
