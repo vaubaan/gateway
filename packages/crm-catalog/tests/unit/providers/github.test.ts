@@ -156,14 +156,16 @@ describe('github-org-admin', () => {
     expect(hosts).toContain('ghcr.io');
   });
 
-  it('provider operations are phase-6 stubs that throw a stable marker', async () => {
-    const access: Readonly<Record<string, string>> = { GITHUB_TOKEN: 't' };
-    await expect(githubOrgAdmin.listChildren(access)).rejects.toThrow(MARKER_PHASE_6);
-    await expect(githubOrgAdmin.createChild(access, {})).rejects.toThrow(MARKER_PHASE_6);
-    await expect(githubOrgAdmin.destroyChild(access, 'ref')).rejects.toThrow(MARKER_PHASE_6);
-    await expect(githubOrgAdmin.rotateChildAccess(access, 'ref', 'GITHUB_TOKEN')).rejects.toThrow(
-      MARKER_PHASE_6,
-    );
+  // Phase 6 lit up the provider operations — see
+  // tests/unit/providers/github-admin.test.ts for the live behaviour
+  // (mocked `fetch`). The shape-level contract test is now: methods
+  // exist and are async functions.
+  it('provider operations are now Phase 6-live (no longer phase-6 stubs)', () => {
+    expect(typeof githubOrgAdmin.listChildren).toBe('function');
+    expect(typeof githubOrgAdmin.createChild).toBe('function');
+    expect(typeof githubOrgAdmin.destroyChild).toBe('function');
+    expect(typeof githubOrgAdmin.rotateChildAccess).toBe('function');
+    void MARKER_PHASE_6;
   });
 
   it('narrows to OrgResourceAdminKind at the type level', () => {
