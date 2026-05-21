@@ -133,12 +133,19 @@ export async function PUT(req: NextRequest, ctx: RouteContext): Promise<NextResp
   }
 
   // Upsert on (resource_id, key) — unique constraint in migration 1000.
+  // Setting `recipients_stale: false` here resolves the Phase 5 TODO:
+  // after an admin re-seals the blob (whether following a membership
+  // change, a lost-password recovery, or a manual rotation), the row
+  // is fresh again and the banner clears. The trigger added in
+  // migration 1003 will flip it back to true the next time the org's
+  // membership mutates (spec §4.5).
   const upsertRow = {
     resource_id: rId,
     key,
     sealed_blob: sealedBlobToBytea(blob),
     description,
     rotated_at: new Date().toISOString(),
+    recipients_stale: false,
   };
 
   const { data, error } = (await db

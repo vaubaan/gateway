@@ -4,6 +4,7 @@ tracks:
   - github-admin-impl
   - vercel-admin-impl
   - supabase-admin-impl
+  - provision-rotate-rest
 last_reviewed: 2026-05-21
 ---
 
@@ -13,7 +14,7 @@ Document l'implémentation effective des workflows de provisioning
 (via un Admin) et de rotation (3 paths : `self`, `admin-mediated`,
 `manual`). Spec §0.1, §6.5, §7.3, §7.4.
 
-## Statut courant (Phase 6, Wave A — done)
+## Statut courant (Phase 6, Wave B — done)
 
 | Composant                                                        | État          |
 | ---------------------------------------------------------------- | ------------- |
@@ -21,10 +22,108 @@ Document l'implémentation effective des workflows de provisioning
 | `github-org-admin` impl (Phase 6)                                | done (Wave A) |
 | `vercel-team-admin` impl (Phase 6)                               | done (Wave A) |
 | `supabase-org-admin` impl (Phase 6)                              | done (Wave A) |
-| REST `/provision`, `/destroy-cloud-resource`, `/rotate` dispatch | TODO Wave B   |
-| Trigger SQL `recipients_stale` on org_members change             | TODO Wave B   |
-| `PUT /access/:key` reset `recipients_stale=false`                | TODO Wave B   |
+| REST `/provision`, `/destroy-cloud-resource`, `/rotate` dispatch | done (Wave B) |
+| Trigger SQL `recipients_stale` on org_members change             | done (Wave B) |
+| `PUT /access/:key` reset `recipients_stale=false`                | done (Wave B) |
 | UI Wizard `+ Provision via …` + `Rotate` button                  | TODO Wave C   |
+
+## REST endpoints (Phase 6 Wave B)
+
+### `POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision`
+
+Spec §6.5 + §7.3 — book-keeping side du workflow de provisioning.
+Le browser a déjà appelé `admin.createChild(access, spec)` côté
+provider (ZK §4). Cet endpoint enregistre la nouvelle row dans la
+DB sans toucher au token de l'enfant.
+
+Pré-conditions enforced server-side :
+
+- session valide, org visible (RLS) ;
+- `:adminId` existe dans l'org, `is_admin=true`, kind est dans
+  `kindClass='org-admin'` ;
+- `body.childKind` ∈ `admin.manages`.
+
+Body :
+
+```json
+{
+  "childKind": "github-repo",
+  "name": "repo-a",
+  "project_id": "<uuid>",
+  "variant": "prod",
+  "provider_ref": "vauban/repo-a",
+  "metadata": { "org": "vauban", "repo": "repo-a" }
+}
+```
+
+Réponse 201 :
+
+```json
+{
+  "resource": { "...row insérée..." },
+  "resource_id": "<uuid>"
+}
+```
+
+Audit : `resource.provisioned` avec scope = `{ resource_id, admin_resource_id, child_kind }`.
+
+### `DELETE /api/crm/v1/orgs/:orgId/resources/:rId/destroy-cloud-resource`
+
+Spec §6.5 + §7.3. Le browser a déjà appelé
+`admin.destroyChild(access, providerRef)` côté provider. Cet
+endpoint supprime la row CRM (cascade sur resource_access) et
+audite `resource.destroyed-cloud-side`.
+
+Pré-conditions :
+
+- `scope = 'project'` (sinon 409) ;
+- `admin_resource_id` non null (sinon 409 — la suppression admin-less
+  passe par `DELETE /resources/:rId` standard).
+
+### `POST /api/crm/v1/orgs/:orgId/resources/:rId/access/:key/rotate`
+
+Spec §6.4 + §7.4 — **dispatcher** des 3 paths. Le browser lit le
+payload et exécute le sous-flux correspondant. Phase 5 livrait un
+stub (`pending-runner`) ; Phase 6 wave B retourne `pending-dispatch`
+avec les champs nécessaires :
+
+| `rotation_method` | `next_step`            | Champs additionnels                                                   |
+| ----------------- | ---------------------- | --------------------------------------------------------------------- |
+| `manual`          | `operator-action`      | `setup_docs`                                                          |
+| `self`            | `runner-self-rotation` | `setup_docs`                                                          |
+| `admin-mediated`  | `admin-rotate-child`   | `admin_resource_id`, `admin_kind`, `child_provider_ref`, `setup_docs` |
+
+Audit : `resource.access.rotate.requested` avec
+`subject={rotation_method, admin_resource_id?}`.
+
+## Reset `recipients_stale=false` sur PUT (Phase 5 TODO résolu)
+
+Le `PUT /access/:key` insère/upsert maintenant `recipients_stale: false`
+sur la row. Combiné au trigger SQL ci-dessous, cela donne le cycle :
+
+1. Un membre est ajouté → trigger flippe `recipients_stale=true`
+   sur tous les blobs de l'org (banner s'affiche).
+2. Un admin unseal + re-seal pour la nouvelle liste de destinataires
+   et PUT.
+3. Le PUT remet `recipients_stale=false` → banner disparaît.
+
+## Trigger SQL `recipients_stale` on membership change
+
+Migration `supabase/migrations/1003_recipients_stale_on_membership.sql` :
+
+- Function `flip_recipients_stale_on_member_change()` (`security definer`).
+- Trigger `org_members_recipients_stale` `after insert or delete on org_members`.
+- Updates : `resource_access.recipients_stale = true` pour tous les
+  blobs des Resources de l'org dont la membership a changé (qu'on
+  ait ajouté ou retiré un user — dans les deux cas, la liste de
+  destinataires _doit_ être recalculée).
+- Le `update` ne touche QUE les rows où `recipients_stale = false`
+  (évite des cycles inutiles si plusieurs membres sont ajoutés en
+  série dans la même transaction).
+
+Appliquée sur prod via `psql aws-1-eu-west-3.pooler.supabase.com:6543`
+le 2026-05-21 ; enregistrée dans `supabase_migrations.schema_migrations`
+(version `1003`).
 
 ## Principes ZK (spec §4)
 
@@ -241,5 +340,6 @@ Phase 6 (build plan `.claude/build-plans/phase-6-provisioning-rotation.json`) :
 
 - **Wave A** (done) — impl des 3 providers admin (`github`,
   `vercel`, `supabase-cloud`).
-- **Wave B** (suivante) — REST endpoints + migration trigger SQL.
+- **Wave B** (done) — REST endpoints + migration trigger SQL + reset
+  `recipients_stale=false` sur PUT.
 - **Wave C** (suivante) — UI wizard + boutons.

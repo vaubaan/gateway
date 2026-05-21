@@ -23,6 +23,7 @@ tracks:
   - packages/web/src/components/needs-reseal/NeedsResealBanner.tsx
   - packages/web/src/lib/secret-managers/re-seal-blob.ts
   - supabase/migrations/1001_audit_log_org_nullable.sql
+  - supabase/migrations/1003_recipients_stale_on_membership.sql
 last_reviewed: 2026-05-21
 ---
 
@@ -72,10 +73,14 @@ comme côté Node (Runner, tests d'intégration). Ils s'appuient sur
 
 Le flow complet est désormais cliquable :
 
-1. Un trigger (PATCH `me/crypto-key replace=true` côté Phase 4 wave
-   C, ou bientôt un trigger SQL sur INSERT/DELETE org_members en
-   Phase 6+) flippe `resource_access.recipients_stale=true` sur
-   chaque blob où le user concerné est recipient.
+1. Un trigger flippe `resource_access.recipients_stale=true` :
+   - **Phase 4 wave C** : PATCH `me/crypto-key replace=true` (lost
+     password / identity replacement) — marque tous les blobs où
+     l'old fingerprint figurait.
+   - **Phase 6 wave B** : trigger SQL `org_members_recipients_stale`
+     (migration `1003_recipients_stale_on_membership.sql`) qui se
+     déclenche `AFTER INSERT OR DELETE ON org_members` et marque
+     tous les blobs de l'org affectée.
 2. À chaque visite d'une page `/orgs/[slug]/*`, le
    `<NeedsResealBanner>` fait un `GET /needs-reseal` ; s'il y a au
    moins une row stale visible, le banner jaune s'affiche en haut.
@@ -90,15 +95,13 @@ Le flow complet est désormais cliquable :
 4. À la fin de l'itération, le banner re-fetch `/needs-reseal`. Si
    le compteur revient à 0, le banner disparaît.
 
-**TODO Phase 6** : le PUT `/access/:key` actuel (Phase 4 wave A) ne
-flippe pas `recipients_stale=false` côté serveur. C'est un détail
-de finalisation côté route ; tant qu'on n'a pas le trigger SQL qui
-remet le flag à true sur membership change, on peut faire un
-reset explicite côté re-seal handler (PATCH dédié) ou rajouter le
-clear dans le PUT existant. Vu que la spec §4.5 prévoit déjà
-"SM clear recipients_stale", la voie naturelle est de l'ajouter
-dans le PUT. **Marqué pending dans `out_of_scope_for_phase_5`** du
-build plan.
+**Résolu en Phase 6 wave B** : le `PUT /access/:key` set désormais
+`recipients_stale = false` sur l'upsert (cf. `route.ts`). Le banner
+disparaît dès que le re-seal a écrit ; il reviendra dès qu'un
+trigger SQL (membership change ou PATCH lost-password) flippera la
+colonne à `true` ailleurs. Voir le handbook
+`provisioning-rotation.md` section "Reset `recipients_stale=false`
+sur PUT".
 
 ## Décisions amont (lecture obligatoire)
 
