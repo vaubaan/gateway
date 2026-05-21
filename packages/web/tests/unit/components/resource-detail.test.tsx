@@ -110,7 +110,15 @@ describe('<ResourceDetailClient>', () => {
         }),
     );
     render(
-      <ResourceDetailClient orgSlug="acme" resourceId="res-1" accessKeys={['GITHUB_TOKEN']} />,
+      <ResourceDetailClient
+        orgSlug="acme"
+        resourceId="res-1"
+        resourceName="r"
+        accessKeys={['GITHUB_TOKEN']}
+        destroyEnabled={false}
+        providerRef={null}
+        adminResourceId={null}
+      />,
     );
     fireEvent.click(screen.getByTestId('resource-health-button'));
     await flushAsync();
@@ -123,7 +131,15 @@ describe('<ResourceDetailClient>', () => {
   it('opens the AddAccessDialog when an access-key button is clicked', () => {
     installFetchMock(() => new Response('{}'));
     render(
-      <ResourceDetailClient orgSlug="acme" resourceId="res-1" accessKeys={['GITHUB_TOKEN']} />,
+      <ResourceDetailClient
+        orgSlug="acme"
+        resourceId="res-1"
+        resourceName="r"
+        accessKeys={['GITHUB_TOKEN']}
+        destroyEnabled={false}
+        providerRef={null}
+        adminResourceId={null}
+      />,
     );
     expect(screen.queryByTestId('add-access-dialog')).toBeNull();
     fireEvent.click(screen.getByTestId('open-add-access-GITHUB_TOKEN'));
@@ -158,7 +174,15 @@ describe('<ResourceDetailClient>', () => {
     });
 
     render(
-      <ResourceDetailClient orgSlug="acme" resourceId="res-1" accessKeys={['GITHUB_TOKEN']} />,
+      <ResourceDetailClient
+        orgSlug="acme"
+        resourceId="res-1"
+        resourceName="r"
+        accessKeys={['GITHUB_TOKEN']}
+        destroyEnabled={false}
+        providerRef={null}
+        adminResourceId={null}
+      />,
     );
     fireEvent.click(screen.getByTestId('open-add-access-GITHUB_TOKEN'));
     await flushAsync();
