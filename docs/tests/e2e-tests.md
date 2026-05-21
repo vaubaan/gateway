@@ -13,11 +13,19 @@ last_reviewed: 2026-05-21
 
 ## Statut courant
 
-**Squelette vide.** Aucun scénario E2E n'est implémenté en v1 init —
-seul un test fumé `tests/e2e/smoke.spec.ts` (marqué `test.skip`) est
-livré pour valider que Playwright est correctement câblé. Ce fichier
-liste les scénarios qui seront ajoutés au fil des phases (cf. spec
-§12.3 et `.claude/build-plans/init.json` `out_of_scope_for_init`).
+**Harness Phase 8 wave A livré.** Les scénarios §12.3 atterrissent
+dans les waves B + C de la même phase. Le smoke legacy
+`tests/e2e/smoke.spec.ts` est conservé (skip) pour compat ; le
+harness vit sous `tests/e2e/real-clouds/` et expose une fixture
+Playwright unifiée (env + admin service-role + provider clients +
+authed browser + bootstrapped org).
+
+- Harness & infrastructure : **DONE** (Phase 8 wave A).
+- Sweeper standalone : **DONE** (`scripts/e2e-sweeper.ts`).
+- Workflow CI nightly : **DONE** (`.github/workflows/e2e-nightly.yml`).
+- Doc opérateur secrets : `scripts/setup-e2e-secrets.md` (livré
+  Phase 8 wave C).
+- Scénarios métier : voir la section "Scénarios couverts" plus bas.
 
 ## Périmètre
 

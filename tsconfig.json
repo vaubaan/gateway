@@ -2,7 +2,8 @@
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
     "noEmit": true,
-    "allowJs": false
+    "allowJs": false,
+    "types": ["node"]
   },
-  "include": ["vitest.config.ts", "playwright.config.ts", "eslint.config.js"]
+  "include": ["vitest.config.ts", "playwright.config.ts", "eslint.config.js", "scripts/**/*.ts"]
 }
