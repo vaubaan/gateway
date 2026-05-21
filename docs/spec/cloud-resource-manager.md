@@ -7,6 +7,17 @@
 > rendu `.mcp.json` runtime) est intégralement retiré dans cette refonte —
 > pas de dual-write, pas de migration de données, on repart d'une feuille
 > blanche.
+>
+> **Filiation v2.** Cette spec remplace une codebase précédente
+> (**Vauban v2**) archivée sous `legacy/` dans le repo méta
+> [github.com/sbw-vauban/vauban](https://github.com/sbw-vauban/vauban),
+> déjà checkout localement à `/home/dev/vauban/legacy/` (chemin
+> transitoire, à retirer une fois le dev v3 stabilisé). Refonte
+> from-scratch — pas de code partagé, pas de migration, pas de compat.
+> Un agent d'implémentation peut **consulter ponctuellement** v2 comme
+> référence (anciens schémas DB, runbooks, traces de décisions
+> implicites) mais ne doit **pas l'absorber en bloc** dans son
+> contexte : cette spec est faite pour être auto-portante.
 
 ## 0. Vocabulaire
 
