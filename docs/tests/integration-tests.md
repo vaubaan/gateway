@@ -14,6 +14,7 @@ tracks:
   - packages/crm-catalog/tests/unit/providers/supabase-cloud.test.ts
   - packages/crm-catalog/tests/unit/registry.test.ts
   - packages/web/tests/unit/api/catalog.test.ts
+  - packages/web/tests/unit/api/resources.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -287,14 +288,27 @@ les handlers Next.js :
 
 ### Resources CRUD (phase 4)
 
-> Couvrira: spec §3.1, §3.3, §6.3, §6.4.
+> Couvre: spec §3.1, §3.3, §6.3, §7.1.
+> Wave A livré: route handlers + unit tests fakes.
+> Wave A à livrer en integration RLS-aware: vrai Supabase test stack.
 
-- `resources-crud.int.test.ts` — POST/GET/PATCH/DELETE sur
-  `resources` avec RLS member vs admin.
-- `resource-access-put.int.test.ts` — PUT d'un `sealed_blob`,
-  validation du format multi-recipient.
-- `resource-access-rls.int.test.ts` — un member fetch le blob
-  mais ne peut déchiffrer que les recipient-listed.
+- [x] `packages/web/tests/unit/api/resources.test.ts` — couvre
+      `GET /orgs/:orgId/resources` (filtre `scope`), `POST` (registration
+      d'un `github-org`, refus `unknown_kind`, refus check-constraint
+      `scope/project_id`, refus slug invalide, refus quand pas de
+      default secret_manager, RLS 403 simulé, `is_admin=true` pour
+      `github-org-admin`), `PATCH` (mise à jour OK + audit, refus
+      `kind` change), `DELETE` (détache + audit, 404 si absent), stubs
+      `POST /health` et `/refresh` (202 `pending-runner` + audit). 17
+      scénarios verts.
+- TODO Phase 4 integration: `resources-rls.int.test.ts` — vrai Supabase
+  test stack, member 403 sur POST/PATCH/DELETE, admin OK, non-member
+  404 sur GET (RLS empty).
+- TODO Phase 4 integration: `resource-access-put.int.test.ts` (livré par
+  la feature `access-rest-api`).
+- TODO Phase 4 integration: `resource-access-rls.int.test.ts` — un member
+  fetch le blob mais ne peut déchiffrer que les recipient-listed
+  (livré par la feature `access-rest-api`).
 
 ### SecretManagers (phase 5)
 
