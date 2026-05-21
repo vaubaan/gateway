@@ -9,6 +9,7 @@ tracks:
   - packages/web/tests/unit/api/me-crypto-key.test.ts
   - packages/web/tests/unit/validation/crypto-key.test.ts
   - packages/web/tests/unit/api/recipients.test.ts
+  - packages/crm-catalog/tests/unit/providers/github.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -157,6 +158,47 @@ secretbox wrap, multi-recipient sealed-box, defaults). Fichiers sous
   reçoit `null`, tampering détecté.
 - `recipient-defaults.test.ts` — règle §4.4 (members ± runner selon
   `org-admin`).
+
+### Catalogue providers (phase 3)
+
+> Couvrira: spec §5.1, §5.3, §6.1.
+
+**Unit-level — `feature/kinds-github`** :
+`packages/crm-catalog/tests/unit/providers/github.test.ts` couvre les
+3 kinds GitHub (`github-org`, `github-org-admin`, `github-repo`) :
+
+- [x] Contrat ResourceKind respecté (id, provider, kindClass,
+      displayName, rotationMethod, accessSchema, healthTestCmd,
+      egressHosts).
+- [x] `github-org-admin` narrow vers `OrgResourceAdminKind` et déclare
+      `manages = ['github-repo']`.
+- [x] Provider operations (`createChild`, `destroyChild`,
+      `listChildren`, `rotateChildAccess`) throw le marker
+      `phase-6: …` (Phase 6 livrera les vraies impl).
+- [x] `setupDocs` markdown >100 chars, mentions des sections
+      attendues (fine-grained PAT, scopes admin, admin-mediated).
+- [x] `healthTestCmd` interpole les champs metadata sans jamais
+      embarquer la cleartext du token.
+- [x] `mcpFragment` conforme à la shape `McpServerFragment` (cf.
+      `.mcp.json` racine) — image `ghcr.io/github/github-mcp-server`,
+      env `GITHUB_PERSONAL_ACCESS_TOKEN`.
+- [x] `egressHosts` non-vide pour les kinds non-project.
+- [x] Pas de cleartext `github_pat_…` dans les labels /
+      descriptions / env mcpFragment.
+
+**Unit-level — `feature/kinds-vercel`, `feature/kinds-supabase`** :
+mêmes scénarios à livrer en parallèle dans cette wave (cf. handbook
+`catalog-and-plugins.md`).
+
+**Wave B — `feature/catalog-registry-and-endpoint`** :
+
+- [ ] `packages/crm-catalog/tests/unit/registry.test.ts` — invariants
+      structurels (spec §12.4) : tous les `id` uniques, tous les
+      `org-admin` déclarent `manages` non-vide, tous les
+      `rotationMethod` ∈ `{self, admin-mediated, manual}`.
+- [ ] `packages/web/tests/unit/api/catalog.test.ts` — `GET /catalog`
+      renvoie 9 kinds, `GET /catalog/:kindId` renvoie le bon, 404 si
+      inconnu.
 
 ### Resources CRUD (phase 4)
 
