@@ -38,9 +38,19 @@ export interface AccessKeySpec {
  * Fragment of an MCP `mcp.json` server block — emitted by kinds that have an
  * MCP integration (spec §6.6, §6.7). Shape kept loose intentionally; the
  * `mcp.json` schema is owned by the MCP spec, not by us.
+ *
+ * Two flavours coexist in the MCP ecosystem:
+ *   - **stdio** servers — `{ command, args?, env? }` (e.g. the GitHub MCP
+ *     docker image, the Supabase npx wrapper).
+ *   - **HTTP remote** servers — `{ type: 'http', url }` (e.g. Vercel's
+ *     OAuth-backed `https://mcp.vercel.com/`).
+ *
+ * `command` is therefore optional: stdio fragments set it, HTTP fragments
+ * omit it. The catch-all index signature lets us pass through any
+ * MCP-spec field the catalogue doesn't model yet (`type`, `url`, …).
  */
 export interface McpServerFragment {
-  readonly command: string;
+  readonly command?: string;
   readonly args?: readonly string[];
   readonly env?: Readonly<Record<string, string>>;
   readonly [extra: string]: unknown;

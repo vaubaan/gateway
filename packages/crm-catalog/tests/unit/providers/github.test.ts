@@ -39,8 +39,12 @@ function assertAccessSchema(kind: ResourceKind): void {
 }
 
 function assertMcpFragmentShape(frag: McpServerFragment): void {
+  // GitHub kinds use the stdio MCP flavour, so `command` MUST be set.
+  // (The HTTP-remote flavour, used by e.g. Vercel, omits it — `command`
+  // is therefore optional on the shared `McpServerFragment` interface.)
   expect(frag.command).toBeTypeOf('string');
-  expect(frag.command.length).toBeGreaterThan(0);
+  expect(frag.command).toBeDefined();
+  expect((frag.command as string).length).toBeGreaterThan(0);
   if (frag.args !== undefined) {
     expect(Array.isArray(frag.args)).toBe(true);
     for (const a of frag.args) expect(a).toBeTypeOf('string');

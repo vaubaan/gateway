@@ -10,6 +10,7 @@ tracks:
   - packages/web/tests/unit/validation/crypto-key.test.ts
   - packages/web/tests/unit/api/recipients.test.ts
   - packages/crm-catalog/tests/unit/providers/github.test.ts
+  - packages/crm-catalog/tests/unit/providers/vercel.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -186,9 +187,34 @@ secretbox wrap, multi-recipient sealed-box, defaults). Fichiers sous
 - [x] Pas de cleartext `github_pat_…` dans les labels /
       descriptions / env mcpFragment.
 
-**Unit-level — `feature/kinds-vercel`, `feature/kinds-supabase`** :
-mêmes scénarios à livrer en parallèle dans cette wave (cf. handbook
-`catalog-and-plugins.md`).
+**Unit-level — `feature/kinds-vercel`** :
+`packages/crm-catalog/tests/unit/providers/vercel.test.ts` couvre les
+3 kinds Vercel (`vercel-team`, `vercel-team-admin`,
+`vercel-project`) :
+
+- [x] Contrat ResourceKind respecté (id, provider, kindClass,
+      displayName, rotationMethod, accessSchema, healthTestCmd,
+      egressHosts).
+- [x] `vercel-team-admin` narrow vers `OrgResourceAdminKind` et
+      déclare `manages = ['vercel-project']`.
+- [x] Provider operations (`createChild`, `destroyChild`,
+      `listChildren`, `rotateChildAccess`) rejettent avec le marker
+      `phase-6: …` (Phase 6 livrera les vraies impl).
+- [x] `setupDocs` markdown >100 chars, mentions des sections
+      attendues (token creation, team id, admin role).
+- [x] `healthTestCmd` interpole les champs metadata sans jamais
+      embarquer la cleartext du token.
+- [x] `mcpFragment` conforme à la shape HTTP remote (`{ type:
+'http', url: 'https://mcp.vercel.com/' }`, cf. `.mcp.json`
+      racine).
+- [x] `egressHosts` non-vide pour les kinds non-project, couvre
+      `api.vercel.com` et `mcp.vercel.com`.
+- [x] `vercel-project` déclare les 3 clés (`VERCEL_TOKEN`,
+      `VERCEL_TEAM_ID`, `VERCEL_PROJECT_ID`) avec regex appropriées
+      (`prj_…`, `team_…`).
+
+**Unit-level — `feature/kinds-supabase`** : à livrer en parallèle
+dans cette wave (cf. handbook `catalog-and-plugins.md`).
 
 **Wave B — `feature/catalog-registry-and-endpoint`** :
 
