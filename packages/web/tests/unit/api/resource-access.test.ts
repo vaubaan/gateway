@@ -559,7 +559,7 @@ describe('DELETE /access/:key', () => {
   });
 });
 
-describe('POST /access/:key/rotate (stub)', () => {
+describe('POST /access/:key/rotate (dispatcher, Phase 6)', () => {
   beforeEach(() => {
     resetState();
   });
@@ -582,7 +582,10 @@ describe('POST /access/:key/rotate (stub)', () => {
       rotation_method: string;
       next_step: string;
     };
-    expect(body.status).toBe('pending-runner');
+    // Phase 6 wave B switched the payload from 'pending-runner' to
+    // 'pending-dispatch' (the runner only handles the 'self' branch;
+    // the browser dispatches the manual + admin-mediated branches).
+    expect(body.status).toBe('pending-dispatch');
     expect(body.rotation_method).toBe('manual');
     expect(body.next_step).toBe('operator-action');
     expect(state.audit.map((r) => r.action)).toContain('resource.access.rotate.requested');

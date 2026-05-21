@@ -28,6 +28,11 @@ tracks:
   - packages/core/tests/integration/infisical.test.ts
   - packages/web/tests/unit/api/secret-managers.test.ts
   - packages/web/tests/unit/components/secret-managers.test.tsx
+  - packages/crm-catalog/tests/unit/providers/github-admin.test.ts
+  - packages/crm-catalog/tests/unit/providers/vercel-admin.test.ts
+  - packages/crm-catalog/tests/unit/providers/supabase-admin.test.ts
+  - packages/web/tests/unit/api/provision.test.ts
+  - packages/web/tests/unit/api/rotate-dispatch.test.ts
 last_reviewed: 2026-05-21
 ---
 
