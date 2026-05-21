@@ -36,3 +36,4 @@ export { CATALOG, findKind } from './registry.js';
 // paste path in the rotation UI (spec §7.4).
 export { GitHubRotationNotSupportedError } from './providers/github/org-admin.js';
 export { VercelRotationNotSupportedError } from './providers/vercel/team-admin.js';
+export { SupabaseRotationNotSupportedError } from './providers/supabase-cloud/org-admin.js';
