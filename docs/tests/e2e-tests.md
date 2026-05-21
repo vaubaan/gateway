@@ -144,7 +144,28 @@ Les scénarios suivants (spec §12.3) seront ajoutés au fil des phases :
       `(project, variant)` → fichier téléchargé, lignes attendues
       présentes, secrets en placeholder pour les blobs
       non-decryptables.
-      Spec §7.5.
+      Spec §7.5. **Phase 7 livre l'UI**
+      (`<DotenvExportButton>` sur la page
+      `/orgs/:slug/projects/:projectSlug/exports`) et les
+      endpoints REST (`/exports/env`) ; l'E2E doit naviguer vers
+      la page, sélectionner le variant `staging` via
+      `<VariantSelector>`, cliquer Download .env, et asserter que
+      le `<a download>` a déclenché un fichier avec les bonnes
+      lignes (et placeholders `# UNAVAILABLE: ...` quand l'user
+      n'est pas recipient). Couvert en unit tests
+      `packages/web/tests/unit/components/exports.test.tsx`.
+- [ ] **export-cloud-resource-map** — Sur la page
+      `/orgs/:slug/exports`, cliquer "Download
+      cloud-resource-map.json" → assert (i) le fichier téléchargé
+      est un JSON `version: 1` listant chaque Resource avec sa
+      `secret_manager: { kind, name }` et ses `access_keys` ;
+      (ii) **aucun champ `sealed_blob` ni `ct` ni cleartext**
+      n'apparaît nulle part dans le JSON (assert via
+      `JSON.stringify(body).includes(...) === false`).
+      Spec §6.7.1. **Phase 7 livre l'UI**
+      (`<CloudResourceMapButton>`) + l'endpoint
+      (`/exports/cloud-resource-map`). Couvert en unit tests
+      (route + bouton).
 - [ ] **rbac-member-cannot-patch** — Un `member` non-admin ne peut
       pas PATCH une Resource ; assert 403.
       Spec §3.3, §8.

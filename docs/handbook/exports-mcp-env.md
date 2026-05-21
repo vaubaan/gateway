@@ -3,6 +3,7 @@ title: Exports — .env, mcp.json, cloud-resource-map
 tracks:
   - 'feature/p7-mcp-config-regen'
   - 'feature/p7-exports-rest'
+  - 'feature/p7-exports-ui'
 last_reviewed: 2026-05-21
 ---
 
@@ -18,9 +19,10 @@ Documente l'implémentation effective des 3 exports CRM (spec §6.6, §6.7,
 
 ## Statut courant
 
-Phase 7 wave A1 (MCP regen) **livrée**. Wave A2 (exports REST) +
-wave B (UI) à venir dans des commits suivants — ce handbook est mis à
-jour au fil de l'eau.
+Phase 7 **livrée** : wave A1 (MCP regen), wave A2 (exports REST) et
+wave B (UI) en place. Les 3 endpoints REST + les 4 pages/composants UI
+fonctionnent contre la migration `mcp_configs` de la 1000 et la
+catalogue v1.
 
 ## MCP regenerate (spec §6.6)
 
@@ -198,9 +200,70 @@ sealed_blob JSON (cf. spec §4.4 — la recipient list est publique).
 
 ## UI exports
 
-À implémenter en Phase 7 wave B. Page
-`/orgs/:slug/projects/:name/exports` et `/orgs/:slug/exports`. Les
-boutons assemblent les bundles via le browser : POST sur les endpoints
-REST ci-dessus, unseal des sealed_blobs en mémoire via
-`useUserIdentity` + `unsealAs`, écriture du fichier via
-`Blob + URL.createObjectURL`.
+Deux pages serveur (App Router) :
+
+- `packages/web/src/app/(protected)/orgs/[slug]/exports/page.tsx` —
+  org-scoped exports. Récupère l'org + les variants distincts présents
+  dans les Resources de l'org, puis monte
+  `<OrgExportsClient>` (client component).
+- `packages/web/src/app/(protected)/orgs/[slug]/projects/[projectSlug]/exports/page.tsx`
+  — project-scoped exports. Récupère la project row + ses variants
+  distincts, monte `<ProjectExportsClient>`.
+
+### Composants client
+
+Tous sous `packages/web/src/components/exports/` :
+
+- `<VariantSelector>` — `<select>` simple listant les variants
+  - l'option vide (`(none — all variants)`).
+- `<DotenvExportButton>` — POST `/exports/env`, unseal chaque blob
+  via `unsealAs(blob, fp, identity)`, assemble dotenv ou JSON via
+  les helpers purs dans `@/lib/exports/dotenv-assembly`, trigger
+  download via `triggerBrowserDownload` (`Blob` +
+  `URL.createObjectURL` + transient `<a download>`).
+- `<McpExportButton>` — POST `/exports/mcp`, écrit
+  `<stem>.mcp.json` directement, puis assemble + écrit
+  `<stem>.env-mcp` (companion). Deux downloads back-to-back.
+- `<CloudResourceMapButton>` — POST
+  `/exports/cloud-resource-map`, écrit le JSON directement.
+  Pas d'unseal (la réponse ne contient aucun blob).
+- `<RegenerateMcpButton>` — POST `/mcp-configs/regenerate`,
+  affiche `{ regenerated, hash }`. RBAC : 403 sur non-admin (RLS
+  côté DB).
+- `<OrgExportsClient>` / `<ProjectExportsClient>` — wrappers qui
+  hold le `variant` state et passent la scope appropriée.
+
+### Helpers purs côté browser
+
+`packages/web/src/lib/exports/` :
+
+- `dotenv-assembly.ts` — `assembleDotenv` / `assembleJson` /
+  `assembleMcpCompanion` : itèrent les entries, appellent
+  `unsealAs`, écrivent le texte ; les `Uint8Array` cleartext sont
+  `.fill(0)` immédiatement après lecture UTF-8. Les blobs où
+  l'user n'est pas recipient deviennent `# UNAVAILABLE: <key>
+(request access from admin)` (dotenv) ou
+  `"<key>": "UNAVAILABLE"` (JSON).
+- `download.ts` — `triggerBrowserDownload(filename, content,
+mime?)` : crée un `Blob`, `URL.createObjectURL`,
+  `document.createElement('a')` avec `.download = filename`,
+  click, `URL.revokeObjectURL`. Le blob URL est révoqué
+  immédiatement après le click — defense in depth pour limiter
+  la fenêtre de fuite côté URL store.
+
+### ZK invariants côté UI
+
+- Le cleartext ne vit que dans une `Uint8Array` éphémère
+  retournée par `unsealAs`. La fonction décode en UTF-8, copie
+  dans une string locale, puis appelle `.fill(0)` sur l'Uint8Array
+  avant retour.
+- Le résultat assemblé (dotenv text ou JSON string) est la copie
+  finale autorisée — elle est passée à `triggerBrowserDownload`
+  qui la transfère au filesystem via `Blob`. Aucune copie ne reste
+  dans React state hors de la fenêtre de download.
+- Le blob URL est révoqué immédiatement après le click
+  (`URL.revokeObjectURL`) — defense in depth.
+- Pour les blobs où l'user n'est pas recipient, `unsealAs` renvoie
+  `null` ; on émet alors une ligne placeholder dans le `.env`
+  (jamais d'erreur fatale qui pourrait masquer les keys
+  manquantes).
