@@ -1,0 +1,135 @@
+name: e2e-nightly
+
+# Real-cloud E2E + orphan sweeper. Spec §12.3.
+#
+# Scheduled 03:00 UTC daily — well off-hours, leaves the sweeper a
+# 24h window to mop crashes from the previous run. Can also be
+# triggered manually via `workflow_dispatch`.
+#
+# Two jobs :
+#   - sweeper : runs first, in dry-run mode unless `live_sweep`
+#               input flipped to true. Lists `vauban-e2e-*` resources
+#               older than 24h on every provider and deletes them.
+#               Exits non-zero if > 5 orphans (signal of crashes).
+#   - e2e     : runs the Playwright real-clouds project against the
+#               Next.js dev server. Independent of sweeper job —
+#               sweeper failures shouldn't gate the actual tests.
+#
+# Required GH Actions secrets (cf. scripts/setup-e2e-secrets.md):
+#   VAUBAN_E2E_NEXT_PUBLIC_SUPABASE_URL
+#   VAUBAN_E2E_NEXT_PUBLIC_SUPABASE_ANON_KEY
+#   VAUBAN_E2E_SUPABASE_SERVICE_ROLE_KEY
+#   VAUBAN_E2E_ORG_EMAIL
+#   VAUBAN_E2E_GH_ORG
+#   VAUBAN_E2E_GH_ADMIN_TOKEN
+#   VAUBAN_E2E_VERCEL_TEAM_ID
+#   VAUBAN_E2E_VERCEL_TEAM_TOKEN
+#   VAUBAN_E2E_SUPABASE_ORG_SLUG
+#   VAUBAN_E2E_SUPABASE_TOKEN
+#   VAUBAN_E2E_INFISICAL_URL
+#   VAUBAN_E2E_INFISICAL_LOGIN
+#   VAUBAN_E2E_INFISICAL_PWD
+#
+# These map to fallback aliases in
+# packages/web/tests/e2e/real-clouds/fixtures/env.ts so the live
+# .env.test stays the source of truth in local dev.
+
+on:
+  workflow_dispatch:
+    inputs:
+      live_sweep:
+        description: 'Run the sweeper in live (destructive) mode'
+        required: false
+        type: boolean
+        default: true
+      run_e2e:
+        description: 'Run the Playwright E2E scenarios'
+        required: false
+        type: boolean
+        default: true
+  schedule:
+    - cron: '0 3 * * *'
+
+concurrency:
+  group: e2e-nightly
+  cancel-in-progress: false
+
+jobs:
+  sweeper:
+    name: sweep vauban-e2e-* orphans (>24h)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.VAUBAN_E2E_NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.VAUBAN_E2E_NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.VAUBAN_E2E_SUPABASE_SERVICE_ROLE_KEY }}
+      ORG_EMAIL: ${{ secrets.VAUBAN_E2E_ORG_EMAIL }}
+      VAUBAN_E2E_GH_ORG: ${{ secrets.VAUBAN_E2E_GH_ORG }}
+      VAUBAN_E2E_GH_ADMIN_TOKEN: ${{ secrets.VAUBAN_E2E_GH_ADMIN_TOKEN }}
+      VAUBAN_E2E_VERCEL_TEAM_ID: ${{ secrets.VAUBAN_E2E_VERCEL_TEAM_ID }}
+      VAUBAN_E2E_VERCEL_TEAM_TOKEN: ${{ secrets.VAUBAN_E2E_VERCEL_TEAM_TOKEN }}
+      VAUBAN_E2E_SUPABASE_ORG_SLUG: ${{ secrets.VAUBAN_E2E_SUPABASE_ORG_SLUG }}
+      VAUBAN_E2E_SUPABASE_TOKEN: ${{ secrets.VAUBAN_E2E_SUPABASE_TOKEN }}
+      VAUBAN_E2E_INFISICAL_URL: ${{ secrets.VAUBAN_E2E_INFISICAL_URL }}
+      VAUBAN_E2E_INFISICAL_LOGIN: ${{ secrets.VAUBAN_E2E_INFISICAL_LOGIN }}
+      VAUBAN_E2E_INFISICAL_PWD: ${{ secrets.VAUBAN_E2E_INFISICAL_PWD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm install
+      - name: sweeper (dry-run on schedule, live on workflow_dispatch live_sweep=true)
+        run: |
+          DRY_FLAG="--dry-run"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.live_sweep }}" = "true" ]; then
+            DRY_FLAG=""
+          fi
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            DRY_FLAG=""
+          fi
+          npm run sweeper -- $DRY_FLAG
+
+  e2e:
+    name: playwright real-clouds
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'schedule' || inputs.run_e2e != false }}
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.VAUBAN_E2E_NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.VAUBAN_E2E_NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.VAUBAN_E2E_SUPABASE_SERVICE_ROLE_KEY }}
+      ORG_EMAIL: ${{ secrets.VAUBAN_E2E_ORG_EMAIL }}
+      VAUBAN_E2E_GH_ORG: ${{ secrets.VAUBAN_E2E_GH_ORG }}
+      VAUBAN_E2E_GH_ADMIN_TOKEN: ${{ secrets.VAUBAN_E2E_GH_ADMIN_TOKEN }}
+      VAUBAN_E2E_VERCEL_TEAM_ID: ${{ secrets.VAUBAN_E2E_VERCEL_TEAM_ID }}
+      VAUBAN_E2E_VERCEL_TEAM_TOKEN: ${{ secrets.VAUBAN_E2E_VERCEL_TEAM_TOKEN }}
+      VAUBAN_E2E_SUPABASE_ORG_SLUG: ${{ secrets.VAUBAN_E2E_SUPABASE_ORG_SLUG }}
+      VAUBAN_E2E_SUPABASE_TOKEN: ${{ secrets.VAUBAN_E2E_SUPABASE_TOKEN }}
+      VAUBAN_E2E_INFISICAL_URL: ${{ secrets.VAUBAN_E2E_INFISICAL_URL }}
+      VAUBAN_E2E_INFISICAL_LOGIN: ${{ secrets.VAUBAN_E2E_INFISICAL_LOGIN }}
+      VAUBAN_E2E_INFISICAL_PWD: ${{ secrets.VAUBAN_E2E_INFISICAL_PWD }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+      - run: npm install
+      - name: install playwright browsers
+        run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - name: run playwright real-clouds
+        run: npm run test:e2e:real-clouds
+        env:
+          CI: '1'
+      - name: archive playwright report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.run_id }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
