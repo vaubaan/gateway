@@ -137,6 +137,69 @@ export class VaubanAdminClient {
   }
 
   /**
+   * Insert a `projects` row via service-role. No public REST endpoint
+   * in v1 — onboarding flow creates the default project implicitly.
+   * Returns the new project id.
+   */
+  async createProject(input: {
+    organizationId: string;
+    slug: string;
+    name: string;
+  }): Promise<{ id: string; slug: string }> {
+    const sbAny = this.sb as unknown as {
+      from(t: string): {
+        insert(row: Record<string, unknown>): {
+          select(c: string): {
+            single(): Promise<{
+              data: { id: string; slug: string } | null;
+              error: { message?: string } | null;
+            }>;
+          };
+        };
+      };
+    };
+    const res = await sbAny
+      .from('projects')
+      .insert({
+        organization_id: input.organizationId,
+        slug: input.slug,
+        name: input.name,
+      })
+      .select('id, slug')
+      .single();
+    if (res.error !== null) {
+      throw new Error(`createProject failed: ${res.error.message ?? 'unknown'}`);
+    }
+    if (res.data === null) throw new Error('createProject returned no row');
+    return res.data;
+  }
+
+  /**
+   * Add an additional member (admin or member role) to an org via
+   * service-role. Bypasses RLS (org admins normally cannot insert
+   * other admins through PostgREST). Used by RBAC + re-seal scenarios.
+   */
+  async addOrgMember(input: {
+    organizationId: string;
+    userId: string;
+    role: 'admin' | 'member';
+  }): Promise<void> {
+    const sbAny = this.sb as unknown as {
+      from(t: string): {
+        insert(row: Record<string, unknown>): Promise<{ error: { message?: string } | null }>;
+      };
+    };
+    const res = await sbAny.from('org_members').insert({
+      organization_id: input.organizationId,
+      user_id: input.userId,
+      role: input.role,
+    });
+    if (res.error !== null) {
+      throw new Error(`addOrgMember failed: ${res.error.message ?? 'unknown'}`);
+    }
+  }
+
+  /**
    * Direct DB access for trigger assertions (e.g. recipients_stale).
    * Returns the raw row or `null`.
    */
