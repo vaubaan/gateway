@@ -95,10 +95,10 @@ jamais d'exception, jamais de fuite de cleartext dans un message.
 
 Fonction pure (pas de WASM, pas d'I/O). Implémente la règle spec §4.4 :
 
-| `isOrgAdminResource` | `runner` | recipients résultat       |
-| -------------------- | -------- | ------------------------- |
-| `false`              | absent   | `orgMembers`              |
-| `false`              | présent  | `orgMembers ∪ {runner}`   |
+| `isOrgAdminResource` | `runner`  | recipients résultat      |
+| -------------------- | --------- | ------------------------ |
+| `false`              | absent    | `orgMembers`             |
+| `false`              | présent   | `orgMembers ∪ {runner}`  |
 | `true`               | n'importe | `orgMembers` (no runner) |
 
 ## Format `SealedBlobV1`

@@ -18,6 +18,7 @@ export default tseslint.config(
       '**/test-results/**',
       '**/.turbo/**',
       '**/.cache/**',
+      '.build/**',
       'supabase/migrations/**',
       // Config files don't go through type-aware linting (no tsconfig include).
       'eslint.config.js',
