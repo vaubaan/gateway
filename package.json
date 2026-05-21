@@ -1,0 +1,39 @@
+{
+  "name": "cloud-resource-manager",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Cloud Resource Manager (CRM) — Vauban Core sous-système d'inventaire des cloud resources, sealed creds (ZK), MCP exports.",
+  "license": "UNLICENSED",
+  "engines": {
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "type-check": "npm run --workspaces --if-present type-check",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "build": "npm run --workspaces --if-present build",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "dev": "npm run --workspace @crm/web dev"
+  },
+  "devDependencies": {
+    "@eslint/js": "9.39.4",
+    "@playwright/test": "1.60.0",
+    "@types/node": "20.19.41",
+    "eslint": "9.39.4",
+    "eslint-config-prettier": "10.1.8",
+    "globals": "17.6.0",
+    "prettier": "3.8.3",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.59.4",
+    "vitest": "3.2.4"
+  }
+}

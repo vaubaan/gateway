@@ -1,25 +1,24 @@
 name: nightly-e2e
 
-# Integration tests against real provider APIs. Each job needs secrets for
-# its provider; without them the test suite exits green with `describe.skipIf`
-# so partial secret coverage is fine.
-#
-# Trigger manually via the Actions tab (workflow_dispatch) or on the schedule.
+# Integration tests against real provider APIs. Spec §12.3.
+# v1 init: stub job that exits green — concrete E2E scenarios land in
+# later phases (cf. .claude/build-plans/init.json out_of_scope_for_init).
+# Workflow kept here so the schedule + secrets plumbing is in place.
 
 on:
   workflow_dispatch:
+  schedule:
+    # 03:00 UTC daily — off-hours, leaves room for the sweeper.
+    - cron: '0 3 * * *'
 
 concurrency:
   group: nightly-e2e
   cancel-in-progress: false
 
 jobs:
-  github:
+  smoke:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      VAUBAN_CI_GITHUB_ORG: ${{ secrets.VAUBAN_CI_GITHUB_ORG }}
-      VAUBAN_CI_GITHUB_PAT: ${{ secrets.VAUBAN_CI_GITHUB_PAT }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -27,5 +26,7 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm install
-      - run: npm -w @vauban/core run build
-      - run: npm -w @vauban/plugin-service-github run test:e2e
+      - name: Placeholder — real E2E scenarios land in later phases
+        run: |
+          echo "Nightly E2E is a stub in v1 init. See docs/spec/cloud-resource-manager.md §12.3."
+          echo "Scenarios + sweeper will be wired up alongside the catalog phase."
