@@ -15,7 +15,17 @@ interface AuditRow {
   readonly actor_user_id: string;
   readonly action: string;
   readonly scope: unknown;
-  readonly subject: { readonly fingerprint: string; readonly old_fingerprint?: string };
+  readonly subject: {
+    readonly fingerprint: string;
+    readonly old_fingerprint?: string;
+    readonly swept_stale_count?: number;
+  };
+}
+
+interface ResourceAccessRow {
+  id: string;
+  sealed_blob: string; // bytea hex form `\x...`
+  recipients_stale: boolean;
 }
 
 interface CryptoRow {
@@ -33,6 +43,7 @@ interface MockState {
   cryptoRow: CryptoRow | null;
   auditRows: AuditRow[];
   insertCryptoError: { code?: string; message: string } | null;
+  resourceAccessRows: ResourceAccessRow[];
 }
 
 const state: MockState = {
@@ -40,18 +51,24 @@ const state: MockState = {
   cryptoRow: null,
   auditRows: [],
   insertCryptoError: null,
+  resourceAccessRows: [],
 };
 
 function resetState(): void {
   state.user = { id: TEST_USER_ID };
   state.cryptoRow = null;
   state.auditRows = [];
+  state.resourceAccessRows = [];
   state.insertCryptoError = null;
 }
 
 interface SelectBuilder {
   eq: (col: string, val: unknown) => SelectBuilder;
   maybeSingle: <T>() => Promise<{ data: T | null; error: null }>;
+  then: <T1, T2>(
+    onfulfilled?: (v: { data: unknown; error: null }) => T1 | PromiseLike<T1>,
+    onrejected?: (r: unknown) => T2 | PromiseLike<T2>,
+  ) => Promise<T1 | T2>;
 }
 
 interface UpdateBuilder {
@@ -74,6 +91,15 @@ function buildFromTable(table: string): {
             return Promise.resolve({ data: state.cryptoRow as T | null, error: null });
           }
           return Promise.resolve({ data: null, error: null });
+        },
+        then: <T1, T2>(
+          onfulfilled?: (v: { data: unknown; error: null }) => T1 | PromiseLike<T1>,
+          onrejected?: (r: unknown) => T2 | PromiseLike<T2>,
+        ): Promise<T1 | T2> => {
+          // Array-returning select — used by the recipients_stale sweep
+          // (spec §4.7). The test seeds `state.resourceAccessRows`.
+          const data = table === 'resource_access' ? (state.resourceAccessRows ?? []) : [];
+          return Promise.resolve({ data, error: null }).then(onfulfilled, onrejected);
         },
       };
       return builder;
@@ -108,10 +134,16 @@ function buildFromTable(table: string): {
     update: (row: Record<string, unknown>): UpdateBuilder => ({
       eq: (
         _col: string,
-        _val: unknown,
+        val: unknown,
       ): Promise<{ error: null | { code?: string; message: string } }> => {
         if (table === 'user_crypto_keys' && state.cryptoRow !== null) {
           state.cryptoRow = { ...state.cryptoRow, ...(row as Partial<CryptoRow>) };
+        }
+        if (table === 'resource_access') {
+          const target = state.resourceAccessRows.find((r) => r.id === (val as string));
+          if (target && row.recipients_stale !== undefined) {
+            target.recipients_stale = row.recipients_stale === true;
+          }
         }
         return Promise.resolve({ error: null });
       },
@@ -265,6 +297,61 @@ describe('PATCH /api/crm/v1/me/crypto-key', () => {
     expect(audit?.action).toBe('user.crypto-key.replaced-identity');
     expect(audit?.subject.fingerprint).toBe(FP_B);
     expect(audit?.subject.old_fingerprint).toBe(FP_A);
+    // No resource_access rows were seeded → swept count is 0.
+    expect(audit?.subject.swept_stale_count).toBe(0);
+  });
+
+  it('replace-identity sweeps resource_access where the old fp was a recipient', async () => {
+    await POST(buildReq('POST', validCreateBody));
+    state.auditRows = [];
+
+    // Seed two rows: one with FP_A as recipient (should be flipped),
+    // one with a different fp (should be left alone).
+    const stale = {
+      v: 1,
+      recipients: [
+        { fp: FP_A, ct: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA' },
+      ],
+    };
+    const fresh = {
+      v: 1,
+      recipients: [
+        {
+          fp: '1111111111111111111111111111aaaa',
+          ct: 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA',
+        },
+      ],
+    };
+    state.resourceAccessRows = [
+      {
+        id: 'ra-stale',
+        sealed_blob: `\\x${Buffer.from(JSON.stringify(stale), 'utf8').toString('hex')}`,
+        recipients_stale: false,
+      },
+      {
+        id: 'ra-fresh',
+        sealed_blob: `\\x${Buffer.from(JSON.stringify(fresh), 'utf8').toString('hex')}`,
+        recipients_stale: false,
+      },
+    ];
+
+    const res = await PATCH(
+      buildReq('PATCH', {
+        replace: true,
+        public_key: hexToBase64('55'.repeat(32)),
+        fingerprint: FP_B,
+        wrapped_private_key: hexToBase64('66'.repeat(72)),
+        kdf_salt: hexToBase64('77'.repeat(16)),
+      }),
+    );
+    expect(res.status).toBe(200);
+
+    expect(state.resourceAccessRows.find((r) => r.id === 'ra-stale')?.recipients_stale).toBe(true);
+    expect(state.resourceAccessRows.find((r) => r.id === 'ra-fresh')?.recipients_stale).toBe(false);
+
+    const audit = state.auditRows[0];
+    expect(audit?.action).toBe('user.crypto-key.replaced-identity');
+    expect(audit?.subject.swept_stale_count).toBe(1);
   });
 
   it('returns 404 when no row exists to patch', async () => {
@@ -308,7 +395,7 @@ describe('audit log payloads — no cleartext leak', () => {
       expect(subjectJson).not.toContain('22');
       expect(subjectJson).not.toContain('11');
       expect(subjectJson).not.toContain('00');
-      const allowedKeys = ['fingerprint', 'old_fingerprint'];
+      const allowedKeys = ['fingerprint', 'old_fingerprint', 'swept_stale_count'];
       for (const k of Object.keys(row.subject)) {
         expect(allowedKeys).toContain(k);
       }

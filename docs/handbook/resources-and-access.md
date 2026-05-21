@@ -2,8 +2,11 @@
 title: Resources et resource_access — CRUD, RLS, audit
 tracks:
   - supabase/migrations/1000_provider_resource_manager.sql
+  - supabase/migrations/1002_resource_access_recipients_stale.sql
   - packages/web/src/lib/resources/db.ts
   - packages/web/src/lib/validation/resources.ts
+  - packages/web/src/lib/validation/orgs.ts
+  - packages/web/src/app/api/crm/v1/orgs/route.ts
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/route.ts
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/route.ts
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/health/route.ts
@@ -13,8 +16,21 @@ tracks:
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/access/route.ts
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/access/[key]/route.ts
   - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/access/[key]/rotate/route.ts
+  - packages/web/src/app/(public)/sign-in/page.tsx
+  - packages/web/src/app/(public)/sign-up/page.tsx
+  - packages/web/src/app/(protected)/onboarding/page.tsx
+  - packages/web/src/app/(protected)/orgs/[slug]/resources/page.tsx
+  - packages/web/src/app/(protected)/orgs/[slug]/resources/[rId]/page.tsx
+  - packages/web/src/app/(protected)/orgs/[slug]/resources/new/page.tsx
+  - packages/web/src/components/onboarding/OnboardingForm.tsx
+  - packages/web/src/components/wizard/KindPicker.tsx
+  - packages/web/src/components/wizard/SetupDocsDisplay.tsx
+  - packages/web/src/components/wizard/AccessSealForm.tsx
+  - packages/web/src/components/wizard/RegisterWizard.tsx
   - packages/web/tests/unit/api/resources.test.ts
   - packages/web/tests/unit/api/resource-access.test.ts
+  - packages/web/tests/unit/api/orgs.test.ts
+  - packages/web/tests/unit/components/wizard.test.tsx
 last_reviewed: 2026-05-21
 ---
 
@@ -365,6 +381,76 @@ Voir `docs/handbook/crypto-zk.md` section "Composants UI sealed" :
 (view + reveal). Round-trip seal → PUT `/access/:key` testé en
 `packages/web/tests/unit/components/resource-detail.test.tsx`.
 
+## Onboarding & wizard — `feature/p4-onboarding-and-wizard`
+
+Phase 4 wave C livre le flow bout-en-bout sign-up → onboarding →
+register.
+
+### Sign-in / sign-up (public)
+
+- `/sign-in` : email/password via `supabase.auth.signInWithPassword`.
+- `/sign-up` : email/password + confirm. Si email-confirmation est
+  désactivée côté Supabase, la session est établie directement et on
+  redirige vers `/onboarding`. Sinon notice "check your email".
+
+### `/onboarding` (protected)
+
+Server component qui regarde `org_members.user_id = auth.uid()`. Si
+l'user appartient déjà à une org : redirect vers
+`/orgs/<slug>/resources`. Sinon, render `<OnboardingForm>` (slug +
+name) qui POST vers `/api/crm/v1/orgs`.
+
+### `POST /api/crm/v1/orgs`
+
+Bootstrap atomique (Phase 4 wave C) :
+
+1. Insert `organizations` (service-role — pas de policy RLS `insert`
+   sur cette table : c'est l'unique exception au "no service-role
+   handler" du repo, justifiée par §3.3).
+2. Insert `org_members(role='admin', user_id=auth.uid())`.
+3. Insert `secret_managers(kind='placeholder', is_default=true)` pour
+   satisfaire `resources.secret_manager_id NOT NULL` au prochain
+   `POST /resources`. Phase 5 (Infisical) remplacera cette row par
+   un vrai adapter.
+4. Audit `org.created` via la session de l'user (passe par la RLS
+   `audit_log_select_member` côté lecture).
+
+Erreurs : 401 sans session, 400 sur slug invalide ou name vide, 409
+sur slug existant.
+
+### `/orgs/:slug/resources/new` — wizard register (3 steps)
+
+`<RegisterWizard>` (client) orchestre :
+
+1. **KindPicker** : pick parmi les 9 kinds livrés Phase 3 (lus depuis
+   `CATALOG` + `serializeKind` côté server).
+2. **SetupDocsDisplay** : affiche `kind.setupDocs` (markdown brut en
+   `<pre>` pour ce phase ; TODO Phase 5 : renderer markdown sanitisé)
+   - formulaire `name` / `variant` / `provider_ref` / `console_url`.
+     À la soumission : `POST /api/crm/v1/orgs/:slug/resources` →
+     `{ resource: { id } }`. Erreur PostgREST surfacée inline.
+3. **AccessSealForm** : pour chaque clé de `kind.accessSchema`, un
+   `<SealedInput>` + un `PUT /api/.../access/:key` derrière. Les
+   status badges passent à `sealed` au fur et à mesure ; le bouton
+   `Finish` se débloque quand toutes les clés sont sealed et
+   redirige vers `/orgs/:slug/resources/:rId`.
+
+### Sweep `recipients_stale` (spec §4.7)
+
+Migration `1002_resource_access_recipients_stale.sql` (appliquée en
+prod via le pooler) ajoute la colonne `recipients_stale boolean not
+null default false` + un index partiel `where recipients_stale`.
+
+Le handler `PATCH /api/crm/v1/me/crypto-key` mode `replace=true`
+(spec §4.7) implémente maintenant la step 4 : `markResourceAccessStale`
+liste les rows visibles via la session (donc RLS-scopé), parse le
+`sealed_blob` JSON pour vérifier la présence de `old_fingerprint`
+dans `recipients[].fp`, et flip `recipients_stale=true` sur les
+matches. Le compteur final atterrit dans `audit_log.subject.swept_stale_count`.
+
+Le banner UI "X blobs need re-sealing" (spec §11.2) lira ce flag —
+livrable Phase 5+.
+
 ## Roadmap d'implémentation
 
 Phase 4 du roadmap (cf. build plan `phase-4-resources-crud.json`) :
@@ -372,4 +458,4 @@ Phase 4 du roadmap (cf. build plan `phase-4-resources-crud.json`) :
 - [x] **Wave A — `resources-rest-api`** : endpoints §6.3 livrés.
 - [x] **Wave A — `access-rest-api`** : endpoints §6.4 livrés.
 - [x] **Wave B — UI (sealed components, list page, detail page)**.
-- [ ] Wave C — onboarding + wizard register Resource.
+- [x] **Wave C — onboarding + wizard + recipients_stale sweep**.

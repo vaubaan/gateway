@@ -272,12 +272,22 @@ Body :
 Audit : `user.crypto-key.replaced-identity`,
 `subject = { fingerprint: new_fp, old_fingerprint: prev_fp }`.
 
-> **TODO(phase-4)** : à la suite d'un `replace-identity`, il faut
-> repérer les `resource_access` rows où l'ancien fingerprint apparaît
-> comme recipient et les marquer `recipients_stale = true` (spec §4.7
-> étape 4). Le champ `subject.old_fingerprint` du log audit sert de
-> seed pour ce sweeper, qui arrivera avec la table `resource_access`
-> en phase 4.
+**Reseal-sweep sur `replace=true`** (spec §4.7 étape 4, livré Phase 4
+wave C) : à la suite d'un `replace-identity`, le handler appelle
+`markResourceAccessStale(supabase, oldFingerprint)` qui :
+
+1. SELECT tous les `resource_access` rows visibles via la session
+   (RLS-scopé naturellement).
+2. Parse chaque `sealed_blob` (bytea → UTF-8 → JSON) et regarde si
+   `recipients[].fp` contient `old_fingerprint`.
+3. UPDATE `recipients_stale = true` pour chaque match.
+4. Retourne le compteur, qui atterrit dans
+   `audit_log.subject.swept_stale_count`.
+
+Migration `1002_resource_access_recipients_stale.sql` ajoute la
+colonne + un index partiel `where recipients_stale`. Le banner UI
+"X blobs need re-sealing" du spec §11.2 lira ce flag (livrable
+Phase 5+).
 
 | Statut | Body                                             |
 | ------ | ------------------------------------------------ |

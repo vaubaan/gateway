@@ -111,6 +111,11 @@ Les scénarios suivants (spec §12.3) seront ajoutés au fil des phases :
 - [ ] **register-org-resource** — Register OrgResource (kind
       `<provider>-org`) → health check → unseal.
       Spec §7.1.
+      Phase 4 wave C livre la stack côté code (`/sign-up` →
+      `/onboarding` → `/orgs/:slug/resources/new` wizard → POST
+      `/resources` + PUT `/access/:key`). Playwright E2E à câbler
+      contre un projet Supabase de test et un PAT GitHub jetable —
+      pending un harness sur le workflow GitHub Actions.
 - [ ] **provision-via-org-admin** — Register OrgResourceAdmin →
       register OrgResource → provision ProjectResource via Admin →
       assert provider-side création effective.

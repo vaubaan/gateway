@@ -19,6 +19,8 @@ tracks:
   - packages/web/tests/unit/components/sealed.test.tsx
   - packages/web/tests/unit/components/resources-table.test.tsx
   - packages/web/tests/unit/components/resource-detail.test.tsx
+  - packages/web/tests/unit/api/orgs.test.ts
+  - packages/web/tests/unit/components/wizard.test.tsx
 last_reviewed: 2026-05-21
 ---
 
@@ -337,6 +339,22 @@ les handlers Next.js :
       3 scénarios sur `<ResourceDetailClient>` : POST `/health` →
       affiche `pending-runner`, `<AddAccessDialog>` ouvre/ferme,
       flow seal → PUT `/access/:key` capture le bon body shape.
+- [x] `packages/web/tests/unit/api/orgs.test.ts` — 5 scénarios sur
+      `POST /api/crm/v1/orgs` : 401 sans session, 400 slug invalide,
+      400 name vide, 201 happy path (org + admin membership +
+      placeholder default secret_manager + audit `org.created`),
+      409 sur slug existant.
+- [x] `packages/web/tests/unit/components/wizard.test.tsx` —
+      4 scénarios : `<RegisterWizard>` pick → setup → seal → redirect
+      avec POST `/resources` + PUT `/access/:key` capturés ; surface
+      d'erreur `unknown_kind` qui maintient l'utilisateur sur l'étape
+      setup ; `<OnboardingForm>` POST `/api/crm/v1/orgs` → redirect ;
+      refus client-side d'un slug invalide sans network call.
+- [x] `me-crypto-key` Phase 4 wave C : 1 scénario supplémentaire dans
+      `packages/web/tests/unit/api/me-crypto-key.test.ts` couvrant le
+      sweep `recipients_stale` (spec §4.7) — seule la row dont les
+      recipients contenaient `old_fingerprint` est flipée à `true`,
+      l'autre reste `false`, et `audit.subject.swept_stale_count =1`.
 
 ### SecretManagers (phase 5)
 

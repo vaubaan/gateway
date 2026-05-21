@@ -42,6 +42,7 @@ type AuditAction =
 interface AuditSubject {
   readonly fingerprint: string;
   readonly old_fingerprint?: string;
+  readonly swept_stale_count?: number;
 }
 
 interface CryptoKeyRowDb {
@@ -64,7 +65,7 @@ interface DbResult<T> {
   readonly error: DbError | null;
 }
 
-interface SelectChain {
+interface SelectChain extends Promise<DbResult<unknown>> {
   eq(col: string, val: string): SelectChain;
   maybeSingle(): Promise<DbResult<unknown>>;
 }
@@ -144,6 +145,87 @@ function projectRow(row: CryptoKeyRowDb): Record<string, unknown> {
     created_at: row.created_at,
     rotated_at: row.rotated_at,
   };
+}
+
+/**
+ * Spec §4.7 step 4 — re-seal sweep on identity replacement.
+ *
+ * Mark every `resource_access` row whose sealed_blob's recipient list
+ * contained the old fingerprint with `recipients_stale=true`. The
+ * column was added by migration 1002.
+ *
+ * The user's session enforces RLS — they only see (and only update)
+ * the access rows of orgs they're a member of. A user replacing their
+ * identity who is *not* a member of any org will simply touch 0 rows;
+ * an Admin elsewhere who is a member of N orgs sweeps the blobs across
+ * all of them, which is the desired behaviour (spec §4.7).
+ *
+ * Returns the number of rows flipped (0 when the user has no
+ * sealed_blob recipient anywhere).
+ */
+async function markResourceAccessStale(
+  supabase: NarrowedDb,
+  oldFingerprint: string,
+): Promise<number> {
+  // List candidate rows first — we have to look inside the bytea JSON
+  // to test the recipient fingerprint, which is opaque to PostgREST.
+  // The session's RLS makes this naturally org-scoped.
+  const { data, error } = (await supabase
+    .from('resource_access')
+    .select('id, sealed_blob, recipients_stale')) as unknown as DbResult<
+    ReadonlyArray<{ id: string; sealed_blob: unknown; recipients_stale: boolean }>
+  >;
+  if (error || !data) return 0;
+
+  let touched = 0;
+  for (const row of data) {
+    if (row.recipients_stale) continue;
+    const blob = decodeSealedBlobBytea(row.sealed_blob);
+    if (
+      typeof blob !== 'object' ||
+      blob === null ||
+      !Array.isArray((blob as { recipients?: unknown }).recipients)
+    ) {
+      continue;
+    }
+    const recipients = (blob as { recipients: Array<{ fp?: unknown }> }).recipients;
+    if (!recipients.some((r) => typeof r.fp === 'string' && r.fp === oldFingerprint)) {
+      continue;
+    }
+    const { error: updErr } = await supabase
+      .from('resource_access')
+      .update({ recipients_stale: true })
+      .eq('id', row.id);
+    if (!updErr) touched += 1;
+  }
+  return touched;
+}
+
+function decodeSealedBlobBytea(value: unknown): unknown {
+  if (typeof value === 'string') {
+    if (value.startsWith('\\x')) {
+      try {
+        const hex = value.slice(2);
+        const bytes = Buffer.from(hex, 'hex');
+        return JSON.parse(bytes.toString('utf8'));
+      } catch {
+        return null;
+      }
+    }
+    try {
+      return JSON.parse(Buffer.from(value, 'base64').toString('utf8'));
+    } catch {
+      return null;
+    }
+  }
+  if (value instanceof Uint8Array) {
+    try {
+      return JSON.parse(Buffer.from(value).toString('utf8'));
+    } catch {
+      return null;
+    }
+  }
+  return null;
 }
 
 async function writeAuditLog(
@@ -273,13 +355,15 @@ export async function PATCH(req: NextRequest): Promise<NextResponse> {
     .eq('user_id', user.id);
   if (updateError) return errorResponse('database_error', 500);
 
-  // TODO(phase-4): when an identity is replaced, mark resource_access rows
-  // where the old fingerprint was a recipient with recipients_stale=true
-  // (spec §4.7). The old_fingerprint logged below is the seed for that
-  // catch-up job.
+  // Spec §4.7 step 4: every blob whose recipient list contained the old
+  // fingerprint must be marked recipients_stale=true so the next admin
+  // session re-seals it. The column landed in migration 1002.
+  const sweptCount = await markResourceAccessStale(supabase, existing.fingerprint);
+
   await writeAuditLog(supabase, user.id, 'user.crypto-key.replaced-identity', {
     fingerprint: input.fingerprint,
     old_fingerprint: existing.fingerprint,
+    swept_stale_count: sweptCount,
   });
   return jsonResponse(
     { ok: true, fingerprint: input.fingerprint, old_fingerprint: existing.fingerprint },
