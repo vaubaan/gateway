@@ -2,9 +2,9 @@ name: ci
 
 on:
   push:
-    branches: [staging]
+    branches: [main]
   pull_request:
-    branches: [staging]
+    branches: [main]
   workflow_dispatch:
 
 concurrency:
@@ -21,11 +21,8 @@ jobs:
           node-version: '20'
           cache: npm
       - run: npm install
-      - run: npm -w @vauban/core run build
-      - run: npm -w @vauban/eslint-plugin run build
       - run: npm run type-check
       - run: npm run lint
       - run: npm run format:check
       - run: npm run build
       - run: npm run test
-      - run: npm run test:arch

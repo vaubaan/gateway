@@ -2,7 +2,7 @@ name: supabase-migrations
 
 on:
   push:
-    branches: [staging]
+    branches: [main]
     paths:
       - 'supabase/migrations/**'
       - 'supabase/config.toml'
@@ -10,14 +10,14 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: supabase-migrations-staging
+  group: supabase-migrations-prod
   cancel-in-progress: false
 
 jobs:
-  apply-staging:
-    name: apply staging migrations
+  apply-prod:
+    name: apply prod migrations
     runs-on: ubuntu-latest
-    environment: staging
+    environment: production
     permissions:
       contents: read
     env:
@@ -30,7 +30,7 @@ jobs:
       - name: Install psql
         run: sudo apt-get install -y postgresql-client
 
-      - name: Apply Supabase migrations to staging
+      - name: Apply Supabase migrations to prod
         shell: bash
         run: |
           set -euo pipefail

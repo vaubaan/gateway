@@ -2,6 +2,7 @@
 .env
 .env.local
 .env.test
+.env*.local
 *.pem
 
 # Node
@@ -9,3 +10,34 @@ node_modules/
 dist/
 *.log
 .DS_Store
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Test artifacts
+coverage/
+playwright-report/
+test-results/
+
+# Tooling caches
+.eslintcache
+.turbo/
+.cache/
+
+# Build orchestrator artifacts (operator-side, not committed)
+.build/
+.vscode/
+BUILD_PROGRESS.md
+
+# Harness (injected per-session, never committed — cf. spec coding-agent-harness §11)
+.harness-overrides/
+.car/
+.harness-manifest.json
+.claude/
+.codex/
+.opencode/
+AGENTS.md
+CLAUDE.md

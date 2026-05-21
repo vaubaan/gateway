@@ -1,0 +1,11 @@
+@import 'tailwindcss';
+
+@theme {
+  --color-background: oklch(0.16 0.012 264);
+  --color-foreground: oklch(0.98 0.005 264);
+}
+
+html,
+body {
+  height: 100%;
+}
