@@ -12,6 +12,12 @@ tracks:
   - packages/core/tests/unit/secret-manager/interface.test.ts
   - packages/core/tests/integration/infisical.test.ts
   - packages/crm-catalog/src/secret-manager.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/secret-managers/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/secret-managers/[smId]/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/needs-reseal/route.ts
+  - packages/web/src/lib/validation/secret-managers.ts
+  - packages/web/src/lib/secret-managers/db.ts
+  - packages/web/tests/unit/api/secret-managers.test.ts
   - supabase/migrations/1000_provider_resource_manager.sql
 last_reviewed: 2026-05-21
 ---
@@ -24,14 +30,17 @@ Documente l'implémentation effective de l'interface `SecretManager`
 
 ## Statut courant
 
-**Phase 5 wave A livrée** — `@crm/core/secret-manager` expose deux
-implémentations runtime (`db`, `infisical`) + un client REST
-bas-niveau Infisical, le tout testé en unit (22 cas verts).
+**Phase 5 wave A + B (REST) livrées** :
 
-Les endpoints REST `/api/crm/v1/orgs/:orgId/secret-managers` (spec
-§6.2), la page UI `/orgs/:slug/secret-managers` et le banner re-seal
-(spec §4.5) seront livrés en Wave B (sibling features
-`sm-rest-api` et `sm-ui-and-banner`).
+- `@crm/core/secret-manager` — deux factories runtime (`db`,
+  `infisical`) + un client REST bas-niveau Infisical (22 unit tests).
+- REST `/api/crm/v1/orgs/:orgId/secret-managers` (`GET`, `POST`,
+  `GET /:smId`, `PATCH /:smId`, `DELETE /:smId`) + `/needs-reseal`
+  (21 unit tests).
+
+La page UI `/orgs/:slug/secret-managers` + le wizard Connect
+Infisical + le banner re-seal sont livrés en `sm-ui-and-banner` (à
+suivre).
 
 ## Contrat
 
@@ -175,6 +184,76 @@ Les hosts cibles sont déclarés dans le `secret_managers.config`
 DNS/firewall vit dans le `egressHosts` du `ResourceKind` qui consomme
 le SM, pas dans le SM lui-même.
 
+## REST API `/api/crm/v1/orgs/:orgId/secret-managers`
+
+Spec §6.2. Routes livrées :
+
+| Verb     | Path                     | Rôle       | Audit action             |
+| -------- | ------------------------ | ---------- | ------------------------ |
+| `GET`    | `/secret-managers`       | org member | —                        |
+| `POST`   | `/secret-managers`       | org admin  | `secret_manager.created` |
+| `GET`    | `/secret-managers/:smId` | org member | —                        |
+| `PATCH`  | `/secret-managers/:smId` | org admin  | `secret_manager.updated` |
+| `DELETE` | `/secret-managers/:smId` | org admin  | `secret_manager.deleted` |
+| `GET`    | `/needs-reseal`          | org member | —                        |
+
+**`POST` shape** :
+
+```json
+{
+  "kind": "infisical",
+  "name": "default",
+  "config": {
+    "workspace_id": "ws-uuid",
+    "endpoint": "https://eu.infisical.com",
+    "environment": "prod"
+  },
+  "auth_sealed_blob": {
+    "v": 1,
+    "recipients": [{ "fp": "<32-hex>", "ct": "<base64>" }]
+  },
+  "is_default": true
+}
+```
+
+**Codes d'erreur stables** :
+
+- `400 invalid_field` — slug invalide, sealed_blob `v != 1`, endpoint
+  non-http(s), `config.workspace_id` manquant, etc.
+- `400 not_implemented` — `kind in ['vault', '1password']` (v1 ne
+  livre que `infisical`).
+- `401 unauthorized` — pas de session.
+- `403 forbidden` — RLS denial (member non-admin).
+- `404 not_found` — org non visible ou `smId` absent.
+- `409 conflict` — `unique (organization_id, name)` violé.
+- `409 is_default` — DELETE refusé sur la default SM.
+- `409 referenced` — DELETE refusé sur une SM utilisée par
+  ≥ 1 `resources.secret_manager_id`. Le body porte
+  `referenced_resource_ids: [...]` pour aider l'UI à proposer un
+  reassign.
+
+**Invariant `is_default` unique** : la route `POST` (et `PATCH` quand
+`is_default=true`) unset d'abord les autres défauts dans l'org avant
+d'insert/update. Le swap n'est PAS une transaction SQL (supabase-js
+n'expose pas `BEGIN…COMMIT`) mais le partial unique index
+`secret_managers_one_default_per_org` garantit qu'on ne peut jamais
+finir à 2 défauts (l'insert/update échouerait avec `23505` qui
+remonte en `409 conflict`).
+
+**Audit sans leak** : `secret_manager.created` et `.updated` n'ont
+JAMAIS les bytes de `auth_sealed_blob` dans leur `subject`. Le
+champ `recipient_count` (entier) est le seul indicateur de la taille
+du blob — utilisé par le UI pour afficher "sealed for N recipients".
+
+### `GET /api/crm/v1/orgs/:orgId/needs-reseal`
+
+Renvoie `{ count: N, items: [{ resource_id, key, resource_name }] }`.
+Le filtrage RLS est implicite : on lit d'abord la liste des
+`resources` visibles à la session, puis on intersecte avec les rows
+`resource_access` flagués `recipients_stale=true`. Un non-member voit
+404 (org non visible). Un member voit 0 ou N entries selon ce que la
+RLS lui laisse.
+
 ## Stubs Vault / 1Password
 
 **Volontairement hors-scope Phase 5** (cf. build plan
@@ -260,11 +339,11 @@ Phase 5 wave A (`secret-manager-core`, **livré ce commit**) :
 - [x] Tests unit (22 cas verts) + test intégration optionnel
       (skipped sauf creds env).
 
-Phase 5 wave B (à livrer en sibling) :
+Phase 5 wave B (REST livré, UI à suivre) :
 
-- [ ] Endpoints REST `/api/crm/v1/orgs/:orgId/secret-managers`
+- [x] Endpoints REST `/api/crm/v1/orgs/:orgId/secret-managers`
       (`sm-rest-api`).
-- [ ] Endpoint `/api/crm/v1/orgs/:orgId/needs-reseal`.
+- [x] Endpoint `/api/crm/v1/orgs/:orgId/needs-reseal`.
 - [ ] Page UI `/orgs/:slug/secret-managers` + wizard Connect
       Infisical (`sm-ui-and-banner`).
 - [ ] Banner re-seal sur `/resources` et `/secret-managers`.
