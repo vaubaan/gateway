@@ -10,11 +10,21 @@
     ".": {
       "types": "./src/index.ts",
       "import": "./src/index.ts"
+    },
+    "./crypto": {
+      "types": "./src/crypto/index.ts",
+      "import": "./src/crypto/index.ts"
     }
   },
   "scripts": {
     "type-check": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "libsodium-wrappers-sumo": "0.7.16"
+  },
+  "devDependencies": {
+    "@types/libsodium-wrappers-sumo": "0.7.8"
   }
 }

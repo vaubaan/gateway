@@ -1,6 +1,11 @@
 ---
 title: Integration Tests Plan
-tracks: []
+tracks:
+  - packages/core/tests/unit/crypto/kdf.test.ts
+  - packages/core/tests/unit/crypto/keypair.test.ts
+  - packages/core/tests/unit/crypto/wrap.test.ts
+  - packages/core/tests/unit/crypto/sealed-box.test.ts
+  - packages/core/tests/unit/crypto/recipient-defaults.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -70,9 +75,26 @@ Les scénarios suivants seront ajoutés au fil des phases (cf.
 > Couvrira: `docs/spec/cloud-resource-manager.md` §4.
 
 - `crypto-keypair-bootstrap.int.test.ts` — GET/PUT
-  `/me/crypto-key`, round-trip wrap/unwrap.
+  `/me/crypto-key`, round-trip wrap/unwrap. _Pending wave B
+  (endpoints non encore livrés)._
 - `recipient-list-compute.int.test.ts` — endpoint
-  `/access/:key/recipients`, RLS-aware.
+  `/access/:key/recipients`, RLS-aware. _Pending wave B._
+
+**Unit-level (livré dans `feature/crypto-core-lib`)** — couvre les
+primitives pures de `@crm/core/crypto` (KDF Argon2id, X25519 keypair,
+secretbox wrap, multi-recipient sealed-box, defaults). Fichiers sous
+`packages/core/tests/unit/crypto/`:
+
+- `kdf.test.ts` — determinism + refus de params trop faibles + refus
+  de salt mal taillé.
+- `keypair.test.ts` — tailles, format fingerprint sha256(pub)[..16]
+  hex, unicité.
+- `wrap.test.ts` — roundtrip `wrap` / `unwrap`, refus de mauvaise
+  KEK, détection de tampering.
+- `sealed-box.test.ts` — multi-recipient (3 users), non-recipient
+  reçoit `null`, tampering détecté.
+- `recipient-defaults.test.ts` — règle §4.4 (members ± runner selon
+  `org-admin`).
 
 ### Resources CRUD (phase 4)
 

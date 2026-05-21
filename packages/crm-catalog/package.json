@@ -16,5 +16,8 @@
     "type-check": "tsc --noEmit",
     "build": "tsc -p tsconfig.build.json",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@crm/core": "*"
   }
 }

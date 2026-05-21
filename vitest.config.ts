@@ -1,6 +1,21 @@
 import { defineConfig } from 'vitest/config';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+
+// The ESM build of libsodium-wrappers-sumo (0.7.16) references a sibling
+// `libsodium.mjs` that isn't packaged — only the CJS bundle works under
+// Vite's resolver. Resolve the bare specifier via CommonJS so we land on
+// the `main` field (the CJS bundle) and bypass the `exports.import`
+// entry.
+const libsodiumCjsPath = require.resolve('libsodium-wrappers-sumo');
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      'libsodium-wrappers-sumo': libsodiumCjsPath,
+    },
+  },
   test: {
     environment: 'node',
     globals: false,
@@ -8,6 +23,15 @@ export default defineConfig({
     exclude: ['node_modules', 'dist', '.next', 'packages/*/tests/e2e/**'],
     passWithNoTests: false,
     reporters: ['default'],
+    // libsodium-wrappers ships an ESM entry that references a sibling
+    // `libsodium.mjs` not actually present in the published tarball, so
+    // bare Node ESM resolution fails. Inlining the dep routes it through
+    // Vite's resolver, which honours `exports` and falls back to CJS.
+    server: {
+      deps: {
+        inline: ['libsodium-wrappers-sumo'],
+      },
+    },
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
