@@ -19,6 +19,10 @@ const libsodiumCjsPath = require.resolve('libsodium-wrappers-sumo');
 const webSrc = resolve(rootDir, 'packages/web/src');
 
 export default defineConfig({
+  esbuild: {
+    jsx: 'automatic',
+    jsxImportSource: 'react',
+  },
   resolve: {
     alias: {
       'libsodium-wrappers-sumo': libsodiumCjsPath,
@@ -28,8 +32,19 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: false,
-    include: ['packages/*/tests/unit/**/*.test.ts', 'packages/*/src/**/*.test.ts'],
+    include: [
+      'packages/*/tests/unit/**/*.test.ts',
+      'packages/*/tests/unit/**/*.test.tsx',
+      'packages/*/src/**/*.test.ts',
+    ],
     exclude: ['node_modules', 'dist', '.next', 'packages/*/tests/e2e/**'],
+    // Component tests under tests/unit/components and tests/unit/sealed
+    // need a DOM. Per-file matchEnvironment lets the node-only API tests
+    // skip the jsdom setup cost.
+    environmentMatchGlobs: [
+      ['packages/*/tests/unit/components/**', 'jsdom'],
+      ['packages/*/tests/unit/sealed/**', 'jsdom'],
+    ],
     passWithNoTests: false,
     reporters: ['default'],
     // libsodium-wrappers ships an ESM entry that references a sibling

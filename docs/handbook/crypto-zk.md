@@ -515,10 +515,48 @@ pas la clé déballée accessible depuis la page suivante.
   n'est pas câblé en phase 2). Les scénarios sont posés en TODO sous
   `docs/tests/e2e-tests.md` pour la phase d'E2E.
 
+## Composants UI sealed (phase 4 wave B)
+
+Trois composants React partagés vivent sous
+`packages/web/src/components/sealed/` :
+
+- `<SealedInput resourceId accessKey onSealed>` — pose un textarea
+  `autocomplete="off"`/`spellcheck=false`, fetche la default recipient
+  list (§4.4) via `/api/crm/v1/resources/:rId/access/:key/recipients`,
+  affiche un fingerprint + (optionnel) `user_id` par recipient avec
+  une checkbox pour désactiver un destinataire (override §4.4). À la
+  validation, encode UTF-8 → `sealForRecipients(...)` → `onSealed(blob)`.
+  **ZK invariant** : après `onSealed`, les bytes cleartext sont
+  écrits à 0 dans le buffer (`bytes.fill(0)`) et le state du textarea
+  est vidé. Aucun localStorage/sessionStorage/IndexedDB n'est touché —
+  vérifié par tests (`tests/unit/components/sealed.test.tsx` spy sur
+  `Storage.prototype.setItem`).
+
+- `<SealedReveal blob mode="reveal"|"copy" autoHideMs?>` — utilise
+  `identityStore.get()` (Phase 2) pour récupérer la sk déballée,
+  appelle `unsealAs(blob, fp, kp)`. En mode `copy` : copie via
+  `navigator.clipboard.writeText` puis wipe. En mode `reveal` :
+  affiche le cleartext avec auto-hide (default 30 000 ms). Surface
+  `not_a_recipient` / `identity_locked` sans logger le payload.
+
+- `<SealedView blob label?>` — variante read-only : affiche
+  `"sealed for N recipients"` + bouton Reveal qui ouvre un
+  `<SealedReveal mode="reveal">` inline.
+
+Hook utilitaire `useDefaultRecipients(resourceId, accessKey)`
+(`packages/web/src/lib/sealed/use-default-recipients.ts`) : cache
+module-level (TTL 60 s), pas de localStorage ; la liste se rebuilds à
+chaque tab. Helper `__resetDefaultRecipientsCache()` pour les tests.
+
+Tests : `packages/web/tests/unit/components/sealed.test.tsx`
+(10 scénarios). Le mock vi.mock sur `@crm/core/crypto` capture le
+buffer d'entrée pour vérifier que `bytes.fill(0)` a bien été appelé
+(ZK wipe). `vitest.config.ts` mappe `tests/unit/components/**` sur
+l'environment `jsdom`.
+
 ## Reste à livrer
 
-- Composant `<SealedInput>` qui scelle au moment du `put` Access
-  (phase 4).
 - Banner UI "X blobs need re-sealing" + endpoint `/needs-reseal`
-  (spec §4.5, phase 4).
-- Flow `lost password` complet (spec §4.7).
+  (spec §4.5, phase 5+).
+- Flow `lost password` complet (spec §4.7, partiellement Phase 4
+  wave C avec le sweeper `recipients_stale`).

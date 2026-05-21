@@ -321,11 +321,55 @@ Le client Supabase est faké via une in-memory store dans les tests
 (`makeFakeDb()`). Les tests RLS-aware contre un vrai Supabase de test
 sont planifiés dans `docs/tests/integration-tests.md`.
 
+## UI — `feature/p4-wave-b-ui`
+
+Phase 4 wave B livre les pages applicatives spec §11.1.
+
+### `/orgs/:slug/resources` (server component)
+
+Liste paginée des Resources visibles à l'user. Le server component fetche
+via la session Supabase (RLS-aware) puis hydrate `<ResourceTable>`
+client component pour le filtrage interactif (provider, kindClass,
+variant, status). Bouton `+ Register` (link vers `/resources/new`) et
+`+ Provision via …` (désactivé jusqu'à Phase 6). Liens des rows ouvrent
+la detail page. Composant `<ResourceStatusBadge>` colore le pill
+status/connection (spec §11.2).
+
+### `/orgs/:slug/resources/:rId` (server component)
+
+Detail d'une Resource :
+
+- Header : nom, status badge, connection badge, lien `console_url`.
+- Section `Provider metadata` (JSON pretty).
+- Section `Access keys` : liste des rows `resource_access` avec le
+  `recipient_count` calculé depuis la colonne `sealed_blob` (parse JSON
+  inline côté server). **Aucun byte de `ct` n'arrive jusqu'au navigateur
+  via ce server component** — seuls le summary et le count.
+- `<ResourceDetailClient>` (island) : bouton `Test now` (POST `/health`)
+  qui affiche `pending-runner`, et boutons `+ KEY` par entrée de
+  `kind.accessSchema` qui ouvrent une `<AddAccessDialog>` enveloppant
+  `<SealedInput>` pour livrer un nouveau sealed blob via PUT
+  `/access/:key`. Après PUT, `window.location.reload()` rafraîchit la
+  page.
+- Si `is_admin=true` : section `Provisioned children` listant les
+  Resources avec `admin_resource_id = this.id` (Phase 6 enables
+  provisioning).
+- Section `Audit timeline (last 50)` : derniers events `audit_log`
+  filtrés sur `scope.resource_id == this.id`.
+
+### Composants sealed (shared, livrés wave B)
+
+Voir `docs/handbook/crypto-zk.md` section "Composants UI sealed" :
+`<SealedInput>`, `<SealedReveal>`, `<SealedView>`. Réutilisés ici par
+`<AddAccessDialog>` (input) et `<ResourceDetailClient>`/detail page
+(view + reveal). Round-trip seal → PUT `/access/:key` testé en
+`packages/web/tests/unit/components/resource-detail.test.tsx`.
+
 ## Roadmap d'implémentation
 
 Phase 4 du roadmap (cf. build plan `phase-4-resources-crud.json`) :
 
 - [x] **Wave A — `resources-rest-api`** : endpoints §6.3 livrés.
 - [x] **Wave A — `access-rest-api`** : endpoints §6.4 livrés.
-- [ ] Wave B — `<SealedInput>` + pages list / detail.
+- [x] **Wave B — UI (sealed components, list page, detail page)**.
 - [ ] Wave C — onboarding + wizard register Resource.
