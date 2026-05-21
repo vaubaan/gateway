@@ -14,6 +14,11 @@ tracks:
   - packages/crm-catalog/src/providers/vercel/project.ts
   - packages/crm-catalog/src/providers/vercel/index.ts
   - packages/crm-catalog/tests/unit/providers/vercel.test.ts
+  - packages/crm-catalog/src/providers/supabase-cloud/org.ts
+  - packages/crm-catalog/src/providers/supabase-cloud/org-admin.ts
+  - packages/crm-catalog/src/providers/supabase-cloud/project.ts
+  - packages/crm-catalog/src/providers/supabase-cloud/index.ts
+  - packages/crm-catalog/tests/unit/providers/supabase-cloud.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -26,9 +31,9 @@ Vercel, Supabase).
 
 ## Statut courant
 
-**Phase 3 wave A en cours.** GitHub livré dans `feature/kinds-github`
-(mergé). Vercel livré dans `feature/kinds-vercel` (cette feature).
-Supabase livré en parallèle (`feature/kinds-supabase`). Registry
+**Phase 3 wave A complète.** GitHub livré dans `feature/kinds-github`
+(mergé). Vercel livré dans `feature/kinds-vercel` (mergé). Supabase
+Cloud livré dans `feature/kinds-supabase` (cette feature). Registry
 global `CATALOG` + endpoint REST `GET /api/crm/v1/catalog` à venir
 en wave B (`feature/catalog-registry-and-endpoint`).
 
@@ -36,8 +41,8 @@ en wave B (`feature/catalog-registry-and-endpoint`).
   RotationMethod — livrés phase init dans
   `packages/crm-catalog/src/resource-kind.ts`.
 - Provider GitHub (3 kinds) — mergé.
-- Provider Vercel (3 kinds) — livré ici.
-- Provider Supabase — feature parallèle wave A.
+- Provider Vercel (3 kinds) — mergé.
+- Provider Supabase Cloud (3 kinds) — livré ici.
 - Registry `CATALOG` + endpoint `/api/crm/v1/catalog` — wave B.
 - Provider operations effectives (`createChild`,
   `rotateChildAccess`, `listChildren`) — Phase 6 (provisioning).
@@ -176,10 +181,69 @@ exportés via le barrel `index.ts` :
   per-project — l'exposition se fait au niveau team).
 - Egress : `api.vercel.com`, `vercel.com`.
 
-## Supabase kinds
+## Supabase kinds — `feature/kinds-supabase`
 
-À livrer dans `feature/kinds-supabase` (en parallèle de cette
-feature).
+Trois kinds dans `packages/crm-catalog/src/providers/supabase-cloud/`,
+exportés via le barrel `index.ts`. Le `provider` côté
+`ResourceKind.provider` est `supabase-cloud` (et **pas** `supabase`),
+pour réserver le mot `supabase` aux futurs CloudProviders self-hosted
+(Phase ≥7).
+
+### `supabase-org` (OrgResourceKind)
+
+- Fichier : `packages/crm-catalog/src/providers/supabase-cloud/org.ts`.
+- Rotation : `manual` — Supabase Cloud n'expose pas d'API stable de
+  rotation pour les PATs.
+- AccessSchema : `{ SUPABASE_ACCESS_TOKEN }` — PAT user-scoped
+  (regex `^sbp_…`). Le contexte org est dérivé de la membership de
+  l'utilisateur côté Supabase (l'API filtre `/v1/organizations` par
+  membership).
+- Metadata : `{ orgSlug: string }`.
+- MCP fragment : stdio via `npx -y @supabase/mcp-server-supabase`,
+  conforme à `.mcp.json` racine. Le PAT voyage par
+  `--access-token ${SUPABASE_ACCESS_TOKEN}` (placeholder, jamais
+  hardcodé).
+- Egress : `api.supabase.com`, `supabase.com`.
+
+### `supabase-org-admin` (OrgResourceAdminKind)
+
+- Fichier :
+  `packages/crm-catalog/src/providers/supabase-cloud/org-admin.ts`.
+- Rotation : `manual`.
+- Manages : `['supabase-project']`.
+- AccessSchema : `{ SUPABASE_ACCESS_TOKEN }` — PAT issued par un org
+  Owner/Administrator. SetupDocs détaille la vérification du role sur
+  la page Team de l'org avant de créer le token.
+- Provider operations : **stubs Phase 6** qui rejettent avec le
+  marker `phase-6: <method> not implemented (supabase-org-admin)`.
+  En Phase 6, ces méthodes appelleront la Management API : POST
+  `/v1/projects` (create), DELETE `/v1/projects/{ref}` (destroy),
+  POST `/v1/projects/{ref}/api-keys` (regen service_role + anon),
+  POST `/v1/projects/{ref}/database/password` (regen DB password).
+- HealthTestCmd : appel `/v1/organizations` + check sur `role_name`
+  ∈ `{Owner, Administrator}`.
+- MCP fragment : identique à `supabase-org` (npx stdio).
+
+### `supabase-project` (ProjectResourceKind)
+
+- Fichier :
+  `packages/crm-catalog/src/providers/supabase-cloud/project.ts`.
+- Rotation : `admin-mediated` — la "Rotate Access" passe par le
+  `supabase-org-admin` parent (Phase 6).
+- AccessSchema : `{ SUPABASE_URL, SUPABASE_ANON_KEY,
+SUPABASE_SERVICE_ROLE_KEY, SUPABASE_DB_PASSWORD,
+SUPABASE_PROJECT_REF }`. C'est le plus large bundle du catalogue v1
+  (5 clés). Les JWTs (anon, service_role) ont la regex
+  `^eyJ…\\.eyJ…\\.…$`, le `project_ref` est `[a-z]{20}`.
+- Metadata : `{ orgSlug: string, projectRef: string, region?: string }`.
+- Pas de `mcpFragment` — le MCP Supabase est account-PAT driven, pas
+  service_role driven. Le wiring MCP se fait au niveau
+  `supabase-org`/`supabase-org-admin`.
+- HealthTestCmd : appel `$SUPABASE_URL/rest/v1/` avec le `anon_key`
+  (jamais le service_role, qui leakerait plus de capability qu'un
+  healthcheck passif ne devrait exiger).
+- Egress : `api.supabase.com`, `<projectRef>.supabase.co`,
+  `pooler.supabase.com`.
 
 ## Registry & endpoint REST
 
@@ -198,6 +262,14 @@ B, après merge des 3 features de wave A).
   assertions sur les 3 kinds Vercel (contrat, accessSchema, regex
   `team_…` / `prj_…`, shape `mcpFragment` HTTP-remote,
   `egressHosts`, refus de metadata malformée, stubs phase-6).
+- Unit Supabase Cloud :
+  `packages/crm-catalog/tests/unit/providers/supabase-cloud.test.ts`
+  — ~25 assertions sur les 3 kinds Supabase (contrat, accessSchema
+  des 5 clés du `supabase-project`, regex `sbp_…` / `eyJ…` / project
+  ref `[a-z]{20}`, shape `mcpFragment` stdio npx, `egressHosts`
+  incluant le hostname du projet, healthTestCmd qui n'utilise jamais
+  `$SUPABASE_SERVICE_ROLE_KEY`, refus de metadata malformée, stubs
+  phase-6).
 - Integration / E2E : pas applicable en Phase 3 (pas d'appel API
   provider réel). Phase 6 livrera les E2E sur les opérations admin.
 
