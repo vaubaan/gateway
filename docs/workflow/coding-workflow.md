@@ -4,6 +4,8 @@ tracks:
   - .github/workflows/ci.yml
   - .github/workflows/supabase-migrations.yml
   - .github/workflows/nightly.yml
+  - .github/workflows/e2e-nightly.yml
+  - scripts/setup-e2e-secrets.md
   - vercel.json
   - package.json
   - packages/web/package.json
@@ -27,13 +29,14 @@ Modèle global du projet `cloud-resource-manager` :
 
 ## 1. CI pipeline
 
-3 workflows GitHub Actions, tous ciblés sur `main` :
+4 workflows GitHub Actions, tous ciblés sur `main` :
 
-| Workflow                                                                     | Trigger                                                                                                 | Jobs                                                             | Durée typique                    |
-| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- | -------------------------------- |
-| [`ci.yml`](../../.github/workflows/ci.yml)                                   | `push` sur `main`, `pull_request` vers `main`, `workflow_dispatch`                                      | `type-check`, `lint`, `format:check`, `build`, `test`            | ~3-5 min                         |
-| [`supabase-migrations.yml`](../../.github/workflows/supabase-migrations.yml) | `push` sur `main` quand `supabase/migrations/**` ou `supabase/config.toml` change ; `workflow_dispatch` | `apply-prod` (psql session pooler vers prod, append-only ledger) | ~1 min                           |
-| [`nightly.yml`](../../.github/workflows/nightly.yml)                         | `schedule` (03:00 UTC quotidien), `workflow_dispatch`                                                   | `smoke` (stub en v1, sera l'E2E + sweeper plus tard)             | ~30 s (stub) → ~10 min (à venir) |
+| Workflow                                                                     | Trigger                                                                                                 | Jobs                                                                                         | Durée typique |
+| ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------- |
+| [`ci.yml`](../../.github/workflows/ci.yml)                                   | `push` sur `main`, `pull_request` vers `main`, `workflow_dispatch`                                      | `type-check`, `lint`, `format:check`, `build`, `test`                                        | ~3-5 min      |
+| [`supabase-migrations.yml`](../../.github/workflows/supabase-migrations.yml) | `push` sur `main` quand `supabase/migrations/**` ou `supabase/config.toml` change ; `workflow_dispatch` | `apply-prod` (psql session pooler vers prod, append-only ledger)                             | ~1 min        |
+| [`nightly.yml`](../../.github/workflows/nightly.yml)                         | `schedule` (03:00 UTC quotidien), `workflow_dispatch`                                                   | `smoke` (stub legacy ; conservé pour compat — la vraie suite E2E vit dans `e2e-nightly.yml`) | ~30 s         |
+| [`e2e-nightly.yml`](../../.github/workflows/e2e-nightly.yml)                 | `schedule` (03:00 UTC quotidien), `workflow_dispatch`                                                   | `sweeper` (clean `vauban-e2e-*` orphans > 24h) + `e2e` (Playwright real-clouds)              | ~5-15 min     |
 
 ### Secrets CI requis
 
@@ -46,9 +49,14 @@ Workflow `supabase-migrations.yml` :
   ou équivalent — IPv6 du DB direct n'est pas atteignable depuis les
   runners GitHub).
 
-Workflow `nightly.yml` (à câbler en phase 8) : `INFISICAL_TEST_*`,
-`GITHUB_TEST_PAT_*`, `VERCEL_TEST_*`, etc. — cf.
-[`docs/tests/e2e-tests.md`](../tests/e2e-tests.md).
+Workflow `e2e-nightly.yml` (livré Phase 8) : 13 secrets `VAUBAN_E2E_*`
+listés dans [`scripts/setup-e2e-secrets.md`](../../scripts/setup-e2e-secrets.md).
+Setup en une fois via `gh secret set` (cf. snippet dans la doc opérateur).
+Tant que ces secrets ne sont pas configurés, le workflow nightly
+échoue avec un message clair (`Missing E2E env var: VAUBAN_E2E_…`).
+
+Le workflow `nightly.yml` legacy reste vert (no-op stub) — il sera
+retiré une fois `e2e-nightly.yml` confirmé stable.
 
 ### Points de rejet
 
