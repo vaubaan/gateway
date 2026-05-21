@@ -161,14 +161,17 @@ Les scénarios suivants (spec §12.3) seront ajoutés au fil des phases :
       (`<CloudResourceMapButton>`) + l'endpoint
       (`/exports/cloud-resource-map`). Couvert en unit tests
       (route + bouton).
-- [ ] **rbac-member-cannot-patch** — Un `member` non-admin ne peut
-      pas PATCH une Resource ; assert 403.
-      Spec §3.3, §8.
-- [ ] **re-seal-membership-change** — Ajouter un member, assert
-      `recipients_stale=true` sur les blobs, déclencher re-seal,
-      assert blobs déchiffrables par le new member.
-      Spec §4.5. Phase 5 livre l'UI banner + le handler `runReseal` ;
-      le trigger sur INSERT `org_members` arrive en Phase 6+.
+- [x] **rbac-member-cannot-patch** — Member 403 on PATCH /resources,
+      200 on GET, 200 on GET /access (sealed_blob opaque, unseal
+      yields null since not recipient).
+      Spec §3.3, §8. Phase 8 wave B implementation in
+      `packages/web/tests/e2e/real-clouds/05-rbac-member-403.spec.ts`.
+- [x] **re-seal-membership-change** — INSERT org_members triggers
+      `recipients_stale=true` (migration 1003); admin re-seals for
+      both recipients; PUT flips back to false; new member unseals
+      the same cleartext.
+      Spec §4.5. Phase 8 wave B implementation in
+      `packages/web/tests/e2e/real-clouds/06-reseal-on-member-add.spec.ts`.
 - [ ] **connect-infisical-wizard** — Connexion d'un workspace
       Infisical : ouvrir `/orgs/:slug/secret-managers/new`, remplir
       `workspace_id` + `endpoint` + `(clientId, clientSecret)`,
