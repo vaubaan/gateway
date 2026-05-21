@@ -135,7 +135,17 @@ Les scénarios suivants (spec §12.3) seront ajoutés au fil des phases :
 - [ ] **re-seal-membership-change** — Ajouter un member, assert
       `recipients_stale=true` sur les blobs, déclencher re-seal,
       assert blobs déchiffrables par le new member.
-      Spec §4.5.
+      Spec §4.5. Phase 5 livre l'UI banner + le handler `runReseal` ;
+      le trigger sur INSERT `org_members` arrive en Phase 6+.
+- [ ] **connect-infisical-wizard** — Connexion d'un workspace
+      Infisical : ouvrir `/orgs/:slug/secret-managers/new`, remplir
+      `workspace_id` + `endpoint` + `(clientId, clientSecret)`,
+      cocher recipients, seal, submit. Assert : 201 POST
+      `/secret-managers`, row visible dans la list page avec
+      badge `default` si coché, **0 `clientSecret` cleartext dans
+      Network panel et 0 `localStorage`/`sessionStorage`/`IndexedDB`
+      write touché côté browser**.
+      Spec §5.2, §6.2, §11.1.
 - [ ] **crypto-identity-first-login** — User vient de signer up, tape
       son password dans `UnlockIdentityDialog`. Assert : POST
       `/api/crm/v1/me/crypto-key` part avec un body `public_key`,
