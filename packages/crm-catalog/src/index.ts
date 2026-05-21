@@ -1,13 +1,20 @@
 /**
- * @crm/catalog — types-only contracts for the Cloud Resource Manager catalogue.
+ * @crm/catalog — contracts + concrete catalogue of the Cloud Resource Manager.
  *
  * Spec reference: docs/spec/cloud-resource-manager.md §5.1 (ResourceKind /
- * OrgResourceAdminKind) and §5.2 (SecretManager).
+ * OrgResourceAdminKind), §5.2 (SecretManager), §5.3 (provider catalogue
+ * layout), §6.1 (REST endpoint).
  *
- * v1 init: this package ships interfaces and discriminator unions ONLY.
- * No provider implementations (no `CATALOG` export, no github / vercel /
- * supabase plugins). Those land in a later phase (cf. build-plan
- * `out_of_scope_for_init`).
+ * Public surface:
+ *   - Types: `ResourceKind`, `OrgResourceAdminKind`, `KindClass`,
+ *     `RotationMethod`, `AccessKeySpec`, `McpServerFragment`,
+ *     `ProviderChild`, plus `SealedBlob`, `SealedRecipient`,
+ *     `SecretManager`.
+ *   - Registry: `CATALOG` (frozen list of 9 ResourceKinds in v1) and
+ *     `findKind(id)` helper. Phase 3 wave B (`feature/catalog-registry-and-endpoint`).
+ *   - Per-provider barrels are NOT re-exported from the root — callers
+ *     that need a specific kind import via `findKind('github-org')` or
+ *     consume the `CATALOG` array.
  */
 
 export type {
@@ -21,3 +28,5 @@ export type {
 } from './resource-kind.js';
 
 export type { SealedBlob, SealedRecipient, SecretManager } from './secret-manager.js';
+
+export { CATALOG, findKind } from './registry.js';

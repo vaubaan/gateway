@@ -12,6 +12,8 @@ tracks:
   - packages/crm-catalog/tests/unit/providers/github.test.ts
   - packages/crm-catalog/tests/unit/providers/vercel.test.ts
   - packages/crm-catalog/tests/unit/providers/supabase-cloud.test.ts
+  - packages/crm-catalog/tests/unit/registry.test.ts
+  - packages/web/tests/unit/api/catalog.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -249,15 +251,39 @@ couvre les 3 kinds Supabase Cloud (`supabase-org`,
       appropriées (`https://[a-z]{20}\.supabase\.co`, JWT format
       `eyJ.eyJ.…`, project ref `[a-z]{20}`).
 
-**Wave B — `feature/catalog-registry-and-endpoint`** :
+**Wave B — `feature/catalog-registry-and-endpoint`** (livré) :
 
-- [ ] `packages/crm-catalog/tests/unit/registry.test.ts` — invariants
-      structurels (spec §12.4) : tous les `id` uniques, tous les
-      `org-admin` déclarent `manages` non-vide, tous les
+`packages/crm-catalog/tests/unit/registry.test.ts` — 15 invariants
+structurels (spec §12.4 + v1 allowlist) :
+
+- [x] `CATALOG` ship 9 entries, frozen, ids uniques.
+- [x] `kindClass` ∈ `{org, project, org-admin}`,
       `rotationMethod` ∈ `{self, admin-mediated, manual}`.
-- [ ] `packages/web/tests/unit/api/catalog.test.ts` — `GET /catalog`
-      renvoie 9 kinds, `GET /catalog/:kindId` renvoie le bon, 404 si
-      inconnu.
+- [x] Tout `org-admin` déclare `manages` non-vide, et chaque id de
+      `manages` résout vers un kind `kindClass='project'`.
+- [x] Tout `org` est `rotationMethod='manual'` (spec §0.1).
+- [x] Tout `id` matche `/^[a-z][a-z0-9-]*$/`,
+      `provider` ∈ allowlist v1 `{github, vercel, supabase-cloud}`.
+- [x] Tout `setupDocs` ≥ 100 chars, tout `accessSchema` non-vide.
+- [x] `findKind` retourne `undefined` pour un id inconnu et un
+      pointeur référentiellement identique pour deux lookups.
+
+`packages/web/tests/unit/api/catalog.test.ts` — 10 assertions sur
+les handlers Next.js :
+
+- [x] `GET /catalog` → 200 + 9 kinds, sans aucune fonction sur le
+      wire (`healthTestCmd`, `mcpFragment`, `listChildren`, etc.
+      absents).
+- [x] Chaque kind du payload list a un schema minimum (id, provider,
+      kindClass, displayName, setupDocs ≥ 100, accessSchema non-vide,
+      rotationMethod valide, egressHosts array).
+- [x] Les `org-admin` du payload portent `manages` non-vide.
+- [x] Les ids exposés == v1 inventory (`{github-…, vercel-…, supabase-…}`).
+- [x] Header `Cache-Control: public, max-age=…`.
+- [x] `GET /catalog/:kindId` → 200 sur known, setupDocs markdown,
+      `manages` pour org-admin.
+- [x] `GET /catalog/nope` → 404 `{ error: 'unknown_kind', kindId }`.
+- [x] Le single-kind path filtre aussi les fonctions.
 
 ### Resources CRUD (phase 4)
 

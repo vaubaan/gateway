@@ -19,6 +19,12 @@ tracks:
   - packages/crm-catalog/src/providers/supabase-cloud/project.ts
   - packages/crm-catalog/src/providers/supabase-cloud/index.ts
   - packages/crm-catalog/tests/unit/providers/supabase-cloud.test.ts
+  - packages/crm-catalog/src/registry.ts
+  - packages/crm-catalog/tests/unit/registry.test.ts
+  - packages/web/src/app/api/crm/v1/catalog/route.ts
+  - packages/web/src/app/api/crm/v1/catalog/[kindId]/route.ts
+  - packages/web/src/lib/catalog/serialize.ts
+  - packages/web/tests/unit/api/catalog.test.ts
 last_reviewed: 2026-05-21
 ---
 
@@ -31,19 +37,18 @@ Vercel, Supabase).
 
 ## Statut courant
 
-**Phase 3 wave A complète.** GitHub livré dans `feature/kinds-github`
-(mergé). Vercel livré dans `feature/kinds-vercel` (mergé). Supabase
-Cloud livré dans `feature/kinds-supabase` (cette feature). Registry
-global `CATALOG` + endpoint REST `GET /api/crm/v1/catalog` à venir
-en wave B (`feature/catalog-registry-and-endpoint`).
+**Phase 3 complète.** Wave A (9 kinds) + wave B (registry + endpoint
+REST) livrés. Le catalogue est désormais exposé en lecture publique
+via `GET /api/crm/v1/catalog` + `GET /api/crm/v1/catalog/:kindId`.
 
 - Types ResourceKind / OrgResourceAdminKind / KindClass /
   RotationMethod — livrés phase init dans
   `packages/crm-catalog/src/resource-kind.ts`.
-- Provider GitHub (3 kinds) — mergé.
-- Provider Vercel (3 kinds) — mergé.
-- Provider Supabase Cloud (3 kinds) — livré ici.
-- Registry `CATALOG` + endpoint `/api/crm/v1/catalog` — wave B.
+- Provider GitHub (3 kinds) — mergé wave A.
+- Provider Vercel (3 kinds) — mergé wave A.
+- Provider Supabase Cloud (3 kinds) — mergé wave A.
+- Registry `CATALOG` + endpoint `/api/crm/v1/catalog` — livré ici
+  (wave B).
 - Provider operations effectives (`createChild`,
   `rotateChildAccess`, `listChildren`) — Phase 6 (provisioning).
 
@@ -245,10 +250,82 @@ SUPABASE_PROJECT_REF }`. C'est le plus large bundle du catalogue v1
 - Egress : `api.supabase.com`, `<projectRef>.supabase.co`,
   `pooler.supabase.com`.
 
-## Registry & endpoint REST
+## Registry & endpoint REST — `feature/catalog-registry-and-endpoint`
 
-À livrer dans `feature/catalog-registry-and-endpoint` (Phase 3 wave
-B, après merge des 3 features de wave A).
+### `packages/crm-catalog/src/registry.ts`
+
+Source unique de vérité côté `@crm/catalog`. Importe les 3 barrels
+provider (`./providers/github`, `./providers/vercel`,
+`./providers/supabase-cloud`) et expose deux symboles :
+
+- `export const CATALOG: readonly ResourceKind[]` — frozen array de
+  9 entrées, ordonné par provider (github → vercel → supabase-cloud)
+  puis par kindClass (`org` → `org-admin` → `project`).
+- `export function findKind(id: string): ResourceKind | undefined` —
+  lookup par id ; retourne `undefined` si le kind est inconnu
+  (callers gèrent le 404).
+
+Le barrel racine `packages/crm-catalog/src/index.ts` re-exporte
+`CATALOG` + `findKind` à côté des types.
+
+### Endpoint REST `GET /api/crm/v1/catalog`
+
+Deux routes Next.js (App Router) :
+
+- `packages/web/src/app/api/crm/v1/catalog/route.ts` — list. Retourne
+  `{ kinds: SerializedKind[] }` (9 entrées).
+- `packages/web/src/app/api/crm/v1/catalog/[kindId]/route.ts` — by-id.
+  Retourne `{ kind: SerializedKind }` ou 404 + `{ error:
+'unknown_kind', kindId }` si l'id est inconnu.
+
+Les deux endpoints sont :
+
+- **Public-ish** : pas d'auth (le catalogue est build-time metadata,
+  identique pour toutes les orgs).
+- **Static** : `export const dynamic = 'force-static'`.
+- **Cacheables** : `Cache-Control: public, max-age=60,
+stale-while-revalidate=60` (CDN + browser).
+
+### Serialiseur `packages/web/src/lib/catalog/serialize.ts`
+
+Une fonction `serializeKind(k: ResourceKind): SerializedKind` qui
+filtre les champs **non-sérialisables** :
+
+- **gardés** : `id`, `provider`, `kindClass`, `displayName`,
+  `setupDocs`, `accessSchema`, `rotationMethod`, `egressHosts`
+  (évalué avec `{}`), `manages` (uniquement pour les org-admin).
+- **retirés** : `healthTestCmd`, `mcpFragment`, `rotateSelf`,
+  `listChildren`, `createChild`, `destroyChild`,
+  `rotateChildAccess`, `metadataSchema`.
+
+Le wire format reste **statique** : `egressHosts` est appelé avec un
+metadata vide. Les hosts dérivés de la metadata d'une Resource
+concrète (ex: `<projectRef>.supabase.co`) sont calculés au runtime
+par la Resource, pas par le catalogue.
+
+### Tests structurels
+
+`packages/crm-catalog/tests/unit/registry.test.ts` enforce les
+invariants spec §12.4 + les contraintes du build plan :
+
+- 9 kinds, ids uniques, `CATALOG` frozen.
+- `kindClass` ∈ `{org, project, org-admin}`,
+  `rotationMethod` ∈ `{self, admin-mediated, manual}`.
+- Tout `org-admin` déclare un `manages` non-vide, et chaque id de
+  `manages` résout vers un kind `kindClass='project'`.
+- Tout `org` est `rotationMethod='manual'` (spec §0.1 : pas
+  d'admin "au-dessus" de l'org).
+- Tout `id` matche `/^[a-z][a-z0-9-]*$/`.
+- Tout `provider` ∈ `{github, vercel, supabase-cloud}` (v1
+  allowlist).
+- Toute `setupDocs` ≥ 100 chars.
+- `findKind` retourne `undefined` pour un id inconnu et un pointeur
+  référentiellement identique pour deux lookups consécutifs.
+
+`packages/web/tests/unit/api/catalog.test.ts` exerce les handlers
+Next.js directement : 9 entrées sur list, ids exacts, 404 sur
+unknown_kind, absence des fonctions sur le wire, header
+`Cache-Control` public.
 
 ## Tests
 
@@ -270,6 +347,13 @@ B, après merge des 3 features de wave A).
   incluant le hostname du projet, healthTestCmd qui n'utilise jamais
   `$SUPABASE_SERVICE_ROLE_KEY`, refus de metadata malformée, stubs
   phase-6).
+- Unit registry : `packages/crm-catalog/tests/unit/registry.test.ts`
+  — 15 assertions structurelles (spec §12.4 + v1 allowlist) sur la
+  forme globale du `CATALOG` + helper `findKind`.
+- Unit endpoint : `packages/web/tests/unit/api/catalog.test.ts` — 10
+  assertions sur la list (9 entrées, wire format, Cache-Control) et
+  le by-id (200 sur known, 404 + `unknown_kind` sur missing,
+  absence des fonctions sur le wire).
 - Integration / E2E : pas applicable en Phase 3 (pas d'appel API
   provider réel). Phase 6 livrera les E2E sur les opérations admin.
 
