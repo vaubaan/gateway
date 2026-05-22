@@ -203,11 +203,32 @@ message }` → server update `resources.connection_status`,
 
 Le serveur ne voit que le résultat (binaire), jamais l'access cleartext.
 
-**CORS** : les 3 providers livrés (api.github.com, api.vercel.com,
-api.supabase.com) supportent CORS depuis browsers — cf. probe test
-manuel post-livraison. Si un futur kind cible une API sans CORS, le
-probe échouera proprement avec `network: <CORS error>` et le user le
-verra dans le `connection_message`. Pas de fallback Runner v1.
+**CORS** — état au 2026-05-22 :
+
+| Provider                | CORS browser | Test now status                |
+| ----------------------- | ------------ | ------------------------------ |
+| api.github.com          | `ACAO: *`    | OK                             |
+| api.vercel.com          | `ACAO: *`    | OK                             |
+| api.supabase.com (mgmt) | bloqué       | échoue `network: CORS blocked` |
+
+Supabase Management API expose `Access-Control-Allow-Credentials: true`
+mais ne renvoie pas d'`Access-Control-Allow-Origin` pour les origines
+tierces — la whitelist côté Supabase ne couvre que le dashboard
+supabase.com. Conséquence : les kinds `supabase-org` et
+`supabase-project` font échouer le probe avec un message CORS dans
+`connection_message`. Le user voit l'erreur directement, sans surface
+de fallback v1.
+
+Workarounds possibles si on doit débloquer Supabase plus tard (hors
+scope v1) : proxy server-side qui forward avec le cleartext (rompt
+la posture ZK — non), ou un mode "browser extension" qui contourne
+CORS (lourd). Pour l'instant : accepté comme limitation documentée,
+le user qui veut vraiment tester son token Supabase peut le faire via
+`curl` ou le dashboard Supabase.
+
+Si un futur kind cible une API sans CORS, le probe se comportera
+exactement de la même manière : message `network: <error>` dans
+`connection_message`. Pas de fallback Runner v1.
 
 ### `POST /:rId/refresh` (stub Phase 4)
 
