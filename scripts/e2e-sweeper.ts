@@ -261,8 +261,15 @@ async function main(): Promise<void> {
     }
   }
 
-  if (totalErrors > 0) {
-    console.error(`\nsweeper finished with ${totalErrors} errors`);
+  // Sweeper exit code policy: les "errors" par provider sont des
+  // problèmes de config (login HTTP 404, token expiré, etc.) — c'est
+  // un signal pour l'opérateur mais pas un fail bloquant tant qu'au
+  // moins un provider a pu s'exécuter sans erreur. Le vrai signal de
+  // crash E2E est totalOrphans > threshold (cf. spec §12.3 "sweeper
+  // alerte sur Telegram si > N orphelins").
+  const okProviders = stats.filter((s) => s.errors.length === 0).length;
+  if (okProviders === 0) {
+    console.error('\nsweeper: 0 providers swept cleanly — credential setup likely broken');
     process.exit(2);
   }
   if (totalOrphans > opts.alertThreshold) {
@@ -270,6 +277,9 @@ async function main(): Promise<void> {
       `\nsweeper destroyed ${totalOrphans} orphans (threshold=${opts.alertThreshold}) — investigate E2E crashes`,
     );
     process.exit(3);
+  }
+  if (totalErrors > 0) {
+    console.warn(`\nsweeper completed with ${totalErrors} provider error(s) — review above`);
   }
   console.log('\nsweeper OK');
 }
