@@ -7,9 +7,11 @@ export interface KdfParams {
   readonly t: number;
   /** Parallelism (Argon2id `p`). Default: 1. */
   readonly p: number;
+  /** KDF algorithm identifier. Always `'argon2id'` in v1 (spec §4.1). */
+  readonly alg: 'argon2id';
 }
 
-const DEFAULT_PARAMS: KdfParams = { m: 67108864, t: 3, p: 1 };
+const DEFAULT_PARAMS: KdfParams = { m: 67108864, t: 3, p: 1, alg: 'argon2id' };
 const KEK_LENGTH = 32;
 const SALT_LENGTH = 16;
 

@@ -47,7 +47,7 @@ interface CryptoKeyResponse {
 
 const ENDPOINT = '/api/crm/v1/me/crypto-key';
 const SALT_BYTES = 16;
-const DEFAULT_PARAMS: KdfParams = { m: 67108864, t: 3, p: 1 };
+const DEFAULT_PARAMS: KdfParams = { m: 67108864, t: 3, p: 1, alg: 'argon2id' };
 
 function base64Decode(input: string): Uint8Array {
   const bin = globalThis.atob(input);
@@ -114,7 +114,7 @@ export function useUserIdentity(): UseUserIdentity {
       const data = (await res.json()) as CryptoKeyResponse;
       const salt = base64Decode(data.kdf_salt);
       const params: KdfParams = data.kdf_params
-        ? { m: data.kdf_params.m, t: data.kdf_params.t, p: data.kdf_params.p }
+        ? { m: data.kdf_params.m, t: data.kdf_params.t, p: data.kdf_params.p, alg: 'argon2id' }
         : DEFAULT_PARAMS;
       const kek = await deriveKEK(pw, salt, params);
       pw = '';

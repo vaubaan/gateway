@@ -32,7 +32,9 @@ describe('deriveKEK (Argon2id)', () => {
 
   it('refuses params weaker than spec defaults (m=32 MiB)', async () => {
     const salt = new Uint8Array(16).fill(0x42);
-    await expect(deriveKEK('pw', salt, { m: 33554432, t: 3, p: 1 })).rejects.toThrow(/too weak/i);
+    await expect(
+      deriveKEK('pw', salt, { m: 33554432, t: 3, p: 1, alg: 'argon2id' }),
+    ).rejects.toThrow(/too weak/i);
   });
 
   it('refuses a salt of the wrong length', async () => {

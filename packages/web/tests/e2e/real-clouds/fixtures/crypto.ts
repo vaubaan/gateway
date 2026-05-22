@@ -32,7 +32,7 @@ import {
   type SealedBlobV1,
 } from '@crm/core/crypto';
 
-const DEFAULT_KDF: KdfParams = { m: 67108864, t: 3, p: 1 };
+const DEFAULT_KDF: KdfParams = { m: 67108864, t: 3, p: 1, alg: 'argon2id' };
 
 export interface E2EIdentity {
   readonly publicKey: Uint8Array;
