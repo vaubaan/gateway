@@ -17,6 +17,8 @@
     "@crm/core": "*",
     "@supabase/ssr": "0.10.3",
     "@supabase/supabase-js": "2.106.1",
+    "libsodium-sumo": "0.7.16",
+    "libsodium-wrappers-sumo": "0.7.16",
     "next": "15.5.18",
     "react": "19.2.0",
     "react-dom": "19.2.0"

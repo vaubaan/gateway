@@ -30,6 +30,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "libsodium-sumo": "0.7.16",
     "libsodium-wrappers-sumo": "0.7.16"
   },
   "devDependencies": {

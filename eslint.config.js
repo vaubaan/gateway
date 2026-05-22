@@ -39,7 +39,11 @@ export default tseslint.config(
       globals: { ...globals.node, ...globals.browser },
       parserOptions: {
         projectService: {
-          allowDefaultProject: ['*.config.{js,cjs,mjs,ts}', '*.config.*.{js,cjs,mjs,ts}'],
+          allowDefaultProject: [
+            '*.config.{js,cjs,mjs,ts}',
+            '*.config.*.{js,cjs,mjs,ts}',
+            'scripts/*.mjs',
+          ],
           defaultProject: 'tsconfig.json',
         },
         tsconfigRootDir: import.meta.dirname,
@@ -58,9 +62,17 @@ export default tseslint.config(
   },
   // CLI-ish ops scripts log to stdout by design; console is OK.
   {
-    files: ['scripts/**/*.ts'],
+    files: ['scripts/**/*.ts', 'scripts/**/*.mjs'],
     rules: {
       'no-console': 'off',
+      // .mjs files run via tsconfig allowDefaultProject without strict
+      // type-aware inference for Node stdlib return types (readdirSync
+      // is inferred as any[]). The narrowing happens at runtime; ops
+      // scripts don't carry the same type budget as production code.
+      '@typescript-eslint/no-unsafe-argument': 'off',
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
     },
   },
   prettier,
