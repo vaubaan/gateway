@@ -8,6 +8,7 @@
  */
 
 import { useState, type ReactElement } from 'react';
+import { useRouter } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 import { identityStore } from '@/lib/crypto/identity-store';
@@ -21,6 +22,7 @@ export function SignOutButton({
   label?: string;
 }): ReactElement {
   const [busy, setBusy] = useState(false);
+  const router = useRouter();
 
   async function handleClick(): Promise<void> {
     if (busy) return;
@@ -29,6 +31,8 @@ export function SignOutButton({
       identityStore.clear();
       const supabase = createSupabaseBrowserClient() as SupabaseClient;
       await supabase.auth.signOut();
+      router.push('/sign-in');
+      router.refresh();
     } finally {
       setBusy(false);
     }

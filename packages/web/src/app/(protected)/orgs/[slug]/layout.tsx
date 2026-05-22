@@ -11,6 +11,7 @@
 import type { ReactNode } from 'react';
 
 import { NeedsResealBanner } from '@/components/needs-reseal/NeedsResealBanner';
+import { TopNav } from '@/components/nav/TopNav';
 
 interface LayoutProps {
   readonly children: ReactNode;
@@ -21,6 +22,7 @@ export default async function OrgLayout({ children, params }: LayoutProps) {
   const { slug } = await params;
   return (
     <>
+      <TopNav orgSlug={slug} />
       <NeedsResealBanner orgSlug={slug} />
       {children}
     </>
