@@ -8,6 +8,8 @@
 
 import type { ReactElement } from 'react';
 
+import { Badge } from '@/components/ui';
+
 import { SetDefaultButton } from './SetDefaultButton';
 
 export interface SecretManagerRowProps {
@@ -41,7 +43,7 @@ export function SecretManagerList(props: SecretManagerListProps): ReactElement {
     return (
       <p
         data-testid="secret-managers-empty"
-        className="rounded border border-dashed border-neutral-300 p-4 text-sm text-neutral-600"
+        className="rounded border border-dashed border-border-default p-4 text-sm text-muted"
       >
         No SecretManagers yet. Click <strong>+ Connect Infisical Workspace</strong> to add one.
       </p>
@@ -50,7 +52,7 @@ export function SecretManagerList(props: SecretManagerListProps): ReactElement {
   return (
     <table data-testid="secret-managers-table" className="w-full border-collapse text-sm">
       <thead>
-        <tr className="border-b text-left text-xs uppercase text-neutral-600">
+        <tr className="border-b border-border-default text-left text-xs uppercase text-muted">
           <th className="py-2">Name</th>
           <th className="py-2">Kind</th>
           <th className="py-2">Config</th>
@@ -60,25 +62,29 @@ export function SecretManagerList(props: SecretManagerListProps): ReactElement {
       </thead>
       <tbody>
         {items.map((sm) => (
-          <tr key={sm.id} data-testid={`secret-managers-row-${sm.id}`} className="border-b">
+          <tr
+            key={sm.id}
+            data-testid={`secret-managers-row-${sm.id}`}
+            className="border-b border-border-default"
+          >
             <td className="py-2 font-mono">{sm.name}</td>
             <td className="py-2">{sm.kind}</td>
-            <td className="py-2 font-mono text-xs text-neutral-600">
-              {fmtConfigSummary(sm.config)}
-            </td>
+            <td className="py-2 font-mono text-xs text-muted">{fmtConfigSummary(sm.config)}</td>
             <td className="py-2">
               {sm.is_default ? (
-                <span
+                <Badge
                   data-testid={`secret-managers-default-badge-${sm.id}`}
-                  className="rounded bg-green-100 px-2 py-0.5 text-xs font-medium text-green-900"
+                  variant="success"
+                  size="sm"
+                  shape="square"
                 >
                   default
-                </span>
+                </Badge>
               ) : (
                 <SetDefaultButton orgSlug={orgSlug} smId={sm.id} />
               )}
             </td>
-            <td className="py-2 text-right text-xs text-neutral-500">
+            <td className="py-2 text-right text-xs text-subtle">
               {new Date(sm.created_at).toISOString().slice(0, 10)}
             </td>
           </tr>

@@ -30,13 +30,13 @@ export function OrgExportsClient(props: OrgExportsClientProps): ReactElement {
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium text-neutral-700">Scope</h2>
+        <h2 className="text-sm font-medium text-foreground">Scope</h2>
         <VariantSelector variants={variants} value={variant} onChange={setVariant} />
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-neutral-700">.env bundle</h2>
-        <p className="text-xs text-neutral-600">
+        <h2 className="text-sm font-medium text-foreground">.env bundle</h2>
+        <p className="text-xs text-muted">
           Sealed blobs for every Access visible at scope. Browser unseals and assembles the file.
         </p>
         <div className="flex gap-2">
@@ -46,8 +46,8 @@ export function OrgExportsClient(props: OrgExportsClientProps): ReactElement {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-neutral-700">mcp.json + .env companion</h2>
-        <p className="text-xs text-neutral-600">
+        <h2 className="text-sm font-medium text-foreground">mcp.json + .env companion</h2>
+        <p className="text-xs text-muted">
           Downloads the composed <code>mcp.json</code> snapshot followed by its{' '}
           <code>.env-mcp</code> companion (placeholders resolved via unseal where possible).
         </p>
@@ -58,8 +58,8 @@ export function OrgExportsClient(props: OrgExportsClientProps): ReactElement {
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-neutral-700">cloud-resource-map.json</h2>
-        <p className="text-xs text-neutral-600">
+        <h2 className="text-sm font-medium text-foreground">cloud-resource-map.json</h2>
+        <p className="text-xs text-muted">
           JSON metadata map consumed by the Coding Agent Runner — zero secrets, just metadata +
           references to <code>(secret_manager.kind, .name)</code> per Access.
         </p>

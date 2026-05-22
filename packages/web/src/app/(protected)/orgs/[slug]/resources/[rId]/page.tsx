@@ -235,7 +235,7 @@ export default async function ResourceDetailPage({ params }: PageProps): Promise
             title={resource.connection_message ?? undefined}
           />
         </div>
-        <p className="text-xs text-neutral-600">
+        <p className="text-xs text-muted">
           {resource.provider_name} / {resource.kind} · scope {resource.scope}
           {resource.variant ? ` · variant ${resource.variant}` : ''}
           {resource.is_admin ? ' · admin' : ''}
@@ -245,7 +245,7 @@ export default async function ResourceDetailPage({ params }: PageProps): Promise
             href={resource.console_url}
             target="_blank"
             rel="noreferrer"
-            className="text-xs text-blue-700 underline"
+            className="text-xs text-info-foreground underline"
           >
             Open provider console ↗
           </a>
@@ -256,7 +256,7 @@ export default async function ResourceDetailPage({ params }: PageProps): Promise
         <h2 className="text-sm font-semibold">Provider metadata</h2>
         <pre
           data-testid="resource-detail-metadata"
-          className="overflow-x-auto rounded bg-neutral-100 p-2 font-mono text-xs"
+          className="overflow-x-auto rounded bg-sunken p-2 font-mono text-xs"
         >
           {JSON.stringify(resource.provider_metadata, null, 2)}
         </pre>
@@ -265,7 +265,7 @@ export default async function ResourceDetailPage({ params }: PageProps): Promise
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Access keys</h2>
         {accessSummary.length === 0 ? (
-          <span data-testid="resource-detail-access-empty" className="text-xs text-neutral-600">
+          <span data-testid="resource-detail-access-empty" className="text-xs text-muted">
             No sealed access stored for this resource yet.
           </span>
         ) : (
@@ -274,10 +274,10 @@ export default async function ResourceDetailPage({ params }: PageProps): Promise
               <li
                 key={row.key}
                 data-testid={`resource-detail-access-row-${row.key}`}
-                className="flex items-center justify-between border-b border-neutral-100 py-1"
+                className="flex items-center justify-between border-b border-border-default py-1"
               >
                 <span className="font-mono text-xs">{row.key}</span>
-                <span className="text-xs text-neutral-600">
+                <span className="text-xs text-muted">
                   sealed for {String(row.recipient_count)} · rotated{' '}
                   {new Date(row.rotated_at).toISOString().slice(0, 10)}
                 </span>
@@ -302,7 +302,7 @@ export default async function ResourceDetailPage({ params }: PageProps): Promise
         <section className="flex flex-col gap-2">
           <h2 className="text-sm font-semibold">Provisioned children</h2>
           {children.length === 0 ? (
-            <span data-testid="resource-detail-children-empty" className="text-xs text-neutral-600">
+            <span data-testid="resource-detail-children-empty" className="text-xs text-muted">
               No children yet. Phase 6 enables `+ Provision via this Admin`.
             </span>
           ) : (
@@ -311,15 +311,15 @@ export default async function ResourceDetailPage({ params }: PageProps): Promise
                 <li
                   key={c.id}
                   data-testid={`resource-detail-child-${c.id}`}
-                  className="border-b border-neutral-100 py-1"
+                  className="border-b border-border-default py-1"
                 >
                   <a
                     href={`/orgs/${org.slug}/resources/${c.id}`}
-                    className="text-blue-700 underline"
+                    className="text-info-foreground underline"
                   >
                     {c.name}
                   </a>{' '}
-                  <span className="text-xs text-neutral-600">
+                  <span className="text-xs text-muted">
                     {c.kind} · {c.status}
                   </span>
                 </li>
@@ -332,16 +332,16 @@ export default async function ResourceDetailPage({ params }: PageProps): Promise
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Audit timeline (last 50)</h2>
         {audit.length === 0 ? (
-          <span data-testid="resource-detail-audit-empty" className="text-xs text-neutral-600">
+          <span data-testid="resource-detail-audit-empty" className="text-xs text-muted">
             No audit events for this resource yet.
           </span>
         ) : (
           <ol className="flex flex-col gap-1 text-xs" data-testid="resource-detail-audit-list">
             {audit.map((row) => (
               <li key={row.id} className="flex items-baseline gap-2">
-                <span className="font-mono text-neutral-600">{new Date(row.at).toISOString()}</span>
+                <span className="font-mono text-muted">{new Date(row.at).toISOString()}</span>
                 <span className="font-medium">{row.action}</span>
-                <span className="text-neutral-600">
+                <span className="text-muted">
                   {JSON.stringify({ ...row.subject, ...row.scope })}
                 </span>
               </li>

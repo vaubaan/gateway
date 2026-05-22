@@ -33,16 +33,16 @@ export function ProjectExportsClient(props: ProjectExportsClientProps): ReactEle
   return (
     <div className="flex flex-col gap-6">
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-medium text-neutral-700">Scope</h2>
+        <h2 className="text-sm font-medium text-foreground">Scope</h2>
         <VariantSelector variants={variants} value={variant} onChange={setVariant} />
-        <p className="text-xs text-neutral-500">
+        <p className="text-xs text-subtle">
           Without a variant, the bundle includes every Resource attached to this project (variant IS
           NULL or any variant), plus the org-scoped Resources.
         </p>
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-neutral-700">.env bundle</h2>
+        <h2 className="text-sm font-medium text-foreground">.env bundle</h2>
         <div className="flex gap-2">
           <DotenvExportButton
             orgSlug={orgSlug}
@@ -62,7 +62,7 @@ export function ProjectExportsClient(props: ProjectExportsClientProps): ReactEle
       </section>
 
       <section className="flex flex-col gap-3">
-        <h2 className="text-sm font-medium text-neutral-700">mcp.json + .env companion</h2>
+        <h2 className="text-sm font-medium text-foreground">mcp.json + .env companion</h2>
         <div className="flex flex-col gap-2">
           <McpExportButton orgSlug={orgSlug} scope={scope} variant={v} filenameStem={stem} />
           <RegenerateMcpButton orgSlug={orgSlug} scope={scope} variant={v} />

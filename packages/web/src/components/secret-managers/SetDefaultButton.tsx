@@ -9,6 +9,8 @@
 
 import { useState } from 'react';
 
+import { Button } from '@/components/ui';
+
 export interface SetDefaultButtonProps {
   readonly orgSlug: string;
   readonly smId: string;
@@ -49,17 +51,22 @@ export function SetDefaultButton(props: SetDefaultButtonProps): React.ReactEleme
 
   return (
     <span className="flex items-center gap-2">
-      <button
+      <Button
         type="button"
+        variant="secondary"
+        size="sm"
         data-testid={`set-default-button-${props.smId}`}
         disabled={busy}
+        loading={busy}
         onClick={() => void handleClick()}
-        className="rounded border border-neutral-300 px-2 py-0.5 text-xs disabled:opacity-50"
       >
         {busy ? 'Setting…' : 'Set default'}
-      </button>
+      </Button>
       {error ? (
-        <span data-testid={`set-default-error-${props.smId}`} className="text-xs text-red-700">
+        <span
+          data-testid={`set-default-error-${props.smId}`}
+          className="text-xs text-danger-foreground"
+        >
           {error}
         </span>
       ) : null}

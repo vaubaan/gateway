@@ -19,7 +19,10 @@ export function KindPicker(props: KindPickerProps): React.ReactElement {
       <h2 className="text-sm font-semibold">Pick a resource kind</h2>
       <ul className="flex flex-col gap-2">
         {kinds.map((k) => (
-          <li key={k.id} className="rounded border border-neutral-200 p-3 hover:border-neutral-400">
+          <li
+            key={k.id}
+            className="rounded border border-border-default p-3 hover:border-border-strong"
+          >
             <button
               type="button"
               data-testid={`wizard-kind-${k.id}`}
@@ -29,7 +32,7 @@ export function KindPicker(props: KindPickerProps): React.ReactElement {
               className="flex w-full flex-col items-start gap-1 text-left"
             >
               <span className="text-sm font-medium">{k.displayName}</span>
-              <span className="font-mono text-xs text-neutral-600">
+              <span className="font-mono text-xs text-muted">
                 {k.id} · {k.provider} · {k.kindClass}
               </span>
             </button>

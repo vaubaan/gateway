@@ -9,6 +9,7 @@
 import { useMemo, useState } from 'react';
 
 import type { ResourceRow } from '@/components/resources/ResourceTable';
+import { Button } from '@/components/ui';
 
 export interface ProvisionLauncherProps {
   readonly orgSlug: string;
@@ -26,41 +27,44 @@ export function ProvisionLauncher(props: ProvisionLauncherProps): React.ReactEle
 
   if (admins.length === 0) {
     return (
-      <button
+      <Button
         type="button"
+        variant="secondary"
+        size="sm"
         data-testid="resources-page-provision-button"
         disabled
         title="Register an org-admin first to provision child resources."
-        className="rounded border border-neutral-300 px-3 py-1 text-sm text-neutral-500"
+        className="text-subtle"
       >
         + Provision via …
-      </button>
+      </Button>
     );
   }
 
   return (
     <div className="relative">
-      <button
+      <Button
         type="button"
+        variant="secondary"
+        size="sm"
         data-testid="resources-page-provision-button"
         onClick={() => setOpen((p) => !p)}
-        className="rounded border border-neutral-300 px-3 py-1 text-sm"
       >
         + Provision via …
-      </button>
+      </Button>
       {open ? (
         <ul
           data-testid="provision-admin-dropdown"
-          className="absolute right-0 z-10 mt-1 flex flex-col rounded border border-neutral-300 bg-white p-1 text-sm shadow"
+          className="absolute right-0 z-10 mt-1 flex flex-col rounded border border-border-default bg-surface p-1 text-sm shadow"
         >
           {admins.map((a) => (
             <li key={a.id}>
               <a
                 data-testid={`provision-admin-${a.id}`}
                 href={`/orgs/${encodeURIComponent(orgSlug)}/resources/provision?admin=${encodeURIComponent(a.id)}`}
-                className="block rounded px-2 py-1 text-xs hover:bg-neutral-100"
+                className="block rounded px-2 py-1 text-xs hover:bg-sunken"
               >
-                {a.name} <span className="text-neutral-500">({a.kind})</span>
+                {a.name} <span className="text-subtle">({a.kind})</span>
               </a>
             </li>
           ))}

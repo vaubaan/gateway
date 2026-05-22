@@ -11,6 +11,7 @@ import { useState, type ReactElement } from 'react';
 import { useRouter } from 'next/navigation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+import { Button } from '@/components/ui';
 import { identityStore } from '@/lib/crypto/identity-store';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
@@ -39,18 +40,17 @@ export function SignOutButton({
   }
 
   return (
-    <button
+    <Button
       type="button"
-      disabled={busy}
+      variant="secondary"
+      size="sm"
+      loading={busy}
       onClick={() => {
         void handleClick();
       }}
-      className={
-        className ??
-        'rounded border border-neutral-700 px-3 py-1.5 text-sm text-neutral-200 hover:bg-neutral-800 disabled:opacity-50'
-      }
+      className={className}
     >
       {busy ? 'Signing out...' : label}
-    </button>
+    </Button>
   );
 }

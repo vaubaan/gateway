@@ -28,6 +28,7 @@ import type { ReactElement } from 'react';
 
 import type { SealedBlobV1 } from '@crm/core/crypto';
 
+import { Button } from '@/components/ui';
 import { identityStore } from '@/lib/crypto/identity-store';
 import { assembleDotenv, assembleJson, type AssemblableEntry } from '@/lib/exports/dotenv-assembly';
 import { triggerBrowserDownload } from '@/lib/exports/download';
@@ -127,7 +128,7 @@ export function DotenvExportButton(props: DotenvExportButtonProps): ReactElement
 
   if (state.kind === 'running') {
     return (
-      <span data-testid="dotenv-export-running" className="text-xs text-neutral-700">
+      <span data-testid="dotenv-export-running" className="text-xs text-muted">
         {state.status}
       </span>
     );
@@ -135,15 +136,16 @@ export function DotenvExportButton(props: DotenvExportButtonProps): ReactElement
   if (state.kind === 'error') {
     return (
       <div className="flex flex-col gap-1">
-        <button
+        <Button
           type="button"
+          variant="danger"
+          size="sm"
           data-testid="dotenv-export-retry"
           onClick={() => void handleClick()}
-          className="rounded border border-red-300 px-2 py-1 text-xs text-red-700"
         >
           Retry download
-        </button>
-        <span data-testid="dotenv-export-error" className="text-xs text-red-700">
+        </Button>
+        <span data-testid="dotenv-export-error" className="text-xs text-danger-foreground">
           {state.message}
         </span>
       </div>
@@ -152,15 +154,16 @@ export function DotenvExportButton(props: DotenvExportButtonProps): ReactElement
   if (state.kind === 'done') {
     return (
       <div className="flex flex-col gap-1">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           data-testid="dotenv-export-again"
           onClick={() => void handleClick()}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs"
         >
           Download again
-        </button>
-        <span data-testid="dotenv-export-summary" className="text-xs text-neutral-700">
+        </Button>
+        <span data-testid="dotenv-export-summary" className="text-xs text-muted">
           {state.resolved.length} unsealed
           {state.unavailable.length > 0 ? `, ${state.unavailable.length} placeholder(s)` : ''}.
         </span>
@@ -170,13 +173,14 @@ export function DotenvExportButton(props: DotenvExportButtonProps): ReactElement
 
   const label = format === 'json' ? 'Download .env.json' : 'Download .env';
   return (
-    <button
+    <Button
       type="button"
+      variant="primary"
+      size="sm"
       data-testid="dotenv-export-button"
       onClick={() => void handleClick()}
-      className="rounded bg-neutral-900 px-3 py-1 text-sm text-white"
     >
       {label}
-    </button>
+    </Button>
   );
 }

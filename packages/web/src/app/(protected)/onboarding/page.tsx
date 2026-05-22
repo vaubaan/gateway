@@ -60,7 +60,7 @@ export default async function OnboardingPage(): Promise<ReactElement> {
   return (
     <main className="mx-auto flex max-w-md flex-col gap-4 p-8" data-testid="onboarding-page">
       <h1 className="text-xl font-semibold">Create your first organization</h1>
-      <p className="text-sm text-neutral-700">
+      <p className="text-sm text-muted">
         Cloud Resource Manager groups resources by organization. You'll be the first admin.
       </p>
       <OnboardingForm />

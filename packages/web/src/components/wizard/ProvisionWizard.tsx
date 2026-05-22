@@ -28,6 +28,7 @@ import { sealForRecipients, unsealAs, type PubKeyEntry, type SealedBlobV1 } from
 
 import { identityStore } from '@/lib/crypto/identity-store';
 import { SealedInput } from '@/components/sealed/SealedInput';
+import { Button, Input } from '@/components/ui';
 
 export interface ProvisionWizardProps {
   readonly orgSlug: string;
@@ -104,7 +105,7 @@ export function ProvisionWizard(props: ProvisionWizardProps): React.ReactElement
 
   if (step.kind === 'error') {
     return (
-      <p data-testid="provision-wizard-error" className="text-sm text-red-700">
+      <p data-testid="provision-wizard-error" className="text-sm text-danger-foreground">
         {step.message}
       </p>
     );
@@ -121,14 +122,15 @@ export function ProvisionWizard(props: ProvisionWizardProps): React.ReactElement
         <ul className="flex flex-col gap-2">
           {manages.map((id) => (
             <li key={id}>
-              <button
+              <Button
                 type="button"
+                variant="secondary"
+                size="sm"
                 data-testid={`pick-child-${id}`}
                 onClick={() => setStep({ kind: 'fill-spec', admin: step.admin, childKindId: id })}
-                className="rounded border border-neutral-300 px-2 py-1 text-xs"
               >
                 {id}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>
@@ -182,7 +184,7 @@ export function ProvisionWizard(props: ProvisionWizardProps): React.ReactElement
   }
 
   return (
-    <p data-testid="provision-wizard-done" className="text-sm text-green-700">
+    <p data-testid="provision-wizard-done" className="text-sm text-success-foreground">
       Resource provisioned (id: <code>{step.resourceId}</code>).
     </p>
   );
@@ -220,11 +222,11 @@ function SpecForm(props: SpecFormProps): React.ReactElement {
       <h2 className="text-sm font-medium">Step 2 / 3 — fill spec for {childKindId}</h2>
       <label className="text-xs">
         Name (slug)
-        <input
+        <Input
           data-testid="provision-spec-name"
           value={name}
           onChange={(e) => setName(e.target.value)}
-          className="ml-2 rounded border border-neutral-300 px-2 py-1 text-xs"
+          className="ml-2 inline-block w-auto text-xs"
         />
       </label>
       {childKindId === 'github-repo' ? (
@@ -241,45 +243,47 @@ function SpecForm(props: SpecFormProps): React.ReactElement {
       {childKindId === 'vercel-project' ? (
         <label className="text-xs">
           Framework
-          <input
+          <Input
             data-testid="provision-spec-framework"
             value={framework}
             onChange={(e) => setFramework(e.target.value)}
-            className="ml-2 rounded border border-neutral-300 px-2 py-1 text-xs"
+            className="ml-2 inline-block w-auto text-xs"
           />
         </label>
       ) : null}
       {childKindId === 'supabase-project' ? (
         <label className="text-xs">
           Region
-          <input
+          <Input
             data-testid="provision-spec-region"
             value={region}
             onChange={(e) => setRegion(e.target.value)}
-            className="ml-2 rounded border border-neutral-300 px-2 py-1 text-xs"
+            className="ml-2 inline-block w-auto text-xs"
           />
         </label>
       ) : null}
       <div className="flex gap-2">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           data-testid="provision-spec-back"
           onClick={onBack}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs"
         >
           Back
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="primary"
+          size="sm"
           data-testid="provision-spec-next"
           onClick={handle}
           disabled={name.length === 0}
-          className="rounded bg-neutral-900 px-2 py-1 text-xs text-white disabled:opacity-50"
         >
           Create cloud resource
-        </button>
+        </Button>
       </div>
-      <p className="text-xs text-neutral-500">
+      <p className="text-xs text-subtle">
         Admin in use: <code>{admin.kind.id}</code>
       </p>
     </div>

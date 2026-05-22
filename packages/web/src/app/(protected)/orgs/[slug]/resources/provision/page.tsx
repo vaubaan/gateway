@@ -65,7 +65,7 @@ export default async function ProvisionPage({
     return (
       <main className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
         <h1 className="text-xl font-semibold">Provision a resource</h1>
-        <p className="text-sm text-red-700">
+        <p className="text-sm text-danger-foreground">
           This org has no project yet — provisioning requires a project to attach the new resource
           to. Create one via the org settings first.
         </p>
@@ -77,7 +77,7 @@ export default async function ProvisionPage({
     <main className="mx-auto flex max-w-3xl flex-col gap-4 p-6">
       <header>
         <h1 className="text-xl font-semibold">Provision a resource</h1>
-        <p className="text-xs text-neutral-600">
+        <p className="text-xs text-muted">
           org: {org.slug} · admin: <code>{admin}</code> · project: <code>{projectId}</code>
         </p>
       </header>

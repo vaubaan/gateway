@@ -37,6 +37,8 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { sealForRecipients, type PubKeyEntry, type SealedBlobV1 } from '@crm/core/crypto';
 
+import { Button, Input } from '@/components/ui';
+
 export interface WizardRecipient {
   readonly user_id?: string;
   readonly fingerprint: string;
@@ -195,9 +197,9 @@ export function ConnectInfisicalWizard(props: ConnectInfisicalWizardProps): Reac
     <div
       data-testid="connect-infisical-wizard"
       data-step={step}
-      className="flex flex-col gap-4 rounded-md border border-neutral-300 p-4"
+      className="flex flex-col gap-4 rounded-md border border-border-default p-4"
     >
-      <ol className="flex gap-2 text-xs uppercase text-neutral-600">
+      <ol className="flex gap-2 text-xs uppercase text-muted">
         <li data-testid="wizard-progress-config" data-active={step === 'config'}>
           1. Config
         </li>
@@ -212,7 +214,7 @@ export function ConnectInfisicalWizard(props: ConnectInfisicalWizardProps): Reac
       </ol>
 
       {error ? (
-        <p data-testid="wizard-error" className="text-sm text-red-700">
+        <p data-testid="wizard-error" className="text-sm text-danger-foreground">
           {error}
         </p>
       ) : null}
@@ -221,60 +223,60 @@ export function ConnectInfisicalWizard(props: ConnectInfisicalWizardProps): Reac
         <div data-testid="wizard-step-config" className="flex flex-col gap-2 text-sm">
           <label className="flex flex-col gap-1">
             <span>Name (slug)</span>
-            <input
+            <Input
               data-testid="wizard-input-name"
               value={config.name}
               onChange={(e) => setConfig({ ...config, name: e.target.value })}
-              className="rounded border border-neutral-300 px-2 py-1 font-mono"
+              className="font-mono"
             />
           </label>
           <label className="flex flex-col gap-1">
             <span>Infisical endpoint</span>
-            <input
+            <Input
               data-testid="wizard-input-endpoint"
               value={config.endpoint}
               onChange={(e) => setConfig({ ...config, endpoint: e.target.value })}
-              className="rounded border border-neutral-300 px-2 py-1 font-mono"
+              className="font-mono"
             />
           </label>
           <label className="flex flex-col gap-1">
             <span>Workspace ID</span>
-            <input
+            <Input
               data-testid="wizard-input-workspace"
               value={config.workspaceId}
               onChange={(e) => setConfig({ ...config, workspaceId: e.target.value })}
-              className="rounded border border-neutral-300 px-2 py-1 font-mono"
+              className="font-mono"
             />
           </label>
           <label className="flex flex-col gap-1">
             <span>Environment</span>
-            <input
+            <Input
               data-testid="wizard-input-environment"
               value={config.environment}
               onChange={(e) => setConfig({ ...config, environment: e.target.value })}
-              className="rounded border border-neutral-300 px-2 py-1 font-mono"
+              className="font-mono"
             />
           </label>
           <label className="flex flex-col gap-1">
             <span>Machine Identity — Client ID (UUID)</span>
-            <input
+            <Input
               data-testid="wizard-input-clientid"
               value={config.clientId}
               onChange={(e) => setConfig({ ...config, clientId: e.target.value })}
               autoComplete="off"
-              className="rounded border border-neutral-300 px-2 py-1 font-mono"
+              className="font-mono"
             />
           </label>
           <label className="flex flex-col gap-1">
             <span>Machine Identity — Client Secret</span>
-            <input
+            <Input
               data-testid="wizard-input-clientsecret"
               type="password"
               value={config.clientSecret}
               onChange={(e) => setConfig({ ...config, clientSecret: e.target.value })}
               autoComplete="off"
               spellCheck={false}
-              className="rounded border border-neutral-300 px-2 py-1 font-mono"
+              className="font-mono"
             />
           </label>
           <label className="flex items-center gap-2">
@@ -286,25 +288,27 @@ export function ConnectInfisicalWizard(props: ConnectInfisicalWizardProps): Reac
             />
             <span>Set as default SecretManager for the org</span>
           </label>
-          <button
+          <Button
             type="button"
+            variant="primary"
+            size="sm"
             data-testid="wizard-button-next-seal"
             onClick={goToSeal}
-            className="self-start rounded bg-neutral-900 px-3 py-1 text-sm text-white"
+            className="self-start"
           >
             Continue — Seal
-          </button>
+          </Button>
         </div>
       ) : null}
 
       {step === 'seal' ? (
         <div data-testid="wizard-step-seal" className="flex flex-col gap-2 text-sm">
-          <p className="text-neutral-700">
+          <p className="text-muted">
             The client secret is about to be sealed multi-recipient for the org_admins ∪ runner.
             Uncheck any recipient that should not have access (rare).
           </p>
           <fieldset data-testid="wizard-recipient-list" className="flex flex-col gap-1 text-xs">
-            <legend className="font-medium text-neutral-700">
+            <legend className="font-medium text-muted">
               Recipients ({String(decodedRecipients.length)} / {String(props.recipients.length)})
             </legend>
             {props.recipients.length === 0 ? (
@@ -332,34 +336,37 @@ export function ConnectInfisicalWizard(props: ConnectInfisicalWizardProps): Reac
             })}
           </fieldset>
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               data-testid="wizard-button-back-to-config"
               onClick={() => setStep('config')}
-              className="rounded border border-neutral-300 px-3 py-1 text-sm"
             >
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="primary"
+              size="sm"
               data-testid="wizard-button-seal"
               disabled={busy || decodedRecipients.length === 0}
+              loading={busy}
               onClick={() => void handleSeal()}
-              className="rounded bg-neutral-900 px-3 py-1 text-sm text-white disabled:opacity-50"
             >
               {busy ? 'Sealing…' : 'Seal & continue'}
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}
 
       {step === 'submit' ? (
         <div data-testid="wizard-step-submit" className="flex flex-col gap-2 text-sm">
-          <p className="text-neutral-700">
+          <p className="text-muted">
             Sealed for {sealedBlob ? String(sealedBlob.recipients.length) : '0'} recipients. The
             client secret has been wiped from this browser session.
           </p>
-          <ul className="font-mono text-xs text-neutral-700">
+          <ul className="font-mono text-xs text-muted">
             <li>name: {config.name}</li>
             <li>endpoint: {config.endpoint}</li>
             <li>workspace: {config.workspaceId}</li>
@@ -367,23 +374,26 @@ export function ConnectInfisicalWizard(props: ConnectInfisicalWizardProps): Reac
             <li>is_default: {config.isDefault ? 'true' : 'false'}</li>
           </ul>
           <div className="flex gap-2">
-            <button
+            <Button
               type="button"
+              variant="secondary"
+              size="sm"
               data-testid="wizard-button-back-to-seal"
               onClick={() => setStep('seal')}
-              className="rounded border border-neutral-300 px-3 py-1 text-sm"
             >
               Back
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              variant="primary"
+              size="sm"
               data-testid="wizard-button-submit"
               disabled={busy}
+              loading={busy}
               onClick={() => void handleSubmit()}
-              className="rounded bg-neutral-900 px-3 py-1 text-sm text-white disabled:opacity-50"
             >
               {busy ? 'Submitting…' : 'Submit'}
-            </button>
+            </Button>
           </div>
         </div>
       ) : null}

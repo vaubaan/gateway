@@ -72,12 +72,12 @@ export default async function SecretManagersPage({ params }: PageProps): Promise
       <header className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold">{org.name} — SecretManagers</h1>
-          <p className="text-xs text-neutral-600">org: {org.slug}</p>
+          <p className="text-xs text-muted">org: {org.slug}</p>
         </div>
         <a
           href={`/orgs/${org.slug}/secret-managers/new`}
           data-testid="sm-page-connect-button"
-          className="rounded bg-neutral-900 px-3 py-1 text-sm text-white"
+          className="inline-flex h-7 items-center justify-center rounded-sm border border-primary bg-primary px-2.5 text-xs font-medium text-primary-foreground transition-colors hover:opacity-90"
         >
           + Connect Infisical Workspace
         </a>

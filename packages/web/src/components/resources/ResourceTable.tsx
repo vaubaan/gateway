@@ -15,6 +15,7 @@ import { useMemo, useState } from 'react';
 import { findKind } from '@crm/catalog';
 
 import { ResourceStatusBadge } from './ResourceStatusBadge';
+import { Table, TBody, TD, TH, THead, TR } from '@/components/ui';
 
 export interface ResourceRow {
   readonly id: string;
@@ -114,7 +115,7 @@ export function ResourceTable(props: ResourceTableProps): React.ReactElement {
           options={['all', ...statuses]}
           onChange={setStatus}
         />
-        <span data-testid="resource-table-count" className="ml-auto text-neutral-600">
+        <span data-testid="resource-table-count" className="ml-auto text-muted">
           {String(filtered.length)} / {String(resources.length)}
         </span>
       </div>
@@ -122,63 +123,59 @@ export function ResourceTable(props: ResourceTableProps): React.ReactElement {
       {filtered.length === 0 ? (
         <div
           data-testid="resource-table-empty"
-          className="rounded border border-dashed border-neutral-300 p-6 text-center text-sm text-neutral-600"
+          className="rounded-sm border border-dashed border-border-default p-6 text-center text-sm text-muted"
         >
           No resources match the current filters.
         </div>
       ) : (
-        <table className="w-full border-collapse text-sm">
-          <thead className="text-left text-xs uppercase text-neutral-600">
-            <tr>
-              <th className="border-b border-neutral-200 py-1">Provider</th>
-              <th className="border-b border-neutral-200 py-1">Kind</th>
-              <th className="border-b border-neutral-200 py-1">Name</th>
-              <th className="border-b border-neutral-200 py-1">Scope</th>
-              <th className="border-b border-neutral-200 py-1">Variant</th>
-              <th className="border-b border-neutral-200 py-1">Status</th>
-              <th className="border-b border-neutral-200 py-1">Connection</th>
-              <th className="border-b border-neutral-200 py-1">Last check</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table density="compact">
+          <THead>
+            <TR>
+              <TH>Provider</TH>
+              <TH>Kind</TH>
+              <TH>Name</TH>
+              <TH>Scope</TH>
+              <TH>Variant</TH>
+              <TH>Status</TH>
+              <TH>Connection</TH>
+              <TH>Last check</TH>
+            </TR>
+          </THead>
+          <TBody>
             {filtered.map((r) => (
-              <tr
-                key={r.id}
-                data-testid={`resource-row-${r.id}`}
-                className="border-b border-neutral-100"
-              >
-                <td className="py-1">{r.provider_name}</td>
-                <td className="py-1 font-mono text-xs">{r.kind}</td>
-                <td className="py-1">
+              <TR key={r.id} data-testid={`resource-row-${r.id}`}>
+                <TD>{r.provider_name}</TD>
+                <TD className="font-mono text-xs">{r.kind}</TD>
+                <TD>
                   <a
                     href={`/orgs/${orgSlug}/resources/${r.id}`}
-                    className="text-blue-700 underline"
+                    className="text-foreground underline"
                   >
                     {r.name}
                   </a>
-                </td>
-                <td className="py-1">
+                </TD>
+                <TD>
                   {r.scope}
                   {r.is_admin ? ' · admin' : ''}
-                </td>
-                <td className="py-1">{r.variant ?? '—'}</td>
-                <td className="py-1">
+                </TD>
+                <TD>{r.variant ?? '—'}</TD>
+                <TD>
                   <ResourceStatusBadge label={r.status} kind="status" />
-                </td>
-                <td className="py-1">
+                </TD>
+                <TD>
                   <ResourceStatusBadge
                     label={r.connection_status}
                     kind="connection"
                     title={r.connection_message ?? undefined}
                   />
-                </td>
-                <td className="py-1 text-xs text-neutral-600">
+                </TD>
+                <TD className="text-xs text-muted">
                   {r.connection_checked_at ? new Date(r.connection_checked_at).toISOString() : '—'}
-                </td>
-              </tr>
+                </TD>
+              </TR>
             ))}
-          </tbody>
-        </table>
+          </TBody>
+        </Table>
       )}
     </div>
   );
@@ -193,14 +190,14 @@ function FilterSelect(props: {
 }): React.ReactElement {
   return (
     <label className="inline-flex items-center gap-1">
-      <span className="text-neutral-600">{props.label}</span>
+      <span className="text-muted">{props.label}</span>
       <select
         data-testid={props.testid}
         value={props.value}
         onChange={(e) => {
           props.onChange(e.target.value);
         }}
-        className="rounded border border-neutral-300 px-1 py-0.5"
+        className="rounded-sm border border-border-default bg-surface px-1 py-0.5 text-foreground"
       >
         {props.options.map((o) => (
           <option key={o} value={o}>

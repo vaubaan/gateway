@@ -14,6 +14,8 @@ import { useState } from 'react';
 
 import { type SealedBlobV1 } from '@crm/core/crypto';
 
+import { Button } from '@/components/ui';
+
 import { SealedReveal } from './SealedReveal';
 
 export interface SealedViewProps {
@@ -34,16 +36,17 @@ export function SealedView(props: SealedViewProps): React.ReactElement {
             {blob.recipients.length === 1 ? '' : 's'}
           </span>
         </span>
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           data-testid="sealed-view-toggle"
-          className="rounded border border-neutral-300 px-2 py-1 text-xs"
           onClick={() => {
             setOpen((v) => !v);
           }}
         >
           {open ? 'Close' : 'Reveal'}
-        </button>
+        </Button>
       </div>
       {open ? <SealedReveal blob={blob} mode="reveal" /> : null}
     </div>

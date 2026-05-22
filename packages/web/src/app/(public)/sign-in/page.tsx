@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 
+import { Button, Input } from '@/components/ui';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export const dynamic = 'force-dynamic';
@@ -57,7 +58,7 @@ export default function SignInPage(): React.ReactElement {
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3 text-sm">
         <label className="flex flex-col gap-1">
           <span>Email</span>
-          <input
+          <Input
             type="email"
             required
             value={email}
@@ -65,12 +66,11 @@ export default function SignInPage(): React.ReactElement {
               setEmail(e.target.value);
             }}
             autoComplete="email"
-            className="rounded border border-neutral-300 px-2 py-1"
           />
         </label>
         <label className="flex flex-col gap-1">
           <span>Password</span>
-          <input
+          <Input
             type="password"
             required
             value={password}
@@ -78,23 +78,25 @@ export default function SignInPage(): React.ReactElement {
               setPassword(e.target.value);
             }}
             autoComplete="current-password"
-            className="rounded border border-neutral-300 px-2 py-1"
           />
         </label>
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          size="sm"
+          loading={busy}
           disabled={busy}
-          className="self-start rounded bg-neutral-900 px-3 py-1 text-white disabled:opacity-50"
+          className="self-start"
         >
           {busy ? 'Signing in…' : 'Sign in'}
-        </button>
+        </Button>
         {error ? (
-          <span data-testid="sign-in-error" className="text-red-700">
+          <span data-testid="sign-in-error" className="text-danger-foreground">
             {error}
           </span>
         ) : null}
       </form>
-      <a href="/sign-up" className="text-xs text-blue-700 underline">
+      <a href="/sign-up" className="text-xs text-info-foreground underline">
         Need an account? Sign up
       </a>
     </main>

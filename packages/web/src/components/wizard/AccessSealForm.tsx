@@ -11,6 +11,7 @@ import { useCallback, useState } from 'react';
 import { type SealedBlobV1 } from '@crm/core/crypto';
 
 import { SealedInput } from '@/components/sealed/SealedInput';
+import { Badge, Button } from '@/components/ui';
 import type { SerializedKind } from '@/lib/catalog/serialize';
 
 export interface AccessSealFormProps {
@@ -75,11 +76,11 @@ export function AccessSealForm(props: AccessSealFormProps): React.ReactElement {
   return (
     <div className="flex flex-col gap-3" data-testid="wizard-access-seal">
       <h2 className="text-sm font-semibold">Paste and seal {kind.displayName} credentials</h2>
-      <p className="text-xs text-neutral-700">
+      <p className="text-xs text-muted">
         Each value is sealed client-side for the org members. The server never sees the cleartext.
       </p>
       {accessKeys.length === 0 ? (
-        <p className="text-xs text-neutral-600">
+        <p className="text-xs text-muted">
           This resource kind has no `accessSchema` — no secrets to seal.
         </p>
       ) : null}
@@ -90,15 +91,15 @@ export function AccessSealForm(props: AccessSealFormProps): React.ReactElement {
           <div key={key} data-testid={`wizard-access-key-${key}`} className="flex flex-col gap-1">
             <div className="flex items-center gap-2 text-xs">
               <span className="font-medium">{key}</span>
-              <span
+              <Badge
                 data-testid={`wizard-access-status-${key}`}
-                className={`rounded px-1.5 py-0.5 ${st === 'sealed' ? 'bg-emerald-100 text-emerald-900' : 'bg-neutral-200 text-neutral-700'}`}
+                variant={st === 'sealed' ? 'success' : 'neutral'}
+                size="sm"
+                shape="square"
               >
                 {st}
-              </span>
-              {spec?.description ? (
-                <span className="text-neutral-600">— {spec.description}</span>
-              ) : null}
+              </Badge>
+              {spec?.description ? <span className="text-muted">— {spec.description}</span> : null}
             </div>
             {st !== 'sealed' ? (
               <SealedInput
@@ -111,7 +112,10 @@ export function AccessSealForm(props: AccessSealFormProps): React.ReactElement {
               />
             ) : null}
             {errors[key] ? (
-              <span data-testid={`wizard-access-error-${key}`} className="text-xs text-red-700">
+              <span
+                data-testid={`wizard-access-error-${key}`}
+                className="text-xs text-danger-foreground"
+              >
                 {errors[key]}
               </span>
             ) : null}
@@ -120,23 +124,25 @@ export function AccessSealForm(props: AccessSealFormProps): React.ReactElement {
       })}
 
       <div className="flex items-center gap-2">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           onClick={onBack}
-          className="rounded border border-neutral-300 px-3 py-1 text-sm"
           data-testid="wizard-access-back"
         >
           Back
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
+          variant="primary"
+          size="sm"
           disabled={!allSealed && accessKeys.length > 0}
           onClick={onDone}
           data-testid="wizard-finish"
-          className="rounded bg-neutral-900 px-3 py-1 text-sm text-white disabled:opacity-50"
         >
           {accessKeys.length === 0 ? 'Finish' : 'Finish (all keys sealed)'}
-        </button>
+        </Button>
       </div>
     </div>
   );

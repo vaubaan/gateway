@@ -11,6 +11,16 @@
 
 import { useState, type FormEvent, type ReactElement } from 'react';
 
+import {
+  Button,
+  Dialog,
+  DialogBody,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  Input,
+} from '@/components/ui';
+
 export interface UnlockIdentityDialogProps {
   open: boolean;
   mode: 'unlock' | 'first-login';
@@ -55,51 +65,61 @@ export function UnlockIdentityDialog(props: UnlockIdentityDialogProps): ReactEle
   const submitLabel = mode === 'first-login' ? 'Generate identity' : 'Unlock';
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="unlock-identity-title"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+    <Dialog
+      open={open}
+      onClose={() => {
+        /* dialog is dismissed only via submit; backdrop-close is a no-op here */
+      }}
+      dismissOnBackdropClick={false}
+      ariaLabel={heading}
     >
       <form
         onSubmit={(e) => {
           void handleSubmit(e);
         }}
-        className="w-full max-w-md rounded-lg border border-neutral-800 bg-neutral-900 p-6 shadow-xl"
+        aria-labelledby="unlock-identity-title"
       >
-        <h2 id="unlock-identity-title" className="text-lg font-semibold text-neutral-100">
-          {heading}
-        </h2>
-        <p className="mt-2 text-sm text-neutral-400">{blurb}</p>
-        <label htmlFor="unlock-identity-password" className="mt-6 block text-sm text-neutral-300">
-          Password
-        </label>
-        <input
-          id="unlock-identity-password"
-          type="password"
-          autoComplete="off"
-          autoFocus
-          required
-          disabled={busy}
-          value={password}
-          onChange={(e) => {
-            setPassword(e.target.value);
-          }}
-          className="mt-1 w-full rounded border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-neutral-100 outline-none focus:border-neutral-500"
-        />
-        {error !== null && (
-          <p role="alert" className="mt-3 text-sm text-red-400">
-            {error}
-          </p>
-        )}
-        <button
-          type="submit"
-          disabled={busy || password.length === 0}
-          className="mt-6 w-full rounded bg-neutral-100 px-3 py-2 text-sm font-medium text-neutral-900 disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {busy ? 'Working...' : submitLabel}
-        </button>
+        <DialogHeader>
+          <DialogTitle id="unlock-identity-title">{heading}</DialogTitle>
+          <p className="text-sm text-muted">{blurb}</p>
+        </DialogHeader>
+        <DialogBody>
+          <label htmlFor="unlock-identity-password" className="block text-sm text-foreground">
+            Password
+          </label>
+          <Input
+            id="unlock-identity-password"
+            type="password"
+            autoComplete="off"
+            autoFocus
+            required
+            disabled={busy}
+            value={password}
+            onChange={(e) => {
+              setPassword(e.target.value);
+            }}
+            error={error !== null}
+            className="mt-1"
+          />
+          {error !== null && (
+            <p role="alert" className="mt-3 text-sm text-danger-foreground">
+              {error}
+            </p>
+          )}
+        </DialogBody>
+        <DialogFooter>
+          <Button
+            type="submit"
+            variant="primary"
+            size="md"
+            disabled={busy || password.length === 0}
+            loading={busy}
+            className="w-full"
+          >
+            {busy ? 'Working...' : submitLabel}
+          </Button>
+        </DialogFooter>
       </form>
-    </div>
+    </Dialog>
   );
 }

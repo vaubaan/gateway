@@ -22,6 +22,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { decodeUtf8, unsealAs, type SealedBlobV1 } from '@crm/core/crypto';
 
+import { Button } from '@/components/ui';
 import { identityStore } from '@/lib/crypto/identity-store';
 
 export interface SealedRevealProps {
@@ -95,7 +96,7 @@ export function SealedReveal(props: SealedRevealProps): React.ReactElement {
 
   if (state.kind === 'error') {
     return (
-      <div data-testid="sealed-reveal-error" className="text-sm text-red-700">
+      <div data-testid="sealed-reveal-error" className="text-sm text-danger-foreground">
         {state.code === 'not_a_recipient'
           ? 'You are not a recipient of this sealed value.'
           : state.code === 'identity_locked'
@@ -108,33 +109,36 @@ export function SealedReveal(props: SealedRevealProps): React.ReactElement {
   if (state.kind === 'unlocked' && shown) {
     return (
       <div data-testid="sealed-reveal-shown" className="flex flex-col gap-2">
-        <pre className="overflow-x-auto rounded bg-neutral-100 px-2 py-1 font-mono text-xs">
+        <pre className="overflow-x-auto rounded bg-sunken px-2 py-1 font-mono text-xs">
           {state.cleartext}
         </pre>
-        <button
+        <Button
           type="button"
+          variant="link"
+          size="sm"
           data-testid="sealed-reveal-hide"
           onClick={() => {
             setShown(false);
             setState({ kind: 'idle' });
             if (timerRef.current) clearTimeout(timerRef.current);
           }}
-          className="self-start text-xs underline"
+          className="self-start"
         >
           Hide
-        </button>
+        </Button>
       </div>
     );
   }
 
   return (
-    <button
+    <Button
       type="button"
+      variant="secondary"
+      size="sm"
       data-testid={mode === 'copy' ? 'sealed-reveal-copy' : 'sealed-reveal-show'}
       onClick={() => void reveal()}
-      className="rounded border border-neutral-300 px-2 py-1 text-xs"
     >
       {mode === 'copy' ? 'Copy' : 'Reveal'}
-    </button>
+    </Button>
   );
 }

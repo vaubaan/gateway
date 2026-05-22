@@ -43,6 +43,7 @@ import {
 } from '@crm/catalog';
 import { sealForRecipients, unsealAs, type PubKeyEntry, type SealedBlobV1 } from '@crm/core/crypto';
 
+import { Button } from '@/components/ui';
 import { identityStore } from '@/lib/crypto/identity-store';
 import { SealedInput } from '@/components/sealed/SealedInput';
 
@@ -267,24 +268,25 @@ export function RotateAccessButton(props: RotateAccessButtonProps): React.ReactE
 
   if (state.kind === 'idle') {
     return (
-      <button
+      <Button
         type="button"
         data-testid={`rotate-${accessKey}`}
         onClick={() => void handleStart()}
-        className="rounded border border-neutral-300 px-2 py-1 text-xs"
+        variant="secondary"
+        size="sm"
       >
         Rotate
-      </button>
+      </Button>
     );
   }
 
   if (state.kind === 'dispatching') {
-    return <span className="text-xs text-neutral-700">Dispatching rotation…</span>;
+    return <span className="text-xs text-muted">Dispatching rotation…</span>;
   }
 
   if (state.kind === 'running-admin') {
     return (
-      <span data-testid="rotate-admin-running" className="text-xs text-neutral-700">
+      <span data-testid="rotate-admin-running" className="text-xs text-muted">
         Rotating via admin {state.info.admin_kind ?? '?'}…
       </span>
     );
@@ -294,47 +296,51 @@ export function RotateAccessButton(props: RotateAccessButtonProps): React.ReactE
     return (
       <div
         data-testid="rotate-manual"
-        className="flex flex-col gap-2 rounded border border-neutral-300 p-3"
+        className="flex flex-col gap-2 rounded-sm border border-border-default p-3"
       >
-        <span className="text-xs font-medium">Manual rotation — {accessKey}</span>
+        <span className="text-xs font-medium text-foreground">Manual rotation — {accessKey}</span>
         {state.info.setup_docs ? (
           <pre
             data-testid="rotate-setup-docs"
-            className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded bg-neutral-100 px-2 py-1 text-xs"
+            className="max-h-48 overflow-y-auto whitespace-pre-wrap rounded-sm bg-sunken px-2 py-1 text-xs text-foreground"
           >
             {state.info.setup_docs}
           </pre>
         ) : null}
         <SealedInput resourceId={resourceId} accessKey={accessKey} onSealed={handleManualSealed} />
-        <button
+        <Button
           type="button"
-          className="self-start text-xs underline"
+          variant="link"
+          size="sm"
+          className="self-start"
           onClick={() => setState({ kind: 'idle' })}
         >
           Cancel
-        </button>
+        </Button>
       </div>
     );
   }
 
   if (state.kind === 'done') {
     return (
-      <span data-testid="rotate-done" className="text-xs text-green-700">
+      <span data-testid="rotate-done" className="text-xs text-success-foreground">
         Rotated successfully.
       </span>
     );
   }
 
   return (
-    <div data-testid="rotate-error" className="flex flex-col gap-2 text-xs text-red-700">
+    <div data-testid="rotate-error" className="flex flex-col gap-2 text-xs text-danger-foreground">
       <span>Rotation failed: {state.message}</span>
-      <button
+      <Button
         type="button"
-        className="self-start text-xs underline"
+        variant="link"
+        size="sm"
+        className="self-start"
         onClick={() => setState({ kind: 'idle' })}
       >
         Reset
-      </button>
+      </Button>
     </div>
   );
 }

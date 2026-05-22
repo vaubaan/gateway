@@ -10,6 +10,8 @@
 
 import { useState } from 'react';
 
+import { Button, Input } from '@/components/ui';
+
 const SLUG_REGEX = /^[a-z0-9](-?[a-z0-9])*$/;
 
 export function OnboardingForm(): React.ReactElement {
@@ -57,40 +59,42 @@ export function OnboardingForm(): React.ReactElement {
     >
       <label className="flex flex-col gap-1">
         <span>Org slug (lowercase, hyphens, no spaces)</span>
-        <input
+        <Input
           required
           value={slug}
           onChange={(e) => {
             setSlug(e.target.value);
           }}
           data-testid="onboarding-slug"
-          className="rounded border border-neutral-300 px-2 py-1 font-mono"
+          className="font-mono"
           placeholder="acme"
         />
       </label>
       <label className="flex flex-col gap-1">
         <span>Org display name</span>
-        <input
+        <Input
           required
           value={name}
           onChange={(e) => {
             setName(e.target.value);
           }}
           data-testid="onboarding-name"
-          className="rounded border border-neutral-300 px-2 py-1"
           placeholder="Acme Corporation"
         />
       </label>
-      <button
+      <Button
         type="submit"
+        variant="primary"
+        size="sm"
+        loading={busy}
         disabled={busy}
         data-testid="onboarding-submit"
-        className="self-start rounded bg-neutral-900 px-3 py-1 text-white disabled:opacity-50"
+        className="self-start"
       >
         {busy ? 'Creating…' : 'Create organization'}
-      </button>
+      </Button>
       {error ? (
-        <span data-testid="onboarding-error" className="text-red-700">
+        <span data-testid="onboarding-error" className="text-danger-foreground">
           {error}
         </span>
       ) : null}

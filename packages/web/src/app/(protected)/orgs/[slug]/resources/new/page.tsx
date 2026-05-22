@@ -49,7 +49,7 @@ export default async function RegisterResourcePage({ params }: PageProps): Promi
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <header>
         <h1 className="text-xl font-semibold">Register a resource</h1>
-        <p className="text-xs text-neutral-600">org: {slug}</p>
+        <p className="text-xs text-muted">org: {slug}</p>
       </header>
       <RegisterWizard orgSlug={slug} kinds={kinds} />
     </main>

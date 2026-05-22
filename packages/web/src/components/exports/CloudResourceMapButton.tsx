@@ -13,6 +13,7 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 
+import { Button } from '@/components/ui';
 import { triggerBrowserDownload } from '@/lib/exports/download';
 
 export interface CloudResourceMapButtonProps {
@@ -58,7 +59,7 @@ export function CloudResourceMapButton(props: CloudResourceMapButtonProps): Reac
 
   if (state.kind === 'running') {
     return (
-      <span data-testid="crm-map-running" className="text-xs text-neutral-700">
+      <span data-testid="crm-map-running" className="text-xs text-muted">
         building map…
       </span>
     );
@@ -66,15 +67,16 @@ export function CloudResourceMapButton(props: CloudResourceMapButtonProps): Reac
   if (state.kind === 'error') {
     return (
       <div className="flex flex-col gap-1">
-        <button
+        <Button
           type="button"
+          variant="danger"
+          size="sm"
           data-testid="crm-map-retry"
           onClick={() => void handleClick()}
-          className="rounded border border-red-300 px-2 py-1 text-xs text-red-700"
         >
           Retry
-        </button>
-        <span data-testid="crm-map-error" className="text-xs text-red-700">
+        </Button>
+        <span data-testid="crm-map-error" className="text-xs text-danger-foreground">
           {state.message}
         </span>
       </div>
@@ -83,28 +85,30 @@ export function CloudResourceMapButton(props: CloudResourceMapButtonProps): Reac
   if (state.kind === 'done') {
     return (
       <div className="flex flex-col gap-1">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           data-testid="crm-map-again"
           onClick={() => void handleClick()}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs"
         >
           Download again
-        </button>
-        <span data-testid="crm-map-summary" className="text-xs text-neutral-700">
+        </Button>
+        <span data-testid="crm-map-summary" className="text-xs text-muted">
           cloud-resource-map.json downloaded · {state.resourceCount} resource(s).
         </span>
       </div>
     );
   }
   return (
-    <button
+    <Button
       type="button"
+      variant="primary"
+      size="sm"
       data-testid="crm-map-button"
       onClick={() => void handleClick()}
-      className="rounded bg-neutral-900 px-3 py-1 text-sm text-white"
     >
       Download cloud-resource-map.json
-    </button>
+    </Button>
   );
 }

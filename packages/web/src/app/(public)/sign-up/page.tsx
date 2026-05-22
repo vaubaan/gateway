@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 
+import { Button, Input } from '@/components/ui';
 import { createSupabaseBrowserClient } from '@/lib/supabase/client';
 
 export const dynamic = 'force-dynamic';
@@ -73,7 +74,7 @@ export default function SignUpPage(): React.ReactElement {
       <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-3 text-sm">
         <label className="flex flex-col gap-1">
           <span>Email</span>
-          <input
+          <Input
             type="email"
             required
             value={email}
@@ -81,12 +82,11 @@ export default function SignUpPage(): React.ReactElement {
               setEmail(e.target.value);
             }}
             autoComplete="email"
-            className="rounded border border-neutral-300 px-2 py-1"
           />
         </label>
         <label className="flex flex-col gap-1">
           <span>Password (min 8 chars)</span>
-          <input
+          <Input
             type="password"
             required
             minLength={8}
@@ -95,12 +95,11 @@ export default function SignUpPage(): React.ReactElement {
               setPassword(e.target.value);
             }}
             autoComplete="new-password"
-            className="rounded border border-neutral-300 px-2 py-1"
           />
         </label>
         <label className="flex flex-col gap-1">
           <span>Confirm password</span>
-          <input
+          <Input
             type="password"
             required
             minLength={8}
@@ -109,28 +108,30 @@ export default function SignUpPage(): React.ReactElement {
               setConfirm(e.target.value);
             }}
             autoComplete="new-password"
-            className="rounded border border-neutral-300 px-2 py-1"
           />
         </label>
-        <button
+        <Button
           type="submit"
+          variant="primary"
+          size="sm"
+          loading={busy}
           disabled={busy}
-          className="self-start rounded bg-neutral-900 px-3 py-1 text-white disabled:opacity-50"
+          className="self-start"
         >
           {busy ? 'Creating…' : 'Sign up'}
-        </button>
+        </Button>
         {error ? (
-          <span data-testid="sign-up-error" className="text-red-700">
+          <span data-testid="sign-up-error" className="text-danger-foreground">
             {error}
           </span>
         ) : null}
         {notice ? (
-          <span data-testid="sign-up-notice" className="text-emerald-700">
+          <span data-testid="sign-up-notice" className="text-success-foreground">
             {notice}
           </span>
         ) : null}
       </form>
-      <a href="/sign-in" className="text-xs text-blue-700 underline">
+      <a href="/sign-in" className="text-xs text-info-foreground underline">
         Already have an account? Sign in
       </a>
     </main>

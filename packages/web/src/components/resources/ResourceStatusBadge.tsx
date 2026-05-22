@@ -6,14 +6,16 @@
 
 import type { ReactElement } from 'react';
 
-const STATUS_CLASS: Record<string, string> = {
-  active: 'bg-emerald-100 text-emerald-900',
-  pending: 'bg-amber-100 text-amber-900',
-  failed: 'bg-red-100 text-red-900',
-  detached: 'bg-neutral-200 text-neutral-700',
-  unknown: 'bg-neutral-200 text-neutral-700',
-  connected: 'bg-emerald-100 text-emerald-900',
-  broken: 'bg-red-100 text-red-900',
+import { Badge, type BadgeVariant } from '@/components/ui';
+
+const STATUS_VARIANT: Record<string, BadgeVariant> = {
+  active: 'success',
+  pending: 'neutral',
+  failed: 'danger',
+  detached: 'warning',
+  unknown: 'neutral',
+  connected: 'success',
+  broken: 'danger',
 };
 
 export interface ResourceStatusBadgeProps {
@@ -25,14 +27,10 @@ export interface ResourceStatusBadgeProps {
 
 export function ResourceStatusBadge(props: ResourceStatusBadgeProps): ReactElement {
   const { label, title, kind: _kind } = props;
-  const cls = STATUS_CLASS[label] ?? 'bg-neutral-200 text-neutral-700';
+  const variant = STATUS_VARIANT[label] ?? 'neutral';
   return (
-    <span
-      data-testid={`badge-${label}`}
-      title={title}
-      className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs font-medium ${cls}`}
-    >
+    <Badge data-testid={`badge-${label}`} title={title} variant={variant} size="sm" shape="square">
       {label}
-    </span>
+    </Badge>
   );
 }

@@ -40,6 +40,7 @@ import { useCallback, useMemo, useRef, useState } from 'react';
 
 import { sealForRecipients, type PubKeyEntry, type SealedBlobV1 } from '@crm/core/crypto';
 
+import { Button, Textarea } from '@/components/ui';
 import { useDefaultRecipients, type RecipientEntry } from '@/lib/sealed/use-default-recipients';
 
 export interface SealedInputProps {
@@ -131,12 +132,12 @@ export function SealedInput(props: SealedInputProps): React.ReactElement {
       data-testid="sealed-input"
       data-status={status}
       data-recipient-count={String(activeRecipients.length)}
-      className="flex flex-col gap-3 rounded-md border border-neutral-300 p-4"
+      className="flex flex-col gap-3 rounded-md border border-border-default p-4"
     >
       <label className="text-sm font-medium" htmlFor={`sealed-input-${accessKey}`}>
         {displayedLabel}
       </label>
-      <textarea
+      <Textarea
         ref={textareaRef}
         id={`sealed-input-${accessKey}`}
         data-testid="sealed-input-textarea"
@@ -145,17 +146,17 @@ export function SealedInput(props: SealedInputProps): React.ReactElement {
         autoComplete="off"
         spellCheck={false}
         rows={3}
-        className="w-full resize-y rounded border border-neutral-300 px-2 py-1 font-mono text-sm"
+        className="font-mono"
         placeholder={placeholder ?? 'paste secret here'}
       />
 
       <fieldset data-testid="sealed-input-recipients" className="flex flex-col gap-1 text-xs">
-        <legend className="font-medium text-neutral-700">
+        <legend className="font-medium text-muted">
           Recipients ({String(activeRecipients.length)} / {String(recipients.length)})
         </legend>
         {status === 'loading' ? <span>Loading recipient list…</span> : null}
         {status === 'error' ? (
-          <span data-testid="sealed-input-recipients-error" className="text-red-700">
+          <span data-testid="sealed-input-recipients-error" className="text-danger-foreground">
             Failed to load recipients: {error ?? 'unknown'} —{' '}
             <button type="button" onClick={() => void recipientsHook.refresh()}>
               retry
@@ -189,15 +190,18 @@ export function SealedInput(props: SealedInputProps): React.ReactElement {
         })}
       </fieldset>
 
-      <button
+      <Button
         type="button"
+        variant="primary"
+        size="sm"
         data-testid="sealed-input-seal"
         disabled={busy || status !== 'ready' || activeRecipients.length === 0 || value.length === 0}
+        loading={busy}
         onClick={() => void handleSeal()}
-        className="self-start rounded bg-neutral-900 px-3 py-1 text-sm text-white disabled:opacity-50"
+        className="self-start"
       >
         {busy ? 'Sealing…' : 'Seal'}
-      </button>
+      </Button>
     </div>
   );
 }

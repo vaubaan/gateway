@@ -134,16 +134,16 @@ describe('<ResourceStatusBadge>', () => {
     cleanup();
   });
 
-  it('renders the expected color class for known statuses', () => {
+  it('renders the success variant for active statuses', () => {
     const { container } = render(<ResourceStatusBadge label="active" />);
     const badge = container.querySelector('[data-testid="badge-active"]');
-    expect(badge?.className).toContain('emerald');
+    expect(badge?.getAttribute('data-variant')).toBe('success');
   });
 
-  it('falls back to neutral class for unknown labels', () => {
+  it('falls back to the neutral variant for unknown labels', () => {
     const { container } = render(<ResourceStatusBadge label="weird" />);
     const badge = container.querySelector('[data-testid="badge-weird"]');
-    expect(badge?.className).toContain('neutral');
+    expect(badge?.getAttribute('data-variant')).toBe('neutral');
   });
 
   it('renders the title attribute when provided', () => {

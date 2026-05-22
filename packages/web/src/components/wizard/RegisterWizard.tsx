@@ -84,12 +84,12 @@ export function RegisterWizard(props: RegisterWizardProps): React.ReactElement {
 
   return (
     <div className="flex flex-col gap-4" data-testid="register-wizard" data-step={step}>
-      <ol className="flex items-center gap-2 text-xs text-neutral-600">
-        <li className={step === 'pick' ? 'font-semibold text-neutral-900' : ''}>1. Kind</li>
+      <ol className="flex items-center gap-2 text-xs text-muted">
+        <li className={step === 'pick' ? 'font-semibold text-foreground' : ''}>1. Kind</li>
         <li>·</li>
-        <li className={step === 'setup' ? 'font-semibold text-neutral-900' : ''}>2. Metadata</li>
+        <li className={step === 'setup' ? 'font-semibold text-foreground' : ''}>2. Metadata</li>
         <li>·</li>
-        <li className={step === 'seal' ? 'font-semibold text-neutral-900' : ''}>3. Seal</li>
+        <li className={step === 'seal' ? 'font-semibold text-foreground' : ''}>3. Seal</li>
       </ol>
 
       {step === 'pick' ? <KindPicker kinds={kinds} onPick={handlePick} /> : null}
@@ -105,7 +105,7 @@ export function RegisterWizard(props: RegisterWizardProps): React.ReactElement {
             }}
           />
           {submitError ? (
-            <span data-testid="wizard-submit-error" className="text-xs text-red-700">
+            <span data-testid="wizard-submit-error" className="text-xs text-danger-foreground">
               {submitError}
             </span>
           ) : null}

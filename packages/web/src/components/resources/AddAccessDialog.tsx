@@ -58,15 +58,17 @@ export function AddAccessDialog(props: AddAccessDialogProps): React.ReactElement
   return (
     <div
       data-testid="add-access-dialog"
-      className="flex flex-col gap-3 rounded-md border border-neutral-300 bg-white p-4"
+      className="flex flex-col gap-3 rounded-md border border-border-default bg-surface p-4"
     >
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold">Add / replace sealed access — {accessKey}</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          Add / replace sealed access — {accessKey}
+        </h3>
         <button
           type="button"
           data-testid="add-access-dialog-close"
           onClick={onClose}
-          className="text-xs underline"
+          className="text-xs text-foreground underline"
         >
           Close
         </button>
@@ -77,9 +79,9 @@ export function AddAccessDialog(props: AddAccessDialogProps): React.ReactElement
         onSealed={handleSealed}
         onError={setError}
       />
-      {busy ? <span className="text-xs">Saving…</span> : null}
+      {busy ? <span className="text-xs text-muted">Saving…</span> : null}
       {error ? (
-        <span data-testid="add-access-dialog-error" className="text-xs text-red-700">
+        <span data-testid="add-access-dialog-error" className="text-xs text-danger-foreground">
           {error}
         </span>
       ) : null}

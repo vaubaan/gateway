@@ -19,6 +19,7 @@ import { useState } from 'react';
 import { findKind, type OrgResourceAdminKind } from '@crm/catalog';
 import { unsealAs, type SealedBlobV1 } from '@crm/core/crypto';
 
+import { Button, Input } from '@/components/ui';
 import { identityStore } from '@/lib/crypto/identity-store';
 
 export interface DestroyCloudResourceButtonProps {
@@ -120,14 +121,16 @@ export function DestroyCloudResourceButton(
 
   if (state.kind === 'idle') {
     return (
-      <button
+      <Button
         type="button"
         data-testid="destroy-cloud-button"
         onClick={() => setState({ kind: 'confirm' })}
-        className="rounded border border-red-300 px-2 py-1 text-xs text-red-700"
+        variant="secondary"
+        size="sm"
+        className="border-danger-border text-danger-foreground"
       >
         Destroy cloud resource
-      </button>
+      </Button>
     );
   }
 
@@ -136,39 +139,41 @@ export function DestroyCloudResourceButton(
     return (
       <div
         data-testid="destroy-cloud-confirm"
-        className="flex flex-col gap-2 rounded border border-red-300 p-3"
+        className="flex flex-col gap-2 rounded-sm border border-danger-border p-3"
       >
-        <span className="text-xs font-medium text-red-700">
+        <span className="text-xs font-medium text-danger-foreground">
           Destroy cloud resource — type the resource name to confirm
         </span>
-        <input
+        <Input
           data-testid="destroy-cloud-input"
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
           placeholder={resourceName}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs"
+          className="text-xs"
         />
         <div className="flex gap-2">
-          <button
+          <Button
             type="button"
             data-testid="destroy-cloud-cancel"
             onClick={() => {
               setTyped('');
               setState({ kind: 'idle' });
             }}
-            className="rounded border border-neutral-300 px-2 py-1 text-xs"
+            variant="secondary"
+            size="sm"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
             data-testid="destroy-cloud-go"
             disabled={!canConfirm}
             onClick={() => void handleDestroy()}
-            className="rounded bg-red-700 px-2 py-1 text-xs text-white disabled:opacity-50"
+            variant="danger"
+            size="sm"
           >
             Destroy
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -176,7 +181,7 @@ export function DestroyCloudResourceButton(
 
   if (state.kind === 'running') {
     return (
-      <span data-testid="destroy-cloud-running" className="text-xs text-neutral-700">
+      <span data-testid="destroy-cloud-running" className="text-xs text-muted">
         {state.status}
       </span>
     );
@@ -184,14 +189,14 @@ export function DestroyCloudResourceButton(
 
   if (state.kind === 'done') {
     return (
-      <span data-testid="destroy-cloud-done" className="text-xs text-green-700">
+      <span data-testid="destroy-cloud-done" className="text-xs text-success-foreground">
         Cloud resource destroyed.
       </span>
     );
   }
 
   return (
-    <span data-testid="destroy-cloud-error" className="text-xs text-red-700">
+    <span data-testid="destroy-cloud-error" className="text-xs text-danger-foreground">
       {state.message}
     </span>
   );

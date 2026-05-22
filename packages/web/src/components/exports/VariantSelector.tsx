@@ -23,12 +23,12 @@ export function VariantSelector(props: VariantSelectorProps): ReactElement {
   const { variants, value, onChange } = props;
   return (
     <label className="flex items-center gap-2 text-xs">
-      <span className="text-neutral-700">Variant</span>
+      <span className="text-muted">Variant</span>
       <select
         data-testid="export-variant-selector"
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="rounded border border-neutral-300 px-2 py-1 text-xs"
+        className="rounded-sm border border-border-default bg-surface px-2 py-1 text-xs text-foreground hover:border-border-strong focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
         <option value="">(none — all variants)</option>
         {variants.map((v) => (

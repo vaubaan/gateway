@@ -18,6 +18,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 
+import { Banner, Button } from '@/components/ui';
 import { runReseal, type RunResealResult } from '@/lib/secret-managers/re-seal-blob';
 
 interface NeedsResealItem {
@@ -101,12 +102,25 @@ export function NeedsResealBanner(props: NeedsResealBannerProps): React.ReactEle
   if (status === 'ready' && items.length === 0) return null;
 
   return (
-    <aside
+    <Banner
+      variant="warning"
       data-testid="needs-reseal-banner"
       data-status={status}
       data-count={String(items.length)}
       role="alert"
-      className="border-b border-yellow-300 bg-yellow-50 px-6 py-3 text-sm text-yellow-900"
+      action={
+        status === 'ready' && items.length > 0 ? (
+          <Button
+            type="button"
+            variant="primary"
+            size="sm"
+            data-testid="needs-reseal-banner-action"
+            onClick={() => void handleReseal()}
+          >
+            Re-seal now
+          </Button>
+        ) : undefined
+      }
     >
       {status === 'error' ? (
         <span data-testid="needs-reseal-banner-error">
@@ -117,20 +131,10 @@ export function NeedsResealBanner(props: NeedsResealBannerProps): React.ReactEle
         </span>
       ) : null}
       {status === 'ready' && items.length > 0 ? (
-        <div className="flex items-center justify-between gap-4">
-          <span data-testid="needs-reseal-banner-message">
-            {String(items.length)} access blob{items.length > 1 ? 's' : ''} need re-sealing for new
-            members.
-          </span>
-          <button
-            type="button"
-            data-testid="needs-reseal-banner-action"
-            onClick={() => void handleReseal()}
-            className="rounded bg-yellow-900 px-3 py-1 text-xs font-semibold text-yellow-50"
-          >
-            Re-seal now
-          </button>
-        </div>
+        <span data-testid="needs-reseal-banner-message">
+          {String(items.length)} access blob{items.length > 1 ? 's' : ''} need re-sealing for new
+          members.
+        </span>
       ) : null}
       {status === 'resealing' && progress ? (
         <span data-testid="needs-reseal-banner-progress">
@@ -138,6 +142,6 @@ export function NeedsResealBanner(props: NeedsResealBannerProps): React.ReactEle
           {progress.failures > 0 ? ` (${String(progress.failures)} failed)` : ''}
         </span>
       ) : null}
-    </aside>
+    </Banner>
   );
 }

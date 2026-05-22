@@ -21,6 +21,7 @@ import { unsealAs, decodeUtf8, type SealedBlobV1 } from '@crm/core/crypto';
 import { AddAccessDialog } from './AddAccessDialog';
 import { DestroyCloudResourceButton } from './DestroyCloudResourceButton';
 import { RotateAccessButton } from './RotateAccessButton';
+import { Button } from '@/components/ui';
 import { identityStore } from '@/lib/crypto/identity-store';
 import { runHealthProbe } from '@/lib/health/probe';
 
@@ -117,16 +118,17 @@ export function ResourceDetailClient(props: ResourceDetailClientProps): React.Re
   return (
     <div className="flex flex-col gap-3" data-testid="resource-detail-client">
       <div className="flex items-center gap-2">
-        <button
+        <Button
           type="button"
           data-testid="resource-health-button"
           onClick={() => void runHealth()}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs"
+          variant="secondary"
+          size="sm"
         >
           Test now (health)
-        </button>
+        </Button>
         {healthState ? (
-          <span data-testid="resource-health-state" className="text-xs text-neutral-700">
+          <span data-testid="resource-health-state" className="text-xs text-muted">
             {healthState}
           </span>
         ) : null}
@@ -134,20 +136,21 @@ export function ResourceDetailClient(props: ResourceDetailClientProps): React.Re
 
       {accessKeys.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium">Add or replace access</span>
+          <span className="text-xs font-medium text-foreground">Add or replace access</span>
           <div className="flex flex-wrap gap-2">
             {accessKeys.map((k) => (
-              <button
+              <Button
                 key={k}
                 type="button"
                 data-testid={`open-add-access-${k}`}
                 onClick={() => {
                   setDialogKey(k);
                 }}
-                className="rounded border border-neutral-300 px-2 py-1 text-xs"
+                variant="secondary"
+                size="sm"
               >
                 + {k}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -155,7 +158,7 @@ export function ResourceDetailClient(props: ResourceDetailClientProps): React.Re
 
       {accessKeys.length > 0 ? (
         <div className="flex flex-col gap-2">
-          <span className="text-xs font-medium">Rotate access</span>
+          <span className="text-xs font-medium text-foreground">Rotate access</span>
           <div className="flex flex-wrap gap-2">
             {accessKeys.map((k) => (
               <RotateAccessButton

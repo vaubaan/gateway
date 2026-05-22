@@ -23,6 +23,7 @@ import type { ReactElement } from 'react';
 
 import type { SealedBlobV1 } from '@crm/core/crypto';
 
+import { Button } from '@/components/ui';
 import { identityStore } from '@/lib/crypto/identity-store';
 import { assembleMcpCompanion, type AssemblableEntry } from '@/lib/exports/dotenv-assembly';
 import { triggerBrowserDownload } from '@/lib/exports/download';
@@ -123,7 +124,7 @@ export function McpExportButton(props: McpExportButtonProps): ReactElement {
 
   if (state.kind === 'running') {
     return (
-      <span data-testid="mcp-export-running" className="text-xs text-neutral-700">
+      <span data-testid="mcp-export-running" className="text-xs text-muted">
         {state.status}
       </span>
     );
@@ -131,15 +132,16 @@ export function McpExportButton(props: McpExportButtonProps): ReactElement {
   if (state.kind === 'error') {
     return (
       <div className="flex flex-col gap-1">
-        <button
+        <Button
           type="button"
+          variant="danger"
+          size="sm"
           data-testid="mcp-export-retry"
           onClick={() => void handleClick()}
-          className="rounded border border-red-300 px-2 py-1 text-xs text-red-700"
         >
           Retry mcp download
-        </button>
-        <span data-testid="mcp-export-error" className="text-xs text-red-700">
+        </Button>
+        <span data-testid="mcp-export-error" className="text-xs text-danger-foreground">
           {state.message}
         </span>
       </div>
@@ -148,15 +150,16 @@ export function McpExportButton(props: McpExportButtonProps): ReactElement {
   if (state.kind === 'done') {
     return (
       <div className="flex flex-col gap-1">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           data-testid="mcp-export-again"
           onClick={() => void handleClick()}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs"
         >
           Download mcp.json again
-        </button>
-        <span data-testid="mcp-export-summary" className="text-xs text-neutral-700">
+        </Button>
+        <span data-testid="mcp-export-summary" className="text-xs text-muted">
           mcp.json + .env-mcp downloaded · {state.resolved.length} resolved
           {state.unavailable.length > 0 ? `, ${state.unavailable.length} placeholder(s)` : ''}.
         </span>
@@ -164,13 +167,14 @@ export function McpExportButton(props: McpExportButtonProps): ReactElement {
     );
   }
   return (
-    <button
+    <Button
       type="button"
+      variant="primary"
+      size="sm"
       data-testid="mcp-export-button"
       onClick={() => void handleClick()}
-      className="rounded bg-neutral-900 px-3 py-1 text-sm text-white"
     >
       Download mcp.json + .env companion
-    </button>
+    </Button>
   );
 }

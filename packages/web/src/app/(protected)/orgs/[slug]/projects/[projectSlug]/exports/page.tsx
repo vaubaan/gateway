@@ -110,7 +110,7 @@ export default async function ProjectExportsPage({ params }: PageProps): Promise
         <h1 className="text-xl font-semibold">
           {org.name} / {project.slug} — Exports
         </h1>
-        <p className="text-xs text-neutral-600">
+        <p className="text-xs text-muted">
           project-scoped bundles include the project Resources + the org-scoped Resources of{' '}
           {org.slug}. Sealed blobs are unsealed in your browser.
         </p>

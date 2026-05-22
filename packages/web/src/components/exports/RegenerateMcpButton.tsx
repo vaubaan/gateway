@@ -16,6 +16,8 @@
 import { useState } from 'react';
 import type { ReactElement } from 'react';
 
+import { Button } from '@/components/ui';
+
 export type RegenerateScope =
   | { readonly kind: 'org' }
   | { readonly kind: 'project'; readonly scopeId: string };
@@ -64,7 +66,7 @@ export function RegenerateMcpButton(props: RegenerateMcpButtonProps): ReactEleme
 
   if (state.kind === 'running') {
     return (
-      <span data-testid="regen-mcp-running" className="text-xs text-neutral-700">
+      <span data-testid="regen-mcp-running" className="text-xs text-muted">
         regenerating mcp_config…
       </span>
     );
@@ -72,15 +74,16 @@ export function RegenerateMcpButton(props: RegenerateMcpButtonProps): ReactEleme
   if (state.kind === 'error') {
     return (
       <div className="flex flex-col gap-1">
-        <button
+        <Button
           type="button"
+          variant="danger"
+          size="sm"
           data-testid="regen-mcp-retry"
           onClick={() => void handleClick()}
-          className="rounded border border-red-300 px-2 py-1 text-xs text-red-700"
         >
           Retry regenerate
-        </button>
-        <span data-testid="regen-mcp-error" className="text-xs text-red-700">
+        </Button>
+        <span data-testid="regen-mcp-error" className="text-xs text-danger-foreground">
           {state.message}
         </span>
       </div>
@@ -89,15 +92,16 @@ export function RegenerateMcpButton(props: RegenerateMcpButtonProps): ReactEleme
   if (state.kind === 'done') {
     return (
       <div className="flex flex-col gap-1">
-        <button
+        <Button
           type="button"
+          variant="secondary"
+          size="sm"
           data-testid="regen-mcp-again"
           onClick={() => void handleClick()}
-          className="rounded border border-neutral-300 px-2 py-1 text-xs"
         >
           Regenerate again
-        </button>
-        <span data-testid="regen-mcp-summary" className="text-xs text-neutral-700">
+        </Button>
+        <span data-testid="regen-mcp-summary" className="text-xs text-muted">
           {state.regenerated ? 'mcp_config regenerated' : 'mcp_config unchanged (no-op)'} ·{' '}
           <code className="text-[10px]">{state.hash.slice(0, 12)}</code>
         </span>
@@ -105,13 +109,14 @@ export function RegenerateMcpButton(props: RegenerateMcpButtonProps): ReactEleme
     );
   }
   return (
-    <button
+    <Button
       type="button"
+      variant="secondary"
+      size="sm"
       data-testid="regen-mcp-button"
       onClick={() => void handleClick()}
-      className="rounded border border-neutral-400 px-3 py-1 text-sm"
     >
       Regenerate MCP snapshot
-    </button>
+    </Button>
   );
 }

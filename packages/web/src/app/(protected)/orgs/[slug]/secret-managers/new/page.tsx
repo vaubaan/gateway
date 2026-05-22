@@ -119,7 +119,7 @@ export default async function NewSecretManagerPage({ params }: PageProps): Promi
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <header>
         <h1 className="text-xl font-semibold">Connect Infisical to {org.name}</h1>
-        <p className="text-xs text-neutral-600">
+        <p className="text-xs text-muted">
           The machine-identity credential pair is sealed in-tab for the org admins. Vauban never
           sees the cleartext.
         </p>

@@ -88,7 +88,7 @@ export default async function OrgExportsPage({ params }: PageProps): Promise<Rea
     <main className="mx-auto flex max-w-3xl flex-col gap-6 p-6">
       <header className="flex flex-col gap-1">
         <h1 className="text-xl font-semibold">{org.name} — Exports</h1>
-        <p className="text-xs text-neutral-600">
+        <p className="text-xs text-muted">
           org: {org.slug} · download bundles assembled from the visible Resources. Sealed blobs are
           unsealed in your browser — Core never sees cleartext.
         </p>
