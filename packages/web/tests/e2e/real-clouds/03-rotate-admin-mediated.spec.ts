@@ -77,7 +77,7 @@ test.describe('rotate admin-mediated (supabase-project SUPABASE_DB_PASSWORD)', (
             kind: 'supabase-org-admin',
             name: 'supabase-admin',
             scope: 'org',
-            providerRef: env.supabaseMgmt.orgSlug,
+            provider_ref: env.supabaseMgmt.orgSlug,
           },
         },
       );
@@ -150,7 +150,7 @@ test.describe('rotate admin-mediated (supabase-project SUPABASE_DB_PASSWORD)', (
           Authorization: `Bearer ${env.supabaseMgmt.token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ db_pass: newPass }),
+        body: JSON.stringify({ name: sbProj.name, db_pass: newPass }),
       });
       expect(patchRes.status, await patchRes.text()).toBeLessThan(300);
 

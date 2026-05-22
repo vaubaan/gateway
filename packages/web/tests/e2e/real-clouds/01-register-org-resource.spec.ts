@@ -35,7 +35,7 @@ test('register github-org + seal PAT + unseal as admin', async ({ env, authedAdm
         kind: 'github-org',
         name: 'github',
         scope: 'org',
-        providerRef: ghOrg,
+        provider_ref: ghOrg,
         metadata: { org_slug: ghOrg },
       },
     },

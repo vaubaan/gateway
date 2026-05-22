@@ -231,7 +231,7 @@ export class VaubanAdminClient {
       .from('resource_access')
       .select('recipients_stale, sealed_blob')
       .eq('resource_id', input.resourceId)
-      .eq('access_key', input.key)
+      .eq('key', input.key)
       .maybeSingle();
     if (res.error !== null) {
       throw new Error(`selectResourceAccess failed: ${res.error.message ?? 'unknown'}`);

@@ -46,7 +46,7 @@ test('provision github-repo via github-org-admin against real GitHub', async ({
         kind: 'github-org-admin',
         name: 'github-admin',
         scope: 'org',
-        providerRef: env.github.org,
+        provider_ref: env.github.org,
         metadata: { org_slug: env.github.org },
       },
     },

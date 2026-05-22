@@ -35,7 +35,7 @@ test('member add flips recipients_stale; re-seal restores unseal-ability', async
         kind: 'github-org',
         name: 'github',
         scope: 'org',
-        providerRef: env.github.org,
+        provider_ref: env.github.org,
       },
     },
   );

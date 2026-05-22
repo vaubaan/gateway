@@ -38,7 +38,7 @@ test('member can GET but cannot PATCH; access blob unsealable=null', async ({
         kind: 'github-org',
         name: 'github',
         scope: 'org',
-        providerRef: env.github.org,
+        provider_ref: env.github.org,
       },
     },
   );

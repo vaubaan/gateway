@@ -61,7 +61,7 @@ test('export .env scope=project variant=staging assembles the right lines', asyn
         kind: 'github-org',
         name: 'github',
         scope: 'org',
-        providerRef: env.github.org,
+        provider_ref: env.github.org,
       },
     },
   );
@@ -78,7 +78,7 @@ test('export .env scope=project variant=staging assembles the right lines', asyn
         scope: 'project',
         projectId,
         variant: 'staging',
-        providerRef: `vauban-e2e-${nameCtx.runUuid}`,
+        provider_ref: `vauban-e2e-${nameCtx.runUuid}`,
       },
     },
   );
