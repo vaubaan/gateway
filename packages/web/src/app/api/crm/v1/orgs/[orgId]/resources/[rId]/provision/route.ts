@@ -1,5 +1,5 @@
 /**
- * `POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision`
+ * `POST /api/crm/v1/orgs/:orgId/resources/:rId/provision`
  *
  * Spec §6.5 + §7.3 — book-keeping side of the provisioning workflow.
  * The browser has already called `admin.createChild(access, spec)` on
@@ -9,7 +9,7 @@
  *
  * Pre-conditions enforced server-side:
  *   - The session user has access to the org (RLS membership check).
- *   - The :adminId resource exists, has `is_admin=true`, lives in the
+ *   - The :rId resource exists, has `is_admin=true`, lives in the
  *     same org, and is of `kindClass='org-admin'`.
  *   - The child kind passed in the body is in `admin.manages`.
  *
@@ -32,7 +32,7 @@ import { parseProvisionRequest, type ValidationError } from '@/lib/validation/pr
 export const dynamic = 'force-dynamic';
 
 interface RouteContext {
-  readonly params: Promise<{ readonly orgId: string; readonly adminId: string }>;
+  readonly params: Promise<{ readonly orgId: string; readonly rId: string }>;
 }
 
 function noStore(res: NextResponse): NextResponse {
@@ -53,7 +53,7 @@ function validationErrorResponse(err: ValidationError): NextResponse {
 }
 
 export async function POST(req: NextRequest, ctx: RouteContext): Promise<NextResponse> {
-  const { orgId: orgSegment, adminId } = await ctx.params;
+  const { orgId: orgSegment, rId } = await ctx.params;
 
   const db = await getDb();
   const { data: userData } = await db.auth.getUser();
@@ -70,7 +70,7 @@ export async function POST(req: NextRequest, ctx: RouteContext): Promise<NextRes
       'id, organization_id, project_id, admin_resource_id, provider_name, kind, scope, is_admin, name, variant, provider_ref, console_url, setup_docs_url, health_test_cmd, status, secret_manager_id, provider_metadata, provider_permissions, connection_status, connection_checked_at, connection_message, created_at, updated_at',
     )
     .eq('organization_id', org.id)
-    .eq('id', adminId)
+    .eq('id', rId)
     .maybeSingle()) as {
     data: ResourceRow | null;
     error: { code?: string; message: string } | null;

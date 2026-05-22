@@ -1,6 +1,6 @@
 /**
  * Unit tests for the Phase 6 wave B REST endpoints:
- *   - POST   /orgs/:orgId/resources/:adminId/provision        (spec §6.5)
+ *   - POST   /orgs/:orgId/resources/:rId/provision        (spec §6.5)
  *   - DELETE /orgs/:orgId/resources/:rId/destroy-cloud-resource (spec §6.5)
  *
  * The Supabase client is faked with an in-memory store. We assert:
@@ -252,10 +252,7 @@ vi.mock('@/lib/supabase/server', () => ({
 }));
 
 interface ProvisionHandler {
-  POST(
-    req: Request,
-    ctx: { params: Promise<{ orgId: string; adminId: string }> },
-  ): Promise<Response>;
+  POST(req: Request, ctx: { params: Promise<{ orgId: string; rId: string }> }): Promise<Response>;
 }
 interface DestroyHandler {
   DELETE(req: Request, ctx: { params: Promise<{ orgId: string; rId: string }> }): Promise<Response>;
@@ -263,7 +260,7 @@ interface DestroyHandler {
 
 async function importProvision(): Promise<ProvisionHandler> {
   const mod: unknown =
-    await import('@/app/api/crm/v1/orgs/[orgId]/resources/[adminId]/provision/route');
+    await import('@/app/api/crm/v1/orgs/[orgId]/resources/[rId]/provision/route');
   return mod as ProvisionHandler;
 }
 async function importDestroy(): Promise<DestroyHandler> {
@@ -307,7 +304,7 @@ function seedOrgWithAdmin(): void {
 
 const PROJECT_UUID = '00000000-0000-0000-0000-000000000001';
 
-describe('POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision', () => {
+describe('POST /api/crm/v1/orgs/:orgId/resources/:rId/provision', () => {
   beforeEach(() => {
     resetState();
   });
@@ -320,7 +317,7 @@ describe('POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision', () => {
         method: 'POST',
         body: '{}',
       }),
-      { params: Promise.resolve({ orgId: 'acme', adminId: 'admin-1' }) },
+      { params: Promise.resolve({ orgId: 'acme', rId: 'admin-1' }) },
     );
     expect(res.status).toBe(401);
   });
@@ -334,7 +331,7 @@ describe('POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision', () => {
         method: 'POST',
         body: '{}',
       }),
-      { params: Promise.resolve({ orgId: 'ghost', adminId: 'admin-1' }) },
+      { params: Promise.resolve({ orgId: 'ghost', rId: 'admin-1' }) },
     );
     expect(res.status).toBe(404);
   });
@@ -355,7 +352,7 @@ describe('POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision', () => {
           provider_ref: 'acme/repo-a',
         }),
       }),
-      { params: Promise.resolve({ orgId: 'acme', adminId: 'admin-1' }) },
+      { params: Promise.resolve({ orgId: 'acme', rId: 'admin-1' }) },
     );
     expect(res.status).toBe(404);
   });
@@ -374,7 +371,7 @@ describe('POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision', () => {
           provider_ref: 'acme/repo-a',
         }),
       }),
-      { params: Promise.resolve({ orgId: 'acme', adminId: 'admin-1' }) },
+      { params: Promise.resolve({ orgId: 'acme', rId: 'admin-1' }) },
     );
     expect(res.status).toBe(403);
   });
@@ -392,7 +389,7 @@ describe('POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision', () => {
           provider_ref: 'prj_xxx',
         }),
       }),
-      { params: Promise.resolve({ orgId: 'acme', adminId: 'admin-1' }) },
+      { params: Promise.resolve({ orgId: 'acme', rId: 'admin-1' }) },
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; message?: string };
@@ -414,7 +411,7 @@ describe('POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision', () => {
           metadata: { org: 'acme', repo: 'repo-a' },
         }),
       }),
-      { params: Promise.resolve({ orgId: 'acme', adminId: 'admin-1' }) },
+      { params: Promise.resolve({ orgId: 'acme', rId: 'admin-1' }) },
     );
     expect(res.status).toBe(201);
     const body = (await res.json()) as {
@@ -443,7 +440,7 @@ describe('POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision', () => {
           metadata: { org: 'acme', repo: 'repo-zk' },
         }),
       }),
-      { params: Promise.resolve({ orgId: 'acme', adminId: 'admin-1' }) },
+      { params: Promise.resolve({ orgId: 'acme', rId: 'admin-1' }) },
     );
     const audit = state.audit.find((a) => a.action === 'resource.provisioned');
     expect(audit).toBeDefined();
@@ -461,7 +458,7 @@ describe('POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision', () => {
         method: 'POST',
         body: JSON.stringify({ childKind: 'github-repo', name: 'r', project_id: PROJECT_UUID }),
       }),
-      { params: Promise.resolve({ orgId: 'acme', adminId: 'admin-1' }) },
+      { params: Promise.resolve({ orgId: 'acme', rId: 'admin-1' }) },
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string; message?: string };

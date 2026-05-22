@@ -1,5 +1,5 @@
 /**
- * Validation helpers for `POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision`.
+ * Validation helpers for `POST /api/crm/v1/orgs/:orgId/resources/:rId/provision`.
  *
  * Spec docs/spec/cloud-resource-manager.md §6.5, §7.3.
  *
