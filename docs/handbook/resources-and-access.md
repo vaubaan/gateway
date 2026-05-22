@@ -177,11 +177,43 @@ UI : `<ProvisionLauncher>` sur la liste, `<ProvisionWizard>` sur la
 page wizard, `<RotateAccessButton>` + `<DestroyCloudResourceButton>`
 sur la page détail.
 
-### `POST /:rId/health` et `POST /:rId/refresh` (stubs Phase 4)
+### `POST /:rId/health` — sync browser probe
+
+Le bouton **Test now** sur la page détail Resource exécute le probe
+**côté browser**, pas via un Runner. L'unsealed cleartext est déjà
+dans la tab quand l'user clique, donc passer par un Runner n'ajoute
+aucune garantie ZK — juste de la latence et un point de panne en
+plus.
+
+Flow :
+
+1. Le client `<ResourceDetailClient>` récupère la sk via
+   `identityStore.get()` (sinon affiche `identity locked`).
+2. Pour chaque clé déclarée dans `kind.accessSchema`, GET
+   `/access/:key` → `unsealAs(blob, fingerprint, identity)` → cleartext
+   en mémoire React state.
+3. `runHealthProbe({ kindId, providerRef, metadata, access })` fait un
+   `fetch(...)` direct contre l'API provider (cf.
+   `packages/web/src/lib/health/probe.ts` pour la table de mapping
+   par kind).
+4. POST `/health` body `{ status: 'connected' | 'failed' | 'unknown',
+message }` → server update `resources.connection_status`,
+   `connection_message`, `connection_checked_at` + audit
+   `resource.health.checked`.
+
+Le serveur ne voit que le résultat (binaire), jamais l'access cleartext.
+
+**CORS** : les 3 providers livrés (api.github.com, api.vercel.com,
+api.supabase.com) supportent CORS depuis browsers — cf. probe test
+manuel post-livraison. Si un futur kind cible une API sans CORS, le
+probe échouera proprement avec `network: <CORS error>` et le user le
+verra dans le `connection_message`. Pas de fallback Runner v1.
+
+### `POST /:rId/refresh` (stub Phase 4)
 
 Response `202 { status: 'pending-runner' }`. Audit
-`resource.health.requested` ou `resource.refresh.requested`. Le
-dispatch réel sur le Runner arrive en Phase 6.
+`resource.refresh.requested`. Re-pull de `provider_metadata` ; même
+raisonnement que `/health` est applicable mais pas encore livré.
 
 ## Access REST — `feature/p4-access-rest-api`
 

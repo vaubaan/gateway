@@ -101,31 +101,27 @@ describe('<ResourceDetailClient>', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders the Health button and renders state on click', async () => {
-    const mock = installFetchMock(
-      () =>
-        new Response(JSON.stringify({ status: 'pending-runner' }), {
-          status: 202,
-          headers: { 'content-type': 'application/json' },
-        }),
-    );
+  it('renders the Health button and surfaces "identity locked" when sk not in store', async () => {
+    // No identityStore.set() before — the click should short-circuit to
+    // 'identity locked' without ever firing a fetch.
+    const mock = installFetchMock(() => new Response('{}', { status: 200 }));
     render(
       <ResourceDetailClient
         orgSlug="acme"
         resourceId="res-1"
         resourceName="r"
+        kindId="github-org"
         accessKeys={['GITHUB_TOKEN']}
         destroyEnabled={false}
         providerRef={null}
         adminResourceId={null}
+        providerMetadata={{}}
       />,
     );
     fireEvent.click(screen.getByTestId('resource-health-button'));
     await flushAsync();
-    expect(mock.calls).toHaveLength(1);
-    expect(mock.calls[0]?.url).toContain('/api/crm/v1/orgs/acme/resources/res-1/health');
-    expect(mock.calls[0]?.method).toBe('POST');
-    expect(screen.getByTestId('resource-health-state').textContent).toContain('pending-runner');
+    expect(mock.calls).toHaveLength(0);
+    expect(screen.getByTestId('resource-health-state').textContent).toContain('identity locked');
   });
 
   it('opens the AddAccessDialog when an access-key button is clicked', () => {
@@ -135,10 +131,12 @@ describe('<ResourceDetailClient>', () => {
         orgSlug="acme"
         resourceId="res-1"
         resourceName="r"
+        kindId="github-org"
         accessKeys={['GITHUB_TOKEN']}
         destroyEnabled={false}
         providerRef={null}
         adminResourceId={null}
+        providerMetadata={{}}
       />,
     );
     expect(screen.queryByTestId('add-access-dialog')).toBeNull();
@@ -178,10 +176,12 @@ describe('<ResourceDetailClient>', () => {
         orgSlug="acme"
         resourceId="res-1"
         resourceName="r"
+        kindId="github-org"
         accessKeys={['GITHUB_TOKEN']}
         destroyEnabled={false}
         providerRef={null}
         adminResourceId={null}
+        providerMetadata={{}}
       />,
     );
     fireEvent.click(screen.getByTestId('open-add-access-GITHUB_TOKEN'));

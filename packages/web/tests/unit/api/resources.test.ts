@@ -581,18 +581,22 @@ describe('POST /health and /refresh stubs', () => {
     resetState();
   });
 
-  it('health returns 202 pending-runner + audits', async () => {
+  it('health accepts a browser probe result and audits it', async () => {
     seedOrg();
     state.resources = [makeResource({ id: 'r1', name: 'gh', kind: 'github-org', scope: 'org' })];
     const mod = await importHealth();
     const res = await mod.POST(
-      new Request('http://localhost/api/crm/v1/orgs/acme/resources/r1/health', { method: 'POST' }),
+      new Request('http://localhost/api/crm/v1/orgs/acme/resources/r1/health', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'connected', message: 'GET /orgs/acme 200' }),
+      }),
       { params: Promise.resolve({ orgId: 'acme', rId: 'r1' }) },
     );
-    expect(res.status).toBe(202);
-    const body = (await res.json()) as { status: string };
-    expect(body.status).toBe('pending-runner');
-    expect(state.audit.map((r) => r.action)).toContain('resource.health.requested');
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; message: string };
+    expect(body.status).toBe('connected');
+    expect(state.audit.map((r) => r.action)).toContain('resource.health.checked');
   });
 
   it('refresh returns 202 pending-runner + audits', async () => {

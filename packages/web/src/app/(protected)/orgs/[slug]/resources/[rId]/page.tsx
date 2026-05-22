@@ -289,9 +289,11 @@ export default async function ResourceDetailPage({ params }: PageProps): Promise
           orgSlug={org.slug}
           resourceId={resource.id}
           resourceName={resource.name}
+          kindId={resource.kind}
           accessKeys={accessSchemaKeys}
           destroyEnabled={resource.scope === 'project' && resource.admin_resource_id !== null}
           providerRef={resource.provider_ref}
+          providerMetadata={resource.provider_metadata ?? {}}
           adminResourceId={resource.admin_resource_id}
         />
       </section>
