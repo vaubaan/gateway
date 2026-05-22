@@ -66,6 +66,8 @@ function randomSalt(): Uint8Array {
 async function main(): Promise<void> {
   const envPath = resolve(import.meta.dirname, '..', '.env');
   const env = loadDotenv(envPath);
+  const envTestPath = resolve(import.meta.dirname, '..', '.env.test');
+  const envTest = loadDotenv(envTestPath);
   const url = env.SUPABASE_PROD_URL;
   const serviceKey = env.SUPABASE_PROD_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
@@ -141,18 +143,54 @@ async function main(): Promise<void> {
   if (memberRes.error) throw memberRes.error;
   console.log(`      org ${orgId} + admin membership`);
 
-  // 4. Default secret_manager placeholder so the FK in resources stays
-  //    valid. We tag it `placeholder` until the user connects Infisical.
+  // 4. Default secret_manager. If .env.test ships a valid Infisical
+  //    machine identity (cf. handbook secret-managers.md), provision
+  //    a real `kind='infisical'` row with the clientId+clientSecret
+  //    bundle sealed for the demo user. Otherwise fall back to a
+  //    placeholder so the FK on resources.secret_manager_id stays valid.
   console.log('[4/5] Provisioning default secret_manager...');
+  const infisicalClientId = envTest.INFISICAL_CLIENT_ID;
+  const infisicalClientSecret = envTest.INFISICAL_CLIENT_SECRET;
+  const infisicalWorkspaceId = envTest.INFISICAL_WORKSPACE_ID;
+  const infisicalUrl = envTest.INFISICAL_URL ?? 'eu.infisical.com';
+
+  let smKind: 'placeholder' | 'infisical' = 'placeholder';
+  let smConfig: Record<string, unknown> = {};
+  let smAuthBlob: { v: 1; recipients: Array<{ fp: string; ct: string }> } | null = null;
+
+  if (infisicalClientId && infisicalClientSecret && infisicalWorkspaceId) {
+    smKind = 'infisical';
+    smConfig = {
+      endpoint: `https://${infisicalUrl}`,
+      workspace_id: infisicalWorkspaceId,
+      environment: 'dev',
+    };
+    const authPayload = JSON.stringify({
+      clientId: infisicalClientId,
+      clientSecret: infisicalClientSecret,
+    });
+    smAuthBlob = await sealForRecipients(authPayload, [
+      { publicKey: kp.publicKey, fingerprint: kp.fingerprint },
+    ]);
+    console.log(`      kind=infisical workspace=${infisicalWorkspaceId} sealed auth bundle`);
+  } else {
+    console.log(
+      '      kind=placeholder (no INFISICAL_CLIENT_ID/_SECRET/_WORKSPACE_ID in .env.test)',
+    );
+  }
+
   const smRes = await sb
     .from('secret_managers')
     .upsert(
       {
         organization_id: orgId,
-        kind: 'placeholder',
+        kind: smKind,
         name: 'default',
         is_default: true,
-        config: {},
+        config: smConfig,
+        auth_sealed_blob: smAuthBlob
+          ? toPgBytea(new TextEncoder().encode(JSON.stringify(smAuthBlob)))
+          : null,
       },
       { onConflict: 'organization_id,name' },
     )
@@ -168,8 +206,6 @@ async function main(): Promise<void> {
   // demo user can hit Reveal and see actual provider data after sign-in.
   // Safe because vauban-e2e accounts are intentionally separate from
   // any production org (cf. spec §12.3).
-  const envTestPath = resolve(import.meta.dirname, '..', '.env.test');
-  const envTest = loadDotenv(envTestPath);
   const samples = [
     {
       kind: 'github-org',
