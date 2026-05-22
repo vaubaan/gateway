@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "cd ../.. && GITHUB_PACKAGE_REGISTRY_TOKEN=skip npm run build --workspace @crm/web",
-  "installCommand": "cd ../.. && GITHUB_PACKAGE_REGISTRY_TOKEN=skip npm install --omit=optional",
+  "buildCommand": "cd ../.. && npm run build --workspace @crm/web",
+  "installCommand": "cd ../.. && rm -f .npmrc && npm install --no-audit --no-fund",
   "outputDirectory": ".next"
 }
