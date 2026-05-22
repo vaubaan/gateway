@@ -1,2 +1,1 @@
-# Temporarily disabled during repo reset — restore once code lands again.
-# npm run ci
+npm run ci

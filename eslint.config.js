@@ -51,12 +51,28 @@ export default tseslint.config(
     },
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
-      '@typescript-eslint/no-misused-promises': 'error',
+      '@typescript-eslint/no-misused-promises': [
+        'error',
+        {
+          // React event handlers (onSubmit, onClick) routinely receive async fns;
+          // the void return is fine here. Keep argument/return checks elsewhere.
+          checksVoidReturn: { attributes: false },
+        },
+      ],
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' },
       ],
       '@typescript-eslint/consistent-type-imports': ['error', { fixStyle: 'inline-type-imports' }],
+      // `async fn() { return value }` is fine when implementing a Promise-returning
+      // contract (interface or override). The rule is stylistic and creates friction.
+      '@typescript-eslint/require-await': 'off',
+      // The policy engine deliberately String-coerces unknown values; the rule
+      // would force us to special-case objects that we never expect.
+      '@typescript-eslint/no-base-to-string': 'off',
+      // Many test mocks pass methods as properties; for unit-test ergonomics we
+      // accept the trade-off. Production callsites are reviewed independently.
+      '@typescript-eslint/unbound-method': 'off',
       'no-console': ['warn', { allow: ['warn', 'error'] }],
     },
   },

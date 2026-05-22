@@ -1,36 +1,24 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright config for E2E tests against the Next.js web app.
+ * Playwright E2E config — packages/web is the Next.js app under test.
  *
- * Two projects live side-by-side :
+ *   - `smoke`            : smoke spec (packages/web/tests/e2e/smoke.spec.ts)
+ *                          checks Playwright is wired. No creds needed.
  *
- *   - `smoke`            : the legacy stub spec
- *                          (packages/web/tests/e2e/smoke.spec.ts) that
- *                          checks Playwright is wired up. Always
- *                          runnable, no creds needed.
- *
- *   - `e2e-real-clouds`  : the real-providers scenarios under
+ *   - `e2e-real-clouds`  : real-providers scenarios under
  *                          packages/web/tests/e2e/real-clouds/.
- *                          Spec §12.3 mandates "no mock". Reads creds
- *                          from .env.test (gitignored) or from the
- *                          GH Actions secrets injected by the nightly
- *                          workflow.
- *
- * Auth state is materialised in tests/e2e/.auth/ (gitignored) — one
- * file per role, populated by the storage-state fixture if needed.
- *
- * `webServer` boots `npm run dev` automatically in local + CI. In CI
- * the timeout is generous because the first Next.js compile can take
- * up to a minute.
+ *                          Spec §14.3 mandates "no mock". Reads creds from
+ *                          .env.test (gitignored) or from the GH Actions
+ *                          secrets injected by the nightly workflow.
  */
 export default defineConfig({
   testDir: './packages/web/tests/e2e',
-  fullyParallel: false, // real-clouds : one shared web server, serial is safer in v1.
+  fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: process.env.CI ? 1 : 1,
-  timeout: 5 * 60 * 1000, // some flows (Supabase project provisioning) take minutes.
+  workers: 1,
+  timeout: 5 * 60 * 1000,
   reporter: process.env.CI
     ? [
         ['github'],

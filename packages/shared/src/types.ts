@@ -1,0 +1,192 @@
+/**
+ * Domain types shared across packages.
+ * Mirrors the SQL schema from supabase/migrations/0001_init.sql.
+ *
+ * Spec : docs/spec/mcp-proxy.md §3.
+ */
+
+export type Provider = 'github' | 'vercel' | 'supabase';
+
+export const PROVIDERS = ['github', 'vercel', 'supabase'] as const satisfies readonly Provider[];
+
+export type OrgRole = 'member' | 'admin';
+
+export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';
+
+export type BotStatus = 'active' | 'revoked';
+
+export type AuditDecision = 'allowed' | 'denied';
+
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  created_at: string;
+}
+
+export interface OrgMember {
+  organization_id: string;
+  user_id: string;
+  role: OrgRole;
+  added_at: string;
+}
+
+export interface ProviderAdmin {
+  id: string;
+  organization_id: string;
+  provider: Provider;
+  status: ProviderAdminStatus;
+  installation_id: string | null;
+  team_id: string | null;
+  access_token_encrypted: Uint8Array | null;
+  refresh_token_encrypted: Uint8Array | null;
+  expires_at: string | null;
+  connected_by_user_id: string | null;
+  connected_at: string;
+}
+
+export interface Project {
+  id: string;
+  organization_id: string;
+  name: string;
+  slug: string;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface ProviderBinding {
+  id: string;
+  project_id: string;
+  provider: Provider;
+  resource_ref: string;
+  display_name: string | null;
+  created_at: string;
+}
+
+export interface Role {
+  id: string;
+  organization_id: string | null;
+  provider: Provider;
+  name: string;
+  description: string | null;
+  is_builtin: boolean;
+  permissions: Permissions;
+  created_at: string;
+}
+
+export interface Bot {
+  id: string;
+  project_id: string;
+  name: string;
+  api_key_prefix: string;
+  api_key_hash: string;
+  status: BotStatus;
+  last_used_at: string | null;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface BotRole {
+  bot_id: string;
+  role_id: string;
+  added_at: string;
+}
+
+export interface AuditLogRow {
+  id: string;
+  organization_id: string;
+  project_id: string | null;
+  bot_id: string | null;
+  ts: string;
+  tool_name: string;
+  arguments_hash: string;
+  role_matched: string | null;
+  decision: AuditDecision;
+  denial_reason: string | null;
+  upstream_latency_ms: number | null;
+  client_ip: string | null;
+  client_user_agent: string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Policy DSL (cf. ADR policy-dsl-declarative-jsonb)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface Permissions {
+  version: 1;
+  rules: Rule[];
+}
+
+export type AbstractTarget = 'project.repos' | 'project.vercel' | 'project.supabase' | '*';
+
+export interface Rule {
+  effect: 'allow' | 'deny';
+  target?: AbstractTarget;
+  tool?: string;
+  tool_matches?: string[];
+  constraints?: Record<string, Constraint>;
+  priority?: number;
+}
+
+export type Constraint =
+  | { equals: string | number | boolean }
+  | { in: (string | number)[] }
+  | { not_in: (string | number)[] }
+  | { match: string[] }
+  | { regex: string }
+  | { starts_with: string | string[] }
+  | { not_starts_with: string | string[] };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Bot context loaded at hot-path (cached 60s)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface BotContext {
+  bot: Pick<Bot, 'id' | 'name' | 'project_id' | 'status' | 'api_key_prefix'>;
+  project: Pick<Project, 'id' | 'slug' | 'organization_id'>;
+  organization: Pick<Organization, 'id' | 'slug' | 'name'>;
+  roles: Role[];
+  bindings: ProviderBinding[];
+  provider_admins: Array<
+    Pick<ProviderAdmin, 'provider' | 'status' | 'installation_id' | 'team_id'>
+  >;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MCP JSON-RPC primitives
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface McpToolDeclaration {
+  name: string;
+  description: string;
+  inputSchema: {
+    type: 'object';
+    properties?: Record<string, unknown>;
+    required?: string[];
+  };
+}
+
+export interface JsonRpcRequest {
+  jsonrpc: '2.0';
+  id?: string | number;
+  method: string;
+  params?: Record<string, unknown>;
+}
+
+export interface JsonRpcSuccess {
+  jsonrpc: '2.0';
+  id: string | number | null;
+  result: unknown;
+}
+
+export interface JsonRpcError {
+  jsonrpc: '2.0';
+  id: string | number | null;
+  error: {
+    code: number;
+    message: string;
+    data?: unknown;
+  };
+}
+
+export type JsonRpcResponse = JsonRpcSuccess | JsonRpcError;

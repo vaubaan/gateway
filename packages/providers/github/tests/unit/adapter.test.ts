@@ -1,0 +1,233 @@
+import { describe, expect, test, vi } from 'vitest';
+import { GitHubAdapter } from '../../src/github-adapter.ts';
+import type { ProviderAdmin } from '@vauban/shared';
+
+// PKCS#8 RSA-2048 test key — generated specifically for unit tests, has no
+// access to anything. Same convention as @octokit's test fixtures.
+const TEST_PRIVATE_KEY_PEM = `-----BEGIN PRIVATE KEY-----
+MIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQDOg7Q7+wHk/p7d
+Bme2T3pH7p9NgM31D0epDi0L7tIA+sV0w1KEh1OB7zNCsP2dgU/UDoBWmlttQ8M5
+TZJk8XfwT2QvfRRGyQrR5DfMzudWKD1HFAk4zJqMI3SyvPzdM7CmKvSPzaGdyXLM
+HBnFEHTrAAYpZJTLLbW2lOECG3ZsuABKQ7sQuU5GLs9CnLeUVQjy1XmwYqLF3uxL
+RYNANvf++iIabHTphkPUOPkSMUDA5IfPq6CY+0e+jiosVHKLfQ1ai/CmRTUWMs8+
+yQz6N+m+8GD1bqp7tH16fqp8u9eGYNvFP6hZ/9eOgrnFEavRkP86bP4ueWg+iAcZ
+v7zSjjJrAgMBAAECggEAVDmwiPgRRPNQR4QAOiOLZX1ZLDGqzWsdtkAdvW1KCl4z
+SAAdSWPLU/7vY7eu+T2/n+kJh4DGztYpD5DC/jpkjcrPVgrAh1qcRdJ6JFR/n+/N
+WTbcvJYS9MX35qkS+nT6BgY15kuPwQ0YJOhrFGY8zk8/sZxlAGJ7QvBoshlEvJOf
+nbXxQDFGM/G7gRRk8tbB1lNiPSe17/uYRjsfTAk9o32Eq6tDLR8e9pTGwlT0Vh+H
+v3DSC5RcJ/Mn1bs7wKtytHnsfNgYHkwoEzeQfxIA8AhCkB99rBn9CJyzKKKQpZ06
+Ku7sUMVPb/MK4OcyhHRGuW2Vk/3WBhdsfqzMHEXKMQKBgQDt6PUodMRPS+8jmTd5
+qLM07VVjbqIH3LowqlBzdwH+ZINFEzsZUBVYUm1msrAPRyHGRfDlh3Z+0a5whtPj
+3yWGfLGiOh23QpRC4xj9HC7TKgewWp4PE1mDpDIWLPmqMmJZS7uMLO/MnUYvLEy/
+QmQEK52oqHbeJoNcFnUbR/9CtwKBgQDeQ8I3wEv3oH3SrnAVGfb+f0YjxkA0tu5l
+QH48jzdHFiZ9Ipdmw6cYY26zh+UrSeJsexBjPnYR8DJa3O7ZbukOXq1c4ndU4dvb
+1FOk2NRR3jcjvyiQ7DCx9Bm00pn1JCpAFXa9emR1eU7+KuYIQjvopT4G2EBSrgVf
+QZBlafhxTQKBgQCx/9OFZw0/UYpYBnwLDhDDdLPMVoLuoPYDDXwZHGSp3w2c+Trh
+EOOLpJ6gz72mIDIb1MKpfgIvUTOzL7vDA1xidLPnNWuBxbyfM/8+T+CHGOPTtdyu
+WdoJ3LDr0PFqRYTSU1Q2YESQs6mLDpEcfm3dgRyFkPdN7Qv9MIWfk1H6tQKBgD0K
+xfdGRr5MS6t/sgF7XDPYHfYdfRQnXMBGzc2nE3Y9YsP4tT5KKLPpQ7xfDTqVy0w3
+4SQYUkpHr1f6FfMJgCUg9KqxlhpVgF8RbgJZyMfvljKIB6kHWGEemkF/oRdMECY2
+JLQp1FpopVKDcfRGl6JV4i3rRxXGzhwYNrZN8eIBAoGAR3eN7AaTcZ5++qFTpHpP
++RaC/Z3xkNawTHK60RJoLM7VqgITAa/0kqIWyILJVjf+sZUMc+L3UVwfwzgRWnL3
+P3lhCcWoarBQqXQ43RNFmqgF0kBC4O5cMrqRhEf9NwBNw0bpV7Xpr5OvVDpKKaiC
+PD9rN0nWMqM6XQqyKQHGCu0=
+-----END PRIVATE KEY-----`;
+
+const baseAdmin: ProviderAdmin = {
+  id: 'pa-1',
+  organization_id: 'org-1',
+  provider: 'github',
+  status: 'connected',
+  installation_id: '12345',
+  team_id: null,
+  access_token_encrypted: null,
+  refresh_token_encrypted: null,
+  expires_at: null,
+  connected_by_user_id: null,
+  connected_at: '2026-01-01T00:00:00Z',
+};
+
+describe('GitHubAdapter — authorizationUrl', () => {
+  test('returns App install URL with state', () => {
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vauban-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+    });
+    const url = adapter.authorizationUrl('org-1', 'http://localhost:3000', 'st-abc');
+    expect(url).toContain('https://github.com/apps/vauban-gateway/installations/new');
+    expect(url).toContain('state=st-abc');
+  });
+});
+
+describe('GitHubAdapter — handleCallback', () => {
+  test('extracts installation_id from query', async () => {
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vauban-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+    });
+    const out = await adapter.handleCallback('org-1', new URLSearchParams('installation_id=99'));
+    expect(out.installation_id).toBe('99');
+  });
+
+  test('rejects missing installation_id', async () => {
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vauban-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+    });
+    await expect(adapter.handleCallback('org-1', new URLSearchParams(''))).rejects.toThrow(
+      /installation_id/,
+    );
+  });
+});
+
+describe('GitHubAdapter — mintUpstreamToken', () => {
+  test('signs JWT and exchanges for installation token', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ token: 'ghs_xxxxx', expires_at: '2026-05-22T11:00:00Z' }),
+    });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vauban-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      fetchImpl: fetchImpl as never,
+    });
+    const { token, expiresAt } = await adapter.mintUpstreamToken(baseAdmin);
+    expect(token).toBe('ghs_xxxxx');
+    expect(expiresAt.getUTCHours()).toBe(11);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    const call = fetchImpl.mock.calls[0]!;
+    expect(call[0]).toBe('https://api.github.com/app/installations/12345/access_tokens');
+    expect((call[1] as { headers: { Authorization: string } }).headers.Authorization).toMatch(
+      /^Bearer /,
+    );
+  });
+
+  test('throws on failed mint', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 404,
+      text: () => Promise.resolve('Not Found'),
+    });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vauban-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      fetchImpl: fetchImpl as never,
+    });
+    await expect(adapter.mintUpstreamToken(baseAdmin)).rejects.toThrow(/404/);
+  });
+});
+
+describe('GitHubAdapter — executeCall dispatch', () => {
+  test('routes github__list_branches to octokit.rest.repos.listBranches', async () => {
+    const listBranches = vi.fn().mockResolvedValue({ data: [{ name: 'main' }] });
+    const fakeOctokit: {
+      rest: { repos: { listBranches: typeof listBranches } };
+      request: ReturnType<typeof vi.fn>;
+    } = {
+      rest: { repos: { listBranches } },
+      request: vi.fn(),
+    };
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ token: 'ghs_xxx', expires_at: '2026-05-22T11:00:00Z' }),
+    });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vauban-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () => fakeOctokit as never,
+      fetchImpl: fetchImpl as never,
+    });
+    const result = await adapter.executeCall(
+      baseAdmin,
+      {
+        id: 'b1',
+        project_id: 'p1',
+        provider: 'github',
+        resource_ref: 'acme/app',
+        display_name: null,
+        created_at: '2026-01-01',
+      },
+      'github__list_branches',
+      { owner: 'acme', repo: 'app' },
+    );
+    expect(result).toEqual([{ name: 'main' }]);
+    expect(listBranches).toHaveBeenCalledWith({ owner: 'acme', repo: 'app' });
+  });
+
+  test('unknown tool throws', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ token: 'ghs_xxx', expires_at: '2026-05-22T11:00:00Z' }),
+    });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vauban-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () => ({ rest: {}, request: vi.fn() }) as never,
+      fetchImpl: fetchImpl as never,
+    });
+    await expect(
+      adapter.executeCall(
+        baseAdmin,
+        {
+          id: 'b1',
+          project_id: 'p1',
+          provider: 'github',
+          resource_ref: 'acme/app',
+          display_name: null,
+          created_at: '2026-01-01',
+        },
+        'github__nonsense_tool',
+        {},
+      ),
+    ).rejects.toThrow(/Unknown GitHub MCP tool/);
+  });
+});
+
+describe('GitHubAdapter — resolveTarget', () => {
+  test('project.repos → list of resource_refs', () => {
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vauban-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+    });
+    expect(
+      adapter.resolveTarget('project.repos', [
+        {
+          id: 'b1',
+          project_id: 'p1',
+          provider: 'github',
+          resource_ref: 'acme/a',
+          display_name: null,
+          created_at: '2026-01-01',
+        },
+        {
+          id: 'b2',
+          project_id: 'p1',
+          provider: 'github',
+          resource_ref: 'acme/b',
+          display_name: null,
+          created_at: '2026-01-01',
+        },
+      ]),
+    ).toEqual(['acme/a', 'acme/b']);
+  });
+
+  test('wildcard target', () => {
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vauban-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+    });
+    expect(adapter.resolveTarget('*', [])).toEqual(['*']);
+  });
+});

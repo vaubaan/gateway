@@ -1,16 +1,17 @@
 {
-  "name": "mcp-proxy",
+  "name": "@vauban/mcp-proxy",
   "private": true,
   "type": "module",
   "version": "0.0.0",
-  "description": "MCP Proxy",
+  "description": "Policy-enforcing MCP gateway for coding agents — Vauban v4",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20",
     "npm": ">=10"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "packages/providers/*"
   ],
   "scripts": {
     "type-check": "npm run --workspaces --if-present type-check",
@@ -24,8 +25,8 @@
     "test:e2e": "playwright test",
     "test:e2e:real-clouds": "playwright test --project=e2e-real-clouds",
     "sweeper": "tsx scripts/e2e-sweeper.ts",
-    "dev": "npm run --workspace @crm/web dev",
-    "prepare": "node scripts/patch-libsodium-esm.mjs && (husky || true)",
+    "dev": "npm run --workspace @vauban/web dev",
+    "prepare": "husky || true",
     "ci": "npm run type-check && npm run lint && npm run format:check && npm run test && npm run build"
   },
   "devDependencies": {
@@ -41,8 +42,5 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.59.4",
     "vitest": "3.2.4"
-  },
-  "optionalDependencies": {
-    "@sbw-vauban/harness": "^0.1.0"
   }
 }
