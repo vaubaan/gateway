@@ -291,10 +291,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   if (error) {
     // 23505 = unique_violation (PK on user_id) — the row already exists.
     if (error.code === '23505') return errorResponse('conflict', 409);
-    console.error(
-      '[crypto-key POST] insert failed',
-      JSON.stringify({ code: error.code, message: error.message, user_id: user.id }),
-    );
     return errorResponse('database_error', 500);
   }
 
