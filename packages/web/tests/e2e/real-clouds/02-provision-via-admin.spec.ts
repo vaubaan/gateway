@@ -23,16 +23,7 @@ import { test, expect } from './fixtures/setup';
 import { seal } from './fixtures/crypto';
 import { makeResourceName } from './fixtures/naming';
 
-// SKIP : la PAT GITHUB_ORG_ADMIN_TOKEN dans .env.test n'a pas la
-// permission "Administration: Write" requise pour créer un repo dans
-// l'org sbw-vauban-test. Probé via :
-//   POST https://api.github.com/orgs/sbw-vauban-test/repos
-//   → 403 "Resource not accessible by personal access token".
-// À débloquer : regénérer la PAT en fine-grained scopée sbw-vauban-test
-// avec Administration (Read&Write) + Contents (Read&Write) + Metadata
-// (Read), puis re-set le secret VAUBAN_E2E_GH_ADMIN_TOKEN côté GH
-// Actions et retirer ce skip.
-test.skip('provision github-repo via github-org-admin against real GitHub', async ({
+test('provision github-repo via github-org-admin against real GitHub', async ({
   env,
   authedAdmin,
   org,
