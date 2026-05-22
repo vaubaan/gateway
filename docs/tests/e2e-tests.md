@@ -1,12 +1,17 @@
 ---
 title: E2E Tests Plan
 tracks:
-  - packages/web/src/lib/crypto/identity-store.ts
-  - packages/web/src/lib/crypto/use-user-identity.ts
-  - packages/web/src/components/identity/UnlockIdentityDialog.tsx
-  - packages/web/src/components/identity/IdentityGate.tsx
-  - packages/web/src/components/identity/SignOutButton.tsx
-last_reviewed: 2026-05-21
+  - playwright.config.ts
+  - packages/web/tests/e2e/smoke.spec.ts
+  - packages/web/tests/e2e/real-clouds/smoke.spec.ts
+  - packages/web/tests/e2e/real-clouds/01-register-org-resource.spec.ts
+  - packages/web/tests/e2e/real-clouds/02-provision-via-admin.spec.ts
+  - packages/web/tests/e2e/real-clouds/03-rotate-admin-mediated.spec.ts
+  - packages/web/tests/e2e/real-clouds/04-export-env-project-variant.spec.ts
+  - packages/web/tests/e2e/real-clouds/05-rbac-member-403.spec.ts
+  - packages/web/tests/e2e/real-clouds/06-reseal-on-member-add.spec.ts
+  - .github/workflows/e2e-nightly.yml
+last_reviewed: 2026-05-22
 ---
 
 # E2E Tests Plan
@@ -97,7 +102,7 @@ en `afterEach`, (b) au sweeper de retrouver les orphelins.
 
 ### Sweeper (cron CI nightly)
 
-Workflow `.github/workflows/nightly.yml` (stub en v1 init).
+Workflow `.github/workflows/e2e-nightly.yml` (livré Phase 8 wave A).
 
 - Liste les ressources `vauban-e2e-*` côté chaque provider, supprime
   celles de plus de 24h.

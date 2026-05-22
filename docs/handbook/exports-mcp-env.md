@@ -1,10 +1,36 @@
 ---
 title: Exports — .env, mcp.json, cloud-resource-map
 tracks:
-  - 'feature/p7-mcp-config-regen'
-  - 'feature/p7-exports-rest'
-  - 'feature/p7-exports-ui'
-last_reviewed: 2026-05-21
+  - packages/core/src/mcp/index.ts
+  - packages/core/src/mcp/compose.ts
+  - packages/core/src/mcp/fragment.ts
+  - packages/core/tests/unit/mcp/compose.test.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/mcp-configs/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/mcp-configs/regenerate/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/exports/env/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/exports/mcp/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/exports/cloud-resource-map/route.ts
+  - packages/web/src/lib/mcp/resolve-scope.ts
+  - packages/web/src/lib/mcp/snapshot-hash.ts
+  - packages/web/src/lib/exports/dotenv-assembly.ts
+  - packages/web/src/lib/exports/download.ts
+  - packages/web/src/lib/exports/resolve.ts
+  - packages/web/src/lib/exports/serialize.ts
+  - packages/web/src/lib/validation/exports.ts
+  - packages/web/src/lib/validation/mcp-configs.ts
+  - packages/web/src/app/(protected)/orgs/[slug]/exports/page.tsx
+  - packages/web/src/app/(protected)/orgs/[slug]/projects/[projectSlug]/exports/page.tsx
+  - packages/web/src/components/exports/OrgExportsClient.tsx
+  - packages/web/src/components/exports/ProjectExportsClient.tsx
+  - packages/web/src/components/exports/VariantSelector.tsx
+  - packages/web/src/components/exports/DotenvExportButton.tsx
+  - packages/web/src/components/exports/McpExportButton.tsx
+  - packages/web/src/components/exports/CloudResourceMapButton.tsx
+  - packages/web/src/components/exports/RegenerateMcpButton.tsx
+  - packages/web/tests/unit/api/exports.test.ts
+  - packages/web/tests/unit/api/mcp-configs.test.ts
+  - packages/web/tests/unit/components/exports.test.tsx
+last_reviewed: 2026-05-22
 ---
 
 # Exports — .env, mcp.json, cloud-resource-map — handbook

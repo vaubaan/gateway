@@ -3,9 +3,7 @@ title: Greenfield rip-and-replace — pas de dual-write, pas de migration de don
 status: accepted
 date: 2026-05-21
 author: rpelissier
-tracks:
-  - docs/spec/cloud-resource-manager.md
-  - supabase/migrations/1000_provider_resource_manager.sql
+tracks: []
 ---
 
 # Greenfield rip-and-replace : pas de dual-write, pas de migration

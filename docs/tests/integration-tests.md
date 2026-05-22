@@ -33,7 +33,13 @@ tracks:
   - packages/crm-catalog/tests/unit/providers/supabase-admin.test.ts
   - packages/web/tests/unit/api/provision.test.ts
   - packages/web/tests/unit/api/rotate-dispatch.test.ts
-last_reviewed: 2026-05-21
+  - packages/web/tests/unit/api/exports.test.ts
+  - packages/web/tests/unit/api/mcp-configs.test.ts
+  - packages/web/tests/unit/components/exports.test.tsx
+  - packages/web/tests/unit/components/provision-wizard.test.tsx
+  - packages/web/tests/unit/components/rotate-button.test.tsx
+  - packages/web/tests/unit/crypto/identity-store.test.ts
+last_reviewed: 2026-05-22
 ---
 
 # Integration Tests Plan

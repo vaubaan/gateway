@@ -3,9 +3,7 @@ title: Une seule keypair X25519 par user, multi-device via wrapped_sk redistribu
 status: accepted
 date: 2026-05-21
 author: rpelissier
-tracks:
-  - docs/spec/cloud-resource-manager.md
-  - supabase/migrations/1000_provider_resource_manager.sql
+tracks: []
 ---
 
 # Une keypair X25519 par user, partagée multi-device via wrapped_sk

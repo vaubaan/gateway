@@ -3,13 +3,7 @@ title: Next.js 15 + Supabase + Vercel as the CRM stack
 status: accepted
 date: 2026-05-21
 author: rpelissier
-tracks:
-  - packages/web/package.json
-  - packages/web/next.config.ts
-  - vercel.json
-  - supabase/config.toml
-  - .github/workflows/ci.yml
-  - .github/workflows/supabase-migrations.yml
+tracks: []
 ---
 
 # Next.js 15 + Supabase + Vercel as the CRM stack

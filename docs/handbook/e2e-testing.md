@@ -6,7 +6,7 @@ tracks:
   - scripts/e2e-sweeper.ts
   - .github/workflows/e2e-nightly.yml
   - scripts/setup-e2e-secrets.md
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-22
 ---
 
 # E2E Testing — real clouds

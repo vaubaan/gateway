@@ -9,23 +9,26 @@ tracks:
   - packages/crm-catalog/src/providers/github/repo.ts
   - packages/crm-catalog/src/providers/github/index.ts
   - packages/crm-catalog/tests/unit/providers/github.test.ts
+  - packages/crm-catalog/tests/unit/providers/github-admin.test.ts
   - packages/crm-catalog/src/providers/vercel/team.ts
   - packages/crm-catalog/src/providers/vercel/team-admin.ts
   - packages/crm-catalog/src/providers/vercel/project.ts
   - packages/crm-catalog/src/providers/vercel/index.ts
   - packages/crm-catalog/tests/unit/providers/vercel.test.ts
+  - packages/crm-catalog/tests/unit/providers/vercel-admin.test.ts
   - packages/crm-catalog/src/providers/supabase-cloud/org.ts
   - packages/crm-catalog/src/providers/supabase-cloud/org-admin.ts
   - packages/crm-catalog/src/providers/supabase-cloud/project.ts
   - packages/crm-catalog/src/providers/supabase-cloud/index.ts
   - packages/crm-catalog/tests/unit/providers/supabase-cloud.test.ts
+  - packages/crm-catalog/tests/unit/providers/supabase-admin.test.ts
   - packages/crm-catalog/src/registry.ts
   - packages/crm-catalog/tests/unit/registry.test.ts
   - packages/web/src/app/api/crm/v1/catalog/route.ts
   - packages/web/src/app/api/crm/v1/catalog/[kindId]/route.ts
   - packages/web/src/lib/catalog/serialize.ts
   - packages/web/tests/unit/api/catalog.test.ts
-last_reviewed: 2026-05-21
+last_reviewed: 2026-05-22
 ---
 
 # Catalogue de ResourceKinds et plugins providers — handbook
@@ -49,8 +52,11 @@ via `GET /api/crm/v1/catalog` + `GET /api/crm/v1/catalog/:kindId`.
 - Provider Supabase Cloud (3 kinds) — mergé wave A.
 - Registry `CATALOG` + endpoint `/api/crm/v1/catalog` — livré ici
   (wave B).
-- Provider operations effectives (`createChild`,
-  `rotateChildAccess`, `listChildren`) — Phase 6 (provisioning).
+- Provider operations effectives (`createChild`, `destroyChild`,
+  `rotateChildAccess`, `listChildren`) — **livrées Phase 6 Wave A**
+  pour les 3 providers admin (github / vercel / supabase). Voir
+  [provisioning-rotation handbook](./provisioning-rotation.md) pour
+  le détail des appels HTTP et des fallbacks `*RotationNotSupportedError`.
 
 ## Décisions amont
 
@@ -115,10 +121,11 @@ exportés via le barrel `index.ts` :
 - AccessSchema : `{ GITHUB_TOKEN }` — PAT **admin** issued by un org
   owner. SetupDocs détaille les scopes requis
   (`Administration: Read and write` côté repo et côté organization).
-- Provider operations : **stubs Phase 6** qui throw
-  `phase-6: <method> not implemented (github-org-admin)`. La shape de
-  l'interface est verrouillée mais les appels HTTPS sur l'API GitHub
-  arriveront dans la feature `provision-via-admin` (Phase 6).
+- Provider operations : **live Phase 6 Wave A**
+  (`listChildren`, `createChild`, `destroyChild`, `rotateChildAccess`)
+  contre `api.github.com`. Fallback `GitHubRotationNotSupportedError`
+  quand le PAT n'a pas accès à `/orgs/.../personal-access-tokens`.
+  Détails : [provisioning-rotation handbook](./provisioning-rotation.md#flow-github-provisioning).
 - HealthTestCmd : double appel curl pour vérifier que le token a
   bien le rôle `admin` sur l'org.
 - MCP fragment : identique à `github-org`.
@@ -166,8 +173,12 @@ exportés via le barrel `index.ts` :
 - AccessSchema : `{ VERCEL_TOKEN, VERCEL_TEAM_ID }` — token issued
   par un team Owner/Admin. SetupDocs détaille la vérification du
   role sur la page members de l'équipe avant de créer le token.
-- Provider operations : **stubs Phase 6** qui rejettent avec le
-  marker `phase-6: <method> not implemented (vercel-team-admin)`.
+- Provider operations : **live Phase 6 Wave A**
+  (`listChildren`, `createChild`, `destroyChild`) contre
+  `api.vercel.com`. `rotateChildAccess` throw toujours
+  `VercelRotationNotSupportedError` (les tokens Vercel sont team-level
+  — pas d'endpoint project-scoped). Détails :
+  [provisioning-rotation handbook](./provisioning-rotation.md#flow-vercel-provisioning).
 - HealthTestCmd : appel API teams + check sur `membership.role`
   ∈ `{OWNER, DEVELOPER, ADMIN, BILLING}` pour confirmer la capacité
   admin.
@@ -219,12 +230,13 @@ pour réserver le mot `supabase` aux futurs CloudProviders self-hosted
 - AccessSchema : `{ SUPABASE_ACCESS_TOKEN }` — PAT issued par un org
   Owner/Administrator. SetupDocs détaille la vérification du role sur
   la page Team de l'org avant de créer le token.
-- Provider operations : **stubs Phase 6** qui rejettent avec le
-  marker `phase-6: <method> not implemented (supabase-org-admin)`.
-  En Phase 6, ces méthodes appelleront la Management API : POST
-  `/v1/projects` (create), DELETE `/v1/projects/{ref}` (destroy),
-  POST `/v1/projects/{ref}/api-keys` (regen service_role + anon),
-  POST `/v1/projects/{ref}/database/password` (regen DB password).
+- Provider operations : **live Phase 6 Wave A** contre la Management
+  API Supabase (`/v1/projects`). `rotateChildAccess` dispatch par clé :
+  `SUPABASE_DB_PASSWORD` → `PATCH /v1/projects/{ref}` (génération
+  CSPRNG côté browser) ; `SUPABASE_SERVICE_ROLE_KEY` /
+  `SUPABASE_ANON_KEY` → throw `SupabaseRotationNotSupportedError`
+  (rotation manuelle via dashboard). Détails :
+  [provisioning-rotation handbook](./provisioning-rotation.md#flow-supabase-provisioning).
 - HealthTestCmd : appel `/v1/organizations` + check sur `role_name`
   ∈ `{Owner, Administrator}`.
 - MCP fragment : identique à `supabase-org` (npx stdio).

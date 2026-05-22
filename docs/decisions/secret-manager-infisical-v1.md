@@ -3,9 +3,7 @@ title: Infisical comme SecretManager built-in en v1 ; Vault et 1Password en stub
 status: accepted
 date: 2026-05-21
 author: rpelissier
-tracks:
-  - docs/spec/cloud-resource-manager.md
-  - packages/crm-catalog/src/secret-manager.ts
+tracks: []
 ---
 
 # Infisical en v1, Vault et 1Password reportés en stubs

@@ -3,9 +3,7 @@ title: libsodium sealed-box NaCl multi-recipient — pas de DEK envelope en v1
 status: accepted
 date: 2026-05-21
 author: rpelissier
-tracks:
-  - docs/spec/cloud-resource-manager.md
-  - packages/crm-catalog/src/secret-manager.ts
+tracks: []
 ---
 
 # libsodium sealed-box NaCl multi-recipient, sans DEK envelope en v1

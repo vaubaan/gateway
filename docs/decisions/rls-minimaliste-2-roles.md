@@ -3,9 +3,7 @@ title: RLS minimaliste — 2 rôles (member / admin), granularité fine via cryp
 status: accepted
 date: 2026-05-21
 author: rpelissier
-tracks:
-  - docs/spec/cloud-resource-manager.md
-  - supabase/migrations/1000_provider_resource_manager.sql
+tracks: []
 ---
 
 # RLS minimaliste : 2 rôles ; granularité fine via la recipient list crypto

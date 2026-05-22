@@ -3,6 +3,7 @@ title: Resources et resource_access — CRUD, RLS, audit
 tracks:
   - supabase/migrations/1000_provider_resource_manager.sql
   - supabase/migrations/1002_resource_access_recipients_stale.sql
+  - supabase/migrations/1004_grant_table_privileges.sql
   - packages/web/src/lib/resources/db.ts
   - packages/web/src/lib/validation/resources.ts
   - packages/web/src/lib/validation/orgs.ts
@@ -27,11 +28,23 @@ tracks:
   - packages/web/src/components/wizard/SetupDocsDisplay.tsx
   - packages/web/src/components/wizard/AccessSealForm.tsx
   - packages/web/src/components/wizard/RegisterWizard.tsx
+  - packages/web/src/components/resources/ResourceTable.tsx
+  - packages/web/src/components/resources/ResourceStatusBadge.tsx
+  - packages/web/src/components/resources/ResourceDetailClient.tsx
+  - packages/web/src/components/resources/AddAccessDialog.tsx
+  - packages/web/src/components/sealed/SealedInput.tsx
+  - packages/web/src/components/sealed/SealedReveal.tsx
+  - packages/web/src/components/sealed/SealedView.tsx
+  - packages/web/src/lib/sealed/base64.ts
+  - packages/web/src/lib/sealed/use-default-recipients.ts
   - packages/web/tests/unit/api/resources.test.ts
   - packages/web/tests/unit/api/resource-access.test.ts
   - packages/web/tests/unit/api/orgs.test.ts
   - packages/web/tests/unit/components/wizard.test.tsx
-last_reviewed: 2026-05-21
+  - packages/web/tests/unit/components/sealed.test.tsx
+  - packages/web/tests/unit/components/resources-table.test.tsx
+  - packages/web/tests/unit/components/resource-detail.test.tsx
+last_reviewed: 2026-05-22
 ---
 
 # Resources et resource_access — handbook

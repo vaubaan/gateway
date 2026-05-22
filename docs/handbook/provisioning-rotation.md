@@ -1,12 +1,27 @@
 ---
 title: Provisioning et Rotation — workflows browser-side
 tracks:
-  - github-admin-impl
-  - vercel-admin-impl
-  - supabase-admin-impl
-  - provision-rotate-rest
-  - provision-rotate-ui
-last_reviewed: 2026-05-21
+  - packages/crm-catalog/src/providers/github/org-admin.ts
+  - packages/crm-catalog/src/providers/vercel/team-admin.ts
+  - packages/crm-catalog/src/providers/supabase-cloud/org-admin.ts
+  - packages/crm-catalog/tests/unit/providers/github-admin.test.ts
+  - packages/crm-catalog/tests/unit/providers/vercel-admin.test.ts
+  - packages/crm-catalog/tests/unit/providers/supabase-admin.test.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/provision/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/destroy-cloud-resource/route.ts
+  - packages/web/src/app/api/crm/v1/orgs/[orgId]/resources/[rId]/access/[key]/rotate/route.ts
+  - packages/web/src/lib/validation/provision.ts
+  - packages/web/src/app/(protected)/orgs/[slug]/resources/provision/page.tsx
+  - packages/web/src/components/wizard/ProvisionLauncher.tsx
+  - packages/web/src/components/wizard/ProvisionWizard.tsx
+  - packages/web/src/components/resources/RotateAccessButton.tsx
+  - packages/web/src/components/resources/DestroyCloudResourceButton.tsx
+  - packages/web/tests/unit/api/provision.test.ts
+  - packages/web/tests/unit/api/rotate-dispatch.test.ts
+  - packages/web/tests/unit/components/provision-wizard.test.tsx
+  - packages/web/tests/unit/components/rotate-button.test.tsx
+  - supabase/migrations/1003_recipients_stale_on_membership.sql
+last_reviewed: 2026-05-22
 ---
 
 # Provisioning et Rotation — handbook
@@ -32,7 +47,11 @@ Document l'implémentation effective des workflows de provisioning
 
 ## REST endpoints (Phase 6 Wave B)
 
-### `POST /api/crm/v1/orgs/:orgId/resources/:adminId/provision`
+### `POST /api/crm/v1/orgs/:orgId/resources/:rId/provision`
+
+(`:rId` est l'admin parent ; convention de nommage Next.js homogène
+avec les autres routes `[rId]/...`. La validation server-side enforce
+`is_admin=true` + `kindClass='org-admin'`.)
 
 Spec §6.5 + §7.3 — book-keeping side du workflow de provisioning.
 Le browser a déjà appelé `admin.createChild(access, spec)` côté
@@ -42,7 +61,7 @@ DB sans toucher au token de l'enfant.
 Pré-conditions enforced server-side :
 
 - session valide, org visible (RLS) ;
-- `:adminId` existe dans l'org, `is_admin=true`, kind est dans
+- `:rId` existe dans l'org, `is_admin=true`, kind est dans
   `kindClass='org-admin'` ;
 - `body.childKind` ∈ `admin.manages`.
 
