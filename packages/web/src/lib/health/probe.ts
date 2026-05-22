@@ -27,6 +27,19 @@ export interface ProbeInput {
   readonly access: Record<string, string>;
 }
 
+/**
+ * Browser-side `fetch` traps cross-origin failures behind a generic
+ * `TypeError: Failed to fetch`. We can't read the actual response, but
+ * we can recognise the providers we KNOW don't allow CORS and surface
+ * a clearer message (cf. handbook resources-and-access.md table).
+ */
+function explainNetworkError(url: string, raw: string): string {
+  if (url.startsWith('https://api.supabase.com/')) {
+    return 'browser CORS blocked (Supabase Mgmt API does not allow third-party origins — known limitation, cf. handbook resources-and-access.md)';
+  }
+  return `network: ${raw}`;
+}
+
 async function fetchOk(
   url: string,
   headers: Record<string, string>,
@@ -39,8 +52,8 @@ async function fetchOk(
     }
     return { ok: false, status: 'failed', message: `GET ${url} → ${String(res.status)}` };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    return { ok: false, status: 'failed', message: `network: ${msg}` };
+    const raw = e instanceof Error ? e.message : String(e);
+    return { ok: false, status: 'failed', message: explainNetworkError(url, raw) };
   }
 }
 
@@ -114,8 +127,12 @@ export async function runHealthProbe(input: ProbeInput): Promise<HealthProbeResu
         ? { ok: true, status: 'connected', message: `org ${ref} visible to the token` }
         : { ok: false, status: 'failed', message: `org ${ref} not in /organizations response` };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return { ok: false, status: 'failed', message: `network: ${msg}` };
+      const raw = e instanceof Error ? e.message : String(e);
+      return {
+        ok: false,
+        status: 'failed',
+        message: explainNetworkError('https://api.supabase.com/v1/organizations', raw),
+      };
     }
   }
   if (kindId === 'supabase-project') {
