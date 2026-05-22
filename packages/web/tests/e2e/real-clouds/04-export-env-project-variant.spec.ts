@@ -76,7 +76,7 @@ test('export .env scope=project variant=staging assembles the right lines', asyn
         kind: 'vercel-project',
         name: 'web',
         scope: 'project',
-        projectId,
+        project_id: projectId,
         variant: 'staging',
         provider_ref: `vauban-e2e-${nameCtx.runUuid}`,
       },
