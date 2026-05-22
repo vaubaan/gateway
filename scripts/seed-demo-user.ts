@@ -199,35 +199,78 @@ async function main(): Promise<void> {
   if (smRes.error) throw smRes.error;
   const smId = smRes.data.id;
 
-  // 5. Three sample resources with sealed_blob unsealable by the demo
-  //    user. Cleartext values are obviously fake placeholders.
-  console.log('[5/5] Provisioning 3 sample resources + access blobs...');
-  // Use the real vauban-e2e test cloud creds from .env.test so the
-  // demo user can hit Reveal and see actual provider data after sign-in.
-  // Safe because vauban-e2e accounts are intentionally separate from
-  // any production org (cf. spec §12.3).
-  const samples = [
+  // 5. Sample resources : pour chaque provider, on seed à la fois une
+  //    Resource org-scoped read-only (`*-org`) ET son OrgResourceAdmin
+  //    (`*-org-admin`, is_admin=true) qui débloque les flows Provision
+  //    + Rotate admin-mediated (spec §7.3, §7.4). En prod les deux
+  //    rows auraient des PAT distincts (read vs admin) ; pour la démo
+  //    on réutilise le même token .env.test des deux côtés — le token
+  //    `vauban-e2e` GitHub est déjà admin scope.
+  console.log('[5/5] Provisioning 6 sample resources + access blobs...');
+  interface Sample {
+    readonly kind: string;
+    readonly name: string;
+    readonly provider_name: string;
+    readonly provider_ref: string;
+    readonly is_admin: boolean;
+    readonly access_key: string;
+    readonly cleartext: string;
+  }
+  const samples: ReadonlyArray<Sample> = [
+    // ── GitHub ────────────────────────────────────────────────────
     {
       kind: 'github-org',
       name: 'demo-github',
       provider_name: 'github',
       provider_ref: envTest.GITHUB_ORG ?? 'sbw-vauban-test',
+      is_admin: false,
       access_key: 'GITHUB_TOKEN',
       cleartext: envTest.GITHUB_ORG_ADMIN_TOKEN ?? '',
     },
+    {
+      kind: 'github-org-admin',
+      name: 'demo-github-admin',
+      provider_name: 'github',
+      provider_ref: envTest.GITHUB_ORG ?? 'sbw-vauban-test',
+      is_admin: true,
+      access_key: 'GITHUB_TOKEN',
+      cleartext: envTest.GITHUB_ORG_ADMIN_TOKEN ?? '',
+    },
+    // ── Vercel ────────────────────────────────────────────────────
     {
       kind: 'vercel-team',
       name: 'demo-vercel',
       provider_name: 'vercel',
       provider_ref: envTest.VERCEL_TEAM_ID ?? 'team_unknown',
+      is_admin: false,
       access_key: 'VERCEL_TOKEN',
       cleartext: envTest.VERCEL_TEAM_TOKEN ?? '',
     },
+    {
+      kind: 'vercel-team-admin',
+      name: 'demo-vercel-admin',
+      provider_name: 'vercel',
+      provider_ref: envTest.VERCEL_TEAM_ID ?? 'team_unknown',
+      is_admin: true,
+      access_key: 'VERCEL_TOKEN',
+      cleartext: envTest.VERCEL_TEAM_TOKEN ?? '',
+    },
+    // ── Supabase ──────────────────────────────────────────────────
     {
       kind: 'supabase-org',
       name: 'demo-supabase',
       provider_name: 'supabase',
       provider_ref: envTest.SUPABASE_ORG_SLUG ?? 'unknown-org',
+      is_admin: false,
+      access_key: 'SUPABASE_ACCESS_TOKEN',
+      cleartext: envTest.SUPABASE_TOKEN ?? '',
+    },
+    {
+      kind: 'supabase-org-admin',
+      name: 'demo-supabase-admin',
+      provider_name: 'supabase',
+      provider_ref: envTest.SUPABASE_ORG_SLUG ?? 'unknown-org',
+      is_admin: true,
       access_key: 'SUPABASE_ACCESS_TOKEN',
       cleartext: envTest.SUPABASE_TOKEN ?? '',
     },
@@ -243,7 +286,7 @@ async function main(): Promise<void> {
           provider_name: s.provider_name,
           kind: s.kind,
           scope: 'org',
-          is_admin: false,
+          is_admin: s.is_admin,
           name: s.name,
           provider_ref: s.provider_ref,
           status: 'active',
@@ -263,6 +306,11 @@ async function main(): Promise<void> {
       console.warn(`      skip ${s.name}: no cleartext available in .env.test`);
       continue;
     }
+    // Spec §4.4 : un OrgResourceAdmin n'est JAMAIS sealed pour le
+    // Runner (humains only). Le Runner n'est pas encore enregistré
+    // côté CRM, donc en pratique la recipient list est identique pour
+    // les deux types ici. On laisse le commentaire en place pour le
+    // jour où on activera la pubkey Runner.
     const blob = await sealForRecipients(s.cleartext, [
       { publicKey: kp.publicKey, fingerprint: kp.fingerprint },
     ]);
@@ -272,14 +320,16 @@ async function main(): Promise<void> {
         resource_id: rId,
         key: s.access_key,
         sealed_blob: { v: 1, recipients: blob.recipients },
-        description: 'demo seed — replace by your real cred via Rotate',
+        description: s.is_admin
+          ? 'demo seed — admin PAT, unlocks provision + rotate flows'
+          : 'demo seed — replace by your real cred via Rotate',
       },
       { onConflict: 'resource_id,key' },
     );
     if (accessRow.error) {
       console.warn(`      access ${s.access_key} upsert error:`, accessRow.error.message);
     }
-    console.log(`      ${s.kind} ${s.name} (access ${s.access_key} sealed)`);
+    console.log(`      ${s.kind.padEnd(20)} ${s.name.padEnd(22)} ${s.is_admin ? '(ADMIN)' : ''}`);
   }
 
   console.log('\n=== DONE ===');
