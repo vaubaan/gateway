@@ -1,9 +1,9 @@
 {
-  "name": "cloud-resource-manager",
+  "name": "mcp-proxy",
   "private": true,
   "type": "module",
   "version": "0.0.0",
-  "description": "Cloud Resource Manager (CRM) — Vauban Core sous-système d'inventaire des cloud resources, sealed creds (ZK), MCP exports.",
+  "description": "MCP Proxy",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20",

@@ -1,2 +1,0 @@
--- Seed data for local dev. Empty in v1 init.
--- Add fixtures here when local dev needs them (test orgs, test users).
