@@ -15,6 +15,8 @@
     "@vauban/mcp-gateway": "*",
     "@vauban/policy-engine": "*",
     "@vauban/providers-github": "*",
+    "@vauban/providers-supabase": "*",
+    "@vauban/providers-vercel": "*",
     "@vauban/shared": "*",
     "next": "15.5.18",
     "react": "19.1.1",

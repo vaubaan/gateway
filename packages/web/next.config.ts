@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
     '@vauban/shared',
     '@vauban/policy-engine',
     '@vauban/providers-github',
+    '@vauban/providers-vercel',
+    '@vauban/providers-supabase',
     '@vauban/mcp-gateway',
   ],
   experimental: {

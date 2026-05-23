@@ -14,9 +14,12 @@ import { availableTools } from './tools.ts';
 import { executeCall, type OctokitFactory } from './execute.ts';
 
 export interface GitHubAdapterConfig {
-  appId: string;
-  appSlug: string; // e.g. "vauban-gateway" — used to build the install URL
-  privateKeyPem: string;
+  /** GitHub App ID. Required for the App-install path. */
+  appId?: string;
+  /** App slug (e.g. "vauban-gateway") used to build the install URL. */
+  appSlug?: string;
+  /** PEM private key. Required for the App-install path. */
+  privateKeyPem?: string;
   /** Override for tests. */
   octokitFactory?: OctokitFactory;
   /** Override fetch in tests. */
@@ -36,13 +39,11 @@ export class GitHubAdapter implements ProviderAdapter {
   }
 
   authorizationUrl(_orgId: string, returnUrl: string, state: string): string {
-    // GitHub App install URL — the org admin picks an installation target on
-    // GitHub's screen. GitHub will POST back to our callback with installation_id.
+    if (!this.config.appSlug) {
+      throw new Error('GitHubAdapter: appSlug is required to build the install URL.');
+    }
     const url = new URL(`https://github.com/apps/${this.config.appSlug}/installations/new`);
     url.searchParams.set('state', state);
-    // GitHub doesn't actually use redirect_url on the install URL — we pass
-    // returnUrl in state by convention to round-trip through. The callback
-    // handler is the source of truth for what to do next.
     void returnUrl;
     return url.toString();
   }
@@ -62,16 +63,32 @@ export class GitHubAdapter implements ProviderAdapter {
   }
 
   async mintUpstreamToken(admin: ProviderAdmin): Promise<MintedToken> {
-    if (!admin.installation_id) {
-      throw new Error('GitHub ProviderAdmin missing installation_id.');
+    // App-install path (production) : mint a 1h installation token JIT.
+    if (admin.installation_id) {
+      if (!this.config.appId || !this.config.privateKeyPem) {
+        throw new Error(
+          'GitHubAdapter: appId and privateKeyPem are required to mint an installation token.',
+        );
+      }
+      const { token, expiresAt } = await mintInstallationToken({
+        appId: this.config.appId,
+        privateKeyPem: this.config.privateKeyPem,
+        installationId: admin.installation_id,
+        fetchImpl: this.config.fetchImpl,
+      });
+      return { token, expiresAt };
     }
-    const { token, expiresAt } = await mintInstallationToken({
-      appId: this.config.appId,
-      privateKeyPem: this.config.privateKeyPem,
-      installationId: admin.installation_id,
-      fetchImpl: this.config.fetchImpl,
-    });
-    return { token, expiresAt };
+    // PAT fallback (E2E test / no App registered yet) : use the stored bytea
+    // as a raw UTF-8 token. v0 doesn't actually encrypt yet (no Vault wired),
+    // so the bytea holds plain UTF-8 bytes of the PAT.
+    if (admin.access_token_encrypted) {
+      const token = new TextDecoder().decode(admin.access_token_encrypted);
+      // PATs are long-lived ; we report an arbitrary far-future expiry so the
+      // cache (when wired) can hold them. Vauban never relies on this date
+      // for revocation — that's done at the provider_admins.status level.
+      return { token, expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000) };
+    }
+    throw new Error('GitHub ProviderAdmin has neither installation_id nor access_token_encrypted.');
   }
 
   async validateBinding(admin: ProviderAdmin, resourceRef: string): Promise<ValidateResult> {

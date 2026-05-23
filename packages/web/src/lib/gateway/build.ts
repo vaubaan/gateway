@@ -6,6 +6,8 @@
  */
 
 import { GitHubAdapter, githubAvailableTools } from '@vauban/providers-github';
+import { VercelAdapter, vercelAvailableTools } from '@vauban/providers-vercel';
+import { SupabaseAdapter, supabaseAvailableTools } from '@vauban/providers-supabase';
 import type { BotContext, Provider, ProviderAdmin, Role } from '@vauban/shared';
 import {
   McpGateway,
@@ -16,6 +18,23 @@ import {
   type UpstreamAdapter,
 } from '@vauban/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
+
+/**
+ * Supabase returns `bytea` columns as a `\xHEX` string. Decode to Uint8Array
+ * so adapters can `new TextDecoder().decode(...)` the PAT.
+ */
+function parseByteaHex(raw: unknown): Uint8Array | null {
+  if (raw === null || raw === undefined) return null;
+  if (raw instanceof Uint8Array) return raw;
+  if (typeof raw !== 'string') return null;
+  const hex = raw.startsWith('\\x') ? raw.slice(2) : raw;
+  if (!/^[0-9a-f]*$/i.test(hex) || hex.length % 2 !== 0) return null;
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
 
 function getGitHubAppCredentials() {
   const appId = process.env.GITHUB_APP_ID;
@@ -124,24 +143,54 @@ export function buildGateway(opts: {
 
   const upstreamByProvider: Partial<Record<Provider, UpstreamAdapter>> = {};
 
-  const ghCreds = getGitHubAppCredentials();
-  if (ghCreds) {
-    const adapter = new GitHubAdapter(ghCreds);
-    upstreamByProvider.github = {
-      provider: 'github',
-      availableTools: githubAvailableTools,
-      executeCall: (admin, binding, tool, args) => adapter.executeCall(admin, binding, tool, args),
-      loadProviderAdmin: async (orgId, provider) => {
-        const { data } = await supabase
-          .from('provider_admins')
-          .select('*')
-          .eq('organization_id', orgId)
-          .eq('provider', provider)
-          .maybeSingle<ProviderAdmin>();
-        return data;
-      },
+  // ProviderAdmin loader (shared across providers — they all hit the same table).
+  const loadProviderAdmin = async (
+    orgId: string,
+    provider: Provider,
+  ): Promise<ProviderAdmin | null> => {
+    const { data } = await supabase
+      .from('provider_admins')
+      .select('*')
+      .eq('organization_id', orgId)
+      .eq('provider', provider)
+      .maybeSingle<ProviderAdmin>();
+    if (!data) return null;
+    // Supabase returns bytea as a hex-encoded `\x...` string. Convert to Uint8Array.
+    return {
+      ...data,
+      access_token_encrypted: parseByteaHex(data.access_token_encrypted),
+      refresh_token_encrypted: parseByteaHex(data.refresh_token_encrypted),
     };
-  }
+  };
+
+  // GitHub: PAT-fallback always available ; App credentials optional.
+  const ghAdapter = new GitHubAdapter(getGitHubAppCredentials() ?? {});
+  upstreamByProvider.github = {
+    provider: 'github',
+    availableTools: githubAvailableTools,
+    executeCall: (admin, binding, tool, args) => ghAdapter.executeCall(admin, binding, tool, args),
+    loadProviderAdmin,
+  };
+
+  // Vercel: paste-token mode (team token from .env.test or per-customer).
+  const vercelAdapter = new VercelAdapter();
+  upstreamByProvider.vercel = {
+    provider: 'vercel',
+    availableTools: vercelAvailableTools,
+    executeCall: (admin, binding, tool, args) =>
+      vercelAdapter.executeCall(admin, binding, tool, args),
+    loadProviderAdmin,
+  };
+
+  // Supabase: paste-token mode (Management API PAT).
+  const supabaseAdapter = new SupabaseAdapter();
+  upstreamByProvider.supabase = {
+    provider: 'supabase',
+    availableTools: supabaseAvailableTools,
+    executeCall: (admin, binding, tool, args) =>
+      supabaseAdapter.executeCall(admin, binding, tool, args),
+    loadProviderAdmin,
+  };
 
   return new McpGateway({
     cache: buildCacheClient(),

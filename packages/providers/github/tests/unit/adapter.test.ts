@@ -60,6 +60,39 @@ describe('GitHubAdapter — authorizationUrl', () => {
   });
 });
 
+describe('GitHubAdapter — mintUpstreamToken (PAT fallback)', () => {
+  test('uses access_token_encrypted as Bearer when no installation_id', async () => {
+    const adapter = new GitHubAdapter({});
+    const patAdmin: ProviderAdmin = {
+      ...baseAdmin,
+      installation_id: null,
+      access_token_encrypted: new TextEncoder().encode('github_pat_test_xxx'),
+    };
+    const { token, expiresAt } = await adapter.mintUpstreamToken(patAdmin);
+    expect(token).toBe('github_pat_test_xxx');
+    expect(expiresAt.getTime()).toBeGreaterThan(Date.now());
+  });
+
+  test('throws when neither installation_id nor access_token_encrypted is set', async () => {
+    const adapter = new GitHubAdapter({});
+    const emptyAdmin: ProviderAdmin = {
+      ...baseAdmin,
+      installation_id: null,
+      access_token_encrypted: null,
+    };
+    await expect(adapter.mintUpstreamToken(emptyAdmin)).rejects.toThrow(
+      /installation_id nor access_token_encrypted/,
+    );
+  });
+
+  test('throws when installation_id set but App credentials missing', async () => {
+    const adapter = new GitHubAdapter({}); // no appId / privateKeyPem
+    await expect(adapter.mintUpstreamToken(baseAdmin)).rejects.toThrow(
+      /appId and privateKeyPem are required/,
+    );
+  });
+});
+
 describe('GitHubAdapter — handleCallback', () => {
   test('extracts installation_id from query', async () => {
     const adapter = new GitHubAdapter({
