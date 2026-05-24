@@ -18,6 +18,7 @@
     "@vauban/providers-supabase": "*",
     "@vauban/providers-vercel": "*",
     "@vauban/shared": "*",
+    "geist": "^1.7.1",
     "next": "15.5.18",
     "react": "19.1.1",
     "react-dom": "19.1.1",

@@ -1,12 +1,13 @@
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { getSupabaseServer } from '@/lib/supabase/server';
+import { Badge, Button, Card, CardBody, CardHeader, CardTitle } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
 interface OrgRow {
-  organization: { id: string; slug: string; name: string };
   role: 'member' | 'admin';
+  organization: { id: string; slug: string; name: string };
 }
 
 export default async function DashboardPage() {
@@ -21,51 +22,57 @@ export default async function DashboardPage() {
 
   return (
     <main>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h1>Your organizations</h1>
-        <span style={{ opacity: 0.6 }}>{user.user.email}</span>
-      </header>
-      <p>
+      <header
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          marginBottom: 'var(--space-6)',
+        }}
+      >
+        <div>
+          <h1 style={{ margin: 0 }}>Organizations</h1>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+            Each org is a tenant. Bots, projects, audit log live under one.
+          </p>
+        </div>
         <Link href="/orgs/new">
-          <button
-            type="button"
-            style={{
-              padding: '8px 12px',
-              background: '#fff',
-              color: '#000',
-              border: 0,
-              borderRadius: 6,
-            }}
-          >
-            + New organization
-          </button>
+          <Button variant="primary">+ New organization</Button>
         </Link>
-      </p>
-      {error && <p style={{ color: '#ff7e7e' }}>Error loading orgs: {error.message}</p>}
-      {(rows ?? []).length === 0 && !error && (
-        <p style={{ opacity: 0.6 }}>You don&apos;t belong to any organization yet.</p>
+      </header>
+      {error && (
+        <p style={{ color: 'var(--accent-danger-fg)' }}>Error loading orgs: {error.message}</p>
       )}
-      <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
+      {(rows ?? []).length === 0 && !error && (
+        <Card>
+          <CardBody>
+            <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+              You don&apos;t belong to any organization yet. Create one to get started.
+            </p>
+          </CardBody>
+        </Card>
+      )}
+      <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
         {((rows ?? []) as unknown as OrgRow[]).map((r) => (
-          <li
+          <Link
             key={r.organization.id}
-            style={{
-              padding: 12,
-              border: '1px solid #2a2a2a',
-              borderRadius: 6,
-              marginBottom: 8,
-              display: 'flex',
-              justifyContent: 'space-between',
-            }}
+            href={`/orgs/${r.organization.slug}`}
+            style={{ display: 'block' }}
           >
-            <Link href={`/orgs/${r.organization.slug}`} style={{ textDecoration: 'none' }}>
-              <strong>{r.organization.name}</strong>
-              <span style={{ opacity: 0.55, marginLeft: 8 }}>/{r.organization.slug}</span>
-            </Link>
-            <span style={{ opacity: 0.5 }}>{r.role}</span>
-          </li>
+            <Card>
+              <CardHeader>
+                <CardTitle>
+                  {r.organization.name}{' '}
+                  <span style={{ color: 'var(--text-subtle)', fontWeight: 400 }}>
+                    /{r.organization.slug}
+                  </span>
+                </CardTitle>
+                <Badge tone={r.role === 'admin' ? 'info' : 'neutral'}>{r.role}</Badge>
+              </CardHeader>
+            </Card>
+          </Link>
         ))}
-      </ul>
+      </div>
     </main>
   );
 }

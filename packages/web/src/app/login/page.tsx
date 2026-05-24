@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
+import { Button, Card, CardBody, CardHeader, CardTitle, Field, Input } from '@/components/ui';
 
 type Mode = 'password' | 'magic';
 type Status = 'idle' | 'sending' | 'sent' | 'error';
@@ -40,107 +41,99 @@ export default function LoginPage() {
   }
 
   return (
-    <main>
+    <main style={{ maxWidth: 420, marginTop: 'var(--space-12)' }}>
       <h1>Sign in</h1>
-
-      <div role="tablist" style={{ display: 'flex', gap: 4, marginBottom: 16, maxWidth: 320 }}>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'password'}
-          onClick={() => {
-            setMode('password');
-            setStatus('idle');
-            setError(null);
-          }}
-          style={tab(mode === 'password')}
-        >
-          Email + password
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={mode === 'magic'}
-          onClick={() => {
-            setMode('magic');
-            setStatus('idle');
-            setError(null);
-          }}
-          style={tab(mode === 'magic')}
-        >
-          Magic link
-        </button>
-      </div>
-
-      {mode === 'magic' && (
-        <p style={{ opacity: 0.7 }}>Enter your email — we&apos;ll send you a magic link.</p>
-      )}
-
-      <form onSubmit={onSubmit} style={{ maxWidth: 320, display: 'grid', gap: 12 }}>
-        <input
-          type="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          placeholder="you@example.com"
-          autoComplete="email"
-          style={field}
-        />
-        {mode === 'password' && (
-          <input
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            autoComplete="current-password"
-            style={field}
-          />
-        )}
-        <button type="submit" disabled={status === 'sending'} style={submitBtn}>
-          {status === 'sending'
-            ? mode === 'password'
-              ? 'Signing in…'
-              : 'Sending…'
-            : mode === 'password'
-              ? 'Sign in'
-              : 'Send magic link'}
-        </button>
-        {status === 'sent' && mode === 'magic' && (
-          <p style={{ color: '#7ee87e' }}>
-            Magic link sent to <code>{email}</code>. Check your inbox.
-          </p>
-        )}
-        {status === 'error' && <p style={{ color: '#ff7e7e' }}>{error}</p>}
-      </form>
+      <Card>
+        <CardHeader>
+          <div role="tablist" style={{ display: 'flex', gap: 6 }}>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'password'}
+              onClick={() => {
+                setMode('password');
+                setStatus('idle');
+                setError(null);
+              }}
+              style={tabStyle(mode === 'password')}
+            >
+              Password
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={mode === 'magic'}
+              onClick={() => {
+                setMode('magic');
+                setStatus('idle');
+                setError(null);
+              }}
+              style={tabStyle(mode === 'magic')}
+            >
+              Magic link
+            </button>
+          </div>
+          <CardTitle>{mode === 'password' ? 'Email + password' : 'Magic link'}</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <form
+            onSubmit={onSubmit}
+            style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}
+          >
+            <Field label="Email">
+              <Input
+                type="email"
+                required
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="you@example.com"
+              />
+            </Field>
+            {mode === 'password' && (
+              <Field label="Password">
+                <Input
+                  type="password"
+                  required
+                  autoComplete="current-password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                />
+              </Field>
+            )}
+            <Button type="submit" variant="primary" loading={status === 'sending'}>
+              {status === 'sending'
+                ? mode === 'password'
+                  ? 'Signing in…'
+                  : 'Sending…'
+                : mode === 'password'
+                  ? 'Sign in'
+                  : 'Send magic link'}
+            </Button>
+            {status === 'sent' && mode === 'magic' && (
+              <p style={{ color: 'var(--accent-success-fg)', margin: 0 }}>
+                Magic link sent to <code>{email}</code>. Check your inbox.
+              </p>
+            )}
+            {status === 'error' && (
+              <p style={{ color: 'var(--accent-danger-fg)', margin: 0 }}>{error}</p>
+            )}
+          </form>
+        </CardBody>
+      </Card>
     </main>
   );
 }
 
-function tab(active: boolean): React.CSSProperties {
+function tabStyle(active: boolean): React.CSSProperties {
   return {
-    flex: 1,
-    padding: '8px 12px',
-    background: active ? '#fff' : 'transparent',
-    color: active ? '#000' : '#fff',
-    border: '1px solid #2a2a2a',
-    borderRadius: 6,
+    padding: '4px 10px',
+    background: active ? 'var(--primary-bg)' : 'transparent',
+    color: active ? 'var(--primary-fg)' : 'var(--text-muted)',
+    border: '1px solid ' + (active ? 'var(--primary-bg)' : 'var(--border-subtle)'),
+    borderRadius: 'var(--radius-sm)',
+    fontSize: 'var(--text-xs)',
     cursor: 'pointer',
   };
 }
-
-const field: React.CSSProperties = {
-  padding: 10,
-  borderRadius: 6,
-  background: '#1a1a1a',
-  color: '#fff',
-  border: '1px solid #2a2a2a',
-};
-
-const submitBtn: React.CSSProperties = {
-  padding: '10px 14px',
-  background: '#fff',
-  color: '#000',
-  border: 0,
-  borderRadius: 6,
-};

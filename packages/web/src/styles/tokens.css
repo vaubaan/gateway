@@ -1,0 +1,162 @@
+/**
+ * Vauban design tokens — Geist-inspired.
+ *
+ * Spec : docs/spec/style-guide.md.
+ *
+ * Two layers:
+ *   1. Primitive tokens — anonymous (gray-N, blue-N, space-N…).
+ *   2. Semantic tokens — prescribed usage (surface-base, text-foreground…),
+ *      mapped to primitives per theme.
+ *
+ * Dark = default (data-theme="dark" or no attribute). Light via [data-theme="light"].
+ */
+
+:root {
+  /* ───── Primitive : gray (OKLCH, perceptually spaced) ───── */
+  --gray-0: oklch(99% 0 0);
+  --gray-20: oklch(97% 0 0);
+  --gray-50: oklch(94% 0 0);
+  --gray-100: oklch(90% 0 0);
+  --gray-200: oklch(82% 0 0);
+  --gray-300: oklch(72% 0 0);
+  --gray-400: oklch(62% 0 0);
+  --gray-500: oklch(52% 0 0);
+  --gray-600: oklch(42% 0 0);
+  --gray-700: oklch(32% 0 0);
+  --gray-800: oklch(22% 0 0);
+  --gray-900: oklch(14% 0 0);
+  --gray-980: oklch(8% 0 0);
+  --gray-1000: oklch(4% 0 0);
+
+  /* ───── Primitive : accent palettes ───── */
+  --blue-50: oklch(96% 0.04 250);
+  --blue-200: oklch(82% 0.12 250);
+  --blue-600: oklch(58% 0.18 250);
+  --blue-900: oklch(28% 0.12 250);
+
+  --green-50: oklch(96% 0.05 150);
+  --green-200: oklch(82% 0.16 150);
+  --green-600: oklch(58% 0.2 150);
+  --green-900: oklch(28% 0.12 150);
+
+  --amber-50: oklch(96% 0.08 80);
+  --amber-200: oklch(82% 0.16 80);
+  --amber-600: oklch(70% 0.16 60);
+  --amber-900: oklch(32% 0.12 60);
+
+  --red-50: oklch(96% 0.04 25);
+  --red-200: oklch(82% 0.14 25);
+  --red-600: oklch(58% 0.2 25);
+  --red-900: oklch(28% 0.14 25);
+
+  /* ───── Primitive : space (4px base) ───── */
+  --space-0: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+
+  /* ───── Primitive : radius ───── */
+  --radius-none: 0;
+  --radius-xs: 2px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 999px;
+
+  /* ───── Primitive : font sizes (rem-based, 16px root) ───── */
+  --text-xs: 0.75rem; /* 12px */
+  --text-sm: 0.8125rem; /* 13px */
+  --text-base: 0.875rem; /* 14px */
+  --text-md: 1rem; /* 16px */
+  --text-lg: 1.125rem; /* 18px */
+  --text-xl: 1.5rem; /* 24px */
+  --text-2xl: 2rem; /* 32px */
+  --text-3xl: 2.5rem; /* 40px */
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  /* ───── Primitive : motion ───── */
+  --duration-fast: 100ms;
+  --duration-base: 150ms;
+  --duration-slow: 250ms;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* ───── Primitive : shadows (sparse — prefer hairlines) ───── */
+  --shadow-none: none;
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px -2px rgba(0, 0, 0, 0.18);
+}
+
+/* ───── Semantic : DARK (default) ───── */
+:root,
+:root[data-theme='dark'] {
+  --surface-base: var(--gray-1000);
+  --surface-raised: var(--gray-980);
+  --surface-overlay: var(--gray-900);
+  --surface-sunken: var(--gray-1000);
+
+  --text-foreground: var(--gray-0);
+  --text-muted: var(--gray-300);
+  --text-subtle: var(--gray-500);
+  --text-inverse: var(--gray-1000);
+
+  --border-subtle: var(--gray-800);
+  --border-strong: var(--gray-600);
+
+  --accent-info-bg: var(--blue-900);
+  --accent-info-fg: var(--blue-200);
+  --accent-success-bg: var(--green-900);
+  --accent-success-fg: var(--green-200);
+  --accent-warning-bg: var(--amber-900);
+  --accent-warning-fg: var(--amber-200);
+  --accent-danger-bg: var(--red-900);
+  --accent-danger-fg: var(--red-200);
+
+  --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--gray-300);
+
+  --primary-bg: var(--gray-0);
+  --primary-fg: var(--gray-1000);
+  --primary-bg-hover: var(--gray-100);
+}
+
+/* ───── Semantic : LIGHT (opt-in via data-theme="light") ───── */
+:root[data-theme='light'] {
+  --surface-base: var(--gray-0);
+  --surface-raised: var(--gray-20);
+  --surface-overlay: var(--gray-0);
+  --surface-sunken: var(--gray-50);
+
+  --text-foreground: var(--gray-1000);
+  --text-muted: var(--gray-600);
+  --text-subtle: var(--gray-400);
+  --text-inverse: var(--gray-0);
+
+  --border-subtle: var(--gray-100);
+  --border-strong: var(--gray-300);
+
+  --accent-info-bg: var(--blue-50);
+  --accent-info-fg: var(--blue-900);
+  --accent-success-bg: var(--green-50);
+  --accent-success-fg: var(--green-900);
+  --accent-warning-bg: var(--amber-50);
+  --accent-warning-fg: var(--amber-900);
+  --accent-danger-bg: var(--red-50);
+  --accent-danger-fg: var(--red-900);
+
+  --focus-ring: 0 0 0 2px var(--surface-base), 0 0 0 4px var(--gray-700);
+
+  --primary-bg: var(--gray-1000);
+  --primary-fg: var(--gray-0);
+  --primary-bg-hover: var(--gray-900);
+}
