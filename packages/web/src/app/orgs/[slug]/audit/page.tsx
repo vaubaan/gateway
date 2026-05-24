@@ -1,6 +1,21 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
+import {
+  Badge,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Code,
+  Select,
+  Table,
+  Tbody,
+  Td,
+  Th,
+  Thead,
+  Tr,
+} from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -15,8 +30,26 @@ interface AuditRow {
   bot_id: string | null;
 }
 
-export default async function AuditPage({ params }: { params: Promise<{ slug: string }> }) {
+interface BotOpt {
+  id: string;
+  name: string;
+}
+
+interface SearchParams {
+  bot?: string;
+  decision?: 'allowed' | 'denied';
+  since?: string;
+}
+
+export default async function AuditPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<SearchParams>;
+}) {
   const { slug } = await params;
+  const sp = await searchParams;
   const supabase = await getSupabaseServer();
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) redirect('/login');
@@ -27,79 +60,239 @@ export default async function AuditPage({ params }: { params: Promise<{ slug: st
     .eq('slug', slug)
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!org) notFound();
-  const o = org;
 
-  const { data: rows } = await supabase
+  // Bots for the filter dropdown.
+  const { data: bots } = await supabase
+    .from('bots')
+    .select('id, name, projects!inner(organization_id)')
+    .eq('projects.organization_id', org.id);
+  const botOpts: BotOpt[] = ((bots ?? []) as Array<{ id: string; name: string }>).map((b) => ({
+    id: b.id,
+    name: b.name,
+  }));
+
+  // Last 7 days stats.
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
+  let statQ = supabase
+    .from('audit_log')
+    .select('decision, tool_name', { count: 'exact' })
+    .eq('organization_id', org.id)
+    .gte('ts', sevenDaysAgo);
+  if (sp.bot) statQ = statQ.eq('bot_id', sp.bot);
+  if (sp.decision) statQ = statQ.eq('decision', sp.decision);
+  const statResp = await statQ.limit(5000);
+  const statRows = (statResp.data ?? []) as Array<{
+    decision: 'allowed' | 'denied';
+    tool_name: string;
+  }>;
+  const allowed7d = statRows.filter((r) => r.decision === 'allowed').length;
+  const denied7d = statRows.filter((r) => r.decision === 'denied').length;
+  const topTools = topN(
+    statRows.reduce<Record<string, number>>((acc, r) => {
+      acc[r.tool_name] = (acc[r.tool_name] ?? 0) + 1;
+      return acc;
+    }, {}),
+    5,
+  );
+
+  // Filtered list.
+  let q = supabase
     .from('audit_log')
     .select('id, ts, tool_name, decision, role_matched, denial_reason, upstream_latency_ms, bot_id')
-    .eq('organization_id', o.id)
+    .eq('organization_id', org.id)
     .order('ts', { ascending: false })
     .limit(100);
+  if (sp.bot) q = q.eq('bot_id', sp.bot);
+  if (sp.decision) q = q.eq('decision', sp.decision);
+  if (sp.since) q = q.gte('ts', sp.since);
+  const { data: rows } = await q;
+  const auditRows = (rows ?? []) as AuditRow[];
+
+  const botNameById = new Map(botOpts.map((b) => [b.id, b.name]));
 
   return (
     <main>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
-        <h1>Audit log — {o.name}</h1>
-        <Link href={`/orgs/${o.slug}`} style={{ opacity: 0.7 }}>
+      <header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 'var(--space-4)',
+        }}
+      >
+        <div>
+          <h1 style={{ margin: 0 }}>Audit log</h1>
+          <p style={{ color: 'var(--text-muted)', margin: 0 }}>
+            {org.name} · last 100 calls · 90-day retention
+          </p>
+        </div>
+        <Link href={`/orgs/${org.slug}`} style={{ color: 'var(--text-muted)' }}>
           ← back
         </Link>
       </header>
-      <p style={{ opacity: 0.6 }}>Last 100 MCP calls. Retention 90 days.</p>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-        <thead>
-          <tr>
-            <th style={th}>Time</th>
-            <th style={th}>Tool</th>
-            <th style={th}>Decision</th>
-            <th style={th}>Role / reason</th>
-            <th style={th}>Latency</th>
-          </tr>
-        </thead>
-        <tbody>
-          {((rows ?? []) as AuditRow[]).map((r) => (
-            <tr key={r.id} style={{ borderBottom: '1px solid #2a2a2a' }}>
-              <td style={td}>{new Date(r.ts).toLocaleString()}</td>
-              <td style={td}>
-                <code>{r.tool_name}</code>
-              </td>
-              <td
-                style={{
-                  ...td,
-                  color: r.decision === 'allowed' ? '#7ee87e' : '#ff7e7e',
-                }}
-              >
-                {r.decision}
-              </td>
-              <td style={{ ...td, opacity: 0.75, maxWidth: 480 }}>
-                {r.role_matched ?? r.denial_reason}
-              </td>
-              <td style={td}>
-                {r.upstream_latency_ms !== null ? `${r.upstream_latency_ms}ms` : '—'}
-              </td>
-            </tr>
+
+      {/* Stats row */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))',
+          gap: 'var(--space-3)',
+          marginBottom: 'var(--space-4)',
+        }}
+      >
+        <Card>
+          <CardBody>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
+              Allowed (7d)
+            </div>
+            <div
+              style={{
+                fontSize: 'var(--text-2xl)',
+                fontWeight: 'var(--font-weight-semibold)',
+                color: 'var(--accent-success-fg)',
+              }}
+            >
+              {allowed7d}
+            </div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardBody>
+            <div style={{ color: 'var(--text-muted)', fontSize: 'var(--text-xs)' }}>
+              Denied (7d)
+            </div>
+            <div
+              style={{
+                fontSize: 'var(--text-2xl)',
+                fontWeight: 'var(--font-weight-semibold)',
+                color: 'var(--accent-danger-fg)',
+              }}
+            >
+              {denied7d}
+            </div>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Top tools (7d)</CardTitle>
+          </CardHeader>
+          <CardBody>
+            {topTools.length === 0 ? (
+              <p style={{ color: 'var(--text-subtle)', margin: 0 }}>No calls yet.</p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, fontSize: 'var(--text-sm)' }}>
+                {topTools.map(([name, n]) => (
+                  <li
+                    key={name}
+                    style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}
+                  >
+                    <Code>{name}</Code>
+                    <span style={{ color: 'var(--text-muted)' }}>{n}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+
+      {/* Filters */}
+      <form
+        method="get"
+        style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}
+      >
+        <Select name="bot" defaultValue={sp.bot ?? ''} style={{ width: 'auto' }}>
+          <option value="">All bots</option>
+          {botOpts.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
           ))}
-          {(rows ?? []).length === 0 && (
-            <tr>
-              <td colSpan={5} style={{ ...td, opacity: 0.5, textAlign: 'center', padding: 24 }}>
-                No calls yet.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
+        </Select>
+        <Select name="decision" defaultValue={sp.decision ?? ''} style={{ width: 'auto' }}>
+          <option value="">All decisions</option>
+          <option value="allowed">allowed</option>
+          <option value="denied">denied</option>
+        </Select>
+        <button
+          type="submit"
+          style={{
+            padding: '8px 14px',
+            background: 'var(--primary-bg)',
+            color: 'var(--primary-fg)',
+            border: 0,
+            borderRadius: 'var(--radius-md)',
+            cursor: 'pointer',
+            fontSize: 'var(--text-base)',
+          }}
+        >
+          Apply
+        </button>
+        {(sp.bot || sp.decision) && (
+          <a
+            href={`/orgs/${org.slug}/audit`}
+            style={{
+              padding: '8px 14px',
+              border: '1px solid var(--border-subtle)',
+              borderRadius: 'var(--radius-md)',
+              fontSize: 'var(--text-base)',
+              color: 'var(--text-muted)',
+            }}
+          >
+            Clear
+          </a>
+        )}
+      </form>
+
+      <Card>
+        <Table>
+          <Thead>
+            <Tr>
+              <Th>Time</Th>
+              <Th>Bot</Th>
+              <Th>Tool</Th>
+              <Th>Decision</Th>
+              <Th>Role / reason</Th>
+              <Th>Latency</Th>
+            </Tr>
+          </Thead>
+          <Tbody>
+            {auditRows.map((r) => (
+              <Tr key={r.id}>
+                <Td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                  {new Date(r.ts).toLocaleString()}
+                </Td>
+                <Td>{r.bot_id ? (botNameById.get(r.bot_id) ?? '—') : '—'}</Td>
+                <Td>
+                  <Code>{r.tool_name}</Code>
+                </Td>
+                <Td>
+                  <Badge tone={r.decision === 'allowed' ? 'success' : 'danger'}>{r.decision}</Badge>
+                </Td>
+                <Td style={{ maxWidth: 480, color: 'var(--text-muted)' }}>
+                  {r.role_matched ?? r.denial_reason}
+                </Td>
+                <Td style={{ color: 'var(--text-muted)' }}>
+                  {r.upstream_latency_ms !== null ? `${r.upstream_latency_ms} ms` : '—'}
+                </Td>
+              </Tr>
+            ))}
+            {auditRows.length === 0 && (
+              <Tr>
+                <Td colSpan={6} style={{ color: 'var(--text-subtle)', textAlign: 'center' }}>
+                  No calls match these filters.
+                </Td>
+              </Tr>
+            )}
+          </Tbody>
+        </Table>
+      </Card>
     </main>
   );
 }
 
-const th: React.CSSProperties = {
-  textAlign: 'left',
-  padding: '8px 12px',
-  borderBottom: '1px solid #2a2a2a',
-  opacity: 0.7,
-  fontWeight: 500,
-};
-
-const td: React.CSSProperties = {
-  padding: '8px 12px',
-  verticalAlign: 'top',
-};
+function topN(map: Record<string, number>, n: number): Array<[string, number]> {
+  return Object.entries(map)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, n);
+}

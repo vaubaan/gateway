@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { ProviderDisconnectButton } from './provider-disconnect';
+import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code, Row } from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,133 +34,157 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
 
   return (
     <main>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 'var(--space-6)',
+        }}
+      >
         <div>
-          <h1 style={{ marginBottom: 4 }}>{o.name}</h1>
-          <code style={{ opacity: 0.5 }}>/{o.slug}</code>
+          <h1 style={{ margin: 0 }}>{o.name}</h1>
+          <Code>/{o.slug}</Code>
         </div>
-        <Link href="/dashboard" style={{ opacity: 0.7 }}>
+        <Link href="/dashboard" style={{ color: 'var(--text-muted)' }}>
           ← all orgs
         </Link>
       </header>
 
-      <section style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 18 }}>Cloud providers</h2>
-        <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-          {(['github', 'vercel', 'supabase'] as const).map((p) => {
-            const row = (providers ?? []).find(
-              (x) => (x as { provider: string }).provider === p,
-            ) as { status: string; connected_at: string } | undefined;
-            return (
-              <li
-                key={p}
-                style={{
-                  padding: 12,
-                  marginBottom: 8,
-                  border: '1px solid #2a2a2a',
-                  borderRadius: 6,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <span>
-                  <strong>{p}</strong>{' '}
-                  <span style={{ opacity: 0.55 }}>
-                    {row
-                      ? `connected ${new Date(row.connected_at).toLocaleDateString()}`
-                      : 'not connected'}
-                  </span>
-                </span>
-                <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-                  {row && (
-                    <span style={{ color: row.status === 'connected' ? '#7ee87e' : '#ff7e7e' }}>
-                      {row.status}
-                    </span>
-                  )}
-                  {row && row.status === 'connected' && (
-                    <ProviderDisconnectButton orgSlug={o.slug} provider={p} />
-                  )}
-                  {!row && p === 'github' && (
-                    <Link
-                      href={`/orgs/${o.slug}/providers/github/connect`}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '2fr 1fr',
+          gap: 'var(--space-4)',
+        }}
+      >
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Cloud providers</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {(['github', 'vercel', 'supabase'] as const).map((p) => {
+                  const row = (providers ?? []).find(
+                    (x) => (x as { provider: string }).provider === p,
+                  ) as { status: string; connected_at: string } | undefined;
+                  return (
+                    <li
+                      key={p}
                       style={{
-                        padding: '6px 10px',
-                        background: '#fff',
-                        color: '#000',
-                        borderRadius: 4,
-                        textDecoration: 'none',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: 'var(--space-2) 0',
+                        borderBottom: '1px solid var(--border-subtle)',
                       }}
                     >
-                      Connect
-                    </Link>
-                  )}
-                  {!row && p !== 'github' && <span style={{ opacity: 0.4 }}>phase 5</span>}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
+                      <Row>
+                        <strong style={{ textTransform: 'capitalize' }}>{p}</strong>
+                        <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
+                          {row
+                            ? `connected ${new Date(row.connected_at).toLocaleDateString()}`
+                            : 'not connected'}
+                        </span>
+                      </Row>
+                      <Row gap="var(--space-2)">
+                        {row && (
+                          <Badge tone={row.status === 'connected' ? 'success' : 'danger'}>
+                            {row.status}
+                          </Badge>
+                        )}
+                        {row && row.status === 'connected' && (
+                          <ProviderDisconnectButton orgSlug={o.slug} provider={p} />
+                        )}
+                        {!row && p === 'github' && (
+                          <Link href={`/orgs/${o.slug}/providers/github/connect`}>
+                            <Button size="sm" variant="primary">
+                              Connect
+                            </Button>
+                          </Link>
+                        )}
+                        {!row && p !== 'github' && (
+                          <Badge tone="neutral">paste-token via API</Badge>
+                        )}
+                      </Row>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardBody>
+          </Card>
 
-      <section style={{ marginTop: 32 }}>
-        <header
-          style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}
-        >
-          <h2 style={{ fontSize: 18 }}>Projects</h2>
-          <Link
-            href={`/orgs/${o.slug}/projects/new`}
-            style={{
-              padding: '6px 10px',
-              background: '#fff',
-              color: '#000',
-              borderRadius: 4,
-              textDecoration: 'none',
-            }}
-          >
-            + New project
-          </Link>
-        </header>
-        <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-          {(projects ?? []).map((p) => {
-            const proj = p as { id: string; name: string; slug: string };
-            return (
-              <li
-                key={proj.id}
-                style={{
-                  padding: 12,
-                  marginBottom: 8,
-                  border: '1px solid #2a2a2a',
-                  borderRadius: 6,
-                }}
-              >
-                <Link
-                  href={`/orgs/${o.slug}/projects/${proj.slug}`}
-                  style={{ textDecoration: 'none' }}
-                >
-                  <strong>{proj.name}</strong> <span style={{ opacity: 0.55 }}>/{proj.slug}</span>
-                </Link>
-              </li>
-            );
-          })}
-          {(projects ?? []).length === 0 && <p style={{ opacity: 0.55 }}>No projects yet.</p>}
-        </ul>
-      </section>
+          <div style={{ height: 'var(--space-4)' }} />
 
-      <section style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 18 }}>Roles catalog</h2>
-        <Link href={`/orgs/${o.slug}/roles`}>Browse builtin + custom roles →</Link>
-      </section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Projects</CardTitle>
+              <Link href={`/orgs/${o.slug}/projects/new`}>
+                <Button size="sm" variant="primary">
+                  + New project
+                </Button>
+              </Link>
+            </CardHeader>
+            <CardBody>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {(projects ?? []).map((p) => {
+                  const proj = p as { id: string; name: string; slug: string };
+                  return (
+                    <li key={proj.id}>
+                      <Link
+                        href={`/orgs/${o.slug}/projects/${proj.slug}`}
+                        style={{
+                          display: 'flex',
+                          justifyContent: 'space-between',
+                          alignItems: 'baseline',
+                          padding: 'var(--space-3) 0',
+                          borderBottom: '1px solid var(--border-subtle)',
+                          textDecoration: 'none',
+                        }}
+                      >
+                        <span>
+                          <strong>{proj.name}</strong>{' '}
+                          <span style={{ color: 'var(--text-subtle)', marginLeft: 6 }}>
+                            /{proj.slug}
+                          </span>
+                        </span>
+                        <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
+                          open →
+                        </span>
+                      </Link>
+                    </li>
+                  );
+                })}
+                {(projects ?? []).length === 0 && (
+                  <p style={{ color: 'var(--text-subtle)', margin: 0 }}>No projects yet.</p>
+                )}
+              </ul>
+            </CardBody>
+          </Card>
+        </section>
 
-      <section style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 18 }}>Members</h2>
-        <Link href={`/orgs/${o.slug}/members`}>Manage members →</Link>
-      </section>
-
-      <section style={{ marginTop: 32 }}>
-        <h2 style={{ fontSize: 18 }}>Audit log</h2>
-        <Link href={`/orgs/${o.slug}/audit`}>View recent calls →</Link>
-      </section>
+        <aside style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Quick links</CardTitle>
+            </CardHeader>
+            <CardBody>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0, lineHeight: 2 }}>
+                <li>
+                  <Link href={`/orgs/${o.slug}/roles`}>→ Roles catalog</Link>
+                </li>
+                <li>
+                  <Link href={`/orgs/${o.slug}/members`}>→ Members</Link>
+                </li>
+                <li>
+                  <Link href={`/orgs/${o.slug}/audit`}>→ Audit log</Link>
+                </li>
+              </ul>
+            </CardBody>
+          </Card>
+        </aside>
+      </div>
     </main>
   );
 }
