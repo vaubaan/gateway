@@ -10,7 +10,13 @@
  * returns a JSON-RPC response. Next.js handlers wrap this.
  */
 
-import { evaluatePolicy, filterAvailableTools } from '@vauban/policy-engine';
+import {
+  evaluatePolicy,
+  filterAvailableTools,
+  injectionPlanFor,
+  mergeInjectedArgs,
+  stripInjectedArgs,
+} from '@vauban/policy-engine';
 import type {
   BotContext,
   JsonRpcRequest,
@@ -140,7 +146,16 @@ export class McpGateway {
       const providerRoles = ctx.roles.filter((r) => r.provider === provider);
       if (providerRoles.length === 0) continue;
       const filtered = filterAvailableTools(providerRoles, adapter.availableTools);
-      out.push(...filtered);
+      const adminEntry = ctx.provider_admins.find((p) => p.provider === provider);
+      const plan = injectionPlanFor(provider, {
+        bindings: ctx.bindings,
+        vercelTeamId: adminEntry?.team_id ?? null,
+      });
+      if (plan) {
+        for (const tool of filtered) out.push(stripInjectedArgs(tool, plan));
+      } else {
+        out.push(...filtered);
+      }
     }
     return out;
   }
@@ -152,20 +167,20 @@ export class McpGateway {
   ): Promise<JsonRpcResponse> {
     const toolName = typeof params.name === 'string' ? params.name : '';
     if (!toolName) return rpcError(id, -32602, 'tools/call requires params.name');
-    const args = (params.arguments as Record<string, unknown> | undefined) ?? {};
+    const rawArgs = (params.arguments as Record<string, unknown> | undefined) ?? {};
 
     // Determine provider from tool prefix.
     const provider = this.providerFor(toolName);
     if (!provider) {
       const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__).`;
-      await this.audit(ctx, toolName, args, 'denied', null, reason, null);
+      await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
       return rpcError(id, -32603, `Vauban policy denied: ${reason}`);
     }
 
     const adapter = this.cfg.upstreamByProvider[provider];
     if (!adapter) {
       const reason = `provider '${provider}' is not enabled on this gateway.`;
-      await this.audit(ctx, toolName, args, 'denied', null, reason, null);
+      await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
       return rpcError(id, -32603, `Vauban policy denied: ${reason}`);
     }
 
@@ -173,11 +188,21 @@ export class McpGateway {
     const adminEntry = ctx.provider_admins.find((p) => p.provider === provider);
     if (!adminEntry || adminEntry.status !== 'connected') {
       const reason = `provider '${provider}' is not connected for organization '${ctx.organization.slug}'.`;
-      await this.audit(ctx, toolName, args, 'denied', null, reason, null);
+      await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
       return rpcError(id, -32603, `Vauban policy denied: ${reason}`);
     }
 
-    // Evaluate policy.
+    // Server-side scope injection : if this bot's project has a single
+    // binding for the provider, the resource identifier is determined and
+    // we auto-fill it. Caller-provided values win (admin can still override).
+    const plan = injectionPlanFor(provider, {
+      bindings: ctx.bindings,
+      vercelTeamId: adminEntry.team_id ?? null,
+    });
+    const args = plan ? mergeInjectedArgs(rawArgs, plan) : rawArgs;
+
+    // Evaluate policy with the injected args so target resolution + constraints
+    // see the same values the upstream will receive.
     const decision = evaluatePolicy(ctx.roles, ctx.bindings, {
       provider,
       tool: toolName,
