@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
+import { BindingDeleteButton } from './binding-delete';
 
 export const dynamic = 'force-dynamic';
 
@@ -81,10 +82,16 @@ export default async function ProjectPage({
                   marginBottom: 8,
                   border: '1px solid #2a2a2a',
                   borderRadius: 6,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                 }}
               >
-                <strong>{bind.provider}</strong>{' '}
-                <code style={{ opacity: 0.7 }}>{bind.resource_ref}</code>
+                <span>
+                  <strong>{bind.provider}</strong>{' '}
+                  <code style={{ opacity: 0.7 }}>{bind.resource_ref}</code>
+                </span>
+                <BindingDeleteButton bindingId={bind.id} orgSlug={o.slug} />
               </li>
             );
           })}
@@ -129,10 +136,13 @@ export default async function ProjectPage({
                   justifyContent: 'space-between',
                 }}
               >
-                <div>
+                <Link
+                  href={`/orgs/${o.slug}/projects/${p.slug}/bots/${bot.id}`}
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
                   <strong>{bot.name}</strong>{' '}
                   <code style={{ opacity: 0.55 }}>vbn_live_{bot.api_key_prefix}…</code>
-                </div>
+                </Link>
                 <span style={{ opacity: 0.55 }}>
                   {bot.status === 'active' ? (
                     <span style={{ color: '#7ee87e' }}>active</span>

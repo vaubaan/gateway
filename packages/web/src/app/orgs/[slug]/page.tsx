@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
+import { ProviderDisconnectButton } from './provider-disconnect';
 
 export const dynamic = 'force-dynamic';
 
@@ -70,26 +71,31 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
                       : 'not connected'}
                   </span>
                 </span>
-                {row ? (
-                  <span style={{ color: row.status === 'connected' ? '#7ee87e' : '#ff7e7e' }}>
-                    {row.status}
-                  </span>
-                ) : p === 'github' ? (
-                  <Link
-                    href={`/orgs/${o.slug}/providers/github/connect`}
-                    style={{
-                      padding: '6px 10px',
-                      background: '#fff',
-                      color: '#000',
-                      borderRadius: 4,
-                      textDecoration: 'none',
-                    }}
-                  >
-                    Connect
-                  </Link>
-                ) : (
-                  <span style={{ opacity: 0.4 }}>phase 5</span>
-                )}
+                <span style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                  {row && (
+                    <span style={{ color: row.status === 'connected' ? '#7ee87e' : '#ff7e7e' }}>
+                      {row.status}
+                    </span>
+                  )}
+                  {row && row.status === 'connected' && (
+                    <ProviderDisconnectButton orgSlug={o.slug} provider={p} />
+                  )}
+                  {!row && p === 'github' && (
+                    <Link
+                      href={`/orgs/${o.slug}/providers/github/connect`}
+                      style={{
+                        padding: '6px 10px',
+                        background: '#fff',
+                        color: '#000',
+                        borderRadius: 4,
+                        textDecoration: 'none',
+                      }}
+                    >
+                      Connect
+                    </Link>
+                  )}
+                  {!row && p !== 'github' && <span style={{ opacity: 0.4 }}>phase 5</span>}
+                </span>
               </li>
             );
           })}
