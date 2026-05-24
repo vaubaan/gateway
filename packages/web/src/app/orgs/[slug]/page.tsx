@@ -152,6 +152,11 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
       </section>
 
       <section style={{ marginTop: 32 }}>
+        <h2 style={{ fontSize: 18 }}>Members</h2>
+        <Link href={`/orgs/${o.slug}/members`}>Manage members →</Link>
+      </section>
+
+      <section style={{ marginTop: 32 }}>
         <h2 style={{ fontSize: 18 }}>Audit log</h2>
         <Link href={`/orgs/${o.slug}/audit`}>View recent calls →</Link>
       </section>

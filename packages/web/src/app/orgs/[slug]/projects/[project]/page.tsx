@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { BindingDeleteButton } from './binding-delete';
+import { ProjectControls } from './project-controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -50,9 +51,12 @@ export default async function ProjectPage({
             /{o.slug}/{p.slug}
           </code>
         </div>
-        <Link href={`/orgs/${o.slug}`} style={{ opacity: 0.7 }}>
-          ← back
-        </Link>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+          <ProjectControls projectId={p.id} initialName={p.name} orgSlug={o.slug} />
+          <Link href={`/orgs/${o.slug}`} style={{ opacity: 0.7 }}>
+            ← back
+          </Link>
+        </div>
       </header>
 
       <section style={{ marginTop: 32 }}>
