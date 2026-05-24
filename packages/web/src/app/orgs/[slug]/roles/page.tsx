@@ -43,13 +43,28 @@ export default async function RolesPage({ params }: { params: Promise<{ slug: st
     <main>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <h1>Roles — {org.name}</h1>
-        <Link href={`/orgs/${org.slug}`} style={{ opacity: 0.7 }}>
-          ← back
-        </Link>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+          <Link
+            href={`/orgs/${org.slug}/roles/new`}
+            style={{
+              padding: '6px 10px',
+              background: '#fff',
+              color: '#000',
+              borderRadius: 4,
+              textDecoration: 'none',
+              fontSize: 13,
+            }}
+          >
+            + New custom role
+          </Link>
+          <Link href={`/orgs/${org.slug}`} style={{ opacity: 0.7 }}>
+            ← back
+          </Link>
+        </div>
       </header>
       <p style={{ opacity: 0.6 }}>
         Builtin roles are read-only and apply to every Vauban org. Custom roles are scoped to this
-        org (creation UI lands in v2).
+        org and editable.
       </p>
 
       {(['github', 'vercel', 'supabase'] as const).map((provider) => {
@@ -80,7 +95,17 @@ export default async function RolesPage({ params }: { params: Promise<{ slug: st
                         {r.permissions.rules.length === 1 ? '' : 's'}
                       </span>
                     </Link>
-                    <span style={{ opacity: 0.5 }}>{r.is_builtin ? 'builtin' : 'custom'}</span>
+                    <span style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      <span style={{ opacity: 0.5 }}>{r.is_builtin ? 'builtin' : 'custom'}</span>
+                      {!r.is_builtin && (
+                        <Link
+                          href={`/orgs/${org.slug}/roles/${r.id}/edit`}
+                          style={{ opacity: 0.7, fontSize: 13 }}
+                        >
+                          Edit
+                        </Link>
+                      )}
+                    </span>
                   </div>
                   {r.description && (
                     <p style={{ margin: '6px 0 0', opacity: 0.75, fontSize: 14 }}>
