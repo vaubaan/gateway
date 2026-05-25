@@ -7,7 +7,7 @@
  */
 
 import { Octokit } from '@octokit/rest';
-import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vauban/shared';
+import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import type { ProviderAdapter, ValidateResult, MintedToken } from './adapter.ts';
 import { mintInstallationToken } from './app-install.ts';
 import { availableTools } from './tools.ts';
@@ -16,7 +16,7 @@ import { executeCall, type OctokitFactory } from './execute.ts';
 export interface GitHubAdapterConfig {
   /** GitHub App ID. Required for the App-install path. */
   appId?: string;
-  /** App slug (e.g. "vauban-gateway") used to build the install URL. */
+  /** App slug (e.g. "vaubaan-gateway") used to build the install URL. */
   appSlug?: string;
   /** PEM private key. Required for the App-install path. */
   privateKeyPem?: string;

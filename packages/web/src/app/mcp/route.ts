@@ -13,8 +13,8 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { AuthError } from '@vauban/mcp-gateway';
-import type { JsonRpcRequest } from '@vauban/shared';
+import { AuthError } from '@vaubaan/mcp-gateway';
+import type { JsonRpcRequest } from '@vaubaan/shared';
 import { buildGateway } from '@/lib/gateway/build';
 
 export const runtime = 'nodejs';

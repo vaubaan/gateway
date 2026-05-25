@@ -7,7 +7,7 @@ tracks:
   - packages/web/next.config.ts
 ---
 
-# Web app — `@vauban/web`
+# Web app — `@vaubaan/web`
 
 Le control plane UI + le `/mcp` endpoint. Next.js 15 App Router, Supabase
 magic-link auth, server-side rendering, dynamic routes.
@@ -90,7 +90,7 @@ a warning `won't be shown again`. The modal also shows the snippet to drop in
 {
   "mcpServers": {
     "vauban": {
-      "url": "https://vauban.run/mcp",
+      "url": "https://vaubaan.com/mcp",
       "headers": { "Authorization": "Bearer vbn_live_..." },
     },
   },

@@ -17,7 +17,7 @@ import {
   type ProviderAdmin,
   type ProviderBinding,
   type Role,
-} from '@vauban/shared';
+} from '@vaubaan/shared';
 import { MemoryAuditWriter } from '../../src/audit.ts';
 import { MemoryCacheClient } from '../../src/cache.ts';
 import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/gateway.ts';

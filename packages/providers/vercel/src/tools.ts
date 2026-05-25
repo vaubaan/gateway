@@ -10,7 +10,7 @@
  * tool with the prefix added.
  */
 
-import type { McpToolDeclaration } from '@vauban/shared';
+import type { McpToolDeclaration } from '@vaubaan/shared';
 import upstream from './upstream-tools.json' with { type: 'json' };
 
 export const availableTools: readonly McpToolDeclaration[] =

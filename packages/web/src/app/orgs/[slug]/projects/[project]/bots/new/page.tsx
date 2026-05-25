@@ -135,7 +135,7 @@ export default function NewBotPage({
             {`{
   "mcpServers": {
     "vauban": {
-      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://vauban.run'}/mcp",
+      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com'}/mcp",
       "headers": {
         "Authorization": "Bearer ${apiKey}"
       }

@@ -1,5 +1,5 @@
 {
-  "name": "@vauban/providers-github",
+  "name": "@vaubaan/providers-github",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
   "dependencies": {
     "@octokit/auth-app": "^7.1.0",
     "@octokit/rest": "^21.0.2",
-    "@vauban/shared": "*",
+    "@vaubaan/shared": "*",
     "jose": "^5.9.6",
     "zod": "^3.23.8"
   }

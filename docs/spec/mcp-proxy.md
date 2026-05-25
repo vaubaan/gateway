@@ -1,14 +1,14 @@
 # MCP Proxy — spec
 
 > **Statut :** spec greenfield. Ce document remplace toute version antérieure
-> de la gestion de cloud resources / credentials / MCP côté Vauban Core.
+> de la gestion de cloud resources / credentials / MCP côté Vaubaan Core.
 > Le code et la doc précédents (`cloud-resource-manager.md`, packages
 > `core`/`crm-catalog`/`web`, migrations Supabase, ADRs ZK + Infisical) ont
 > été retirés intégralement dans ce repo le 2026-05-22. Pas de dual-write,
 > pas de migration de données, on repart d'une feuille blanche.
 >
 > **Filiation v3.** Cette spec remplace une codebase précédente
-> (**Vauban Cloud Resource Manager v3**) archivée dans l'historique git de
+> (**Vaubaan Cloud Resource Manager v3**) archivée dans l'historique git de
 > ce même repo (tag `v3-final` à poser). Refonte from-scratch — pas de
 > code partagé, pas de migration, pas de compat. Un agent d'implémentation
 > peut **consulter ponctuellement** v3 via git pour référence (anciens
@@ -26,7 +26,7 @@ Le MCP Proxy raisonne sur 10 mots, distincts et non-interchangeables :
 - **Organization** — tenant racine côté Vauban. Isolation RLS stricte.
 - **Project** — sous-unité d'une Organization. Porte ses ProviderBindings
   et ses Bots.
-- **ProviderAdmin** — bundle de credentials que Vauban Core détient au niveau
+- **ProviderAdmin** — bundle de credentials que Vaubaan Core détient au niveau
   organisation pour un Provider, **issu d'un flow OAuth/App install** (jamais
   paste-token). Stocké chiffré at-rest, déchiffré en mémoire à chaque
   call upstream.
@@ -38,10 +38,10 @@ Le MCP Proxy raisonne sur 10 mots, distincts et non-interchangeables :
   touche qu'à 1 Provider). Naming `<provider>:<role-name>` (`github:developer`,
   `supabase:writer-staging`). Builtin global ou custom org-level.
 - **Bot** — identité agent émise par Vauban, **project-scoped**, porteur de
-  N Roles. Identifié par une `api_key` Vauban (`vbn_live_xxxx…`).
+  N Roles. Identifié par une `api_key` Vaubaan (`vbn_live_xxxx…`).
 - **Policy** — une `rule` JSON dans `Role.permissions` : `{effect, tool/tool_matches,
   target?, constraints?}`. Le DSL est strictement déclaratif.
-- **MCPGateway** — endpoint `/mcp` de Vauban Core. JSON-RPC. Auth par
+- **MCPGateway** — endpoint `/mcp` de Vaubaan Core. JSON-RPC. Auth par
   `Authorization: Bearer <api_key>`.
 - **AuditLog** — une row par call MCP, allow ou deny : (bot, tool, args_hash,
   role_matched, decision, upstream_latency).
@@ -52,10 +52,10 @@ il ne reçoit que la réponse à un call autorisé.
 
 ## 1. Vision
 
-Le **MCP Proxy** est le sous-système de Vauban Core qui :
+Le **MCP Proxy** est le sous-système de Vaubaan Core qui :
 
 1. **Connecte** les CloudProviders d'une Organization via OAuth/App install
-   (le seul moment où Vauban acquiert des creds — Vauban Core stocke un
+   (le seul moment où Vauban acquiert des creds — Vaubaan Core stocke un
    token long-lived ou un installation_id, mais l'écran de consent est
    géré par le provider).
 2. **Catalogue** les Roles disponibles par Provider (builtin v1, custom v2).
@@ -66,7 +66,7 @@ Le **MCP Proxy** est le sous-système de Vauban Core qui :
    → forward(upstream_mcp_server)`.
 5. **Audit** chaque call (allow ou deny) avec qui/quoi/décision/latence.
 
-Le MCP Proxy vit dans le cloud public (Vauban Core, Next.js + Supabase +
+Le MCP Proxy vit dans le cloud public (Vaubaan Core, Next.js + Supabase +
 Vercel) et est multi-tenant.
 
 **Positionnement** : *"policy-enforcing MCP gateway pour Coding Agents"*.
@@ -131,7 +131,7 @@ AuditLog (transversal)     one row per MCP call : (bot, tool, args_hash,
 | **ProviderAdmin**   | Bundle de credentials que Vauban détient au niveau Org pour un Provider, issu d'un flow OAuth/App install. 1 par (org, provider).          |
 | **ProviderBinding** | Référence concrète d'un Project vers une ressource côté Provider. 1 par (project, provider).                                               |
 | **Role**            | Bundle nommé de permissions, **provider-scoped**, naming `<provider>:<role-name>`. Builtin v1 = `github:reader`, `github:developer`.       |
-| **Bot**             | Identité agent. Project-scoped. Porteur de N Roles. Identifié par une `api_key` Vauban (`vbn_live_xxxx…`).                                 |
+| **Bot**             | Identité agent. Project-scoped. Porteur de N Roles. Identifié par une `api_key` Vaubaan (`vbn_live_xxxx…`).                                 |
 | **Policy**          | Règle dans `Role.permissions.rules[]` : `{effect, tool/tool_matches, target?, constraints?, priority?}`.                                   |
 | **MCPGateway**      | Endpoint Vauban `/mcp` en JSON-RPC. Auth via `Authorization: Bearer <api_key>`. C'est le hot-path produit.                                  |
 | **AuditLog**        | Une row par MCP call : qui/quoi/décision/latence. Append-only via app, rétention 90j.                                                       |
@@ -144,7 +144,7 @@ AuditLog (transversal)     one row per MCP call : (bot, tool, args_hash,
   (`vbn_live_xxxx…`), pas avec un token provider.
 - Le gateway mint **JIT** un token éphémère côté Provider :
   - GitHub : installation token 1h via JWT signé avec la privkey de la
-    GitHub App "Vauban Gateway" → `POST /app/installations/{id}/access_tokens`
+    GitHub App "Vaubaan Gateway" → `POST /app/installations/{id}/access_tokens`
   - Vercel : `access_token` long-lived issu du flow OAuth Integration
   - Supabase : `access_token` court (1h) issu d'un refresh dance OAuth Mgmt
 - Le gateway utilise ce token pour l'appel upstream et le **libère immédiatement**
@@ -335,9 +335,9 @@ le `(tool, args)` → JSON-RPC error avec `denial_reason` actionable.
 
 ### 4.2 Trust model — IdP-style
 
-Vauban Core est **un IdP de confiance** dans la chaîne :
+Vaubaan Core est **un IdP de confiance** dans la chaîne :
 
-- L'org admin connecte un ProviderAdmin = il donne à Vauban Core le pouvoir
+- L'org admin connecte un ProviderAdmin = il donne à Vaubaan Core le pouvoir
   d'agir à sa place chez le Provider.
 - Modèle équivalent à Okta / Auth0 (SSO orchestre l'identité), Cloudflare
   Access (proxy zéro-trust), Stripe Connect (Stripe détient des tokens
@@ -346,15 +346,15 @@ Vauban Core est **un IdP de confiance** dans la chaîne :
 Implications :
 
 - L'opérateur Vauban a accès en clair aux tokens provider en mémoire
-  d'exécution. Vauban Core doit être opéré avec les pratiques d'un IdP
+  d'exécution. Vaubaan Core doit être opéré avec les pratiques d'un IdP
   critique : audits (SOC2-style dès v1.5), access logs immutables,
   rotation des secrets app, isolation des envs.
-- Si Vauban Core est compromis, **tous les ProviderAdmins de toutes les
+- Si Vaubaan Core est compromis, **tous les ProviderAdmins de toutes les
   Orgs sont compromis**. Mitigations :
   - Encryption at-rest via KMS séparée (Supabase Vault — la KEK n'est pas
     accessible à l'app)
   - Audit log immutable (DB-side append-only)
-  - Rotation périodique des secrets de l'app Vauban (App private keys,
+  - Rotation périodique des secrets de l'app Vaubaan (App private keys,
     OAuth client secrets, encryption keys)
 
 ### 4.3 Hot-path multi-tenant
@@ -418,7 +418,7 @@ exposés et de leur shape.
 
 ### 5.1 Contrat `ProviderAdapter`
 
-Le catalogue vit dans `@vauban/mcp-proxy-providers` :
+Le catalogue vit dans `@vaubaan/mcp-proxy-providers` :
 
 ```ts
 type Provider = 'github' | 'vercel' | 'supabase';
@@ -691,7 +691,7 @@ opérateurs sauf `not_in` / `not_starts_with` (où elles matchent à `true`).
 
 ```
 POST /mcp HTTP/1.1
-Host: vauban.run
+Host: vaubaan.com
 Authorization: Bearer vbn_live_abc123def456...
 Content-Type: application/json
 
@@ -858,13 +858,13 @@ GET    /catalog/tools?provider=...          -- availableTools par provider
 ### 9.1 Onboarder une nouvelle Organization
 
 ```
-1. User → signup Vauban (magic-link Supabase Auth)
+1. User → signup Vaubaan (magic-link Supabase Auth)
 2. User → POST /orgs { name: 'Acme', slug: 'acme' } → 201 ; user devient admin
 3. UI propose "Connect a Cloud Provider"
 4. User clic "Connect GitHub" :
    - UI → POST /orgs/acme/providers/github/connect → { authorization_url, state }
-   - browser redirect vers https://github.com/apps/vauban-gateway/installations/new
-5. GitHub écran consent : "Vauban Gateway veut accéder à votre org" → user
+   - browser redirect vers https://github.com/apps/vaubaan-gateway/installations/new
+5. GitHub écran consent : "Vaubaan Gateway veut accéder à votre org" → user
    choisit org + repos → "Authorize"
 6. GitHub redirect callback : GET /providers/github/callback?installation_id=...&setup_action=install
 7. Vauban : verify state, persist provider_admins row (status='connected',
@@ -900,7 +900,7 @@ GET    /catalog/tools?provider=...          -- availableTools par provider
 4. UI : modal "Copy this api_key now, it won't be shown again" + bouton Copy
 5. User copie l'api_key dans son ~/.config/claude/mcp.json :
    "vauban": {
-     "url": "https://vauban.run/mcp",
+     "url": "https://vaubaan.com/mcp",
      "headers": { "Authorization": "Bearer vbn_live_AbCd...XyZ" }
    }
 ```
@@ -922,7 +922,7 @@ GET    /catalog/tools?provider=...          -- availableTools par provider
    - mint installation token JWT JIT
    - call adapter.executeCall(admin, binding, 'github__create_pull_request', args)
      → Octokit POST /repos/acme/website/pulls
-     → PR créée côté GitHub, audit GitHub-side : actor = Vauban Gateway[bot]
+     → PR créée côté GitHub, audit GitHub-side : actor = Vaubaan Gateway[bot]
    - mesure upstream_latency_ms = 247
    - audit_log row { decision: 'allowed', role_matched: 'github:developer',
                      upstream_latency_ms: 247 }
@@ -1006,7 +1006,7 @@ Pas de granularité fine par-resource. La granularité fine vit dans la
   l'auth).
 - **Encryption at-rest.** ProviderAdmin tokens chiffrés via Supabase Vault
   (KMS). KEK jamais accessible à l'app Vauban.
-- **TLS only.** Vauban Core (Vercel) sert tout en TLS 1.2+. HSTS forcé.
+- **TLS only.** Vaubaan Core (Vercel) sert tout en TLS 1.2+. HSTS forcé.
   Le MCP gateway exige HTTPS dans le client.
 - **Rate limits** (Upstash Redis sliding window) :
   - `/mcp` : 60 req/min par api_key, 600 req/min par org. Burst 10×.
@@ -1021,7 +1021,7 @@ Pas de granularité fine par-resource. La granularité fine vit dans la
   l'app. Purge nightly par job admin programmé (rétention 90 jours en v1).
   Stockage post-90j → tier cold (S3 Parquet) en v1.5+.
 - **Pas de redirect open.** Le `returnUrl` du flow OAuth est validé contre
-  une allowlist hard-codée (l'origin Vauban Core uniquement).
+  une allowlist hard-codée (l'origin Vaubaan Core uniquement).
 - **Subprocess sandboxing** non-applicable en v1 (pas de sidecar MCP en
   Option A). Si on switch en Option B en v1.5, le sidecar Docker tourne
   avec `--cap-drop=ALL --read-only --network=internal` + egress allowlist.
@@ -1185,7 +1185,7 @@ supabase    | org vauban-e2e                  | (Phase 5)
 4. **Allow flow** — Claude Code (instance Playwright headless avec extension
    MCP) configuré avec l'api_key → demande "open PR feature/test-1 with
    a README" → assert call MCP forwardé + PR créée côté GitHub avec
-   `actor = Vauban Gateway[bot]` + audit_log row decision=allowed.
+   `actor = Vaubaan Gateway[bot]` + audit_log row decision=allowed.
 5. **Deny flow** — Claude demande "push directly to main" → assert JSON-RPC
    error avec denial_reason actionable + audit_log row decision=denied.
 6. **Revocation** — rotate api_key → assert ancienne 401, nouvelle 200.
@@ -1222,16 +1222,16 @@ Greenfield : aucune migration de données, aucun dual-write. La séquence :
    `.mcp.json`, `.env*`. Tag git `v3-final` à poser avant Phase 2.
 3. **Phase 1 spec ADRs** : drafter les 7 ADRs fondateurs (cf §16.3).
 4. **Phase 2 bootstrap** :
-   - Rename `package.json` → `@vauban/mcp-proxy`. Description / scripts
+   - Rename `package.json` → `@vaubaan/mcp-proxy`. Description / scripts
      refondus.
    - Fix `playwright.config.ts` (testDir = `packages/web/tests/e2e`).
-   - Fix `vercel.json` (buildCommand workspace `@vauban/web`).
+   - Fix `vercel.json` (buildCommand workspace `@vaubaan/web`).
    - Nouveau workflow `.github/workflows/ci.yml` épuré. Supprimer
      `e2e-nightly.yml` legacy, `supabase-migrations.yml` à redrafter.
    - Nouvelle migration `0001_init.sql` (les 9 tables §3.1).
    - Scaffold `packages/{policy-engine, mcp-gateway, providers/github, web, shared}`.
 5. **Phase 3 vertical slice GitHub** :
-   - Enregistrer GitHub App "Vauban Gateway" (manuel via dashboard GitHub,
+   - Enregistrer GitHub App "Vaubaan Gateway" (manuel via dashboard GitHub,
      opérateur Vauban).
    - Flow OAuth/App install + UI minimaliste (login, create org, connect
      GitHub, create project, bind repo, create bot).
@@ -1249,7 +1249,7 @@ mort dans ce repo.
 
 ### 16.1 Décisions figées (référence rapide)
 
-- **Topologie** : Vauban Core multi-tenant SaaS, pas le Runner client.
+- **Topologie** : Vaubaan Core multi-tenant SaaS, pas le Runner client.
 - **Surface MVP** : MCP only. CLI/SDK = v2 (MITM TLS proxy).
 - **Modèle RBAC** : Org → Roles → Bots → Project. Naming `<provider>:<role-name>`.
 - **Connect providers** : OAuth/App install. Pas de paste-token jamais.
@@ -1259,9 +1259,9 @@ mort dans ce repo.
   not_in, match, regex, starts_with, not_starts_with).
 - **Default deny** : un call non couvert par au moins une allow rule est denied.
 - **Deny override allow** : entre deux rules matchant, deny gagne.
-- **Trust model** : IdP-style. Vauban Core détient les tokens provider en
+- **Trust model** : IdP-style. Vaubaan Core détient les tokens provider en
   clair en mémoire d'exécution, chiffrés at-rest via Supabase Vault.
-- **GitHub App** : globale Vauban (1 App registered, installée par chaque org).
+- **GitHub App** : globale Vaubaan (1 App registered, installée par chaque org).
 - **MVP roles builtin** : `github:reader`, `github:developer`.
 - **Dispatch upstream** : Option A (synthèse via Octokit) pour MVP, Option B
   (sidecar Docker) reconsidérée en v1.5 si besoin.

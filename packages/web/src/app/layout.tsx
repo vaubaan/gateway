@@ -5,7 +5,7 @@ import { TopBar } from '@/components/topbar';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Vauban — MCP Proxy',
+  title: 'Vaubaan — MCP Proxy',
   description: 'Policy-enforcing MCP gateway for coding agents.',
 };
 

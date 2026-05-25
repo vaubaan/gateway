@@ -18,7 +18,7 @@ export default async function ConnectGitHubPage({ params }: { params: Promise<{ 
   if (!org) redirect('/dashboard');
   const o = org;
 
-  const appSlug = process.env.GITHUB_APP_SLUG ?? 'vauban-gateway';
+  const appSlug = process.env.GITHUB_APP_SLUG ?? 'vaubaan-gateway';
   const state = generateState(o.id);
 
   // Stash the state cookie so the callback can verify (5-min single-use).

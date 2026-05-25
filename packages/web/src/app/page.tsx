@@ -15,7 +15,7 @@ export default async function HomePage() {
   return (
     <main>
       <section style={{ paddingTop: 'var(--space-12)', maxWidth: 720 }}>
-        <h1 style={{ fontSize: 'var(--text-3xl)', letterSpacing: '-0.03em' }}>Vauban</h1>
+        <h1 style={{ fontSize: 'var(--text-3xl)', letterSpacing: '-0.03em' }}>Vaubaan</h1>
         <p
           style={{
             color: 'var(--text-muted)',

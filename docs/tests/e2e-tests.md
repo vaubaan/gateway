@@ -25,13 +25,13 @@ le **plan de test** validé en spec ; ils seront codés en Phase 5
 ## Setup pré-requis (manuel, opérateur Vauban)
 
 - Org GitHub dédié `sbw-vauban-test` avec un repo `playground` créé à la main.
-- GitHub App "Vauban Gateway (test)" installée sur l'org.
+- GitHub App "Vaubaan Gateway (test)" installée sur l'org.
 - `.env.test` (gitignored) :
   ```bash
   GH_TEST_APP_ID=...
   GH_TEST_APP_PRIVATE_KEY=...
   GH_TEST_INSTALLATION_ID=...
-  E2E_BASE_URL=https://staging.vauban.run     # ou http://localhost:3000
+  E2E_BASE_URL=https://staging.vaubaan.com     # ou http://localhost:3000
   E2E_USER_EMAIL=...                           # un compte test signup
   E2E_SUPABASE_URL=...
   E2E_SUPABASE_SERVICE_ROLE_KEY=...
@@ -71,7 +71,7 @@ le **plan de test** validé en spec ; ils seront codés en Phase 5
 ```
 1. Use api_key in real MCP client (or curl simulation)
 2. Send tools/call github__create_pull_request {head:'feature/test-X', base:'main'}
-3. Assert PR créée côté GitHub avec actor='Vauban Gateway[bot]'
+3. Assert PR créée côté GitHub avec actor='Vaubaan Gateway[bot]'
 4. Assert audit_log row decision='allowed', role_matched='github:developer'
 ```
 

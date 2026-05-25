@@ -29,7 +29,7 @@ Coding Agent ──── MCP call ────▶ ┌────────�
   côté provider JIT à chaque call.
 - **Une policy déclarative** filtre par tool et arguments — `github:developer`
   peut push sur `feature/*` mais pas merger sur `main`. Default deny.
-- **Audit immutable** côté Vauban — 1 row par call, allow ou deny.
+- **Audit immutable** côté Vaubaan — 1 row par call, allow ou deny.
 
 Cf. `docs/spec/mcp-proxy.md` pour la spec complète.
 
@@ -39,7 +39,7 @@ Cf. `docs/spec/mcp-proxy.md` pour la spec complète.
 
 - Node ≥ 20, npm ≥ 10
 - Supabase project (anon + service_role keys)
-- GitHub App "Vauban Gateway" registered (one-time operator setup)
+- GitHub App "Vaubaan Gateway" registered (one-time operator setup)
 - (optional) Upstash Redis for hot-path cache
 
 ### Setup
@@ -143,4 +143,4 @@ MVP — vertical slice GitHub. 69 unit + integration tests green. Phase 5
 
 ## License
 
-UNLICENSED. Vauban-internal.
+UNLICENSED. Vaubaan-internal.

@@ -22,7 +22,7 @@ import {
   type ProviderAdmin,
   type Role,
   type ProviderBinding,
-} from '@vauban/shared';
+} from '@vaubaan/shared';
 import { MemoryCacheClient } from '../../src/cache.ts';
 import { MemoryAuditWriter } from '../../src/audit.ts';
 import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/gateway.ts';
@@ -285,7 +285,7 @@ describe('integration — lifecycle', () => {
     });
     expect('error' in call).toBe(true);
     if ('error' in call) {
-      expect(call.error.message).toMatch(/Vauban policy denied/);
+      expect(call.error.message).toMatch(/Vaubaan policy denied/);
       expect(call.error.message).toMatch(/feature/);
       expect(call.error.message).toMatch(/Suggestion/);
     }
@@ -312,7 +312,7 @@ describe('integration — lifecycle', () => {
     // Invalidate the cache so we re-load (in production, the rotate endpoint
     // explicitly invalidates cache).
     await harness.cache.del(
-      `vauban:ctx:${harness.apiKey.slice('vbn_test_'.length, 'vbn_test_'.length + 8)}`,
+      `vaubaan:ctx:${harness.apiKey.slice('vbn_test_'.length, 'vbn_test_'.length + 8)}`,
     );
     // Old key — gone.
     await expect(harness.gateway.authenticate(`Bearer ${harness.apiKey}`)).rejects.toThrow();
@@ -328,7 +328,7 @@ describe('integration — lifecycle', () => {
     const ctx = await harness.gateway.authenticate(`Bearer ${harness.apiKey}`);
     harness.db.disconnectProvider('bot-1');
     // Force cache miss to pick up the change.
-    await harness.cache.del(`vauban:ctx:${ctx.bot.api_key_prefix}`);
+    await harness.cache.del(`vaubaan:ctx:${ctx.bot.api_key_prefix}`);
     const freshCtx = await harness.gateway.authenticate(`Bearer ${harness.apiKey}`);
     const call = await harness.gateway.handle(freshCtx, {
       jsonrpc: '2.0',

@@ -6,7 +6,7 @@
  */
 
 import { z } from 'zod';
-import type { Permissions, Rule, Constraint } from '@vauban/shared';
+import type { Permissions, Rule, Constraint } from '@vaubaan/shared';
 
 const stringOrNumber = z.union([z.string(), z.number()]);
 const stringOrStringArray = z.union([z.string(), z.array(z.string())]);

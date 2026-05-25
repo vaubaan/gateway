@@ -51,7 +51,7 @@ v1.5+ pourra envisager un MITM TLS proxy avec custom CA pour couvrir CLI
   interception. Le gateway est un endpoint HTTP, pas un binaire CLI à
   distribuer.
 - **Pas de friction d'install client.** L'agent configure son `mcp.json`
-  avec `https://vauban.run/mcp` + Bearer token. Pas de CA root à installer,
+  avec `https://vaubaan.com/mcp` + Bearer token. Pas de CA root à installer,
   pas de shim CLI à mettre dans le PATH.
 - **Compatible le-jour-1 avec Claude Code, Cursor, Continue, n'importe
   quel client MCP.**

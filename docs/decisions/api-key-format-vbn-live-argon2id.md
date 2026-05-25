@@ -18,7 +18,7 @@ Chaque Bot porte une `api_key` que l'agent met dans son `mcp.json` :
 {
   "mcpServers": {
     "vauban": {
-      "url": "https://vauban.run/mcp",
+      "url": "https://vaubaan.com/mcp",
       "headers": { "Authorization": "Bearer vbn_live_AbCd...XyZ" },
     },
   },

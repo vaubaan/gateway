@@ -1,5 +1,5 @@
 {
-  "name": "@vauban/mcp-gateway",
+  "name": "@vaubaan/mcp-gateway",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -12,8 +12,8 @@
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "@upstash/redis": "^1.34.3",
-    "@vauban/policy-engine": "*",
-    "@vauban/providers-github": "*",
-    "@vauban/shared": "*"
+    "@vaubaan/policy-engine": "*",
+    "@vaubaan/providers-github": "*",
+    "@vaubaan/shared": "*"
   }
 }

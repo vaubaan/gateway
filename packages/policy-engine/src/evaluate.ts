@@ -14,7 +14,7 @@
  */
 
 import { minimatch } from 'minimatch';
-import type { Provider, ProviderBinding, Role, Rule } from '@vauban/shared';
+import type { Provider, ProviderBinding, Role, Rule } from '@vaubaan/shared';
 import { evaluateConstraint, readPath } from './operators.ts';
 import { callTargetMatches, resolveTarget } from './target.ts';
 

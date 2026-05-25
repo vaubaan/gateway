@@ -4,15 +4,15 @@ const nextConfig: NextConfig = {
   // packages/web imports TS source directly from sibling workspace packages.
   // Tell Next.js to transpile those packages on the server side.
   transpilePackages: [
-    '@vauban/shared',
-    '@vauban/policy-engine',
-    '@vauban/providers-github',
-    '@vauban/providers-vercel',
-    '@vauban/providers-supabase',
-    '@vauban/mcp-gateway',
+    '@vaubaan/shared',
+    '@vaubaan/policy-engine',
+    '@vaubaan/providers-github',
+    '@vaubaan/providers-vercel',
+    '@vaubaan/providers-supabase',
+    '@vaubaan/mcp-gateway',
   ],
   experimental: {
-    serverActions: { allowedOrigins: ['localhost:3000', 'vauban.run'] },
+    serverActions: { allowedOrigins: ['localhost:3000', 'vaubaan.com'] },
   },
 };
 

@@ -1,7 +1,7 @@
 /**
  * E2E golden path against the deployed prod URL.
  *
- *   1. Login via password (seeded test@vauban.run / VaubanTest!2026).
+ *   1. Login via password (seeded test@vaubaan.com / VaubanTest!2026).
  *   2. Land on /dashboard, see at least one organization (Acme test customer).
  *   3. Open the org page, see 3 providers connected + 1 project.
  *   4. Open the Playground project, see 3 bindings + claude-dev bot.
@@ -17,7 +17,7 @@
 import { expect, test } from '@playwright/test';
 
 const BASE = process.env.E2E_BASE_URL ?? 'https://cloud-resource-manager-zeta.vercel.app';
-const EMAIL = process.env.E2E_USER_EMAIL ?? 'test@vauban.run';
+const EMAIL = process.env.E2E_USER_EMAIL ?? 'test@vaubaan.com';
 const PASSWORD = process.env.E2E_USER_PASSWORD ?? 'VaubanTest!2026';
 
 test.describe('Vauban golden path', () => {

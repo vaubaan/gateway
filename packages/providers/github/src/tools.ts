@@ -8,7 +8,7 @@
  * 17 tools — the strict subset relevant for coding agents.
  */
 
-import type { McpToolDeclaration } from '@vauban/shared';
+import type { McpToolDeclaration } from '@vaubaan/shared';
 
 const repoArgs = {
   owner: { type: 'string', description: 'Repository owner (user or org).' },

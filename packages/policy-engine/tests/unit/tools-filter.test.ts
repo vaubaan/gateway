@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { McpToolDeclaration, Role } from '@vauban/shared';
+import type { McpToolDeclaration, Role } from '@vaubaan/shared';
 import { filterAvailableTools } from '../../src/tools-filter.ts';
 
 const tools: McpToolDeclaration[] = [

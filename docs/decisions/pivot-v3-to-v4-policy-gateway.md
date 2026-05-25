@@ -10,12 +10,12 @@ tracks:
 
 ## Contexte
 
-Vauban Cloud Resource Manager **v3** distribuait des credentials cloud
+Vaubaan Cloud Resource Manager **v3** distribuait des credentials cloud
 (GitHub PATs, Vercel tokens, Supabase service-role keys) chiffrés
 end-to-end vers le Runner client, qui les injectait dans le ~/.bashrc des
 agents. L'agent recevait des secrets _en clair_ à exécution et tapait les
 APIs des providers directement. Le ZK (zero-knowledge) garantissait que
-Vauban Core ne voyait jamais les secrets en clair.
+Vaubaan Core ne voyait jamais les secrets en clair.
 
 Trois constats ont fini par invalider cette ligne :
 
@@ -24,7 +24,7 @@ Trois constats ont fini par invalider cette ligne :
    sur main, supprimer un repo, lire toutes les env vars Vercel — toute
    action que le scope du PAT permettait.
 2. **Pas d'audit fin.** L'audit Vauban ne voyait que les distributions de
-   creds. L'audit _côté provider_ voyait des "Vauban Gateway" anonymes.
+   creds. L'audit _côté provider_ voyait des "Vaubaan Gateway" anonymes.
    Impossible de répondre "qui a fait quoi" au niveau Vauban.
 3. **Posture sécurité fragile.** Compromis du Runner = compromis de tous
    les creds de l'org. Compromis d'un agent = idem. Le ZK protégeait Core,
@@ -37,7 +37,7 @@ encombrée pour les coding agents spécifiquement.
 ## Décision
 
 On rip & replace. **v4 = MCP Proxy** : un gateway JSON-RPC `/mcp` côté
-Vauban Core qui intercepte chaque tool call d'un agent, évalue une policy
+Vaubaan Core qui intercepte chaque tool call d'un agent, évalue une policy
 déclarative (Roles × Bots × Bindings), mint un token éphémère provider
 JIT et forwarde l'appel upstream. **L'agent ne voit jamais de cred cloud.**
 
@@ -62,9 +62,9 @@ sur le commit de wipe `d6538b7`). Possibilité de consulter v3 via
 
 **Négatives / coûts :**
 
-- Trust model **non-ZK** : Vauban Core opère en clair les tokens upstream
+- Trust model **non-ZK** : Vaubaan Core opère en clair les tokens upstream
   en mémoire à chaque call (cf. [[trust-model-clear-at-rest-idp-style]]).
-  Le compromis Vauban Core compromet tous les ProviderAdmins de toutes les
+  Le compromis Vaubaan Core compromet tous les ProviderAdmins de toutes les
   Orgs. Mitigations : Supabase Vault, audit immutable, rotation périodique
   des secrets app.
 - **MCP uniquement** en MVP. Les agents qui appellent une API HTTPS

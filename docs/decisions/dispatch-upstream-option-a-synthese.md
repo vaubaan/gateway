@@ -71,7 +71,7 @@ binding, toolName, args)` qui dispatch via un switch sur `toolName`
   MCP officielle GitHub _à condition_ qu'on expose un sous-ensemble
   conforme. On documente les tools exposés dans `docs/handbook/github-provider.md`.
 - **Surface de bug propre.** Si on mappe mal un champ d'argument,
-  l'erreur sort de chez Vauban (pas du provider). Mitigation : tests
+  l'erreur sort de chez Vaubaan (pas du provider). Mitigation : tests
   unitaires + tests E2E réels qui valident le round-trip.
 
 ## Conditions de bascule Option B

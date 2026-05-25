@@ -9,8 +9,8 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { PermissionsSchema } from '@vauban/policy-engine';
-import { buildCacheClient } from '@vauban/mcp-gateway';
+import { PermissionsSchema } from '@vaubaan/policy-engine';
+import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgAdmin } from '@/lib/auth/require-admin';
 
@@ -35,7 +35,7 @@ async function invalidateOrg(orgId: string): Promise<void> {
     .eq('projects.organization_id', orgId);
   const cache = buildCacheClient();
   for (const b of (bots ?? []) as Array<{ api_key_prefix: string }>) {
-    await cache.del(`vauban:ctx:${b.api_key_prefix}`);
+    await cache.del(`vaubaan:ctx:${b.api_key_prefix}`);
   }
 }
 

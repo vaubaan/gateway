@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding, Role } from '@vauban/shared';
+import type { ProviderBinding, Role } from '@vaubaan/shared';
 import { evaluatePolicy } from '../../src/evaluate.ts';
 
 function role(

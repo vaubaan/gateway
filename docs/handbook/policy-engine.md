@@ -7,7 +7,7 @@ tracks:
   - packages/policy-engine/tests/unit/
 ---
 
-# Policy engine — `@vauban/policy-engine`
+# Policy engine — `@vaubaan/policy-engine`
 
 Le cœur d'évaluation du MCP Proxy. Prend une `(roles, bindings, call)` et
 retourne une décision `allowed | denied` avec une raison actionable.

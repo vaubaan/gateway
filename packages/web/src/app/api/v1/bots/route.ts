@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { generateApiKey, hashApiKey } from '@vauban/shared';
+import { generateApiKey, hashApiKey } from '@vaubaan/shared';
 import { getSupabaseServer, getSupabaseServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';

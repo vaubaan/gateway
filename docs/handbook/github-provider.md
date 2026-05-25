@@ -7,7 +7,7 @@ tracks:
   - supabase/migrations/0001_init.sql
 ---
 
-# GitHub provider — `@vauban/providers-github`
+# GitHub provider — `@vaubaan/providers-github`
 
 L'unique provider intégré au MVP. OAuth/App install, JIT installation token,
 17 MCP tools synthétisés via Octokit.
@@ -48,7 +48,7 @@ Vercel et Supabase suivront le même contrat en Phase 5.
 ## GitHub App install flow
 
 1. Org admin → `Connect GitHub` button.
-2. UI redirige vers `https://github.com/apps/vauban-gateway/installations/new?state=<nonce>`.
+2. UI redirige vers `https://github.com/apps/vaubaan-gateway/installations/new?state=<nonce>`.
 3. GitHub écran consent. Admin choisit org + repos. Click Authorize.
 4. GitHub redirige vers `/orgs/<slug>/providers/github/callback?installation_id=<id>&state=<nonce>`.
 5. Callback handler :

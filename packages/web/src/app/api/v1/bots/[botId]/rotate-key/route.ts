@@ -13,8 +13,8 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { generateApiKey, hashApiKey } from '@vauban/shared';
-import { buildCacheClient } from '@vauban/mcp-gateway';
+import { generateApiKey, hashApiKey } from '@vaubaan/shared';
+import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgAdmin } from '@/lib/auth/require-admin';
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ botId: str
 
   // Drop the old prefix's cached BotContext so the rotated-out key 401s
   // immediately rather than waiting for the 60s TTL.
-  await buildCacheClient().del(`vauban:ctx:${bot.api_key_prefix}`);
+  await buildCacheClient().del(`vaubaan:ctx:${bot.api_key_prefix}`);
 
   return NextResponse.json({ api_key: apiKey, api_key_prefix: apiKeyPrefix });
 }

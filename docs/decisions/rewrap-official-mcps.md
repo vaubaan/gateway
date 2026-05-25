@@ -25,7 +25,7 @@ Surface réelle des MCPs officiels disponibles aujourd'hui :
 | Vercel   | `https://mcp.vercel.com/`           | **HTTP+SSE**       | Bearer (team token ou OAuth user session) |
 | Supabase | `npx @supabase/mcp-server-supabase` | **stdio** (Node)   | `--access-token` flag                     |
 
-Vauban Core tourne en **Vercel Functions (serverless Node)**. Contraintes
+Vaubaan Core tourne en **Vercel Functions (serverless Node)**. Contraintes
 opérationnelles :
 
 - **Pas de Docker en runtime** — exclut `ghcr.io/github/github-mcp-server`
@@ -65,7 +65,7 @@ Per-provider :
     Vercel ajoute des tools (un re-fetch + commit suffit à refresh).
 - **GitHub + Supabase gardent leur Option A** — surface contrôlée,
   filtering possible des réponses, tests unitaires triviaux.
-- **Pas de dépendance d'hébergement** : Vauban Core reste serverless
+- **Pas de dépendance d'hébergement** : Vaubaan Core reste serverless
   Vercel-friendly.
 
 **Négatives / coûts :**

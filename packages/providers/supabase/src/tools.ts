@@ -7,7 +7,7 @@
  * Supabase OAuth Mgmt flow is Phase 5+ once we register an OAuth app.
  */
 
-import type { McpToolDeclaration } from '@vauban/shared';
+import type { McpToolDeclaration } from '@vaubaan/shared';
 
 const projectArg = {
   project_ref: {

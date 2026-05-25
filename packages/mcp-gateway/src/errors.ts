@@ -12,7 +12,7 @@
  *   -32001  Auth required (Vauban-specific)
  */
 
-import type { JsonRpcError, JsonRpcSuccess } from '@vauban/shared';
+import type { JsonRpcError, JsonRpcSuccess } from '@vaubaan/shared';
 
 export function rpcError(
   id: string | number | null,

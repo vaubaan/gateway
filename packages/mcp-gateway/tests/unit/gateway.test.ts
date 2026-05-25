@@ -6,8 +6,8 @@ import type {
   ProviderAdmin,
   ProviderBinding,
   Role,
-} from '@vauban/shared';
-import { generateApiKey, hashApiKey } from '@vauban/shared';
+} from '@vaubaan/shared';
+import { generateApiKey, hashApiKey } from '@vaubaan/shared';
 import { MemoryCacheClient } from '../../src/cache.ts';
 import { MemoryAuditWriter } from '../../src/audit.ts';
 import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/gateway.ts';
@@ -216,7 +216,7 @@ describe('McpGateway — tools/call denied', () => {
     });
     expect('error' in res).toBe(true);
     if ('error' in res) {
-      expect(res.error.message).toMatch(/Vauban policy denied/);
+      expect(res.error.message).toMatch(/Vaubaan policy denied/);
       expect(res.error.message).toMatch(/feature/);
     }
     expect(audit.rows).toHaveLength(1);
@@ -278,7 +278,7 @@ describe('McpGateway — initialize', () => {
     expect('result' in res).toBe(true);
     if ('result' in res) {
       expect((res.result as { serverInfo: { name: string } }).serverInfo.name).toBe(
-        'vauban-mcp-proxy',
+        'vaubaan-mcp-proxy',
       );
     }
   });

@@ -1,9 +1,9 @@
 {
-  "name": "@vauban/mcp-proxy",
+  "name": "@vaubaan/mcp-proxy",
   "private": true,
   "type": "module",
   "version": "0.0.0",
-  "description": "Policy-enforcing MCP gateway for coding agents — Vauban v4",
+  "description": "Policy-enforcing MCP gateway for coding agents — Vaubaan v4",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20",
@@ -25,7 +25,7 @@
     "test:e2e": "playwright test",
     "test:e2e:real-clouds": "playwright test --project=e2e-real-clouds",
     "sweeper": "tsx scripts/e2e-sweeper.ts",
-    "dev": "npm run --workspace @vauban/web dev",
+    "dev": "npm run --workspace @vaubaan/web dev",
     "prepare": "husky || true",
     "ci": "npm run type-check && npm run lint && npm run format:check && npm run test && npm run build"
   },

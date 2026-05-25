@@ -57,7 +57,7 @@ export async function mintInstallationToken(
       headers: {
         Authorization: `Bearer ${jwt}`,
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'vauban-mcp-proxy',
+        'User-Agent': 'vaubaan-mcp-proxy',
         'X-GitHub-Api-Version': '2022-11-28',
       },
     },

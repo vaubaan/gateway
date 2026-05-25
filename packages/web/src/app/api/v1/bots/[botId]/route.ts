@@ -13,7 +13,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { buildCacheClient } from '@vauban/mcp-gateway';
+import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgAdmin } from '@/lib/auth/require-admin';
 
@@ -35,7 +35,7 @@ const PatchSchema = z
   });
 
 async function invalidateCache(prefix: string) {
-  await buildCacheClient().del(`vauban:ctx:${prefix}`);
+  await buildCacheClient().del(`vaubaan:ctx:${prefix}`);
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ botId: string }> }) {

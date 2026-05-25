@@ -1,15 +1,15 @@
 #!/usr/bin/env tsx
 /**
- * Seed a fake customer org in Vauban Core for E2E demos.
+ * Seed a fake customer org in Vaubaan Core for E2E demos.
  *
- * Customer = `sbw-vauban-test`. Reads its 3 cloud creds from `.env.test`
+ * Customer = `sbw-vaubaan`. Reads its 3 cloud creds from `.env.test`
  * and registers them as if the customer had clicked through the OAuth/install
  * flows for each provider (paste-token mode).
  *
  * Idempotent : reuses existing org / project / bot rows when they exist ;
  * rotates the api_key on every run and prints it.
  *
- * Requires the test user `test@vauban.run` to exist in auth.users (seeded
+ * Requires the test user `test@vaubaan.com` to exist in auth.users (seeded
  * manually via the Supabase Admin API on 2026-05-23).
  *
  * Usage : tsx scripts/seed-test-customer.ts
@@ -38,7 +38,7 @@ function readEnvTest(): EnvTest {
   return env as unknown as EnvTest;
 }
 
-const CUSTOMER_USER_ID = '592efb45-80bb-419f-b955-48132dcdbf8d'; // test@vauban.run
+const CUSTOMER_USER_ID = '592efb45-80bb-419f-b955-48132dcdbf8d'; // test@vaubaan.com
 const PROJECT_REF_SUPABASE = 'qsockrvwpfzvxxecwjvh';
 const PROJECT_REF_VERCEL = 'prj_BFmSakD8ITliRqDgaIFChxZJFNZD';
 
@@ -51,15 +51,17 @@ async function main() {
     port: 5432,
     database: 'postgres',
     user: 'postgres.ynxfyklzqdumtixkdrco',
-    password: process.env.VAUBAN_CORE_DB_PASSWORD ?? 'dlA1Ew07XQCPoii4',
+    password: process.env.VAUBAAN_CORE_DB_PASSWORD ?? 'dlA1Ew07XQCPoii4',
     ssl: { rejectUnauthorized: false },
   });
   await client.connect();
 
   try {
-    // 1) Customer org
-    const orgSlug = env.GITHUB_ORG; // sbw-vauban-test
-    const orgName = 'sbw-vauban-test (fake customer)';
+    // 1) Customer org — Vaubaan-Core-side label. The GitHub org behind the
+    // binding is still `sbw-vauban-test` (the user has not migrated repos to
+    // the new GitHub org `sbw-vaubaan` yet — needs a new fine-grained PAT).
+    const orgSlug = 'sbw-vaubaan';
+    const orgName = 'sbw-vaubaan (fake customer)';
     const orgRes = await client.query(
       `insert into organizations (name, slug)
        values ($1, $2)
@@ -77,7 +79,7 @@ async function main() {
        on conflict (organization_id, user_id) do update set role = 'admin'`,
       [orgId, CUSTOMER_USER_ID],
     );
-    console.log('member: test@vauban.run as admin');
+    console.log('member: test@vaubaan.com as admin');
 
     // 3) ProviderAdmin × 3 — paste-token mode (no installation_id).
     // The bytea column stores the raw UTF-8 bytes of the PAT for now (v0 has
@@ -131,7 +133,12 @@ async function main() {
       );
       console.log(`binding: ${provider} → ${resourceRef}`);
     };
-    await insertBinding('github', `${env.GITHUB_ORG}/playground`, `${env.GITHUB_ORG}/playground`);
+    // The Vaubaan Core org is labeled `sbw-vaubaan` (post-rebrand) but the
+    // actual GitHub org is still `sbw-vauban-test` until the user migrates
+    // the repo to the new GitHub org `sbw-vaubaan` (requires re-issuing a
+    // fine-grained PAT scoped to it). The binding's resource_ref must point
+    // at the real GitHub identifier or the upstream call 404s.
+    await insertBinding('github', 'sbw-vauban-test/playground', 'sbw-vauban-test/playground');
     await insertBinding('vercel', PROJECT_REF_VERCEL, 'project-i4ddj');
     await insertBinding('supabase', PROJECT_REF_SUPABASE, 'test1');
 

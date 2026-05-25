@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import { GitHubAdapter } from '../../src/github-adapter.ts';
-import type { ProviderAdmin } from '@vauban/shared';
+import type { ProviderAdmin } from '@vaubaan/shared';
 
 // PKCS#8 RSA-2048 test key — generated specifically for unit tests, has no
 // access to anything. Same convention as @octokit's test fixtures.
@@ -51,11 +51,11 @@ describe('GitHubAdapter — authorizationUrl', () => {
   test('returns App install URL with state', () => {
     const adapter = new GitHubAdapter({
       appId: '123',
-      appSlug: 'vauban-gateway',
+      appSlug: 'vaubaan-gateway',
       privateKeyPem: TEST_PRIVATE_KEY_PEM,
     });
     const url = adapter.authorizationUrl('org-1', 'http://localhost:3000', 'st-abc');
-    expect(url).toContain('https://github.com/apps/vauban-gateway/installations/new');
+    expect(url).toContain('https://github.com/apps/vaubaan-gateway/installations/new');
     expect(url).toContain('state=st-abc');
   });
 });
@@ -97,7 +97,7 @@ describe('GitHubAdapter — handleCallback', () => {
   test('extracts installation_id from query', async () => {
     const adapter = new GitHubAdapter({
       appId: '123',
-      appSlug: 'vauban-gateway',
+      appSlug: 'vaubaan-gateway',
       privateKeyPem: TEST_PRIVATE_KEY_PEM,
     });
     const out = await adapter.handleCallback('org-1', new URLSearchParams('installation_id=99'));
@@ -107,7 +107,7 @@ describe('GitHubAdapter — handleCallback', () => {
   test('rejects missing installation_id', async () => {
     const adapter = new GitHubAdapter({
       appId: '123',
-      appSlug: 'vauban-gateway',
+      appSlug: 'vaubaan-gateway',
       privateKeyPem: TEST_PRIVATE_KEY_PEM,
     });
     await expect(adapter.handleCallback('org-1', new URLSearchParams(''))).rejects.toThrow(
@@ -125,7 +125,7 @@ describe('GitHubAdapter — mintUpstreamToken', () => {
     });
     const adapter = new GitHubAdapter({
       appId: '123',
-      appSlug: 'vauban-gateway',
+      appSlug: 'vaubaan-gateway',
       privateKeyPem: TEST_PRIVATE_KEY_PEM,
       fetchImpl: fetchImpl as never,
     });
@@ -148,7 +148,7 @@ describe('GitHubAdapter — mintUpstreamToken', () => {
     });
     const adapter = new GitHubAdapter({
       appId: '123',
-      appSlug: 'vauban-gateway',
+      appSlug: 'vaubaan-gateway',
       privateKeyPem: TEST_PRIVATE_KEY_PEM,
       fetchImpl: fetchImpl as never,
     });
@@ -173,7 +173,7 @@ describe('GitHubAdapter — executeCall dispatch', () => {
     });
     const adapter = new GitHubAdapter({
       appId: '123',
-      appSlug: 'vauban-gateway',
+      appSlug: 'vaubaan-gateway',
       privateKeyPem: TEST_PRIVATE_KEY_PEM,
       octokitFactory: () => fakeOctokit as never,
       fetchImpl: fetchImpl as never,
@@ -203,7 +203,7 @@ describe('GitHubAdapter — executeCall dispatch', () => {
     });
     const adapter = new GitHubAdapter({
       appId: '123',
-      appSlug: 'vauban-gateway',
+      appSlug: 'vaubaan-gateway',
       privateKeyPem: TEST_PRIVATE_KEY_PEM,
       octokitFactory: () => ({ rest: {}, request: vi.fn() }) as never,
       fetchImpl: fetchImpl as never,
@@ -230,7 +230,7 @@ describe('GitHubAdapter — resolveTarget', () => {
   test('project.repos → list of resource_refs', () => {
     const adapter = new GitHubAdapter({
       appId: '123',
-      appSlug: 'vauban-gateway',
+      appSlug: 'vaubaan-gateway',
       privateKeyPem: TEST_PRIVATE_KEY_PEM,
     });
     expect(
@@ -258,7 +258,7 @@ describe('GitHubAdapter — resolveTarget', () => {
   test('wildcard target', () => {
     const adapter = new GitHubAdapter({
       appId: '123',
-      appSlug: 'vauban-gateway',
+      appSlug: 'vaubaan-gateway',
       privateKeyPem: TEST_PRIVATE_KEY_PEM,
     });
     expect(adapter.resolveTarget('*', [])).toEqual(['*']);

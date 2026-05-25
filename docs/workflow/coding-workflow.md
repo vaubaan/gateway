@@ -16,8 +16,8 @@ tracks:
 | Env         | Hosting        | Supabase                                             | Provenance creds          |
 | ----------- | -------------- | ---------------------------------------------------- | ------------------------- |
 | **dev**     | localhost:3000 | local Supabase (à wire en Phase 5) ou prod pour stub | `.env.local`              |
-| **staging** | Vercel preview | `staging.vauban.run`, Supabase staging               | Vercel env vars (preview) |
-| **prod**    | vauban.run     | Supabase prod                                        | Vercel env vars (prod)    |
+| **staging** | Vercel preview | `staging.vaubaan.com`, Supabase staging              | Vercel env vars (preview) |
+| **prod**    | vaubaan.com    | Supabase prod                                        | Vercel env vars (prod)    |
 
 Pas de staging environment branche dédiée pour le MVP. Branches éphémères →
 Vercel preview deploys.
@@ -27,7 +27,7 @@ Vercel preview deploys.
 - `main` — la branche cardinale. Déployée automatiquement sur prod.
 - `feature/*`, `fix/*`, `claude/*` — branches working. PRs vers main.
 
-Les Bots Vauban (`github:developer`) suivent exactement ces patterns (cf.
+Les Bots Vaubaan (`github:developer`) suivent exactement ces patterns (cf.
 ADR [[roles-naming-provider-scoped]]).
 
 ## PR process

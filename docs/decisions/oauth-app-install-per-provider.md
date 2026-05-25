@@ -32,11 +32,11 @@ textarea de paste-token n'apparaît dans l'UI v4.
 
 Per-provider :
 
-| Provider | Méthode                                           | Long-lived stocké                                  | Mint upstream                                                                    |
-| -------- | ------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------- |
-| GitHub   | **GitHub App** "Vauban Gateway" installée per-org | `installation_id` + privkey de l'App (côté Vauban) | JWT signé → `POST /app/installations/{id}/access_tokens` → installation token 1h |
-| Vercel   | **OAuth Integration** "Vauban Gateway"            | `access_token` long-lived + `team_id`              | use direct (long-lived)                                                          |
-| Supabase | **OAuth Mgmt API**                                | `access_token` (1h) + `refresh_token`              | refresh dance si `expires_at - now < 5min`, sinon use direct                     |
+| Provider | Méthode                                            | Long-lived stocké                                  | Mint upstream                                                                    |
+| -------- | -------------------------------------------------- | -------------------------------------------------- | -------------------------------------------------------------------------------- |
+| GitHub   | **GitHub App** "Vaubaan Gateway" installée per-org | `installation_id` + privkey de l'App (côté Vauban) | JWT signé → `POST /app/installations/{id}/access_tokens` → installation token 1h |
+| Vercel   | **OAuth Integration** "Vaubaan Gateway"            | `access_token` long-lived + `team_id`              | use direct (long-lived)                                                          |
+| Supabase | **OAuth Mgmt API**                                 | `access_token` (1h) + `refresh_token`              | refresh dance si `expires_at - now < 5min`, sinon use direct                     |
 
 L'org admin **ne voit jamais de token brut**. L'écran de consent est le
 Provider. La callback est Vauban. Le row `provider_admins` est créé par
@@ -71,16 +71,16 @@ Anti-fishing :
 - **Setup opérateur.** Vauban doit register **3 entités provider** côté
   ses dashboards admin (GitHub App, Vercel OAuth Integration, Supabase
   OAuth client). Ces objets sont **opérationnels** — gérés par
-  l'opérateur Vauban (rpelissier en v1), pas par les org admins. ADR
+  l'opérateur Vaubaan (rpelissier en v1), pas par les org admins. ADR
   séparé serait nécessaire si on switch à des per-org GitHub Apps
   (envisagé pour clients regulated en v2+ — cf. spec §16.2).
 - **Friction onboarding première fois.** L'org admin doit cliquer
-  "Authorize Vauban Gateway to access ..." côté GitHub. Pas un drame,
+  "Authorize Vaubaan Gateway to access ..." côté GitHub. Pas un drame,
   c'est exactement la même friction que connecter Vercel à un repo
   GitHub.
 - **Stockage du `installation_id` GitHub** : c'est _moins sensible_ qu'un
   PAT (sans la privkey de l'App, le `installation_id` seul est inutile).
-  La privkey de l'App est un secret app-level Vauban (Vercel env var
+  La privkey de l'App est un secret app-level Vaubaan (Vercel env var
   `GITHUB_APP_PRIVATE_KEY`), pas un secret de la row `provider_admins`.
 
 ## Alternatives rejetées

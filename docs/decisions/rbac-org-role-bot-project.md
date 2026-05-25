@@ -39,7 +39,7 @@ Organization (tenant racine)
 - **Role** est _provider-scoped_ (1 Role ne touche qu'à 1 Provider), naming
   imposé `<provider>:<role-name>` (cf. [[roles-naming-provider-scoped]]).
 - **Bot** est _project-scoped_. Porte N Roles. Identifié par une `api_key`
-  Vauban (`vbn_live_xxxx…`). C'est l'objet sur lequel le hot-path
+  Vaubaan (`vbn_live_xxxx…`). C'est l'objet sur lequel le hot-path
   s'authentifie.
 - **ProviderBinding** est _project-scoped_. Lien concret vers une ressource
   côté Provider (ex: `acme/app` pour GitHub). Résout les targets abstraits

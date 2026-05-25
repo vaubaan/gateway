@@ -5,7 +5,7 @@
  * Spec : docs/spec/mcp-proxy.md §6.4.
  */
 
-import type { AbstractTarget, ProviderBinding } from '@vauban/shared';
+import type { AbstractTarget, ProviderBinding } from '@vaubaan/shared';
 
 export function resolveTarget(target: AbstractTarget, bindings: ProviderBinding[]): string[] {
   if (target === '*') return ['*'];

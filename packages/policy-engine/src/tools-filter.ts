@@ -9,7 +9,7 @@
  */
 
 import { minimatch } from 'minimatch';
-import type { McpToolDeclaration, Role } from '@vauban/shared';
+import type { McpToolDeclaration, Role } from '@vaubaan/shared';
 
 export function filterAvailableTools(
   roles: Role[],

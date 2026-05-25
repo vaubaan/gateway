@@ -13,7 +13,7 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { buildCacheClient } from '@vauban/mcp-gateway';
+import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgAdmin } from '@/lib/auth/require-admin';
 
@@ -57,7 +57,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ provider
     .eq('projects.organization_id', guard.orgId);
   const cache = buildCacheClient();
   for (const b of (bots ?? []) as Array<{ api_key_prefix: string }>) {
-    await cache.del(`vauban:ctx:${b.api_key_prefix}`);
+    await cache.del(`vaubaan:ctx:${b.api_key_prefix}`);
   }
 
   return NextResponse.json({ ok: true });

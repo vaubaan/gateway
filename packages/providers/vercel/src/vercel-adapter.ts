@@ -8,10 +8,10 @@
  * is forwarded as JSON-RPC `tools/call` to https://mcp.vercel.com/.
  *
  * Auth model : Bearer (team token, `vcp_...`). OAuth Integration registration
- * to surface a real "Vauban Gateway" install button is Phase 5+.
+ * to surface a real "Vaubaan Gateway" install button is Phase 5+.
  */
 
-import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vauban/shared';
+import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
 import { executeCall, type FetchImpl } from './execute.ts';
 

@@ -8,7 +8,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { AuditDecision } from '@vauban/shared';
+import type { AuditDecision } from '@vaubaan/shared';
 
 export interface AuditRow {
   organization_id: string;

@@ -7,7 +7,7 @@
  * The MCP gateway dispatches against it without knowing provider specifics.
  */
 
-import type { McpToolDeclaration, Provider, ProviderAdmin, ProviderBinding } from '@vauban/shared';
+import type { McpToolDeclaration, Provider, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 
 export interface ValidateResult {
   ok: boolean;

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import type { ProviderAdmin, ProviderBinding } from '@vauban/shared';
+import type { ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import { VercelAdapter } from '../../src/vercel-adapter.ts';
 
 const baseAdmin: ProviderAdmin = {

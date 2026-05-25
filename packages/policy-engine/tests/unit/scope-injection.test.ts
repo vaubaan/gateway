@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { McpToolDeclaration, ProviderBinding } from '@vauban/shared';
+import type { McpToolDeclaration, ProviderBinding } from '@vaubaan/shared';
 import {
   injectionPlanFor,
   mergeInjectedArgs,

@@ -1,5 +1,5 @@
 {
-  "name": "@vauban/providers-supabase",
+  "name": "@vaubaan/providers-supabase",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -10,6 +10,6 @@
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@vauban/shared": "*"
+    "@vaubaan/shared": "*"
   }
 }

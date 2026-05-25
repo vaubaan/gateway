@@ -16,7 +16,7 @@ import {
   injectionPlanFor,
   mergeInjectedArgs,
   stripInjectedArgs,
-} from '@vauban/policy-engine';
+} from '@vaubaan/policy-engine';
 import type {
   BotContext,
   JsonRpcRequest,
@@ -25,8 +25,8 @@ import type {
   Provider,
   ProviderAdmin,
   ProviderBinding,
-} from '@vauban/shared';
-import { parseApiKey, verifyApiKey } from '@vauban/shared';
+} from '@vaubaan/shared';
+import { parseApiKey, verifyApiKey } from '@vaubaan/shared';
 import type { CacheClient } from './cache.ts';
 import { hashArguments, type AuditWriter } from './audit.ts';
 import { AuthError, rpcError, rpcSuccess } from './errors.ts';
@@ -85,7 +85,7 @@ export class McpGateway {
     const parsed = parseApiKey(raw);
     if (!parsed) throw new AuthError('api_key format invalid.');
 
-    const cacheKey = `vauban:ctx:${parsed.prefix}`;
+    const cacheKey = `vaubaan:ctx:${parsed.prefix}`;
     const cached = await this.cfg.cache.get<BotContext>(cacheKey);
     if (cached && cached.bot.status === 'active') {
       // Re-verify hash on cache hit — defensive against cache poisoning.
@@ -121,7 +121,7 @@ export class McpGateway {
           return rpcSuccess(id, {
             protocolVersion: '2024-11-05',
             capabilities: { tools: {} },
-            serverInfo: { name: 'vauban-mcp-proxy', version: '0.1.0' },
+            serverInfo: { name: 'vaubaan-mcp-proxy', version: '0.1.0' },
           });
         case 'tools/list':
           return rpcSuccess(id, { tools: this.listTools(ctx) });
@@ -174,14 +174,14 @@ export class McpGateway {
     if (!provider) {
       const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__).`;
       await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
-      return rpcError(id, -32603, `Vauban policy denied: ${reason}`);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
 
     const adapter = this.cfg.upstreamByProvider[provider];
     if (!adapter) {
       const reason = `provider '${provider}' is not enabled on this gateway.`;
       await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
-      return rpcError(id, -32603, `Vauban policy denied: ${reason}`);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
 
     // Provider must be connected.
@@ -189,7 +189,7 @@ export class McpGateway {
     if (!adminEntry || adminEntry.status !== 'connected') {
       const reason = `provider '${provider}' is not connected for organization '${ctx.organization.slug}'.`;
       await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
-      return rpcError(id, -32603, `Vauban policy denied: ${reason}`);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
 
     // Server-side scope injection : if this bot's project has a single
@@ -211,7 +211,7 @@ export class McpGateway {
 
     if (decision.decision === 'denied') {
       await this.audit(ctx, toolName, args, 'denied', null, decision.reason, null);
-      return rpcError(id, -32603, `Vauban policy denied: ${decision.reason}`);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${decision.reason}`);
     }
 
     // Load full ProviderAdmin (with tokens — never cached in clear).
@@ -219,7 +219,7 @@ export class McpGateway {
     if (!admin) {
       const reason = `provider_admin for '${provider}' could not be loaded — re-connect required.`;
       await this.audit(ctx, toolName, args, 'denied', null, reason, null);
-      return rpcError(id, -32603, `Vauban policy denied: ${reason}`);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
 
     // Pick binding for the project (if any).

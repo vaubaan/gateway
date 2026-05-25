@@ -25,7 +25,7 @@ faut un cache.
 **Cache "context complet par api_key_prefix" en Upstash Redis (TTL 60s)
 avec fallback in-memory si Redis indisponible.**
 
-- Key : `vauban:ctx:<api_key_prefix>` (le prefix est suffisant — le hash
+- Key : `vaubaan:ctx:<api_key_prefix>` (le prefix est suffisant — le hash
   est revérifié sur cache hit avant d'accepter le call).
 - Value : objet JSON sérialisé `{ bot, project, org, roles, bindings,
 provider_admin (sans tokens en clair) }`. **Aucun token en clair n'est
@@ -36,7 +36,7 @@ provider_admin (sans tokens en clair) }`. **Aucun token en clair n'est
 
 **Cache spécifique GitHub installation token** (séparé) :
 
-- Key : `vauban:ghtok:<installation_id>` → installation token (string).
+- Key : `vaubaan:ghtok:<installation_id>` → installation token (string).
 - TTL : 50min (l'installation token GitHub vit 1h ; marge de 10min).
 - Justification : le mint de l'installation token est cher (~150ms : JWT
   sign + POST GitHub) ; cacher 50min réduit la latence amortie.

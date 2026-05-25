@@ -5,10 +5,10 @@
  * ADRs : docs/decisions/redis-cache-upstash-with-memory-fallback.md.
  */
 
-import { GitHubAdapter, githubAvailableTools } from '@vauban/providers-github';
-import { VercelAdapter, vercelAvailableTools } from '@vauban/providers-vercel';
-import { SupabaseAdapter, supabaseAvailableTools } from '@vauban/providers-supabase';
-import type { BotContext, Provider, ProviderAdmin, Role } from '@vauban/shared';
+import { GitHubAdapter, githubAvailableTools } from '@vaubaan/providers-github';
+import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
+import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
+import type { BotContext, Provider, ProviderAdmin, Role } from '@vaubaan/shared';
 import {
   McpGateway,
   buildCacheClient,
@@ -16,7 +16,7 @@ import {
   type ContextLoader,
   type SupabaseLike,
   type UpstreamAdapter,
-} from '@vauban/mcp-gateway';
+} from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 /**
@@ -38,7 +38,7 @@ function parseByteaHex(raw: unknown): Uint8Array | null {
 
 function getGitHubAppCredentials() {
   const appId = process.env.GITHUB_APP_ID;
-  const slug = process.env.GITHUB_APP_SLUG ?? 'vauban-gateway';
+  const slug = process.env.GITHUB_APP_SLUG ?? 'vaubaan-gateway';
   const privateKey = process.env.GITHUB_APP_PRIVATE_KEY;
   if (!appId || !privateKey) return null;
   // Vercel env vars escape \n — un-escape before importing.

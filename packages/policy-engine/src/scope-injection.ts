@@ -21,7 +21,7 @@
  * single source of truth instead of scattered across each adapter.
  */
 
-import type { McpToolDeclaration, Provider, ProviderBinding } from '@vauban/shared';
+import type { McpToolDeclaration, Provider, ProviderBinding } from '@vaubaan/shared';
 
 interface InjectionPlan {
   /** owner + repo built from `binding.resource_ref` shaped as `owner/repo`. */

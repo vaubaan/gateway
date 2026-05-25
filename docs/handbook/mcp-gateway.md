@@ -8,7 +8,7 @@ tracks:
   - packages/web/src/lib/gateway/build.ts
 ---
 
-# MCP gateway — `@vauban/mcp-gateway` + `/mcp` route
+# MCP gateway — `@vaubaan/mcp-gateway` + `/mcp` route
 
 Le hot-path produit. Auth → context load (cached) → policy evaluate → mint
 upstream JIT → executeCall → audit → JSON-RPC response.
@@ -40,7 +40,7 @@ packages/web/src/
 
 ```
 POST /mcp HTTP/1.1
-Host: vauban.run
+Host: vaubaan.com
 Authorization: Bearer vbn_live_<8-char prefix>_<32-char secret>
 Content-Type: application/json
 
@@ -69,7 +69,7 @@ POST /mcp
   │
   ├─[McpGateway.authenticate(authHeader)]
   │     ├─ parse `Bearer vbn_live_<prefix>_<secret>`
-  │     ├─ cache GET vauban:ctx:<prefix>
+  │     ├─ cache GET vaubaan:ctx:<prefix>
   │     │     ├─ hit  → re-vérifie argon2id verify(hash, full) → ctx
   │     │     └─ miss → contextLoader.loadBotForAuth(prefix) →
   │     │              argon2id verify → loadBotContext(botId) →
@@ -105,11 +105,11 @@ Absent ⇒ Memory.
 
 Key naming :
 
-- `vauban:ctx:<api_key_prefix>` → BotContext, TTL 60s.
+- `vaubaan:ctx:<api_key_prefix>` → BotContext, TTL 60s.
 
 Invalidation explicite (à appeler depuis les routes REST mutantes) :
 
-- `cache.del('vauban:ctx:<prefix>')` après PATCH bot, PATCH role, etc.
+- `cache.del('vaubaan:ctx:<prefix>')` après PATCH bot, PATCH role, etc.
 
 ## Audit
 

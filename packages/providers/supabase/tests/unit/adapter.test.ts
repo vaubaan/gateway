@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from 'vitest';
-import type { ProviderAdmin, ProviderBinding } from '@vauban/shared';
+import type { ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import { SupabaseAdapter } from '../../src/supabase-adapter.ts';
 
 const baseAdmin: ProviderAdmin = {

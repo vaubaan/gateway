@@ -10,13 +10,13 @@ tracks:
 
 ## Contexte
 
-V3 reposait sur un trust model **zero-knowledge** : Vauban Core ne voyait
+V3 reposait sur un trust model **zero-knowledge** : Vaubaan Core ne voyait
 jamais les credentials provider en clair. Les creds étaient chiffrés côté
 client (Runner) avec une clé dérivée d'un keyring user, et déchiffrés
 _uniquement_ sur le laptop dev / Runner.
 
 La v4 introduit le **MCP Gateway** : pour filtrer sémantiquement et
-forwarder un call upstream, Vauban Core doit **lui-même** déchiffrer le
+forwarder un call upstream, Vaubaan Core doit **lui-même** déchiffrer le
 token provider, signer un JWT (GitHub) ou tirer un refresh dance
 (Supabase), puis émettre la requête HTTPS. **C'est mathématiquement
 incompatible avec le ZK.**
@@ -36,8 +36,8 @@ Cloudflare Access / Stripe Connect :
   l'appel, puis **libère immédiatement** les tokens de mémoire (pas de
   cache persistant en clair — sauf cache Redis 50min pour le GitHub
   installation token, qui est lui-même éphémère 1h).
-- L'opérateur Vauban (la personne qui gère l'infra Vercel / Supabase de
-  vauban.run) a accès en clair aux tokens _en mémoire d'exécution_
+- L'opérateur Vaubaan (la personne qui gère l'infra Vercel / Supabase de
+  vaubaan.com) a accès en clair aux tokens _en mémoire d'exécution_
   pendant qu'un call est en cours. C'est inévitable.
 
 L'org admin **accepte ce modèle de confiance** quand il connecte un
@@ -49,7 +49,7 @@ Posture sécurité opérationnelle :
 - Encryption at-rest via Supabase Vault (KEK gérée par Supabase).
 - Audit immutable côté DB (append-only depuis l'app).
 - Pas de logs en clair des tokens (logging filtre les champs sensibles).
-- Rotation périodique des secrets app Vauban (App privkey GitHub, OAuth
+- Rotation périodique des secrets app Vaubaan (App privkey GitHub, OAuth
   client secrets Vercel/Supabase, encryption keys app-level).
 - Isolation envs dev/staging/prod : 3 projets Supabase distincts, 3
   Vercel projects, 3 GitHub Apps distinctes (vauban-dev, vauban-staging,
@@ -61,7 +61,7 @@ Posture sécurité opérationnelle :
 
 **Positives :**
 
-- **Modèle de confiance lisible.** "Vauban Core est un IdP, tu nous fais
+- **Modèle de confiance lisible.** "Vaubaan Core est un IdP, tu nous fais
   confiance pour agir à ta place chez le provider, ou tu n'utilises pas
   Vauban." Pas d'ambiguïté.
 - **Filtrage sémantique possible.** Le gateway peut effectivement
@@ -74,7 +74,7 @@ Posture sécurité opérationnelle :
 
 **Négatives / coûts assumés :**
 
-- **Compromis Vauban Core = compromis de tous les ProviderAdmins de
+- **Compromis Vaubaan Core = compromis de tous les ProviderAdmins de
   toutes les Orgs.** C'est _le_ worst-case. Mitigations seulement —
   pas de mitigation absolue.
   - Encryption at-rest : protège la DB _au repos_ (cold storage compromis,

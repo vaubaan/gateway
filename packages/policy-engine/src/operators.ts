@@ -10,7 +10,7 @@
  */
 
 import { minimatch } from 'minimatch';
-import type { Constraint } from '@vauban/shared';
+import type { Constraint } from '@vaubaan/shared';
 
 export function evaluateConstraint(c: Constraint, value: unknown): boolean {
   if ('equals' in c) {
