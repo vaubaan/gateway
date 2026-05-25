@@ -60,14 +60,14 @@ v1.5+ pourra envisager un MITM TLS proxy avec custom CA pour couvrir CLI
 
 - **Surface de bypass connue.** Si l'agent ouvre un terminal et tape
   `gh pr merge`, ça contourne le proxy. Mitigations partielles :
-  - Documentation explicite ("Vauban filtre les MCP calls ; pour exiger
+  - Documentation explicite ("Vaubaan filtre les MCP calls ; pour exiger
     le filtrage, configure ton agent pour utiliser MCP uniquement").
   - Token GitHub côté agent ? **Non** — l'agent n'a justement pas de PAT
     GitHub propre dans le modèle v4. Si l'agent veut utiliser `gh`, il
     doit s'authentifier via _son_ compte humain (ce que Claude Code fait
-    par défaut) — pas via Vauban. Le proxy n'a juridiction que sur les
+    par défaut) — pas via Vaubaan. Le proxy n'a juridiction que sur les
     calls qui _passent par lui_.
-  - Audit côté provider (GitHub audit log) : on voit le bot Vauban _et_
+  - Audit côté provider (GitHub audit log) : on voit le bot Vaubaan _et_
     on voit les calls humains. Un humain qui delete un repo via `gh`
     apparaît côté GitHub.
 - **Le marketing doit être honnête.** "Policy-enforcing gateway for MCP

@@ -84,7 +84,7 @@ export class GitHubAdapter implements ProviderAdapter {
     if (admin.access_token_encrypted) {
       const token = new TextDecoder().decode(admin.access_token_encrypted);
       // PATs are long-lived ; we report an arbitrary far-future expiry so the
-      // cache (when wired) can hold them. Vauban never relies on this date
+      // cache (when wired) can hold them. Vaubaan never relies on this date
       // for revocation — that's done at the provider_admins.status level.
       return { token, expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000) };
     }

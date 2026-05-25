@@ -13,7 +13,7 @@ export async function TopBar() {
   return (
     <header className="vbn-topbar">
       <Link href="/" className="vbn-brand">
-        Vauban
+        Vaubaan
       </Link>
       <nav>
         {email ? (

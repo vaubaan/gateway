@@ -45,7 +45,7 @@ Organization (tenant racine)
   côté Provider (ex: `acme/app` pour GitHub). Résout les targets abstraits
   des Roles (`project.repos`, `project.vercel`, `project.supabase`).
 - **ProviderAdmin** est _org-scoped_. Bundle de credentials issu d'un flow
-  OAuth/App install. C'est ce qui permet à Vauban d'agir au nom de l'org
+  OAuth/App install. C'est ce qui permet à Vaubaan d'agir au nom de l'org
   chez le Provider (cf. [[oauth-app-install-per-provider]]).
 
 Décision d'évaluation d'un call MCP :

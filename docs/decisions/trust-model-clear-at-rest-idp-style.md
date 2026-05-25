@@ -30,7 +30,7 @@ Cloudflare Access / Stripe Connect :
 
 - Les ProviderAdmin tokens sont **chiffrés at-rest** via une KMS séparée
   (Supabase Vault — la KEK est gérée par Supabase et **jamais accessible
-  à l'app Vauban**).
+  à l'app Vaubaan**).
 - À chaque MCP call autorisé, le gateway **déchiffre en mémoire** le
   token long-lived nécessaire, mint le token éphémère upstream, fait
   l'appel, puis **libère immédiatement** les tokens de mémoire (pas de
@@ -63,7 +63,7 @@ Posture sécurité opérationnelle :
 
 - **Modèle de confiance lisible.** "Vaubaan Core est un IdP, tu nous fais
   confiance pour agir à ta place chez le provider, ou tu n'utilises pas
-  Vauban." Pas d'ambiguïté.
+  Vaubaan." Pas d'ambiguïté.
 - **Filtrage sémantique possible.** Le gateway peut effectivement
   inspecter `(tool, arguments)` et appliquer une policy. C'est _toute_
   la valeur produit.

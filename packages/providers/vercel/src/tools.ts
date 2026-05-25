@@ -5,7 +5,7 @@
  * ADR  : docs/decisions/rewrap-official-mcps.md.
  *
  * 18 tools fetched from upstream on 2026-05-23 and frozen as upstream-tools.json.
- * Names are prefixed `vercel__` to match the Vauban policy DSL provider scoping
+ * Names are prefixed `vercel__` to match the Vaubaan policy DSL provider scoping
  * convention. Refresh procedure : POST tools/list to mcp.vercel.com, copy each
  * tool with the prefix added.
  */

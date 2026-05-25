@@ -20,7 +20,7 @@ const BASE = process.env.E2E_BASE_URL ?? 'https://cloud-resource-manager-zeta.ve
 const EMAIL = process.env.E2E_USER_EMAIL ?? 'test@vaubaan.com';
 const PASSWORD = process.env.E2E_USER_PASSWORD ?? 'VaubanTest!2026';
 
-test.describe('Vauban golden path', () => {
+test.describe('Vaubaan golden path', () => {
   test('login → dashboard → org → project → roles', async ({ page }) => {
     test.setTimeout(120_000);
 

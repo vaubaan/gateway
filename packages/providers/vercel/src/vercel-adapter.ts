@@ -4,7 +4,7 @@
  * Spec : docs/spec/mcp-proxy.md §5.1.
  * ADR  : docs/decisions/rewrap-official-mcps.md.
  *
- * Vauban's policy engine and audit live in front ; the actual tool execution
+ * Vaubaan's policy engine and audit live in front ; the actual tool execution
  * is forwarded as JSON-RPC `tools/call` to https://mcp.vercel.com/.
  *
  * Auth model : Bearer (team token, `vcp_...`). OAuth Integration registration

@@ -63,7 +63,7 @@ export default async function RolesPage({ params }: { params: Promise<{ slug: st
         </div>
       </header>
       <p style={{ opacity: 0.6 }}>
-        Builtin roles are read-only and apply to every Vauban org. Custom roles are scoped to this
+        Builtin roles are read-only and apply to every Vaubaan org. Custom roles are scoped to this
         org and editable.
       </p>
 

@@ -110,7 +110,7 @@ Stocké en `bots.api_key_hash text`.
 
 ## Alternatives rejetées
 
-- **JWT signé par Vauban au lieu de random api_key.** Rejeté : un JWT
+- **JWT signé par Vaubaan au lieu de random api_key.** Rejeté : un JWT
   porte du state (claims) qui peut s'écarter de l'état DB ; révocation
   exige une blacklist ou un rotate de la signing key (cross-Bot
   impactant). Random api_key + DB lookup est plus simple.

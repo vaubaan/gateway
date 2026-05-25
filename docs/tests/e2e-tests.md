@@ -22,7 +22,7 @@ Aucun scénario n'est implémenté en MVP. Les scénarios listés ci-dessous son
 le **plan de test** validé en spec ; ils seront codés en Phase 5
 (post-déploiement staging).
 
-## Setup pré-requis (manuel, opérateur Vauban)
+## Setup pré-requis (manuel, opérateur Vaubaan)
 
 - Org GitHub dédié `sbw-vauban-test` avec un repo `playground` créé à la main.
 - GitHub App "Vaubaan Gateway (test)" installée sur l'org.

@@ -9,7 +9,7 @@
  *   -32601  Method not found
  *   -32602  Invalid params
  *   -32603  Internal error  ← used for policy denials and upstream errors with denial_reason.
- *   -32001  Auth required (Vauban-specific)
+ *   -32001  Auth required (Vaubaan-specific)
  */
 
 import type { JsonRpcError, JsonRpcSuccess } from '@vaubaan/shared';

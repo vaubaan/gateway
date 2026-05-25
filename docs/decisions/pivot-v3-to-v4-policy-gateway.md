@@ -23,9 +23,9 @@ Trois constats ont fini par invalider cette ligne :
    plus aucune policy ne s'applique. Un agent "developer" pouvait merger
    sur main, supprimer un repo, lire toutes les env vars Vercel — toute
    action que le scope du PAT permettait.
-2. **Pas d'audit fin.** L'audit Vauban ne voyait que les distributions de
+2. **Pas d'audit fin.** L'audit Vaubaan ne voyait que les distributions de
    creds. L'audit _côté provider_ voyait des "Vaubaan Gateway" anonymes.
-   Impossible de répondre "qui a fait quoi" au niveau Vauban.
+   Impossible de répondre "qui a fait quoi" au niveau Vaubaan.
 3. **Posture sécurité fragile.** Compromis du Runner = compromis de tous
    les creds de l'org. Compromis d'un agent = idem. Le ZK protégeait Core,
    pas le client final.
@@ -52,9 +52,9 @@ sur le commit de wipe `d6538b7`). Possibilité de consulter v3 via
 
 **Positives :**
 
-- Policy déclarative côté Vauban → filtrage **sémantique** (par tool, par
+- Policy déclarative côté Vaubaan → filtrage **sémantique** (par tool, par
   arguments) ; deny override allow ; default deny.
-- Audit immutable côté Vauban : 1 row par MCP call, allow ou deny.
+- Audit immutable côté Vaubaan : 1 row par MCP call, allow ou deny.
 - Compromis agent → seul son `api_key` est exposé (révocable instantanément),
   pas de cred long-lived côté provider.
 - Surface produit beaucoup plus serrée : 9 tables, ~5 packages, ~15 endpoints
@@ -79,7 +79,7 @@ sur le commit de wipe `d6538b7`). Possibilité de consulter v3 via
   pouvait inspecter les calls upstream à condition de MITM TLS le Runner.
   Le Runner est côté client (laptop dev) → MITM = installer une CA root
   custom. Friction d'install + risque de compromis CA. Le hot-path
-  reste _sur le laptop_ du dev, pas auditable côté Vauban.
+  reste _sur le laptop_ du dev, pas auditable côté Vaubaan.
 - **Mode hybride v3 + v4.** Rejeté : double complexité (deux trust models,
   deux audits, deux UX), aucun bénéfice transitoire (les users n'ont pas
   encore de prod).
