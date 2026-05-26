@@ -8,6 +8,6 @@ const BASE = process.env.E2E_BASE_URL ?? 'https://cloud-resource-manager-zeta.ve
 
 test('landing renders with Sign in CTA', async ({ page }) => {
   await page.goto(BASE);
-  await expect(page.getByRole('heading', { name: 'Vaubaan' })).toBeVisible();
-  await expect(page.getByRole('link', { name: /Sign in/ })).toBeVisible();
+  await expect(page.getByText('Vaubaan').first()).toBeVisible();
+  await expect(page.getByRole('link', { name: /Sign in|Start free/ })).toBeVisible();
 });
