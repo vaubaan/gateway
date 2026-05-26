@@ -72,6 +72,9 @@ mise sur Vercel mais pas en local". Si en doute → `vercel env pull` puis diff.
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`      | `packages/web/.env.local` |
 | `SUPABASE_SERVICE_ROLE_KEY`          | `packages/web/.env.local` |
 | `GITHUB_APP_ID`/`SLUG`/`PRIVATE_KEY` | `packages/web/.env.local` |
+| `VERCEL_INTEGRATION_SLUG`            | `packages/web/.env.local` |
+| `VERCEL_OAUTH_CLIENT_ID`/`SECRET`    | `packages/web/.env.local` |
+| `SUPABASE_OAUTH_CLIENT_ID`/`SECRET`  | `packages/web/.env.local` |
 | `UPSTASH_REDIS_*`                    | `packages/web/.env.local` |
 
 ## Tests E2E
