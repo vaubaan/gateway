@@ -133,12 +133,11 @@ async function main() {
       );
       console.log(`binding: ${provider} → ${resourceRef}`);
     };
-    // The Vaubaan Core org is labeled `sbw-vaubaan` (post-rebrand) but the
-    // actual GitHub org is still `sbw-vauban-test` until the user migrates
-    // the repo to the new GitHub org `sbw-vaubaan` (requires re-issuing a
-    // fine-grained PAT scoped to it). The binding's resource_ref must point
-    // at the real GitHub identifier or the upstream call 404s.
-    await insertBinding('github', 'sbw-vauban-test/playground', 'sbw-vauban-test/playground');
+    // Real GitHub identifier for the binding — the FAKE CUSTOMER org
+    // (sbw-vaubaan-test), NOT the Vaubaan Core org (sbw-vaubaan).
+    // env.GITHUB_ORG comes from .env.test and resolves to sbw-vaubaan-test.
+    // Don't confuse with the Core PAT in .env which is scoped to sbw-vaubaan.
+    await insertBinding('github', `${env.GITHUB_ORG}/playground`, `${env.GITHUB_ORG}/playground`);
     await insertBinding('vercel', PROJECT_REF_VERCEL, 'project-i4ddj');
     await insertBinding('supabase', PROJECT_REF_SUPABASE, 'test1');
 
