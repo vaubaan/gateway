@@ -82,6 +82,74 @@
 .chev {
   color: var(--text-subtle);
   flex: 0 0 auto;
+  transition: transform var(--duration-fast) var(--ease-out);
+}
+.chevOpen {
+  transform: rotate(180deg);
+}
+
+.orgSwitcherWrap {
+  position: relative;
+}
+.orgMenu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: var(--space-3);
+  right: var(--space-3);
+  background: var(--surface-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+  padding: var(--space-1);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+.orgMenuItem {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: inherit;
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.orgMenuItem:hover {
+  background: var(--surface-muted);
+}
+.orgMenuItemActive {
+  background: var(--surface-muted);
+}
+.orgMenuItemName {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.orgMenuItemSlug {
+  font-size: var(--text-xs);
+  color: var(--text-subtle);
+}
+.orgMenuDivider {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-1) var(--space-1);
+}
+.orgMenuFooterLink {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  transition: background-color var(--duration-fast) var(--ease-out);
+}
+.orgMenuFooterLink:hover {
+  background: var(--surface-muted);
+  color: inherit;
 }
 
 .nav {

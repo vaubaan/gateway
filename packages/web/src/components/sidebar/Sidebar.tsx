@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import styles from './Sidebar.module.css';
 import {
@@ -84,6 +84,31 @@ export function Sidebar({ email, orgs }: SidebarProps) {
   const currentOrg = orgs.find((o) => o.slug === currentOrgSlug) ?? orgs[0] ?? null;
   const orgBase = currentOrg ? `/orgs/${currentOrg.slug}` : null;
 
+  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
+  const orgMenuRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!orgMenuOpen) return;
+    function onDown(e: MouseEvent) {
+      if (orgMenuRef.current && !orgMenuRef.current.contains(e.target as Node)) {
+        setOrgMenuOpen(false);
+      }
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOrgMenuOpen(false);
+    }
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [orgMenuOpen]);
+
+  useEffect(() => {
+    setOrgMenuOpen(false);
+  }, [pathname]);
+
   const generalNav: NavItem[] = [
     {
       href: '/dashboard',
@@ -129,17 +154,47 @@ export function Sidebar({ email, orgs }: SidebarProps) {
       </Link>
 
       {currentOrg ? (
-        <button
-          type="button"
-          className={styles.orgSwitcher}
-          onClick={() => router.push('/dashboard')}
-        >
-          <div className={styles.orgSwitcherText}>
-            <span className={styles.orgSwitcherLabel}>Organization</span>
-            <span className={styles.orgSwitcherName}>{currentOrg.name}</span>
-          </div>
-          <IconChevronDown className={styles.chev} />
-        </button>
+        <div className={styles.orgSwitcherWrap} ref={orgMenuRef}>
+          <button
+            type="button"
+            className={styles.orgSwitcher}
+            onClick={() => setOrgMenuOpen((v) => !v)}
+            aria-haspopup="menu"
+            aria-expanded={orgMenuOpen}
+          >
+            <div className={styles.orgSwitcherText}>
+              <span className={styles.orgSwitcherLabel}>Organization</span>
+              <span className={styles.orgSwitcherName}>{currentOrg.name}</span>
+            </div>
+            <IconChevronDown
+              className={`${styles.chev}${orgMenuOpen ? ' ' + styles.chevOpen : ''}`}
+            />
+          </button>
+          {orgMenuOpen && (
+            <div className={styles.orgMenu} role="menu">
+              {orgs.map((o) => (
+                <Link
+                  key={o.id}
+                  href={`/orgs/${o.slug}`}
+                  className={`${styles.orgMenuItem}${
+                    o.slug === currentOrg.slug ? ' ' + styles.orgMenuItemActive : ''
+                  }`}
+                  role="menuitem"
+                >
+                  <span className={styles.orgMenuItemName}>{o.name}</span>
+                  <span className={styles.orgMenuItemSlug}>/{o.slug}</span>
+                </Link>
+              ))}
+              <div className={styles.orgMenuDivider} />
+              <Link href="/orgs/new" className={styles.orgMenuFooterLink} role="menuitem">
+                + New organization
+              </Link>
+              <Link href="/dashboard" className={styles.orgMenuFooterLink} role="menuitem">
+                View all organizations
+              </Link>
+            </div>
+          )}
+        </div>
       ) : null}
 
       <nav className={styles.nav}>
