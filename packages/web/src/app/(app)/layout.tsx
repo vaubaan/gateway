@@ -17,6 +17,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const { data: rows } = await supabase
     .from('org_members')
     .select('organization:organizations(id, slug, name)')
+    .eq('user_id', userRes.user.id)
     .order('added_at');
 
   const orgs: SidebarOrg[] = ((rows ?? []) as unknown as OrgMemberRow[])

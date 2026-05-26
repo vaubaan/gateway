@@ -4,7 +4,7 @@
  */
 import { expect, test } from '@playwright/test';
 
-const BASE = process.env.E2E_BASE_URL ?? 'https://cloud-resource-manager-zeta.vercel.app';
+const BASE = process.env.E2E_BASE_URL ?? 'https://vaubaan.com';
 
 test('landing renders with Sign in CTA', async ({ page }) => {
   await page.goto(BASE);

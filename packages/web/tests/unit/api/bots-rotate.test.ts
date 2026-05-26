@@ -16,7 +16,7 @@ import { describe, expect, test } from 'vitest';
 // HTTP handlers that expect a NextRequest). Instead we simulate a fetch
 // against the prod URL when E2E_BASE_URL is set. Skip otherwise.
 
-const BASE = process.env.E2E_BASE_URL ?? 'https://cloud-resource-manager-zeta.vercel.app';
+const BASE = process.env.E2E_BASE_URL ?? 'https://vaubaan.com';
 
 describe.skipIf(process.env.SKIP_LIVE === '1')('REST /api/v1/bots/:botId/rotate-key', () => {
   test('rejects unauthenticated POST with 401', async () => {

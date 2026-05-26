@@ -16,7 +16,7 @@
 
 import { expect, test } from '@playwright/test';
 
-const BASE = process.env.E2E_BASE_URL ?? 'https://cloud-resource-manager-zeta.vercel.app';
+const BASE = process.env.E2E_BASE_URL ?? 'https://vaubaan.com';
 const EMAIL = process.env.E2E_USER_EMAIL ?? 'test@vaubaan.com';
 const PASSWORD = process.env.E2E_USER_PASSWORD ?? 'VaubanTest!2026';
 

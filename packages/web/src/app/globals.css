@@ -4,6 +4,13 @@
   box-sizing: border-box;
 }
 
+html {
+  /* Bump the root from the browser default (usually 16px) to 20px.
+     All rem-based tokens (text-xs … text-3xl) scale up 1.25x — matches
+     what 125% browser zoom looks like at 100%. */
+  font-size: 125%;
+}
+
 html,
 body {
   margin: 0;

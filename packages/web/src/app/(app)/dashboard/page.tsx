@@ -18,6 +18,7 @@ export default async function DashboardPage() {
   const { data: rows, error } = await supabase
     .from('org_members')
     .select('role, organization:organizations(id, slug, name)')
+    .eq('user_id', user.user.id)
     .order('added_at');
 
   return (
