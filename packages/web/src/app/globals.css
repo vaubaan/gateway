@@ -9,9 +9,12 @@ html {
      All rem-based tokens (text-xs … text-3xl) scale up 1.25x — matches
      what 125% browser zoom looks like at 100%. */
   font-size: 125%;
+  margin: 0;
+  padding: 0;
+  background: var(--surface-base);
+  min-height: 100vh;
 }
 
-html,
 body {
   margin: 0;
   padding: 0;
