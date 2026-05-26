@@ -15,7 +15,8 @@
  * `provider_admins.installation_id`.
  */
 
-import { SignJWT, importPKCS8 } from 'jose';
+import { SignJWT } from 'jose';
+import { createPrivateKey } from 'node:crypto';
 
 export interface AppCredentials {
   appId: string;
@@ -34,7 +35,8 @@ export interface MintInstallationTokenInput extends AppCredentials {
 }
 
 export async function buildAppJwt(creds: AppCredentials, now: Date = new Date()): Promise<string> {
-  const key = await importPKCS8(creds.privateKeyPem, 'RS256');
+  // createPrivateKey accepts both PKCS#1 (GitHub default download) and PKCS#8.
+  const key = createPrivateKey(creds.privateKeyPem);
   const iat = Math.floor(now.getTime() / 1000) - 30; // 30s clock-skew tolerance
   const exp = iat + 9 * 60; // 9 minutes — GitHub max is 10
   return new SignJWT({})

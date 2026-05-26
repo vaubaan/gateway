@@ -98,7 +98,7 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
                           <ProviderDisconnectButton orgSlug={o.slug} provider={p} />
                         )}
                         {!row && p === 'github' && (
-                          <Link href={`/orgs/${o.slug}/providers/github/connect`}>
+                          <Link href={`/api/integrations/github/connect?org=${o.slug}`}>
                             <Button size="sm" variant="primary">
                               Connect
                             </Button>

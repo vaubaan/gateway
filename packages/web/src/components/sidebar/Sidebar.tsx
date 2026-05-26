@@ -16,7 +16,6 @@ import {
   IconLifeBuoy,
   IconLogout,
   IconMoon,
-  IconPlug,
   IconShield,
   IconSun,
   IconUsers,
@@ -103,13 +102,11 @@ export function Sidebar({ email, orgs }: SidebarProps) {
           match: (p) =>
             p === orgBase ||
             (p.startsWith(orgBase) &&
-              !p.startsWith(`${orgBase}/providers`) &&
               !p.startsWith(`${orgBase}/projects`) &&
               !p.startsWith(`${orgBase}/roles`) &&
               !p.startsWith(`${orgBase}/members`) &&
               !p.startsWith(`${orgBase}/audit`)),
         },
-        { href: `${orgBase}/providers/github/connect`, label: 'Providers', icon: <IconPlug /> },
         {
           href: `${orgBase}/projects`,
           label: 'Projects',
