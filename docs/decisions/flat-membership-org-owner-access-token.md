@@ -22,8 +22,8 @@ qui se sont avérés à reconsidérer après usage :
    ce filtre génère de la friction sans gain de sécurité — un membre malveillant
    peut déjà observer tout l'audit, donc la séparation read/write est cosmétique.
 
-2. **Bot** comme nom de l'objet porteur de l'api*key. Le mot présume que le
-   consommateur est un agent LLM. Mais une `vbn_live*...` peut tout aussi bien
+2. **Bot** comme nom de l'objet porteur de l'`api_key`. Le mot présume que le
+   consommateur est un agent LLM. Mais une `vbn_live_...` peut tout aussi bien
    être posée dans un script CI, un cron humain, un curl manuel. Le naming
    présume de l'usager là où on n'a pas à le faire.
 

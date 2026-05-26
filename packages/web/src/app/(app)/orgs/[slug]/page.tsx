@@ -98,11 +98,14 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
                           <ProviderDisconnectButton orgSlug={o.slug} provider={p} />
                         )}
                         {!row && (
-                          <Link href={`/api/integrations/${p}/connect?org=${o.slug}`}>
+                          <a
+                            href={`/api/integrations/${p}/connect?org=${o.slug}`}
+                            style={{ textDecoration: 'none' }}
+                          >
                             <Button size="sm" variant="primary">
                               Connect
                             </Button>
-                          </Link>
+                          </a>
                         )}
                       </Row>
                     </li>
