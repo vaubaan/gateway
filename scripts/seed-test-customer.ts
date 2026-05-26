@@ -26,6 +26,7 @@ interface EnvTest {
   VERCEL_TEAM_ID: string;
   VERCEL_TEAM_TOKEN: string;
   SUPABASE_TOKEN: string;
+  SUPABASE_PROJECT_REF: string;
 }
 
 function readEnvTest(): EnvTest {
@@ -39,7 +40,6 @@ function readEnvTest(): EnvTest {
 }
 
 const CUSTOMER_USER_ID = '592efb45-80bb-419f-b955-48132dcdbf8d'; // test@vaubaan.com
-const PROJECT_REF_SUPABASE = 'qsockrvwpfzvxxecwjvh';
 const PROJECT_REF_VERCEL = 'prj_BFmSakD8ITliRqDgaIFChxZJFNZD';
 
 async function main() {
@@ -139,7 +139,7 @@ async function main() {
     // Don't confuse with the Core PAT in .env which is scoped to sbw-vaubaan.
     await insertBinding('github', `${env.GITHUB_ORG}/playground`, `${env.GITHUB_ORG}/playground`);
     await insertBinding('vercel', PROJECT_REF_VERCEL, 'project-i4ddj');
-    await insertBinding('supabase', PROJECT_REF_SUPABASE, 'test1');
+    await insertBinding('supabase', env.SUPABASE_PROJECT_REF, 'playground');
 
     // 6) Bot — rotate api_key on each run.
     const builtinRoles = await client.query(
