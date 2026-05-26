@@ -39,10 +39,10 @@ export async function GET(req: NextRequest) {
   const { data: userData } = await auth.auth.getUser();
   if (!userData.user) return NextResponse.redirect(new URL('/login', req.url));
 
-  const clientId = process.env.SUPABASE_OAUTH_CLIENT_ID;
-  const clientSecret = process.env.SUPABASE_OAUTH_CLIENT_SECRET;
+  const clientId = process.env.SUPABASE_APP_CLIENT_ID;
+  const clientSecret = process.env.SUPABASE_APP_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    fallback.searchParams.set('error', 'server misconfigured: SUPABASE_OAUTH_* unset');
+    fallback.searchParams.set('error', 'server misconfigured: SUPABASE_APP_* unset');
     return NextResponse.redirect(fallback);
   }
 

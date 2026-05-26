@@ -1,16 +1,14 @@
 /**
  * GET /api/integrations/vercel/connect?org=<slug>
  *
- * Starts the Vercel Integration install flow. Vercel uses its own UI for
- * install (not raw OAuth2 authorize); we redirect to the integration's
- * marketplace URL with our state nonce. Vercel will redirect back to
- * `/api/integrations/vercel/callback` with `code` + `state` + the
- * `teamId` and `configurationId` of the install.
+ * Starts the Vercel Connected App OAuth2 authorization flow. Standard
+ * `response_type=code` authorize redirect; callback handler exchanges the
+ * code for a long-lived access token via POST /v2/oauth/access_token.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { requireOrgAdmin } from '@/lib/auth/require-admin';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
 import { generateState } from '@/lib/oauth/state';
 
 export const dynamic = 'force-dynamic';
@@ -19,13 +17,13 @@ export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get('org');
   if (!slug) return NextResponse.json({ error: 'org query param required' }, { status: 400 });
 
-  const guard = await requireOrgAdmin(slug);
+  const guard = await requireOrgMember(slug);
   if (!guard.ok) return guard.response;
 
-  const integrationSlug = process.env.VERCEL_INTEGRATION_SLUG;
-  if (!integrationSlug) {
+  const clientId = process.env.VERCEL_APP_CLIENT_ID;
+  if (!clientId) {
     return NextResponse.json(
-      { error: 'server misconfigured: VERCEL_INTEGRATION_SLUG unset' },
+      { error: 'server misconfigured: VERCEL_APP_CLIENT_ID unset' },
       { status: 503 },
     );
   }
@@ -40,7 +38,11 @@ export async function GET(req: NextRequest) {
     path: '/',
   });
 
-  const installUrl = new URL(`https://vercel.com/integrations/${integrationSlug}/new`);
-  installUrl.searchParams.set('state', state);
-  return NextResponse.redirect(installUrl.toString());
+  const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
+  const authorizeUrl = new URL('https://vercel.com/oauth/authorize');
+  authorizeUrl.searchParams.set('client_id', clientId);
+  authorizeUrl.searchParams.set('redirect_uri', redirectUri);
+  authorizeUrl.searchParams.set('response_type', 'code');
+  authorizeUrl.searchParams.set('state', state);
+  return NextResponse.redirect(authorizeUrl.toString());
 }
