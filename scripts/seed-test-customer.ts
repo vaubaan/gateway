@@ -39,7 +39,7 @@ function readEnvTest(): EnvTest {
   return env as unknown as EnvTest;
 }
 
-const CUSTOMER_USER_ID = '592efb45-80bb-419f-b955-48132dcdbf8d'; // test@vaubaan.com
+const CUSTOMER_USER_EMAIL = 'test@vaubaan.com';
 const PROJECT_REF_VERCEL = 'prj_BFmSakD8ITliRqDgaIFChxZJFNZD';
 
 function readCoreEnv(): { projectRef: string; dbPassword: string } {
@@ -72,6 +72,19 @@ async function main() {
   await client.connect();
 
   try {
+    // Resolve the customer's auth.users row by email — survives DB resets.
+    const userRes = await client.query(`select id from auth.users where email = $1`, [
+      CUSTOMER_USER_EMAIL,
+    ]);
+    const userRow = (userRes.rows as { id: string }[])[0];
+    if (!userRow) {
+      throw new Error(
+        `${CUSTOMER_USER_EMAIL} not found in auth.users — create via the Supabase Admin API first.`,
+      );
+    }
+    const CUSTOMER_USER_ID = userRow.id;
+    console.log('customer user:', CUSTOMER_USER_ID, CUSTOMER_USER_EMAIL);
+
     // 1) Customer org — Vaubaan-Core-side label. The GitHub org behind the
     // binding is still `sbw-vauban-test` (the user has not migrated repos to
     // the new GitHub org `sbw-vaubaan` yet — needs a new fine-grained PAT).
