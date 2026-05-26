@@ -1,4 +1,4 @@
-# Vauban MCP Proxy
+# Vaubaan MCP Proxy
 
 > Policy-enforcing **MCP gateway** for coding agents. Filter and audit each
 > tool call from Claude Code / Cursor / Continue without ever giving them a
@@ -6,7 +6,7 @@
 
 ```
 Coding Agent ──── MCP call ────▶ ┌─────────────────────────────┐
-                                  │  Vauban MCP Proxy  /mcp     │
+                                  │  Vaubaan MCP Proxy  /mcp     │
                                   │  ┌────────────────────────┐ │
                                   │  │ Auth (Bearer vbn_live_) │ │
                                   │  │ Policy evaluate         │ │
@@ -25,7 +25,7 @@ Coding Agent ──── MCP call ────▶ ┌────────�
 ## Pitch
 
 - **L'agent ne voit jamais de cred provider.** Il s'authentifie auprès de
-  Vauban avec une `vbn_live_<key>`, et le gateway mint un token éphémère
+  Vaubaan avec une `vbn_live_<key>`, et le gateway mint un token éphémère
   côté provider JIT à chaque call.
 - **Une policy déclarative** filtre par tool et arguments — `github:developer`
   peut push sur `feature/*` mais pas merger sur `main`. Default deny.
