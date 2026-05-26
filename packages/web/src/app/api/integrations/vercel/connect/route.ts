@@ -1,9 +1,15 @@
 /**
  * GET /api/integrations/vercel/connect?org=<slug>
  *
- * Starts the Vercel Connected App OAuth2 authorization flow. Standard
- * `response_type=code` authorize redirect; callback handler exchanges the
- * code for a long-lived access token via POST /v2/oauth/access_token.
+ * Starts the Vercel Marketplace Integration install flow. Vercel's install URL
+ * (https://vercel.com/integrations/<slug>/new) shows the user their teams and
+ * the per-resource scope picker, then redirects back to the configured
+ * Redirect URL with `?code=...&teamId=...&configurationId=...&state=...`.
+ *
+ * Slug here = the Integration's marketplace slug (e.g. `vaubaan`), NOT a
+ * Connected App client_id. Connected Apps (cl_ prefix) are a different
+ * primitive (SSO-only); we explicitly use Marketplace Integrations because
+ * the upstream API tools need long-lived API access, not user identity.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -20,10 +26,10 @@ export async function GET(req: NextRequest) {
   const guard = await requireOrgMember(slug);
   if (!guard.ok) return guard.response;
 
-  const clientId = process.env.VERCEL_APP_CLIENT_ID;
-  if (!clientId) {
+  const integrationSlug = process.env.VERCEL_INTEGRATION_SLUG;
+  if (!integrationSlug) {
     return NextResponse.json(
-      { error: 'server misconfigured: VERCEL_APP_CLIENT_ID unset' },
+      { error: 'server misconfigured: VERCEL_INTEGRATION_SLUG unset' },
       { status: 503 },
     );
   }
@@ -38,11 +44,7 @@ export async function GET(req: NextRequest) {
     path: '/',
   });
 
-  const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
-  const authorizeUrl = new URL('https://vercel.com/oauth/authorize');
-  authorizeUrl.searchParams.set('client_id', clientId);
-  authorizeUrl.searchParams.set('redirect_uri', redirectUri);
-  authorizeUrl.searchParams.set('response_type', 'code');
-  authorizeUrl.searchParams.set('state', state);
-  return NextResponse.redirect(authorizeUrl.toString());
+  const installUrl = new URL(`https://vercel.com/integrations/${integrationSlug}/new`);
+  installUrl.searchParams.set('state', state);
+  return NextResponse.redirect(installUrl.toString());
 }
