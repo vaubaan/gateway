@@ -13,13 +13,13 @@ concurrency:
 
 # .npmrc points @sbw-vaubaan to GH Packages — even if we have no dep
 # under that scope today, defensive token wiring avoids future surprise
-# if the harness is ever added as a devDep.
+# if the harness is ever added as a devDep. PAT used because the org
+# plan disables cross-repo GITHUB_TOKEN reads on packages.
 permissions:
   contents: read
-  packages: read
 
 env:
-  NPM_PUBLISH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
 jobs:
   check:
