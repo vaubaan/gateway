@@ -18,22 +18,28 @@ import { describe, expect, test } from 'vitest';
 
 const BASE = process.env.E2E_BASE_URL ?? 'https://vaubaan.com';
 
-describe.skipIf(process.env.SKIP_LIVE === '1')('REST /api/v1/bots/:botId/rotate-key', () => {
+describe.skipIf(process.env.SKIP_LIVE === '1')('REST /api/v1/tokens/:botId/rotate-key', () => {
   test('rejects unauthenticated POST with 401', async () => {
-    const res = await fetch(`${BASE}/api/v1/bots/00000000-0000-0000-0000-000000000000/rotate-key`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ orgSlug: 'sbw-vauban-test' }),
-    });
+    const res = await fetch(
+      `${BASE}/api/v1/tokens/00000000-0000-0000-0000-000000000000/rotate-key`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ orgSlug: 'sbw-vauban-test' }),
+      },
+    );
     expect([401, 403]).toContain(res.status);
   });
 
   test('rejects malformed body with 400 (even when authenticated would 401 first)', async () => {
-    const res = await fetch(`${BASE}/api/v1/bots/00000000-0000-0000-0000-000000000000/rotate-key`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({}),
-    });
+    const res = await fetch(
+      `${BASE}/api/v1/tokens/00000000-0000-0000-0000-000000000000/rotate-key`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
     expect([400, 401]).toContain(res.status);
   });
 });

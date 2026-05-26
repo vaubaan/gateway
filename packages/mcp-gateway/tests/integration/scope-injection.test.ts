@@ -12,7 +12,7 @@ import { describe, expect, test, vi } from 'vitest';
 import {
   generateApiKey,
   hashApiKey,
-  type BotContext,
+  type AccessTokenContext,
   type McpToolDeclaration,
   type ProviderAdmin,
   type ProviderBinding,
@@ -74,10 +74,10 @@ const ghTools: McpToolDeclaration[] = [
 async function harness() {
   const { apiKey, apiKeyPrefix } = generateApiKey('test');
   const apiKeyHash = await hashApiKey(apiKey);
-  const ctx: BotContext = {
-    bot: {
-      id: 'bot1',
-      name: 'claude-dev',
+  const ctx: AccessTokenContext = {
+    access_token: {
+      id: 'tk1',
+      name: 'ci-deploy',
       project_id: 'p1',
       status: 'active',
       api_key_prefix: apiKeyPrefix,
@@ -91,10 +91,10 @@ async function harness() {
     ],
   };
   const loader: ContextLoader = {
-    loadBotForAuth: vi
+    loadAccessTokenForAuth: vi
       .fn()
-      .mockResolvedValue({ id: 'bot1', api_key_hash: apiKeyHash, status: 'active' }),
-    loadBotContext: vi.fn().mockResolvedValue(ctx),
+      .mockResolvedValue({ id: 'tk1', api_key_hash: apiKeyHash, status: 'active' }),
+    loadAccessTokenContext: vi.fn().mockResolvedValue(ctx),
     touchLastUsed: vi.fn().mockResolvedValue(undefined),
   };
   const execute = vi.fn().mockResolvedValue({ branches: [{ name: 'main' }] });

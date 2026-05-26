@@ -27,6 +27,7 @@ packages/web/tests/e2e/.auth/
 .eslintcache
 .turbo/
 .cache/
+supabase/.temp/
 
 # Build orchestrator artifacts (operator-side, not committed)
 .build/

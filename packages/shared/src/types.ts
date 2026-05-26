@@ -9,11 +9,9 @@ export type Provider = 'github' | 'vercel' | 'supabase';
 
 export const PROVIDERS = ['github', 'vercel', 'supabase'] as const satisfies readonly Provider[];
 
-export type OrgRole = 'member' | 'admin';
-
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';
 
-export type BotStatus = 'active' | 'revoked';
+export type AccessTokenStatus = 'active' | 'revoked';
 
 export type AuditDecision = 'allowed' | 'denied';
 
@@ -21,13 +19,13 @@ export interface Organization {
   id: string;
   name: string;
   slug: string;
+  owner_id: string;
   created_at: string;
 }
 
 export interface OrgMember {
   organization_id: string;
   user_id: string;
-  role: OrgRole;
   added_at: string;
 }
 
@@ -74,20 +72,20 @@ export interface Role {
   created_at: string;
 }
 
-export interface Bot {
+export interface AccessToken {
   id: string;
   project_id: string;
   name: string;
   api_key_prefix: string;
   api_key_hash: string;
-  status: BotStatus;
+  status: AccessTokenStatus;
   last_used_at: string | null;
   created_by: string | null;
   created_at: string;
 }
 
-export interface BotRole {
-  bot_id: string;
+export interface AccessTokenRole {
+  access_token_id: string;
   role_id: string;
   added_at: string;
 }
@@ -96,7 +94,7 @@ export interface AuditLogRow {
   id: string;
   organization_id: string;
   project_id: string | null;
-  bot_id: string | null;
+  access_token_id: string | null;
   ts: string;
   tool_name: string;
   arguments_hash: string;
@@ -138,11 +136,11 @@ export type Constraint =
   | { not_starts_with: string | string[] };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Bot context loaded at hot-path (cached 60s)
+// Access-token context loaded at hot-path (cached 60s)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface BotContext {
-  bot: Pick<Bot, 'id' | 'name' | 'project_id' | 'status' | 'api_key_prefix'>;
+export interface AccessTokenContext {
+  access_token: Pick<AccessToken, 'id' | 'name' | 'project_id' | 'status' | 'api_key_prefix'>;
   project: Pick<Project, 'id' | 'slug' | 'organization_id'>;
   organization: Pick<Organization, 'id' | 'slug' | 'name'>;
   roles: Role[];

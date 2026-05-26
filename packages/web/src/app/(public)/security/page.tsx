@@ -66,8 +66,9 @@ export default function SecurityPage() {
         memory only during the upstream call.
       </p>
       <p>
-        <strong>Agent-facing keys.</strong> When an admin creates a Bot, the API key is shown
-        exactly once. We store only an HMAC-SHA256 for verification. Lost keys must be rotated.
+        <strong>Access tokens.</strong> When an org member creates an access token, the API key is
+        shown exactly once. We store only an argon2id hash for verification. Lost keys must be
+        rotated.
       </p>
 
       <h2 id="encryption">3. Encryption</h2>
@@ -99,19 +100,20 @@ export default function SecurityPage() {
 
       <h2 id="audit">5. Audit &amp; observability</h2>
       <p>
-        Every MCP call appends one row to the org audit log: bot id, tool name, resolved upstream
-        resource, policy decision, deny reason (if any), and timing. Admins can stream the log in
-        the dashboard. Audit data is retained 90 days by default and is configurable per-org up to 2
-        years.
+        Every MCP call appends one row to the org audit log: access token id, tool name, resolved
+        upstream resource, policy decision, deny reason (if any), and timing. Org members can stream
+        the log in the dashboard. Audit data is retained 90 days by default and is configurable
+        per-org up to 2 years.
       </p>
 
       <h2 id="access">6. Access controls</h2>
       <ul>
         <li>
-          Org membership has two roles: <strong>admin</strong> (full control) and{' '}
-          <strong>member</strong> (read-only view of audit and projects).
+          Org membership is flat — every member has full RW. An <strong>owner</strong> is designated
+          per-org and is protected against removal; transferring ownership requires an explicit
+          action from the current owner.
         </li>
-        <li>Bot creation, provider connection, and role edits require admin.</li>
+        <li>Access token creation, provider connection, and role edits require org membership.</li>
         <li>
           Internal access by Vaubaan staff to production is logged, scoped, and requires a
           documented ticket.

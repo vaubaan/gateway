@@ -27,16 +27,16 @@ interface AuditRow {
   role_matched: string | null;
   denial_reason: string | null;
   upstream_latency_ms: number | null;
-  bot_id: string | null;
+  access_token_id: string | null;
 }
 
-interface BotOpt {
+interface TokenOpt {
   id: string;
   name: string;
 }
 
 interface SearchParams {
-  bot?: string;
+  token?: string;
   decision?: 'allowed' | 'denied';
   since?: string;
 }
@@ -61,15 +61,14 @@ export default async function AuditPage({
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!org) notFound();
 
-  // Bots for the filter dropdown.
-  const { data: bots } = await supabase
-    .from('bots')
+  // Access tokens for the filter dropdown.
+  const { data: tokens } = await supabase
+    .from('access_tokens')
     .select('id, name, projects!inner(organization_id)')
     .eq('projects.organization_id', org.id);
-  const botOpts: BotOpt[] = ((bots ?? []) as Array<{ id: string; name: string }>).map((b) => ({
-    id: b.id,
-    name: b.name,
-  }));
+  const tokenOpts: TokenOpt[] = ((tokens ?? []) as Array<{ id: string; name: string }>).map(
+    (t) => ({ id: t.id, name: t.name }),
+  );
 
   // Last 7 days stats.
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
@@ -78,7 +77,7 @@ export default async function AuditPage({
     .select('decision, tool_name', { count: 'exact' })
     .eq('organization_id', org.id)
     .gte('ts', sevenDaysAgo);
-  if (sp.bot) statQ = statQ.eq('bot_id', sp.bot);
+  if (sp.token) statQ = statQ.eq('access_token_id', sp.token);
   if (sp.decision) statQ = statQ.eq('decision', sp.decision);
   const statResp = await statQ.limit(5000);
   const statRows = (statResp.data ?? []) as Array<{
@@ -98,17 +97,19 @@ export default async function AuditPage({
   // Filtered list.
   let q = supabase
     .from('audit_log')
-    .select('id, ts, tool_name, decision, role_matched, denial_reason, upstream_latency_ms, bot_id')
+    .select(
+      'id, ts, tool_name, decision, role_matched, denial_reason, upstream_latency_ms, access_token_id',
+    )
     .eq('organization_id', org.id)
     .order('ts', { ascending: false })
     .limit(100);
-  if (sp.bot) q = q.eq('bot_id', sp.bot);
+  if (sp.token) q = q.eq('access_token_id', sp.token);
   if (sp.decision) q = q.eq('decision', sp.decision);
   if (sp.since) q = q.gte('ts', sp.since);
   const { data: rows } = await q;
   const auditRows = (rows ?? []) as AuditRow[];
 
-  const botNameById = new Map(botOpts.map((b) => [b.id, b.name]));
+  const tokenNameById = new Map(tokenOpts.map((t) => [t.id, t.name]));
 
   return (
     <main>
@@ -201,11 +202,11 @@ export default async function AuditPage({
         method="get"
         style={{ display: 'flex', gap: 'var(--space-2)', marginBottom: 'var(--space-3)' }}
       >
-        <Select name="bot" defaultValue={sp.bot ?? ''} style={{ width: 'auto' }}>
-          <option value="">All bots</option>
-          {botOpts.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
+        <Select name="token" defaultValue={sp.token ?? ''} style={{ width: 'auto' }}>
+          <option value="">All access tokens</option>
+          {tokenOpts.map((t) => (
+            <option key={t.id} value={t.id}>
+              {t.name}
             </option>
           ))}
         </Select>
@@ -228,7 +229,7 @@ export default async function AuditPage({
         >
           Apply
         </button>
-        {(sp.bot || sp.decision) && (
+        {(sp.token || sp.decision) && (
           <a
             href={`/orgs/${org.slug}/audit`}
             style={{
@@ -249,7 +250,7 @@ export default async function AuditPage({
           <Thead>
             <Tr>
               <Th>Time</Th>
-              <Th>Bot</Th>
+              <Th>Access token</Th>
               <Th>Tool</Th>
               <Th>Decision</Th>
               <Th>Role / reason</Th>
@@ -262,7 +263,7 @@ export default async function AuditPage({
                 <Td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
                   {new Date(r.ts).toLocaleString()}
                 </Td>
-                <Td>{r.bot_id ? (botNameById.get(r.bot_id) ?? '—') : '—'}</Td>
+                <Td>{r.access_token_id ? (tokenNameById.get(r.access_token_id) ?? '—') : '—'}</Td>
                 <Td>
                   <Code>{r.tool_name}</Code>
                 </Td>

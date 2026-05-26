@@ -7,7 +7,6 @@ export const dynamic = 'force-dynamic';
 
 interface MemberRow {
   user_id: string;
-  role: 'member' | 'admin';
   added_at: string;
   email: string;
 }
@@ -20,22 +19,14 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
 
   const { data: org } = await supabase
     .from('organizations')
-    .select('id, slug, name')
+    .select('id, slug, name, owner_id')
     .eq('slug', slug)
-    .maybeSingle<{ id: string; slug: string; name: string }>();
+    .maybeSingle<{ id: string; slug: string; name: string; owner_id: string }>();
   if (!org) notFound();
-
-  const { data: meMember } = await supabase
-    .from('org_members')
-    .select('role')
-    .eq('organization_id', org.id)
-    .eq('user_id', user.user.id)
-    .maybeSingle<{ role: 'member' | 'admin' }>();
-  const isAdmin = meMember?.role === 'admin';
 
   const { data: rawMembers } = await supabase
     .from('org_members')
-    .select('user_id, role, added_at')
+    .select('user_id, added_at')
     .eq('organization_id', org.id);
 
   // Hydrate emails server-side via service client (auth.users not RLS-readable).
@@ -48,7 +39,6 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
   const members: MemberRow[] = (
     (rawMembers ?? []) as Array<{
       user_id: string;
-      role: 'member' | 'admin';
       added_at: string;
     }>
   ).map((m) => ({
@@ -65,15 +55,16 @@ export default async function MembersPage({ params }: { params: Promise<{ slug: 
         </Link>
       </header>
       <p style={{ opacity: 0.6 }}>
-        2 roles humains : <strong>admin</strong> (RW) et <strong>member</strong> (R). La granularité
-        fine vit dans la composition Roles × Bots des projects.
+        Tous les members ont un accès complet (lecture + écriture) sur l&apos;org. L&apos;
+        <strong>owner</strong> est protégé contre la suppression — il doit transférer
+        l&apos;ownership avant de quitter l&apos;org.
       </p>
 
       <MembersClient
         orgSlug={org.slug}
         members={members}
         currentUserId={user.user.id}
-        isAdmin={isAdmin}
+        ownerId={org.owner_id}
       />
     </main>
   );

@@ -4,7 +4,7 @@
  *   1. Login via password (seeded test@vaubaan.com / VaubanTest!2026).
  *   2. Land on /dashboard, see at least one organization (Acme test customer).
  *   3. Open the org page, see 3 providers connected + 1 project.
- *   4. Open the Playground project, see 3 bindings + claude-dev bot.
+ *   4. Open the Playground project, see 3 bindings + access tokens.
  *   5. Open the Roles catalog, see 4+ builtin roles.
  *
  * No assertion against the MCP endpoint here — that lives in the unit + integration

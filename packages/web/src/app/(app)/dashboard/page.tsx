@@ -6,8 +6,7 @@ import { Badge, Button, Card, CardBody, CardHeader, CardTitle } from '@/componen
 export const dynamic = 'force-dynamic';
 
 interface OrgRow {
-  role: 'member' | 'admin';
-  organization: { id: string; slug: string; name: string };
+  organization: { id: string; slug: string; name: string; owner_id: string };
 }
 
 export default async function DashboardPage() {
@@ -17,7 +16,7 @@ export default async function DashboardPage() {
 
   const { data: rows, error } = await supabase
     .from('org_members')
-    .select('role, organization:organizations(id, slug, name)')
+    .select('organization:organizations(id, slug, name, owner_id)')
     .eq('user_id', user.user.id)
     .order('added_at');
 
@@ -34,7 +33,7 @@ export default async function DashboardPage() {
         <div>
           <h1 style={{ margin: 0 }}>Organizations</h1>
           <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-            Each org is a tenant. Bots, projects, audit log live under one.
+            Each org is a tenant. Access tokens, projects, audit log live under one.
           </p>
         </div>
         <Link href="/orgs/new">
@@ -68,7 +67,7 @@ export default async function DashboardPage() {
                     /{r.organization.slug}
                   </span>
                 </CardTitle>
-                <Badge tone={r.role === 'admin' ? 'info' : 'neutral'}>{r.role}</Badge>
+                {r.organization.owner_id === user.user.id && <Badge tone="info">owner</Badge>}
               </CardHeader>
             </Card>
           </Link>

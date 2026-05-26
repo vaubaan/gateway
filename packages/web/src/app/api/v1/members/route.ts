@@ -1,8 +1,11 @@
 /**
- * POST /api/v1/members  body: { orgSlug, email, role }
+ * POST /api/v1/members  body: { orgSlug, email }
  *
- * Adds a user to an Org as member or admin. If the user doesn't exist, we
- * invite them (Supabase Admin generateLink type='invite').
+ * Adds a user to an Org. If the user doesn't exist in auth.users, we invite
+ * them (Supabase Admin createUser + generateLink type='invite').
+ *
+ * Membership is flat — any org member has full RW. The org's `owner_id` is
+ * separate (set at org creation, transferable via /transfer-ownership).
  *
  * Spec : docs/spec/mcp-proxy.md §8.1, §10.
  */
@@ -10,7 +13,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { requireOrgAdmin } from '@/lib/auth/require-admin';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -18,7 +21,6 @@ export const dynamic = 'force-dynamic';
 const BodySchema = z.object({
   orgSlug: z.string().min(1),
   email: z.string().email(),
-  role: z.enum(['member', 'admin']).default('member'),
 });
 
 interface AdminUser {
@@ -37,7 +39,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const guard = await requireOrgAdmin(body.orgSlug);
+  const guard = await requireOrgMember(body.orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();
@@ -61,15 +63,13 @@ export async function POST(req: NextRequest) {
     }
     userId = created.user.id;
     invited = true;
-    // Best-effort send invite email — ignore failure (the user is already in
-    // auth.users and can be invited again from Supabase dashboard).
     await svc.auth.admin.generateLink({ type: 'invite', email: body.email }).catch(() => null);
   }
 
   const { error: memErr } = await svc
     .from('org_members')
     .upsert(
-      { organization_id: guard.orgId, user_id: userId, role: body.role },
+      { organization_id: guard.orgId, user_id: userId },
       { onConflict: 'organization_id,user_id' },
     );
   if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });

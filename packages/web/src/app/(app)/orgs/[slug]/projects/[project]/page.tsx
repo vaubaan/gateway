@@ -33,10 +33,10 @@ export default async function ProjectPage({
   if (!proj) notFound();
   const p = proj;
 
-  const [{ data: bindings }, { data: bots }] = await Promise.all([
+  const [{ data: bindings }, { data: tokens }] = await Promise.all([
     supabase.from('provider_bindings').select('*').eq('project_id', p.id),
     supabase
-      .from('bots')
+      .from('access_tokens')
       .select('*')
       .eq('project_id', p.id)
       .order('created_at', { ascending: false }),
@@ -105,9 +105,9 @@ export default async function ProjectPage({
 
       <section style={{ marginTop: 32 }}>
         <header style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <h2 style={{ fontSize: 18 }}>Bots</h2>
+          <h2 style={{ fontSize: 18 }}>Access tokens</h2>
           <Link
-            href={`/orgs/${o.slug}/projects/${p.slug}/bots/new`}
+            href={`/orgs/${o.slug}/projects/${p.slug}/tokens/new`}
             style={{
               padding: '6px 10px',
               background: '#fff',
@@ -116,12 +116,12 @@ export default async function ProjectPage({
               textDecoration: 'none',
             }}
           >
-            + New bot
+            + New access token
           </Link>
         </header>
         <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-          {(bots ?? []).map((b) => {
-            const bot = b as {
+          {(tokens ?? []).map((t) => {
+            const token = t as {
               id: string;
               name: string;
               api_key_prefix: string;
@@ -130,7 +130,7 @@ export default async function ProjectPage({
             };
             return (
               <li
-                key={bot.id}
+                key={token.id}
                 style={{
                   padding: 12,
                   marginBottom: 8,
@@ -141,28 +141,28 @@ export default async function ProjectPage({
                 }}
               >
                 <Link
-                  href={`/orgs/${o.slug}/projects/${p.slug}/bots/${bot.id}`}
+                  href={`/orgs/${o.slug}/projects/${p.slug}/tokens/${token.id}`}
                   style={{ textDecoration: 'none', color: 'inherit' }}
                 >
-                  <strong>{bot.name}</strong>{' '}
-                  <code style={{ opacity: 0.55 }}>vbn_live_{bot.api_key_prefix}…</code>
+                  <strong>{token.name}</strong>{' '}
+                  <code style={{ opacity: 0.55 }}>vbn_live_{token.api_key_prefix}…</code>
                 </Link>
                 <span style={{ opacity: 0.55 }}>
-                  {bot.status === 'active' ? (
+                  {token.status === 'active' ? (
                     <span style={{ color: '#7ee87e' }}>active</span>
                   ) : (
                     <span style={{ color: '#ff7e7e' }}>revoked</span>
                   )}
-                  {bot.last_used_at && (
+                  {token.last_used_at && (
                     <span style={{ marginLeft: 8 }}>
-                      used {new Date(bot.last_used_at).toLocaleString()}
+                      used {new Date(token.last_used_at).toLocaleString()}
                     </span>
                   )}
                 </span>
               </li>
             );
           })}
-          {(bots ?? []).length === 0 && <p style={{ opacity: 0.55 }}>No bots yet.</p>}
+          {(tokens ?? []).length === 0 && <p style={{ opacity: 0.55 }}>No access tokens yet.</p>}
         </ul>
       </section>
     </main>

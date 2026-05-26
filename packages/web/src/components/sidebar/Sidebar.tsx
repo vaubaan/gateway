@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 import styles from './Sidebar.module.css';
 import {
@@ -13,6 +13,7 @@ import {
   IconExternal,
   IconFolder,
   IconHome,
+  IconKey,
   IconLifeBuoy,
   IconLogout,
   IconMoon,
@@ -27,9 +28,16 @@ export interface SidebarOrg {
   name: string;
 }
 
+export interface SidebarProject {
+  id: string;
+  slug: string;
+  name: string;
+}
+
 export interface SidebarProps {
   email: string | null;
   orgs: SidebarOrg[];
+  projectsByOrg: Record<string, SidebarProject[]>;
 }
 
 interface NavItem {
@@ -46,11 +54,13 @@ function isActive(pathname: string, item: NavItem): boolean {
   return pathname === item.href || pathname.startsWith(item.href + '/');
 }
 
-export function Sidebar({ email, orgs }: SidebarProps) {
+export function Sidebar({ email, orgs, projectsByOrg }: SidebarProps) {
   const pathname = usePathname() ?? '';
   const router = useRouter();
   const orgSlugMatch = pathname.match(/^\/orgs\/([^/]+)/);
   const currentOrgSlug = orgSlugMatch ? orgSlugMatch[1] : null;
+  const projSlugMatch = pathname.match(/^\/orgs\/[^/]+\/projects\/([^/]+)/);
+  const currentProjSlug = projSlugMatch ? projSlugMatch[1] : null;
   const [theme, setTheme] = useState<'light' | 'dark'>('light');
 
   useEffect(() => {
@@ -81,42 +91,33 @@ export function Sidebar({ email, orgs }: SidebarProps) {
     router.refresh();
   }, [router]);
 
-  const currentOrg = orgs.find((o) => o.slug === currentOrgSlug) ?? orgs[0] ?? null;
+  const currentOrg = orgs.find((o) => o.slug === currentOrgSlug) ?? null;
+  const projects = currentOrg ? (projectsByOrg[currentOrg.id] ?? []) : [];
+  const currentProj = projects.find((p) => p.slug === currentProjSlug) ?? null;
+
   const orgBase = currentOrg ? `/orgs/${currentOrg.slug}` : null;
+  const projBase = orgBase && currentProj ? `${orgBase}/projects/${currentProj.slug}` : null;
 
-  const [orgMenuOpen, setOrgMenuOpen] = useState(false);
-  const orgMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!orgMenuOpen) return;
-    function onDown(e: MouseEvent) {
-      if (orgMenuRef.current && !orgMenuRef.current.contains(e.target as Node)) {
-        setOrgMenuOpen(false);
-      }
-    }
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') setOrgMenuOpen(false);
-    }
-    document.addEventListener('mousedown', onDown);
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('keydown', onKey);
-    };
-  }, [orgMenuOpen]);
-
-  useEffect(() => {
-    setOrgMenuOpen(false);
-  }, [pathname]);
-
-  const generalNav: NavItem[] = [
-    {
-      href: '/dashboard',
-      label: 'Organizations',
-      icon: <IconHome />,
-      match: (p) => p === '/dashboard',
+  const onOrgChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const slug = e.target.value;
+      if (!slug) router.push('/dashboard');
+      else router.push(`/orgs/${slug}`);
     },
-  ];
+    [router],
+  );
+
+  const onProjectChange = useCallback(
+    (e: React.ChangeEvent<HTMLSelectElement>) => {
+      const slug = e.target.value;
+      if (!orgBase) return;
+      if (!slug) router.push(orgBase);
+      else router.push(`${orgBase}/projects/${slug}`);
+    },
+    [router, orgBase],
+  );
+
+  const initials = email ? email.slice(0, 2).toUpperCase() : '··';
 
   const orgNav: NavItem[] = orgBase
     ? [
@@ -132,19 +133,24 @@ export function Sidebar({ email, orgs }: SidebarProps) {
               !p.startsWith(`${orgBase}/members`) &&
               !p.startsWith(`${orgBase}/audit`)),
         },
-        {
-          href: `${orgBase}/projects`,
-          label: 'Projects',
-          icon: <IconFolder />,
-          match: (p) => p.startsWith(`${orgBase}/projects`),
-        },
-        { href: `${orgBase}/roles`, label: 'Roles', icon: <IconShield /> },
         { href: `${orgBase}/members`, label: 'Members', icon: <IconUsers /> },
+        { href: `${orgBase}/roles`, label: 'Roles', icon: <IconShield /> },
         { href: `${orgBase}/audit`, label: 'Audit log', icon: <IconActivity /> },
       ]
     : [];
 
-  const initials = email ? email.slice(0, 2).toUpperCase() : '··';
+  const projNav: NavItem[] = projBase
+    ? [
+        {
+          href: projBase,
+          label: 'Overview',
+          icon: <IconFolder />,
+          match: (p) => p === projBase || p === `${projBase}/`,
+        },
+        { href: `${projBase}/audit`, label: 'Audit log', icon: <IconActivity /> },
+        { href: `${projBase}/tokens`, label: 'Access tokens', icon: <IconKey /> },
+      ]
+    : [];
 
   return (
     <aside className={styles.aside} aria-label="Primary navigation">
@@ -153,62 +159,65 @@ export function Sidebar({ email, orgs }: SidebarProps) {
         <span className={styles.brandName}>Vaubaan</span>
       </Link>
 
-      {currentOrg ? (
-        <div className={styles.orgSwitcherWrap} ref={orgMenuRef}>
-          <button
-            type="button"
-            className={styles.orgSwitcher}
-            onClick={() => setOrgMenuOpen((v) => !v)}
-            aria-haspopup="menu"
-            aria-expanded={orgMenuOpen}
-          >
-            <div className={styles.orgSwitcherText}>
-              <span className={styles.orgSwitcherLabel}>Organization</span>
-              <span className={styles.orgSwitcherName}>{currentOrg.name}</span>
-            </div>
-            <IconChevronDown
-              className={`${styles.chev}${orgMenuOpen ? ' ' + styles.chevOpen : ''}`}
-            />
-          </button>
-          {orgMenuOpen && (
-            <div className={styles.orgMenu} role="menu">
-              {orgs.map((o) => (
-                <Link
-                  key={o.id}
-                  href={`/orgs/${o.slug}`}
-                  className={`${styles.orgMenuItem}${
-                    o.slug === currentOrg.slug ? ' ' + styles.orgMenuItemActive : ''
-                  }`}
-                  role="menuitem"
-                >
-                  <span className={styles.orgMenuItemName}>{o.name}</span>
-                  <span className={styles.orgMenuItemSlug}>/{o.slug}</span>
-                </Link>
-              ))}
-              <div className={styles.orgMenuDivider} />
-              <Link href="/orgs/new" className={styles.orgMenuFooterLink} role="menuitem">
-                + New organization
-              </Link>
-              <Link href="/dashboard" className={styles.orgMenuFooterLink} role="menuitem">
-                View all organizations
-              </Link>
-            </div>
-          )}
-        </div>
-      ) : null}
-
       <nav className={styles.nav}>
         <div className={styles.section}>
           <span className={styles.sectionLabel}>General</span>
-          {generalNav.map((item) => (
-            <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
-          ))}
+          <NavLink
+            item={{
+              href: '/dashboard',
+              label: 'Organizations',
+              icon: <IconHome />,
+              match: (p) => p === '/dashboard',
+            }}
+            active={pathname === '/dashboard'}
+          />
+          <div className={styles.selectWrap}>
+            <select
+              className={styles.selectInput}
+              value={currentOrg?.slug ?? ''}
+              onChange={onOrgChange}
+              aria-label="Switch organization"
+            >
+              <option value="">— pick an org —</option>
+              {orgs.map((o) => (
+                <option key={o.id} value={o.slug}>
+                  {o.name}
+                </option>
+              ))}
+            </select>
+            <IconChevronDown className={styles.selectChev} />
+          </div>
         </div>
 
-        {orgNav.length > 0 && (
+        {currentOrg && (
           <div className={styles.section}>
-            <span className={styles.sectionLabel}>{currentOrg?.name ?? 'Organization'}</span>
+            <span className={styles.sectionLabel}>{currentOrg.name}</span>
             {orgNav.map((item) => (
+              <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
+            ))}
+            <div className={styles.selectWrap}>
+              <select
+                className={styles.selectInput}
+                value={currentProj?.slug ?? ''}
+                onChange={onProjectChange}
+                aria-label="Switch project"
+              >
+                <option value="">— pick a project —</option>
+                {projects.map((p) => (
+                  <option key={p.id} value={p.slug}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+              <IconChevronDown className={styles.selectChev} />
+            </div>
+          </div>
+        )}
+
+        {currentOrg && currentProj && (
+          <div className={styles.section}>
+            <span className={styles.sectionLabel}>{currentProj.name}</span>
+            {projNav.map((item) => (
               <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
             ))}
           </div>

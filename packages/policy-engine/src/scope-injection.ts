@@ -1,10 +1,10 @@
 /**
- * Scope injection — hide and auto-fill arguments the bot has no choice over.
+ * Scope injection — hide and auto-fill arguments the access token has no choice over.
  *
  * Spec : docs/spec/mcp-proxy.md §7.2 (filtered tools/list) + spec §6.4
  *        (resource_ref resolution).
  *
- * Premise : if a Bot's Project has exactly one ProviderBinding for a given
+ * Premise : if an access token's Project has exactly one ProviderBinding for a given
  * provider, then any tool argument that identifies that resource (owner+repo
  * for GitHub, project_id for Vercel, project_ref for Supabase, teamId for
  * Vercel team) is already fully determined. Exposing it to the agent is
@@ -42,7 +42,7 @@ export interface ScopeContext {
 }
 
 /**
- * Compute which arguments are determined for a given provider in this Bot's
+ * Compute which arguments are determined for a given provider in this access token's
  * project. Returns null if the args are NOT fully determined (zero or 2+
  * bindings) — in which case the agent must keep providing them.
  */

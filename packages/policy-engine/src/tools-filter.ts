@@ -4,7 +4,7 @@
  * Spec : docs/spec/mcp-proxy.md §7.2.
  *
  * The MCP gateway responds to `tools/list` by enumerating only the tools the
- * bot *could potentially call* (no evaluation of constraints, which depend on
+ * access token *could potentially call* (no evaluation of constraints, which depend on
  * runtime arguments). This narrows the agent's surface and reduces confusion.
  */
 

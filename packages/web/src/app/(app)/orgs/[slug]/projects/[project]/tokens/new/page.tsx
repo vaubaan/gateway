@@ -11,7 +11,7 @@ interface RoleRow {
   description: string | null;
 }
 
-export default function NewBotPage({
+export default function NewTokenPage({
   params,
 }: {
   params: Promise<{ slug: string; project: string }>;
@@ -43,7 +43,7 @@ export default function NewBotPage({
     setBusy(true);
     setError(null);
     try {
-      const res = await fetch('/api/v1/bots', {
+      const res = await fetch('/api/v1/tokens', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
@@ -66,7 +66,7 @@ export default function NewBotPage({
   if (apiKey) {
     return (
       <main>
-        <h1>Bot created — copy this api_key now</h1>
+        <h1>Access token created — copy this api_key now</h1>
         <div
           style={{
             padding: 24,
@@ -150,16 +150,16 @@ export default function NewBotPage({
 
   return (
     <main>
-      <h1>New bot</h1>
+      <h1>New access token</h1>
       <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, maxWidth: 540 }}>
         <label>
-          <div style={{ opacity: 0.7, marginBottom: 4 }}>Bot name</div>
+          <div style={{ opacity: 0.7, marginBottom: 4 }}>Token name</div>
           <input
             value={name}
             onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
             pattern="^[a-z0-9](-?[a-z0-9])*$"
             required
-            placeholder="claude-dev"
+            placeholder="ci-deploy"
             style={{
               width: '100%',
               padding: 10,
@@ -199,7 +199,7 @@ export default function NewBotPage({
             borderRadius: 6,
           }}
         >
-          {busy ? 'Creating…' : 'Create bot'}
+          {busy ? 'Creating…' : 'Create access token'}
         </button>
         {error && <p style={{ color: '#ff7e7e' }}>{error}</p>}
       </form>

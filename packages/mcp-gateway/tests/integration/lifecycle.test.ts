@@ -18,7 +18,7 @@ import { describe, expect, test, beforeEach } from 'vitest';
 import {
   generateApiKey,
   hashApiKey,
-  type BotContext,
+  type AccessTokenContext,
   type ProviderAdmin,
   type Role,
   type ProviderBinding,
@@ -30,50 +30,50 @@ import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/
 // ─── In-memory "DB" ──────────────────────────────────────────────────────────
 
 interface DbRow {
-  bot: {
+  token: {
     id: string;
     api_key_prefix: string;
     api_key_hash: string;
     status: 'active' | 'revoked';
     name: string;
   };
-  context: BotContext;
+  context: AccessTokenContext;
   admin: ProviderAdmin;
 }
 
 class FakeDb {
-  private bots = new Map<string, DbRow>();
+  private tokens = new Map<string, DbRow>();
 
-  addBot(row: DbRow): void {
-    this.bots.set(row.bot.id, row);
+  addToken(row: DbRow): void {
+    this.tokens.set(row.token.id, row);
   }
 
   byPrefix(prefix: string): DbRow | null {
-    for (const r of this.bots.values()) {
-      if (r.bot.api_key_prefix === prefix) return r;
+    for (const r of this.tokens.values()) {
+      if (r.token.api_key_prefix === prefix) return r;
     }
     return null;
   }
 
   byId(id: string): DbRow | null {
-    return this.bots.get(id) ?? null;
+    return this.tokens.get(id) ?? null;
   }
 
   revoke(id: string): void {
-    const row = this.bots.get(id);
-    if (row) row.bot.status = 'revoked';
+    const row = this.tokens.get(id);
+    if (row) row.token.status = 'revoked';
   }
 
   rotate(id: string, newPrefix: string, newHash: string): void {
-    const row = this.bots.get(id);
+    const row = this.tokens.get(id);
     if (row) {
-      row.bot.api_key_prefix = newPrefix;
-      row.bot.api_key_hash = newHash;
+      row.token.api_key_prefix = newPrefix;
+      row.token.api_key_hash = newHash;
     }
   }
 
-  disconnectProvider(botId: string): void {
-    const row = this.bots.get(botId);
+  disconnectProvider(tokenId: string): void {
+    const row = this.tokens.get(tokenId);
     if (row) {
       row.admin.status = 'revoked';
       row.context.provider_admins = row.context.provider_admins.map((p) =>
@@ -146,7 +146,7 @@ interface Harness {
   cache: MemoryCacheClient;
   gateway: McpGateway;
   apiKey: string;
-  botId: string;
+  tokenId: string;
   executeStub: (tool: string, args: Record<string, unknown>) => unknown;
 }
 
@@ -160,11 +160,11 @@ async function buildHarness(
   const { apiKey, apiKeyPrefix } = generateApiKey('test');
   const apiKeyHash = await hashApiKey(apiKey);
 
-  const botId = 'bot-1';
-  const ctx: BotContext = {
-    bot: {
-      id: botId,
-      name: 'claude-dev',
+  const tokenId = 'tk-1';
+  const ctx: AccessTokenContext = {
+    access_token: {
+      id: tokenId,
+      name: 'ci-deploy',
       project_id: 'p1',
       status: 'active',
       api_key_prefix: apiKeyPrefix,
@@ -178,26 +178,26 @@ async function buildHarness(
     ],
   };
 
-  db.addBot({
-    bot: {
-      id: botId,
+  db.addToken({
+    token: {
+      id: tokenId,
       api_key_prefix: apiKeyPrefix,
       api_key_hash: apiKeyHash,
       status: 'active',
-      name: 'claude-dev',
+      name: 'ci-deploy',
     },
     context: ctx,
     admin: { ...adminConnected },
   });
 
   const loader: ContextLoader = {
-    async loadBotForAuth(prefix) {
+    async loadAccessTokenForAuth(prefix) {
       const row = db.byPrefix(prefix);
       return row
-        ? { id: row.bot.id, api_key_hash: row.bot.api_key_hash, status: row.bot.status }
+        ? { id: row.token.id, api_key_hash: row.token.api_key_hash, status: row.token.status }
         : null;
     },
-    async loadBotContext(id) {
+    async loadAccessTokenContext(id) {
       return db.byId(id)?.context ?? null;
     },
     async touchLastUsed() {},
@@ -216,7 +216,7 @@ async function buildHarness(
       return stubExec(tool, args);
     },
     async loadProviderAdmin(_orgId, _provider) {
-      const row = db.byId(botId);
+      const row = db.byId(tokenId);
       return row?.admin ?? null;
     },
   };
@@ -228,7 +228,7 @@ async function buildHarness(
     upstreamByProvider: { github: githubAdapter } as never,
   });
 
-  return { db, audit, cache, gateway, apiKey, botId, executeStub: stubExec };
+  return { db, audit, cache, gateway, apiKey, tokenId, executeStub: stubExec };
 }
 
 // ─── Tests ───────────────────────────────────────────────────────────────────
@@ -292,10 +292,10 @@ describe('integration — lifecycle', () => {
     expect(harness.audit.rows[0]?.decision).toBe('denied');
   });
 
-  test('bot revocation → 401 on next call', async () => {
+  test('access-token revocation → 401 on next call', async () => {
     const ctx = await harness.gateway.authenticate(`Bearer ${harness.apiKey}`);
-    expect(ctx.bot.id).toBe('bot-1');
-    harness.db.revoke('bot-1');
+    expect(ctx.access_token.id).toBe('tk-1');
+    harness.db.revoke('tk-1');
     // Cache hit + revoke → re-verify should reject.
     await expect(harness.gateway.authenticate(`Bearer ${harness.apiKey}`)).rejects.toThrow(
       /revoked/,
@@ -308,7 +308,7 @@ describe('integration — lifecycle', () => {
     // Rotate.
     const { apiKey: newKey, apiKeyPrefix: newPrefix } = generateApiKey('test');
     const newHash = await hashApiKey(newKey);
-    harness.db.rotate('bot-1', newPrefix, newHash);
+    harness.db.rotate('tk-1', newPrefix, newHash);
     // Invalidate the cache so we re-load (in production, the rotate endpoint
     // explicitly invalidates cache).
     await harness.cache.del(
@@ -317,18 +317,18 @@ describe('integration — lifecycle', () => {
     // Old key — gone.
     await expect(harness.gateway.authenticate(`Bearer ${harness.apiKey}`)).rejects.toThrow();
     // Also update the context's stored prefix so the cache key matches the new one.
-    const row = harness.db.byId('bot-1');
-    if (row) row.context.bot.api_key_prefix = newPrefix;
+    const row = harness.db.byId('tk-1');
+    if (row) row.context.access_token.api_key_prefix = newPrefix;
     // New key — works.
     const ctx = await harness.gateway.authenticate(`Bearer ${newKey}`);
-    expect(ctx.bot.id).toBe('bot-1');
+    expect(ctx.access_token.id).toBe('tk-1');
   });
 
   test('provider disconnect → deny with explicit reason', async () => {
     const ctx = await harness.gateway.authenticate(`Bearer ${harness.apiKey}`);
-    harness.db.disconnectProvider('bot-1');
+    harness.db.disconnectProvider('tk-1');
     // Force cache miss to pick up the change.
-    await harness.cache.del(`vaubaan:ctx:${ctx.bot.api_key_prefix}`);
+    await harness.cache.del(`vaubaan:ctx:${ctx.access_token.api_key_prefix}`);
     const freshCtx = await harness.gateway.authenticate(`Bearer ${harness.apiKey}`);
     const call = await harness.gateway.handle(freshCtx, {
       jsonrpc: '2.0',

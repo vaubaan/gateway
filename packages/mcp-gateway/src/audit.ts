@@ -13,7 +13,7 @@ import type { AuditDecision } from '@vaubaan/shared';
 export interface AuditRow {
   organization_id: string;
   project_id: string | null;
-  bot_id: string | null;
+  access_token_id: string | null;
   tool_name: string;
   arguments_hash: string;
   role_matched: string | null;

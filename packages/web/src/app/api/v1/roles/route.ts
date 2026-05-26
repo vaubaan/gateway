@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { PermissionsSchema } from '@vaubaan/policy-engine';
 import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { requireOrgAdmin } from '@/lib/auth/require-admin';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,7 +32,7 @@ const BodySchema = z
 async function invalidateOrg(orgId: string): Promise<void> {
   const svc = getSupabaseServiceClient();
   const { data: bots } = await svc
-    .from('bots')
+    .from('access_tokens')
     .select('api_key_prefix, projects!inner(organization_id)')
     .eq('projects.organization_id', orgId);
   const cache = buildCacheClient();
@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const guard = await requireOrgAdmin(body.orgSlug);
+  const guard = await requireOrgMember(body.orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();

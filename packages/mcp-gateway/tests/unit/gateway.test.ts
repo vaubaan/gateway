@@ -1,6 +1,6 @@
 import { describe, expect, test, vi } from 'vitest';
 import type {
-  BotContext,
+  AccessTokenContext,
   McpToolDeclaration,
   Provider,
   ProviderAdmin,
@@ -77,10 +77,10 @@ async function buildHarness(opts: { execute?: UpstreamAdapter['executeCall'] } =
   const { apiKey, apiKeyPrefix } = generateApiKey('test');
   const apiKeyHash = await hashApiKey(apiKey);
 
-  const ctx: BotContext = {
-    bot: {
-      id: 'bot1',
-      name: 'claude-dev',
+  const ctx: AccessTokenContext = {
+    access_token: {
+      id: 'tk1',
+      name: 'ci-deploy',
       project_id: 'p1',
       status: 'active',
       api_key_prefix: apiKeyPrefix,
@@ -95,10 +95,10 @@ async function buildHarness(opts: { execute?: UpstreamAdapter['executeCall'] } =
   };
 
   const loader: ContextLoader = {
-    loadBotForAuth: vi
+    loadAccessTokenForAuth: vi
       .fn()
-      .mockResolvedValue({ id: 'bot1', api_key_hash: apiKeyHash, status: 'active' }),
-    loadBotContext: vi.fn().mockResolvedValue(ctx),
+      .mockResolvedValue({ id: 'tk1', api_key_hash: apiKeyHash, status: 'active' }),
+    loadAccessTokenContext: vi.fn().mockResolvedValue(ctx),
     touchLastUsed: vi.fn(),
   };
 
@@ -127,7 +127,7 @@ describe('McpGateway — authenticate', () => {
   test('valid api_key returns context', async () => {
     const { gateway, apiKey } = await buildHarness();
     const ctx = await gateway.authenticate(`Bearer ${apiKey}`);
-    expect(ctx.bot.id).toBe('bot1');
+    expect(ctx.access_token.id).toBe('tk1');
   });
 
   test('missing header throws AuthError', async () => {
@@ -144,9 +144,9 @@ describe('McpGateway — authenticate', () => {
     const { gateway, apiKey, loader } = await buildHarness();
     await gateway.authenticate(`Bearer ${apiKey}`);
     await gateway.authenticate(`Bearer ${apiKey}`);
-    // loadBotForAuth called twice (cache hit still re-verifies), loadBotContext once.
-    expect(loader.loadBotForAuth).toHaveBeenCalledTimes(2);
-    expect(loader.loadBotContext).toHaveBeenCalledTimes(1);
+    // loadAccessTokenForAuth called twice (cache hit still re-verifies), loadAccessTokenContext once.
+    expect(loader.loadAccessTokenForAuth).toHaveBeenCalledTimes(2);
+    expect(loader.loadAccessTokenContext).toHaveBeenCalledTimes(1);
   });
 });
 

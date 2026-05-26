@@ -10,6 +10,7 @@ test-results
 .vercel
 package-lock.json
 supabase/migrations/*.sql
+supabase/.temp/
 
 # Spec is read-only from the coding kind (cf. AGENTS.md §3, CLAUDE.md).
 docs/spec/

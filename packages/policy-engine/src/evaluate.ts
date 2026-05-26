@@ -101,7 +101,7 @@ export function evaluatePolicy(
   if (matchingRoles.length === 0) {
     return {
       decision: 'denied',
-      reason: `no role attached to this bot covers provider '${call.provider}'.`,
+      reason: `no role attached to this access token covers provider '${call.provider}'.`,
     };
   }
 
@@ -166,7 +166,7 @@ export function evaluatePolicy(
   }
   return {
     decision: 'denied',
-    reason: `tool '${call.tool}' is not allowed by any role attached to this bot.`,
+    reason: `tool '${call.tool}' is not allowed by any role attached to this access token.`,
   };
 }
 

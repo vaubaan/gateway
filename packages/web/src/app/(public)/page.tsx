@@ -13,12 +13,12 @@ const features = [
   {
     icon: 'P',
     title: 'Default-deny policy',
-    body: 'Every tool call is gated by a per-bot role. Dangerous ops (merge to main, delete file, drop table) are deny-listed by default.',
+    body: 'Every tool call is gated by per-token roles. Dangerous ops (merge to main, delete file, drop table) are deny-listed by default.',
   },
   {
     icon: 'A',
     title: 'Full audit log',
-    body: 'Bot id, tool, target, policy decision and timing on every call — including denies. Streamable in the dashboard.',
+    body: 'Access token id, tool, target, policy decision and timing on every call — including denies. Streamable in the dashboard.',
   },
   {
     icon: 'R',
@@ -28,7 +28,7 @@ const features = [
   {
     icon: 'B',
     title: 'Composable roles',
-    body: 'Attach builtin (github:developer, vercel:viewer) and custom roles to a bot. Roles union for allows, deny-lists override.',
+    body: 'Attach builtin (github:developer, vercel:viewer) and custom roles to a token. Roles union for allows, deny-lists override.',
   },
   {
     icon: 'O',
@@ -47,8 +47,8 @@ const steps = [
     body: 'Pin each project to specific repos, Vercel projects and Supabase project_refs. Default-deny on anything else.',
   },
   {
-    title: 'Compose Roles → Bot',
-    body: 'Pick builtin roles (github:developer, vercel:viewer…) or write custom. Attach N roles to a Bot.',
+    title: 'Compose Roles → Access token',
+    body: 'Pick builtin roles (github:developer, vercel:viewer…) or write custom. Attach N roles to an access token.',
   },
   {
     title: 'Drop key, ship',

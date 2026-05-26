@@ -7,7 +7,7 @@
  *
  * Spec : docs/spec/mcp-proxy.md §8.2, §9.6 ("Révoquer un ProviderAdmin").
  *
- * Cache invalidation : we drop every cached BotContext for this org (we
+ * Cache invalidation : we drop every cached AccessTokenContext for this org (we
  * scan by org_id since context cache keys are api_key_prefix-based).
  * In practice this means a small set of DELs.
  */
@@ -15,7 +15,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { requireOrgAdmin } from '@/lib/auth/require-admin';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -32,7 +32,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ provider
     return NextResponse.json({ error: 'orgSlug query param required' }, { status: 400 });
   }
 
-  const guard = await requireOrgAdmin(orgSlug);
+  const guard = await requireOrgMember(orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();
@@ -50,14 +50,14 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ provider
     .eq('provider', provider);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Best-effort cache invalidation for the org's bots.
-  const { data: bots } = await svc
-    .from('bots')
+  // Best-effort cache invalidation for the org's access tokens.
+  const { data: tokens } = await svc
+    .from('access_tokens')
     .select('api_key_prefix, projects!inner(organization_id)')
     .eq('projects.organization_id', guard.orgId);
   const cache = buildCacheClient();
-  for (const b of (bots ?? []) as Array<{ api_key_prefix: string }>) {
-    await cache.del(`vaubaan:ctx:${b.api_key_prefix}`);
+  for (const t of (tokens ?? []) as Array<{ api_key_prefix: string }>) {
+    await cache.del(`vaubaan:ctx:${t.api_key_prefix}`);
   }
 
   return NextResponse.json({ ok: true });

@@ -8,7 +8,7 @@
 import { GitHubAdapter, githubAvailableTools } from '@vaubaan/providers-github';
 import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
-import type { BotContext, Provider, ProviderAdmin, Role } from '@vaubaan/shared';
+import type { AccessTokenContext, Provider, ProviderAdmin, Role } from '@vaubaan/shared';
 import {
   McpGateway,
   buildCacheClient,
@@ -46,13 +46,13 @@ function getGitHubAppCredentials() {
   return { appId, appSlug: slug, privateKeyPem: pem };
 }
 
-interface BotAuthRow {
+interface AccessTokenAuthRow {
   id: string;
   api_key_hash: string;
   status: string;
 }
 
-interface BotRow {
+interface AccessTokenRow {
   id: string;
   name: string;
   project_id: string;
@@ -79,25 +79,25 @@ export function buildGateway(opts: {
   const supabase = getSupabaseServiceClient();
 
   const contextLoader: ContextLoader = {
-    async loadBotForAuth(prefix) {
+    async loadAccessTokenForAuth(prefix) {
       const { data } = await supabase
-        .from('bots')
+        .from('access_tokens')
         .select('id, api_key_hash, status')
         .eq('api_key_prefix', prefix)
-        .maybeSingle<BotAuthRow>();
+        .maybeSingle<AccessTokenAuthRow>();
       return data;
     },
-    async loadBotContext(botId) {
-      const { data: bot } = await supabase
-        .from('bots')
+    async loadAccessTokenContext(accessTokenId) {
+      const { data: tk } = await supabase
+        .from('access_tokens')
         .select('id, name, project_id, status, api_key_prefix')
-        .eq('id', botId)
-        .maybeSingle<BotRow>();
-      if (!bot) return null;
+        .eq('id', accessTokenId)
+        .maybeSingle<AccessTokenRow>();
+      if (!tk) return null;
       const { data: project } = await supabase
         .from('projects')
         .select('id, slug, organization_id')
-        .eq('id', bot.project_id)
+        .eq('id', tk.project_id)
         .maybeSingle<ProjectRow>();
       if (!project) return null;
       const { data: org } = await supabase
@@ -106,11 +106,11 @@ export function buildGateway(opts: {
         .eq('id', project.organization_id)
         .maybeSingle<OrgRow>();
       if (!org) return null;
-      const { data: botRoles } = await supabase
-        .from('bot_roles')
+      const { data: tokenRoles } = await supabase
+        .from('access_token_roles')
         .select('role:roles(*)')
-        .eq('bot_id', botId);
-      const roles: Role[] = ((botRoles ?? []) as unknown as Array<{ role: Role | null }>)
+        .eq('access_token_id', accessTokenId);
+      const roles: Role[] = ((tokenRoles ?? []) as unknown as Array<{ role: Role | null }>)
         .map((r) => r.role)
         .filter((r): r is Role => r !== null);
       const bindingsResp = await supabase
@@ -123,21 +123,21 @@ export function buildGateway(opts: {
         .eq('organization_id', org.id);
       const bindings = (bindingsResp.data ?? []) as unknown;
       const providerAdmins = (providerAdminsResp.data ?? []) as unknown;
-      const ctx: BotContext = {
-        bot,
+      const ctx: AccessTokenContext = {
+        access_token: tk,
         project,
         organization: org,
         roles,
-        bindings: bindings as BotContext['bindings'],
-        provider_admins: providerAdmins as BotContext['provider_admins'],
+        bindings: bindings as AccessTokenContext['bindings'],
+        provider_admins: providerAdmins as AccessTokenContext['provider_admins'],
       };
       return ctx;
     },
-    async touchLastUsed(botId) {
+    async touchLastUsed(accessTokenId) {
       await supabase
-        .from('bots')
+        .from('access_tokens')
         .update({ last_used_at: new Date().toISOString() })
-        .eq('id', botId);
+        .eq('id', accessTokenId);
     },
   };
 

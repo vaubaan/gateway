@@ -6,8 +6,8 @@
  * and registers them as if the customer had clicked through the OAuth/install
  * flows for each provider (paste-token mode).
  *
- * Idempotent : reuses existing org / project / bot rows when they exist ;
- * rotates the api_key on every run and prints it.
+ * Idempotent : reuses existing org / project / access_token rows when they
+ * exist ; rotates the api_key on every run and prints it.
  *
  * Requires the test user `test@vaubaan.com` to exist in auth.users (seeded
  * manually via the Supabase Admin API on 2026-05-23).
@@ -78,23 +78,17 @@ async function main() {
     const orgSlug = 'sbw-vaubaan';
     const orgName = 'sbw-vaubaan (fake customer)';
     const orgRes = await client.query(
-      `insert into organizations (name, slug)
-       values ($1, $2)
-       on conflict (slug) do update set name = excluded.name
+      `insert into organizations (name, slug, owner_id)
+       values ($1, $2, $3)
+       on conflict (slug) do update set name = excluded.name, owner_id = excluded.owner_id
        returning id`,
-      [orgName, orgSlug],
+      [orgName, orgSlug, CUSTOMER_USER_ID],
     );
     const orgId = (orgRes.rows[0] as { id: string }).id;
-    console.log('org:', orgId, orgSlug);
+    console.log('org:', orgId, orgSlug, '(owner: test@vaubaan.com)');
 
-    // 2) Member: test user as admin
-    await client.query(
-      `insert into org_members (organization_id, user_id, role)
-       values ($1, $2, 'admin')
-       on conflict (organization_id, user_id) do update set role = 'admin'`,
-      [orgId, CUSTOMER_USER_ID],
-    );
-    console.log('member: test@vaubaan.com as admin');
+    // The enforce_owner_is_member trigger inserts the owner into org_members,
+    // so no explicit org_members insert is needed. Idempotent on re-runs.
 
     // 3) ProviderAdmin × 3 — paste-token mode (no installation_id).
     // The bytea column stores the raw UTF-8 bytes of the PAT for now (v0 has
@@ -156,7 +150,7 @@ async function main() {
     await insertBinding('vercel', PROJECT_REF_VERCEL, 'project-i4ddj');
     await insertBinding('supabase', env.SUPABASE_PROJECT_REF, 'playground');
 
-    // 6) Bot — rotate api_key on each run.
+    // 6) Access token — rotate api_key on each run.
     const builtinRoles = await client.query(
       `select id, name from roles
        where is_builtin = true
@@ -171,9 +165,9 @@ async function main() {
 
     const { apiKey, apiKeyPrefix } = generateApiKey('test');
     const apiKeyHash = await hashApiKey(apiKey);
-    const botRes = await client.query(
-      `insert into bots (project_id, name, api_key_prefix, api_key_hash, status, created_by)
-       values ($1, 'claude-dev', $2, $3, 'active', $4)
+    const tokenRes = await client.query(
+      `insert into access_tokens (project_id, name, api_key_prefix, api_key_hash, status, created_by)
+       values ($1, 'demo-token', $2, $3, 'active', $4)
        on conflict (project_id, name) do update set
          api_key_prefix = excluded.api_key_prefix,
          api_key_hash = excluded.api_key_hash,
@@ -181,24 +175,24 @@ async function main() {
        returning id`,
       [projectId, apiKeyPrefix, apiKeyHash, CUSTOMER_USER_ID],
     );
-    const botId = (botRes.rows[0] as { id: string }).id;
+    const tokenId = (tokenRes.rows[0] as { id: string }).id;
     // Wipe old role assignments and re-attach.
-    await client.query(`delete from bot_roles where bot_id = $1`, [botId]);
+    await client.query(`delete from access_token_roles where access_token_id = $1`, [tokenId]);
     for (const roleId of roleIds) {
       await client.query(
-        `insert into bot_roles (bot_id, role_id) values ($1, $2)
+        `insert into access_token_roles (access_token_id, role_id) values ($1, $2)
          on conflict do nothing`,
-        [botId, roleId],
+        [tokenId, roleId],
       );
     }
-    console.log('bot:', botId, 'claude-dev with', roleIds.length, 'roles');
+    console.log('access_token:', tokenId, 'demo-token with', roleIds.length, 'roles');
 
     console.log('\n========================================');
     console.log('TEST CUSTOMER SEEDED — copy the api_key:');
     console.log('========================================');
     console.log('Org slug   :', orgSlug);
     console.log('Project    : playground');
-    console.log('Bot name   : claude-dev');
+    console.log('Token name : demo-token');
     console.log('Roles      : github:developer, vercel:viewer, supabase:reader');
     console.log('API key    :', apiKey);
     console.log('========================================\n');

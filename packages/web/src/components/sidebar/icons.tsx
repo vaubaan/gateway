@@ -104,6 +104,13 @@ export const IconBot = (p: IconProps) => (
   </svg>
 );
 
+export const IconKey = (p: IconProps) => (
+  <svg {...base(p)}>
+    <circle cx="7.5" cy="15.5" r="3.5" />
+    <path d="M10 13 21 2M16 7l4 4M14 9l4 4" />
+  </svg>
+);
+
 export const IconSun = (p: IconProps) => (
   <svg {...base(p)}>
     <circle cx="12" cy="12" r="4" />

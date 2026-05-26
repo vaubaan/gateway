@@ -11,7 +11,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { requireOrgAdmin } from '@/lib/auth/require-admin';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
 import { generateState } from '@/lib/oauth/state';
 
 export const dynamic = 'force-dynamic';
@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: 'org query param required' }, { status: 400 });
   }
 
-  const guard = await requireOrgAdmin(slug);
+  const guard = await requireOrgMember(slug);
   if (!guard.ok) return guard.response;
 
   const appSlug = process.env.GITHUB_APP_SLUG ?? 'vaubaan-gateway';

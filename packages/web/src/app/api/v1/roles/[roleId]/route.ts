@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { PermissionsSchema } from '@vaubaan/policy-engine';
 import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { requireOrgAdmin } from '@/lib/auth/require-admin';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -30,7 +30,7 @@ const PatchSchema = z
 async function invalidateOrg(orgId: string): Promise<void> {
   const svc = getSupabaseServiceClient();
   const { data: bots } = await svc
-    .from('bots')
+    .from('access_tokens')
     .select('api_key_prefix, projects!inner(organization_id)')
     .eq('projects.organization_id', orgId);
   const cache = buildCacheClient();
@@ -58,7 +58,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ roleId: s
       { status: 400 },
     );
   }
-  const guard = await requireOrgAdmin(body.orgSlug);
+  const guard = await requireOrgMember(body.orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();
@@ -85,7 +85,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ roleId: 
   if (!orgSlug)
     return NextResponse.json({ error: 'orgSlug query param required' }, { status: 400 });
 
-  const guard = await requireOrgAdmin(orgSlug);
+  const guard = await requireOrgMember(orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();
@@ -97,7 +97,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ roleId: 
 
   // bot_roles has on delete restrict — make sure no bot still references this role.
   const { count } = await svc
-    .from('bot_roles')
+    .from('access_token_roles')
     .select('*', { count: 'exact', head: true })
     .eq('role_id', roleId);
   if ((count ?? 0) > 0) {

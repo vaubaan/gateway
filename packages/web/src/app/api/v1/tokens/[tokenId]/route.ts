@@ -1,13 +1,13 @@
 /**
- * Bot RW operations.
+ * Access-token RW operations.
  *
- *   PATCH  /api/v1/bots/:botId   body: { name?, status?, roleIds? }
- *   DELETE /api/v1/bots/:botId
+ *   PATCH  /api/v1/tokens/:tokenId   body: { name?, status?, roleIds? }
+ *   DELETE /api/v1/tokens/:tokenId
  *
  * Spec : docs/spec/mcp-proxy.md §8.5.
  *
- * Cache invalidation : on every mutation we delete the cached BotContext
- * for the bot's api_key_prefix so the next /mcp call picks up changes
+ * Cache invalidation : on every mutation we delete the cached AccessTokenContext
+ * for the token's api_key_prefix so the next /mcp call picks up changes
  * within ≤1 round-trip (no 60s staleness window).
  */
 
@@ -15,7 +15,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { requireOrgAdmin } from '@/lib/auth/require-admin';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -38,8 +38,8 @@ async function invalidateCache(prefix: string) {
   await buildCacheClient().del(`vaubaan:ctx:${prefix}`);
 }
 
-export async function PATCH(req: NextRequest, ctx: { params: Promise<{ botId: string }> }) {
-  const { botId } = await ctx.params;
+export async function PATCH(req: NextRequest, ctx: { params: Promise<{ tokenId: string }> }) {
+  const { tokenId } = await ctx.params;
   let body: z.infer<typeof PatchSchema>;
   try {
     body = PatchSchema.parse(await req.json());
@@ -50,74 +50,73 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ botId: st
     );
   }
 
-  const guard = await requireOrgAdmin(body.orgSlug);
+  const guard = await requireOrgMember(body.orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();
 
-  // Confirm the bot belongs to a project of this org.
-  const { data: bot } = await svc
-    .from('bots')
+  const { data: token } = await svc
+    .from('access_tokens')
     .select('id, project_id, api_key_prefix, projects!inner(organization_id)')
-    .eq('id', botId)
+    .eq('id', tokenId)
     .maybeSingle<{
       id: string;
       project_id: string;
       api_key_prefix: string;
       projects: { organization_id: string };
     }>();
-  if (!bot || bot.projects.organization_id !== guard.orgId) {
-    return NextResponse.json({ error: 'bot not found in this org' }, { status: 404 });
+  if (!token || token.projects.organization_id !== guard.orgId) {
+    return NextResponse.json({ error: 'access token not found in this org' }, { status: 404 });
   }
 
   const updates: Record<string, string> = {};
   if (body.name) updates.name = body.name;
   if (body.status) updates.status = body.status;
   if (Object.keys(updates).length > 0) {
-    const { error } = await svc.from('bots').update(updates).eq('id', botId);
+    const { error } = await svc.from('access_tokens').update(updates).eq('id', tokenId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   if (body.roleIds) {
-    await svc.from('bot_roles').delete().eq('bot_id', botId);
+    await svc.from('access_token_roles').delete().eq('access_token_id', tokenId);
     if (body.roleIds.length > 0) {
       const { error } = await svc
-        .from('bot_roles')
-        .insert(body.roleIds.map((rid) => ({ bot_id: botId, role_id: rid })));
+        .from('access_token_roles')
+        .insert(body.roleIds.map((rid) => ({ access_token_id: tokenId, role_id: rid })));
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
     }
   }
 
-  await invalidateCache(bot.api_key_prefix);
+  await invalidateCache(token.api_key_prefix);
   return NextResponse.json({ ok: true });
 }
 
-export async function DELETE(req: NextRequest, ctx: { params: Promise<{ botId: string }> }) {
-  const { botId } = await ctx.params;
+export async function DELETE(req: NextRequest, ctx: { params: Promise<{ tokenId: string }> }) {
+  const { tokenId } = await ctx.params;
   const orgSlug = req.nextUrl.searchParams.get('orgSlug');
   if (!orgSlug)
     return NextResponse.json({ error: 'orgSlug query param required' }, { status: 400 });
 
-  const guard = await requireOrgAdmin(orgSlug);
+  const guard = await requireOrgMember(orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();
-  const { data: bot } = await svc
-    .from('bots')
+  const { data: token } = await svc
+    .from('access_tokens')
     .select('id, api_key_prefix, projects!inner(organization_id)')
-    .eq('id', botId)
+    .eq('id', tokenId)
     .maybeSingle<{
       id: string;
       api_key_prefix: string;
       projects: { organization_id: string };
     }>();
-  if (!bot || bot.projects.organization_id !== guard.orgId) {
-    return NextResponse.json({ error: 'bot not found in this org' }, { status: 404 });
+  if (!token || token.projects.organization_id !== guard.orgId) {
+    return NextResponse.json({ error: 'access token not found in this org' }, { status: 404 });
   }
 
-  const { error } = await svc.from('bots').delete().eq('id', botId);
+  const { error } = await svc.from('access_tokens').delete().eq('id', tokenId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  await invalidateCache(bot.api_key_prefix);
+  await invalidateCache(token.api_key_prefix);
   return NextResponse.json({ ok: true });
 }

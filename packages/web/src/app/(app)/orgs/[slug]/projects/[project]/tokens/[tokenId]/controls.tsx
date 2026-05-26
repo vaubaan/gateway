@@ -10,18 +10,18 @@ interface RoleRow {
   description: string | null;
 }
 
-export function BotControls({
-  botId,
-  botName,
-  botStatus,
+export function TokenControls({
+  tokenId,
+  tokenName,
+  tokenStatus,
   orgSlug,
   projectSlug,
   roles,
   attachedRoleIds,
 }: {
-  botId: string;
-  botName: string;
-  botStatus: 'active' | 'revoked';
+  tokenId: string;
+  tokenName: string;
+  tokenStatus: 'active' | 'revoked';
   orgSlug: string;
   projectSlug: string;
   roles: RoleRow[];
@@ -38,7 +38,7 @@ export function BotControls({
     setBusy('rotate');
     setError(null);
     try {
-      const res = await fetch(`/api/v1/bots/${botId}/rotate-key`, {
+      const res = await fetch(`/api/v1/tokens/${tokenId}/rotate-key`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ orgSlug }),
@@ -54,12 +54,12 @@ export function BotControls({
   }
 
   async function toggleStatus() {
-    const next = botStatus === 'active' ? 'revoked' : 'active';
-    if (!confirm(`Set this bot's status to ${next}?`)) return;
+    const next = tokenStatus === 'active' ? 'revoked' : 'active';
+    if (!confirm(`Set this access token's status to ${next}?`)) return;
     setBusy('status');
     setError(null);
     try {
-      const res = await fetch(`/api/v1/bots/${botId}`, {
+      const res = await fetch(`/api/v1/tokens/${tokenId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ orgSlug, status: next }),
@@ -78,7 +78,7 @@ export function BotControls({
     setBusy('roles');
     setError(null);
     try {
-      const res = await fetch(`/api/v1/bots/${botId}`, {
+      const res = await fetch(`/api/v1/tokens/${tokenId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ orgSlug, roleIds: Array.from(selected) }),
@@ -94,11 +94,11 @@ export function BotControls({
   }
 
   async function destroy() {
-    if (!confirm(`Delete bot '${botName}' permanently? This cannot be undone.`)) return;
+    if (!confirm(`Delete access token '${tokenName}' permanently? This cannot be undone.`)) return;
     setBusy('delete');
     setError(null);
     try {
-      const res = await fetch(`/api/v1/bots/${botId}?orgSlug=${encodeURIComponent(orgSlug)}`, {
+      const res = await fetch(`/api/v1/tokens/${tokenId}?orgSlug=${encodeURIComponent(orgSlug)}`, {
         method: 'DELETE',
       });
       const json = (await res.json()) as { error?: string };
@@ -166,12 +166,12 @@ export function BotControls({
           >
             {busy === 'status'
               ? '…'
-              : botStatus === 'active'
+              : tokenStatus === 'active'
                 ? 'Revoke (block all calls)'
                 : 'Reactivate'}
           </button>
           <button type="button" onClick={destroy} disabled={busy !== null} style={dangerBtn}>
-            {busy === 'delete' ? 'Deleting…' : 'Delete bot'}
+            {busy === 'delete' ? 'Deleting…' : 'Delete token'}
           </button>
         </div>
         {error && <p style={{ color: '#ff7e7e', marginTop: 12 }}>{error}</p>}

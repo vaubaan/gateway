@@ -24,25 +24,19 @@ export async function createOrg(
   const { data: userData } = await auth.auth.getUser();
   if (!userData.user) return { ok: false, error: 'not authenticated — please log in again' };
 
-  // Insert via service-role : same trust model as the OAuth provider callback —
-  // we've authenticated the user above, so we can bypass RLS to atomically
-  // create the org + admin membership.
+  // Insert via service-role : we've authenticated the user above, so we can
+  // bypass RLS to set owner_id atomically. The DB trigger will then
+  // auto-insert the owner into org_members.
   const svc = getSupabaseServiceClient();
 
   const { data: org, error: orgErr } = await svc
     .from('organizations')
-    .insert({ name, slug })
+    .insert({ name, slug, owner_id: userData.user.id })
     .select('id, slug')
     .single<{ id: string; slug: string }>();
   if (orgErr || !org) {
     return { ok: false, error: orgErr?.message ?? 'insert returned no row' };
   }
-
-  const { error: memErr } = await svc
-    .from('org_members')
-    .insert({ organization_id: org.id, user_id: userData.user.id, role: 'admin' });
-  if (memErr)
-    return { ok: false, error: `org created but member insert failed: ${memErr.message}` };
 
   redirect(`/orgs/${org.slug}`);
 }

@@ -9,7 +9,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { requireOrgAdmin } from '@/lib/auth/require-admin';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,7 +23,7 @@ const PatchSchema = z.object({
 async function invalidateOrg(orgId: string) {
   const svc = getSupabaseServiceClient();
   const { data: bots } = await svc
-    .from('bots')
+    .from('access_tokens')
     .select('api_key_prefix, projects!inner(organization_id)')
     .eq('projects.organization_id', orgId);
   const cache = buildCacheClient();
@@ -44,7 +44,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ bindingId
     );
   }
 
-  const guard = await requireOrgAdmin(body.orgSlug);
+  const guard = await requireOrgMember(body.orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();
@@ -77,7 +77,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ bindingI
   if (!orgSlug) {
     return NextResponse.json({ error: 'orgSlug query param required' }, { status: 400 });
   }
-  const guard = await requireOrgAdmin(orgSlug);
+  const guard = await requireOrgMember(orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();

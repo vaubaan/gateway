@@ -1,11 +1,11 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
-import { BotControls } from './controls';
+import { TokenControls } from './controls';
 
 export const dynamic = 'force-dynamic';
 
-interface BotRow {
+interface TokenRow {
   id: string;
   name: string;
   api_key_prefix: string;
@@ -21,12 +21,12 @@ interface RoleRow {
   description: string | null;
 }
 
-export default async function BotPage({
+export default async function TokenPage({
   params,
 }: {
-  params: Promise<{ slug: string; project: string; botId: string }>;
+  params: Promise<{ slug: string; project: string; tokenId: string }>;
 }) {
-  const { slug, project, botId } = await params;
+  const { slug, project, tokenId } = await params;
   const supabase = await getSupabaseServer();
   const { data: user } = await supabase.auth.getUser();
   if (!user.user) redirect('/login');
@@ -46,16 +46,16 @@ export default async function BotPage({
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!proj) notFound();
 
-  const { data: bot } = await supabase
-    .from('bots')
+  const { data: token } = await supabase
+    .from('access_tokens')
     .select('id, name, api_key_prefix, status, last_used_at, created_at')
-    .eq('id', botId)
+    .eq('id', tokenId)
     .eq('project_id', proj.id)
-    .maybeSingle<BotRow>();
-  if (!bot) notFound();
+    .maybeSingle<TokenRow>();
+  if (!token) notFound();
 
   const [{ data: roleLinks }, { data: rolesCatalog }, { data: lastCalls }] = await Promise.all([
-    supabase.from('bot_roles').select('role_id').eq('bot_id', bot.id),
+    supabase.from('access_token_roles').select('role_id').eq('access_token_id', token.id),
     supabase
       .from('roles')
       .select('id, name, provider, description')
@@ -64,7 +64,7 @@ export default async function BotPage({
     supabase
       .from('audit_log')
       .select('id, ts, tool_name, decision, role_matched, upstream_latency_ms')
-      .eq('bot_id', bot.id)
+      .eq('access_token_id', token.id)
       .order('ts', { ascending: false })
       .limit(10),
   ]);
@@ -77,9 +77,9 @@ export default async function BotPage({
     <main>
       <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <div>
-          <h1 style={{ marginBottom: 4 }}>{bot.name}</h1>
+          <h1 style={{ marginBottom: 4 }}>{token.name}</h1>
           <code style={{ opacity: 0.5 }}>
-            /{org.slug}/{proj.slug}/{bot.name}
+            /{org.slug}/{proj.slug}/{token.name}
           </code>
         </div>
         <Link href={`/orgs/${org.slug}/projects/${proj.slug}`} style={{ opacity: 0.7 }}>
@@ -89,30 +89,27 @@ export default async function BotPage({
 
       <section style={{ marginTop: 24 }}>
         <p>
-          <strong>API key prefix:</strong>{' '}
-          <code>
-            vbn_{bot.status === 'revoked' ? 'live' : 'live'}_{bot.api_key_prefix}…
-          </code>{' '}
-          {bot.status === 'active' ? (
+          <strong>API key prefix:</strong> <code>vbn_live_{token.api_key_prefix}…</code>{' '}
+          {token.status === 'active' ? (
             <span style={{ color: '#7ee87e' }}>● active</span>
           ) : (
             <span style={{ color: '#ff7e7e' }}>● revoked</span>
           )}
         </p>
-        {bot.last_used_at && (
+        {token.last_used_at && (
           <p style={{ opacity: 0.6, fontSize: 13 }}>
-            Last call: {new Date(bot.last_used_at).toLocaleString()}
+            Last call: {new Date(token.last_used_at).toLocaleString()}
           </p>
         )}
         <p style={{ opacity: 0.6, fontSize: 13 }}>
-          Created: {new Date(bot.created_at).toLocaleString()}
+          Created: {new Date(token.created_at).toLocaleString()}
         </p>
       </section>
 
-      <BotControls
-        botId={bot.id}
-        botName={bot.name}
-        botStatus={bot.status}
+      <TokenControls
+        tokenId={token.id}
+        tokenName={token.name}
+        tokenStatus={token.status}
         orgSlug={org.slug}
         projectSlug={proj.slug}
         roles={roles}

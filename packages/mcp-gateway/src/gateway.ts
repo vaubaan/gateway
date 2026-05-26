@@ -18,7 +18,7 @@ import {
   stripInjectedArgs,
 } from '@vaubaan/policy-engine';
 import type {
-  BotContext,
+  AccessTokenContext,
   JsonRpcRequest,
   JsonRpcResponse,
   McpToolDeclaration,
@@ -32,14 +32,14 @@ import { hashArguments, type AuditWriter } from './audit.ts';
 import { AuthError, rpcError, rpcSuccess } from './errors.ts';
 
 export interface ContextLoader {
-  /** Load minimal bot row for auth verification. Returns null if not found / revoked. */
-  loadBotForAuth(
+  /** Load minimal access-token row for auth verification. Returns null if not found / revoked. */
+  loadAccessTokenForAuth(
     apiKeyPrefix: string,
   ): Promise<{ id: string; api_key_hash: string; status: string } | null>;
-  /** Load the full context for an authenticated bot. */
-  loadBotContext(botId: string): Promise<BotContext | null>;
+  /** Load the full context for an authenticated access token. */
+  loadAccessTokenContext(accessTokenId: string): Promise<AccessTokenContext | null>;
   /** Touch last_used_at — best-effort. */
-  touchLastUsed?(botId: string): Promise<void>;
+  touchLastUsed?(accessTokenId: string): Promise<void>;
 }
 
 export interface UpstreamAdapter {
@@ -60,7 +60,7 @@ export interface GatewayConfig {
   audit: AuditWriter;
   contextLoader: ContextLoader;
   upstreamByProvider: Record<Provider, UpstreamAdapter>;
-  /** TTL for the bot context cache. Default 60s. */
+  /** TTL for the access-token context cache. Default 60s. */
   contextTtlSeconds?: number;
   /** Optional request metadata captured into audit_log. */
   clientIp?: string | null;
@@ -75,7 +75,7 @@ export class McpGateway {
   }
 
   /** Authenticate the request via Bearer api_key header. */
-  async authenticate(authHeader: string | null | undefined): Promise<BotContext> {
+  async authenticate(authHeader: string | null | undefined): Promise<AccessTokenContext> {
     if (!authHeader || !authHeader.toLowerCase().startsWith('bearer ')) {
       throw new AuthError(
         'missing or malformed Authorization header (expected `Bearer vbn_live_...`).',
@@ -86,26 +86,26 @@ export class McpGateway {
     if (!parsed) throw new AuthError('api_key format invalid.');
 
     const cacheKey = `vaubaan:ctx:${parsed.prefix}`;
-    const cached = await this.cfg.cache.get<BotContext>(cacheKey);
-    if (cached && cached.bot.status === 'active') {
+    const cached = await this.cfg.cache.get<AccessTokenContext>(cacheKey);
+    if (cached && cached.access_token.status === 'active') {
       // Re-verify hash on cache hit — defensive against cache poisoning.
-      const bot = await this.cfg.contextLoader.loadBotForAuth(parsed.prefix);
-      if (!bot || bot.status !== 'active') throw new AuthError('bot not found or revoked.');
-      if (!(await verifyApiKey(bot.api_key_hash, raw))) throw new AuthError('api_key mismatch.');
+      const tk = await this.cfg.contextLoader.loadAccessTokenForAuth(parsed.prefix);
+      if (!tk || tk.status !== 'active') throw new AuthError('access token not found or revoked.');
+      if (!(await verifyApiKey(tk.api_key_hash, raw))) throw new AuthError('api_key mismatch.');
       return cached;
     }
 
-    const bot = await this.cfg.contextLoader.loadBotForAuth(parsed.prefix);
-    if (!bot) throw new AuthError('unknown api_key.');
-    if (bot.status !== 'active') throw new AuthError('bot is revoked.');
-    if (!(await verifyApiKey(bot.api_key_hash, raw))) throw new AuthError('api_key mismatch.');
+    const tk = await this.cfg.contextLoader.loadAccessTokenForAuth(parsed.prefix);
+    if (!tk) throw new AuthError('unknown api_key.');
+    if (tk.status !== 'active') throw new AuthError('access token is revoked.');
+    if (!(await verifyApiKey(tk.api_key_hash, raw))) throw new AuthError('api_key mismatch.');
 
-    const ctx = await this.cfg.contextLoader.loadBotContext(bot.id);
-    if (!ctx) throw new AuthError('bot context could not be loaded.');
+    const ctx = await this.cfg.contextLoader.loadAccessTokenContext(tk.id);
+    if (!ctx) throw new AuthError('access-token context could not be loaded.');
 
     await this.cfg.cache.set(cacheKey, ctx, this.cfg.contextTtlSeconds ?? 60);
     if (this.cfg.contextLoader.touchLastUsed) {
-      Promise.resolve(this.cfg.contextLoader.touchLastUsed(bot.id)).catch((e: unknown) => {
+      Promise.resolve(this.cfg.contextLoader.touchLastUsed(tk.id)).catch((e: unknown) => {
         console.error('[gateway] touchLastUsed failed', e);
       });
     }
@@ -113,7 +113,7 @@ export class McpGateway {
   }
 
   /** Handle a parsed JSON-RPC request. Routes by method. */
-  async handle(ctx: BotContext, req: JsonRpcRequest): Promise<JsonRpcResponse> {
+  async handle(ctx: AccessTokenContext, req: JsonRpcRequest): Promise<JsonRpcResponse> {
     const id = req.id ?? null;
     try {
       switch (req.method) {
@@ -138,7 +138,7 @@ export class McpGateway {
     }
   }
 
-  private listTools(ctx: BotContext): McpToolDeclaration[] {
+  private listTools(ctx: AccessTokenContext): McpToolDeclaration[] {
     const out: McpToolDeclaration[] = [];
     for (const provider of ['github', 'vercel', 'supabase'] as Provider[]) {
       const adapter = this.cfg.upstreamByProvider[provider];
@@ -161,7 +161,7 @@ export class McpGateway {
   }
 
   private async callTool(
-    ctx: BotContext,
+    ctx: AccessTokenContext,
     id: string | number | null,
     params: Record<string, unknown>,
   ): Promise<JsonRpcResponse> {
@@ -192,7 +192,7 @@ export class McpGateway {
       return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
 
-    // Server-side scope injection : if this bot's project has a single
+    // Server-side scope injection : if this token's project has a single
     // binding for the provider, the resource identifier is determined and
     // we auto-fill it. Caller-provided values win (admin can still override).
     const plan = injectionPlanFor(provider, {
@@ -276,7 +276,7 @@ export class McpGateway {
   }
 
   private async audit(
-    ctx: BotContext,
+    ctx: AccessTokenContext,
     tool: string,
     args: Record<string, unknown>,
     decision: 'allowed' | 'denied',
@@ -288,7 +288,7 @@ export class McpGateway {
       await this.cfg.audit.write({
         organization_id: ctx.organization.id,
         project_id: ctx.project.id,
-        bot_id: ctx.bot.id,
+        access_token_id: ctx.access_token.id,
         tool_name: tool,
         arguments_hash: hashArguments(args),
         role_matched: roleMatched,

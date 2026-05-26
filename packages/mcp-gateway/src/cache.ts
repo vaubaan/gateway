@@ -1,5 +1,5 @@
 /**
- * BotContext cache.
+ * AccessTokenContext cache.
  *
  * Two implementations:
  *   - MemoryCacheClient   : Map<string, {value, expiresAt}>. Default for dev/test.
