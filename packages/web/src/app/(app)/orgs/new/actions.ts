@@ -1,7 +1,7 @@
 'use server';
 
 import { redirect } from 'next/navigation';
-import { getSupabaseServer } from '@/lib/supabase/server';
+import { getSupabaseServer, getSupabaseServiceClient } from '@/lib/supabase/server';
 
 export interface CreateOrgResult {
   ok: false;
@@ -19,11 +19,17 @@ export async function createOrg(
     return { ok: false, error: 'slug must match ^[a-z0-9](-?[a-z0-9])*$' };
   }
 
-  const supabase = await getSupabaseServer();
-  const { data: userData } = await supabase.auth.getUser();
+  // Auth check via the cookie-bound client (the RLS-aware one).
+  const auth = await getSupabaseServer();
+  const { data: userData } = await auth.auth.getUser();
   if (!userData.user) return { ok: false, error: 'not authenticated — please log in again' };
 
-  const { data: org, error: orgErr } = await supabase
+  // Insert via service-role : same trust model as the OAuth provider callback —
+  // we've authenticated the user above, so we can bypass RLS to atomically
+  // create the org + admin membership.
+  const svc = getSupabaseServiceClient();
+
+  const { data: org, error: orgErr } = await svc
     .from('organizations')
     .insert({ name, slug })
     .select('id, slug')
@@ -32,7 +38,7 @@ export async function createOrg(
     return { ok: false, error: orgErr?.message ?? 'insert returned no row' };
   }
 
-  const { error: memErr } = await supabase
+  const { error: memErr } = await svc
     .from('org_members')
     .insert({ organization_id: org.id, user_id: userData.user.id, role: 'admin' });
   if (memErr)
