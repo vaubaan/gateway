@@ -8,7 +8,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
-import { requireOrgMember } from '@/lib/auth/require-org-member';
+import { requireOrgAdmin } from '@/lib/auth/require-admin';
 import { generateState } from '@/lib/oauth/state';
 
 export const dynamic = 'force-dynamic';
@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const slug = req.nextUrl.searchParams.get('org');
   if (!slug) return NextResponse.json({ error: 'org query param required' }, { status: 400 });
 
-  const guard = await requireOrgMember(slug);
+  const guard = await requireOrgAdmin(slug);
   if (!guard.ok) return guard.response;
 
   const clientId = process.env.VERCEL_APP_CLIENT_ID;
