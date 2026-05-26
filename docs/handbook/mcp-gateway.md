@@ -1,7 +1,7 @@
 ---
 title: MCP gateway
 status: current
-date: 2026-05-22
+date: 2026-05-26
 tracks:
   - packages/mcp-gateway/src/
   - packages/web/src/app/mcp/route.ts
@@ -55,7 +55,7 @@ Content-Type: application/json
 Méthodes supportées :
 
 - `initialize` → renvoie `protocolVersion`, capabilities, serverInfo.
-- `tools/list` → renvoie les tools que les Roles du Bot peuvent
+- `tools/list` → renvoie les tools que les Roles de l'access token peuvent
   potentiellement appeler (static filter).
 - `tools/call` → policy evaluate + dispatch + audit.
 - `ping` → no-op.
@@ -71,10 +71,10 @@ POST /mcp
   │     ├─ parse `Bearer vbn_live_<prefix>_<secret>`
   │     ├─ cache GET vaubaan:ctx:<prefix>
   │     │     ├─ hit  → re-vérifie argon2id verify(hash, full) → ctx
-  │     │     └─ miss → contextLoader.loadBotForAuth(prefix) →
-  │     │              argon2id verify → loadBotContext(botId) →
+  │     │     └─ miss → contextLoader.loadAccessTokenForAuth(prefix) →
+  │     │              argon2id verify → loadAccessTokenContext(tokenId) →
   │     │              cache.set(ctx, ttl=60s)
-  │     └─ touchLastUsed(botId) (fire-and-forget)
+  │     └─ touchLastUsed(tokenId) (fire-and-forget)
   │
   ├─[McpGateway.handle(ctx, req)]
   │     switch req.method
@@ -105,11 +105,11 @@ Absent ⇒ Memory.
 
 Key naming :
 
-- `vaubaan:ctx:<api_key_prefix>` → BotContext, TTL 60s.
+- `vaubaan:ctx:<api_key_prefix>` → AccessTokenContext, TTL 60s.
 
 Invalidation explicite (à appeler depuis les routes REST mutantes) :
 
-- `cache.del('vaubaan:ctx:<prefix>')` après PATCH bot, PATCH role, etc.
+- `cache.del('vaubaan:ctx:<prefix>')` après PATCH access_token, PATCH role, etc.
 
 ## Audit
 
@@ -121,7 +121,7 @@ on log l'erreur et on renvoie la réponse au client (le call n'est pas avorté).
 
 - L'`api_key_hash` n'est lu QUE par le gateway via service_role client. La RLS
   côté app web ne l'expose à personne.
-- Cache Redis ne contient PAS de token upstream en clair. Seul le BotContext
+- Cache Redis ne contient PAS de token upstream en clair. Seul l'AccessTokenContext
   (sans `access_token_encrypted`) est caché.
 - Le GitHub installation token (mint JIT 1h) est _éphémère_ — pas de cache
   persistant en clair en MVP (peut être ajouté en v1.1 — cache 50min Upstash
@@ -131,5 +131,5 @@ on log l'erreur et on renvoie la réponse au client (le call n'est pas avorté).
 
 - Unit (`packages/mcp-gateway/tests/unit/`) : 11 tests — auth flow, tools/list
   filter, allow/deny dispatch, audit row shape.
-- Integration (`packages/mcp-gateway/tests/integration/`) : 7 tests — bot
-  lifecycle, rotation, revocation, provider disconnect.
+- Integration (`packages/mcp-gateway/tests/integration/`) : 7 tests — access
+  token lifecycle, rotation, revocation, provider disconnect.

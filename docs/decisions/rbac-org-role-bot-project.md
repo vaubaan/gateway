@@ -1,12 +1,23 @@
 ---
 title: RBAC — modèle Org × Project × Role × Bot
-status: accepted
+status: superseded
 date: 2026-05-22
+superseded-by: flat-membership-org-owner-access-token
 tracks:
   - docs/spec/mcp-proxy.md
 ---
 
 # RBAC — modèle Org × Project × Role × Bot
+
+> **⚠️ Superseded** by [[flat-membership-org-owner-access-token]] (2026-05-26) :
+>
+> - **Bot** renommé en **AccessToken** (vocabulaire neutre — pas que des agents).
+> - Les **2 rôles humains (member/admin)** sont remplacés par un modèle plat :
+>   tout member a full RW, plus un **owner** unique par org protégé contre
+>   la suppression (transfert d'ownership explicite requis).
+>
+> Le reste du modèle (Project-scoping, Role provider-scoped, ProviderBinding,
+> évaluation policy) est inchangé.
 
 ## Contexte
 

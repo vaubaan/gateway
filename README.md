@@ -63,10 +63,10 @@ psql "postgresql://postgres.<ref>@<pooler-host>:5432/postgres" \
   -f supabase/migrations/0001_init.sql
 ```
 
-### Run a Bot's first call
+### Use an access token
 
-After UI flow (org → connect GitHub → project → binding → bot create), copy
-the api_key into your agent's `mcp.json` :
+After UI flow (org → connect GitHub → project → binding → access token create),
+copy the api_key into your agent's `mcp.json` :
 
 ```jsonc
 {
@@ -80,7 +80,7 @@ the api_key into your agent's `mcp.json` :
 ```
 
 Restart your agent. `tools/list` should now return GitHub tools filtered by
-the Bot's roles.
+the access token's roles.
 
 ## Scripts
 
@@ -126,7 +126,8 @@ how that spec is realized) :
 ADRs landed for the v4 pivot :
 
 - [pivot-v3-to-v4-policy-gateway](docs/decisions/pivot-v3-to-v4-policy-gateway.md)
-- [rbac-org-role-bot-project](docs/decisions/rbac-org-role-bot-project.md)
+- [rbac-org-role-bot-project](docs/decisions/rbac-org-role-bot-project.md) — superseded by `flat-membership-org-owner-access-token`
+- [flat-membership-org-owner-access-token](docs/decisions/flat-membership-org-owner-access-token.md)
 - [roles-naming-provider-scoped](docs/decisions/roles-naming-provider-scoped.md)
 - [mcp-only-mvp-scope](docs/decisions/mcp-only-mvp-scope.md)
 - [oauth-app-install-per-provider](docs/decisions/oauth-app-install-per-provider.md)

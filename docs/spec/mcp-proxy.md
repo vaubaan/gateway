@@ -1,6 +1,16 @@
 # MCP Proxy — spec
 
-> **Statut :** spec greenfield. Ce document remplace toute version antérieure
+> **Statut :** spec greenfield.
+>
+> **⚠️ Note 2026-05-26 :** depuis l'ADR
+> [[flat-membership-org-owner-access-token]] le terme **Bot** est renommé en
+> **AccessToken** (table `access_tokens`, URL `/tokens`) et le RBAC humain
+> 2-tier (`member`/`admin`) est remplacé par un modèle plat avec **owner
+> unique par org**. Les sections §0, §2.1, §2.2, §3.1-3.3, §4.1, §4.3
+> sont à jour. Les sections narratives §5+ peuvent encore mentionner "Bot"
+> dans leur texte — sémantiquement équivalent à "access token".
+>
+> Ce document remplace toute version antérieure
 > de la gestion de cloud resources / credentials / MCP côté Vaubaan Core.
 > Le code et la doc précédents (`cloud-resource-manager.md`, packages
 > `core`/`crm-catalog`/`web`, migrations Supabase, ADRs ZK + Infisical) ont
@@ -25,7 +35,7 @@ Le MCP Proxy raisonne sur 10 mots, distincts et non-interchangeables :
   ProviderAdmins, ProviderBindings et Roles.
 - **Organization** — tenant racine côté Vaubaan. Isolation RLS stricte.
 - **Project** — sous-unité d'une Organization. Porte ses ProviderBindings
-  et ses Bots.
+  et ses AccessTokens.
 - **ProviderAdmin** — bundle de credentials que Vaubaan Core détient au niveau
   organisation pour un Provider, **issu d'un flow OAuth/App install** (jamais
   paste-token). Stocké chiffré at-rest, déchiffré en mémoire à chaque
@@ -37,14 +47,15 @@ Le MCP Proxy raisonne sur 10 mots, distincts et non-interchangeables :
 - **Role** — bundle nommé de permissions, **provider-scoped** (1 Role ne
   touche qu'à 1 Provider). Naming `<provider>:<role-name>` (`github:developer`,
   `supabase:writer-staging`). Builtin global ou custom org-level.
-- **Bot** — identité agent émise par Vaubaan, **project-scoped**, porteur de
-  N Roles. Identifié par une `api_key` Vaubaan (`vbn_live_xxxx…`).
+- **AccessToken** — identité émise par Vaubaan, **project-scoped**, porteur de
+  N Roles. Identifié par une `api_key` Vaubaan (`vbn_live_xxxx…`). Consommé
+  indistinctement par un agent LLM, un script CI, un cron ou un humain.
 - **Policy** — une `rule` JSON dans `Role.permissions` : `{effect, tool/tool_matches,
   target?, constraints?}`. Le DSL est strictement déclaratif.
 - **MCPGateway** — endpoint `/mcp` de Vaubaan Core. JSON-RPC. Auth par
   `Authorization: Bearer <api_key>`.
-- **AuditLog** — une row par call MCP, allow ou deny : (bot, tool, args_hash,
-  role_matched, decision, upstream_latency).
+- **AuditLog** — une row par call MCP, allow ou deny : (access_token, tool,
+  args_hash, role_matched, decision, upstream_latency).
 
 **Distinction clé :** Vaubaan ne *distribue* plus de credentials cloud. Vaubaan
 *intermédie* des calls MCP. L'agent ne reçoit jamais de token provider ;
@@ -107,15 +118,15 @@ CloudProvider           (statique : 'github' | 'vercel' | 'supabase')
    │
    │  est connecté par
    ▼
-Organization
+Organization (owner_id : FK auth.users, unique, transferable)
    ├── ProviderAdmins[]    1 par CloudProvider connecté (post-OAuth/App install)
    ├── RoleCatalog[]       provider-scoped, builtin global + custom (v2) org-level
-   ├── OrgMembers[]        2 rôles humains : member (read) / admin (write)
+   ├── OrgMembers[]        membership plat — tout member a full RW
    └── Projects[]
          ├── ProviderBindings[]    1 par CloudProvider activé pour ce Project
-         └── Bots[]                 project-scoped, porteurs de N Roles
+         └── AccessTokens[]        project-scoped, porteurs de N Roles
 
-AuditLog (transversal)     one row per MCP call : (bot, tool, args_hash,
+AuditLog (transversal)     one row per MCP call : (access_token, tool, args_hash,
                                                     role_matched, decision,
                                                     upstream_latency_ms)
 ```
@@ -126,12 +137,12 @@ AuditLog (transversal)     one row per MCP call : (bot, tool, args_hash,
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | **User**            | Compte humain Vaubaan. Auth Supabase (magic-link + Google OAuth). Peut appartenir à plusieurs Organizations.                                |
 | **Organization**    | Tenant racine. Isolation RLS stricte.                                                                                                      |
-| **Project**         | Sous-unité d'une Org. Porte ses ProviderBindings et ses Bots.                                                                              |
+| **Project**         | Sous-unité d'une Org. Porte ses ProviderBindings et ses AccessTokens.                                                                      |
 | **CloudProvider**   | SaaS supporté. Statique. Identifié par string (`github`, `vercel`, `supabase`).                                                            |
 | **ProviderAdmin**   | Bundle de credentials que Vaubaan détient au niveau Org pour un Provider, issu d'un flow OAuth/App install. 1 par (org, provider).          |
 | **ProviderBinding** | Référence concrète d'un Project vers une ressource côté Provider. 1 par (project, provider).                                               |
 | **Role**            | Bundle nommé de permissions, **provider-scoped**, naming `<provider>:<role-name>`. Builtin v1 = `github:reader`, `github:developer`.       |
-| **Bot**             | Identité agent. Project-scoped. Porteur de N Roles. Identifié par une `api_key` Vaubaan (`vbn_live_xxxx…`).                                 |
+| **AccessToken**     | Identité project-scoped, porteur de N Roles, identifiée par une `api_key` Vaubaan (`vbn_live_xxxx…`). Usager agnostique (agent/script/humain). |
 | **Policy**          | Règle dans `Role.permissions.rules[]` : `{effect, tool/tool_matches, target?, constraints?, priority?}`.                                   |
 | **MCPGateway**      | Endpoint Vaubaan `/mcp` en JSON-RPC. Auth via `Authorization: Bearer <api_key>`. C'est le hot-path produit.                                  |
 | **AuditLog**        | Une row par MCP call : qui/quoi/décision/latence. Append-only via app, rétention 90j.                                                       |
@@ -173,13 +184,16 @@ create table organizations (
   id            uuid primary key default gen_random_uuid(),
   name          text not null,
   slug          text not null unique check (slug ~ '^[a-z0-9](-?[a-z0-9])*$'),
+  owner_id      uuid not null references auth.users(id),
   created_at    timestamptz not null default now()
 );
+
+-- Trigger : un owner est toujours member de son org.
+-- enforce_owner_is_member() s'exécute après INSERT/UPDATE de owner_id.
 
 create table org_members (
   organization_id uuid not null references organizations(id) on delete cascade,
   user_id         uuid not null references auth.users(id) on delete cascade,
-  role            text not null default 'member' check (role in ('member', 'admin')),
   added_at        timestamptz not null default now(),
   primary key (organization_id, user_id)
 );
@@ -239,7 +253,7 @@ create table roles (
   unique (organization_id, name) nulls not distinct
 );
 
-create table bots (
+create table access_tokens (
   id              uuid primary key default gen_random_uuid(),
   project_id      uuid not null references projects(id) on delete cascade,
   name            text not null check (name ~ '^[a-z0-9](-?[a-z0-9])*$'),
@@ -253,18 +267,18 @@ create table bots (
   unique (project_id, name)
 );
 
-create table bot_roles (
-  bot_id   uuid not null references bots(id) on delete cascade,
-  role_id  uuid not null references roles(id) on delete restrict,
-  added_at timestamptz not null default now(),
-  primary key (bot_id, role_id)
+create table access_token_roles (
+  access_token_id uuid not null references access_tokens(id) on delete cascade,
+  role_id         uuid not null references roles(id) on delete restrict,
+  added_at        timestamptz not null default now(),
+  primary key (access_token_id, role_id)
 );
 
 create table audit_log (
   id                    uuid primary key default gen_random_uuid(),
   organization_id       uuid not null references organizations(id) on delete cascade,
   project_id            uuid references projects(id) on delete set null,
-  bot_id                uuid references bots(id) on delete set null,
+  access_token_id       uuid references access_tokens(id) on delete set null,
   ts                    timestamptz not null default now(),
   tool_name             text not null,
   arguments_hash        text not null,  -- sha256(JSON.stringify(args)).slice(0, 16)
@@ -283,34 +297,38 @@ create table audit_log (
 - `provider_bindings (project_id, provider)` — UNIQUE.
 - `roles (organization_id, name)` — UNIQUE nulls not distinct (sépare builtin
   global vs custom org-level).
-- `bots (api_key_prefix)` — fast lookup au moment de l'auth (puis vérifier hash).
-- `bots (project_id)` — listing UI.
-- `bot_roles (bot_id)` — lookup roles d'un bot au hot-path.
+- `access_tokens (api_key_prefix)` — fast lookup au moment de l'auth (puis vérifier hash).
+- `access_tokens (project_id)` — listing UI.
+- `access_token_roles (access_token_id)` — lookup roles d'un access_token au hot-path.
 - `audit_log (organization_id, ts desc)` — historique org.
-- `audit_log (bot_id, ts desc)` — historique bot.
+- `audit_log (access_token_id, ts desc)` — historique access_token.
 - `audit_log (decision, ts desc) where decision='denied'` — partial index pour
   les anomalies (dashboard alerting).
 
 ### 3.3 RLS — résumé
 
-**2 rôles au niveau Organization, point.** `member` (read) et `admin` (write).
-Pas de RBAC fin par-resource — la granularité fine vit dans la composition
-Roles × Bots (qui est elle-même un objet d'admin, géré par les org admins).
+**Membership plat + owner protégé.** Cf. ADR [[flat-membership-org-owner-access-token]].
+Tout member a un accès RW complet sur le contenu de l'org. L'owner unique
+(`organizations.owner_id`) a les mêmes droits + il est protégé contre la
+suppression depuis `org_members` (transfert préalable via
+`POST /api/v1/orgs/:slug/transfer-ownership` requis).
 
-| Table              | member | admin |
-| ------------------ | :----: | :---: |
-| `organizations`    |   R    |  RW   |
-| `org_members`      |   R    |  RW   |
-| `provider_admins`  |   R    |  RW   |
-| `projects`         |  RW¹   |  RW   |
-| `provider_bindings`|   R    |  RW   |
-| `roles`            |   R    |  RW²  |
-| `bots`             |   R    |  RW   |
-| `bot_roles`        |   R    |  RW   |
-| `audit_log`        |   R    |   R   |
+| Table                | member | owner |
+| -------------------- | :----: | :---: |
+| `organizations`      |   RW   |  RW   |
+| `org_members`        |  RW¹   |  RW¹  |
+| `provider_admins`    |   RW   |  RW   |
+| `projects`           |   RW   |  RW   |
+| `provider_bindings`  |   RW   |  RW   |
+| `roles`              |   RW²  |  RW²  |
+| `access_tokens`      |   RW   |  RW   |
+| `access_token_roles` |   RW   |  RW   |
+| `audit_log`          |   R    |   R   |
 
-¹ Member peut créer ses propres Projects et les éditer ; pas ceux des autres.
-² Admin peut créer des Roles custom (v2) ; les builtin sont read-only globalement.
+¹ DELETE refusé si la cible est l'owner ; l'UPDATE de `organizations.owner_id`
+est restreint à l'owner courant (transfert d'ownership).
+² Les Roles builtin (`organization_id IS NULL`) restent read-only ; seuls les
+custom org-scoped sont éditables par les members.
 
 `audit_log` est strictement append-only depuis l'app (aucun UPDATE/DELETE
 exposé). Purge nightly par job admin programmé (rétention 90j en v1).
@@ -322,15 +340,15 @@ gateway le lit, avec un service_role key séparé.
 
 ### 4.1 Le double plan d'accès
 
-Pour qu'un Bot exécute un appel upstream, **deux gates indépendantes**
-doivent être franchies :
+Pour qu'un porteur d'AccessToken exécute un appel upstream, **deux gates
+indépendantes** doivent être franchies :
 
-| Plan              | Mécanisme                              | Tenu par           | Bloque…                          |
-| ----------------- | -------------------------------------- | ------------------ | -------------------------------- |
-| **Plan Auth**     | Auth `api_key` du Bot                  | Gateway Vaubaan     | l'authentification du bot         |
-| **Plan Policy**   | Évaluation des Roles du Bot            | Policy engine      | l'autorisation de l'appel        |
+| Plan              | Mécanisme                                       | Tenu par           | Bloque…                              |
+| ----------------- | ----------------------------------------------- | ------------------ | ------------------------------------ |
+| **Plan Auth**     | Auth `api_key` de l'AccessToken                 | Gateway Vaubaan    | l'authentification du porteur        |
+| **Plan Policy**   | Évaluation des Roles attachés à l'AccessToken   | Policy engine      | l'autorisation de l'appel            |
 
-Si l'`api_key` est invalide → 401. Si les Roles du Bot n'autorisent pas
+Si l'`api_key` est invalide → 401. Si les Roles n'autorisent pas
 le `(tool, args)` → JSON-RPC error avec `denial_reason` actionable.
 
 ### 4.2 Trust model — IdP-style
@@ -364,10 +382,10 @@ passent par lui.
 
 - **Stateless** : chaque call MCP est self-contained. Pas de session côté
   gateway, juste lookup `api_key`.
-- **Cache Redis** : `(api_key_prefix → bot+project+roles+bindings+provider_admin)`
+- **Cache Redis** : `(api_key_prefix → access_token+project+roles+bindings+provider_admin)`
   cached 60s pour éviter le N+1 sur la DB. Invalidation explicite sur
-  `PATCH bots`, `DELETE bots`, `PATCH bot_roles`, `PATCH provider_admins`,
-  `PATCH roles`, `PATCH provider_bindings`.
+  `PATCH access_tokens`, `DELETE access_tokens`, `PATCH access_token_roles`,
+  `PATCH provider_admins`, `PATCH roles`, `PATCH provider_bindings`.
 - **Latence cible** : p50 < 50ms côté gateway (auth + policy + cache lookup) +
   latence upstream provider. p99 < 200ms hors upstream.
 - **Throughput cible MVP** : 1 instance Vercel serverless (~1000 req/s par
