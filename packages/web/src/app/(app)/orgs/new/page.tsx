@@ -1,51 +1,23 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { getSupabaseBrowser } from '@/lib/supabase/client';
+import { useActionState, useState } from 'react';
+import { createOrg, type CreateOrgResult } from './actions';
 
 export default function NewOrgPage() {
-  const [name, setName] = useState('');
+  const [state, formAction, pending] = useActionState<CreateOrgResult | null, FormData>(
+    createOrg,
+    null,
+  );
   const [slug, setSlug] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
-
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const supabase = getSupabaseBrowser();
-      const { data: org, error: orgErr } = await supabase
-        .from('organizations')
-        .insert({ name, slug })
-        .select('id')
-        .single<{ id: string }>();
-      if (orgErr) throw orgErr;
-      if (!org) throw new Error('insert returned no row');
-      const { data: user } = await supabase.auth.getUser();
-      if (!user.user) throw new Error('not authenticated');
-      const { error: memErr } = await supabase
-        .from('org_members')
-        .insert({ organization_id: org.id, user_id: user.user.id, role: 'admin' });
-      if (memErr) throw memErr;
-      router.push(`/orgs/${slug}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setBusy(false);
-    }
-  }
 
   return (
     <main>
       <h1>New organization</h1>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, maxWidth: 420 }}>
+      <form action={formAction} style={{ display: 'grid', gap: 12, maxWidth: 420 }}>
         <label>
           <div style={{ opacity: 0.7, marginBottom: 4 }}>Name</div>
           <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
+            name="name"
             required
             style={{
               width: '100%',
@@ -60,6 +32,7 @@ export default function NewOrgPage() {
         <label>
           <div style={{ opacity: 0.7, marginBottom: 4 }}>Slug</div>
           <input
+            name="slug"
             value={slug}
             onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
             pattern="^[a-z0-9](-?[a-z0-9])*$"
@@ -76,7 +49,7 @@ export default function NewOrgPage() {
         </label>
         <button
           type="submit"
-          disabled={busy}
+          disabled={pending}
           style={{
             padding: '10px 14px',
             background: '#fff',
@@ -85,9 +58,9 @@ export default function NewOrgPage() {
             borderRadius: 6,
           }}
         >
-          {busy ? 'Creating…' : 'Create organization'}
+          {pending ? 'Creating…' : 'Create organization'}
         </button>
-        {error && <p style={{ color: '#ff7e7e' }}>{error}</p>}
+        {state?.error && <p style={{ color: '#ff7e7e' }}>{state.error}</p>}
       </form>
     </main>
   );
