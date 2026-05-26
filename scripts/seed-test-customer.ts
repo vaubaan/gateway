@@ -42,16 +42,31 @@ function readEnvTest(): EnvTest {
 const CUSTOMER_USER_ID = '592efb45-80bb-419f-b955-48132dcdbf8d'; // test@vaubaan.com
 const PROJECT_REF_VERCEL = 'prj_BFmSakD8ITliRqDgaIFChxZJFNZD';
 
+function readCoreEnv(): { projectRef: string; dbPassword: string } {
+  const raw = readFileSync(resolve(import.meta.dirname, '../.env'), 'utf8');
+  const env: Record<string, string> = {};
+  for (const line of raw.split('\n')) {
+    const m = line.match(/^([A-Z_]+)=(.+?)(?:\s+#.*)?$/);
+    if (m) env[m[1]!] = m[2]!.trim();
+  }
+  const projectRef = env.SUPABASE_CORE_PROJECT_REF;
+  const dbPassword = env.VAUBAAN_CORE_DB_PASSWORD;
+  if (!projectRef) throw new Error('SUPABASE_CORE_PROJECT_REF missing in /.env');
+  if (!dbPassword) throw new Error('VAUBAAN_CORE_DB_PASSWORD missing in /.env');
+  return { projectRef, dbPassword };
+}
+
 async function main() {
   const env = readEnvTest();
+  const core = readCoreEnv();
   // Supabase pooler uses self-signed certs ; we trust on first connect since the
   // host is hard-coded below.
   const client = new Client({
     host: 'aws-1-eu-west-3.pooler.supabase.com',
     port: 5432,
     database: 'postgres',
-    user: 'postgres.ynxfyklzqdumtixkdrco',
-    password: process.env.VAUBAAN_CORE_DB_PASSWORD ?? 'dlA1Ew07XQCPoii4',
+    user: `postgres.${core.projectRef}`,
+    password: core.dbPassword,
     ssl: { rejectUnauthorized: false },
   });
   await client.connect();

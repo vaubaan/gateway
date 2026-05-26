@@ -61,7 +61,8 @@ mise sur Vercel mais pas en local". Si en doute → `vercel env pull` puis diff.
 | Variable                             | Fichier                   |
 | ------------------------------------ | ------------------------- |
 | `SUPABASE_MGMT_TOKEN`                | `/.env`                   |
-| `SUPABASE_PROD_*`                    | `/.env`                   |
+| `SUPABASE_CORE_PROJECT_REF`          | `/.env`                   |
+| `VAUBAAN_CORE_DB_PASSWORD`           | `/.env`                   |
 | `GITHUB_ORG_ADMIN_TOKEN` (Core)      | `/.env`                   |
 | `VERCEL_TOKEN`                       | `/.env`                   |
 | `GITHUB_ORG_ADMIN_TOKEN` (test)      | `/.env.test`              |
