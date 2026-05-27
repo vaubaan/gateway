@@ -51,10 +51,13 @@ export function ProjectControls({
       });
       const json = (await res.json()) as { error?: string; slug?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      router.refresh();
       if (json.slug && json.slug !== initialSlug) {
-        router.push(`/orgs/${orgSlug}/projects/${json.slug}`);
+        // Project slug change rewires every sidebar link under this project.
+        // Hard-navigate so the (app) layout re-fetches the projects payload.
+        window.location.href = `/orgs/${orgSlug}/projects/${json.slug}/settings`;
+        return;
       }
+      router.refresh();
     } catch (err) {
       setRenameError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -72,8 +75,10 @@ export function ProjectControls({
       );
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      router.refresh();
-      router.push(`/orgs/${orgSlug}/projects`);
+      // Hard navigation so the sidebar's pick-a-project dropdown drops the
+      // deleted project (the layout's cached projects payload won't refresh
+      // reliably with router.refresh+push in this order).
+      window.location.href = `/orgs/${orgSlug}/projects`;
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : String(err));
       setDeleting(false);

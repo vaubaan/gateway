@@ -47,10 +47,16 @@ export function OrgSettings({
       });
       const json = (await res.json()) as { error?: string; slug?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      router.refresh();
       if (json.slug && json.slug !== org.slug) {
-        router.push(`/orgs/${json.slug}/settings`);
+        // Slug change moves every /orgs/<slug>/... URL in the sidebar. The
+        // (app) layout's projects-by-org payload is keyed off the old slug
+        // in the client router cache and Next.js' refresh+push race can
+        // serve the new URL against the stale layout. Force a real navigation
+        // so the layout (and sidebar) re-render from scratch.
+        window.location.href = `/orgs/${json.slug}/settings`;
+        return;
       }
+      router.refresh();
     } catch (err) {
       setRenameError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -67,7 +73,10 @@ export function OrgSettings({
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      router.push('/dashboard');
+      // The (app) layout caches the org list on the client; router.refresh()+
+      // push race can leave the deleted org in the sidebar dropdown. Hard
+      // navigation forces a fresh layout fetch.
+      window.location.href = '/dashboard';
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : String(err));
       setDeleting(false);
