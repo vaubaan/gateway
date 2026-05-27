@@ -183,55 +183,35 @@ export function Sidebar({ email, orgs, projectsByOrg }: SidebarProps) {
             }}
             active={pathname === '/dashboard'}
           />
-          <div className={styles.selectWrap}>
-            <select
-              className={styles.selectInput}
-              value={currentOrg?.slug ?? ''}
-              onChange={onOrgChange}
-              aria-label="Switch organization"
-            >
-              <option value="">— pick an org —</option>
-              {orgs.map((o) => (
-                <option key={o.id} value={o.slug}>
-                  {o.name}
-                </option>
-              ))}
-            </select>
-            <IconChevronDown className={styles.selectChev} />
-          </div>
+        </div>
+
+        <div className={styles.section}>
+          <HeadSelect
+            value={currentOrg?.slug ?? ''}
+            onChange={onOrgChange}
+            placeholder="— pick an org —"
+            ariaLabel="Switch organization"
+            options={orgs.map((o) => ({ value: o.slug, label: o.name }))}
+          />
+          {currentOrg &&
+            orgNav.map((item) => (
+              <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
+            ))}
         </div>
 
         {currentOrg && (
           <div className={styles.section}>
-            <span className={styles.sectionLabel}>{currentOrg.name}</span>
-            {orgNav.map((item) => (
-              <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
-            ))}
-            <div className={styles.selectWrap}>
-              <select
-                className={styles.selectInput}
-                value={currentProj?.slug ?? ''}
-                onChange={onProjectChange}
-                aria-label="Switch project"
-              >
-                <option value="">— pick a project —</option>
-                {projects.map((p) => (
-                  <option key={p.id} value={p.slug}>
-                    {p.name}
-                  </option>
-                ))}
-              </select>
-              <IconChevronDown className={styles.selectChev} />
-            </div>
-          </div>
-        )}
-
-        {currentOrg && currentProj && (
-          <div className={styles.section}>
-            <span className={styles.sectionLabel}>{currentProj.name}</span>
-            {projNav.map((item) => (
-              <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
-            ))}
+            <HeadSelect
+              value={currentProj?.slug ?? ''}
+              onChange={onProjectChange}
+              placeholder="— pick a project —"
+              ariaLabel="Switch project"
+              options={projects.map((p) => ({ value: p.slug, label: p.name }))}
+            />
+            {currentProj &&
+              projNav.map((item) => (
+                <NavLink key={item.href} item={item} active={isActive(pathname, item)} />
+              ))}
           </div>
         )}
 
@@ -311,6 +291,39 @@ function BuildStamp() {
       {sha ? <code>{sha}</code> : null}
       {sha && built ? <span aria-hidden> · </span> : null}
       {built ? <span>{built}</span> : null}
+    </div>
+  );
+}
+
+function HeadSelect({
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+  options,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  placeholder: string;
+  ariaLabel: string;
+  options: Array<{ value: string; label: string }>;
+}) {
+  return (
+    <div className={styles.headSelect}>
+      <select
+        className={styles.headSelectInput}
+        value={value}
+        onChange={onChange}
+        aria-label={ariaLabel}
+      >
+        <option value="">{placeholder}</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+      <IconChevronDown className={styles.headSelectChev} />
     </div>
   );
 }
