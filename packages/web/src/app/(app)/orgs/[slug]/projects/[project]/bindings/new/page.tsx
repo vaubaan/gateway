@@ -1,122 +1,92 @@
-'use client';
+import { notFound, redirect } from 'next/navigation';
+import Link from 'next/link';
+import { PROVIDERS } from '@vaubaan/shared';
+import { getSupabaseServer } from '@/lib/supabase/server';
+import { loadProviderState } from '@/lib/providers/state';
+import { Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
+import { BindingForm } from './binding-form';
 
-import { useState, use as usePromise } from 'react';
-import { useRouter } from 'next/navigation';
-import { getSupabaseBrowser } from '@/lib/supabase/client';
+export const dynamic = 'force-dynamic';
 
-export default function NewBindingPage({
+export default async function NewBindingPage({
   params,
 }: {
   params: Promise<{ slug: string; project: string }>;
 }) {
-  const { slug: orgSlug, project: projectSlug } = usePromise(params);
-  const [provider, setProvider] = useState<'github' | 'vercel' | 'supabase'>('github');
-  const [resourceRef, setResourceRef] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const router = useRouter();
+  const { slug, project } = await params;
+  const supabase = await getSupabaseServer();
+  const { data: user } = await supabase.auth.getUser();
+  if (!user.user) redirect('/login');
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setBusy(true);
-    setError(null);
-    try {
-      const supabase = getSupabaseBrowser();
-      const { data: org } = await supabase
-        .from('organizations')
-        .select('id')
-        .eq('slug', orgSlug)
-        .single<{ id: string }>();
-      if (!org) throw new Error('org not found');
-      const { data: proj } = await supabase
-        .from('projects')
-        .select('id')
-        .eq('organization_id', org.id)
-        .eq('slug', projectSlug)
-        .single<{ id: string }>();
-      if (!proj) throw new Error('project not found');
-      const { error: err } = await supabase.from('provider_bindings').insert({
-        project_id: proj.id,
-        provider,
-        resource_ref: resourceRef,
-        display_name: resourceRef,
-      });
-      if (err) throw err;
-      router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-      setBusy(false);
-    }
-  }
+  const { data: org } = await supabase
+    .from('organizations')
+    .select('id, slug, name')
+    .eq('slug', slug)
+    .maybeSingle<{ id: string; slug: string; name: string }>();
+  if (!org) notFound();
+
+  const { data: proj } = await supabase
+    .from('projects')
+    .select('id, slug, name')
+    .eq('organization_id', org.id)
+    .eq('slug', project)
+    .maybeSingle<{ id: string; slug: string; name: string }>();
+  if (!proj) notFound();
+
+  const states = await Promise.all(PROVIDERS.map((p) => loadProviderState(org.id, p)));
+
+  const connected = states.filter((s) => s.status === 'connected');
+  const offered = connected.map((s) => ({
+    provider: s.provider,
+    resources: s.resources,
+    error: s.error,
+  }));
 
   return (
     <main>
-      <h1>Bind a resource</h1>
-      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, maxWidth: 480 }}>
-        <label>
-          <div style={{ opacity: 0.7, marginBottom: 4 }}>Provider</div>
-          <select
-            value={provider}
-            onChange={(e) => setProvider(e.target.value as typeof provider)}
-            style={{
-              width: '100%',
-              padding: 10,
-              background: '#1a1a1a',
-              color: '#fff',
-              border: '1px solid #2a2a2a',
-              borderRadius: 6,
-            }}
-          >
-            <option value="github">github</option>
-            <option value="vercel" disabled>
-              vercel (phase 5)
-            </option>
-            <option value="supabase" disabled>
-              supabase (phase 5)
-            </option>
-          </select>
-        </label>
-        <label>
-          <div style={{ opacity: 0.7, marginBottom: 4 }}>
-            Resource ref{' '}
-            <span style={{ opacity: 0.55 }}>
-              {provider === 'github'
-                ? '(owner/repo)'
-                : provider === 'vercel'
-                  ? '(prj_xxx)'
-                  : '(<project_ref>)'}
-            </span>
-          </div>
-          <input
-            value={resourceRef}
-            onChange={(e) => setResourceRef(e.target.value)}
-            required
-            placeholder={provider === 'github' ? 'acme/website' : ''}
-            style={{
-              width: '100%',
-              padding: 10,
-              background: '#1a1a1a',
-              color: '#fff',
-              border: '1px solid #2a2a2a',
-              borderRadius: 6,
-            }}
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={busy}
-          style={{
-            padding: '10px 14px',
-            background: '#fff',
-            color: '#000',
-            border: 0,
-            borderRadius: 6,
-          }}
+      <header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 'var(--space-4)',
+        }}
+      >
+        <div>
+          <h1 style={{ margin: 0 }}>Bind a resource</h1>
+          <Code>
+            /{org.slug}/{proj.slug}
+          </Code>
+        </div>
+        <Link
+          href={`/orgs/${org.slug}/projects/${proj.slug}`}
+          style={{ color: 'var(--text-muted)' }}
         >
-          {busy ? 'Saving…' : 'Save binding'}
-        </button>
-        {error && <p style={{ color: '#ff7e7e' }}>{error}</p>}
-      </form>
+          ← back
+        </Link>
+      </header>
+
+      {connected.length === 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>No providers connected</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <p style={{ color: 'var(--text-muted)' }}>
+              Connect at least one provider on the{' '}
+              <Link href={`/orgs/${org.slug}`}>Cloud providers</Link> page before binding resources
+              to this project.
+            </p>
+          </CardBody>
+        </Card>
+      ) : (
+        <BindingForm
+          orgSlug={org.slug}
+          projectId={proj.id}
+          projectSlug={proj.slug}
+          offered={offered}
+        />
+      )}
     </main>
   );
 }

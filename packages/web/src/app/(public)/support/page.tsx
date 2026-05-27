@@ -26,13 +26,9 @@ export default function SupportPage() {
       <h2>2. Read the docs</h2>
       <ul>
         <li>
-          <a
-            href="https://github.com/sbw-vaubaan/mcp-proxy#readme"
-            target="_blank"
-            rel="noreferrer noopener"
-          >
-            Overview, install, MCP client setup
-          </a>
+          <Link href="/docs">
+            Operator guide — connect a provider, bind resources, issue tokens
+          </Link>
         </li>
         <li>
           <Link href="/security">Security architecture</Link>

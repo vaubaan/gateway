@@ -32,6 +32,10 @@ export default function NewProjectPage({ params }: { params: Promise<{ slug: str
         created_by: user.user?.id ?? null,
       });
       if (err) throw err;
+      // refresh() so the (app) layout re-fetches the projects list driving the
+      // sidebar "pick a project" dropdown. Without it, the new project doesn't
+      // appear in the picker until the next full reload.
+      router.refresh();
       router.push(`/orgs/${orgSlug}/projects/${slug}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));

@@ -50,7 +50,10 @@ const page = await ctx.newPage();
 await page.goto(`${BASE}/login`);
 await page.locator('input[type=email]').first().fill(EMAIL);
 await page.locator('input[type=password]').first().fill(PASSWORD);
-await page.getByRole('button', { name: /sign in/i }).first().click();
+await page
+  .getByRole('button', { name: /sign in/i })
+  .first()
+  .click();
 await page.waitForURL(/\/dashboard/, { timeout: 20_000 });
 console.log('  logged in');
 

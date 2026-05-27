@@ -8,8 +8,8 @@ import styles from './Sidebar.module.css';
 import {
   IconActivity,
   IconBook,
-  IconBuilding,
   IconChevronDown,
+  IconCloud,
   IconExternal,
   IconFolder,
   IconHome,
@@ -95,6 +95,15 @@ export function Sidebar({ email, orgs, projectsByOrg }: SidebarProps) {
   const projects = currentOrg ? (projectsByOrg[currentOrg.id] ?? []) : [];
   const currentProj = projects.find((p) => p.slug === currentProjSlug) ?? null;
 
+  // If the URL points at a project that the cached layout payload doesn't know
+  // about (e.g. just-created project in another tab, or stale router cache),
+  // force a server fetch so the picker dropdown picks it up.
+  useEffect(() => {
+    if (currentProjSlug && currentOrg && !currentProj) {
+      router.refresh();
+    }
+  }, [currentProjSlug, currentOrg, currentProj, router]);
+
   const orgBase = currentOrg ? `/orgs/${currentOrg.slug}` : null;
   const projBase = orgBase && currentProj ? `${orgBase}/projects/${currentProj.slug}` : null;
 
@@ -123,8 +132,8 @@ export function Sidebar({ email, orgs, projectsByOrg }: SidebarProps) {
     ? [
         {
           href: orgBase,
-          label: 'Overview',
-          icon: <IconBuilding />,
+          label: 'Cloud providers',
+          icon: <IconCloud />,
           match: (p) =>
             p === orgBase ||
             (p.startsWith(orgBase) &&
@@ -132,6 +141,16 @@ export function Sidebar({ email, orgs, projectsByOrg }: SidebarProps) {
               !p.startsWith(`${orgBase}/roles`) &&
               !p.startsWith(`${orgBase}/members`) &&
               !p.startsWith(`${orgBase}/audit`)),
+        },
+        {
+          href: `${orgBase}/projects`,
+          label: 'Projects',
+          icon: <IconFolder />,
+          match: (p) =>
+            p === `${orgBase}/projects` ||
+            p === `${orgBase}/projects/new` ||
+            // The /projects index, NOT a specific project (those get their own section).
+            (p.startsWith(`${orgBase}/projects/`) && currentProjSlug === null),
         },
         { href: `${orgBase}/members`, label: 'Members', icon: <IconUsers /> },
         { href: `${orgBase}/roles`, label: 'Roles', icon: <IconShield /> },
@@ -227,12 +246,12 @@ export function Sidebar({ email, orgs, projectsByOrg }: SidebarProps) {
           <span className={styles.sectionLabel}>Resources</span>
           <NavLink
             item={{
-              href: 'https://github.com/sbw-vaubaan/mcp-proxy',
+              href: '/docs',
               label: 'Documentation',
               icon: <IconBook />,
-              external: true,
+              match: (p) => p === '/docs' || p.startsWith('/docs/'),
             }}
-            active={false}
+            active={pathname === '/docs' || pathname.startsWith('/docs/')}
           />
           <NavLink
             item={{

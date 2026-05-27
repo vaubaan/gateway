@@ -101,6 +101,12 @@
 /* ───── Semantic : DARK (default) ───── */
 :root,
 :root[data-theme='dark'] {
+  /* Tell the browser to paint native controls (select option list, scrollbars,
+     date pickers) with dark system chrome. Without this, the OS-rendered
+     `<option>` list comes back light-mode by default — black-on-black against
+     our dark surfaces, white-on-white against our white text. */
+  color-scheme: dark;
+
   --surface-base: var(--gray-1000);
   --surface-raised: var(--gray-980);
   --surface-overlay: var(--gray-900);
@@ -132,6 +138,8 @@
 
 /* ───── Semantic : LIGHT (opt-in via data-theme="light") ───── */
 :root[data-theme='light'] {
+  color-scheme: light;
+
   --surface-base: var(--gray-0);
   --surface-raised: var(--gray-20);
   --surface-overlay: var(--gray-0);
