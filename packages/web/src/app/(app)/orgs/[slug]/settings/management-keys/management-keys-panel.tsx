@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Banner,
@@ -196,6 +196,8 @@ export function ManagementKeysPanel({
             )}
           </CardBody>
         </Card>
+
+        <RunnerSnippetReferenceCard />
       </div>
 
       {confirmKey && (
@@ -261,16 +263,76 @@ curl -sS -X POST "$VAUBAAN_BASE_URL/api/v1/runner/tokens" \\
 `;
 }
 
+async function writeClipboard(text: string): Promise<boolean> {
+  // Prefer the modern API (secure-context only). Fall back to a textarea +
+  // execCommand('copy') trick — old but it still works in non-secure contexts
+  // and when navigator.clipboard.writeText rejects (transient focus loss,
+  // permission glitches, …).
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through
+  }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.setAttribute('readonly', '');
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
+function CopyButton({
+  text,
+  label = 'Copy',
+  copiedLabel = 'Copied!',
+  variant = 'primary',
+}: {
+  text: string;
+  label?: string;
+  copiedLabel?: string;
+  variant?: 'primary' | 'secondary';
+}) {
+  const [state, setState] = useState<'idle' | 'ok' | 'err'>('idle');
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+    },
+    [],
+  );
+  async function onClick() {
+    const ok = await writeClipboard(text);
+    setState(ok ? 'ok' : 'err');
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setState('idle'), 1800);
+  }
+  return (
+    <Button
+      type="button"
+      variant={variant}
+      onClick={() => {
+        void onClick();
+      }}
+    >
+      {state === 'ok' ? copiedLabel : state === 'err' ? 'Copy failed — select & ⌘C' : label}
+    </Button>
+  );
+}
+
 function FreshKeyCard({ apiKey, onDismiss }: { apiKey: string; onDismiss: () => void }) {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com';
   const snippet = buildRunnerSnippet(apiKey, baseUrl);
-
-  function copyKey() {
-    void navigator.clipboard.writeText(apiKey);
-  }
-  function copySnippet() {
-    void navigator.clipboard.writeText(snippet);
-  }
 
   return (
     <Card style={{ marginTop: 'var(--space-4)', borderColor: 'var(--accent-warning-fg)' }}>
@@ -295,9 +357,7 @@ function FreshKeyCard({ apiKey, onDismiss }: { apiKey: string; onDismiss: () => 
           {apiKey}
         </pre>
         <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
-          <Button type="button" variant="primary" onClick={copyKey}>
-            Copy key
-          </Button>
+          <CopyButton text={apiKey} label="Copy key" />
           <Button type="button" variant="secondary" onClick={onDismiss}>
             I&apos;ve copied it — dismiss
           </Button>
@@ -336,11 +396,51 @@ function FreshKeyCard({ apiKey, onDismiss }: { apiKey: string; onDismiss: () => 
             {snippet}
           </pre>
           <div style={{ marginTop: 'var(--space-3)' }}>
-            <Button type="button" variant="primary" onClick={copySnippet}>
-              Copy snippet
-            </Button>
+            <CopyButton text={snippet} label="Copy snippet" />
           </div>
         </details>
+      </CardBody>
+    </Card>
+  );
+}
+
+/**
+ * Always-visible card: same Runner setup snippet as the fresh-key card, but
+ * with a placeholder where the key would go. Lives at the bottom of the
+ * management-keys panel so an operator can grab the integration script anytime
+ * — long after the original key was dismissed.
+ */
+function RunnerSnippetReferenceCard() {
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com';
+  const snippet = buildRunnerSnippet('<paste-your-mgmt-key>', baseUrl);
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Runner setup snippet</CardTitle>
+      </CardHeader>
+      <CardBody>
+        <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
+          Paste this into your other project for an LLM/agent to scaffold the integration. Replace{' '}
+          <Code>&lt;paste-your-mgmt-key&gt;</Code> with one of the active keys above — the full key
+          is only visible at creation time, so keep yours safe.
+        </p>
+        <pre
+          style={{
+            padding: 'var(--space-3)',
+            background: 'var(--surface-base)',
+            borderRadius: 'var(--radius-md)',
+            overflow: 'auto',
+            fontSize: 'var(--text-xs)',
+            maxHeight: 320,
+            margin: 0,
+            whiteSpace: 'pre',
+          }}
+        >
+          {snippet}
+        </pre>
+        <div style={{ marginTop: 'var(--space-3)' }}>
+          <CopyButton text={snippet} label="Copy snippet" />
+        </div>
       </CardBody>
     </Card>
   );
