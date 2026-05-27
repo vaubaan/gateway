@@ -231,21 +231,21 @@ function buildRunnerSnippet(apiKey: string, baseUrl: string): string {
   return `# Vaubaan — Coding Agent Runner integration
 
 # 1. Configure
-export VAUBAAN_BASE_URL="${baseUrl}"
-export VAUBAAN_MGMT_KEY="${apiKey}"
+export VAUBAAN_MCP_GATEWAY_BASE_URL="${baseUrl}"
+export VAUBAAN_MCP_GATEWAY_MGMT_KEY="${apiKey}"
 
 # 2. Discover available roles
-curl -sS "$VAUBAAN_BASE_URL/api/v1/runner/roles" \\
-  -H "Authorization: Bearer $VAUBAAN_MGMT_KEY"
+curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/roles" \\
+  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
 
 # 3. Discover projects + bindings
-curl -sS "$VAUBAAN_BASE_URL/api/v1/runner/projects" \\
-  -H "Authorization: Bearer $VAUBAAN_MGMT_KEY"
+curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/projects" \\
+  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
 
 # 4. Mint an ephemeral AccessToken for a coding session
 #    ttlHours default 24, max 168 (7 days). Response.api_key visible ONCE.
-curl -sS -X POST "$VAUBAAN_BASE_URL/api/v1/runner/tokens" \\
-  -H "Authorization: Bearer $VAUBAAN_MGMT_KEY" \\
+curl -sS -X POST "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/tokens" \\
+  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{ "projectSlug": "<slug>", "roleIds": ["<role-id>"], "ttlHours": 24 }'
 

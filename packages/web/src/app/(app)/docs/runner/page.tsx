@@ -64,12 +64,13 @@ export default function RunnerDocsPage() {
           <strong>Create</strong>, copy the <code>vbn_mgmt_…</code> shown once.
         </li>
         <li>
-          Store it on the Runner host as <code>VAUBAAN_MGMT_KEY</code>. Use whatever secret manager
-          you already have (Infisical, Vault, Doppler, AWS Secrets Manager, plain env in a
-          single-tenant VM). The Runner never logs the raw value.
+          Store it on the Runner host as <code>VAUBAAN_MCP_GATEWAY_MGMT_KEY</code>. Use whatever
+          secret manager you already have (Infisical, Vault, Doppler, AWS Secrets Manager, plain env
+          in a single-tenant VM). The Runner never logs the raw value.
         </li>
         <li>
-          Configure <code>VAUBAAN_BASE_URL</code> — <code>https://vaubaan.com</code> in prod,
+          Configure <code>VAUBAAN_MCP_GATEWAY_BASE_URL</code> — <code>https://vaubaan.com</code> in
+          prod,
           <code>http://localhost:3000</code> in local dev.
         </li>
       </ol>
@@ -82,8 +83,8 @@ export default function RunnerDocsPage() {
 
       <h3>4.1 Discover available roles</h3>
       <pre>
-        <code>{`curl -sS "$VAUBAAN_BASE_URL/api/v1/runner/roles" \\
-  -H "Authorization: Bearer $VAUBAAN_MGMT_KEY"
+        <code>{`curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/roles" \\
+  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
 
 # Response (truncated):
 # {
@@ -101,8 +102,8 @@ export default function RunnerDocsPage() {
 
       <h3>4.2 Discover projects and bindings</h3>
       <pre>
-        <code>{`curl -sS "$VAUBAAN_BASE_URL/api/v1/runner/projects" \\
-  -H "Authorization: Bearer $VAUBAAN_MGMT_KEY"
+        <code>{`curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/projects" \\
+  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
 
 # Response (truncated):
 # {
@@ -128,8 +129,8 @@ export default function RunnerDocsPage() {
 
       <h3>4.3 Mint an ephemeral access token</h3>
       <pre>
-        <code>{`curl -sS -X POST "$VAUBAAN_BASE_URL/api/v1/runner/tokens" \\
-  -H "Authorization: Bearer $VAUBAAN_MGMT_KEY" \\
+        <code>{`curl -sS -X POST "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/tokens" \\
+  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{
     "projectSlug": "website",
@@ -159,7 +160,7 @@ export default function RunnerDocsPage() {
         <code>{`{
   "mcpServers": {
     "vaubaan": {
-      "url": "$VAUBAAN_BASE_URL/mcp",
+      "url": "$VAUBAAN_MCP_GATEWAY_BASE_URL/mcp",
       "headers": { "Authorization": "Bearer $ACCESS_TOKEN" }
     }
   }
