@@ -311,6 +311,21 @@
   align-items: center;
   justify-content: space-between;
 }
+
+.buildStamp {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 2px var(--space-2) 0;
+  font-size: 10px;
+  color: var(--text-subtle);
+  letter-spacing: 0.02em;
+}
+.buildStamp code {
+  font-family: var(--font-geist-mono);
+  font-size: 10px;
+  color: var(--text-muted);
+}
 .footerLinks {
   display: flex;
   gap: 2px;

@@ -294,8 +294,31 @@ export function Sidebar({ email, orgs, projectsByOrg }: SidebarProps) {
             <IconLogout />
           </button>
         </div>
+        <BuildStamp />
       </div>
     </aside>
+  );
+}
+
+function BuildStamp() {
+  const sha = process.env.NEXT_PUBLIC_COMMIT_SHA;
+  const builtAt = process.env.NEXT_PUBLIC_BUILD_TIME;
+  if (!sha && !builtAt) return null;
+  const built = builtAt
+    ? new Date(builtAt).toLocaleString(undefined, {
+        year: '2-digit',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : null;
+  return (
+    <div className={styles.buildStamp} title={builtAt ?? ''}>
+      {sha ? <code>{sha}</code> : null}
+      {sha && built ? <span aria-hidden> · </span> : null}
+      {built ? <span>{built}</span> : null}
+    </div>
   );
 }
 
