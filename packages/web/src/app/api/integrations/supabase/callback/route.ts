@@ -11,6 +11,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getSupabaseServer, getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeStateOrgId } from '@/lib/oauth/state';
+import { encodeByteaHex } from '@/lib/providers/state';
 
 export const dynamic = 'force-dynamic';
 
@@ -94,8 +95,8 @@ export async function GET(req: NextRequest) {
       organization_id: orgId,
       provider: 'supabase',
       status: 'connected',
-      access_token_encrypted: Buffer.from(tokenJson.access_token, 'utf8'),
-      refresh_token_encrypted: Buffer.from(tokenJson.refresh_token, 'utf8'),
+      access_token_encrypted: encodeByteaHex(tokenJson.access_token),
+      refresh_token_encrypted: encodeByteaHex(tokenJson.refresh_token),
       expires_at: expiresAt,
       connected_by_user_id: userData.user.id,
       connected_at: new Date().toISOString(),

@@ -18,23 +18,7 @@ import {
   type UpstreamAdapter,
 } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-
-/**
- * Supabase returns `bytea` columns as a `\xHEX` string. Decode to Uint8Array
- * so adapters can `new TextDecoder().decode(...)` the PAT.
- */
-function parseByteaHex(raw: unknown): Uint8Array | null {
-  if (raw === null || raw === undefined) return null;
-  if (raw instanceof Uint8Array) return raw;
-  if (typeof raw !== 'string') return null;
-  const hex = raw.startsWith('\\x') ? raw.slice(2) : raw;
-  if (!/^[0-9a-f]*$/i.test(hex) || hex.length % 2 !== 0) return null;
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
-}
+import { decodeBytea } from '@/lib/providers/bytea';
 
 function getGitHubAppCredentials() {
   const appId = process.env.GITHUB_APP_ID;
@@ -158,8 +142,8 @@ export function buildGateway(opts: {
     // Supabase returns bytea as a hex-encoded `\x...` string. Convert to Uint8Array.
     return {
       ...data,
-      access_token_encrypted: parseByteaHex(data.access_token_encrypted),
-      refresh_token_encrypted: parseByteaHex(data.refresh_token_encrypted),
+      access_token_encrypted: decodeBytea(data.access_token_encrypted),
+      refresh_token_encrypted: decodeBytea(data.refresh_token_encrypted),
     };
   };
 

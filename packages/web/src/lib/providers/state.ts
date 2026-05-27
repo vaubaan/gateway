@@ -12,6 +12,9 @@
 import { buildAppJwt, mintInstallationToken } from '@vaubaan/providers-github';
 import type { Provider, ProviderAdminStatus } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import { decodeBytea, encodeByteaHex } from './bytea';
+
+export { encodeByteaHex } from './bytea';
 
 export interface ProviderResource {
   ref: string;
@@ -49,19 +52,6 @@ interface AdminRow {
   expires_at: string | null;
   connected_by_user_id: string | null;
   connected_at: string;
-}
-
-function decodeBytea(raw: unknown): Uint8Array | null {
-  if (raw === null || raw === undefined) return null;
-  if (raw instanceof Uint8Array) return raw;
-  if (typeof raw !== 'string') return null;
-  const hex = raw.startsWith('\\x') ? raw.slice(2) : raw;
-  if (!/^[0-9a-f]*$/i.test(hex) || hex.length % 2 !== 0) return null;
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
 }
 
 /** Pull the first useful line out of a (potentially JSON) error body. */
@@ -332,8 +322,8 @@ async function refreshSupabaseToken(admin: AdminRow): Promise<string | null> {
   await svc
     .from('provider_admins')
     .update({
-      access_token_encrypted: Buffer.from(json.access_token, 'utf8'),
-      refresh_token_encrypted: Buffer.from(json.refresh_token, 'utf8'),
+      access_token_encrypted: encodeByteaHex(json.access_token),
+      refresh_token_encrypted: encodeByteaHex(json.refresh_token),
       expires_at: expiresAt,
     })
     .eq('id', admin.id);
