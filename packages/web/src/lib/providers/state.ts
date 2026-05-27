@@ -242,16 +242,63 @@ async function loadVercelState(admin: AdminRow): Promise<ProviderState> {
         url: teamSlug ? `https://vercel.com/${teamSlug}/${p.name}` : undefined,
       }));
     } else {
-      const snippet = await readErrorSnippet(projRes);
-      base.error =
-        projRes.status === 403
-          ? `${snippet} — the Vaubaan Marketplace Integration probably wasn't granted the “read projects” scope. Reinstall and confirm the resource scope.`
-          : snippet;
+      // Marketplace-Integration tokens often can't hit /v9/projects directly —
+      // they're scoped to the integration's own configuration. Try the
+      // integration-configurations endpoint as a fallback: it returns the
+      // project IDs the integration is enabled on, with the same token.
+      const fallbackProjects = await listVercelProjectsViaConfiguration(token, teamId, teamSlug);
+      if (fallbackProjects.resources) {
+        base.resources = fallbackProjects.resources;
+        if (fallbackProjects.note) base.error = fallbackProjects.note;
+      } else {
+        const snippet = await readErrorSnippet(projRes);
+        base.error =
+          projRes.status === 403
+            ? `${snippet} — Marketplace-Integration tokens are scoped to the integration's own configuration and can't list every team project. Bind by typing the Vercel project id (\`prj_…\`) manually, or reinstall as a fully-scoped integration.`
+            : snippet;
+      }
     }
   } catch (e) {
     base.error = e instanceof Error ? e.message : String(e);
   }
   return base;
+}
+
+/**
+ * Fallback path for Vercel Marketplace tokens that 403 on `/v9/projects`. We
+ * pull the integration's configuration object (`/v1/integrations/configurations`)
+ * which lists the project IDs the integration is enabled on. The endpoint
+ * accepts the integration's own access token.
+ */
+async function listVercelProjectsViaConfiguration(
+  token: string,
+  teamId: string | null,
+  teamSlug: string | null,
+): Promise<{ resources: ProviderResource[] | null; note?: string }> {
+  const url = teamId
+    ? `https://api.vercel.com/v1/integrations/configurations?view=account&teamId=${encodeURIComponent(teamId)}`
+    : `https://api.vercel.com/v1/integrations/configurations?view=account`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) return { resources: null };
+  const list = (await res.json()) as Array<{
+    id: string;
+    projects: string[] | null;
+  }>;
+  if (!Array.isArray(list) || list.length === 0) return { resources: null };
+  const config = list[0]!;
+  if (config.projects === null) {
+    // "All projects" mode but we can't enumerate names without /v9/projects.
+    return {
+      resources: null,
+      note: 'Integration is enabled on every project, but project names are not visible to the integration token. Bind by typing the Vercel project id (`prj_…`) manually.',
+    };
+  }
+  const resources = config.projects.map((id) => ({
+    ref: id,
+    name: id,
+    url: teamSlug ? `https://vercel.com/${teamSlug}/${id}` : undefined,
+  }));
+  return { resources };
 }
 
 /**
@@ -374,7 +421,7 @@ async function loadSupabaseState(admin: AdminRow): Promise<ProviderState> {
       const snippet = await readErrorSnippet(projectsRes);
       base.error =
         projectsRes.status === 401 || projectsRes.status === 403
-          ? `${snippet} — token rejected. Reconnect Supabase to grant fresh credentials.`
+          ? `${snippet} — the Supabase Management API rejected the stored token. Disconnect and reconnect Supabase to mint a fresh one. In the meantime, bind by typing a Supabase project ref (20 lowercase chars) manually.`
           : snippet;
     }
   } catch (e) {
