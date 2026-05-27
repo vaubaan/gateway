@@ -78,7 +78,7 @@ export function ProjectControls({
       // Hard navigation so the sidebar's pick-a-project dropdown drops the
       // deleted project (the layout's cached projects payload won't refresh
       // reliably with router.refresh+push in this order).
-      window.location.href = `/orgs/${orgSlug}/projects`;
+      window.location.href = `/orgs/${orgSlug}`;
     } catch (err) {
       setDeleteError(err instanceof Error ? err.message : String(err));
       setDeleting(false);

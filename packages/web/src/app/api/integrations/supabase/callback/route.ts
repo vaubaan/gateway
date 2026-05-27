@@ -88,7 +88,7 @@ export async function GET(req: NextRequest) {
     fallback.searchParams.set('error', 'org not found for state');
     return NextResponse.redirect(fallback);
   }
-  const redirect = new URL(`/orgs/${org.slug}`, req.url);
+  const redirect = new URL(`/orgs/${org.slug}/providers`, req.url);
 
   const { error: insertErr } = await svc.from('provider_admins').upsert(
     {

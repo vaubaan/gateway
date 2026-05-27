@@ -88,7 +88,7 @@ export default async function ProjectPage({
             /{org.slug}/{proj.slug}
           </Code>
         </div>
-        <Link href={`/orgs/${org.slug}/projects`} style={{ color: 'var(--text-muted)' }}>
+        <Link href={`/orgs/${org.slug}`} style={{ color: 'var(--text-muted)' }}>
           ← all projects
         </Link>
       </header>

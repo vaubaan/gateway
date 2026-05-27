@@ -133,26 +133,17 @@ export function Sidebar({ email, orgs, projectsByOrg }: SidebarProps) {
     ? [
         {
           href: orgBase,
-          label: 'Cloud providers',
-          icon: <IconCloud />,
-          match: (p) =>
-            p === orgBase ||
-            (p.startsWith(orgBase) &&
-              !p.startsWith(`${orgBase}/projects`) &&
-              !p.startsWith(`${orgBase}/roles`) &&
-              !p.startsWith(`${orgBase}/members`) &&
-              !p.startsWith(`${orgBase}/audit`)),
-        },
-        {
-          href: `${orgBase}/projects`,
           label: 'Projects',
           icon: <IconFolder />,
+          // The org root is now the Projects index. Stays active for /orgs/X
+          // itself, /orgs/X/projects/new, and any /orgs/X/projects/<project>
+          // tree that isn't yet matched by a specific project section.
           match: (p) =>
-            p === `${orgBase}/projects` ||
+            p === orgBase ||
             p === `${orgBase}/projects/new` ||
-            // The /projects index, NOT a specific project (those get their own section).
             (p.startsWith(`${orgBase}/projects/`) && currentProjSlug === null),
         },
+        { href: `${orgBase}/providers`, label: 'Cloud providers', icon: <IconCloud /> },
         { href: `${orgBase}/members`, label: 'Members', icon: <IconUsers /> },
         { href: `${orgBase}/roles`, label: 'Roles', icon: <IconShield /> },
         { href: `${orgBase}/audit`, label: 'Audit log', icon: <IconActivity /> },

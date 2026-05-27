@@ -74,8 +74,8 @@ export default async function NewBindingPage({
           <CardBody>
             <p style={{ color: 'var(--text-muted)' }}>
               Connect at least one provider on the{' '}
-              <Link href={`/orgs/${org.slug}`}>Cloud providers</Link> page before binding resources
-              to this project.
+              <Link href={`/orgs/${org.slug}/providers`}>Cloud providers</Link> page before binding
+              resources to this project.
             </p>
           </CardBody>
         </Card>
