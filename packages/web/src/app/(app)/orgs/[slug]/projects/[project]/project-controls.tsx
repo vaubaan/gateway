@@ -2,50 +2,69 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  DangerConfirm,
+  Field,
+  Input,
+} from '@/components/ui';
 
 export function ProjectControls({
   projectId,
   initialName,
+  initialSlug,
   orgSlug,
 }: {
   projectId: string;
   initialName: string;
+  initialSlug: string;
   orgSlug: string;
 }) {
-  const [name, setName] = useState(initialName);
-  const [editing, setEditing] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const [name, setName] = useState(initialName);
+  const [slug, setSlug] = useState(initialSlug);
+  const [saving, setSaving] = useState(false);
+  const [renameError, setRenameError] = useState<string | null>(null);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  async function rename(e: React.FormEvent) {
+  const dirty = name !== initialName || slug !== initialSlug;
+
+  async function saveRename(e: React.FormEvent) {
     e.preventDefault();
-    setBusy(true);
-    setError(null);
+    setSaving(true);
+    setRenameError(null);
     try {
       const res = await fetch(`/api/v1/projects/${projectId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ orgSlug, name }),
+        body: JSON.stringify({
+          orgSlug,
+          ...(name !== initialName ? { name } : {}),
+          ...(slug !== initialSlug ? { slug } : {}),
+        }),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as { error?: string; slug?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      setEditing(false);
       router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (json.slug && json.slug !== initialSlug) {
+        router.push(`/orgs/${orgSlug}/projects/${json.slug}`);
+      }
+    } catch (err) {
+      setRenameError(err instanceof Error ? err.message : String(err));
     } finally {
-      setBusy(false);
+      setSaving(false);
     }
   }
 
   async function destroy() {
-    if (
-      !confirm(`Delete project '${initialName}'? Bindings, bots, and audit history will cascade.`)
-    )
-      return;
-    setBusy(true);
-    setError(null);
+    setDeleting(true);
+    setDeleteError(null);
     try {
       const res = await fetch(
         `/api/v1/projects/${projectId}?orgSlug=${encodeURIComponent(orgSlug)}`,
@@ -53,84 +72,87 @@ export function ProjectControls({
       );
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      router.push(`/orgs/${orgSlug}`);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-      setBusy(false);
+      router.refresh();
+      router.push(`/orgs/${orgSlug}/projects`);
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+      setDeleting(false);
     }
   }
 
-  if (editing) {
-    return (
-      <form onSubmit={rename} style={{ display: 'flex', gap: 6 }}>
-        <input
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          required
-          style={{
-            padding: '4px 8px',
-            background: '#0c0c0c',
-            color: '#fff',
-            border: '1px solid #2a2a2a',
-            borderRadius: 4,
-            fontSize: 14,
-          }}
-        />
-        <button type="submit" disabled={busy} style={btn}>
-          Save
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            setEditing(false);
-            setName(initialName);
-          }}
-          style={btnSecondary}
-        >
-          Cancel
-        </button>
-        {error && <span style={{ color: '#ff7e7e', fontSize: 12 }}>{error}</span>}
-      </form>
-    );
-  }
-
   return (
-    <span style={{ display: 'flex', gap: 8 }}>
-      <button type="button" onClick={() => setEditing(true)} style={btnSecondary}>
-        Rename
-      </button>
-      <button type="button" onClick={destroy} disabled={busy} style={btnDanger}>
-        Delete project
-      </button>
-      {error && <span style={{ color: '#ff7e7e', fontSize: 12 }}>{error}</span>}
-    </span>
+    <>
+      <Card>
+        <CardHeader>
+          <CardTitle>Project settings</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <form onSubmit={saveRename} style={{ display: 'grid', gap: 'var(--space-3)' }}>
+            <Field label="Name">
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                disabled={saving}
+                required
+              />
+            </Field>
+            <Field
+              label="Slug"
+              hint="Used in URLs. Changing it breaks external bookmarks but bindings and tokens follow."
+            >
+              <Input
+                value={slug}
+                onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+                pattern="^[a-z0-9](-?[a-z0-9])*$"
+                disabled={saving}
+                required
+              />
+            </Field>
+            {renameError && (
+              <p style={{ color: 'var(--accent-danger-fg)', margin: 0 }}>{renameError}</p>
+            )}
+            <div>
+              <Button type="submit" variant="primary" disabled={!dirty || saving}>
+                {saving ? 'Saving…' : 'Save changes'}
+              </Button>
+            </div>
+          </form>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Danger zone</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
+            Deleting <strong>{initialName}</strong> wipes its bindings, access tokens, and audit
+            history. Cannot be undone.
+          </p>
+          {deleteError && <p style={{ color: 'var(--accent-danger-fg)' }}>{deleteError}</p>}
+          <Button type="button" variant="danger" onClick={() => setConfirmOpen(true)}>
+            Delete project
+          </Button>
+        </CardBody>
+      </Card>
+
+      {confirmOpen && (
+        <DangerConfirm
+          title={`Delete ${initialName}?`}
+          body={
+            <>
+              Bindings, access tokens, and audit history for <strong>{initialName}</strong> will be
+              removed. Tokens carrying this project will stop working immediately.
+            </>
+          }
+          phrase={initialSlug}
+          confirmLabel="Delete project"
+          busy={deleting}
+          error={deleteError}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={destroy}
+        />
+      )}
+    </>
   );
 }
-
-const btn: React.CSSProperties = {
-  padding: '4px 10px',
-  background: '#fff',
-  color: '#000',
-  border: 0,
-  borderRadius: 4,
-  fontSize: 12,
-  cursor: 'pointer',
-};
-const btnSecondary: React.CSSProperties = {
-  padding: '4px 10px',
-  background: 'transparent',
-  color: '#fff',
-  border: '1px solid #2a2a2a',
-  borderRadius: 4,
-  fontSize: 12,
-  cursor: 'pointer',
-};
-const btnDanger: React.CSSProperties = {
-  padding: '4px 10px',
-  background: 'transparent',
-  color: '#ff7e7e',
-  border: '1px solid #4a1c1c',
-  borderRadius: 4,
-  fontSize: 12,
-  cursor: 'pointer',
-};

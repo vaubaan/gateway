@@ -1,10 +1,27 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { PROVIDERS, type Provider } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
-import { BindingDeleteButton } from './binding-delete';
-import { ProjectControls } from './project-controls';
+import { loadProviderState } from '@/lib/providers/state';
+import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
+import { BindingControls } from './binding-controls';
 
 export const dynamic = 'force-dynamic';
+
+interface BindingRow {
+  id: string;
+  provider: Provider;
+  resource_ref: string;
+  display_name: string | null;
+}
+
+interface TokenRow {
+  id: string;
+  name: string;
+  api_key_prefix: string;
+  status: 'active' | 'revoked';
+  last_used_at: string | null;
+}
 
 export default async function ProjectPage({
   params,
@@ -22,149 +39,155 @@ export default async function ProjectPage({
     .eq('slug', slug)
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!org) notFound();
-  const o = org;
 
   const { data: proj } = await supabase
     .from('projects')
     .select('id, slug, name')
-    .eq('organization_id', o.id)
+    .eq('organization_id', org.id)
     .eq('slug', project)
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!proj) notFound();
-  const p = proj;
 
-  const [{ data: bindings }, { data: tokens }] = await Promise.all([
-    supabase.from('provider_bindings').select('*').eq('project_id', p.id),
+  const [{ data: bindings }, { data: tokens }, providerStates] = await Promise.all([
+    supabase
+      .from('provider_bindings')
+      .select('id, provider, resource_ref, display_name')
+      .eq('project_id', proj.id)
+      .returns<BindingRow[]>(),
     supabase
       .from('access_tokens')
-      .select('*')
-      .eq('project_id', p.id)
-      .order('created_at', { ascending: false }),
+      .select('id, name, api_key_prefix, status, last_used_at')
+      .eq('project_id', proj.id)
+      .order('created_at', { ascending: false })
+      .returns<TokenRow[]>(),
+    Promise.all(PROVIDERS.map((p) => loadProviderState(org.id, p))),
   ]);
+
+  const resourcesByProvider: Record<Provider, Array<{ ref: string; name: string }>> = {
+    github: [],
+    vercel: [],
+    supabase: [],
+  };
+  for (const s of providerStates) {
+    resourcesByProvider[s.provider] = s.resources.map((r) => ({ ref: r.ref, name: r.name }));
+  }
 
   return (
     <main>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+      <header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: 'var(--space-6)',
+        }}
+      >
         <div>
-          <h1 style={{ marginBottom: 4 }}>{p.name}</h1>
-          <code style={{ opacity: 0.5 }}>
-            /{o.slug}/{p.slug}
-          </code>
+          <h1 style={{ margin: 0 }}>{proj.name}</h1>
+          <Code>
+            /{org.slug}/{proj.slug}
+          </Code>
         </div>
-        <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
-          <ProjectControls projectId={p.id} initialName={p.name} orgSlug={o.slug} />
-          <Link href={`/orgs/${o.slug}`} style={{ opacity: 0.7 }}>
-            ← back
-          </Link>
-        </div>
+        <Link href={`/orgs/${org.slug}/projects`} style={{ color: 'var(--text-muted)' }}>
+          ← all projects
+        </Link>
       </header>
 
-      <section style={{ marginTop: 32 }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <h2 style={{ fontSize: 18 }}>Provider bindings</h2>
-          <Link
-            href={`/orgs/${o.slug}/projects/${p.slug}/bindings/new`}
-            style={{
-              padding: '6px 10px',
-              background: '#fff',
-              color: '#000',
-              borderRadius: 4,
-              textDecoration: 'none',
-            }}
-          >
-            + Bind a resource
-          </Link>
-        </header>
-        <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-          {(bindings ?? []).map((b) => {
-            const bind = b as { id: string; provider: string; resource_ref: string };
-            return (
-              <li
-                key={bind.id}
-                style={{
-                  padding: 12,
-                  marginBottom: 8,
-                  border: '1px solid #2a2a2a',
-                  borderRadius: 6,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                }}
-              >
-                <span>
-                  <strong>{bind.provider}</strong>{' '}
-                  <code style={{ opacity: 0.7 }}>{bind.resource_ref}</code>
-                </span>
-                <BindingDeleteButton bindingId={bind.id} orgSlug={o.slug} />
-              </li>
-            );
-          })}
-          {(bindings ?? []).length === 0 && <p style={{ opacity: 0.55 }}>No bindings yet.</p>}
-        </ul>
-      </section>
-
-      <section style={{ marginTop: 32 }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between' }}>
-          <h2 style={{ fontSize: 18 }}>Access tokens</h2>
-          <Link
-            href={`/orgs/${o.slug}/projects/${p.slug}/tokens/new`}
-            style={{
-              padding: '6px 10px',
-              background: '#fff',
-              color: '#000',
-              borderRadius: 4,
-              textDecoration: 'none',
-            }}
-          >
-            + New access token
-          </Link>
-        </header>
-        <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-          {(tokens ?? []).map((t) => {
-            const token = t as {
-              id: string;
-              name: string;
-              api_key_prefix: string;
-              status: string;
-              last_used_at: string | null;
-            };
-            return (
-              <li
-                key={token.id}
-                style={{
-                  padding: 12,
-                  marginBottom: 8,
-                  border: '1px solid #2a2a2a',
-                  borderRadius: 6,
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                }}
-              >
-                <Link
-                  href={`/orgs/${o.slug}/projects/${p.slug}/tokens/${token.id}`}
-                  style={{ textDecoration: 'none', color: 'inherit' }}
-                >
-                  <strong>{token.name}</strong>{' '}
-                  <code style={{ opacity: 0.55 }}>vbn_live_{token.api_key_prefix}…</code>
-                </Link>
-                <span style={{ opacity: 0.55 }}>
-                  {token.status === 'active' ? (
-                    <span style={{ color: '#7ee87e' }}>active</span>
-                  ) : (
-                    <span style={{ color: '#ff7e7e' }}>revoked</span>
-                  )}
-                  {token.last_used_at && (
-                    <span style={{ marginLeft: 8 }}>
-                      used {new Date(token.last_used_at).toLocaleString()}
+      <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Provider bindings</CardTitle>
+            <Link href={`/orgs/${org.slug}/projects/${proj.slug}/bindings/new`}>
+              <Button size="sm" variant="primary">
+                + Bind a resource
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardBody>
+            {(bindings ?? []).length === 0 ? (
+              <p style={{ color: 'var(--text-subtle)', margin: 0 }}>No bindings yet.</p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {(bindings ?? []).map((b) => (
+                  <li
+                    key={b.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 'var(--space-3)',
+                      padding: 'var(--space-3) 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <span style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                      <Badge tone="neutral">{b.provider}</Badge>
+                      <Code>{b.display_name ?? b.resource_ref}</Code>
                     </span>
-                  )}
-                </span>
-              </li>
-            );
-          })}
-          {(tokens ?? []).length === 0 && <p style={{ opacity: 0.55 }}>No access tokens yet.</p>}
-        </ul>
-      </section>
+                    <BindingControls
+                      binding={b}
+                      orgSlug={org.slug}
+                      resources={resourcesByProvider[b.provider]}
+                    />
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Access tokens</CardTitle>
+            <Link href={`/orgs/${org.slug}/projects/${proj.slug}/tokens/new`}>
+              <Button size="sm" variant="primary">
+                + New access token
+              </Button>
+            </Link>
+          </CardHeader>
+          <CardBody>
+            {(tokens ?? []).length === 0 ? (
+              <p style={{ color: 'var(--text-subtle)', margin: 0 }}>No access tokens yet.</p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {(tokens ?? []).map((t) => (
+                  <li
+                    key={t.id}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'baseline',
+                      padding: 'var(--space-3) 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <Link
+                      href={`/orgs/${org.slug}/projects/${proj.slug}/tokens/${t.id}`}
+                      style={{ textDecoration: 'none', color: 'inherit' }}
+                    >
+                      <strong>{t.name}</strong> <Code>vbn_live_{t.api_key_prefix}…</Code>
+                    </Link>
+                    <span
+                      style={{
+                        color: 'var(--text-subtle)',
+                        fontSize: 'var(--text-sm)',
+                        display: 'flex',
+                        gap: 'var(--space-2)',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Badge tone={t.status === 'active' ? 'success' : 'danger'}>{t.status}</Badge>
+                      {t.last_used_at && (
+                        <span>used {new Date(t.last_used_at).toLocaleString()}</span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+      </div>
     </main>
   );
 }

@@ -6,3 +6,4 @@ export { Table, Tbody, Td, Th, Thead, Tr } from './Table.tsx';
 export { Banner } from './Banner.tsx';
 export { Container, Stack, Row, Spacer } from './Layout.tsx';
 export { Code, KeyHint } from './Code.tsx';
+export { DangerConfirm } from './DangerConfirm.tsx';

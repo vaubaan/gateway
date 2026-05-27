@@ -1,9 +1,9 @@
 /**
- * PATCH  /api/v1/projects/:projectId  body: { orgSlug, name }
+ * PATCH  /api/v1/projects/:projectId  body: { orgSlug, name?, slug? }
  * DELETE /api/v1/projects/:projectId?orgSlug=...
  *
- * Slug is immutable — renames apply to `name` only. DELETE cascades to
- * bindings + bots + bot_roles (cf. supabase migration 0001_init.sql).
+ * DELETE cascades to bindings + access_tokens + access_token_roles (cf. supabase
+ * migration 0001_init.sql).
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -15,10 +15,20 @@ import { requireOrgMember } from '@/lib/auth/require-org-member';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const PatchSchema = z.object({
-  orgSlug: z.string().min(1),
-  name: z.string().min(1),
-});
+const PatchSchema = z
+  .object({
+    orgSlug: z.string().min(1),
+    name: z.string().min(1).max(120).optional(),
+    slug: z
+      .string()
+      .regex(/^[a-z0-9](-?[a-z0-9])*$/, 'slug must be lowercase kebab-case')
+      .min(2)
+      .max(40)
+      .optional(),
+  })
+  .refine((b) => b.name !== undefined || b.slug !== undefined, {
+    message: 'nothing to update',
+  });
 
 async function invalidateProject(projectId: string): Promise<void> {
   const svc = getSupabaseServiceClient();
@@ -49,15 +59,29 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ projectId
   const svc = getSupabaseServiceClient();
   const { data: project } = await svc
     .from('projects')
-    .select('id, organization_id')
+    .select('id, organization_id, slug')
     .eq('id', projectId)
-    .maybeSingle<{ id: string; organization_id: string }>();
+    .maybeSingle<{ id: string; organization_id: string; slug: string }>();
   if (!project || project.organization_id !== guard.orgId) {
     return NextResponse.json({ error: 'project not found' }, { status: 404 });
   }
-  const { error } = await svc.from('projects').update({ name: body.name }).eq('id', projectId);
+
+  if (body.slug && body.slug !== project.slug) {
+    const { data: dup } = await svc
+      .from('projects')
+      .select('id')
+      .eq('organization_id', guard.orgId)
+      .eq('slug', body.slug)
+      .maybeSingle<{ id: string }>();
+    if (dup) return NextResponse.json({ error: 'slug already taken' }, { status: 409 });
+  }
+
+  const updates: Record<string, string> = {};
+  if (body.name) updates.name = body.name;
+  if (body.slug) updates.slug = body.slug;
+  const { error } = await svc.from('projects').update(updates).eq('id', projectId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ ok: true });
+  return NextResponse.json({ ok: true, slug: body.slug ?? project.slug });
 }
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ projectId: string }> }) {

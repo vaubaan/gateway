@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
+import { RoleControls } from './role-controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -60,9 +61,22 @@ export default async function RoleDetailPage({
             provider <strong>{row.provider}</strong> · {row.is_builtin ? 'builtin' : 'custom'}
           </code>
         </div>
-        <Link href={`/orgs/${org.slug}/roles`} style={{ opacity: 0.7 }}>
-          ← all roles
-        </Link>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
+          {!row.is_builtin && (
+            <>
+              <Link
+                href={`/orgs/${org.slug}/roles/${row.id}/edit`}
+                style={{ opacity: 0.7, fontSize: 14 }}
+              >
+                Edit
+              </Link>
+              <RoleControls roleId={row.id} roleName={row.name} orgSlug={org.slug} />
+            </>
+          )}
+          <Link href={`/orgs/${org.slug}/roles`} style={{ opacity: 0.7 }}>
+            ← all roles
+          </Link>
+        </div>
       </header>
 
       {row.description && (
