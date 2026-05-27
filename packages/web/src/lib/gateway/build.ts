@@ -42,6 +42,7 @@ interface AccessTokenRow {
   project_id: string;
   status: 'active' | 'revoked';
   api_key_prefix: string;
+  expires_at: string | null;
 }
 
 interface ProjectRow {
@@ -74,7 +75,7 @@ export function buildGateway(opts: {
     async loadAccessTokenContext(accessTokenId) {
       const { data: tk } = await supabase
         .from('access_tokens')
-        .select('id, name, project_id, status, api_key_prefix')
+        .select('id, name, project_id, status, api_key_prefix, expires_at')
         .eq('id', accessTokenId)
         .maybeSingle<AccessTokenRow>();
       if (!tk) return null;

@@ -82,6 +82,24 @@ export interface AccessToken {
   last_used_at: string | null;
   created_by: string | null;
   created_at: string;
+  /** ISO timestamp ; null = no TTL (UI-issued long-lived token).
+   *  When non-null and `now > expires_at` the gateway rejects the token
+   *  with AuthError('access token expired'). */
+  expires_at: string | null;
+}
+
+export type ManagementKeyStatus = 'active' | 'revoked';
+
+export interface OrgManagementKey {
+  id: string;
+  organization_id: string;
+  name: string;
+  api_key_prefix: string;
+  api_key_hash: string;
+  status: ManagementKeyStatus;
+  last_used_at: string | null;
+  created_by: string | null;
+  created_at: string;
 }
 
 export interface AccessTokenRole {
@@ -140,7 +158,10 @@ export type Constraint =
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface AccessTokenContext {
-  access_token: Pick<AccessToken, 'id' | 'name' | 'project_id' | 'status' | 'api_key_prefix'>;
+  access_token: Pick<
+    AccessToken,
+    'id' | 'name' | 'project_id' | 'status' | 'api_key_prefix' | 'expires_at'
+  >;
   project: Pick<Project, 'id' | 'slug' | 'organization_id'>;
   organization: Pick<Organization, 'id' | 'slug' | 'name'>;
   roles: Role[];

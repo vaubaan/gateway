@@ -84,6 +84,7 @@ async function buildHarness(opts: { execute?: UpstreamAdapter['executeCall'] } =
       project_id: 'p1',
       status: 'active',
       api_key_prefix: apiKeyPrefix,
+      expires_at: null,
     },
     project: { id: 'p1', slug: 'website', organization_id: 'org1' },
     organization: { id: 'org1', slug: 'acme', name: 'Acme' },
@@ -147,6 +148,50 @@ describe('McpGateway — authenticate', () => {
     // loadAccessTokenForAuth called twice (cache hit still re-verifies), loadAccessTokenContext once.
     expect(loader.loadAccessTokenForAuth).toHaveBeenCalledTimes(2);
     expect(loader.loadAccessTokenContext).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('McpGateway — kind/expiry guards', () => {
+  test('rejects vbn_mgmt_ keys (those auth the Runner, not the gateway)', async () => {
+    const { gateway } = await buildHarness();
+    const { apiKey: mgmtKey } = generateApiKey('mgmt');
+    await expect(gateway.authenticate(`Bearer ${mgmtKey}`)).rejects.toThrow(/management keys/i);
+  });
+
+  test('rejects an access token past expires_at on cold path', async () => {
+    const { apiKey, apiKeyPrefix } = generateApiKey('test');
+    const apiKeyHash = await hashApiKey(apiKey);
+    const expired: AccessTokenContext = {
+      access_token: {
+        id: 'tk-exp',
+        name: 'expired',
+        project_id: 'p1',
+        status: 'active',
+        api_key_prefix: apiKeyPrefix,
+        expires_at: new Date(Date.now() - 60_000).toISOString(),
+      },
+      project: { id: 'p1', slug: 'website', organization_id: 'org1' },
+      organization: { id: 'org1', slug: 'acme', name: 'Acme' },
+      roles: [developerRole],
+      bindings: [fakeBinding],
+      provider_admins: [
+        { provider: 'github', status: 'connected', installation_id: '99', team_id: null },
+      ],
+    };
+    const loader: ContextLoader = {
+      loadAccessTokenForAuth: vi
+        .fn()
+        .mockResolvedValue({ id: 'tk-exp', api_key_hash: apiKeyHash, status: 'active' }),
+      loadAccessTokenContext: vi.fn().mockResolvedValue(expired),
+      touchLastUsed: vi.fn(),
+    };
+    const gateway = new McpGateway({
+      cache: new MemoryCacheClient(),
+      audit: new MemoryAuditWriter(),
+      contextLoader: loader,
+      upstreamByProvider: {} as Record<Provider, UpstreamAdapter>,
+    });
+    await expect(gateway.authenticate(`Bearer ${apiKey}`)).rejects.toThrow(/expired/);
   });
 });
 

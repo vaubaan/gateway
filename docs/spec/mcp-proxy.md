@@ -28,7 +28,7 @@
 
 ## 0. Vocabulaire
 
-Le MCP Proxy raisonne sur 10 mots, distincts et non-interchangeables :
+Le MCP Proxy raisonne sur 11 mots, distincts et non-interchangeables :
 
 - **CloudProvider** — le SaaS lui-même (GitHub, Vercel, Supabase…). Statique
   dans le catalogue. Pas une row DB, juste une string référencée par les
@@ -50,6 +50,14 @@ Le MCP Proxy raisonne sur 10 mots, distincts et non-interchangeables :
 - **AccessToken** — identité émise par Vaubaan, **project-scoped**, porteur de
   N Roles. Identifié par une `api_key` Vaubaan (`vbn_live_xxxx…`). Consommé
   indistinctement par un agent LLM, un script CI, un cron ou un humain.
+  Peut porter un `expires_at` (TTL) — les AccessTokens créés via l'UI sont
+  long-lived (`NULL`), ceux émis programmatiquement par un Runner via
+  `POST /api/v1/runner/tokens` sont éphémères (default 24h, max 7j).
+- **ManagementKey** — Bearer credential **org-scoped**, distinct des
+  AccessTokens et **inutilisable** sur le MCP gateway. Préfixe `vbn_mgmt_…`.
+  Sert exclusivement à authentifier un service externe (typiquement le
+  Coding Agent Runner) sur `POST /api/v1/runner/tokens` pour qu'il puisse
+  mint des AccessTokens éphémères. Cf. ADR [[org-management-keys-for-runner]].
 - **Policy** — une `rule` JSON dans `Role.permissions` : `{effect, tool/tool_matches,
   target?, constraints?}`. Le DSL est strictement déclaratif.
 - **MCPGateway** — endpoint `/mcp` de Vaubaan Core. JSON-RPC. Auth par
@@ -119,12 +127,14 @@ CloudProvider           (statique : 'github' | 'vercel' | 'supabase')
    │  est connecté par
    ▼
 Organization (owner_id : FK auth.users, unique, transferable)
-   ├── ProviderAdmins[]    1 par CloudProvider connecté (post-OAuth/App install)
-   ├── RoleCatalog[]       provider-scoped, builtin global + custom (v2) org-level
-   ├── OrgMembers[]        membership plat — tout member a full RW
+   ├── ProviderAdmins[]      1 par CloudProvider connecté (post-OAuth/App install)
+   ├── RoleCatalog[]         provider-scoped, builtin global + custom (v2) org-level
+   ├── OrgMembers[]          membership plat — tout member a full RW
+   ├── ManagementKeys[]      org-scoped Bearer creds pour le Runner (vbn_mgmt_…)
    └── Projects[]
          ├── ProviderBindings[]    1 par CloudProvider activé pour ce Project
          └── AccessTokens[]        project-scoped, porteurs de N Roles
+                                   (optionnellement expires_at — runner-minted)
 
 AuditLog (transversal)     one row per MCP call : (access_token, tool, args_hash,
                                                     role_matched, decision,
@@ -142,7 +152,8 @@ AuditLog (transversal)     one row per MCP call : (access_token, tool, args_hash
 | **ProviderAdmin**   | Bundle de credentials que Vaubaan détient au niveau Org pour un Provider, issu d'un flow OAuth/App install. 1 par (org, provider).          |
 | **ProviderBinding** | Référence concrète d'un Project vers une ressource côté Provider. 1 par (project, provider).                                               |
 | **Role**            | Bundle nommé de permissions, **provider-scoped**, naming `<provider>:<role-name>`. Builtin v1 = `github:reader`, `github:developer`.       |
-| **AccessToken**     | Identité project-scoped, porteur de N Roles, identifiée par une `api_key` Vaubaan (`vbn_live_xxxx…`). Usager agnostique (agent/script/humain). |
+| **AccessToken**     | Identité project-scoped, porteur de N Roles, identifiée par une `api_key` Vaubaan (`vbn_live_xxxx…`). Usager agnostique (agent/script/humain). Optionnellement TTL via `expires_at`. |
+| **ManagementKey**   | Bearer creds org-scoped (`vbn_mgmt_xxxx…`), inutilisable sur `/mcp`. Permet à un service externe (Runner) de mint des AccessTokens éphémères via `POST /api/v1/runner/tokens`. |
 | **Policy**          | Règle dans `Role.permissions.rules[]` : `{effect, tool/tool_matches, target?, constraints?, priority?}`.                                   |
 | **MCPGateway**      | Endpoint Vaubaan `/mcp` en JSON-RPC. Auth via `Authorization: Bearer <api_key>`. C'est le hot-path produit.                                  |
 | **AuditLog**        | Une row par MCP call : qui/quoi/décision/latence. Append-only via app, rétention 90j.                                                       |
@@ -264,7 +275,26 @@ create table access_tokens (
   last_used_at    timestamptz,
   created_by      uuid references auth.users(id),
   created_at      timestamptz not null default now(),
+  expires_at      timestamptz,     -- NULL = pas de TTL ; sinon le gateway
+                                   --       rejette quand now > expires_at
   unique (project_id, name)
+);
+
+-- ManagementKey : Bearer creds org-scoped, distinct des AccessTokens,
+-- utilisé exclusivement par le Runner sur POST /api/v1/runner/tokens.
+-- Inutilisable sur le MCP gateway. Cf. ADR [[org-management-keys-for-runner]].
+create table org_management_keys (
+  id              uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references organizations(id) on delete cascade,
+  name            text not null check (name ~ '^[a-z0-9](-?[a-z0-9])*$'),
+  api_key_prefix  text not null unique,   -- 'vbn_mgmt_AbCdEfGh'
+  api_key_hash    text not null,           -- argon2id(full api_key)
+  status          text not null default 'active'
+                      check (status in ('active', 'revoked')),
+  last_used_at    timestamptz,
+  created_by      uuid references auth.users(id),
+  created_at      timestamptz not null default now(),
+  unique (organization_id, name)
 );
 
 create table access_token_roles (
@@ -299,7 +329,12 @@ create table audit_log (
   global vs custom org-level).
 - `access_tokens (api_key_prefix)` — fast lookup au moment de l'auth (puis vérifier hash).
 - `access_tokens (project_id)` — listing UI.
+- `access_tokens (expires_at) where expires_at is not null` — partial index pour
+  les purges de tokens expirés (runner-minted).
 - `access_token_roles (access_token_id)` — lookup roles d'un access_token au hot-path.
+- `org_management_keys (api_key_prefix)` — UNIQUE, fast lookup au moment de
+  l'auth Runner (puis vérifier hash).
+- `org_management_keys (organization_id)` — listing UI.
 - `audit_log (organization_id, ts desc)` — historique org.
 - `audit_log (access_token_id, ts desc)` — historique access_token.
 - `audit_log (decision, ts desc) where decision='denied'` — partial index pour
@@ -323,6 +358,7 @@ suppression depuis `org_members` (transfert préalable via
 | `roles`              |   RW²  |  RW²  |
 | `access_tokens`      |   RW   |  RW   |
 | `access_token_roles` |   RW   |  RW   |
+| `org_management_keys`|   RW   |  RW   |
 | `audit_log`          |   R    |   R   |
 
 ¹ DELETE refusé si la cible est l'owner ; l'UPDATE de `organizations.owner_id`
@@ -871,6 +907,49 @@ GET    /catalog/roles                       -- liste roles builtin
 GET    /catalog/tools?provider=...          -- availableTools par provider
 ```
 
+### 8.8 ManagementKeys + Runner (programmatic AccessToken minting)
+
+Cf. ADR [[org-management-keys-for-runner]].
+
+```
+GET    /orgs/:slug/management-keys                 -- list (admin/member)
+POST   /orgs/:slug/management-keys                 -- { name } ; returns { management_key, api_key }
+                                                   --   api_key visible 1× (argon2id at-rest)
+DELETE /orgs/:slug/management-keys/:keyId          -- hard delete
+```
+
+```
+GET    /api/v1/runner/roles
+       Authorization: Bearer vbn_mgmt_…
+       returns 200 { roles: [{ id, name, provider, description, is_builtin }] }
+
+GET    /api/v1/runner/projects
+       Authorization: Bearer vbn_mgmt_…
+       returns 200 {
+         projects: [{
+           id, slug, name, created_at,
+           bindings: [{ provider, resource_ref, display_name }]
+         }]
+       }
+
+POST   /api/v1/runner/tokens
+       Authorization: Bearer vbn_mgmt_…
+       body: { projectSlug, roleIds, name?, ttlHours? }
+       returns 201 { access_token, api_key, expires_at }
+```
+
+`GET /runner/roles` retourne les builtin globaux **plus** les roles custom
+de l'org liée à la management key — c'est la liste actionable pour les
+`roleIds[]` du `POST /runner/tokens`. `GET /runner/projects` retourne les
+projects de l'org avec leurs bindings pour permettre au Runner de découvrir
+les `projectSlug` valides et savoir quels providers sont activés sur chacun.
+
+Default `ttlHours=24`, hard-cap **168h** (7j). Tout AccessToken émis ici porte
+un `expires_at` que le hot-path gateway respecte (`AuthError('access token
+has expired.')` quand `now > expires_at`). Le Runner appelle ce endpoint au
+début de chaque session de coding et stocke l'`api_key` localement pour la
+durée de la session.
+
 ## 9. Workflows
 
 ### 9.1 Onboarder une nouvelle Organization
@@ -1273,6 +1352,10 @@ mort dans ce repo.
 - **Connect providers** : OAuth/App install. Pas de paste-token jamais.
 - **Roles** : org-level catalog, builtin v1, custom v2.
 - **Bots** : project-scoped, N roles, identifiés par api_key (`vbn_live_…`).
+- **Management keys** : org-scoped (`vbn_mgmt_…`), inutilisables sur `/mcp`,
+  exclusivement utilisés par un service externe (Runner) pour mint des
+  AccessTokens éphémères via `POST /api/v1/runner/tokens` (TTL default 24h,
+  max 7j). Cf. ADR [[org-management-keys-for-runner]].
 - **DSL policy** : JSON déclaratif `jsonb`, 7 opérateurs (equals, in,
   not_in, match, regex, starts_with, not_starts_with).
 - **Default deny** : un call non couvert par au moins une allow rule est denied.

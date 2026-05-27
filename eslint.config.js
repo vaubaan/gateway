@@ -12,6 +12,9 @@ export default tseslint.config(
       'node_modules/**',
       '**/dist/**',
       '**/.next/**',
+      // Parallel-agent worktrees are independent git checkouts (gitignored) —
+      // don't lint them as part of the main project.
+      '.claude/worktrees/**',
       '**/out/**',
       '**/coverage/**',
       '**/playwright-report/**',

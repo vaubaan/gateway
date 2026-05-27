@@ -31,6 +31,13 @@ import type { CacheClient } from './cache.ts';
 import { hashArguments, type AuditWriter } from './audit.ts';
 import { AuthError, rpcError, rpcSuccess } from './errors.ts';
 
+function assertNotExpired(expiresAt: string | null | undefined): void {
+  if (!expiresAt) return;
+  if (Date.parse(expiresAt) <= Date.now()) {
+    throw new AuthError('access token has expired.');
+  }
+}
+
 export interface ContextLoader {
   /** Load minimal access-token row for auth verification. Returns null if not found / revoked. */
   loadAccessTokenForAuth(
@@ -84,6 +91,13 @@ export class McpGateway {
     const raw = authHeader.slice('bearer '.length).trim();
     const parsed = parseApiKey(raw);
     if (!parsed) throw new AuthError('api_key format invalid.');
+    // `vbn_mgmt_*` is the Runner credential — it authenticates against
+    // /api/v1/runner/*, not the MCP gateway. Reject upfront.
+    if (parsed.kind === 'mgmt') {
+      throw new AuthError(
+        'management keys (vbn_mgmt_…) cannot consume the MCP gateway. Use an AccessToken (vbn_live_…).',
+      );
+    }
 
     const cacheKey = `vaubaan:ctx:${parsed.prefix}`;
     const cached = await this.cfg.cache.get<AccessTokenContext>(cacheKey);
@@ -92,6 +106,7 @@ export class McpGateway {
       const tk = await this.cfg.contextLoader.loadAccessTokenForAuth(parsed.prefix);
       if (!tk || tk.status !== 'active') throw new AuthError('access token not found or revoked.');
       if (!(await verifyApiKey(tk.api_key_hash, raw))) throw new AuthError('api_key mismatch.');
+      assertNotExpired(cached.access_token.expires_at);
       return cached;
     }
 
@@ -102,6 +117,7 @@ export class McpGateway {
 
     const ctx = await this.cfg.contextLoader.loadAccessTokenContext(tk.id);
     if (!ctx) throw new AuthError('access-token context could not be loaded.');
+    assertNotExpired(ctx.access_token.expires_at);
 
     await this.cfg.cache.set(cacheKey, ctx, this.cfg.contextTtlSeconds ?? 60);
     if (this.cfg.contextLoader.touchLastUsed) {

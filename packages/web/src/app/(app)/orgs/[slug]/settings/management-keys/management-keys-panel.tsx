@@ -1,0 +1,347 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Banner,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Code,
+  DangerConfirm,
+  Field,
+  Input,
+} from '@/components/ui';
+
+interface ManagementKeyRow {
+  id: string;
+  name: string;
+  api_key_prefix: string;
+  status: 'active' | 'revoked';
+  last_used_at: string | null;
+  created_at: string;
+}
+
+export function ManagementKeysPanel({
+  org,
+  initialKeys,
+}: {
+  org: { id: string; slug: string; name: string };
+  initialKeys: ManagementKeyRow[];
+}) {
+  const router = useRouter();
+  const [keys, setKeys] = useState<ManagementKeyRow[]>(initialKeys);
+  const [newName, setNewName] = useState('');
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const [freshApiKey, setFreshApiKey] = useState<string | null>(null);
+
+  const [confirmKey, setConfirmKey] = useState<ManagementKeyRow | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function onCreate(e: React.FormEvent) {
+    e.preventDefault();
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const res = await fetch(`/api/v1/orgs/${encodeURIComponent(org.slug)}/management-keys`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name: newName }),
+      });
+      const json = (await res.json()) as {
+        management_key?: ManagementKeyRow;
+        api_key?: string;
+        error?: string;
+      };
+      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
+      if (json.management_key) setKeys((cur) => [json.management_key as ManagementKeyRow, ...cur]);
+      setFreshApiKey(json.api_key ?? null);
+      setNewName('');
+    } catch (err) {
+      setCreateError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function onDelete(key: ManagementKeyRow) {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(
+        `/api/v1/orgs/${encodeURIComponent(org.slug)}/management-keys/${encodeURIComponent(key.id)}`,
+        { method: 'DELETE' },
+      );
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setKeys((cur) => cur.filter((k) => k.id !== key.id));
+      setConfirmKey(null);
+      router.refresh();
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <main>
+      <header style={{ marginBottom: 'var(--space-6)' }}>
+        <h1 style={{ margin: 0 }}>Management keys</h1>
+        <Code>/{org.slug}</Code>
+      </header>
+
+      <Banner tone="info">
+        Management keys authenticate <strong>external services</strong> (e.g. the Coding Agent
+        Runner) to mint short-lived AccessTokens through <Code>POST /api/v1/runner/tokens</Code>.
+        They cannot consume the MCP gateway directly — only AccessTokens (<Code>vbn_live_…</Code>)
+        can.
+      </Banner>
+
+      {freshApiKey && <FreshKeyCard apiKey={freshApiKey} onDismiss={() => setFreshApiKey(null)} />}
+
+      <div style={{ display: 'grid', gap: 'var(--space-4)', marginTop: 'var(--space-4)' }}>
+        <Card>
+          <CardHeader>
+            <CardTitle>New management key</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <form onSubmit={onCreate} style={{ display: 'grid', gap: 'var(--space-3)' }}>
+              <Field
+                label="Name"
+                hint="Lowercase kebab-case. Identifies the key in the list and audit views."
+              >
+                <Input
+                  value={newName}
+                  onChange={(e) =>
+                    setNewName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))
+                  }
+                  pattern="^[a-z0-9](-?[a-z0-9])*$"
+                  required
+                  placeholder="coding-agent-runner"
+                />
+              </Field>
+              {createError && (
+                <p style={{ color: 'var(--accent-danger-fg)', margin: 0 }}>{createError}</p>
+              )}
+              <div>
+                <Button type="submit" variant="primary" disabled={creating || newName.length === 0}>
+                  {creating ? 'Creating…' : 'Create management key'}
+                </Button>
+              </div>
+            </form>
+          </CardBody>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Existing keys</CardTitle>
+          </CardHeader>
+          <CardBody>
+            {keys.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', margin: 0 }}>No management keys yet.</p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {keys.map((k) => (
+                  <li
+                    key={k.id}
+                    style={{
+                      padding: 'var(--space-3)',
+                      borderTop: '1px solid var(--border-subtle)',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 'var(--space-3)',
+                    }}
+                  >
+                    <div>
+                      <strong>{k.name}</strong> <Code>vbn_mgmt_{k.api_key_prefix}…</Code>
+                      <div
+                        style={{
+                          fontSize: 'var(--text-sm)',
+                          color: 'var(--text-muted)',
+                          marginTop: 'var(--space-1)',
+                        }}
+                      >
+                        {k.status === 'active' ? (
+                          <span style={{ color: '#16a34a' }}>active</span>
+                        ) : (
+                          <span style={{ color: '#dc2626' }}>revoked</span>
+                        )}
+                        {k.last_used_at && (
+                          <span style={{ marginLeft: 'var(--space-3)' }}>
+                            last used {new Date(k.last_used_at).toLocaleString()}
+                          </span>
+                        )}
+                        <span style={{ marginLeft: 'var(--space-3)' }}>
+                          created {new Date(k.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="danger"
+                      onClick={() => setConfirmKey(k)}
+                      disabled={deleting}
+                    >
+                      Delete
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardBody>
+        </Card>
+      </div>
+
+      {confirmKey && (
+        <DangerConfirm
+          title={`Delete ${confirmKey.name}?`}
+          body={
+            <>
+              The Runner using this management key will start failing immediately. AccessTokens
+              already minted with this key remain valid until their <Code>expires_at</Code>. Cannot
+              be undone.
+            </>
+          }
+          phrase={confirmKey.name}
+          confirmLabel="Delete key"
+          busy={deleting}
+          error={deleteError}
+          onCancel={() => {
+            setConfirmKey(null);
+            setDeleteError(null);
+          }}
+          onConfirm={() => {
+            void onDelete(confirmKey);
+          }}
+        />
+      )}
+    </main>
+  );
+}
+
+function buildRunnerSnippet(apiKey: string, baseUrl: string): string {
+  return `# Vaubaan — Coding Agent Runner integration
+
+# 1. Configure
+export VAUBAAN_BASE_URL="${baseUrl}"
+export VAUBAAN_MGMT_KEY="${apiKey}"
+
+# 2. Discover available roles
+curl -sS "$VAUBAAN_BASE_URL/api/v1/runner/roles" \\
+  -H "Authorization: Bearer $VAUBAAN_MGMT_KEY"
+
+# 3. Discover projects + bindings
+curl -sS "$VAUBAAN_BASE_URL/api/v1/runner/projects" \\
+  -H "Authorization: Bearer $VAUBAAN_MGMT_KEY"
+
+# 4. Mint an ephemeral AccessToken for a coding session
+#    ttlHours default 24, max 168 (7 days). Response.api_key visible ONCE.
+curl -sS -X POST "$VAUBAAN_BASE_URL/api/v1/runner/tokens" \\
+  -H "Authorization: Bearer $VAUBAAN_MGMT_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{ "projectSlug": "<slug>", "roleIds": ["<role-id>"], "ttlHours": 24 }'
+
+# 5. Hand the returned api_key (vbn_live_…) to the MCP client:
+# {
+#   "mcpServers": {
+#     "vaubaan": {
+#       "url": "${baseUrl}/mcp",
+#       "headers": { "Authorization": "Bearer <api_key>" }
+#     }
+#   }
+# }
+
+# Full guide: ${baseUrl}/docs/runner
+`;
+}
+
+function FreshKeyCard({ apiKey, onDismiss }: { apiKey: string; onDismiss: () => void }) {
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com';
+  const snippet = buildRunnerSnippet(apiKey, baseUrl);
+
+  function copyKey() {
+    void navigator.clipboard.writeText(apiKey);
+  }
+  function copySnippet() {
+    void navigator.clipboard.writeText(snippet);
+  }
+
+  return (
+    <Card style={{ marginTop: 'var(--space-4)', borderColor: 'var(--accent-warning-fg)' }}>
+      <CardHeader>
+        <CardTitle>Copy this management key now</CardTitle>
+      </CardHeader>
+      <CardBody>
+        <p style={{ marginTop: 0, color: 'var(--accent-warning-fg)' }}>
+          ⚠️ This is the <strong>only time</strong> the key will be shown. After dismissing this
+          panel, only the prefix is retrievable. Lose it = create a new one and revoke this one.
+        </p>
+        <pre
+          style={{
+            padding: 'var(--space-3)',
+            background: 'var(--surface-base)',
+            borderRadius: 'var(--radius-md)',
+            overflow: 'auto',
+            fontSize: 'var(--text-sm)',
+            margin: 0,
+          }}
+        >
+          {apiKey}
+        </pre>
+        <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
+          <Button type="button" variant="primary" onClick={copyKey}>
+            Copy key
+          </Button>
+          <Button type="button" variant="secondary" onClick={onDismiss}>
+            I&apos;ve copied it — dismiss
+          </Button>
+        </div>
+
+        <details style={{ marginTop: 'var(--space-4)' }}>
+          <summary
+            style={{
+              cursor: 'pointer',
+              fontWeight: 600,
+              padding: 'var(--space-2) 0',
+            }}
+          >
+            Runner setup snippet — paste this into your other project for an LLM/agent to scaffold
+            the integration
+          </summary>
+          <p style={{ color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>
+            Drops the full discovery + mint flow with your key already inlined. Full guide:{' '}
+            <a href="/docs/runner" target="_blank" rel="noreferrer">
+              /docs/runner
+            </a>
+            .
+          </p>
+          <pre
+            style={{
+              padding: 'var(--space-3)',
+              background: 'var(--surface-base)',
+              borderRadius: 'var(--radius-md)',
+              overflow: 'auto',
+              fontSize: 'var(--text-xs)',
+              maxHeight: 320,
+              margin: 0,
+              whiteSpace: 'pre',
+            }}
+          >
+            {snippet}
+          </pre>
+          <div style={{ marginTop: 'var(--space-3)' }}>
+            <Button type="button" variant="primary" onClick={copySnippet}>
+              Copy snippet
+            </Button>
+          </div>
+        </details>
+      </CardBody>
+    </Card>
+  );
+}
