@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Provider } from '@vaubaan/shared';
-import { Button, Select } from '@/components/ui';
+import { Button, Input, Select } from '@/components/ui';
 
 interface Binding {
   id: string;
@@ -79,14 +79,24 @@ export function BindingControls({
     const knownRef = resources.some((r) => r.ref === ref);
     return (
       <span style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
-        <Select value={ref} onChange={(e) => setRef(e.target.value)} disabled={busy}>
-          {!knownRef && <option value={ref}>{ref} (current)</option>}
-          {resources.map((r) => (
-            <option key={r.ref} value={r.ref}>
-              {r.name}
-            </option>
-          ))}
-        </Select>
+        {resources.length > 0 ? (
+          <Select value={ref} onChange={(e) => setRef(e.target.value)} disabled={busy}>
+            {!knownRef && <option value={ref}>{ref} (current)</option>}
+            {resources.map((r) => (
+              <option key={r.ref} value={r.ref}>
+                {r.name}
+              </option>
+            ))}
+          </Select>
+        ) : (
+          <Input
+            value={ref}
+            onChange={(e) => setRef(e.target.value)}
+            disabled={busy}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        )}
         <Button type="button" size="sm" variant="primary" onClick={save} disabled={busy}>
           {busy ? 'Saving…' : 'Save'}
         </Button>

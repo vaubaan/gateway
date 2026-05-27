@@ -64,6 +64,29 @@ function decodeBytea(raw: unknown): Uint8Array | null {
   return out;
 }
 
+/** Pull the first useful line out of a (potentially JSON) error body. */
+async function readErrorSnippet(res: Response): Promise<string> {
+  const text = await res.text().catch(() => '');
+  if (!text) return `HTTP ${res.status}`;
+  // JSON shape: {error:{message,...}} or {message,...} or {error_description,...}.
+  try {
+    const j = JSON.parse(text) as Record<string, unknown>;
+    const msg =
+      (typeof j.message === 'string' && j.message) ||
+      (typeof j.error_description === 'string' && j.error_description) ||
+      (typeof j.error === 'string' && j.error) ||
+      (typeof j.error === 'object' &&
+        j.error !== null &&
+        typeof (j.error as Record<string, unknown>).message === 'string' &&
+        ((j.error as Record<string, unknown>).message as string)) ||
+      null;
+    if (msg) return `HTTP ${res.status}: ${msg}`;
+  } catch {
+    // fall through — plain text
+  }
+  return `HTTP ${res.status}: ${text.slice(0, 200)}`;
+}
+
 function getGitHubAppCreds() {
   const appId = process.env.GITHUB_APP_ID;
   const slug = process.env.GITHUB_APP_SLUG ?? 'vaubaan-gateway';
@@ -219,12 +242,55 @@ async function loadVercelState(admin: AdminRow): Promise<ProviderState> {
         url: teamSlug ? `https://vercel.com/${teamSlug}/${p.name}` : undefined,
       }));
     } else {
-      base.error = `Could not list Vercel projects (${projRes.status}).`;
+      const snippet = await readErrorSnippet(projRes);
+      base.error =
+        projRes.status === 403
+          ? `${snippet} — the Vaubaan Marketplace Integration probably wasn't granted the “read projects” scope. Reinstall and confirm the resource scope.`
+          : snippet;
     }
   } catch (e) {
     base.error = e instanceof Error ? e.message : String(e);
   }
   return base;
+}
+
+/**
+ * Refresh a Supabase access_token using the stored refresh_token. Persists the
+ * new pair + expires_at. Returns the new access_token (or null on failure).
+ */
+async function refreshSupabaseToken(admin: AdminRow): Promise<string | null> {
+  const clientId = process.env.SUPABASE_APP_CLIENT_ID;
+  const clientSecret = process.env.SUPABASE_APP_CLIENT_SECRET;
+  if (!clientId || !clientSecret) return null;
+  const refreshBytes = decodeBytea(admin.refresh_token_encrypted);
+  if (!refreshBytes) return null;
+  const refresh = new TextDecoder().decode(refreshBytes);
+  const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const res = await fetch('https://api.supabase.com/v1/oauth/token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+      Authorization: `Basic ${basicAuth}`,
+    },
+    body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refresh }),
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as {
+    access_token: string;
+    refresh_token: string;
+    expires_in: number;
+  };
+  const expiresAt = new Date(Date.now() + json.expires_in * 1000).toISOString();
+  const svc = getSupabaseServiceClient();
+  await svc
+    .from('provider_admins')
+    .update({
+      access_token_encrypted: Buffer.from(json.access_token, 'utf8'),
+      refresh_token_encrypted: Buffer.from(json.refresh_token, 'utf8'),
+      expires_at: expiresAt,
+    })
+    .eq('id', admin.id);
+  return json.access_token;
 }
 
 async function loadSupabaseState(admin: AdminRow): Promise<ProviderState> {
@@ -244,9 +310,19 @@ async function loadSupabaseState(admin: AdminRow): Promise<ProviderState> {
     base.error = 'Token missing — reconnect required.';
     return base;
   }
-  const token = new TextDecoder().decode(bytes);
+  let token = new TextDecoder().decode(bytes);
+
+  // Supabase OAuth access_tokens expire in 1h. Pre-emptively refresh if we're
+  // within 60s of expiry (or already past). On refresh failure we still try
+  // the current token — it might be a paste-PAT (no expires_at).
+  const expiresAt = admin.expires_at ? Date.parse(admin.expires_at) : null;
+  if (expiresAt !== null && expiresAt - Date.now() < 60_000) {
+    const fresh = await refreshSupabaseToken(admin);
+    if (fresh) token = fresh;
+  }
+
   try {
-    const [projectsRes, orgsRes] = await Promise.all([
+    let [projectsRes, orgsRes] = await Promise.all([
       fetch('https://api.supabase.com/v1/projects', {
         headers: { Authorization: `Bearer ${token}` },
       }),
@@ -254,6 +330,27 @@ async function loadSupabaseState(admin: AdminRow): Promise<ProviderState> {
         headers: { Authorization: `Bearer ${token}` },
       }),
     ]);
+
+    // Reactive refresh: if the first call comes back 401/403 with a non-paste
+    // token, try once more with a fresh access_token.
+    if (
+      (projectsRes.status === 401 || projectsRes.status === 403) &&
+      admin.refresh_token_encrypted
+    ) {
+      const fresh = await refreshSupabaseToken(admin);
+      if (fresh) {
+        token = fresh;
+        [projectsRes, orgsRes] = await Promise.all([
+          fetch('https://api.supabase.com/v1/projects', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+          fetch('https://api.supabase.com/v1/organizations', {
+            headers: { Authorization: `Bearer ${token}` },
+          }),
+        ]);
+      }
+    }
+
     if (orgsRes.ok) {
       const orgs = (await orgsRes.json()) as Array<{ id: string; name: string }>;
       if (orgs.length > 0) {
@@ -274,7 +371,11 @@ async function loadSupabaseState(admin: AdminRow): Promise<ProviderState> {
         url: `https://supabase.com/dashboard/project/${p.id}`,
       }));
     } else {
-      base.error = `Could not list Supabase projects (${projectsRes.status}).`;
+      const snippet = await readErrorSnippet(projectsRes);
+      base.error =
+        projectsRes.status === 401 || projectsRes.status === 403
+          ? `${snippet} — token rejected. Reconnect Supabase to grant fresh credentials.`
+          : snippet;
     }
   } catch (e) {
     base.error = e instanceof Error ? e.message : String(e);

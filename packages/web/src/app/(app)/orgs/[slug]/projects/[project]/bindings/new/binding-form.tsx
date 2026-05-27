@@ -3,8 +3,23 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Provider } from '@vaubaan/shared';
-import { Button, Card, CardBody, CardHeader, CardTitle, Field, Select } from '@/components/ui';
+import {
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Field,
+  Input,
+  Select,
+} from '@/components/ui';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
+
+const REF_HINT: Record<Provider, string> = {
+  github: 'owner/repo (e.g. acme/website)',
+  vercel: 'prj_XXXXXXXXXXXX',
+  supabase: '20-char project ref',
+};
 
 interface OfferedProvider {
   provider: Provider;
@@ -92,25 +107,30 @@ export function BindingForm({
               label="Resource"
               hint={
                 current?.error
-                  ? `Could not list resources: ${current.error}`
+                  ? `${current.error} — type the resource reference manually below.`
                   : current && current.resources.length === 0
-                    ? 'No resources visible to the granted token for this provider.'
-                    : undefined
+                    ? 'No resources visible to the granted token. Type the resource reference manually below.'
+                    : 'Pick from the resources the granted token can see.'
               }
             >
-              <Select
-                value={ref}
-                onChange={(e) => setRef(e.target.value)}
-                disabled={!current || current.resources.length === 0}
-              >
-                {!current?.resources.length && <option value="">— none available —</option>}
-                {(current?.resources ?? []).map((r) => (
-                  <option key={r.ref} value={r.ref}>
-                    {r.name}
-                    {r.description ? ` · ${r.description}` : ''}
-                  </option>
-                ))}
-              </Select>
+              {current && current.resources.length > 0 ? (
+                <Select value={ref} onChange={(e) => setRef(e.target.value)}>
+                  {(current?.resources ?? []).map((r) => (
+                    <option key={r.ref} value={r.ref}>
+                      {r.name}
+                      {r.description ? ` · ${r.description}` : ''}
+                    </option>
+                  ))}
+                </Select>
+              ) : (
+                <Input
+                  value={ref}
+                  onChange={(e) => setRef(e.target.value)}
+                  placeholder={REF_HINT[provider]}
+                  autoComplete="off"
+                  spellCheck={false}
+                />
+              )}
             </Field>
 
             {error && <p style={{ color: 'var(--accent-danger-fg)', margin: 0 }}>{error}</p>}
