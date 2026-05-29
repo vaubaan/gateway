@@ -2,7 +2,7 @@
  * Domain types shared across packages.
  * Mirrors the SQL schema from supabase/migrations/0001_init.sql.
  *
- * Spec : docs/spec/mcp-proxy.md §3.
+ * Spec : docs/spec/vaubaan-gateway.md §3.
  */
 
 export type Provider = 'github' | 'vercel' | 'supabase';

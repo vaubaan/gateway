@@ -5,7 +5,7 @@
  *   - MemoryCacheClient   : Map<string, {value, expiresAt}>. Default for dev/test.
  *   - RedisCacheClient    : Upstash REST. Production hot-path.
  *
- * Spec : docs/spec/mcp-proxy.md §4.3.
+ * Spec : docs/spec/vaubaan-gateway.md §4.3.
  * ADR  : docs/decisions/redis-cache-upstash-with-memory-fallback.md.
  */
 

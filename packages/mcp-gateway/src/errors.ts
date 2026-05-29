@@ -1,7 +1,7 @@
 /**
  * JSON-RPC error builder for the MCP gateway.
  *
- * Spec : docs/spec/mcp-proxy.md §6.3, §7.5.
+ * Spec : docs/spec/vaubaan-gateway.md §6.3, §7.5.
  *
  * Standard error codes :
  *   -32700  Parse error

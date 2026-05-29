@@ -1,7 +1,7 @@
 /**
  * Scope injection — hide and auto-fill arguments the access token has no choice over.
  *
- * Spec : docs/spec/mcp-proxy.md §7.2 (filtered tools/list) + spec §6.4
+ * Spec : docs/spec/vaubaan-gateway.md §7.2 (filtered tools/list) + spec §6.4
  *        (resource_ref resolution).
  *
  * Premise : if an access token's Project has exactly one ProviderBinding for a given

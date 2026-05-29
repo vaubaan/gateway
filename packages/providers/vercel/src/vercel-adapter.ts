@@ -1,7 +1,7 @@
 /**
  * VercelAdapter — paste-token mode, rewraps the official Vercel MCP server.
  *
- * Spec : docs/spec/mcp-proxy.md §5.1.
+ * Spec : docs/spec/vaubaan-gateway.md §5.1.
  * ADR  : docs/decisions/rewrap-official-mcps.md.
  *
  * Vaubaan's policy engine and audit live in front ; the actual tool execution

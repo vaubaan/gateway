@@ -5,7 +5,7 @@
  * `org_management_keys` table (argon2id), returns the bound organization,
  * and best-effort touches `last_used_at`.
  *
- * Spec : docs/spec/mcp-proxy.md §3.1 (ManagementKey), §8.
+ * Spec : docs/spec/vaubaan-gateway.md §3.1 (ManagementKey), §8.
  * ADR  : docs/decisions/org-management-keys-for-runner.md.
  */
 

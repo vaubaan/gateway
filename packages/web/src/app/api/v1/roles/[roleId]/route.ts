@@ -4,7 +4,7 @@
  *
  * Custom-only. Builtin roles (organization_id null) are read-only and 403.
  *
- * Spec : docs/spec/mcp-proxy.md §8.4.
+ * Spec : docs/spec/vaubaan-gateway.md §8.4.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

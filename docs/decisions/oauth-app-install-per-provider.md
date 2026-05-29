@@ -3,7 +3,7 @@ title: Connect Provider via OAuth / App install — jamais de paste-token
 status: accepted
 date: 2026-05-22
 tracks:
-  - docs/spec/mcp-proxy.md
+  - docs/spec/vaubaan-gateway.md
 ---
 
 # Connect Provider via OAuth / App install — jamais de paste-token

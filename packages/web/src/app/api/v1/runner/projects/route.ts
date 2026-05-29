@@ -17,7 +17,7 @@
  * its provider bindings. The Runner uses `slug` as `projectSlug` on the
  * subsequent POST /api/v1/runner/tokens.
  *
- * Spec : docs/spec/mcp-proxy.md §8.8.
+ * Spec : docs/spec/vaubaan-gateway.md §8.8.
  * ADR  : docs/decisions/org-management-keys-for-runner.md.
  */
 

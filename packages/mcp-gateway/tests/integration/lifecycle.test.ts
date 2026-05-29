@@ -1,7 +1,7 @@
 /**
  * Integration test — end-to-end lifecycle without browser, without real Supabase.
  *
- * Spec : docs/spec/mcp-proxy.md §14.2.
+ * Spec : docs/spec/vaubaan-gateway.md §14.2.
  *
  * Coverage :
  *   - Bot api_key auth round-trip (generate → hash → lookup → verify).

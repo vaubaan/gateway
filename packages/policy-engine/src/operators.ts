@@ -1,7 +1,7 @@
 /**
  * 7 constraint operators.
  *
- * Spec : docs/spec/mcp-proxy.md §6.5.
+ * Spec : docs/spec/vaubaan-gateway.md §6.5.
  *
  * Semantics :
  *   - All string-coerce before comparison (except `regex`, which expects string).

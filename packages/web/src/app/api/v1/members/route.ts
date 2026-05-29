@@ -7,7 +7,7 @@
  * Membership is flat — any org member has full RW. The org's `owner_id` is
  * separate (set at org creation, transferable via /transfer-ownership).
  *
- * Spec : docs/spec/mcp-proxy.md §8.1, §10.
+ * Spec : docs/spec/vaubaan-gateway.md §8.1, §10.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

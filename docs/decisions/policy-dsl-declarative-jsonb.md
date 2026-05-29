@@ -3,7 +3,7 @@ title: Policy DSL — JSON déclaratif stocké en jsonb, 7 opérateurs
 status: accepted
 date: 2026-05-22
 tracks:
-  - docs/spec/mcp-proxy.md
+  - docs/spec/vaubaan-gateway.md
   - packages/policy-engine/src/
 ---
 

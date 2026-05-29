@@ -6,7 +6,7 @@
  *                                                returns { management_key, api_key }
  *                                                api_key visible **once** (argon2id at-rest).
  *
- * Spec : docs/spec/mcp-proxy.md §3.1 (ManagementKey), §8.
+ * Spec : docs/spec/vaubaan-gateway.md §3.1 (ManagementKey), §8.
  * ADR  : docs/decisions/org-management-keys-for-runner.md.
  */
 

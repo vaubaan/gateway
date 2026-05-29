@@ -6,7 +6,7 @@ import { randomBytes } from 'node:crypto';
  * Format : `<orgIdB64>.<random>`. Caller stashes the full nonce in a
  * `vbn_oauth_state` cookie ; callback compares strict-equality.
  *
- * Spec : docs/spec/mcp-proxy.md §11 (anti-replay).
+ * Spec : docs/spec/vaubaan-gateway.md §11 (anti-replay).
  */
 export function generateState(orgId: string): string {
   const noise = randomBytes(24).toString('base64url');

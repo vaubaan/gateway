@@ -5,7 +5,7 @@
  * invalidates the cache for the OLD prefix so the rotated-out key is rejected
  * on the next /mcp call.
  *
- * Spec : docs/spec/mcp-proxy.md §8.5, §9.6.
+ * Spec : docs/spec/vaubaan-gateway.md §8.5, §9.6.
  *
  * Returns the new api_key in cleartext — visible 1× per the ADR
  * api-key-format-vbn-live-argon2id.

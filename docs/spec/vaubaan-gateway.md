@@ -472,7 +472,7 @@ exposés et de leur shape.
 
 ### 5.1 Contrat `ProviderAdapter`
 
-Le catalogue vit dans `@vaubaan/mcp-proxy-providers` :
+Le catalogue vit dans `@vaubaan/gateway-providers` :
 
 ```ts
 type Provider = 'github' | 'vercel' | 'supabase';
@@ -1319,7 +1319,7 @@ Greenfield : aucune migration de données, aucun dual-write. La séquence :
    `.mcp.json`, `.env*`. Tag git `v3-final` à poser avant Phase 2.
 3. **Phase 1 spec ADRs** : drafter les 7 ADRs fondateurs (cf §16.3).
 4. **Phase 2 bootstrap** :
-   - Rename `package.json` → `@vaubaan/mcp-proxy`. Description / scripts
+   - Rename `package.json` → `@vaubaan/gateway`. Description / scripts
      refondus.
    - Fix `playwright.config.ts` (testDir = `packages/web/tests/e2e`).
    - Fix `vercel.json` (buildCommand workspace `@vaubaan/web`).

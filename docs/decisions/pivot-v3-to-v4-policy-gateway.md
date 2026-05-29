@@ -3,7 +3,7 @@ title: Pivot v3 → v4 — du Cloud Resource Manager vers le Policy-Enforcing MC
 status: accepted
 date: 2026-05-22
 tracks:
-  - docs/spec/mcp-proxy.md
+  - docs/spec/vaubaan-gateway.md
 ---
 
 # Pivot v3 → v4 — du Cloud Resource Manager vers le Policy-Enforcing MCP Gateway
@@ -41,7 +41,7 @@ Vaubaan Core qui intercepte chaque tool call d'un agent, évalue une policy
 déclarative (Roles × Bots × Bindings), mint un token éphémère provider
 JIT et forwarde l'appel upstream. **L'agent ne voit jamais de cred cloud.**
 
-Cf. `docs/spec/mcp-proxy.md` pour la spec complète.
+Cf. `docs/spec/vaubaan-gateway.md` pour la spec complète.
 
 Pas de dual-write, pas de migration de données v3 → v4, pas de période de
 coexistence. Code v3 supprimé du repo le 2026-05-22 (tag `v3-final` posé

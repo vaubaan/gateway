@@ -1,7 +1,7 @@
 /**
  * Zod schema for the Policy DSL.
  *
- * Spec : docs/spec/mcp-proxy.md §6.1.
+ * Spec : docs/spec/vaubaan-gateway.md §6.1.
  * ADR  : docs/decisions/policy-dsl-declarative-jsonb.md.
  */
 

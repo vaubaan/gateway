@@ -3,7 +3,7 @@ title: Roles — naming `<provider>:<role-name>`, provider-scoped, builtin v1
 status: accepted
 date: 2026-05-22
 tracks:
-  - docs/spec/mcp-proxy.md
+  - docs/spec/vaubaan-gateway.md
 ---
 
 # Roles — naming `<provider>:<role-name>`, provider-scoped, builtin v1

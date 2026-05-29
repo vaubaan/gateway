@@ -1,7 +1,7 @@
 /**
  * The MCP Gateway endpoint — `POST /mcp`.
  *
- * Spec : docs/spec/mcp-proxy.md §7.1.
+ * Spec : docs/spec/vaubaan-gateway.md §7.1.
  *
  * Auth : `Authorization: Bearer vbn_live_<prefix>_<secret>`.
  * Body : JSON-RPC 2.0 request. Methods : initialize | tools/list | tools/call | ping.

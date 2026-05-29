@@ -93,7 +93,7 @@ export default async function HomePage() {
               </Link>
             )}
             <a
-              href="https://github.com/sbw-vaubaan/mcp-proxy"
+              href="https://github.com/sbw-vaubaan/vaubaan-gateway"
               target="_blank"
               rel="noreferrer noopener"
               className={styles.btnSecondary}
@@ -133,7 +133,7 @@ export default async function HomePage() {
             <br />
             <span
               className={styles.muted}
-            >{`  target: sbw-vaubaan/mcp-proxy#feature/sidebar`}</span>
+            >{`  target: sbw-vaubaan/vaubaan-gateway#feature/sidebar`}</span>
             <br />
             <span className={styles.ok}>{`  policy: github:developer · ALLOW`}</span>
             <br />
@@ -142,7 +142,7 @@ export default async function HomePage() {
             <br />
             <span className={styles.muted}>{`→ tool: github__merge_pull_request`}</span>
             <br />
-            <span className={styles.muted}>{`  target: sbw-vaubaan/mcp-proxy#main`}</span>
+            <span className={styles.muted}>{`  target: sbw-vaubaan/vaubaan-gateway#main`}</span>
             <br />
             <span className={styles.deny}>
               {`  policy: github:developer · DENY (merge_blocked_on_default)`}

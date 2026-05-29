@@ -4,7 +4,7 @@ status: superseded
 date: 2026-05-22
 superseded-by: flat-membership-org-owner-access-token
 tracks:
-  - docs/spec/mcp-proxy.md
+  - docs/spec/vaubaan-gateway.md
 ---
 
 # RBAC — modèle Org × Project × Role × Bot

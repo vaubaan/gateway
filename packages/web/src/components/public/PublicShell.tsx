@@ -31,7 +31,7 @@ export async function PublicShell({ children }: { children: React.ReactNode }) {
             Terms
           </Link>
           <a
-            href="https://github.com/sbw-vaubaan/mcp-proxy"
+            href="https://github.com/sbw-vaubaan/vaubaan-gateway"
             target="_blank"
             rel="noreferrer noopener"
             className={styles.navLink}

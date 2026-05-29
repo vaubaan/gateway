@@ -1,7 +1,7 @@
 /**
  * Decision flow.
  *
- * Spec : docs/spec/mcp-proxy.md §6.2.
+ * Spec : docs/spec/vaubaan-gateway.md §6.2.
  *
  * Semantics :
  *   - default deny.

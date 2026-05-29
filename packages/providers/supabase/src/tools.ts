@@ -1,7 +1,7 @@
 /**
  * Supabase MCP tools — read-only subset of the Management API + DB introspection.
  *
- * Spec : docs/spec/mcp-proxy.md §5 (provider catalogue).
+ * Spec : docs/spec/vaubaan-gateway.md §5 (provider catalogue).
  *
  * Token model : paste-token (Management API PAT, `sbp_...`). PAT mode only —
  * Supabase OAuth Mgmt flow is Phase 5+ once we register an OAuth app.

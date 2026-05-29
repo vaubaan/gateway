@@ -1,4 +1,4 @@
-# Vaubaan MCP Proxy
+# Vaubaan Gateway
 
 > Policy-enforcing **MCP gateway** for coding agents. Filter and audit each
 > tool call from Claude Code / Cursor / Continue without ever giving them a
@@ -6,7 +6,7 @@
 
 ```
 Coding Agent ──── MCP call ────▶ ┌─────────────────────────────┐
-                                  │  Vaubaan MCP Proxy  /mcp     │
+                                  │  Vaubaan Gateway  /mcp       │
                                   │  ┌────────────────────────┐ │
                                   │  │ Auth (Bearer vbn_live_) │ │
                                   │  │ Policy evaluate         │ │
@@ -31,7 +31,7 @@ Coding Agent ──── MCP call ────▶ ┌────────�
   peut push sur `feature/*` mais pas merger sur `main`. Default deny.
 - **Audit immutable** côté Vaubaan — 1 row par call, allow ou deny.
 
-Cf. `docs/spec/mcp-proxy.md` pour la spec complète.
+Cf. `docs/spec/vaubaan-gateway.md` pour la spec complète.
 
 ## Quick start
 
@@ -114,14 +114,14 @@ supabase/migrations/   # SQL schema (9 tables + RLS + builtin roles seed)
 The 6 doc pillars (cf. `docs/spec/` is the source of truth ; the rest captures
 how that spec is realized) :
 
-| Pillar        | Path                     | Purpose                                |
-| ------------- | ------------------------ | -------------------------------------- |
-| **Spec**      | `docs/spec/mcp-proxy.md` | Vision, vocabulary, hors-scope, domain |
-| **Decisions** | `docs/decisions/`        | ADRs — why we chose what we chose      |
-| **Handbook**  | `docs/handbook/`         | How features are actually implemented  |
-| **Tests**     | `docs/tests/`            | Integration + E2E test plans           |
-| **Workflow**  | `docs/workflow/`         | CI, branches, env variants, PR process |
-| **README**    | this file                | Pitch + quick start                    |
+| Pillar        | Path                           | Purpose                                |
+| ------------- | ------------------------------ | -------------------------------------- |
+| **Spec**      | `docs/spec/vaubaan-gateway.md` | Vision, vocabulary, hors-scope, domain |
+| **Decisions** | `docs/decisions/`              | ADRs — why we chose what we chose      |
+| **Handbook**  | `docs/handbook/`               | How features are actually implemented  |
+| **Tests**     | `docs/tests/`                  | Integration + E2E test plans           |
+| **Workflow**  | `docs/workflow/`               | CI, branches, env variants, PR process |
+| **README**    | this file                      | Pitch + quick start                    |
 
 ADRs landed for the v4 pivot :
 

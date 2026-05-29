@@ -19,7 +19,7 @@
  *
  * The gateway enforces `expires_at` at the hot-path.
  *
- * Spec : docs/spec/mcp-proxy.md §3.1, §8 (Runner endpoint).
+ * Spec : docs/spec/vaubaan-gateway.md §3.1, §8 (Runner endpoint).
  * ADR  : docs/decisions/org-management-keys-for-runner.md.
  */
 

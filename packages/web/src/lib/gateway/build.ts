@@ -1,7 +1,7 @@
 /**
  * Build a configured `McpGateway` for the current Next.js runtime.
  *
- * Spec : docs/spec/mcp-proxy.md §7.
+ * Spec : docs/spec/vaubaan-gateway.md §7.
  * ADRs : docs/decisions/redis-cache-upstash-with-memory-fallback.md.
  */
 

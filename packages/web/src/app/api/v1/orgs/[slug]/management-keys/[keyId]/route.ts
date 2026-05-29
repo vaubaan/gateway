@@ -6,7 +6,7 @@
  * Hard delete (the key only authenticates the Runner — we don't keep tombstones
  * for it like we do for AccessTokens, which are referenced by audit_log rows).
  *
- * Spec : docs/spec/mcp-proxy.md §3.1, §8.
+ * Spec : docs/spec/vaubaan-gateway.md §3.1, §8.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

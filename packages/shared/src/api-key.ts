@@ -10,7 +10,7 @@
  *
  * Hash : argon2id with OWASP-2023 recommended params (19 MiB, 2 iters).
  *
- * Spec : docs/spec/mcp-proxy.md §3.1, §6.2.
+ * Spec : docs/spec/vaubaan-gateway.md §3.1, §6.2.
  * ADRs :
  *   - docs/decisions/api-key-format-vbn-live-argon2id.md
  *   - docs/decisions/org-management-keys-for-runner.md

@@ -1,7 +1,7 @@
 /**
  * Static filter for `tools/list` discovery.
  *
- * Spec : docs/spec/mcp-proxy.md §7.2.
+ * Spec : docs/spec/vaubaan-gateway.md §7.2.
  *
  * The MCP gateway responds to `tools/list` by enumerating only the tools the
  * access token *could potentially call* (no evaluation of constraints, which depend on

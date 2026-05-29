@@ -1,7 +1,7 @@
 /**
  * GitHub MCP tools — subset of the official GitHub MCP server exposed by Vaubaan.
  *
- * Spec : docs/spec/mcp-proxy.md §5.2, §16.2.
+ * Spec : docs/spec/vaubaan-gateway.md §5.2, §16.2.
  * ADR  : docs/decisions/dispatch-upstream-option-a-synthese.md.
  *
  * Naming convention `github__<verb>_<noun>` matches the official MCP server.

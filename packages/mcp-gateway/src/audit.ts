@@ -1,7 +1,7 @@
 /**
  * Audit writer — `audit_log` row per MCP call (allowed or denied).
  *
- * Spec : docs/spec/mcp-proxy.md §13.1.
+ * Spec : docs/spec/vaubaan-gateway.md §13.1.
  *
  * Writes go via the service_role Supabase client (bypasses RLS — the gateway
  * is the only writer of audit_log per design).

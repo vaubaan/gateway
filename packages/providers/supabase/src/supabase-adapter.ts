@@ -1,7 +1,7 @@
 /**
  * SupabaseAdapter — ProviderAdapter for Supabase, paste-token (Mgmt API PAT) mode.
  *
- * Spec : docs/spec/mcp-proxy.md §5.1.
+ * Spec : docs/spec/vaubaan-gateway.md §5.1.
  * Note : OAuth Mgmt API flow is Phase 5+ once we register a Vaubaan Gateway
  *        Supabase OAuth app. v0 uses paste-token (`sbp_...`) directly.
  */

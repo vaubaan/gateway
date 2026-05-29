@@ -3,7 +3,7 @@ title: Cache hot-path — Upstash Redis + fallback in-memory
 status: accepted
 date: 2026-05-22
 tracks:
-  - docs/spec/mcp-proxy.md
+  - docs/spec/vaubaan-gateway.md
   - packages/mcp-gateway/src/cache.ts
 ---
 

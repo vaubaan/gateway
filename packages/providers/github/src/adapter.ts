@@ -1,7 +1,7 @@
 /**
  * Generic ProviderAdapter contract.
  *
- * Spec : docs/spec/mcp-proxy.md §5.1.
+ * Spec : docs/spec/vaubaan-gateway.md §5.1.
  *
  * Every cloud provider (GitHub, Vercel, Supabase) implements this contract.
  * The MCP gateway dispatches against it without knowing provider specifics.

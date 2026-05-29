@@ -323,7 +323,7 @@ describe('McpGateway — initialize', () => {
     expect('result' in res).toBe(true);
     if ('result' in res) {
       expect((res.result as { serverInfo: { name: string } }).serverInfo.name).toBe(
-        'vaubaan-mcp-proxy',
+        'vaubaan-gateway',
       );
     }
   });

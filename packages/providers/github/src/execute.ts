@@ -1,7 +1,7 @@
 /**
  * GitHub MCP tool dispatcher (Option A — synthèse via Octokit).
  *
- * Spec : docs/spec/mcp-proxy.md §7.4.
+ * Spec : docs/spec/vaubaan-gateway.md §7.4.
  * ADR  : docs/decisions/dispatch-upstream-option-a-synthese.md.
  *
  * Each tool name in `availableTools` maps to a single Octokit call. The

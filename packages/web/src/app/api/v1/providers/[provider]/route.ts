@@ -5,7 +5,7 @@
  * encrypted token. All subsequent /mcp calls targeting this provider for
  * this org will deny with "provider not connected".
  *
- * Spec : docs/spec/mcp-proxy.md §8.2, §9.6 ("Révoquer un ProviderAdmin").
+ * Spec : docs/spec/vaubaan-gateway.md §8.2, §9.6 ("Révoquer un ProviderAdmin").
  *
  * Cache invalidation : we drop every cached AccessTokenContext for this org (we
  * scan by org_id since context cache keys are api_key_prefix-based).

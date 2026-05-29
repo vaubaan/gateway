@@ -1,7 +1,7 @@
 -- =============================================================================
 -- 0001_init.sql — schema initial du MCP Proxy v4
 --
--- Spec : docs/spec/mcp-proxy.md §3
+-- Spec : docs/spec/vaubaan-gateway.md §3
 -- ADRs :
 --   - docs/decisions/rbac-org-role-bot-project.md
 --   - docs/decisions/roles-naming-provider-scoped.md

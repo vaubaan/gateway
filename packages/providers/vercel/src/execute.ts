@@ -1,7 +1,7 @@
 /**
  * Vercel tool dispatcher — JSON-RPC forward to the official Vercel MCP server.
  *
- * Spec : docs/spec/mcp-proxy.md §7.4.
+ * Spec : docs/spec/vaubaan-gateway.md §7.4.
  * ADR  : docs/decisions/rewrap-official-mcps.md.
  *
  * The upstream serves at https://mcp.vercel.com/ via HTTP+SSE. We forward our

@@ -3,7 +3,7 @@ title: Dispatch upstream — Option A (synthèse REST), pas de sidecar Docker MV
 status: accepted
 date: 2026-05-22
 tracks:
-  - docs/spec/mcp-proxy.md
+  - docs/spec/vaubaan-gateway.md
   - packages/providers/github/src/execute.ts
 ---
 

@@ -1,7 +1,7 @@
-# Supabase project config for @vaubaan/mcp-proxy.
+# Supabase project config for @vaubaan/gateway.
 # This file is used by the supabase CLI for local development.
 
-project_id = "vaubaan-mcp-proxy"
+project_id = "vaubaan-gateway"
 
 [api]
 enabled = true

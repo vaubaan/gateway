@@ -172,7 +172,7 @@ export default function IntegrationsPage() {
         adding integrations and prioritize requests with a concrete use case. The provider contract
         is documented in{' '}
         <a
-          href="https://github.com/sbw-vaubaan/mcp-proxy/blob/main/docs/spec/mcp-proxy.md"
+          href="https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/spec/vaubaan-gateway.md"
           target="_blank"
           rel="noreferrer noopener"
         >

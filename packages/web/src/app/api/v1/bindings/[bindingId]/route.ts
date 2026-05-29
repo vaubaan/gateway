@@ -2,7 +2,7 @@
  * PATCH  /api/v1/bindings/:bindingId  body: { orgSlug, resource_ref?, display_name? }
  * DELETE /api/v1/bindings/:bindingId?orgSlug=...
  *
- * Spec : docs/spec/mcp-proxy.md §8.3.
+ * Spec : docs/spec/vaubaan-gateway.md §8.3.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

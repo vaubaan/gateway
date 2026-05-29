@@ -4,7 +4,7 @@
  *   PATCH  /api/v1/tokens/:tokenId   body: { name?, status?, roleIds? }
  *   DELETE /api/v1/tokens/:tokenId
  *
- * Spec : docs/spec/mcp-proxy.md §8.5.
+ * Spec : docs/spec/vaubaan-gateway.md §8.5.
  *
  * Cache invalidation : on every mutation we delete the cached AccessTokenContext
  * for the token's api_key_prefix so the next /mcp call picks up changes

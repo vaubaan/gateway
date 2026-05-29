@@ -1,7 +1,7 @@
 /**
  * MCP Gateway core.
  *
- * Spec : docs/spec/mcp-proxy.md §6.2, §7.
+ * Spec : docs/spec/vaubaan-gateway.md §6.2, §7.
  *
  *   auth → load context (cached) → parse RPC → route by method →
  *   evaluate policy → mint upstream token → execute → audit → respond.
@@ -137,7 +137,7 @@ export class McpGateway {
           return rpcSuccess(id, {
             protocolVersion: '2024-11-05',
             capabilities: { tools: {} },
-            serverInfo: { name: 'vaubaan-mcp-proxy', version: '0.1.0' },
+            serverInfo: { name: 'vaubaan-gateway', version: '0.1.0' },
           });
         case 'tools/list':
           return rpcSuccess(id, { tools: this.listTools(ctx) });

@@ -4,7 +4,7 @@
  * Removes a member from the org. The owner cannot be removed — they must
  * first transfer ownership via POST /api/v1/orgs/:slug/transfer-ownership.
  *
- * Spec : docs/spec/mcp-proxy.md §8.1.
+ * Spec : docs/spec/vaubaan-gateway.md §8.1.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

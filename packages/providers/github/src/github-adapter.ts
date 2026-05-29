@@ -1,7 +1,7 @@
 /**
  * GitHubAdapter — implements ProviderAdapter for GitHub via GitHub App install.
  *
- * Spec  : docs/spec/mcp-proxy.md §5.1, §5.2.
+ * Spec  : docs/spec/vaubaan-gateway.md §5.1, §5.2.
  * ADRs  : docs/decisions/oauth-app-install-per-provider.md,
  *         docs/decisions/dispatch-upstream-option-a-synthese.md.
  */

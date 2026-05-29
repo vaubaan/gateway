@@ -1,7 +1,7 @@
 /**
  * Supabase tool dispatcher — direct against the Management API.
  *
- * Spec : docs/spec/mcp-proxy.md §7.4.
+ * Spec : docs/spec/vaubaan-gateway.md §7.4.
  */
 
 export type FetchImpl = typeof fetch;

@@ -1,7 +1,7 @@
 /**
  * Vercel MCP tools — rewrap of the official Vercel MCP server at mcp.vercel.com.
  *
- * Spec : docs/spec/mcp-proxy.md §7.4.
+ * Spec : docs/spec/vaubaan-gateway.md §7.4.
  * ADR  : docs/decisions/rewrap-official-mcps.md.
  *
  * 18 tools fetched from upstream on 2026-05-23 and frozen as upstream-tools.json.

@@ -8,7 +8,7 @@
 -- Also adds `access_tokens.expires_at` so runner-minted tokens can carry a TTL
 -- enforced at the gateway hot-path.
 --
--- Spec : docs/spec/mcp-proxy.md §3.1 (ManagementKey)
+-- Spec : docs/spec/vaubaan-gateway.md §3.1 (ManagementKey)
 -- ADR  : docs/decisions/org-management-keys-for-runner.md
 -- =============================================================================
 

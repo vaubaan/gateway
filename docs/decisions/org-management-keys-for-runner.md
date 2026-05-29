@@ -3,7 +3,7 @@ title: Org Management Keys for programmatic AccessToken minting (Runner)
 status: accepted
 date: 2026-05-27
 tracks:
-  - docs/spec/mcp-proxy.md
+  - docs/spec/vaubaan-gateway.md
   - supabase/migrations/0003_org_management_keys.sql
   - packages/web/src/app/api/v1/runner/tokens/route.ts
   - packages/web/src/app/api/v1/runner/roles/route.ts

@@ -1,7 +1,7 @@
 /**
  * GitHub App JIT installation-token minting.
  *
- * Spec  : docs/spec/mcp-proxy.md §4.5, §9.1.
+ * Spec  : docs/spec/vaubaan-gateway.md §4.5, §9.1.
  * ADRs  : docs/decisions/oauth-app-install-per-provider.md,
  *         docs/decisions/trust-model-clear-at-rest-idp-style.md.
  *
@@ -59,7 +59,7 @@ export async function mintInstallationToken(
       headers: {
         Authorization: `Bearer ${jwt}`,
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'vaubaan-mcp-proxy',
+        'User-Agent': 'vaubaan-gateway',
         'X-GitHub-Api-Version': '2022-11-28',
       },
     },

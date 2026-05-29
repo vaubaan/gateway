@@ -3,7 +3,7 @@ title: API key Bot — format `vbn_live_*` + argon2id hash, visible 1×
 status: accepted
 date: 2026-05-22
 tracks:
-  - docs/spec/mcp-proxy.md
+  - docs/spec/vaubaan-gateway.md
   - packages/mcp-gateway/src/auth.ts
   - packages/shared/src/api-key.ts
 ---

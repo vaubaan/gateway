@@ -2,7 +2,7 @@
  * Resolve abstract targets (`project.repos`, `project.vercel`, `project.supabase`)
  * to concrete `resource_ref` strings from `provider_bindings`.
  *
- * Spec : docs/spec/mcp-proxy.md §6.4.
+ * Spec : docs/spec/vaubaan-gateway.md §6.4.
  */
 
 import type { AbstractTarget, ProviderBinding } from '@vaubaan/shared';

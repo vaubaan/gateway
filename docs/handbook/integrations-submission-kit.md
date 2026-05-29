@@ -120,7 +120,7 @@ Console : https://vercel.com/integrations/console/
 | Screenshots (≥ 3, 1440×900) | `screenshots/dashboard-overview`, `audit-log`, `role-editor`            |
 | Website URL                 | `https://vaubaan.com`                                                   |
 | Support URL                 | `https://vaubaan.com/support`                                           |
-| Documentation URL           | `https://github.com/sbw-vaubaan/mcp-proxy#readme`                       |
+| Documentation URL           | `https://github.com/sbw-vaubaan/vaubaan-gateway#readme`                 |
 | Configuration URL           | `https://vaubaan.com/orgs/{org}/providers/vercel/connect`               |
 | Webhook URL (optional)      | n/a au MVP                                                              |
 | Allowed scopes              | `read-projects`, `read-deployments`, `read-env`                         |
@@ -140,7 +140,7 @@ Page : https://supabase.com/partners
 | Tagline (80 ch.)   | `Policy-enforcing MCP gateway. The agent never sees the Supabase PAT.` |
 | Description        | Reuse `/about` + `/security` content                                   |
 | Website            | `https://vaubaan.com`                                                  |
-| Docs URL           | `https://github.com/sbw-vaubaan/mcp-proxy#readme`                      |
+| Docs URL           | `https://github.com/sbw-vaubaan/vaubaan-gateway#readme`                |
 | Demo URL           | `https://vaubaan.com/login` (preview org)                              |
 | Support email      | `support@vaubaan.com`                                                  |
 | Privacy URL        | `https://vaubaan.com/privacy`                                          |
