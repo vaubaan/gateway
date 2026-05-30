@@ -24,7 +24,19 @@ export interface GitHubAdapterConfig {
   octokitFactory?: OctokitFactory;
   /** Override fetch in tests. */
   fetchImpl?: typeof fetch;
+  /**
+   * Load every github binding of a project. Injected by the web layer (DB
+   * lookup) and used by `github__mint_install_token` to scope the minted token
+   * to the project's repos.
+   */
+  loadGithubBindings?: (projectId: string) => Promise<ProviderBinding[]>;
 }
+
+const MINT_TOOL = 'github__mint_install_token';
+const MINT_PERMISSIONS: Record<'clone' | 'push', Record<string, string>> = {
+  clone: { contents: 'read' },
+  push: { contents: 'write', pull_requests: 'write', metadata: 'read' },
+};
 
 const defaultOctokitFactory: OctokitFactory = (token) => new Octokit({ auth: token });
 
@@ -110,12 +122,78 @@ export class GitHubAdapter implements ProviderAdapter {
 
   async executeCall(
     admin: ProviderAdmin,
-    _binding: ProviderBinding,
+    binding: ProviderBinding,
     tool: string,
     args: Record<string, unknown>,
   ): Promise<unknown> {
+    if (tool === MINT_TOOL) {
+      return this.mintTokenForCaller(admin, binding, args);
+    }
     const { token } = await this.mintUpstreamToken(admin);
     return executeCall(this.config.octokitFactory ?? defaultOctokitFactory, token, tool, args);
+  }
+
+  /**
+   * Mint a short-lived installation token scoped to the project repos. Called
+   * by CAR (clone) and agents (push) ; the caller's role pins `purpose` via
+   * policy constraints.
+   *
+   * Policy enforces the purpose constraint upstream — this method trusts the
+   * value but still rejects unknown values defensively.
+   */
+  private async mintTokenForCaller(
+    admin: ProviderAdmin,
+    binding: ProviderBinding,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    if (!admin.installation_id) {
+      throw new Error(`${MINT_TOOL} requires a GitHub App installation_id on the org.`);
+    }
+    if (!this.config.appId || !this.config.privateKeyPem) {
+      throw new Error(`${MINT_TOOL} requires App credentials (appId + privateKeyPem).`);
+    }
+    if (!this.config.loadGithubBindings) {
+      throw new Error(`${MINT_TOOL}: loadGithubBindings callback not configured.`);
+    }
+    const purpose = args.purpose;
+    if (purpose !== 'clone' && purpose !== 'push') {
+      throw new Error(`${MINT_TOOL} requires purpose in ['clone','push'], got ${String(purpose)}.`);
+    }
+    if (!binding.project_id) {
+      throw new Error(`${MINT_TOOL}: missing project context.`);
+    }
+
+    const bindings = await this.config.loadGithubBindings(binding.project_id);
+    if (bindings.length === 0) {
+      throw new Error(`${MINT_TOOL}: project has no github bindings.`);
+    }
+
+    const repoFullName = typeof args.repoFullName === 'string' ? args.repoFullName : undefined;
+    let repositories: string[];
+    if (repoFullName) {
+      if (!bindings.some((b) => b.resource_ref === repoFullName)) {
+        throw new Error(`${MINT_TOOL}: ${repoFullName} is not in the project's github bindings.`);
+      }
+      repositories = [repoFullName.split('/')[1] ?? ''];
+    } else {
+      repositories = bindings.map((b) => b.resource_ref.split('/')[1] ?? '');
+    }
+
+    const minted = await mintInstallationToken({
+      appId: this.config.appId,
+      privateKeyPem: this.config.privateKeyPem,
+      installationId: admin.installation_id,
+      repositories,
+      permissions: MINT_PERMISSIONS[purpose],
+      fetchImpl: this.config.fetchImpl,
+    });
+
+    return {
+      token: minted.token,
+      expires_at: minted.expiresAt.toISOString(),
+      repositories: minted.repositories,
+      permissions: minted.permissions,
+    };
   }
 
   resolveTarget(target: string, bindings: ProviderBinding[]): string[] {

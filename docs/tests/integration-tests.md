@@ -20,7 +20,7 @@ Vitest, ~1s total. No browser, no Supabase server, no real GitHub.
 | `packages/policy-engine/tests/unit/evaluate.test.ts`       |       12 |   ~15ms |
 | `packages/policy-engine/tests/unit/dsl.test.ts`            |        7 |   ~10ms |
 | `packages/policy-engine/tests/unit/tools-filter.test.ts`   |        3 |    ~8ms |
-| `packages/providers/github/tests/unit/adapter.test.ts`     |       12 |   ~35ms |
+| `packages/providers/github/tests/unit/adapter.test.ts`     |       18 |   ~50ms |
 | `packages/providers/vercel/tests/unit/adapter.test.ts`     |        7 |    ~7ms |
 | `packages/providers/supabase/tests/unit/adapter.test.ts`   |        5 |   ~12ms |
 | `packages/providers/railway/tests/unit/adapter.test.ts`    |       11 |   ~10ms |
@@ -59,6 +59,11 @@ npx vitest run packages/policy-engine    # one package
   unknown tool throws.
 - `resolveTarget('project.repos', bindings)` returns concrete `resource_ref`s,
   `resolveTarget('*', ...)` returns wildcard.
+- `github__mint_install_token` (ADR mint-install-token-runner-credential):
+  `purpose=clone` → body `contents:read`; `purpose=push` → body
+  `contents:write + pull_requests:write + metadata:read`; `repoFullName`
+  outside project bindings throws; omitting `repoFullName` mints for every
+  github binding; unknown `purpose` throws before any HTTP call.
 
 ## Scénarios — Railway adapter
 

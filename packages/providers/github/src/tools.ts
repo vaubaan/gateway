@@ -179,6 +179,29 @@ export const availableTools: readonly McpToolDeclaration[] = [
       required: ['owner', 'repo', 'issue_number', 'body'],
     },
   },
+  // Mint install token — kills host-side git creds for CAR + agent.
+  {
+    name: 'github__mint_install_token',
+    description:
+      'Mint a short-lived (1h) GitHub App installation token scoped to the project repos. Used by CAR (clone) and agents (push); the caller role pins the purpose. ADR mint-install-token-runner-credential.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        repoFullName: {
+          type: 'string',
+          description:
+            "Optional `<owner>/<repo>` — must be in the project's github bindings. Omit to scope the token to every github binding of the project.",
+        },
+        purpose: {
+          type: 'string',
+          enum: ['clone', 'push'],
+          description:
+            '`clone` → contents:read only. `push` → contents:write + pull_requests:write + metadata:read.',
+        },
+      },
+      required: ['purpose'],
+    },
+  },
   // Dangerous (deny-listed by default in github:developer)
   {
     name: 'github__merge_pull_request',

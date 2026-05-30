@@ -30,8 +30,26 @@ export interface InstallationToken {
 
 export interface MintInstallationTokenInput extends AppCredentials {
   installationId: string;
+  /**
+   * Optional repository names (WITHOUT owner — owner is implicit from the
+   * installation). When set, the minted token is scoped to these repos only.
+   * Omit for an installation-wide token.
+   */
+  repositories?: string[];
+  /**
+   * Optional permissions sub-set (e.g. `{ contents: 'read' }`). When set, the
+   * minted token is scoped DOWN to these permissions (cannot exceed what the
+   * App was granted at install). Omit for the App's full granted permissions.
+   */
+  permissions?: Record<string, string>;
   /** Override for testing — replaces global fetch. */
   fetchImpl?: typeof fetch;
+}
+
+/** Subset of the GitHub access_tokens response surfaced by mint_install_token. */
+export interface ScopedInstallationToken extends InstallationToken {
+  repositories: Array<{ id: number; name: string; full_name: string }>;
+  permissions: Record<string, string>;
 }
 
 export async function buildAppJwt(creds: AppCredentials, now: Date = new Date()): Promise<string> {
@@ -49,9 +67,15 @@ export async function buildAppJwt(creds: AppCredentials, now: Date = new Date())
 
 export async function mintInstallationToken(
   input: MintInstallationTokenInput,
-): Promise<InstallationToken> {
+): Promise<ScopedInstallationToken> {
   const jwt = await buildAppJwt(input);
   const fetchFn = input.fetchImpl ?? fetch;
+  const body: Record<string, unknown> = {};
+  if (input.repositories && input.repositories.length > 0) body.repositories = input.repositories;
+  if (input.permissions && Object.keys(input.permissions).length > 0) {
+    body.permissions = input.permissions;
+  }
+  const hasBody = Object.keys(body).length > 0;
   const res = await fetchFn(
     `https://api.github.com/app/installations/${encodeURIComponent(input.installationId)}/access_tokens`,
     {
@@ -61,13 +85,25 @@ export async function mintInstallationToken(
         Accept: 'application/vnd.github+json',
         'User-Agent': 'vaubaan-gateway',
         'X-GitHub-Api-Version': '2022-11-28',
+        ...(hasBody ? { 'Content-Type': 'application/json' } : {}),
       },
+      ...(hasBody ? { body: JSON.stringify(body) } : {}),
     },
   );
   if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`GitHub App token mint failed (${res.status}): ${body.slice(0, 200)}`);
+    const errBody = await res.text();
+    throw new Error(`GitHub App token mint failed (${res.status}): ${errBody.slice(0, 200)}`);
   }
-  const data = (await res.json()) as { token: string; expires_at: string };
-  return { token: data.token, expiresAt: new Date(data.expires_at) };
+  const data = (await res.json()) as {
+    token: string;
+    expires_at: string;
+    repositories?: Array<{ id: number; name: string; full_name: string }>;
+    permissions?: Record<string, string>;
+  };
+  return {
+    token: data.token,
+    expiresAt: new Date(data.expires_at),
+    repositories: data.repositories ?? [],
+    permissions: data.permissions ?? {},
+  };
 }

@@ -652,6 +652,31 @@ Seedés en migration `0004_add_railway_provider.sql`.
 }
 ```
 
+#### `github:provisioner` (migration 0005, internal)
+
+Mint exclusivement `github__mint_install_token` avec `purpose=clone`. Utilisé
+par CAR (Coding Agent Runner) au bootstrap d'une session pour minter un
+token court-vivant scopé clone-only sur les repos du Project. **Ne pas
+assigner à des humains.** Cf. ADR `mint-install-token-runner-credential`.
+
+```jsonc
+{
+  "version": 1,
+  "rules": [
+    {
+      "effect": "allow",
+      "tool": "github__mint_install_token",
+      "constraints": {
+        "arguments.purpose": { "equals": "clone" }
+      }
+    }
+  ]
+}
+```
+
+`github:developer` est étendu par la migration 0005 pour autoriser le même
+tool avec `purpose IN ('clone', 'push')` — l'agent push avec ce rôle.
+
 #### Phase 5+ (catalogue prévu)
 
 - `github:reviewer` — read + comment/approve PR, pas d'edit code

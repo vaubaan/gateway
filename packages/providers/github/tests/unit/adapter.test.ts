@@ -226,6 +226,162 @@ describe('GitHubAdapter — executeCall dispatch', () => {
   });
 });
 
+describe('GitHubAdapter — mint_install_token', () => {
+  const projectBinding = (ref: string) => ({
+    id: `b-${ref}`,
+    project_id: 'p1',
+    provider: 'github' as const,
+    resource_ref: ref,
+    display_name: null,
+    created_at: '2026-01-01',
+  });
+
+  function mintFetch(body: { repos?: string[]; permissions?: Record<string, string> } = {}) {
+    return vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          token: 'ghs_mint_xxx',
+          expires_at: '2026-05-30T12:00:00Z',
+          repositories: (body.repos ?? []).map((name, i) => ({
+            id: i + 1,
+            name,
+            full_name: `acme/${name}`,
+          })),
+          permissions: body.permissions ?? { contents: 'read' },
+        }),
+    });
+  }
+
+  test('purpose=clone scopes the token to contents:read only', async () => {
+    const fetchImpl = mintFetch({ repos: ['app'], permissions: { contents: 'read' } });
+    const loadGithubBindings = vi.fn().mockResolvedValue([projectBinding('acme/app')]);
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      fetchImpl: fetchImpl as never,
+      loadGithubBindings,
+    });
+    const result = (await adapter.executeCall(
+      baseAdmin,
+      projectBinding('acme/app'),
+      'github__mint_install_token',
+      { purpose: 'clone' },
+    )) as { token: string; permissions: Record<string, string> };
+
+    expect(result.token).toBe('ghs_mint_xxx');
+    const reqBody = JSON.parse((fetchImpl.mock.calls[0]![1] as { body: string }).body) as {
+      repositories: string[];
+      permissions: Record<string, string>;
+    };
+    expect(reqBody.permissions).toEqual({ contents: 'read' });
+    expect(reqBody.repositories).toEqual(['app']);
+    expect(loadGithubBindings).toHaveBeenCalledWith('p1');
+  });
+
+  test('purpose=push scopes the token to contents:write + pr:write + metadata:read', async () => {
+    const fetchImpl = mintFetch({
+      repos: ['app'],
+      permissions: { contents: 'write', pull_requests: 'write', metadata: 'read' },
+    });
+    const loadGithubBindings = vi.fn().mockResolvedValue([projectBinding('acme/app')]);
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      fetchImpl: fetchImpl as never,
+      loadGithubBindings,
+    });
+    await adapter.executeCall(baseAdmin, projectBinding('acme/app'), 'github__mint_install_token', {
+      purpose: 'push',
+      repoFullName: 'acme/app',
+    });
+    const reqBody = JSON.parse((fetchImpl.mock.calls[0]![1] as { body: string }).body) as {
+      permissions: Record<string, string>;
+    };
+    expect(reqBody.permissions).toEqual({
+      contents: 'write',
+      pull_requests: 'write',
+      metadata: 'read',
+    });
+  });
+
+  test('omits repoFullName → token scoped to every github binding of the project', async () => {
+    const fetchImpl = mintFetch({ repos: ['app', 'lib'] });
+    const loadGithubBindings = vi
+      .fn()
+      .mockResolvedValue([projectBinding('acme/app'), projectBinding('acme/lib')]);
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      fetchImpl: fetchImpl as never,
+      loadGithubBindings,
+    });
+    await adapter.executeCall(baseAdmin, projectBinding('acme/app'), 'github__mint_install_token', {
+      purpose: 'clone',
+    });
+    const reqBody = JSON.parse((fetchImpl.mock.calls[0]![1] as { body: string }).body) as {
+      repositories: string[];
+    };
+    expect(reqBody.repositories).toEqual(['app', 'lib']);
+  });
+
+  test('repoFullName not in bindings → throws', async () => {
+    const loadGithubBindings = vi.fn().mockResolvedValue([projectBinding('acme/app')]);
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      fetchImpl: vi.fn() as never,
+      loadGithubBindings,
+    });
+    await expect(
+      adapter.executeCall(baseAdmin, projectBinding('acme/app'), 'github__mint_install_token', {
+        purpose: 'clone',
+        repoFullName: 'other/repo',
+      }),
+    ).rejects.toThrow(/not in the project's github bindings/);
+  });
+
+  test('unknown purpose → throws before hitting GitHub', async () => {
+    const fetchImpl = vi.fn();
+    const loadGithubBindings = vi.fn().mockResolvedValue([projectBinding('acme/app')]);
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      fetchImpl: fetchImpl as never,
+      loadGithubBindings,
+    });
+    await expect(
+      adapter.executeCall(baseAdmin, projectBinding('acme/app'), 'github__mint_install_token', {
+        purpose: 'merge',
+      }),
+    ).rejects.toThrow(/purpose in \['clone','push'\]/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('missing installation_id → throws', async () => {
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      loadGithubBindings: vi.fn().mockResolvedValue([projectBinding('acme/app')]),
+    });
+    await expect(
+      adapter.executeCall(
+        { ...baseAdmin, installation_id: null },
+        projectBinding('acme/app'),
+        'github__mint_install_token',
+        { purpose: 'clone' },
+      ),
+    ).rejects.toThrow(/installation_id/);
+  });
+});
+
 describe('GitHubAdapter — resolveTarget', () => {
   test('project.repos → list of resource_refs', () => {
     const adapter = new GitHubAdapter({

@@ -9,7 +9,13 @@ import { GitHubAdapter, githubAvailableTools } from '@vaubaan/providers-github';
 import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
-import type { AccessTokenContext, Provider, ProviderAdmin, Role } from '@vaubaan/shared';
+import type {
+  AccessTokenContext,
+  Provider,
+  ProviderAdmin,
+  ProviderBinding,
+  Role,
+} from '@vaubaan/shared';
 import {
   McpGateway,
   buildCacheClient,
@@ -150,7 +156,21 @@ export function buildGateway(opts: {
   };
 
   // GitHub: PAT-fallback always available ; App credentials optional.
-  const ghAdapter = new GitHubAdapter(getGitHubAppCredentials() ?? {});
+  // loadGithubBindings is required by github__mint_install_token to scope the
+  // minted token to the project's repos (CAR clone / agent push, ADR
+  // mint-install-token-runner-credential).
+  const loadGithubBindings = async (projectId: string): Promise<ProviderBinding[]> => {
+    const { data } = await supabase
+      .from('provider_bindings')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('provider', 'github');
+    return (data ?? []) as ProviderBinding[];
+  };
+  const ghAdapter = new GitHubAdapter({
+    ...(getGitHubAppCredentials() ?? {}),
+    loadGithubBindings,
+  });
   upstreamByProvider.github = {
     provider: 'github',
     availableTools: githubAvailableTools,
