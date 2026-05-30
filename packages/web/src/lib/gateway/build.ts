@@ -223,7 +223,7 @@ export function buildGateway(opts: {
 
   return new McpGateway({
     cache: buildCacheClient(),
-    audit: new SupabaseAuditWriter(supabase as unknown as SupabaseLike),
+    audit: new SupabaseAuditWriter(supabase as SupabaseLike),
     contextLoader,
     upstreamByProvider: upstreamByProvider as Record<Provider, UpstreamAdapter>,
     clientIp: opts.clientIp,

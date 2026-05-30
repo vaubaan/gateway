@@ -49,14 +49,14 @@ export class MemoryAuditWriter implements AuditWriter {
  */
 export interface SupabaseLike {
   from(table: string): {
-    insert(row: AuditRow): { error: { message: string } | null };
+    insert(row: AuditRow): PromiseLike<{ error: { message: string } | null }>;
   };
 }
 
 export class SupabaseAuditWriter implements AuditWriter {
   constructor(private readonly client: SupabaseLike) {}
   async write(row: AuditRow): Promise<void> {
-    const { error } = this.client.from('audit_log').insert(row);
+    const { error } = await this.client.from('audit_log').insert(row);
     if (error) {
       // Don't throw on audit failure — degrade gracefully but log loudly.
       // The gateway's value is still delivered; observability matters for ops.
