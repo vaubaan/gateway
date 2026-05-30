@@ -179,6 +179,15 @@ export default function DocsPage() {
         not the union of every provider — that's the deny-by-default contract surfacing through
         capability discovery.
       </p>
+      <p>
+        For agents that need a self-contained primer (auth, JSON-RPC shape, tool catalog, bootstrap
+        recipes with <code>git clone</code>/<code>push</code> via{' '}
+        <code>github__mint_install_token</code>, error model), point them at{' '}
+        <a href="/agent-bootstrap.md">
+          <code>https://vaubaan.com/agent-bootstrap.md</code>
+        </a>{' '}
+        — raw markdown, curl-friendly, single source of truth.
+      </p>
 
       <h2 id="audit">8. Audit log</h2>
       <p>
