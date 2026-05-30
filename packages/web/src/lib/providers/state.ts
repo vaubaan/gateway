@@ -10,7 +10,13 @@
  */
 
 import { buildAppJwt, mintInstallationToken } from '@vaubaan/providers-github';
-import type { Provider, ProviderAdminStatus } from '@vaubaan/shared';
+import { RailwayAdapter } from '@vaubaan/providers-railway';
+import type {
+  Provider,
+  ProviderAdmin,
+  ProviderAdminStatus,
+  ProviderBinding,
+} from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeBytea, encodeByteaHex } from './bytea';
 
@@ -420,6 +426,128 @@ async function loadSupabaseState(admin: AdminRow): Promise<ProviderState> {
   return base;
 }
 
+/** Pull the `text` payload out of an MCP `tools/call` result `{content:[{text}]}`. */
+function extractMcpText(result: unknown): string | null {
+  if (
+    result &&
+    typeof result === 'object' &&
+    Array.isArray((result as { content?: unknown }).content)
+  ) {
+    const first = (result as { content: Array<{ text?: string }> }).content[0];
+    if (first && typeof first.text === 'string') return first.text;
+  }
+  return null;
+}
+
+/** Best-effort normalization of Railway's list-projects payload into {id,name}[]. */
+function normalizeRailwayProjects(data: unknown): Array<{ id: string; name?: string }> {
+  const out: Array<{ id: string; name?: string }> = [];
+  const pushNode = (n: unknown) => {
+    if (n && typeof n === 'object') {
+      const node = (n as { node?: unknown }).node ?? n;
+      const id = (node as { id?: unknown }).id;
+      const name = (node as { name?: unknown }).name;
+      if (typeof id === 'string')
+        out.push({ id, name: typeof name === 'string' ? name : undefined });
+    }
+  };
+  const visit = (v: unknown) => {
+    if (Array.isArray(v)) {
+      for (const item of v) pushNode(item);
+      return;
+    }
+    if (v && typeof v === 'object') {
+      const o = v as Record<string, unknown>;
+      if (Array.isArray(o.edges)) return visit(o.edges);
+      if (Array.isArray(o.projects)) return visit(o.projects);
+      if (o.projects && typeof o.projects === 'object') return visit(o.projects);
+    }
+  };
+  visit(data);
+  return out;
+}
+
+async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
+  const base: ProviderState = {
+    provider: 'railway',
+    status: admin.status,
+    connectedAt: admin.connected_at,
+    connectedByEmail: await loadGranterEmail(admin.connected_by_user_id),
+    serviceUrl: 'https://railway.com/workspace',
+    account: null,
+    scopes: ['Manage Railway projects, services & deployments (workspace:member scope)'],
+    resources: [],
+    error: null,
+  };
+  const accessBytes = decodeBytea(admin.access_token_encrypted);
+  if (!accessBytes) {
+    base.error = 'Token missing — reconnect required.';
+    return base;
+  }
+
+  const adapter = new RailwayAdapter({
+    clientId: process.env.RAILWAY_CLIENT_ID,
+    clientSecret: process.env.RAILWAY_CLIENT_SECRET,
+    persistRefresh: async (_a, tokens) => {
+      const svc = getSupabaseServiceClient();
+      await svc
+        .from('provider_admins')
+        .update({
+          access_token_encrypted: encodeByteaHex(tokens.accessToken),
+          refresh_token_encrypted: encodeByteaHex(tokens.refreshToken),
+          expires_at: tokens.expiresAt.toISOString(),
+        })
+        .eq('id', admin.id);
+    },
+  });
+
+  const providerAdmin: ProviderAdmin = {
+    id: admin.id,
+    organization_id: admin.organization_id,
+    provider: 'railway',
+    status: admin.status,
+    installation_id: admin.installation_id,
+    team_id: admin.team_id,
+    access_token_encrypted: accessBytes,
+    refresh_token_encrypted: decodeBytea(admin.refresh_token_encrypted),
+    expires_at: admin.expires_at,
+    connected_by_user_id: admin.connected_by_user_id,
+    connected_at: admin.connected_at,
+  };
+  const railwayBinding: ProviderBinding = {
+    id: '',
+    project_id: '',
+    provider: 'railway',
+    resource_ref: '',
+    display_name: null,
+    created_at: '',
+  };
+
+  try {
+    const result = await adapter.executeCall(
+      providerAdmin,
+      railwayBinding,
+      'railway__list-projects',
+      {},
+    );
+    const text = extractMcpText(result);
+    const data: unknown = text ? JSON.parse(text) : result;
+    const projects = normalizeRailwayProjects(data);
+    base.resources = projects.map((p) => ({
+      ref: p.id,
+      name: p.name ?? p.id,
+      url: `https://railway.com/project/${p.id}`,
+    }));
+    if (base.resources.length === 0) {
+      base.error = 'No projects visible — bind by typing a Railway project id (UUID) manually.';
+    }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e);
+    base.error = `${message} — bind by typing a Railway project id (UUID) manually.`;
+  }
+  return base;
+}
+
 export async function loadProviderState(orgId: string, provider: Provider): Promise<ProviderState> {
   const svc = getSupabaseServiceClient();
   const { data: admin } = await svc
@@ -447,5 +575,6 @@ export async function loadProviderState(orgId: string, provider: Provider): Prom
 
   if (provider === 'github') return loadGitHubState(admin);
   if (provider === 'vercel') return loadVercelState(admin);
+  if (provider === 'railway') return loadRailwayState(admin);
   return loadSupabaseState(admin);
 }

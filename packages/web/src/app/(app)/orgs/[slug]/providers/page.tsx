@@ -11,6 +11,7 @@ const PROVIDER_LABEL: Record<Provider, string> = {
   github: 'GitHub',
   vercel: 'Vercel',
   supabase: 'Supabase',
+  railway: 'Railway',
 };
 
 const PROVIDER_DESCRIPTION: Record<Provider, string> = {
@@ -20,6 +21,7 @@ const PROVIDER_DESCRIPTION: Record<Provider, string> = {
     'Install the Vaubaan Marketplace Integration on the team that owns the projects you want to expose.',
   supabase:
     'Paste a Supabase Management API personal access token (PAT) to allow Vaubaan to enumerate projects.',
+  railway: 'Authorize the Vaubaan Gateway Railway app to manage the projects in your workspace.',
 };
 
 export default async function OrgPage({ params }: { params: Promise<{ slug: string }> }) {

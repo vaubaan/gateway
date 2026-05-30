@@ -19,6 +19,7 @@ const REF_HINT: Record<Provider, string> = {
   github: 'owner/repo (e.g. acme/website)',
   vercel: 'prj_XXXXXXXXXXXX',
   supabase: '20-char project ref',
+  railway: 'project id (UUID)',
 };
 
 interface OfferedProvider {

@@ -35,6 +35,10 @@ le **plan de test** validé en spec ; ils seront codés en Phase 5
   E2E_USER_EMAIL=...                           # un compte test signup
   E2E_SUPABASE_URL=...
   E2E_SUPABASE_SERVICE_ROLE_KEY=...
+  # Railway (Auth app "Vaubaan Gateway (test)") :
+  RAILWAY_CLIENT_ID=...
+  RAILWAY_CLIENT_SECRET=...
+  RAILWAY_REDIRECT_URI=https://127.0.0.1:3000/api/integrations/railway/callback
   ```
 
 ## Scénarios planifiés
@@ -90,6 +94,20 @@ le **plan de test** validé en spec ; ils seront codés en Phase 5
 2. Old api_key → 401
 3. New api_key → 200
 4. PATCH bot status='revoked' → new api_key also → 401
+```
+
+### Scenario 7 — Railway OAuth + rewrap (Phase 5+)
+
+```
+1. Clic Connect Railway → authorize backboard.railway.com (PKCE + resource binding)
+2. Callback échange le code → provider_admins row railway, access+refresh+expires_at set
+3. tools/list → 10 railway__ tools visibles selon le role
+4. Bind project.railway (UUID), token railway:viewer → tools/call railway__list-projects
+   → assert allowed + audit row
+5. railway:viewer → tools/call railway__redeploy → assert denied (read-only)
+6. railway:member → tools/call railway__accept-deploy → assert denied (DESTRUCTIVE deny-list)
+7. Force expires_at dans le passé → next call déclenche un refresh (provider_admins
+   access_token muté) → call OK
 ```
 
 ## Sweeper

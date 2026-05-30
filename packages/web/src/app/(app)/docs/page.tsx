@@ -158,8 +158,8 @@ export default function DocsPage() {
       <p>
         Custom roles live under <em>Roles</em> in the org sidebar. The schema is documented inline
         in the role editor. Use <code>tool_matches</code> with glob patterns and <code>target</code>{' '}
-        = <code>project.repos</code> /<code>project.vercel</code> /<code>project.supabase</code> to
-        scope rules to the project's own bindings.
+        = <code>project.repos</code> /<code>project.vercel</code> /<code>project.supabase</code> /
+        <code>project.railway</code> to scope rules to the project's own bindings.
       </p>
 
       <h2 id="agent-config">7. Configure your agent</h2>

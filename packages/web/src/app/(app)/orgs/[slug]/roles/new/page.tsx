@@ -6,7 +6,7 @@ import { RuleEditor, defaultEmptyRule, type EditableRule } from '../rule-editor'
 
 export default function NewRolePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = usePromise(params);
-  const [provider, setProvider] = useState<'github' | 'vercel' | 'supabase'>('github');
+  const [provider, setProvider] = useState<'github' | 'vercel' | 'supabase' | 'railway'>('github');
   const [shortName, setShortName] = useState('');
   const [description, setDescription] = useState('');
   const [rules, setRules] = useState<EditableRule[]>([defaultEmptyRule()]);
@@ -55,6 +55,7 @@ export default function NewRolePage({ params }: { params: Promise<{ slug: string
               <option value="github">github</option>
               <option value="vercel">vercel</option>
               <option value="supabase">supabase</option>
+              <option value="railway">railway</option>
             </select>
           </label>
           <label>

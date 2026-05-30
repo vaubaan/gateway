@@ -8,6 +8,7 @@
 import { GitHubAdapter, githubAvailableTools } from '@vaubaan/providers-github';
 import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
+import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
 import type { AccessTokenContext, Provider, ProviderAdmin, Role } from '@vaubaan/shared';
 import {
   McpGateway,
@@ -18,7 +19,7 @@ import {
   type UpstreamAdapter,
 } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { decodeBytea } from '@/lib/providers/bytea';
+import { decodeBytea, encodeByteaHex } from '@/lib/providers/bytea';
 
 function getGitHubAppCredentials() {
   const appId = process.env.GITHUB_APP_ID;
@@ -174,6 +175,29 @@ export function buildGateway(opts: {
     availableTools: supabaseAvailableTools,
     executeCall: (admin, binding, tool, args) =>
       supabaseAdapter.executeCall(admin, binding, tool, args),
+    loadProviderAdmin,
+  };
+
+  // Railway: OAuth Auth app — short-lived (1h) token refreshed on the hot-path.
+  const railwayAdapter = new RailwayAdapter({
+    clientId: process.env.RAILWAY_CLIENT_ID,
+    clientSecret: process.env.RAILWAY_CLIENT_SECRET,
+    persistRefresh: async (admin, tokens) => {
+      await supabase
+        .from('provider_admins')
+        .update({
+          access_token_encrypted: encodeByteaHex(tokens.accessToken),
+          refresh_token_encrypted: encodeByteaHex(tokens.refreshToken),
+          expires_at: tokens.expiresAt.toISOString(),
+        })
+        .eq('id', admin.id);
+    },
+  });
+  upstreamByProvider.railway = {
+    provider: 'railway',
+    availableTools: railwayAvailableTools,
+    executeCall: (admin, binding, tool, args) =>
+      railwayAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
   };
 

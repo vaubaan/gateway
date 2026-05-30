@@ -67,6 +67,7 @@ export default async function ProjectPage({
     github: [],
     vercel: [],
     supabase: [],
+    railway: [],
   };
   for (const s of providerStates) {
     resourcesByProvider[s.provider] = s.resources.map((r) => ({ ref: r.ref, name: r.name }));

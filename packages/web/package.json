@@ -15,6 +15,7 @@
     "@vaubaan/mcp-gateway": "*",
     "@vaubaan/policy-engine": "*",
     "@vaubaan/providers-github": "*",
+    "@vaubaan/providers-railway": "*",
     "@vaubaan/providers-supabase": "*",
     "@vaubaan/providers-vercel": "*",
     "@vaubaan/shared": "*",

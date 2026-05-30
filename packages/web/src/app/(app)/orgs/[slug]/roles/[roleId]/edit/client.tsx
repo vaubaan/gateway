@@ -7,7 +7,7 @@ import { RuleEditor, ruleFromStored, defaultEmptyRule, type EditableRule } from 
 interface RoleRow {
   id: string;
   organization_id: string | null;
-  provider: 'github' | 'vercel' | 'supabase';
+  provider: 'github' | 'vercel' | 'supabase' | 'railway';
   name: string;
   description: string | null;
   is_builtin: boolean;

@@ -156,7 +156,7 @@ export class McpGateway {
 
   private listTools(ctx: AccessTokenContext): McpToolDeclaration[] {
     const out: McpToolDeclaration[] = [];
-    for (const provider of ['github', 'vercel', 'supabase'] as Provider[]) {
+    for (const provider of ['github', 'vercel', 'supabase', 'railway'] as Provider[]) {
       const adapter = this.cfg.upstreamByProvider[provider];
       if (!adapter) continue;
       const providerRoles = ctx.roles.filter((r) => r.provider === provider);
@@ -188,7 +188,7 @@ export class McpGateway {
     // Determine provider from tool prefix.
     const provider = this.providerFor(toolName);
     if (!provider) {
-      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__).`;
+      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__/railway__).`;
       await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
       return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
@@ -275,6 +275,7 @@ export class McpGateway {
     if (tool.startsWith('github__')) return 'github';
     if (tool.startsWith('vercel__')) return 'vercel';
     if (tool.startsWith('supabase__')) return 'supabase';
+    if (tool.startsWith('railway__')) return 'railway';
     return null;
   }
 

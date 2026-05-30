@@ -5,9 +5,14 @@
  * Spec : docs/spec/vaubaan-gateway.md §3.
  */
 
-export type Provider = 'github' | 'vercel' | 'supabase';
+export type Provider = 'github' | 'vercel' | 'supabase' | 'railway';
 
-export const PROVIDERS = ['github', 'vercel', 'supabase'] as const satisfies readonly Provider[];
+export const PROVIDERS = [
+  'github',
+  'vercel',
+  'supabase',
+  'railway',
+] as const satisfies readonly Provider[];
 
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';
 
@@ -133,7 +138,12 @@ export interface Permissions {
   rules: Rule[];
 }
 
-export type AbstractTarget = 'project.repos' | 'project.vercel' | 'project.supabase' | '*';
+export type AbstractTarget =
+  | 'project.repos'
+  | 'project.vercel'
+  | 'project.supabase'
+  | 'project.railway'
+  | '*';
 
 export interface Rule {
   effect: 'allow' | 'deny';

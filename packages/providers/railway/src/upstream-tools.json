@@ -1,0 +1,100 @@
+[
+  {
+    "name": "railway__whoami",
+    "description": "Get the current authenticated Railway user's profile information.",
+    "inputSchema": { "type": "object", "properties": {} }
+  },
+  {
+    "name": "railway__list-projects",
+    "description": "List all Railway projects accessible to the authenticated user.",
+    "inputSchema": { "type": "object", "properties": {} }
+  },
+  {
+    "name": "railway__create-project",
+    "description": "Create a new Railway project.",
+    "inputSchema": {
+      "type": "object",
+      "properties": { "name": { "type": "string" } }
+    }
+  },
+  {
+    "name": "railway__list-services",
+    "description": "List all services and environments in a Railway project.",
+    "inputSchema": {
+      "type": "object",
+      "properties": { "projectId": { "type": "string" } },
+      "required": ["projectId"]
+    }
+  },
+  {
+    "name": "railway__list-deployments",
+    "description": "List recent deployments for a Railway project, optionally filtered by environment.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "environmentId": { "type": "string" }
+      },
+      "required": ["projectId"]
+    }
+  },
+  {
+    "name": "railway__get-status",
+    "description": "Get the deployment status of a Railway project environment. Returns project + environment status.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "environmentId": { "type": "string" }
+      },
+      "required": ["projectId"]
+    }
+  },
+  {
+    "name": "railway__get-logs",
+    "description": "Get logs from Railway for a deployment — covers deploy (runtime), build, and http logs.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "environmentId": { "type": "string" },
+        "serviceId": { "type": "string" }
+      },
+      "required": ["projectId"]
+    }
+  },
+  {
+    "name": "railway__redeploy",
+    "description": "Trigger a redeployment of a service in a given environment.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "environmentId": { "type": "string" },
+        "serviceId": { "type": "string" }
+      },
+      "required": ["projectId", "environmentId", "serviceId"]
+    }
+  },
+  {
+    "name": "railway__accept-deploy",
+    "description": "DESTRUCTIVE: Commits all staged changes in a Railway environment and triggers a deploy.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "projectId": { "type": "string" },
+        "environmentId": { "type": "string" }
+      },
+      "required": ["projectId", "environmentId"]
+    }
+  },
+  {
+    "name": "railway__railway-agent",
+    "description": "Send a message to Railway's AI agent for complex infrastructure operations.",
+    "inputSchema": {
+      "type": "object",
+      "properties": { "message": { "type": "string" } },
+      "required": ["message"]
+    }
+  }
+]

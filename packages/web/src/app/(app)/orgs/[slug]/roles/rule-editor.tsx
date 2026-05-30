@@ -22,7 +22,7 @@ export interface EditableRule {
   toolKind: 'exact' | 'glob';
   tool?: string;
   tool_matches?: string[];
-  target: 'project.repos' | 'project.vercel' | 'project.supabase' | '*';
+  target: 'project.repos' | 'project.vercel' | 'project.supabase' | 'project.railway' | '*';
   constraints: EditableConstraint[];
   priority?: number | null;
 }
@@ -130,6 +130,7 @@ export function RuleEditor({
           <option value="project.repos">target: project.repos</option>
           <option value="project.vercel">target: project.vercel</option>
           <option value="project.supabase">target: project.supabase</option>
+          <option value="project.railway">target: project.railway</option>
         </select>
         <select
           value={rule.toolKind}

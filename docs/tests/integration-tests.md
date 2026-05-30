@@ -14,16 +14,19 @@ Vitest, ~1s total. No browser, no Supabase server, no real GitHub.
 
 ## Coverage
 
-| Suite                                                      |  Tests | Latency |
-| ---------------------------------------------------------- | -----: | ------: |
-| `packages/policy-engine/tests/unit/operators.test.ts`      |     20 |   ~10ms |
-| `packages/policy-engine/tests/unit/evaluate.test.ts`       |     12 |   ~15ms |
-| `packages/policy-engine/tests/unit/dsl.test.ts`            |      7 |   ~10ms |
-| `packages/policy-engine/tests/unit/tools-filter.test.ts`   |      3 |    ~8ms |
-| `packages/providers/github/tests/unit/adapter.test.ts`     |      9 |   ~35ms |
-| `packages/mcp-gateway/tests/unit/gateway.test.ts`          |     11 |  ~400ms |
-| `packages/mcp-gateway/tests/integration/lifecycle.test.ts` |      7 |  ~600ms |
-| **TOTAL**                                                  | **69** |   ~1.1s |
+| Suite                                                      |    Tests | Latency |
+| ---------------------------------------------------------- | -------: | ------: |
+| `packages/policy-engine/tests/unit/operators.test.ts`      |       20 |   ~10ms |
+| `packages/policy-engine/tests/unit/evaluate.test.ts`       |       12 |   ~15ms |
+| `packages/policy-engine/tests/unit/dsl.test.ts`            |        7 |   ~10ms |
+| `packages/policy-engine/tests/unit/tools-filter.test.ts`   |        3 |    ~8ms |
+| `packages/providers/github/tests/unit/adapter.test.ts`     |       12 |   ~35ms |
+| `packages/providers/vercel/tests/unit/adapter.test.ts`     |        7 |    ~7ms |
+| `packages/providers/supabase/tests/unit/adapter.test.ts`   |        5 |   ~12ms |
+| `packages/providers/railway/tests/unit/adapter.test.ts`    |       11 |   ~10ms |
+| `packages/mcp-gateway/tests/unit/gateway.test.ts`          |       13 |  ~520ms |
+| `packages/mcp-gateway/tests/integration/lifecycle.test.ts` |        7 |  ~500ms |
+| **TOTAL**                                                  | **~108** |   ~1.3s |
 
 ## Run
 
@@ -56,6 +59,21 @@ npx vitest run packages/policy-engine    # one package
   unknown tool throws.
 - `resolveTarget('project.repos', bindings)` returns concrete `resource_ref`s,
   `resolveTarget('*', ...)` returns wildcard.
+
+## Scénarios — Railway adapter
+
+- `mintUpstreamToken` returns the stored token when not near expiry ; throws
+  when no token.
+- `mintUpstreamToken` refreshes (mocked `backboard.railway.com/oauth/token`,
+  Basic auth + `resource=` audience) when within 60s of expiry, and calls
+  `persistRefresh` with the new pair ; falls back to the stale token when no
+  client credentials are configured.
+- `executeCall` forwards `tools/call` to `mcp.railway.com` with the `railway__`
+  prefix stripped ; surfaces upstream JSON-RPC errors + HTTP errors.
+- `validateBinding` rejects a non-UUID ref ; accepts a UUID and confirms token
+  liveness via `whoami`.
+- `resolveTarget('project.railway', bindings)` returns railway refs only ;
+  `'*'` returns wildcard.
 
 ## Scénarios — MCP gateway
 

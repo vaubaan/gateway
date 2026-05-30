@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 /**
  * OAuth state nonce — opaque, single-use, 5-min TTL.
@@ -22,4 +22,19 @@ export function decodeStateOrgId(state: string): string | null {
   } catch {
     return null;
   }
+}
+
+export interface Pkce {
+  verifier: string;
+  challenge: string;
+}
+
+/**
+ * PKCE (RFC 7636, S256). Used by the Railway OAuth flow : the `verifier` is
+ * stashed in a single-use cookie, the `challenge` goes on the authorize URL.
+ */
+export function generatePkce(): Pkce {
+  const verifier = randomBytes(32).toString('base64url');
+  const challenge = createHash('sha256').update(verifier).digest('base64url');
+  return { verifier, challenge };
 }

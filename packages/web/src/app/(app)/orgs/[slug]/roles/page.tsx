@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 interface RoleRow {
   id: string;
   organization_id: string | null;
-  provider: 'github' | 'vercel' | 'supabase';
+  provider: 'github' | 'vercel' | 'supabase' | 'railway';
   name: string;
   description: string | null;
   is_builtin: boolean;
@@ -67,7 +67,7 @@ export default async function RolesPage({ params }: { params: Promise<{ slug: st
         org and editable.
       </p>
 
-      {(['github', 'vercel', 'supabase'] as const).map((provider) => {
+      {(['github', 'vercel', 'supabase', 'railway'] as const).map((provider) => {
         const items = byProvider[provider] ?? [];
         return (
           <section key={provider} style={{ marginTop: 32 }}>

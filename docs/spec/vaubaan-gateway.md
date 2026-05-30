@@ -475,7 +475,7 @@ exposés et de leur shape.
 Le catalogue vit dans `@vaubaan/gateway-providers` :
 
 ```ts
-type Provider = 'github' | 'vercel' | 'supabase';
+type Provider = 'github' | 'vercel' | 'supabase' | 'railway';
 
 interface ProviderAdapter {
   readonly provider: Provider;
@@ -520,9 +520,18 @@ packages/providers/
     roles/
       reader.ts             # github:reader
       developer.ts          # github:developer
-  vercel/                   # Phase 5
-  supabase/                 # Phase 5
+  vercel/                   # rewrap mcp.vercel.com (paste/long-lived token)
+  supabase/                 # synthesis via Management API
+  railway/                  # rewrap mcp.railway.com (OAuth + 1h refresh)
+    railway-adapter.ts      # RailwayAdapter — refresh on hot-path + forward
+    execute.ts              # JSON-RPC forward to mcp.railway.com
+    tools.ts                # availableTools from frozen upstream-tools.json
+    upstream-tools.json     # 10 tools frozen from upstream
 ```
+
+Deux styles d'adapter coexistent (cf. ADR `rewrap-official-mcps.md` +
+`railway-rewrap-remote-mcp.md`) : **rewrap** (Vercel, Railway — forward JSON-RPC
+au MCP officiel) et **synthesis** (GitHub, Supabase — appels SDK/API directs).
 
 ### 5.3 Roles builtin v1 (GitHub MVP)
 
@@ -589,6 +598,55 @@ vers `main` depuis ces branches. Pas de merge, pas de delete.
     {
       "effect": "deny",
       "tool_matches": ["github__delete_*", "github__merge_pull_request"]
+    }
+  ]
+}
+```
+
+#### Railway (rewrap — cf. ADR `railway-rewrap-remote-mcp.md`)
+
+Rewrap de `mcp.railway.com` (10 tools : `whoami`, `list-projects`,
+`create-project`, `list-services`, `list-deployments`, `get-status`,
+`get-logs`, `redeploy`, `accept-deploy`, `railway-agent`). Auth : OAuth Auth app
+`authorization_code` + PKCE, scopes `openid offline_access workspace:member`,
+audience `resource=https://mcp.railway.com`. Token 1h refreshé sur le hot-path.
+Seedés en migration `0004_add_railway_provider.sql`.
+
+`railway:viewer` — read-only.
+
+```jsonc
+{
+  "version": 1,
+  "rules": [
+    {
+      "effect": "allow",
+      "target": "*",
+      "tool_matches": ["railway__whoami", "railway__list-*", "railway__get-*"]
+    }
+  ]
+}
+```
+
+`railway:member` — read + create/redeploy/agent. Deny `accept-deploy`
+(le seul tool marqué `DESTRUCTIVE` par l'upstream).
+
+```jsonc
+{
+  "version": 1,
+  "rules": [
+    {
+      "effect": "allow",
+      "target": "*",
+      "tool_matches": ["railway__whoami", "railway__list-*", "railway__get-*"]
+    },
+    {
+      "effect": "allow",
+      "target": "*",
+      "tool_matches": ["railway__create-project", "railway__redeploy", "railway__railway-agent"]
+    },
+    {
+      "effect": "deny",
+      "tool_matches": ["railway__accept-deploy"]
     }
   ]
 }

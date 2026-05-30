@@ -17,7 +17,7 @@ interface TokenRow {
 interface RoleRow {
   id: string;
   name: string;
-  provider: 'github' | 'vercel' | 'supabase';
+  provider: 'github' | 'vercel' | 'supabase' | 'railway';
   description: string | null;
 }
 

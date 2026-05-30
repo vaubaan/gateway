@@ -24,7 +24,9 @@ export const ConstraintSchema: z.ZodType<Constraint> = z.union([
 export const RuleSchema: z.ZodType<Rule> = z
   .object({
     effect: z.enum(['allow', 'deny']),
-    target: z.enum(['project.repos', 'project.vercel', 'project.supabase', '*']).optional(),
+    target: z
+      .enum(['project.repos', 'project.vercel', 'project.supabase', 'project.railway', '*'])
+      .optional(),
     tool: z.string().min(1).optional(),
     tool_matches: z.array(z.string().min(1)).min(1).optional(),
     constraints: z.record(z.string(), ConstraintSchema).optional(),

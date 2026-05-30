@@ -20,8 +20,8 @@ export const dynamic = 'force-dynamic';
 const BodySchema = z
   .object({
     orgSlug: z.string().min(1),
-    provider: z.enum(['github', 'vercel', 'supabase']),
-    name: z.string().regex(/^(github|vercel|supabase):[a-z0-9](-?[a-z0-9])*$/i),
+    provider: z.enum(['github', 'vercel', 'supabase', 'railway']),
+    name: z.string().regex(/^(github|vercel|supabase|railway):[a-z0-9](-?[a-z0-9])*$/i),
     description: z.string().nullable().optional(),
     permissions: PermissionsSchema,
   })

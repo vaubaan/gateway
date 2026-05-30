@@ -6,8 +6,8 @@
  *
  * Premise : if an access token's Project has exactly one ProviderBinding for a given
  * provider, then any tool argument that identifies that resource (owner+repo
- * for GitHub, project_id for Vercel, project_ref for Supabase, teamId for
- * Vercel team) is already fully determined. Exposing it to the agent is
+ * for GitHub, project_id for Vercel, project_ref for Supabase, projectId for
+ * Railway, teamId for Vercel team) is already fully determined. Exposing it to the agent is
  * worse than useless :
  *   - the agent might pass the wrong value (which we'd deny via policy
  *     anyway, but with confusing feedback),
@@ -27,7 +27,7 @@ interface InjectionPlan {
   /** owner + repo built from `binding.resource_ref` shaped as `owner/repo`. */
   owner?: string;
   repo?: string;
-  /** Vercel project id. */
+  /** Vercel + Railway project id (both upstreams name the arg `projectId`). */
   projectId?: string;
   /** Vercel team id (lives on `provider_admins.team_id` ; the caller passes it). */
   teamId?: string;
@@ -63,6 +63,9 @@ export function injectionPlanFor(provider: Provider, scope: ScopeContext): Injec
   }
   if (provider === 'supabase') {
     return { project_ref: binding.resource_ref };
+  }
+  if (provider === 'railway') {
+    return { projectId: binding.resource_ref };
   }
   return null;
 }

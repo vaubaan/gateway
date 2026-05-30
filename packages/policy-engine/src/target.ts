@@ -15,6 +15,7 @@ export function resolveTarget(target: AbstractTarget, bindings: ProviderBinding[
     repos: 'github',
     vercel: 'vercel',
     supabase: 'supabase',
+    railway: 'railway',
   };
   const want = providerMap[provider];
   if (!want) return [];
@@ -28,10 +29,11 @@ export function resolveTarget(target: AbstractTarget, bindings: ProviderBinding[
  * GitHub : we build `<owner>/<repo>` from `arguments.owner` + `arguments.repo`.
  * Vercel : `arguments.project_id` (or `projectId`).
  * Supabase : `arguments.project_ref`.
+ * Railway : `arguments.projectId`.
  * Wildcard `*` always matches.
  */
 export function callTargetMatches(
-  provider: 'github' | 'vercel' | 'supabase',
+  provider: 'github' | 'vercel' | 'supabase' | 'railway',
   args: Record<string, unknown>,
   resolvedTargets: string[],
 ): boolean {
@@ -43,7 +45,7 @@ export function callTargetMatches(
 }
 
 export function extractCallRef(
-  provider: 'github' | 'vercel' | 'supabase',
+  provider: 'github' | 'vercel' | 'supabase' | 'railway',
   args: Record<string, unknown>,
 ): string | null {
   if (provider === 'github') {
@@ -59,6 +61,10 @@ export function extractCallRef(
   if (provider === 'supabase') {
     const ref = args.project_ref ?? args.projectRef;
     return typeof ref === 'string' ? ref : null;
+  }
+  if (provider === 'railway') {
+    const projectId = args.projectId ?? args.project_id;
+    return typeof projectId === 'string' ? projectId : null;
   }
   return null;
 }
