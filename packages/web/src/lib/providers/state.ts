@@ -530,16 +530,30 @@ async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
       'railway__list-projects',
       {},
     );
+    // The upstream MCP wraps results in {content:[{text:<string>}]}. The text is
+    // sometimes a JSON-encoded list, sometimes a plain status message like
+    // "No projects found." — handle both.
     const text = extractMcpText(result);
-    const data: unknown = text ? JSON.parse(text) : result;
-    const projects = normalizeRailwayProjects(data);
+    let projects: Array<{ id: string; name?: string }> = [];
+    let upstreamNote: string | null = null;
+    if (text) {
+      try {
+        projects = normalizeRailwayProjects(JSON.parse(text));
+      } catch {
+        upstreamNote = text.trim();
+      }
+    } else {
+      projects = normalizeRailwayProjects(result);
+    }
     base.resources = projects.map((p) => ({
       ref: p.id,
       name: p.name ?? p.id,
       url: `https://railway.com/project/${p.id}`,
     }));
     if (base.resources.length === 0) {
-      base.error = 'No projects visible — bind by typing a Railway project id (UUID) manually.';
+      base.error =
+        (upstreamNote ? `${upstreamNote} ` : '') +
+        'Bind by typing a Railway project id (UUID) manually.';
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
