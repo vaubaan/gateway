@@ -281,10 +281,15 @@ describe('GitHubAdapter — mint_install_token', () => {
     expect(loadGithubBindings).toHaveBeenCalledWith('p1');
   });
 
-  test('purpose=push scopes the token to contents:write + pr:write + metadata:read', async () => {
+  test('purpose=push scopes the token to contents:write + pr:write + metadata:read + workflows:write', async () => {
     const fetchImpl = mintFetch({
       repos: ['app'],
-      permissions: { contents: 'write', pull_requests: 'write', metadata: 'read' },
+      permissions: {
+        contents: 'write',
+        pull_requests: 'write',
+        metadata: 'read',
+        workflows: 'write',
+      },
     });
     const loadGithubBindings = vi.fn().mockResolvedValue([projectBinding('acme/app')]);
     const adapter = new GitHubAdapter({
@@ -305,6 +310,7 @@ describe('GitHubAdapter — mint_install_token', () => {
       contents: 'write',
       pull_requests: 'write',
       metadata: 'read',
+      workflows: 'write',
     });
   });
 

@@ -35,7 +35,16 @@ export interface GitHubAdapterConfig {
 const MINT_TOOL = 'github__mint_install_token';
 const MINT_PERMISSIONS: Record<'clone' | 'push', Record<string, string>> = {
   clone: { contents: 'read' },
-  push: { contents: 'write', pull_requests: 'write', metadata: 'read' },
+  // workflows:write covers pushes that include `.github/workflows/*.yml` —
+  // GitHub rejects the push otherwise (App tokens are strict about workflow
+  // file changes). Requires the App itself to have workflows R/W ; without
+  // that, GitHub silently ignores the requested permission.
+  push: {
+    contents: 'write',
+    pull_requests: 'write',
+    metadata: 'read',
+    workflows: 'write',
+  },
 };
 
 const defaultOctokitFactory: OctokitFactory = (token) => new Octokit({ auth: token });

@@ -106,7 +106,9 @@ L'adapter :
 2. Si `repoFullName` est fourni, valide qu'il est dans les bindings ; sinon
    utilise tous les bindings.
 3. Mappe `purpose` → permissions GitHub (`clone` = `contents:read` ; `push` =
-   `contents:write + pull_requests:write + metadata:read`).
+   `contents:write + pull_requests:write + metadata:read + workflows:write`).
+   La permission `workflows:write` est requise dès qu'un push touche
+   `.github/workflows/*.yml` ; elle doit aussi être grantée au niveau App.
 4. Appelle `POST /app/installations/{id}/access_tokens` avec body
    `{ repositories, permissions }` → token `ghs_*` scopé per-call.
 

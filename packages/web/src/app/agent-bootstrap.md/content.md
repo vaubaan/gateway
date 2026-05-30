@@ -202,7 +202,8 @@ git -c credential.helper= -c "http.https://github.com/.extraheader=AUTHORIZATION
 ```
 
 `purpose: "push"` → the minted token gets `contents: write` +
-`pull_requests: write` + `metadata: read`. Enough for `git push` and to open
+`pull_requests: write` + `metadata: read` + `workflows: write`. Enough for
+`git push` (even when the diff touches `.github/workflows/*.yml`) and to open
 a PR via `github__create_pull_request` afterwards.
 
 #### Open the PR through MCP (no extra credential needed)

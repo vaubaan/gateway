@@ -49,10 +49,18 @@ Plus aucun credential git ne vit sur le runner.
   sous-ensemble demandé — pas besoin d'une 2e App.
 - Permissions sortantes mappées sur `purpose` :
 
-  | `purpose` | Permissions GitHub                                            |
-  | --------- | ------------------------------------------------------------- |
-  | `clone`   | `contents: read`                                              |
-  | `push`    | `contents: write` + `pull_requests: write` + `metadata: read` |
+  | `purpose` | Permissions GitHub                                                                 |
+  | --------- | ---------------------------------------------------------------------------------- |
+  | `clone`   | `contents: read`                                                                   |
+  | `push`    | `contents: write` + `pull_requests: write` + `metadata: read` + `workflows: write` |
+
+  `workflows: write` est nécessaire dès que le push touche un fichier sous
+  `.github/workflows/*.yml` — GitHub rejette autrement avec « refusing to
+  allow a GitHub App to create or update workflow … without `workflows`
+  permission ». La permission elle-même doit aussi être accordée **au niveau
+  de la GitHub App** (Permissions & events → Workflows: R/W) et acceptée
+  par chaque installation existante — sinon GitHub ignore silencieusement la
+  demande lors du mint.
 
 - Output : `{ token: 'ghs_...', expires_at, repositories: [{full_name,...}], permissions }` — passé tel quel à l'appelant via le wrap MCP standard.
 
