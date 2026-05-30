@@ -1,100 +1,261 @@
 [
   {
     "name": "railway__whoami",
-    "description": "Get the current authenticated Railway user's profile information.",
-    "inputSchema": { "type": "object", "properties": {} }
+    "description": "Get the current authenticated Railway user's profile information",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
   },
   {
     "name": "railway__list-projects",
-    "description": "List all Railway projects accessible to the authenticated user.",
-    "inputSchema": { "type": "object", "properties": {} }
+    "description": "List all Railway projects accessible to the authenticated user",
+    "inputSchema": {
+      "type": "object",
+      "properties": {}
+    }
   },
   {
     "name": "railway__create-project",
-    "description": "Create a new Railway project.",
+    "description": "Create a new Railway project",
     "inputSchema": {
       "type": "object",
-      "properties": { "name": { "type": "string" } }
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Name for the new project"
+        },
+        "description": {
+          "type": "string",
+          "description": "Optional project description"
+        },
+        "workspaceId": {
+          "type": "string",
+          "description": "Workspace ID to create the project in. If omitted, uses the first available workspace."
+        },
+        "isPublic": {
+          "type": "boolean",
+          "description": "Whether the project should be public (default: false)"
+        }
+      },
+      "required": ["name"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   {
     "name": "railway__list-services",
-    "description": "List all services and environments in a Railway project.",
+    "description": "List all services and environments in a Railway project",
     "inputSchema": {
       "type": "object",
-      "properties": { "projectId": { "type": "string" } },
-      "required": ["projectId"]
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "The project ID to list services for"
+        }
+      },
+      "required": ["projectId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   {
     "name": "railway__list-deployments",
-    "description": "List recent deployments for a Railway project, optionally filtered by environment.",
+    "description": "List recent deployments for a Railway project, optionally filtered by environment, service, or status. Returns the most recent first.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "projectId": { "type": "string" },
-        "environmentId": { "type": "string" }
+        "projectId": {
+          "type": "string",
+          "description": "The project ID"
+        },
+        "environmentId": {
+          "type": "string",
+          "description": "Filter to a specific environment"
+        },
+        "serviceId": {
+          "type": "string",
+          "description": "Filter to a specific service"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "WAITING",
+            "NEEDS_APPROVAL",
+            "QUEUED",
+            "INITIALIZING",
+            "SKIPPED",
+            "BUILDING",
+            "DEPLOYING",
+            "SUCCESS",
+            "FAILED",
+            "REMOVED",
+            "CRASHED",
+            "REMOVING",
+            "SLEEPING"
+          ],
+          "description": "Filter to deployments with this status (e.g. SUCCESS, FAILED, CRASHED, BUILDING, DEPLOYING)"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Max deployments to return (default 10, max 50)"
+        }
       },
-      "required": ["projectId"]
+      "required": ["projectId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   {
     "name": "railway__get-status",
-    "description": "Get the deployment status of a Railway project environment. Returns project + environment status.",
+    "description": "Get the deployment status of a Railway project environment. Returns project + environment metadata and, for each service in the environment, its latest deployment status, replica count, and cron schedule. If environmentId is omitted, the project's `production` environment is used when present, otherwise the oldest environment.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "projectId": { "type": "string" },
-        "environmentId": { "type": "string" }
+        "projectId": {
+          "type": "string",
+          "description": "The project ID"
+        },
+        "environmentId": {
+          "type": "string",
+          "description": "Environment to report on. Defaults to `production` if present, otherwise the project's oldest environment."
+        }
       },
-      "required": ["projectId"]
+      "required": ["projectId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   {
     "name": "railway__get-logs",
-    "description": "Get logs from Railway for a deployment — covers deploy (runtime), build, and http logs.",
+    "description": "Get logs from Railway for a deployment \u2014 covers deploy (runtime), build, and http (proxy request) contexts. Pass a specific deploymentId, or pass serviceId + environmentId to resolve the latest deployment. Use `types` to choose which streams to return (default: ['deploy']).",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "projectId": { "type": "string" },
-        "environmentId": { "type": "string" },
-        "serviceId": { "type": "string" }
+        "projectId": {
+          "type": "string",
+          "description": "The project ID"
+        },
+        "deploymentId": {
+          "type": "string",
+          "description": "A specific deployment ID. If omitted, serviceId and environmentId must be provided to resolve the most recent deployment."
+        },
+        "serviceId": {
+          "type": "string",
+          "description": "Service ID (used together with environmentId when deploymentId is not given)"
+        },
+        "environmentId": {
+          "type": "string",
+          "description": "Environment ID (used together with serviceId when deploymentId is not given)"
+        },
+        "types": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["build", "deploy", "http"]
+          },
+          "description": "Which log streams to fetch. Defaults to ['deploy']. Pass any combination of 'build', 'deploy', and 'http'."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 500,
+          "description": "Max log entries per stream (default 100, max 500)"
+        },
+        "filter": {
+          "type": "string",
+          "description": "Optional log filter expression (Loki-style, same syntax as the Railway dashboard). Applies to build and deploy streams."
+        },
+        "startDate": {
+          "type": "string",
+          "description": "ISO timestamp for the start of the log window"
+        },
+        "endDate": {
+          "type": "string",
+          "description": "ISO timestamp for the end of the log window (defaults to now)"
+        }
       },
-      "required": ["projectId"]
+      "required": ["projectId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   {
     "name": "railway__redeploy",
-    "description": "Trigger a redeployment of a service in a given environment.",
+    "description": "Trigger a redeployment of a service in a given environment",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "projectId": { "type": "string" },
-        "environmentId": { "type": "string" },
-        "serviceId": { "type": "string" }
+        "projectId": {
+          "type": "string",
+          "description": "The project ID"
+        },
+        "serviceId": {
+          "type": "string",
+          "description": "The service ID to redeploy"
+        },
+        "environmentId": {
+          "type": "string",
+          "description": "The environment ID to redeploy in"
+        }
       },
-      "required": ["projectId", "environmentId", "serviceId"]
+      "required": ["projectId", "serviceId", "environmentId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   {
     "name": "railway__accept-deploy",
-    "description": "DESTRUCTIVE: Commits all staged changes in a Railway environment and triggers a deploy.",
+    "description": "DESTRUCTIVE: Commits all staged changes in a Railway environment and triggers a deploy. Only use this when the user has explicitly confirmed they want to deploy.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "projectId": { "type": "string" },
-        "environmentId": { "type": "string" }
+        "environmentId": {
+          "type": "string",
+          "description": "The environment ID to commit staged changes for"
+        },
+        "commitMessage": {
+          "type": "string",
+          "description": "Optional commit message for the deploy"
+        }
       },
-      "required": ["projectId", "environmentId"]
+      "required": ["environmentId"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   },
   {
     "name": "railway__railway-agent",
-    "description": "Send a message to Railway's AI agent for complex infrastructure operations.",
+    "description": "Send a message to Railway's AI agent for complex infrastructure operations. The agent can inspect services, diagnose issues, and take actions on your behalf.",
     "inputSchema": {
       "type": "object",
-      "properties": { "message": { "type": "string" } },
-      "required": ["message"]
+      "properties": {
+        "projectId": {
+          "type": "string",
+          "description": "The project ID"
+        },
+        "environmentId": {
+          "type": "string",
+          "description": "The environment ID"
+        },
+        "message": {
+          "type": "string",
+          "description": "The message to send to the agent"
+        },
+        "threadId": {
+          "type": "string",
+          "description": "Thread ID to continue an existing conversation. Omit to start a new one."
+        },
+        "serviceId": {
+          "type": "string",
+          "description": "Optional service ID to scope the agent's context"
+        }
+      },
+      "required": ["projectId", "environmentId", "message"],
+      "additionalProperties": false,
+      "$schema": "http://json-schema.org/draft-07/schema#"
     }
   }
 ]

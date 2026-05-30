@@ -4,20 +4,16 @@
  * Spec : docs/spec/vaubaan-gateway.md §5, §7.4.
  * ADR  : docs/decisions/railway-rewrap-remote-mcp.md.
  *
- * 10 tools fetched from upstream during the POC (2026-05-29). Names are
+ * 10 tools fetched verbatim from `mcp.railway.com tools/list` on 2026-05-30
+ * (using a Bearer scoped to `resource=https://mcp.railway.com`). Names are
  * prefixed `railway__` to match the Vaubaan policy DSL provider-scoping
  * convention (the upstream names are kebab-case, e.g. `list-projects`, so the
- * prefixed name is `railway__list-projects`).
- *
- * Tool list cross-checked against `docs.railway.com/ai/mcp-server`. Argument
- * names follow Railway's public GraphQL convention (camelCase : `projectId`,
- * `environmentId`, `serviceId`) per `docs.railway.com/reference/public-api`.
- * The required/optional flags are best-effort ; the upstream will return a
- * clear JSON-RPC error if we mis-marked one — fix = re-fetch tools/list with
- * a live Bearer + commit.
+ * prefixed name is `railway__list-projects`). inputSchemas are real (including
+ * `required[]`, enums, and additionalProperties:false) — no guesses.
  *
  * Refresh procedure : POST tools/list to mcp.railway.com with a Bearer scoped
- * to `resource=https://mcp.railway.com`, copy each tool with the prefix added.
+ * to `resource=https://mcp.railway.com`, prefix each name with `railway__`,
+ * commit.
  */
 
 import type { McpToolDeclaration } from '@vaubaan/shared';

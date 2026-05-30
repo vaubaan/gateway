@@ -72,15 +72,12 @@ serveur-side — raison pour laquelle Supabase reste en synthesis (cf.
 - **Exécution** : `executeCall` forwarde `tools/call` en JSON-RPC à
   `https://mcp.railway.com/`, strip le préfixe `railway__`, parse la frame SSE
   (`parseFirstJsonRpcFrame`) — identique à l'adapter Vercel.
-- **tools/list frozen** : les 10 tools ont été fetchés au POC (2026-05-29) et
-  figés dans `packages/providers/railway/src/upstream-tools.json`. Liste
-  cross-checkée contre la doc publique (`docs.railway.com/ai/mcp-server`) ;
-  noms d'args alignés sur la convention GraphQL Railway (**camelCase** :
-  `projectId`, `environmentId`, `serviceId`) per
-  `docs.railway.com/reference/public-api`. Le required/optional est
-  best-effort : si l'upstream rejette un call pour un required mal marqué,
-  le message d'erreur JSON-RPC est explicite → fix = re-fetch tools/list
-  avec un Bearer live + commit (même procédure que Vercel).
+- **tools/list frozen** : les 10 tools sont figés dans
+  `packages/providers/railway/src/upstream-tools.json` (capture verbatim le
+  2026-05-30 depuis `mcp.railway.com tools/list`, avec un Bearer scopé
+  `resource=https://mcp.railway.com`). Les `required[]`, enums et
+  `additionalProperties:false` sont les vrais — pas de guesses. Refresh =
+  re-fetch tools/list + commit (même procédure que Vercel).
 
 ### Roles builtin
 
