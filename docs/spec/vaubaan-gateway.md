@@ -681,6 +681,9 @@ tool avec `purpose IN ('clone', 'push')` — l'agent push avec ce rôle.
 
 - `github:reviewer` — read + comment/approve PR, pas d'edit code
 - `vercel:viewer` — read deploys/logs/env vars
+- `vercel:editor` — read + update project settings (root directory,
+  framework, build commands…) + upsert env vars sur projets bindés (pas
+  de deploy) — shipped via migration 0006
 - `vercel:deployer` — trigger deploys + read logs (pas d'edit env vars)
 - `supabase:reader-staging` — read-only SQL staging, no DDL
 - `supabase:writer-staging` — read/write SQL staging, no DDL
