@@ -139,3 +139,109 @@ describe('VercelAdapter — resolveTarget', () => {
     ).toEqual(['prj_abc']);
   });
 });
+
+/** Build a fake JSON response with arbitrary body for REST custom tools. */
+function jsonResponse(payload: unknown, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: () => Promise.resolve(JSON.stringify(payload)),
+  };
+}
+
+describe('VercelAdapter — executeCall (custom REST tools)', () => {
+  test('update_project_settings PATCHes /v9/projects/{id} with whitelisted fields + teamId query', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) =>
+      jsonResponse({ id: 'prj_abc', rootDirectory: 'app' }),
+    );
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    const out = (await adapter.executeCall(baseAdmin, binding, 'vercel__update_project_settings', {
+      projectId: 'prj_abc',
+      rootDirectory: 'app',
+      framework: 'nextjs',
+      // a field not in the whitelist must be dropped
+      secretField: 'should-not-leak',
+    })) as { rootDirectory: string };
+    expect(out.rootDirectory).toBe('app');
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.vercel.com/v9/projects/prj_abc?teamId=team_abc');
+    expect(init.method).toBe('PATCH');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer vcp_xxx');
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body).toEqual({ rootDirectory: 'app', framework: 'nextjs' });
+    expect(body.secretField).toBeUndefined();
+  });
+
+  test('update_project_settings honors explicit teamId in args over admin team_id', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) => jsonResponse({}));
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'vercel__update_project_settings', {
+      projectId: 'prj_abc',
+      teamId: 'team_override',
+      rootDirectory: 'web',
+    });
+    const [url] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.vercel.com/v9/projects/prj_abc?teamId=team_override');
+  });
+
+  test('update_project_settings throws when projectId missing', async () => {
+    const fetchImpl = vi.fn();
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await expect(
+      adapter.executeCall(baseAdmin, binding, 'vercel__update_project_settings', {
+        rootDirectory: 'app',
+      }),
+    ).rejects.toThrow(/projectId is required/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('update_project_settings surfaces REST errors with status', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      text: () => Promise.resolve('{"error":{"message":"forbidden"}}'),
+    });
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await expect(
+      adapter.executeCall(baseAdmin, binding, 'vercel__update_project_settings', {
+        projectId: 'prj_abc',
+        rootDirectory: 'app',
+      }),
+    ).rejects.toThrow(/403/);
+  });
+
+  test('upsert_env_var POSTs /v10/projects/{id}/env with upsert=true + whitelisted body', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) =>
+      jsonResponse({ created: { key: 'DATABASE_URL' } }),
+    );
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'vercel__upsert_env_var', {
+      projectId: 'prj_abc',
+      key: 'DATABASE_URL',
+      value: 'postgres://...',
+      target: ['production', 'preview'],
+      type: 'encrypted',
+      comment: 'set by gateway',
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.vercel.com/v10/projects/prj_abc/env?teamId=team_abc&upsert=true');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body).toEqual({
+      key: 'DATABASE_URL',
+      value: 'postgres://...',
+      target: ['production', 'preview'],
+      type: 'encrypted',
+      comment: 'set by gateway',
+    });
+  });
+
+  test('custom tools are exposed in availableTools', async () => {
+    const adapter = new VercelAdapter();
+    const names = adapter.availableTools.map((t) => t.name);
+    expect(names).toContain('vercel__update_project_settings');
+    expect(names).toContain('vercel__upsert_env_var');
+    // Sanity check: upstream tools are still present.
+    expect(names).toContain('vercel__list_projects');
+  });
+});

@@ -1,19 +1,26 @@
 /**
- * Vercel tool dispatcher — JSON-RPC forward to the official Vercel MCP server.
+ * Vercel tool dispatcher — JSON-RPC forward to the official Vercel MCP server,
+ * with a fallback to direct REST calls for the custom tools defined in
+ * `custom-tools.ts`.
  *
  * Spec : docs/spec/vaubaan-gateway.md §7.4.
- * ADR  : docs/decisions/rewrap-official-mcps.md.
+ * ADRs :
+ *   - docs/decisions/rewrap-official-mcps.md          (upstream forward)
+ *   - docs/decisions/vercel-augment-with-rest-tools.md (custom tools)
  *
- * The upstream serves at https://mcp.vercel.com/ via HTTP+SSE. We forward our
- * own `tools/call` payload (with the `vercel__` prefix stripped) and parse the
- * SSE-framed JSON response.
+ * Upstream serves at https://mcp.vercel.com/ via HTTP+SSE. We forward our own
+ * `tools/call` payload (with the `vercel__` prefix stripped) and parse the
+ * SSE-framed JSON response. Custom tools (e.g. `vercel__update_project_settings`)
+ * are routed directly to https://api.vercel.com/v9 instead.
  */
 
-import { toUpstreamName } from './tools.ts';
+import { isCustomTool, toUpstreamName } from './tools.ts';
+import { UPDATE_PROJECT_SETTINGS, UPSERT_ENV_VAR } from './custom-tools.ts';
 
 export type FetchImpl = typeof fetch;
 
-const UPSTREAM = 'https://mcp.vercel.com/';
+const UPSTREAM_MCP = 'https://mcp.vercel.com/';
+const REST_BASE = 'https://api.vercel.com';
 
 interface JsonRpcSuccess {
   jsonrpc: '2.0';
@@ -58,14 +65,14 @@ function parseFirstJsonRpcFrame(body: string, id: number): JsonRpcResponse {
   throw new Error(`No JSON-RPC frame matched id ${id} in upstream SSE response.`);
 }
 
-async function callUpstream(
+async function callUpstreamMcp(
   fetchImpl: FetchImpl,
   token: string,
   method: string,
   params: Record<string, unknown> | undefined,
   id = Math.floor(Math.random() * 1_000_000_000),
 ): Promise<unknown> {
-  const res = await fetchImpl(UPSTREAM, {
+  const res = await fetchImpl(UPSTREAM_MCP, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -86,6 +93,85 @@ async function callUpstream(
   return frame.result;
 }
 
+async function callRest(
+  fetchImpl: FetchImpl,
+  token: string,
+  method: 'PATCH' | 'POST',
+  path: string,
+  query: Record<string, string>,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  const qs = new URLSearchParams(query).toString();
+  const url = `${REST_BASE}${path}${qs ? `?${qs}` : ''}`;
+  const res = await fetchImpl(url, {
+    method,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      Accept: 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  if (!res.ok) {
+    throw new Error(`Vercel REST ${method} ${path} ${res.status}: ${text.slice(0, 300)}`);
+  }
+  if (!text) return {};
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+function pickDefined<T extends Record<string, unknown>>(
+  args: T,
+  keys: readonly string[],
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of keys) {
+    if (k in args) out[k] = args[k];
+  }
+  return out;
+}
+
+const PROJECT_SETTINGS_FIELDS = [
+  'rootDirectory',
+  'framework',
+  'buildCommand',
+  'devCommand',
+  'installCommand',
+  'outputDirectory',
+  'nodeVersion',
+] as const;
+
+const ENV_VAR_FIELDS = ['key', 'value', 'target', 'type', 'gitBranch', 'comment'] as const;
+
+async function executeCustom(
+  fetchImpl: FetchImpl,
+  token: string,
+  teamId: string | null,
+  tool: string,
+  args: Record<string, unknown>,
+): Promise<unknown> {
+  const projectId = typeof args.projectId === 'string' ? args.projectId : '';
+  if (!projectId) throw new Error(`Vercel custom tool ${tool}: projectId is required.`);
+  const effectiveTeamId = typeof args.teamId === 'string' ? args.teamId : teamId;
+  const query: Record<string, string> = {};
+  if (effectiveTeamId) query.teamId = effectiveTeamId;
+
+  if (tool === UPDATE_PROJECT_SETTINGS) {
+    const body = pickDefined(args, PROJECT_SETTINGS_FIELDS);
+    return callRest(fetchImpl, token, 'PATCH', `/v9/projects/${projectId}`, query, body);
+  }
+  if (tool === UPSERT_ENV_VAR) {
+    query.upsert = 'true';
+    const body = pickDefined(args, ENV_VAR_FIELDS);
+    return callRest(fetchImpl, token, 'POST', `/v10/projects/${projectId}/env`, query, body);
+  }
+  throw new Error(`Vercel custom tool not implemented: ${tool}`);
+}
+
 export async function executeCall(
   fetchImpl: FetchImpl,
   token: string,
@@ -93,10 +179,13 @@ export async function executeCall(
   tool: string,
   args: Record<string, unknown>,
 ): Promise<unknown> {
+  if (isCustomTool(tool)) {
+    return executeCustom(fetchImpl, token, teamId, tool, args);
+  }
   // The upstream tool name (without the vercel__ prefix).
   const name = toUpstreamName(tool);
   // Many tools require `teamId` ; inject from the admin's stored team_id when
   // the caller didn't pass one explicitly.
   const finalArgs = teamId && !('teamId' in args) ? { ...args, teamId } : args;
-  return callUpstream(fetchImpl, token, 'tools/call', { name, arguments: finalArgs });
+  return callUpstreamMcp(fetchImpl, token, 'tools/call', { name, arguments: finalArgs });
 }
