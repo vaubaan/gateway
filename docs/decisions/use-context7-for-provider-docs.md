@@ -3,7 +3,6 @@ title: Context7 MCP comme source canonique de doc des providers tiers
 status: accepted
 date: 2026-05-31
 tracks:
-  - .mcp.json
   - docs/handbook/
   - docs/decisions/provider-onboarding-handbook-template.md
 ---
@@ -48,8 +47,12 @@ incomplète.
 ## Décision
 
 **Context7 MCP est la source canonique de doc pour tout handbook provider du
-repo.** Câblé dans `.mcp.json` à la racine du projet (committable, partagé
-avec l'équipe et avec tout agent qui clone le repo).
+repo.** Configuration **personnelle** de chaque dev/agent (pas commit dans
+le repo — `.mcp.json` reste gitignored). Chaque contributeur câble Context7
+dans son environnement Claude Code (`claude mcp add --transport http
+context7 https://mcp.context7.com/mcp`) ou dans un `.mcp.json` local non
+versionné. Le repo ne fournit que la **consigne** ; la mécanique est
+locale.
 
 **Process obligatoire** quand on écrit, refresh, ou audite un handbook
 provider :
