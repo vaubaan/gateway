@@ -106,7 +106,8 @@ le **plan de test** validé en spec ; ils seront codés en Phase 5
    → assert allowed + audit row
 5. railway:viewer → tools/call railway__redeploy → assert denied (read-only)
 6. railway:member → tools/call railway__accept-deploy → assert denied (DESTRUCTIVE deny-list)
-7. Force expires_at dans le passé → next call déclenche un refresh (provider_admins
+7. railway:deployer → tools/call railway__accept-deploy sur project bindé → assert allowed
+8. Force expires_at dans le passé → next call déclenche un refresh (provider_admins
    access_token muté) → call OK
 ```
 

@@ -610,7 +610,8 @@ Rewrap de `mcp.railway.com` (10 tools : `whoami`, `list-projects`,
 `get-logs`, `redeploy`, `accept-deploy`, `railway-agent`). Auth : OAuth Auth app
 `authorization_code` + PKCE, scopes `openid offline_access workspace:member`,
 audience `resource=https://mcp.railway.com`. Token 1h refreshé sur le hot-path.
-Seedés en migration `0004_add_railway_provider.sql`.
+Seedés en migrations `0004_add_railway_provider.sql` (viewer + member) et
+`0008_add_railway_deployer_role.sql` (deployer).
 
 `railway:viewer` — read-only.
 
@@ -647,6 +648,29 @@ Seedés en migration `0004_add_railway_provider.sql`.
     {
       "effect": "deny",
       "tool_matches": ["railway__accept-deploy"]
+    }
+  ]
+}
+```
+
+`railway:deployer` — read + commit-staged-and-deploy sur project bindé. Aucun
+`create-project`, aucun `railway-agent`. Standalone : à assigner **à la place
+de** `railway:member` (les deux ensemble laissent gagner le `deny` de
+`member` sur `accept-deploy`).
+
+```jsonc
+{
+  "version": 1,
+  "rules": [
+    {
+      "effect": "allow",
+      "target": "project.railway",
+      "tool_matches": [
+        "railway__whoami",
+        "railway__list-*",
+        "railway__get-*",
+        "railway__accept-deploy"
+      ]
     }
   ]
 }

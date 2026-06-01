@@ -149,15 +149,15 @@ Synthesis over the Management API (`api.supabase.com/v1`). Common ones :
 Rewrap of `mcp.railway.com` — 10 tools. Tool names use kebab-case after the
 prefix (`railway__list-projects`, not `railway__list_projects`).
 
-| Tool                                                    | Purpose                                              |
-| ------------------------------------------------------- | ---------------------------------------------------- |
-| `railway__whoami`                                       | Identity check.                                      |
-| `railway__list-projects` / `-services` / `-deployments` | Read.                                                |
-| `railway__get-status` / `-logs`                         | Read deploy + runtime data.                          |
-| `railway__create-project`                               | Provision a new project.                             |
-| `railway__redeploy`                                     | Re-deploy a service.                                 |
-| `railway__railway-agent`                                | Hand a multi-step infra task to Railway's own agent. |
-| `railway__accept-deploy`                                | **DESTRUCTIVE** — denied by `railway:member`.        |
+| Tool                                                    | Purpose                                                                                                             |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `railway__whoami`                                       | Identity check.                                                                                                     |
+| `railway__list-projects` / `-services` / `-deployments` | Read.                                                                                                               |
+| `railway__get-status` / `-logs`                         | Read deploy + runtime data.                                                                                         |
+| `railway__create-project`                               | Provision a new project.                                                                                            |
+| `railway__redeploy`                                     | Re-deploy a service.                                                                                                |
+| `railway__railway-agent`                                | Hand a multi-step infra task to Railway's own agent.                                                                |
+| `railway__accept-deploy`                                | **DESTRUCTIVE** — denied by `railway:member`, allowed by `railway:deployer` (commits staged env patches + deploys). |
 
 `projectId` is auto-filled from the project's Railway binding when there is
 exactly one.
