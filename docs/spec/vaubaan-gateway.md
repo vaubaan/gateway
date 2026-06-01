@@ -594,14 +594,14 @@ vers `main` depuis ces branches. Pas de merge, pas de delete.
         "arguments.head": { "match": ["feature/*", "fix/*", "claude/*"] },
         "arguments.base": { "equals": "main" }
       }
-    },
-    {
-      "effect": "deny",
-      "tool_matches": ["github__delete_*", "github__merge_pull_request"]
     }
   ]
 }
 ```
+
+`github__delete_*` et `github__merge_pull_request` ne sont pas listés
+dans les allows — default-deny les bloque. Avant 0009 il y avait un deny
+cross-role explicite, retiré pour que multi-role = union d'allows.
 
 #### Railway (rewrap — cf. ADR `railway-rewrap-remote-mcp.md`)
 
@@ -610,8 +610,10 @@ Rewrap de `mcp.railway.com` (10 tools : `whoami`, `list-projects`,
 `get-logs`, `redeploy`, `accept-deploy`, `railway-agent`). Auth : OAuth Auth app
 `authorization_code` + PKCE, scopes `openid offline_access workspace:member`,
 audience `resource=https://mcp.railway.com`. Token 1h refreshé sur le hot-path.
-Seedés en migrations `0004_add_railway_provider.sql` (viewer + member) et
-`0008_add_railway_deployer_role.sql` (deployer).
+Seedés en migrations `0004_add_railway_provider.sql` (viewer + member),
+`0008_add_railway_deployer_role.sql` (deployer), et patché par
+`0009_drop_cross_role_denies.sql` (retire le deny cross-role `accept-deploy`
+du member — multi-role = union d'allows).
 
 `railway:viewer` — read-only.
 
@@ -628,8 +630,9 @@ Seedés en migrations `0004_add_railway_provider.sql` (viewer + member) et
 }
 ```
 
-`railway:member` — read + create/redeploy/agent. Deny `accept-deploy`
-(le seul tool marqué `DESTRUCTIVE` par l'upstream).
+`railway:member` — read + create/redeploy/agent. Ne couvre pas
+`accept-deploy` (default-deny suffit, plus de deny cross-role explicite
+depuis 0009).
 
 ```jsonc
 {
@@ -644,19 +647,15 @@ Seedés en migrations `0004_add_railway_provider.sql` (viewer + member) et
       "effect": "allow",
       "target": "*",
       "tool_matches": ["railway__create-project", "railway__redeploy", "railway__railway-agent"]
-    },
-    {
-      "effect": "deny",
-      "tool_matches": ["railway__accept-deploy"]
     }
   ]
 }
 ```
 
 `railway:deployer` — read + commit-staged-and-deploy sur project bindé. Aucun
-`create-project`, aucun `railway-agent`. Standalone : à assigner **à la place
-de** `railway:member` (les deux ensemble laissent gagner le `deny` de
-`member` sur `accept-deploy`).
+`create-project`, aucun `railway-agent`. Composable avec `railway:member`
+(les droits s'additionnent depuis 0009 — checker les deux donne `member` +
+`accept-deploy`).
 
 ```jsonc
 {

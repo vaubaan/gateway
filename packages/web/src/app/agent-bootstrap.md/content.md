@@ -118,7 +118,7 @@ high-level map.
 | `github__create_pull_request`                                        | Open a PR (must target `main` for `github:developer`).                                    |
 | `github__add_issue_comment`                                          | Comment on issues/PRs.                                                                    |
 | `github__mint_install_token`                                         | **Mint a short-lived `ghs_*` install token** scoped to the Project repos — see §6.1.      |
-| `github__merge_pull_request` / `_delete_file`                        | Dangerous — deny-listed by default.                                                       |
+| `github__merge_pull_request` / `_delete_file`                        | Dangerous — not granted by builtin roles (default-deny). Requires a custom role to allow. |
 
 ### 5.2 Vercel (`vercel__…`)
 
@@ -149,15 +149,15 @@ Synthesis over the Management API (`api.supabase.com/v1`). Common ones :
 Rewrap of `mcp.railway.com` — 10 tools. Tool names use kebab-case after the
 prefix (`railway__list-projects`, not `railway__list_projects`).
 
-| Tool                                                    | Purpose                                                                                                             |
-| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `railway__whoami`                                       | Identity check.                                                                                                     |
-| `railway__list-projects` / `-services` / `-deployments` | Read.                                                                                                               |
-| `railway__get-status` / `-logs`                         | Read deploy + runtime data.                                                                                         |
-| `railway__create-project`                               | Provision a new project.                                                                                            |
-| `railway__redeploy`                                     | Re-deploy a service.                                                                                                |
-| `railway__railway-agent`                                | Hand a multi-step infra task to Railway's own agent.                                                                |
-| `railway__accept-deploy`                                | **DESTRUCTIVE** — denied by `railway:member`, allowed by `railway:deployer` (commits staged env patches + deploys). |
+| Tool                                                    | Purpose                                                                                                                                                   |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `railway__whoami`                                       | Identity check.                                                                                                                                           |
+| `railway__list-projects` / `-services` / `-deployments` | Read.                                                                                                                                                     |
+| `railway__get-status` / `-logs`                         | Read deploy + runtime data.                                                                                                                               |
+| `railway__create-project`                               | Provision a new project.                                                                                                                                  |
+| `railway__redeploy`                                     | Re-deploy a service.                                                                                                                                      |
+| `railway__railway-agent`                                | Hand a multi-step infra task to Railway's own agent.                                                                                                      |
+| `railway__accept-deploy`                                | **DESTRUCTIVE** — granted only by `railway:deployer` (commits staged env patches + deploys). Composable with `railway:member` (multi-role unions allows). |
 
 `projectId` is auto-filled from the project's Railway binding when there is
 exactly one.

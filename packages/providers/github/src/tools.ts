@@ -202,10 +202,10 @@ export const availableTools: readonly McpToolDeclaration[] = [
       required: ['purpose'],
     },
   },
-  // Dangerous (deny-listed by default in github:developer)
+  // Dangerous — not granted by any builtin role (default-deny applies).
   {
     name: 'github__merge_pull_request',
-    description: 'Merge a pull request. Typically denied by github:developer.',
+    description: 'Merge a pull request. Requires a custom role; no builtin grants it.',
     inputSchema: {
       type: 'object',
       properties: {

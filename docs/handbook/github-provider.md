@@ -89,8 +89,9 @@ PEM avec `\n` escaped). Jamais en DB.
   `mint-install-token-runner-credential`) — mint un token ghs\_\* court-vivant
   scopé aux repos du Project. CAR (clone) et l'agent (push) appellent ce tool
   au lieu de stocker un PAT sur le runner.
-- **Dangerous (deny-listed par github:developer)** : `github__merge_pull_request`,
-  `github__delete_file`.
+- **Dangerous (aucun builtin role ne les autorise — default-deny)** :
+  `github__merge_pull_request`, `github__delete_file`. Pour les autoriser,
+  créer un role custom org-scopé.
 
 Le mapping `tool_name → Octokit call` vit dans `src/execute.ts`. Le mint
 vit dans `src/github-adapter.ts` (a accès à `admin.installation_id` + l'App

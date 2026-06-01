@@ -100,9 +100,9 @@ sont en kebab-case) :
   `railway__get-logs`.
 - **Write** : `railway__create-project`, `railway__redeploy`,
   `railway__railway-agent`.
-- **DESTRUCTIVE (deny-listé par railway:member, allow-listé par
-  railway:deployer)** : `railway__accept-deploy` (commit les changements
-  staged + déclenche un deploy).
+- **DESTRUCTIVE (autorisé uniquement par `railway:deployer`)** :
+  `railway__accept-deploy` (commit les changements staged + déclenche un
+  deploy).
 
 Refresh de la liste : `POST tools/list` à `mcp.railway.com` avec un Bearer
 scopé `resource=https://mcp.railway.com`, recopier chaque tool avec le préfixe
@@ -110,21 +110,26 @@ dans `src/upstream-tools.json`.
 
 ## Roles builtin
 
-Seedés en migrations `0004_add_railway_provider.sql` (viewer + member) et
-`0008_add_railway_deployer_role.sql` (deployer) :
+Seedés en migrations `0004_add_railway_provider.sql` (viewer + member),
+`0008_add_railway_deployer_role.sql` (deployer), et patché par
+`0009_drop_cross_role_denies.sql` (retire le deny `accept-deploy` du
+member — cf. note sémantique plus bas) :
 
 - `railway:viewer` — read-only (`whoami`, `list-*`, `get-*`).
-- `railway:member` — read + `create-project`/`redeploy`/`railway-agent`,
-  **deny** `accept-deploy`.
-- `railway:deployer` — read + `accept-deploy`. Standalone, target
-  `project.railway` (le commit-staged + deploy demande une binding
-  explicite). Mirror du pattern `vercel:deployer`.
+- `railway:member` — read + `create-project`/`redeploy`/`railway-agent`.
+  Ne couvre pas `accept-deploy` (mais ne le denie plus explicitement non
+  plus — default-deny suffit).
+- `railway:deployer` — read + `accept-deploy`. Target `project.railway`
+  (le commit-staged + deploy demande une binding explicite). Mirror du
+  pattern `vercel:deployer`.
 
 viewer/member utilisent `target: '*'` (plusieurs tools n'ont pas
 d'identifiant de projet) ; deployer scope sur `project.railway`.
-`deny override allow` : assigner `railway:member` + `railway:deployer`
-en parallèle ne débloque PAS `accept-deploy`, le deny de `member` gagne —
-il faut basculer entièrement sur `deployer` (ou ajouter un role custom).
+
+**Multi-role = union d'allows.** Assigner `railway:member` + `railway:deployer`
+en parallèle donne bien la somme des deux droits (`create-project`,
+`redeploy`, `railway-agent`, ET `accept-deploy` sur projects bindés). C'est
+l'invariant depuis 0009 : ajouter un role n'enlève jamais de droits.
 
 ## Tests
 
