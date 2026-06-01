@@ -143,9 +143,9 @@ export class GitHubAdapter implements ProviderAdapter {
   }
 
   /**
-   * Mint a short-lived installation token scoped to the project repos. Called
-   * by CAR (clone) and agents (push) ; the caller's role pins `purpose` via
-   * policy constraints.
+   * Mint a short-lived installation token scoped to the project repos. The
+   * caller's role pins `purpose` via policy constraints (typically `clone`
+   * vs `push`).
    *
    * Policy enforces the purpose constraint upstream — this method trusts the
    * value but still rejects unknown values defensively.

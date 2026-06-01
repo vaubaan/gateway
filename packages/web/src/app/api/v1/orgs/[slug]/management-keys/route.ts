@@ -7,7 +7,7 @@
  *                                                api_key visible **once** (argon2id at-rest).
  *
  * Spec : docs/spec/vaubaan-gateway.md §3.1 (ManagementKey), §8.
- * ADR  : docs/decisions/org-management-keys-for-runner.md.
+ * ADR  : docs/decisions/programmatic-access-token-minting.md.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

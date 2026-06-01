@@ -1,16 +1,8 @@
 ---
 title: Org Management Keys for programmatic AccessToken minting (Runner)
-status: accepted
+status: superseded
 date: 2026-05-27
-tracks:
-  - docs/spec/vaubaan-gateway.md
-  - supabase/migrations/0003_org_management_keys.sql
-  - packages/web/src/app/api/v1/runner/tokens/route.ts
-  - packages/web/src/app/api/v1/runner/roles/route.ts
-  - packages/web/src/app/api/v1/runner/projects/route.ts
-  - packages/web/src/app/api/v1/orgs/[slug]/management-keys/route.ts
-  - packages/web/src/lib/auth/require-management-key.ts
-  - packages/shared/src/api-key.ts
+superseded-by: programmatic-access-token-minting
 ---
 
 # Org Management Keys for programmatic AccessToken minting (Runner)

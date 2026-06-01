@@ -152,7 +152,7 @@ describe('McpGateway — authenticate', () => {
 });
 
 describe('McpGateway — kind/expiry guards', () => {
-  test('rejects vbn_mgmt_ keys (those auth the Runner, not the gateway)', async () => {
+  test('rejects vbn_mgmt_ keys (those auth /api/v1/mgmt/*, not the MCP gateway)', async () => {
     const { gateway } = await buildHarness();
     const { apiKey: mgmtKey } = generateApiKey('mgmt');
     await expect(gateway.authenticate(`Bearer ${mgmtKey}`)).rejects.toThrow(/management keys/i);

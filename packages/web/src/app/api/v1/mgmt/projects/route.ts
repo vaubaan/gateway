@@ -1,7 +1,7 @@
 /**
- * Projects + bindings discovery for the Coding Agent Runner.
+ * Projects + bindings discovery for ManagementKey-authenticated callers.
  *
- *   GET /api/v1/runner/projects
+ *   GET /api/v1/mgmt/projects
  *     Authorization: Bearer vbn_mgmt_…
  *
  *   returns 200 {
@@ -14,11 +14,11 @@
  *   }
  *
  * Lists every project of the org bound to the management key, along with
- * its provider bindings. The Runner uses `slug` as `projectSlug` on the
- * subsequent POST /api/v1/runner/tokens.
+ * its provider bindings. The caller uses `slug` as `projectSlug` on the
+ * subsequent POST /api/v1/mgmt/tokens.
  *
  * Spec : docs/spec/vaubaan-gateway.md §8.8.
- * ADR  : docs/decisions/org-management-keys-for-runner.md.
+ * ADR  : docs/decisions/programmatic-access-token-minting.md.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

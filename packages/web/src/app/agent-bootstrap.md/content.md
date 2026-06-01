@@ -11,11 +11,11 @@
 A **`vbn_live_*` access token**. It is:
 
 - Scoped to **one Project** in a Vaubaan organization.
-- Bound to a set of **roles** that the operator (or CAR) attached at mint time.
+- Bound to a set of **roles** attached at mint time.
 - Honest about its TTL — once `expires_at` passes, calls return `401`.
 
-Treat it like a password: never log it, never commit it. The runner that
-spawned you keeps it in memory only.
+Treat it like a password: never log it, never commit it. The bootstrap client
+that spawned you keeps it in memory only.
 
 ## 2. Endpoint and auth
 
@@ -164,12 +164,12 @@ exactly one.
 
 ## 6. Recipes
 
-### 6.1 Bootstrap a coding session (CAR + agent split)
+### 6.1 Bootstrap a coding session (bootstrap + agent split)
 
-The Vaubaan model is: **no git credentials on the runner VPS**. Both `clone`
+The Vaubaan model is: **no git credentials on the session host**. Both `clone`
 and `push` ask the gateway for a short-lived (1h) GitHub App install token.
 
-#### CAR — at session boot (role `github:provisioner`)
+#### Bootstrap — at session boot (role `github:provisioner`)
 
 ```bash
 RES=$(curl -sS https://vaubaan.com/mcp \
@@ -270,7 +270,7 @@ The gateway is intentionally verbose on failures. Common ones :
 | `Vaubaan policy denied: …`                           | Your roles don't allow this tool or the constraints failed (e.g. wrong branch name, missing arg). | Read the rest of the message — it names the matched rule. Adjust args or ask for a different role. |
 | `tool '…' does not match any supported provider …`   | Typo in the tool name.                                                                            | Hit `tools/list` to re-check the exact name.                                                       |
 | `provider 'X' is not connected for organization '…'` | The operator hasn't connected provider X to the org yet.                                          | Tell the operator. You cannot self-serve.                                                          |
-| `access token has expired.`                          | Your `vbn_live_*` is past its TTL.                                                                | Ask for a fresh one. CAR usually rotates automatically.                                            |
+| `access token has expired.`                          | Your `vbn_live_*` is past its TTL.                                                                | Ask for a fresh one. The bootstrap client usually rotates automatically.                           |
 | `Upstream call failed: …`                            | Provider API rejected the call (network, scope, repo not found…).                                 | Read the upstream payload echoed in the message ; usually it tells you exactly what's wrong.       |
 
 ## 8. Conventions and gotchas

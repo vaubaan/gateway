@@ -179,11 +179,12 @@ export const availableTools: readonly McpToolDeclaration[] = [
       required: ['owner', 'repo', 'issue_number', 'body'],
     },
   },
-  // Mint install token — kills host-side git creds for CAR + agent.
+  // Mint install token — kills host-side git creds for callers needing
+  // ephemeral GitHub App credentials (clone, push).
   {
     name: 'github__mint_install_token',
     description:
-      'Mint a short-lived (1h) GitHub App installation token scoped to the project repos. Used by CAR (clone) and agents (push); the caller role pins the purpose. ADR mint-install-token-runner-credential.',
+      'Mint a short-lived (1h) GitHub App installation token scoped to the project repos. Used for clone or push flows; the caller role pins the purpose. ADR mint-install-token-credential.',
     inputSchema: {
       type: 'object',
       properties: {

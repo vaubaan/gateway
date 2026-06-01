@@ -1,20 +1,21 @@
 /**
- * Roles discovery for the Coding Agent Runner.
+ * Roles discovery for ManagementKey-authenticated callers.
  *
- *   GET /api/v1/runner/roles
+ *   GET /api/v1/mgmt/roles
  *     Authorization: Bearer vbn_mgmt_…
  *
  *   returns 200 { roles: [{ id, name, provider, description, is_builtin }] }
  *
- * Lists every Role the bound org can attach to a runner-minted AccessToken :
+ * Lists every Role the bound org can attach to a programmatically minted
+ * AccessToken :
  *   - global builtins (`organization_id IS NULL`, `is_builtin = true`)
  *   - custom roles scoped to the bound org (`organization_id = $orgId`)
  *
- * The Runner uses the returned `id` field as `roleIds[]` on the subsequent
- * POST /api/v1/runner/tokens.
+ * The caller uses the returned `id` field as `roleIds[]` on the subsequent
+ * POST /api/v1/mgmt/tokens.
  *
  * Spec : docs/spec/vaubaan-gateway.md §8.8.
- * ADR  : docs/decisions/org-management-keys-for-runner.md.
+ * ADR  : docs/decisions/programmatic-access-token-minting.md.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
     .returns<RoleRow[]>();
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  // Hide the org_id field from the wire — it's not actionable for the Runner.
+  // Hide the org_id field from the wire — it's not actionable for the caller.
   const roles = (data ?? []).map(({ organization_id: _orgId, ...rest }) => rest);
   return NextResponse.json({ roles });
 }

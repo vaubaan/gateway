@@ -1,8 +1,8 @@
 /**
- * Programmatic AccessToken mint — used by the Coding Agent Runner to spin up
- * an ephemeral MCP credential for a single coding session.
+ * Programmatic AccessToken mint — spin up an ephemeral MCP credential
+ * without a user session.
  *
- *   POST /api/v1/runner/tokens
+ *   POST /api/v1/mgmt/tokens
  *     Authorization: Bearer vbn_mgmt_…
  *     body: { projectSlug, roleIds, name?, ttlHours? }
  *
@@ -19,8 +19,8 @@
  *
  * The gateway enforces `expires_at` at the hot-path.
  *
- * Spec : docs/spec/vaubaan-gateway.md §3.1, §8 (Runner endpoint).
- * ADR  : docs/decisions/org-management-keys-for-runner.md.
+ * Spec : docs/spec/vaubaan-gateway.md §3.1, §8 (mgmt endpoints).
+ * ADR  : docs/decisions/programmatic-access-token-minting.md.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -102,7 +102,7 @@ export async function POST(req: NextRequest) {
   const ttlHours = body.ttlHours ?? DEFAULT_TTL_HOURS;
   const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
 
-  const tokenName = body.name ?? `runner-${randomSuffix()}`;
+  const tokenName = body.name ?? `mgmt-${randomSuffix()}`;
   const { apiKey, apiKeyPrefix } = generateApiKey('live');
   const apiKeyHash = await hashApiKey(apiKey);
 
@@ -115,7 +115,7 @@ export async function POST(req: NextRequest) {
       api_key_hash: apiKeyHash,
       status: 'active',
       expires_at: expiresAt,
-      // created_by stays null — the Runner is not an auth.users row.
+      // created_by stays null — the caller is not an auth.users row.
     })
     .select('id, name, project_id, api_key_prefix, status, expires_at, created_at')
     .single<{

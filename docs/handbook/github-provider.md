@@ -85,10 +85,10 @@ PEM avec `\n` escaped). Jamais en DB.
 - **Write branches** : `github__create_branch`.
 - **Write files** : `github__create_or_update_file`, `github__push_files`.
 - **Write PR / comments** : `github__create_pull_request`, `github__add_issue_comment`.
-- **Runner credential** : `github__mint_install_token` (cf. ADR
-  `mint-install-token-runner-credential`) — mint un token ghs\_\* court-vivant
-  scopé aux repos du Project. CAR (clone) et l'agent (push) appellent ce tool
-  au lieu de stocker un PAT sur le runner.
+- **Ephemeral credential** : `github__mint_install_token` (cf. ADR
+  `mint-install-token-credential`) — mint un token ghs\_\* court-vivant
+  scopé aux repos du Project. Les flows clone et push appellent ce tool au
+  lieu de stocker un PAT sur le host d'exécution.
 - **Dangerous (aucun builtin role ne les autorise — default-deny)** :
   `github__merge_pull_request`, `github__delete_file`. Pour les autoriser,
   créer un role custom org-scopé.
@@ -135,8 +135,8 @@ Seedés en migration `0001_init.sql` :
   PRs vers `main`, pas de merge, pas de delete. **Inclut** `mint_install_token`
   avec `purpose IN ('clone','push')`.
 - `github:provisioner` (migration `0005`, **internal**) — mint
-  `github__mint_install_token` avec `purpose='clone'` uniquement. Utilisé par
-  CAR au bootstrap d'une session, **ne pas assigner à des humains**.
+  `github__mint_install_token` avec `purpose='clone'` uniquement. Utilisé
+  au bootstrap d'une session, **ne pas assigner à des humains**.
 
 ## Tests
 

@@ -59,7 +59,7 @@ npx vitest run packages/policy-engine    # one package
   unknown tool throws.
 - `resolveTarget('project.repos', bindings)` returns concrete `resource_ref`s,
   `resolveTarget('*', ...)` returns wildcard.
-- `github__mint_install_token` (ADR mint-install-token-runner-credential):
+- `github__mint_install_token` (ADR mint-install-token-credential):
   `purpose=clone` → body `contents:read`; `purpose=push` → body
   `contents:write + pull_requests:write + metadata:read`; `repoFullName`
   outside project bindings throws; omitting `repoFullName` mints for every

@@ -1,12 +1,12 @@
 /**
- * Bearer-auth guard for /api/v1/runner/* routes.
+ * Bearer-auth guard for /api/v1/mgmt/* routes.
  *
  * Verifies an `Authorization: Bearer vbn_mgmt_…` header against the
  * `org_management_keys` table (argon2id), returns the bound organization,
  * and best-effort touches `last_used_at`.
  *
  * Spec : docs/spec/vaubaan-gateway.md §3.1 (ManagementKey), §8.
- * ADR  : docs/decisions/org-management-keys-for-runner.md.
+ * ADR  : docs/decisions/programmatic-access-token-minting.md.
  */
 
 import { NextResponse } from 'next/server';

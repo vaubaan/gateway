@@ -149,8 +149,9 @@ export function OrgSettings({
           </CardHeader>
           <CardBody>
             <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-              Org-scoped Bearer credentials used by external services (e.g. the Coding Agent Runner)
-              to mint short-lived AccessTokens via <Code>POST /api/v1/runner/tokens</Code>.
+              Org-scoped Bearer credentials used by programmatic clients (CI jobs, bootstrap
+              scripts, automation) to mint short-lived AccessTokens via{' '}
+              <Code>POST /api/v1/mgmt/tokens</Code>.
             </p>
             <Link
               href={`/orgs/${encodeURIComponent(org.slug)}/settings/management-keys`}

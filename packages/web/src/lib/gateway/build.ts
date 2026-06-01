@@ -157,8 +157,7 @@ export function buildGateway(opts: {
 
   // GitHub: PAT-fallback always available ; App credentials optional.
   // loadGithubBindings is required by github__mint_install_token to scope the
-  // minted token to the project's repos (CAR clone / agent push, ADR
-  // mint-install-token-runner-credential).
+  // minted token to the project's repos — ADR mint-install-token-credential.
   const loadGithubBindings = async (projectId: string): Promise<ProviderBinding[]> => {
     const { data } = await supabase
       .from('provider_bindings')

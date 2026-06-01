@@ -96,10 +96,10 @@ export function ManagementKeysPanel({
       </header>
 
       <Banner tone="info">
-        Management keys authenticate <strong>external services</strong> (e.g. the Coding Agent
-        Runner) to mint short-lived AccessTokens through <Code>POST /api/v1/runner/tokens</Code>.
-        They cannot consume the MCP gateway directly — only AccessTokens (<Code>vbn_live_…</Code>)
-        can.
+        Management keys authenticate <strong>programmatic clients</strong> (CI jobs, bootstrap
+        scripts, automation) to mint short-lived AccessTokens through{' '}
+        <Code>POST /api/v1/mgmt/tokens</Code>. They cannot consume the MCP gateway directly — only
+        AccessTokens (<Code>vbn_live_…</Code>) can.
       </Banner>
 
       {freshApiKey && <FreshKeyCard apiKey={freshApiKey} onDismiss={() => setFreshApiKey(null)} />}
@@ -122,7 +122,7 @@ export function ManagementKeysPanel({
                   }
                   pattern="^[a-z0-9](-?[a-z0-9])*$"
                   required
-                  placeholder="coding-agent-runner"
+                  placeholder="ci-bootstrap"
                 />
               </Field>
               {createError && (
@@ -197,7 +197,7 @@ export function ManagementKeysPanel({
           </CardBody>
         </Card>
 
-        <RunnerSnippetReferenceCard />
+        <MgmtSnippetReferenceCard />
       </div>
 
       {confirmKey && (
@@ -205,7 +205,7 @@ export function ManagementKeysPanel({
           title={`Delete ${confirmKey.name}?`}
           body={
             <>
-              The Runner using this management key will start failing immediately. AccessTokens
+              Any client using this management key will start failing immediately. AccessTokens
               already minted with this key remain valid until their <Code>expires_at</Code>. Cannot
               be undone.
             </>
@@ -227,24 +227,24 @@ export function ManagementKeysPanel({
   );
 }
 
-function buildRunnerSnippet(apiKey: string, baseUrl: string): string {
-  return `# Vaubaan — Coding Agent Runner integration
+function buildMgmtSnippet(apiKey: string, baseUrl: string): string {
+  return `# Vaubaan — Management API integration
 
 # 1. Configure
 export VAUBAAN_MCP_GATEWAY_BASE_URL="${baseUrl}"
 export VAUBAAN_MCP_GATEWAY_MGMT_KEY="${apiKey}"
 
 # 2. Discover available roles
-curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/roles" \\
+curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/roles" \\
   -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
 
 # 3. Discover projects + bindings
-curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/projects" \\
+curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/projects" \\
   -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
 
 # 4. Mint an ephemeral AccessToken for a coding session
 #    ttlHours default 24, max 168 (7 days). Response.api_key visible ONCE.
-curl -sS -X POST "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/tokens" \\
+curl -sS -X POST "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/tokens" \\
   -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY" \\
   -H "Content-Type: application/json" \\
   -d '{ "projectSlug": "<slug>", "roleIds": ["<role-id>"], "ttlHours": 24 }'
@@ -259,7 +259,11 @@ curl -sS -X POST "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/runner/tokens" \\
 #   }
 # }
 
-# Full guide: ${baseUrl}/docs/runner
+# 6. After the session, revoke the AccessToken to avoid accumulating rows:
+curl -sS -X DELETE "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/tokens/<token-id>" \\
+  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
+
+# Full guide: ${baseUrl}/docs/mgmt
 `;
 }
 
@@ -332,7 +336,7 @@ function CopyButton({
 
 function FreshKeyCard({ apiKey, onDismiss }: { apiKey: string; onDismiss: () => void }) {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com';
-  const snippet = buildRunnerSnippet(apiKey, baseUrl);
+  const snippet = buildMgmtSnippet(apiKey, baseUrl);
 
   return (
     <Card style={{ marginTop: 'var(--space-4)', borderColor: 'var(--accent-warning-fg)' }}>
@@ -371,13 +375,13 @@ function FreshKeyCard({ apiKey, onDismiss }: { apiKey: string; onDismiss: () => 
               padding: 'var(--space-2) 0',
             }}
           >
-            Runner setup snippet — paste this into your other project for an LLM/agent to scaffold
-            the integration
+            Setup snippet — paste this into your other project for an LLM/agent to scaffold the
+            integration
           </summary>
           <p style={{ color: 'var(--text-muted)', marginTop: 'var(--space-2)' }}>
             Drops the full discovery + mint flow with your key already inlined. Full guide:{' '}
-            <a href="/docs/runner" target="_blank" rel="noreferrer">
-              /docs/runner
+            <a href="/docs/mgmt" target="_blank" rel="noreferrer">
+              /docs/mgmt
             </a>
             .
           </p>
@@ -405,18 +409,18 @@ function FreshKeyCard({ apiKey, onDismiss }: { apiKey: string; onDismiss: () => 
 }
 
 /**
- * Always-visible card: same Runner setup snippet as the fresh-key card, but
+ * Always-visible card: same management API snippet as the fresh-key card, but
  * with a placeholder where the key would go. Lives at the bottom of the
  * management-keys panel so an operator can grab the integration script anytime
  * — long after the original key was dismissed.
  */
-function RunnerSnippetReferenceCard() {
+function MgmtSnippetReferenceCard() {
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com';
-  const snippet = buildRunnerSnippet('<paste-your-mgmt-key>', baseUrl);
+  const snippet = buildMgmtSnippet('<paste-your-mgmt-key>', baseUrl);
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Runner setup snippet</CardTitle>
+        <CardTitle>Management API setup snippet</CardTitle>
       </CardHeader>
       <CardBody>
         <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>

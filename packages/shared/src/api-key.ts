@@ -4,8 +4,8 @@
  * Three flavours share the same shape `vbn_<kind>_<8-char prefix>_<32-char base62 secret>`:
  *   - `live` : AccessToken (project-scoped, consumed at the MCP gateway).
  *   - `test` : Test AccessToken (same role, separate prefix for safety in fixtures).
- *   - `mgmt` : Org Management Key (org-scoped, used by the Runner to mint
- *              AccessTokens via POST /api/v1/runner/tokens — never accepted
+ *   - `mgmt` : Org Management Key (org-scoped, used to mint AccessTokens
+ *              programmatically via POST /api/v1/mgmt/tokens — never accepted
  *              at the MCP gateway).
  *
  * Hash : argon2id with OWASP-2023 recommended params (19 MiB, 2 iters).
@@ -13,7 +13,7 @@
  * Spec : docs/spec/vaubaan-gateway.md §3.1, §6.2.
  * ADRs :
  *   - docs/decisions/api-key-format-vbn-live-argon2id.md
- *   - docs/decisions/org-management-keys-for-runner.md
+ *   - docs/decisions/programmatic-access-token-minting.md
  */
 
 import { randomBytes } from 'node:crypto';

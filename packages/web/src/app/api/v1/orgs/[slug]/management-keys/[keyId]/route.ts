@@ -3,8 +3,9 @@
  *
  *   DELETE /api/v1/orgs/:slug/management-keys/:keyId
  *
- * Hard delete (the key only authenticates the Runner — we don't keep tombstones
- * for it like we do for AccessTokens, which are referenced by audit_log rows).
+ * Hard delete (a management key only authenticates /api/v1/mgmt/* calls —
+ * we don't keep tombstones for it like we do for AccessTokens, which are
+ * referenced by audit_log rows).
  *
  * Spec : docs/spec/vaubaan-gateway.md §3.1, §8.
  */

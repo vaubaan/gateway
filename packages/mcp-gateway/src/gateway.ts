@@ -91,8 +91,8 @@ export class McpGateway {
     const raw = authHeader.slice('bearer '.length).trim();
     const parsed = parseApiKey(raw);
     if (!parsed) throw new AuthError('api_key format invalid.');
-    // `vbn_mgmt_*` is the Runner credential — it authenticates against
-    // /api/v1/runner/*, not the MCP gateway. Reject upfront.
+    // `vbn_mgmt_*` is an admin credential — it authenticates against
+    // /api/v1/mgmt/*, not the MCP gateway. Reject upfront.
     if (parsed.kind === 'mgmt') {
       throw new AuthError(
         'management keys (vbn_mgmt_…) cannot consume the MCP gateway. Use an AccessToken (vbn_live_…).',
