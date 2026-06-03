@@ -11,15 +11,14 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# .npmrc uses NPM_READ_TOKEN (read:packages scope) for @sbw-vaubaan GH Packages.
-# NPM_PUBLISH_TOKEN kept for reference; NPM_READ_TOKEN is the one .npmrc reads.
-# PAT used because the org plan disables cross-repo GITHUB_TOKEN reads on packages.
+# .npmrc reads NPM_READ_TOKEN for @sbw-vaubaan GH Packages.
+# Vercel has a dedicated NPM_READ_TOKEN secret (read:packages scope).
+# CI reuses NPM_PUBLISH_TOKEN (same PAT, broader scope) under that name.
 permissions:
   contents: read
 
 env:
-  NPM_READ_TOKEN: ${{ secrets.NPM_READ_TOKEN }}
-  NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+  NPM_READ_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
 jobs:
   check:
