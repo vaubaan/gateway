@@ -28,6 +28,25 @@ interface AdminUser {
   email: string;
 }
 
+/** Walk all listUsers() pages to find a user by email. Returns the user ID or undefined. */
+async function lookupUserByEmail(
+  svc: ReturnType<typeof getSupabaseServiceClient>,
+  email: string,
+): Promise<string | undefined> {
+  const perPage = 1000;
+  let page = 1;
+  let hasMore = true;
+  while (hasMore) {
+    const { data, error } = await svc.auth.admin.listUsers({ page, perPage });
+    if (error || !data?.users.length) return undefined;
+    const found = (data.users as AdminUser[]).find((u) => u.email === email);
+    if (found) return found.id;
+    hasMore = data.users.length >= perPage;
+    page++;
+  }
+  return undefined;
+}
+
 export async function POST(req: NextRequest) {
   let body: z.infer<typeof BodySchema>;
   try {
@@ -44,13 +63,12 @@ export async function POST(req: NextRequest) {
 
   const svc = getSupabaseServiceClient();
 
-  // Lookup existing user by email.
-  const { data: list } = await svc.auth.admin.listUsers();
-  const existing = (list.users as AdminUser[] | undefined)?.find((u) => u.email === body.email);
-
-  let userId = existing?.id;
+  // Find user by email across all auth.users pages.
+  let userId = await lookupUserByEmail(svc, body.email);
   let invited = false;
+
   if (!userId) {
+    // New user — create account and queue invite email.
     const { data: created, error: createErr } = await svc.auth.admin.createUser({
       email: body.email,
       email_confirm: false,
@@ -66,12 +84,24 @@ export async function POST(req: NextRequest) {
     await svc.auth.admin.generateLink({ type: 'invite', email: body.email }).catch(() => null);
   }
 
+  // Reject if user is already a member of THIS org (the true duplicate case).
+  const { data: existing } = await svc
+    .from('org_members')
+    .select('user_id')
+    .eq('organization_id', guard.orgId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (existing) {
+    return NextResponse.json(
+      { error: 'User is already a member of this organization.' },
+      { status: 409 },
+    );
+  }
+
   const { error: memErr } = await svc
     .from('org_members')
-    .upsert(
-      { organization_id: guard.orgId, user_id: userId },
-      { onConflict: 'organization_id,user_id' },
-    );
+    .insert({ organization_id: guard.orgId, user_id: userId });
   if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
 
   return NextResponse.json({ user_id: userId, invited });
