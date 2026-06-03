@@ -9,10 +9,7 @@
     "node": ">=20",
     "npm": ">=10"
   },
-  "workspaces": [
-    "packages/*",
-    "packages/providers/*"
-  ],
+  "workspaces": ["packages/*", "packages/providers/*"],
   "scripts": {
     "type-check": "npm run --workspaces --if-present type-check",
     "lint": "eslint . --max-warnings=0",
