@@ -1,1 +1,97 @@
-LyoqCiAqIFNtb2tlIHRlc3RzIGZvciBQT1NUIC9hcGkvdjEvbWVtYmVycy4KICoKICogVGVzdHMgdGhhdCBkb24ndCBuZWVkIGEgREI6CiAqICAgLSA0MDEgLyA0MDMgd2hlbiBubyBzZXNzaW9uIGNvb2tpZS4KICogICAtIDQwMCB3aGVuIGJvZHkgaXMgaW52YWxpZC4KICoKICogVGVzdHMgdGhhdCBuZWVkIGEgbGl2ZSBEQiAoc2tpcHBlZCBpbiBDSSB3aXRoIFNLSVBfTElWRT0xKToKICogICAtIDQwOSB3aGVuIHVzZXIgaXMgYWxyZWFkeSBhIG1lbWJlciBvZiB0aGUgb3JnLgogKgogKiBIYXBweS1wYXRoIGNhc2VzIChhbHNvIG5lZWQgbGl2ZSBEQiDigJQgZG9jdW1lbnQgb25seSk6CiAqICAgLSBFeGlzdGluZyBnbG9iYWwgdXNlciwgbm90IHlldCBhIG1lbWJlciDihpIgMjAwIHsgaW52aXRlZDogZmFsc2UgfQogKiAgIC0gTmV3IGVtYWlsIOKGkiAyMDAgeyBpbnZpdGVkOiB0cnVlIH0KICovCgppbXBvcnQgeyBkZXNjcmliZSwgZXhwZWN0LCB0ZXN0IH0gZnJvbSAndml0ZXN0JzsKCmNvbnN0IEJBU0UgPSBwcm9jZXNzLmVudi5FMkVfQkFTRV9VUkwgPz8gJ2h0dHBzOi8vdmF1YmFhbi5jb20nOwoKZGVzY3JpYmUoJ1JFU1QgUE9TVCAvYXBpL3YxL21lbWJlcnMg4oCUIG5vIGF1dGgnLCAoKSA9PiB7CiAgdGVzdCgncmVqZWN0cyB1bmF1dGhlbnRpY2F0ZWQgcmVxdWVzdCcsIGFzeW5jICgpID0+IHsKICAgIGNvbnN0IHJlcyA9IGF3YWl0IGZldGNoKGAke0JBU0V9L2FwaS92MS9tZW1iZXJzYCwgewogICAgICBtZXRob2Q6ICdQT1NUJywKICAgICAgaGVhZGVyczogeyAnQ29udGVudC1UeXBlJzogJ2FwcGxpY2F0aW9uL2pzb24nIH0sCiAgICAgIGJvZHk6IEpTT04uc3RyaW5naWZ5KHsgb3JnU2x1ZzogJ3Rlc3Qtb3JnJywgZW1haWw6ICd0ZXN0QGV4YW1wbGUuY29tJyB9KSwKICAgIH0pOwogICAgZXhwZWN0KFs0MDEsIDQwM10pLnRvQ29udGFpbihyZXMuc3RhdHVzKTsKICB9KTsKfSk7CgpkZXNjcmliZSgnUkVTVCBQT1NUIC9hcGkvdjEvbWVtYmVycyDigJQgdmFsaWRhdGlvbicsICgpID0+IHsKICB0ZXN0KCdyZXR1cm5zIDQwMCBmb3IgbWlzc2luZyBvcmdTbHVnJywgYXN5bmMgKCkgPT4gewogICAgY29uc3QgcmVzID0gYXdhaXQgZmV0Y2goYCR7QkFTRX0vYXBpL3YxL21lbWJlcnNgLCB7CiAgICAgIG1ldGhvZDogJ1BPU1QnLAogICAgICBoZWFkZXJzOiB7ICdDb250ZW50LVR5cGUnOiAnYXBwbGljYXRpb24vanNvbicgfSwKICAgICAgYm9keTogSlNPTi5zdHJpbmdpZnkoeyBlbWFpbDogJ3Rlc3RAZXhhbXBsZS5jb20nIH0pLAogICAgfSk7CiAgICBleHBlY3QocmVzLnN0YXR1cykudG9CZSg0MDApOwogIH0pOwoKICB0ZXN0KCdyZXR1cm5zIDQwMCBmb3IgaW52YWxpZCBlbWFpbCcsIGFzeW5jICgpID0+IHsKICAgIGNvbnN0IHJlcyA9IGF3YWl0IGZldGNoKGAke0JBU0V9L2FwaS92MS9tZW1iZXJzYCwgewogICAgICBtZXRob2Q6ICdQT1NUJywKICAgICAgaGVhZGVyczogeyAnQ29udGVudC1UeXBlJzogJ2FwcGxpY2F0aW9uL2pzb24nIH0sCiAgICAgIGJvZHk6IEpTT04uc3RyaW5naWZ5KHsgb3JnU2x1ZzogJ3Rlc3Qtb3JnJywgZW1haWw6ICdub3QtYW4tZW1haWwnIH0pLAogICAgfSk7CiAgICBleHBlY3QocmVzLnN0YXR1cykudG9CZSg0MDApOwogIH0pOwoKICB0ZXN0KCdyZXR1cm5zIDQwMCBmb3IgbWlzc2luZyBib2R5IGZpZWxkcycsIGFzeW5jICgpID0+IHsKICAgIGNvbnN0IHJlcyA9IGF3YWl0IGZldGNoKGAke0JBU0V9L2FwaS92MS9tZW1iZXJzYCwgewogICAgICBtZXRob2Q6ICdQT1NUJywKICAgICAgaGVhZGVyczogeyAnQ29udGVudC1UeXBlJzogJ2FwcGxpY2F0aW9uL2pzb24nIH0sCiAgICAgIGJvZHk6IEpTT04uc3RyaW5naWZ5KHt9KSwKICAgIH0pOwogICAgZXhwZWN0KHJlcy5zdGF0dXMpLnRvQmUoNDAwKTsKICB9KTsKfSk7CgovLyBUaGVzZSB0ZXN0cyByZXF1aXJlIGEgcmVhbCBEQiBhbmQgYSB2YWxpZCBzZXNzaW9uLiBSdW4gdGhlbSBhZ2FpbnN0IHN0YWdpbmcKLy8gd2l0aCBTS0lQX0xJVkUgdW5zZXQuIEluIENJLCBzZXQgU0tJUF9MSVZFPTEgdG8gc2tpcC4KZGVzY3JpYmUuc2tpcElmKHByb2Nlc3MuZW52LlNLSVBfTElWRSA9PT0gJzEnKSgKICAnUkVTVCBQT1NUIC9hcGkvdjEvbWVtYmVycyDigJQgbGl2ZSBEQicsCiAgKCkgPT4gewogICAgdGVzdCgncmV0dXJucyA0MDkgd2hlbiB1c2VyIGlzIGFscmVhZHkgYSBtZW1iZXIgb2YgdGhlIG9yZycsIGFzeW5jICgpID0+IHsKICAgICAgLy8gUHJlcmVxdWlzaXRlczoKICAgICAgLy8gICAtIEFVVEhfQ09PS0lFIG11c3QgYmUgYSB2YWxpZCBzZXNzaW9uIGNvb2tpZSBmb3IgYW4gb3JnIG1lbWJlci4KICAgICAgLy8gICAtIEVYSVNUSU5HX01FTUJFUl9FTUFJTCBtdXN0IGJlIGFuIGVtYWlsIGFscmVhZHkgaW4gb3JnX21lbWJlcnMgZm9yIHRoYXQgb3JnLgogICAgICAvLyAgIC0gT1JHX1NMVUcgbXVzdCBiZSB0aGUgb3JnJ3Mgc2x1Zy4KICAgICAgY29uc3QgY29va2llID0gcHJvY2Vzcy5lbnYuQVVUSF9DT09LSUUgPz8gJyc7CiAgICAgIGNvbnN0IGVtYWlsID0gcHJvY2Vzcy5lbnYuRVhJU1RJTkdfTUVNQkVSX0VNQUlMID8/ICcnOwogICAgICBjb25zdCBvcmdTbHVnID0gcHJvY2Vzcy5lbnYuT1JHX1NMVUcgPz8gJyc7CgogICAgICBjb25zdCByZXMgPSBhd2FpdCBmZXRjaChgJHtCQVNFfS9hcGkvdjEvbWVtYmVyc2AsIHsKICAgICAgICBtZXRob2Q6ICdQT1NUJywKICAgICAgICBoZWFkZXJzOiB7CiAgICAgICAgICAnQ29udGVudC1UeXBlJzogJ2FwcGxpY2F0aW9uL2pzb24nLAogICAgICAgICAgQ29va2llOiBjb29raWUsCiAgICAgICAgfSwKICAgICAgICBib2R5OiBKU09OLnN0cmluZ2lmeSh7IG9yZ1NsdWcsIGVtYWlsIH0pLAogICAgICB9KTsKICAgICAgZXhwZWN0KHJlcy5zdGF0dXMpLnRvQmUoNDA5KTsKICAgICAgY29uc3QganNvbiA9IGF3YWl0IHJlcy5qc29uKCkgYXMgeyBlcnJvcjogc3RyaW5nIH07CiAgICAgIGV4cGVjdChqc29uLmVycm9yKS50b0JlKCdVc2VyIGlzIGFscmVhZHkgYSBtZW1iZXIgb2YgdGhpcyBvcmdhbml6YXRpb24uJyk7CiAgICB9KTsKCiAgICAvLyBIYXBweS1wYXRoIGNhc2VzIChyZXF1aXJlIGxpdmUgREIgKyBpbnZpdGUtY2FwYWJsZSBTdXBhYmFzZSBwcm9qZWN0KToKICAgIC8vCiAgICAvLyB0ZXN0KCdleGlzdGluZyBnbG9iYWwgdXNlciwgbm90IHlldCBhIG1lbWJlciDihpIgMjAwIHsgaW52aXRlZDogZmFsc2UgfScsIC4uLikKICAgIC8vICAgUE9TVCB3aXRoIGVtYWlsIG9mIGEgdXNlciB0aGF0IGV4aXN0cyBpbiBhdXRoLnVzZXJzIGJ1dCBpcyBub3QgaW4gb3JnX21lbWJlcnMKICAgIC8vICAgPiBleHBlY3QgMjAwLCBib2R5Lmludml0ZWQgPT09IGZhbHNlCiAgICAvLwogICAgLy8gdGVzdCgnbmV3IGVtYWlsIOKGkiAyMDAgeyBpbnZpdGVkOiB0cnVlIH0nLCAuLi4pCiAgICAvLyAgIFBPU1Qgd2l0aCBhIGZyZXNoIGVtYWlsIG5vdCBpbiBhdXRoLnVzZXJzCiAgICAvLyAgID4gZXhwZWN0IDIwMCwgYm9keS5pbnZpdGVkID09PSB0cnVlCiAgfSwKKTsK
+/**
+ * Smoke tests for POST /api/v1/members.
+ *
+ * Tests that don't need a DB:
+ *   - 401 / 403 when no session cookie.
+ *   - 400 when body is invalid.
+ *
+ * Tests that need a live DB (skipped in CI with SKIP_LIVE=1):
+ *   - 409 when user is already a member of the org.
+ *
+ * Happy-path cases (also need live DB — document only):
+ *   - Existing global user, not yet a member → 200 { invited: false }
+ *   - New email → 200 { invited: true }
+ */
+
+import { describe, expect, test } from 'vitest';
+
+const BASE = process.env.E2E_BASE_URL ?? 'https://vaubaan.com';
+
+describe('REST POST /api/v1/members — no auth', () => {
+  test('rejects unauthenticated request', async () => {
+    const res = await fetch(`${BASE}/api/v1/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgSlug: 'test-org', email: 'test@example.com' }),
+    });
+    expect([401, 403]).toContain(res.status);
+  });
+});
+
+describe('REST POST /api/v1/members — validation', () => {
+  test('returns 400 for missing orgSlug', async () => {
+    const res = await fetch(`${BASE}/api/v1/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'test@example.com' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('returns 400 for invalid email', async () => {
+    const res = await fetch(`${BASE}/api/v1/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgSlug: 'test-org', email: 'not-an-email' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  test('returns 400 for missing body fields', async () => {
+    const res = await fetch(`${BASE}/api/v1/members`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    expect(res.status).toBe(400);
+  });
+});
+
+// These tests require a real DB and a valid session. Run them against staging
+// with SKIP_LIVE unset. In CI, set SKIP_LIVE=1 to skip.
+describe.skipIf(process.env.SKIP_LIVE === '1')(
+  'REST POST /api/v1/members — live DB',
+  () => {
+    test('returns 409 when user is already a member of the org', async () => {
+      // Prerequisites:
+      //   - AUTH_COOKIE must be a valid session cookie for an org member.
+      //   - EXISTING_MEMBER_EMAIL must be an email already in org_members for that org.
+      //   - ORG_SLUG must be the org's slug.
+      const cookie = process.env.AUTH_COOKIE ?? '';
+      const email = process.env.EXISTING_MEMBER_EMAIL ?? '';
+      const orgSlug = process.env.ORG_SLUG ?? '';
+
+      const res = await fetch(`${BASE}/api/v1/members`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Cookie: cookie,
+        },
+        body: JSON.stringify({ orgSlug, email }),
+      });
+      expect(res.status).toBe(409);
+      const json = (await res.json()) as { error: string };
+      expect(json.error).toBe('User is already a member of this organization.');
+    });
+
+    // Happy-path cases (require live DB + invite-capable Supabase project):
+    //
+    // test('existing global user, not yet a member → 200 { invited: false }', ...)
+    //   POST with email of a user that exists in auth.users but is not in org_members
+    //   > expect 200, body.invited === false
+    //
+    // test('new email → 200 { invited: true }', ...)
+    //   POST with a fresh email not in auth.users
+    //   > expect 200, body.invited === true
+  },
+);
