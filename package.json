@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "version": "0.0.0",
-  "description": "Policy-enforcing MCP gateway for coding agents \u2014 Vaubaan v4",
+  "description": "Policy-enforcing MCP gateway for coding agents — Vaubaan v4",
   "license": "UNLICENSED",
   "engines": {
     "node": ">=20",
@@ -40,11 +40,11 @@
     "typescript-eslint": "8.59.4",
     "vitest": "3.2.4"
   },
-  "optionalDependencies": {
-    "@sbw-vaubaan/harness": "^0.4.2"
-  },
   "dependencies": {
     "@types/pg": "^8.20.0",
     "pg": "^8.21.0"
+  },
+  "optionalDependencies": {
+    "@sbw-vaubaan/harness": "^0.4.2"
   }
 }
