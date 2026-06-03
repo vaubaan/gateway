@@ -1,1 +1,33 @@
-bmFtZTogY2kKCm9uOgogIHB1c2g6CiAgICBicmFuY2hlczogW21haW5dCiAgcHVsbF9yZXF1ZXN0OgogICAgYnJhbmNoZXM6IFttYWluXQogIHdvcmtmbG93X2Rpc3BhdGNoOgoKY29uY3VycmVuY3k6CiAgZ3JvdXA6IGNpLSR7eyBnaXRodWIucmVmIH19CiAgY2FuY2VsLWluLXByb2dyZXNzOiB0cnVlCgojIEBzYnctdmF1YmFhbi9oYXJuZXNzIGlzIG9wdGlvbmFsRGVwZW5kZW5jaWVzIOKAlCBucG0gaW5zdGFsbCBza2lwcyBpdCBncmFjZWZ1bGx5CiMgd2hlbiBOUE1fUkVBRF9UT0tFTiBpcyBhYnNlbnQuIE9ubHkgVmVyY2VsIGFuZCBsb2NhbCBkZXYgbmVlZCBpdC4KcGVybWlzc2lvbnM6CiAgY29udGVudHM6IHJlYWQKCmpvYnM6CiAgY2hlY2s6CiAgICBydW5zLW9uOiB1YnVudHUtbGF0ZXN0CiAgICBzdGVwczoKICAgICAgLSB1c2VzOiBhY3Rpb25zL2NoZWNrb3V0QHY0CiAgICAgIC0gdXNlczogYWN0aW9ucy9zZXR1cC1ub2RlQHY0CiAgICAgICAgd2l0aDoKICAgICAgICAgIG5vZGUtdmVyc2lvbjogJzIyJwogICAgICAgICAgY2FjaGU6IG5wbQogICAgICAtIHJ1bjogbnBtIGluc3RhbGwgLS1uby1hdWRpdCAtLW5vLWZ1bmQKICAgICAgLSBydW46IG5wbSBydW4gdHlwZS1jaGVjawogICAgICAtIHJ1bjogbnBtIHJ1biBsaW50CiAgICAgIC0gcnVuOiBucG0gcnVuIGZvcm1hdDpjaGVjawogICAgICAtIHJ1bjogbnBtIHJ1biBidWlsZAogICAgICAtIHJ1bjogbnBtIHJ1biB0ZXN0Cg==
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# @sbw-vaubaan/harness is optionalDependencies — npm install skips it gracefully
+# when NPM_READ_TOKEN is absent. Only Vercel and local dev need it.
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npm run type-check
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npm run test
