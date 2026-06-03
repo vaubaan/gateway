@@ -59,39 +59,36 @@ describe('REST POST /api/v1/members — validation', () => {
 
 // These tests require a real DB and a valid session. Run them against staging
 // with SKIP_LIVE unset. In CI, set SKIP_LIVE=1 to skip.
-describe.skipIf(process.env.SKIP_LIVE === '1')(
-  'REST POST /api/v1/members — live DB',
-  () => {
-    test('returns 409 when user is already a member of the org', async () => {
-      // Prerequisites:
-      //   - AUTH_COOKIE must be a valid session cookie for an org member.
-      //   - EXISTING_MEMBER_EMAIL must be an email already in org_members for that org.
-      //   - ORG_SLUG must be the org's slug.
-      const cookie = process.env.AUTH_COOKIE ?? '';
-      const email = process.env.EXISTING_MEMBER_EMAIL ?? '';
-      const orgSlug = process.env.ORG_SLUG ?? '';
+describe.skipIf(process.env.SKIP_LIVE === '1')('REST POST /api/v1/members — live DB', () => {
+  test('returns 409 when user is already a member of the org', async () => {
+    // Prerequisites:
+    //   - AUTH_COOKIE must be a valid session cookie for an org member.
+    //   - EXISTING_MEMBER_EMAIL must be an email already in org_members for that org.
+    //   - ORG_SLUG must be the org's slug.
+    const cookie = process.env.AUTH_COOKIE ?? '';
+    const email = process.env.EXISTING_MEMBER_EMAIL ?? '';
+    const orgSlug = process.env.ORG_SLUG ?? '';
 
-      const res = await fetch(`${BASE}/api/v1/members`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Cookie: cookie,
-        },
-        body: JSON.stringify({ orgSlug, email }),
-      });
-      expect(res.status).toBe(409);
-      const json = (await res.json()) as { error: string };
-      expect(json.error).toBe('User is already a member of this organization.');
+    const res = await fetch(`${BASE}/api/v1/members`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Cookie: cookie,
+      },
+      body: JSON.stringify({ orgSlug, email }),
     });
+    expect(res.status).toBe(409);
+    const json = (await res.json()) as { error: string };
+    expect(json.error).toBe('User is already a member of this organization.');
+  });
 
-    // Happy-path cases (require live DB + invite-capable Supabase project):
-    //
-    // test('existing global user, not yet a member → 200 { invited: false }', ...)
-    //   POST with email of a user that exists in auth.users but is not in org_members
-    //   > expect 200, body.invited === false
-    //
-    // test('new email → 200 { invited: true }', ...)
-    //   POST with a fresh email not in auth.users
-    //   > expect 200, body.invited === true
-  },
-);
+  // Happy-path cases (require live DB + invite-capable Supabase project):
+  //
+  // test('existing global user, not yet a member → 200 { invited: false }', ...)
+  //   POST with email of a user that exists in auth.users but is not in org_members
+  //   → expect 200, body.invited === false
+  //
+  // test('new email → 200 { invited: true }', ...)
+  //   POST with a fresh email not in auth.users
+  //   → expect 200, body.invited === true
+});
