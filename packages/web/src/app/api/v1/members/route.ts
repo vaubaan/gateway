@@ -1,1 +1,108 @@
-LyoqCiAqIFBPU1QgL2FwaS92MS9tZW1iZXJzICBib2R5OiB7IG9yZ1NsdWcsIGVtYWlsIH0KICoKICogQWRkcyBhIHVzZXIgdG8gYW4gT3JnLiBJZiB0aGUgdXNlciBkb2Vzbid0IGV4aXN0IGluIGF1dGgudXNlcnMsIHdlIGludml0ZQogKiB0aGVtIChTdXBhYmFzZSBBZG1pbiBjcmVhdGVVc2VyICsgZ2VuZXJhdGVMaW5rIHR5cGU9J2ludml0ZScpLgogKgogKiBNZW1iZXJzaGlwIGlzIGZsYXQg4oCUIGFueSBvcmcgbWVtYmVyIGhhcyBmdWxsIFJXLiBUaGUgb3JnJ3MgYG93bmVyX2lkYCBpcwogKiBzZXBhcmF0ZSAoc2V0IGF0IG9yZyBjcmVhdGlvbiwgdHJhbnNmZXJhYmxlIHZpYSAvdHJhbnNmZXItb3duZXJzaGlwKS4KICoKICogU3BlYyA6IGRvY3Mvc3BlYy92YXViYWFuLWdhdGV3YXkubWQgwqc4LjEsIMKnMTAuCiAqLwoKaW1wb3J0IHsgdHlwZSBOZXh0UmVxdWVzdCwgTmV4dFJlc3BvbnNlIH0gZnJvbSAnbmV4dC9zZXJ2ZXInOwppbXBvcnQgeyB6IH0gZnJvbSAnem9kJzsKaW1wb3J0IHsgZ2V0U3VwYWJhc2VTZXJ2aWNlQ2xpZW50IH0gZnJvbSAnQC9saWIvc3VwYWJhc2Uvc2VydmVyJzsKaW1wb3J0IHsgcmVxdWlyZU9yZ01lbWJlciB9IGZyb20gJ0AvbGliL2F1dGgvcmVxdWlyZS1vcmctbWVtYmVyJzsKCmV4cG9ydCBjb25zdCBydW50aW1lID0gJ25vZGVqcyc7CmV4cG9ydCBjb25zdCBkeW5hbWljID0gJ2ZvcmNlLWR5bmFtaWMnOwoKY29uc3QgQm9keVNjaGVtYSA9IHoub2JqZWN0KHsKICBvcmdTbHVnOiB6LnN0cmluZygpLm1pbigxKSwKICBlbWFpbDogei5zdHJpbmcoKS5lbWFpbCgpLAp9KTsKCmludGVyZmFjZSBBZG1pblVzZXIgewogIGlkOiBzdHJpbmc7CiAgZW1haWw6IHN0cmluZzsKfQoKLyoqIFdhbGsgYWxsIGxpc3RVc2VycygpIHBhZ2VzIHRvIGZpbmQgYSB1c2VyIGJ5IGVtYWlsLiBSZXR1cm5zIHRoZSB1c2VyIElEIG9yIHVuZGVmaW5lZC4gKi8KYXN5bmMgZnVuY3Rpb24gbG9va3VwVXNlckJ5RW1haWwoCiAgc3ZjOiBSZXR1cm5UeXBlPHR5cGVvZiBnZXRTdXBhYmFzZVNlcnZpY2VDbGllbnQ+LAogIGVtYWlsOiBzdHJpbmcsCik6IFByb21pc2U8c3RyaW5nIHwgdW5kZWZpbmVkPiB7CiAgY29uc3QgcGVyUGFnZSA9IDEwMDA7CiAgbGV0IHBhZ2UgPSAxOwogIGxldCBoYXNNb3JlID0gdHJ1ZTsKICB3aGlsZSAoaGFzTW9yZSkgewogICAgY29uc3QgeyBkYXRhLCBlcnJvciB9ID0gYXdhaXQgc3ZjLmF1dGguYWRtaW4ubGlzdFVzZXJzKHsgcGFnZSwgcGVyUGFnZSB9KTsKICAgIGlmIChlcnJvciB8fCAhZGF0YT8udXNlcnMubGVuZ3RoKSByZXR1cm4gdW5kZWZpbmVkOwogICAgY29uc3QgZm91bmQgPSAoZGF0YS51c2VycyBhcyBBZG1pblVzZXJbXSkuZmluZCgodSkgPT4gdS5lbWFpbCA9PT0gZW1haWwpOwogICAgaWYgKGZvdW5kKSByZXR1cm4gZm91bmQuaWQ7CiAgICBoYXNNb3JlID0gZGF0YS51c2Vycy5sZW5ndGggPj0gcGVyUGFnZTsKICAgIHBhZ2UrKzsKICB9CiAgcmV0dXJuIHVuZGVmaW5lZDsKfQoKZXhwb3J0IGFzeW5jIGZ1bmN0aW9uIFBPU1QocmVxOiBOZXh0UmVxdWVzdCkgewogIGxldCBib2R5OiB6LmluZmVyPHR5cGVvZiBCb2R5U2NoZW1hPjsKICB0cnkgewogICAgYm9keSA9IEJvZHlTY2hlbWEucGFyc2UoYXdhaXQgcmVxLmpzb24oKSk7CiAgfSBjYXRjaCAoZSkgewogICAgcmV0dXJuIE5leHRSZXNwb25zZS5qc29uKAogICAgICB7IGVycm9yOiBlIGluc3RhbmNlb2YgRXJyb3IgPyBlLm1lc3NhZ2UgOiAnaW52YWxpZCBib2R5JyB9LAogICAgICB7IHN0YXR1czogNDAwIH0sCiAgICApOwogIH0KCiAgY29uc3QgZ3VhcmQgPSBhd2FpdCByZXF1aXJlT3JnTWVtYmVyKGJvZHkub3JnU2x1Zyk7CiAgaWYgKCFndWFyZC5vaykgcmV0dXJuIGd1YXJkLnJlc3BvbnNlOwoKICBjb25zdCBzdmMgPSBnZXRTdXBhYmFzZVNlcnZpY2VDbGllbnQoKTsKCiAgLy8gRmluZCB1c2VyIGJ5IGVtYWlsIGFjcm9zcyBhbGwgYXV0aC51c2VycyBwYWdlcy4KICBsZXQgdXNlcklkID0gYXdhaXQgbG9va3VwVXNlckJ5RW1haWwoc3ZjLCBib2R5LmVtYWlsKTsKICBsZXQgaW52aXRlZCA9IGZhbHNlOwoKICBpZiAoIXVzZXJJZCkgewogICAgLy8gTmV3IHVzZXIg4oCUIGNyZWF0ZSBhY2NvdW50IGFuZCBxdWV1ZSBpbnZpdGUgZW1haWwuCiAgICBjb25zdCB7IGRhdGE6IGNyZWF0ZWQsIGVycm9yOiBjcmVhdGVFcnIgfSA9IGF3YWl0IHN2Yy5hdXRoLmFkbWluLmNyZWF0ZVVzZXIoewogICAgICBlbWFpbDogYm9keS5lbWFpbCwKICAgICAgZW1haWxfY29uZmlybTogZmFsc2UsCiAgICB9KTsKICAgIGlmIChjcmVhdGVFcnIgfHwgIWNyZWF0ZWQudXNlcikgewogICAgICByZXR1cm4gTmV4dFJlc3BvbnNlLmpzb24oCiAgICAgICAgeyBlcnJvcjogY3JlYXRlRXJyPy5tZXNzYWdlID8/ICdmYWlsZWQgdG8gaW52aXRlIHVzZXInIH0sCiAgICAgICAgeyBzdGF0dXM6IDUwMCB9LAogICAgICApOwogICAgfQogICAgdXNlcklkID0gY3JlYXRlZC51c2VyLmlkOwogICAgaW52aXRlZCA9IHRydWU7CiAgICBhd2FpdCBzdmMuYXV0aC5hZG1pbi5nZW5lcmF0ZUxpbmsoeyB0eXBlOiAnaW52aXRlJywgZW1haWw6IGJvZHkuZW1haWwgfSkuY2F0Y2goKCkgPT4gbnVsbCk7CiAgfQoKICAvLyBSZWplY3QgaWYgdXNlciBpcyBhbHJlYWR5IGEgbWVtYmVyIG9mIFRISVMgb3JnICh0aGUgdHJ1ZSBkdXBsaWNhdGUgY2FzZSkuCiAgY29uc3QgeyBkYXRhOiBleGlzdGluZyB9ID0gYXdhaXQgc3ZjCiAgICAuZnJvbSgnb3JnX21lbWJlcnMnKQogICAgLnNlbGVjdCgndXNlcl9pZCcpCiAgICAuZXEoJ29yZ2FuaXphdGlvbl9pZCcsIGd1YXJkLm9yZ0lkKQogICAgLmVxKCd1c2VyX2lkJywgdXNlcklkKQogICAgLm1heWJlU2luZ2xlKCk7CgogIGlmIChleGlzdGluZykgewogICAgcmV0dXJuIE5leHRSZXNwb25zZS5qc29uKAogICAgICB7IGVycm9yOiAnVXNlciBpcyBhbHJlYWR5IGEgbWVtYmVyIG9mIHRoaXMgb3JnYW5pemF0aW9uLicgfSwKICAgICAgeyBzdGF0dXM6IDQwOSB9LAogICAgKTsKICB9CgogIGNvbnN0IHsgZXJyb3I6IG1lbUVyciB9ID0gYXdhaXQgc3ZjCiAgICAuZnJvbSgnb3JnX21lbWJlcnMnKQogICAgLmluc2VydCh7IG9yZ2FuaXphdGlvbl9pZDogZ3VhcmQub3JnSWQsIHVzZXJfaWQ6IHVzZXJJZCB9KTsKICBpZiAobWVtRXJyKSByZXR1cm4gTmV4dFJlc3BvbnNlLmpzb24oeyBlcnJvcjogbWVtRXJyLm1lc3NhZ2UgfSwgeyBzdGF0dXM6IDUwMCB9KTsKCiAgcmV0dXJuIE5leHRSZXNwb25zZS5qc29uKHsgdXNlcl9pZDogdXNlcklkLCBpbnZpdGVkIH0pOwp9Cg==
+/**
+ * POST /api/v1/members  body: { orgSlug, email }
+ *
+ * Adds a user to an Org. If the user doesn't exist in auth.users, we invite
+ * them (Supabase Admin createUser + generateLink type='invite').
+ *
+ * Membership is flat — any org member has full RW. The org's `owner_id` is
+ * separate (set at org creation, transferable via /transfer-ownership).
+ *
+ * Spec : docs/spec/vaubaan-gateway.md §8.1, §10.
+ */
+
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const BodySchema = z.object({
+  orgSlug: z.string().min(1),
+  email: z.string().email(),
+});
+
+interface AdminUser {
+  id: string;
+  email: string;
+}
+
+/** Walk all listUsers() pages to find a user by email. Returns the user ID or undefined. */
+async function lookupUserByEmail(
+  svc: ReturnType<typeof getSupabaseServiceClient>,
+  email: string,
+): Promise<string | undefined> {
+  const perPage = 1000;
+  let page = 1;
+  let hasMore = true;
+  while (hasMore) {
+    const { data, error } = await svc.auth.admin.listUsers({ page, perPage });
+    if (error || !data?.users.length) return undefined;
+    const found = (data.users as AdminUser[]).find((u) => u.email === email);
+    if (found) return found.id;
+    hasMore = data.users.length >= perPage;
+    page++;
+  }
+  return undefined;
+}
+
+export async function POST(req: NextRequest) {
+  let body: z.infer<typeof BodySchema>;
+  try {
+    body = BodySchema.parse(await req.json());
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid body' },
+      { status: 400 },
+    );
+  }
+
+  const guard = await requireOrgMember(body.orgSlug);
+  if (!guard.ok) return guard.response;
+
+  const svc = getSupabaseServiceClient();
+
+  // Find user by email across all auth.users pages.
+  let userId = await lookupUserByEmail(svc, body.email);
+  let invited = false;
+
+  if (!userId) {
+    // New user — create account and queue invite email.
+    const { data: created, error: createErr } = await svc.auth.admin.createUser({
+      email: body.email,
+      email_confirm: false,
+    });
+    if (createErr || !created.user) {
+      return NextResponse.json(
+        { error: createErr?.message ?? 'failed to invite user' },
+        { status: 500 },
+      );
+    }
+    userId = created.user.id;
+    invited = true;
+    await svc.auth.admin.generateLink({ type: 'invite', email: body.email }).catch(() => null);
+  }
+
+  // Reject if user is already a member of THIS org (the true duplicate case).
+  const { data: existing } = await svc
+    .from('org_members')
+    .select('user_id')
+    .eq('organization_id', guard.orgId)
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (existing) {
+    return NextResponse.json(
+      { error: 'User is already a member of this organization.' },
+      { status: 409 },
+    );
+  }
+
+  const { error: memErr } = await svc
+    .from('org_members')
+    .insert({ organization_id: guard.orgId, user_id: userId });
+  if (memErr) return NextResponse.json({ error: memErr.message }, { status: 500 });
+
+  return NextResponse.json({ user_id: userId, invited });
+}
