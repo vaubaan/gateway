@@ -74,8 +74,8 @@ export function BindingForm({
         display_name: display,
       });
       if (err) throw err;
-      router.refresh();
       router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -151,3 +151,4 @@ export function BindingForm({
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
