@@ -1,1 +1,38 @@
-bmFtZTogY2kKCm9uOgogIHB1c2g6CiAgICBicmFuY2hlczogW21haW5dCiAgcHVsbF9yZXF1ZXN0OgogICAgYnJhbmNoZXM6IFttYWluXQogIHdvcmtmbG93X2Rpc3BhdGNoOgoKY29uY3VycmVuY3k6CiAgZ3JvdXA6IGNpLSR7eyBnaXRodWIucmVmIH19CiAgY2FuY2VsLWluLXByb2dyZXNzOiB0cnVlCgojIC5ucG1yYyB1c2VzIE5QTV9SRUFEX1RPS0VOIChyZWFkOnBhY2thZ2VzIHNjb3BlKSBmb3IgQHNidy12YXViYWFuIEdIIFBhY2thZ2VzLgojIE5QTV9QVUJMSVNIX1RPS0VOIGtlcHQgZm9yIHJlZmVyZW5jZTsgTlBNX1JFQURfVE9LRU4gaXMgdGhlIG9uZSAubnBtcmMgcmVhZHMuCiMgUEFUIHVzZWQgYmVjYXVzZSB0aGUgb3JnIHBsYW4gZGlzYWJsZXMgY3Jvc3MtcmVwbyBHSVRIVUJfVE9LRU4gcmVhZHMgb24gcGFja2FnZXMuCnBlcm1pc3Npb25zOgogIGNvbnRlbnRzOiByZWFkCgplbnY6CiAgTlBNX1JFQURfVE9LRU46ICR7eyBzZWNyZXRzLk5QTV9SRUFEX1RPS0VOIH19CiAgTlBNX1BVQkxJU0hfVE9LRU46ICR7eyBzZWNyZXRzLk5QTV9QVUJMSVNIX1RPS0VOIH19Cgpqb2JzOgogIGNoZWNrOgogICAgcnVucy1vbjogdWJ1bnR1LWxhdGVzdAogICAgc3RlcHM6CiAgICAgIC0gdXNlczogYWN0aW9ucy9jaGVja291dEB2NAogICAgICAtIHVzZXM6IGFjdGlvbnMvc2V0dXAtbm9kZUB2NAogICAgICAgIHdpdGg6CiAgICAgICAgICBub2RlLXZlcnNpb246ICcyMicKICAgICAgICAgIGNhY2hlOiBucG0KICAgICAgLSBydW46IG5wbSBpbnN0YWxsIC0tbm8tYXVkaXQgLS1uby1mdW5kCiAgICAgIC0gcnVuOiBucG0gcnVuIHR5cGUtY2hlY2sKICAgICAgLSBydW46IG5wbSBydW4gbGludAogICAgICAtIHJ1bjogbnBtIHJ1biBmb3JtYXQ6Y2hlY2sKICAgICAgLSBydW46IG5wbSBydW4gYnVpbGQKICAgICAgLSBydW46IG5wbSBydW4gdGVzdAo=
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+# .npmrc uses NPM_READ_TOKEN (read:packages scope) for @sbw-vaubaan GH Packages.
+# NPM_PUBLISH_TOKEN kept for reference; NPM_READ_TOKEN is the one .npmrc reads.
+# PAT used because the org plan disables cross-repo GITHUB_TOKEN reads on packages.
+permissions:
+  contents: read
+
+env:
+  NPM_READ_TOKEN: ${{ secrets.NPM_READ_TOKEN }}
+  NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm install --no-audit --no-fund
+      - run: npm run type-check
+      - run: npm run lint
+      - run: npm run format:check
+      - run: npm run build
+      - run: npm run test
