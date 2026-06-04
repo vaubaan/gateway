@@ -25,26 +25,49 @@ const BodySchema = z.object({
 
 interface AdminUser {
   id: string;
-  email: string;
+  email?: string;
 }
 
-/** Walk all listUsers() pages to find a user by email. Returns the user ID or undefined. */
+/**
+ * Walk all listUsers() pages (case-insensitive). Falls back to the Auth admin
+ * REST endpoint with filter= to catch unconfirmed invites and other user states
+ * that listUsers() may omit in some Supabase configurations.
+ */
 async function lookupUserByEmail(
   svc: ReturnType<typeof getSupabaseServiceClient>,
   email: string,
 ): Promise<string | undefined> {
+  const normalized = email.toLowerCase();
   const perPage = 1000;
   let page = 1;
   let hasMore = true;
   while (hasMore) {
     const { data, error } = await svc.auth.admin.listUsers({ page, perPage });
-    if (error || !data?.users.length) return undefined;
-    const found = (data.users as AdminUser[]).find((u) => u.email === email);
+    if (error || !data?.users.length) break;
+    const found = (data.users as AdminUser[]).find(
+      (u) => u.email?.toLowerCase() === normalized,
+    );
     if (found) return found.id;
     hasMore = data.users.length >= perPage;
     page++;
   }
-  return undefined;
+
+  // Fallback: the Auth admin REST endpoint supports ?filter=<email> and returns
+  // users in all states including unconfirmed invites (email_confirmed_at = NULL).
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL ?? '';
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY ?? '';
+  if (!supabaseUrl || !serviceKey) return undefined;
+  try {
+    const resp = await fetch(
+      `${supabaseUrl}/auth/v1/admin/users?filter=${encodeURIComponent(email)}&page=1&per_page=10`,
+      { headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` } },
+    );
+    if (!resp.ok) return undefined;
+    const raw = (await resp.json()) as { users?: AdminUser[] };
+    return raw.users?.find((u) => u.email?.toLowerCase() === normalized)?.id;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function POST(req: NextRequest) {
@@ -63,19 +86,31 @@ export async function POST(req: NextRequest) {
 
   const svc = getSupabaseServiceClient();
 
-  // Find user by email across all auth.users pages.
+  // Find user by email (paged listUsers + REST filter fallback).
   let userId = await lookupUserByEmail(svc, body.email);
   let invited = false;
 
   if (!userId) {
-    // New user — create account and queue invite email.
     const { data: created, error: createErr } = await svc.auth.admin.createUser({
       email: body.email,
       email_confirm: false,
     });
-    if (createErr || !created.user) {
+
+    if (createErr) {
+      // "already registered" means the user exists but neither listUsers() nor the
+      // REST filter found them (unconfirmed invite in an unusual state, SSO-only, etc.).
+      if (createErr.message?.toLowerCase().includes('already')) {
+        return NextResponse.json(
+          {
+            error:
+              'This email is already registered. ' +
+              'Ask the user to check their inbox for a pending invite, then retry.',
+          },
+          { status: 409 },
+        );
+      }
       return NextResponse.json(
-        { error: createErr?.message ?? 'failed to invite user' },
+        { error: createErr.message ?? 'failed to invite user' },
         { status: 500 },
       );
     }
