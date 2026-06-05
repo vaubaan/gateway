@@ -7,7 +7,7 @@ import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code, Row } from 
 
 export const dynamic = 'force-dynamic';
 
-// vps-ssh is per-project, not org-level — excluded from this page.
+// ssh is per-project, not org-level — shown as a static info card below.
 const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
 type OrgProvider = (typeof ORG_PROVIDERS)[number];
 
@@ -66,6 +66,20 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
         {states.map((s) => (
           <ProviderCard key={s.provider} state={s} orgSlug={org.slug} />
         ))}
+        <Card>
+          <CardHeader>
+            <Row gap="var(--space-3)">
+              <CardTitle>SSH</CardTitle>
+              <Badge tone="neutral">per-project</Badge>
+            </Row>
+          </CardHeader>
+          <CardBody>
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+              SSH bindings are configured per project, not at the org level. Go to a project and
+              open the SSH tab to register hosts for the <code>ssh__exec</code> tool.
+            </p>
+          </CardBody>
+        </Card>
       </div>
     </main>
   );

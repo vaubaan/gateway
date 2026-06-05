@@ -10,11 +10,11 @@ import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
 import {
-  vpsSshAvailableTools,
+  sshAvailableTools,
   isReadAllowed,
   sshExec,
   type VpsSshBinding,
-} from '@vaubaan/providers-vps-ssh';
+} from '@vaubaan/providers-ssh';
 import type {
   AccessTokenContext,
   Provider,
@@ -33,7 +33,7 @@ import {
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeBytea, encodeByteaHex } from '@/lib/providers/bytea';
 
-interface VpsSshBindingRow {
+interface SshBindingRow {
   id: string;
   project_id: string;
   host_slug: string;
@@ -43,9 +43,9 @@ interface VpsSshBindingRow {
   ssh_private_key: unknown;
 }
 
-class VpsSshAdapter implements UpstreamAdapter {
-  readonly provider = 'vps-ssh' as const;
-  readonly availableTools = vpsSshAvailableTools;
+class SshAdapter implements UpstreamAdapter {
+  readonly provider = 'ssh' as const;
+  readonly availableTools = sshAvailableTools;
   readonly selfContained = true;
 
   constructor(private readonly supabase: ReturnType<typeof getSupabaseServiceClient>) {}
@@ -56,7 +56,7 @@ class VpsSshAdapter implements UpstreamAdapter {
     _tool: string,
     _args: Record<string, unknown>,
   ): Promise<unknown> {
-    throw new Error('use executeCallSelfContained for vps-ssh');
+    throw new Error('use executeCallSelfContained for ssh');
   }
 
   async loadProviderAdmin(): Promise<ProviderAdmin | null> {
@@ -77,21 +77,21 @@ class VpsSshAdapter implements UpstreamAdapter {
     if (!cmd) throw new Error('cmd is required');
 
     // Determine if caller has only :read role (not :write)
-    const vpsSshRoles = ctx.roles.filter((r) => r.provider === 'vps-ssh');
-    const hasWrite = vpsSshRoles.some((r) => r.name === 'vps-ssh:write');
+    const sshRoles = ctx.roles.filter((r) => r.provider === 'ssh');
+    const hasWrite = sshRoles.some((r) => r.name === 'ssh:write');
     if (!hasWrite && !isReadAllowed(cmd)) {
       throw new Error(
-        `Command blocked by vps-ssh:read policy. Only read-only commands are allowed with this role.`,
+        `Command blocked by ssh:read policy. Only read-only commands are allowed with this role.`,
       );
     }
 
     // Load the SSH binding for this project + host
     const { data: row } = await this.supabase
-      .from('vps_ssh_bindings')
+      .from('ssh_bindings')
       .select('id, project_id, host_slug, host_address, port, ssh_user, ssh_private_key')
       .eq('project_id', ctx.project.id)
       .eq('host_slug', hostSlug)
-      .maybeSingle<VpsSshBindingRow>();
+      .maybeSingle<SshBindingRow>();
 
     if (!row) {
       throw new Error(`SSH binding '${hostSlug}' not found for this project.`);
@@ -112,9 +112,9 @@ class VpsSshAdapter implements UpstreamAdapter {
 
     const result = await sshExec(binding, cmd, timeoutS);
 
-    // Write to vps_ssh_audit (best-effort)
+    // Write to ssh_audit (best-effort)
     void Promise.resolve(
-      this.supabase.from('vps_ssh_audit').insert({
+      this.supabase.from('ssh_audit').insert({
         project_id: ctx.project.id,
         access_token_id: ctx.access_token.id,
         host_slug: hostSlug,
@@ -123,7 +123,7 @@ class VpsSshAdapter implements UpstreamAdapter {
         stdout_len: result.stdout.length,
         duration_ms: result.duration_ms,
       }),
-    ).catch((e: unknown) => console.error('[vps-ssh] audit write failed', e));
+    ).catch((e: unknown) => console.error('[ssh] audit write failed', e));
 
     return result;
   }
@@ -322,9 +322,9 @@ export function buildGateway(opts: {
     loadProviderAdmin,
   };
 
-  // VPS-SSH: self-contained (per-project SSH bindings, no provider_admins row).
-  const vpsSshAdapter = new VpsSshAdapter(supabase);
-  upstreamByProvider['vps-ssh'] = vpsSshAdapter;
+  // SSH: self-contained (per-project SSH bindings, no provider_admins row).
+  const sshAdapter = new SshAdapter(supabase);
+  upstreamByProvider['ssh'] = sshAdapter;
 
   return new McpGateway({
     cache: buildCacheClient(),

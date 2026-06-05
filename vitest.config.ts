@@ -18,6 +18,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: false,
+    env: { SKIP_LIVE: '1' },
     include: [
       'packages/*/tests/unit/**/*.test.ts',
       'packages/*/tests/unit/**/*.test.tsx',

@@ -1,5 +1,5 @@
 /**
- * POST /api/v1/vps-ssh-bindings/:bindingId/test?orgSlug=
+ * POST /api/v1/ssh-bindings/:bindingId/test?orgSlug=
  *
  * Runs `uptime` to verify the SSH connection is working.
  */
@@ -8,7 +8,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 import { decodeBytea } from '@/lib/providers/bytea';
-import { sshExec } from '@vaubaan/providers-vps-ssh';
+import { sshExec } from '@vaubaan/providers-ssh';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,7 +35,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
 
   const svc = getSupabaseServiceClient();
   const { data: row } = await svc
-    .from('vps_ssh_bindings')
+    .from('ssh_bindings')
     .select(
       'id, project_id, host_address, port, ssh_user, ssh_private_key, projects!inner(organization_id)',
     )

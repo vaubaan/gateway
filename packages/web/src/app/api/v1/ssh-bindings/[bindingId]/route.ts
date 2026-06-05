@@ -1,5 +1,5 @@
 /**
- * DELETE /api/v1/vps-ssh-bindings/:bindingId?orgSlug=
+ * DELETE /api/v1/ssh-bindings/:bindingId?orgSlug=
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -21,7 +21,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ bindingI
 
   const svc = getSupabaseServiceClient();
   const { data: binding } = await svc
-    .from('vps_ssh_bindings')
+    .from('ssh_bindings')
     .select('id, project_id, projects!inner(organization_id)')
     .eq('id', bindingId)
     .maybeSingle<{ id: string; project_id: string; projects: { organization_id: string } }>();
@@ -30,7 +30,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ bindingI
     return NextResponse.json({ error: 'binding not found in this org' }, { status: 404 });
   }
 
-  const { error } = await svc.from('vps_ssh_bindings').delete().eq('id', bindingId);
+  const { error } = await svc.from('ssh_bindings').delete().eq('id', bindingId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   return NextResponse.json({ ok: true });

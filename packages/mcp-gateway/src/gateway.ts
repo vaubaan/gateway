@@ -64,7 +64,7 @@ export interface UpstreamAdapter {
    * When true the gateway skips the provider_admins "connected" check and
    * loadProviderAdmin — the adapter is responsible for all credential loading
    * inside executeCall. Used by providers that store credentials per-project
-   * (e.g. vps-ssh) rather than per-org.
+   * (e.g. ssh) rather than per-org.
    *
    * Self-contained adapters should also implement `executeCallSelfContained`
    * so they receive the full request context (roles, project id, etc.).
@@ -176,7 +176,7 @@ export class McpGateway {
 
   private listTools(ctx: AccessTokenContext): McpToolDeclaration[] {
     const out: McpToolDeclaration[] = [];
-    for (const provider of ['github', 'vercel', 'supabase', 'railway', 'vps-ssh'] as Provider[]) {
+    for (const provider of ['github', 'vercel', 'supabase', 'railway', 'ssh'] as Provider[]) {
       const adapter = this.cfg.upstreamByProvider[provider];
       if (!adapter) continue;
       const providerRoles = ctx.roles.filter((r) => r.provider === provider);
@@ -212,7 +212,7 @@ export class McpGateway {
     // Determine provider from tool prefix.
     const provider = this.providerFor(toolName);
     if (!provider) {
-      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__/railway__/vps_ssh__).`;
+      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__/railway__/ssh__).`;
       await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
       return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
@@ -225,7 +225,7 @@ export class McpGateway {
     }
 
     if (adapter.selfContained) {
-      // Self-contained adapters (e.g. vps-ssh) skip the provider_admins check
+      // Self-contained adapters (e.g. ssh) skip the provider_admins check
       // and loadProviderAdmin. They handle credential loading and role-based
       // policy internally via executeCallSelfContained.
       const decision = evaluatePolicy(ctx.roles, ctx.bindings, {
@@ -335,7 +335,7 @@ export class McpGateway {
     if (tool.startsWith('vercel__')) return 'vercel';
     if (tool.startsWith('supabase__')) return 'supabase';
     if (tool.startsWith('railway__')) return 'railway';
-    if (tool.startsWith('vps_ssh__')) return 'vps-ssh';
+    if (tool.startsWith('ssh__')) return 'ssh';
     return null;
   }
 

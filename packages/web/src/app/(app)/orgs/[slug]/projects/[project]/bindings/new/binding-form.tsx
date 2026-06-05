@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Provider } from '@vaubaan/shared';
+import Link from 'next/link';
 import {
   Button,
   Card,
@@ -15,7 +16,7 @@ import {
 } from '@/components/ui';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 
-// vps-ssh bindings are managed in the dedicated /vps-ssh page, not here.
+// ssh bindings are managed in the dedicated /ssh page, not here.
 const REF_HINT: Record<string, string> = {
   github: 'owner/repo (e.g. acme/website)',
   vercel: 'prj_XXXXXXXXXXXX',
@@ -84,68 +85,86 @@ export function BindingForm({
   }
 
   return (
-    <form onSubmit={onSubmit}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Pick a resource from a connected provider</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
-            <Field label="Provider">
-              <Select
-                value={provider}
-                onChange={(e) => onProviderChange(e.target.value as Provider)}
-              >
-                {offered.map((o) => (
-                  <option key={o.provider} value={o.provider}>
-                    {capitalize(o.provider)}
-                    {o.resources.length === 0 ? ' (no resources)' : ''}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field
-              label="Resource"
-              hint={
-                current?.error
-                  ? `${current.error} — type the resource reference manually below.`
-                  : current && current.resources.length === 0
-                    ? 'No resources visible to the granted token. Type the resource reference manually below.'
-                    : 'Pick from the resources the granted token can see.'
-              }
-            >
-              {current && current.resources.length > 0 ? (
-                <Select value={ref} onChange={(e) => setRef(e.target.value)}>
-                  {(current?.resources ?? []).map((r) => (
-                    <option key={r.ref} value={r.ref}>
-                      {r.name}
-                      {r.description ? ` · ${r.description}` : ''}
+    <>
+      <form onSubmit={onSubmit}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Pick a resource from a connected provider</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
+              <Field label="Provider">
+                <Select
+                  value={provider}
+                  onChange={(e) => onProviderChange(e.target.value as Provider)}
+                >
+                  {offered.map((o) => (
+                    <option key={o.provider} value={o.provider}>
+                      {capitalize(o.provider)}
+                      {o.resources.length === 0 ? ' (no resources)' : ''}
                     </option>
                   ))}
                 </Select>
-              ) : (
-                <Input
-                  value={ref}
-                  onChange={(e) => setRef(e.target.value)}
-                  placeholder={REF_HINT[provider]}
-                  autoComplete="off"
-                  spellCheck={false}
-                />
-              )}
-            </Field>
+              </Field>
 
-            {error && <p style={{ color: 'var(--accent-danger-fg)', margin: 0 }}>{error}</p>}
+              <Field
+                label="Resource"
+                hint={
+                  current?.error
+                    ? `${current.error} — type the resource reference manually below.`
+                    : current && current.resources.length === 0
+                      ? 'No resources visible to the granted token. Type the resource reference manually below.'
+                      : 'Pick from the resources the granted token can see.'
+                }
+              >
+                {current && current.resources.length > 0 ? (
+                  <Select value={ref} onChange={(e) => setRef(e.target.value)}>
+                    {(current?.resources ?? []).map((r) => (
+                      <option key={r.ref} value={r.ref}>
+                        {r.name}
+                        {r.description ? ` · ${r.description}` : ''}
+                      </option>
+                    ))}
+                  </Select>
+                ) : (
+                  <Input
+                    value={ref}
+                    onChange={(e) => setRef(e.target.value)}
+                    placeholder={REF_HINT[provider]}
+                    autoComplete="off"
+                    spellCheck={false}
+                  />
+                )}
+              </Field>
 
-            <div>
-              <Button type="submit" disabled={busy || !ref} variant="primary">
-                {busy ? 'Saving…' : 'Save binding'}
-              </Button>
+              {error && <p style={{ color: 'var(--accent-danger-fg)', margin: 0 }}>{error}</p>}
+
+              <div>
+                <Button type="submit" disabled={busy || !ref} variant="primary">
+                  {busy ? 'Saving…' : 'Save binding'}
+                </Button>
+              </div>
             </div>
-          </div>
+          </CardBody>
+        </Card>
+      </form>
+      <Card style={{ marginTop: 'var(--space-4)' }}>
+        <CardHeader>
+          <CardTitle>SSH access</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <p style={{ margin: '0 0 var(--space-3)', color: 'var(--text-muted)' }}>
+            SSH bindings (for the <code>ssh__exec</code> tool) are managed per-project, not through
+            this form.
+          </p>
+          <Link href={`/orgs/${orgSlug}/projects/${projectSlug}/ssh`}>
+            <Button size="sm" variant="secondary">
+              Manage SSH bindings →
+            </Button>
+          </Link>
         </CardBody>
       </Card>
-    </form>
+    </>
   );
 }
 
