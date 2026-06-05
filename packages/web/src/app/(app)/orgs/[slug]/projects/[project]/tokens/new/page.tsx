@@ -1,1 +1,242 @@
-J3VzZSBjbGllbnQnOwoKaW1wb3J0IHsgdXNlRWZmZWN0LCB1c2VTdGF0ZSwgdXNlIGFzIHVzZVByb21pc2UgfSBmcm9tICdyZWFjdCc7CmltcG9ydCB7IHVzZVJvdXRlciB9IGZyb20gJ25leHQvbmF2aWdhdGlvbic7CmltcG9ydCB7IGdldFN1cGFiYXNlQnJvd3NlciB9IGZyb20gJ0AvbGliL3N1cGFiYXNlL2NsaWVudCc7CgppbnRlcmZhY2UgUm9sZVJvdyB7CiAgaWQ6IHN0cmluZzsKICBuYW1lOiBzdHJpbmc7CiAgcHJvdmlkZXI6IHN0cmluZzsKICBkZXNjcmlwdGlvbjogc3RyaW5nIHwgbnVsbDsKfQoKZXhwb3J0IGRlZmF1bHQgZnVuY3Rpb24gTmV3VG9rZW5QYWdlKHsKICBwYXJhbXMsCn06IHsKICBwYXJhbXM6IFByb21pc2U8eyBzbHVnOiBzdHJpbmc7IHByb2plY3Q6IHN0cmluZyB9PjsKfSkgewogIGNvbnN0IHsgc2x1Zzogb3JnU2x1ZywgcHJvamVjdDogcHJvamVjdFNsdWcgfSA9IHVzZVByb21pc2UocGFyYW1zKTsKICBjb25zdCBbbmFtZSwgc2V0TmFtZV0gPSB1c2VTdGF0ZSgnJyk7CiAgY29uc3QgW2F2YWlsYWJsZVJvbGVzLCBzZXRBdmFpbGFibGVSb2xlc10gPSB1c2VTdGF0ZTxSb2xlUm93W10+KFtdKTsKICBjb25zdCBbc2VsZWN0ZWQsIHNldFNlbGVjdGVkXSA9IHVzZVN0YXRlPFNldDxzdHJpbmc+PihuZXcgU2V0KCkpOwogIGNvbnN0IFtidXN5LCBzZXRCdXN5XSA9IHVzZVN0YXRlKGZhbHNlKTsKICBjb25zdCBbZXJyb3IsIHNldEVycm9yXSA9IHVzZVN0YXRlPHN0cmluZyB8IG51bGw+KG51bGwpOwogIGNvbnN0IFthcGlLZXksIHNldEFwaUtleV0gPSB1c2VTdGF0ZTxzdHJpbmcgfCBudWxsPihudWxsKTsKICBjb25zdCByb3V0ZXIgPSB1c2VSb3V0ZXIoKTsKCiAgdXNlRWZmZWN0KCgpID0+IHsKICAgIGNvbnN0IHN1cGFiYXNlID0gZ2V0U3VwYWJhc2VCcm93c2VyKCk7CiAgICB2b2lkIHN1cGFiYXNlCiAgICAgIC5mcm9tKCdyb2xlcycpCiAgICAgIC5zZWxlY3QoJ2lkLCBuYW1lLCBwcm92aWRlciwgZGVzY3JpcHRpb24nKQogICAgICAub3IoJ29yZ2FuaXphdGlvbl9pZC5pcy5udWxsLG9yZ2FuaXphdGlvbl9pZC5ub3QuaXMubnVsbCcpCiAgICAgIC5vcmRlcignbmFtZScpCiAgICAgIC50aGVuKChyZXMpID0+IHsKICAgICAgICBpZiAocmVzLmVycm9yKSBzZXRFcnJvcihyZXMuZXJyb3IubWVzc2FnZSk7CiAgICAgICAgZWxzZSBzZXRBdmFpbGFibGVSb2xlcyhyZXMuZGF0YSA/PyBbXSk7CiAgICAgIH0pOwogIH0sIFtdKTsKCiAgYXN5bmMgZnVuY3Rpb24gb25TdWJtaXQoZTogUmVhY3QuRm9ybUV2ZW50KSB7CiAgICBlLnByZXZlbnREZWZhdWx0KCk7CiAgICBzZXRCdXN5KHRydWUpOwogICAgc2V0RXJyb3IobnVsbCk7CiAgICB0cnkgewogICAgICBjb25zdCByZXMgPSBhd2FpdCBmZXRjaCgnL2FwaS92MS90b2tlbnMnLCB7CiAgICAgICAgbWV0aG9kOiAnUE9TVCcsCiAgICAgICAgaGVhZGVyczogeyAnY29udGVudC10eXBlJzogJ2FwcGxpY2F0aW9uL2pzb24nIH0sCiAgICAgICAgYm9keTogSlNPTi5zdHJpbmdpZnkoewogICAgICAgICAgb3JnU2x1ZywKICAgICAgICAgIHByb2plY3RTbHVnLAogICAgICAgICAgbmFtZSwKICAgICAgICAgIHJvbGVJZHM6IEFycmF5LmZyb20oc2VsZWN0ZWQpLAogICAgICAgIH0pLAogICAgICB9KTsKICAgICAgY29uc3QganNvbiA9IChhd2FpdCByZXMuanNvbigpKSBhcyB7IGFwaV9rZXk/OiBzdHJpbmc7IGVycm9yPzogc3RyaW5nIH07CiAgICAgIGlmICghcmVzLm9rIHx8IGpzb24uZXJyb3IpIHRocm93IG5ldyBFcnJvcihqc29uLmVycm9yID8/IGBIVFRQICR7cmVzLnN0YXR1c31gKTsKICAgICAgc2V0QXBpS2V5KGpzb24uYXBpX2tleSA/PyBudWxsKTsKICAgIH0gY2F0Y2ggKGVycikgewogICAgICBzZXRFcnJvcihlcnIgaW5zdGFuY2VvZiBFcnJvciA/IGVyci5tZXNzYWdlIDogU3RyaW5nKGVycikpOwogICAgfSBmaW5hbGx5IHsKICAgICAgc2V0QnVzeShmYWxzZSk7CiAgICB9CiAgfQoKICBpZiAoYXBpS2V5KSB7CiAgICByZXR1cm4gKAogICAgICA8bWFpbj4KICAgICAgICA8aDE+QWNjZXNzIHRva2VuIGNyZWF0ZWQg4oCUIGNvcHkgdGhpcyBhcGlfa2V5IG5vdzwvaDE+CiAgICAgICAgPGRpdgogICAgICAgICAgc3R5bGU9e3sKICAgICAgICAgICAgcGFkZGluZzogMjQsCiAgICAgICAgICAgIGJvcmRlcjogJzJweCBzb2xpZCAjZmZhZTVlJywKICAgICAgICAgICAgYm9yZGVyUmFkaXVzOiA4LAogICAgICAgICAgICBiYWNrZ3JvdW5kOiAnIzFhMTQwOCcsCiAgICAgICAgICAgIG1hcmdpblRvcDogMjQsCiAgICAgICAgICB9fQogICAgICAgID4KICAgICAgICAgIDxwIHN0eWxlPXt7IGNvbG9yOiAnI2ZmYWU1ZScsIG1hcmdpblRvcDogMCB9fT4KICAgICAgICAgICAg4pqg77iPIFRoaXMgaXMgdGhlIDxzdHJvbmc+b25seSB0aW1lPC9zdHJvbmc+IHlvdSZhcG9zO2xsIHNlZSB0aGlzIGFwaV9rZXkuIEFmdGVyIGRpc21pc3NpbmcKICAgICAgICAgICAgdGhpcyBwYWdlLCBvbmx5IHRoZSBwcmVmaXggaXMgcmV0cmlldmFibGUuCiAgICAgICAgICA8L3A+CiAgICAgICAgICA8cHJlCiAgICAgICAgICAgIHN0eWxlPXt7CiAgICAgICAgICAgICAgcGFkZGluZzogMTYsCiAgICAgICAgICAgICAgYmFja2dyb3VuZDogJyMwMDAnLAogICAgICAgICAgICAgIGJvcmRlclJhZGl1czogNCwKICAgICAgICAgICAgICBvdmVyZmxvdzogJ2F1dG8nLAogICAgICAgICAgICAgIGZvbnRTaXplOiAxNCwKICAgICAgICAgICAgfX0KICAgICAgICAgID4KICAgICAgICAgICAge2FwaUtleX0KICAgICAgICAgIDwvcHJlPgogICAgICAgICAgPGJ1dHRvbgogICAgICAgICAgICB0eXBlPSJidXR0b24iCiAgICAgICAgICAgIG9uQ2xpY2s9eygpID0+IHsKICAgICAgICAgICAgICB2b2lkIG5hdmlnYXRvci5jbGlwYm9hcmQud3JpdGVUZXh0KGFwaUtleSk7CiAgICAgICAgICAgIH19CiAgICAgICAgICAgIHN0eWxlPXt7CiAgICAgICAgICAgICAgcGFkZGluZzogJzEwcHggMTRweCcsCiAgICAgICAgICAgICAgYmFja2dyb3VuZDogJyNmZmYnLAogICAgICAgICAgICAgIGNvbG9yOiAnIzAwMCcsCiAgICAgICAgICAgICAgYm9yZGVyOiAwLAogICAgICAgICAgICAgIGJvcmRlclJhZGl1czogNiwKICAgICAgICAgICAgICBtYXJnaW5SaWdodDogOCwKICAgICAgICAgICAgfX0KICAgICAgICAgID4KICAgICAgICAgICAgQ29weQogICAgICAgICAgPC9idXR0b24+CiAgICAgICAgICA8YnV0dG9uCiAgICAgICAgICAgIHR5cGU9ImJ1dHRvbiIKICAgICAgICAgICAgb25DbGljaz17KCkgPT4gcm91dGVyLnB1c2goYC9vcmdzLyR7b3JnU2x1Z30vcHJvamVjdHMvJHtwcm9qZWN0U2x1Z31gKX0KICAgICAgICAgICAgc3R5bGU9e3sKICAgICAgICAgICAgICBwYWRkaW5nOiAnMTBweCAxNHB4JywKICAgICAgICAgICAgICBiYWNrZ3JvdW5kOiAndHJhbnNwYXJlbnQnLAogICAgICAgICAgICAgIGNvbG9yOiAnI2ZmZicsCiAgICAgICAgICAgICAgYm9yZGVyOiAnMXB4IHNvbGlkICMyYTJhMmEnLAogICAgICAgICAgICAgIGJvcmRlclJhZGl1czogNiwKICAgICAgICAgICAgfX0KICAgICAgICAgID4KICAgICAgICAgICAgRG9uZSDigJQgYmFjayB0byBwcm9qZWN0CiAgICAgICAgICA8L2J1dHRvbj4KICAgICAgICA8L2Rpdj4KICAgICAgICA8ZGV0YWlscyBzdHlsZT17eyBtYXJnaW5Ub3A6IDI0LCBvcGFjaXR5OiAwLjg1IH19PgogICAgICAgICAgPHN1bW1hcnk+QWRkIHRvIHlvdXIgYG1jcC5qc29uYDwvc3VtbWFyeT4KICAgICAgICAgIDxwcmUKICAgICAgICAgICAgc3R5bGU9e3sKICAgICAgICAgICAgICBwYWRkaW5nOiAxMiwKICAgICAgICAgICAgICBiYWNrZ3JvdW5kOiAnIzBjMGMwYycsCiAgICAgICAgICAgICAgYm9yZGVyUmFkaXVzOiA0LAogICAgICAgICAgICAgIG92ZXJmbG93OiAnYXV0bycsCiAgICAgICAgICAgICAgZm9udFNpemU6IDEzLAogICAgICAgICAgICB9fQogICAgICAgICAgPgogICAgICAgICAgICB7YHsKICAibWNwU2VydmVycyI6IHsKICAgICJ2YXViYW4iOiB7CiAgICAgICJ0eXBlIjogImh0dHAiLAogICAgICAidXJsIjogIiR7dHlwZW9mIHdpbmRvdyAhPT0gJ3VuZGVmaW5lZCcgPyB3aW5kb3cubG9jYXRpb24ub3JpZ2luIDogJ2h0dHBzOi8vdmF1YmFhbi5jb20nfS9tY3AiLAogICAgICAiaGVhZGVycyI6IHsKICAgICAgICAiQXV0aG9yaXphdGlvbiI6ICJCZWFyZXIgJHthcGlLZXl9IgogICAgICB9CiAgICB9CiAgfQp9YH0KICAgICAgICAgIDwvcHJlPgogICAgICAgIDwvZGV0YWlscz4KICAgICAgICA8ZGV0YWlscyBzdHlsZT17eyBtYXJnaW5Ub3A6IDEyLCBvcGFjaXR5OiAwLjg1IH19PgogICAgICAgICAgPHN1bW1hcnk+T3IgYWRkIHZpYSBDbGF1ZGUgQ0xJPC9zdW1tYXJ5PgogICAgICAgICAgPHByZQogICAgICAgICAgICBzdHlsZT17ewogICAgICAgICAgICAgIHBhZGRpbmc6IDEyLAogICAgICAgICAgICAgIGJhY2tncm91bmQ6ICcjMGMwYzBjJywKICAgICAgICAgICAgICBib3JkZXJSYWRpdXM6IDQsCiAgICAgICAgICAgICAgb3ZlcmZsb3c6ICdhdXRvJywKICAgICAgICAgICAgICBmb250U2l6ZTogMTMsCiAgICAgICAgICAgIH19CiAgICAgICAgICA+CiAgICAgICAgICAgIHtgY2xhdWRlIG1jcCBhZGQgLS10cmFuc3BvcnQgaHR0cCAke3Byb2plY3RTbHVnfSAke3R5cGVvZiB3aW5kb3cgIT09ICd1bmRlZmluZWQnID8gd2luZG93LmxvY2F0aW9uLm9yaWdpbiA6ICdodHRwczovL3ZhdWJhYW4uY29tJ30vbWNwIC0taGVhZGVyICJBdXRob3JpemF0aW9uOiBCZWFyZXIgJHthcGlLZXl9ImB9CiAgICAgICAgICA8L3ByZT4KICAgICAgICAgIDxidXR0b24KICAgICAgICAgICAgdHlwZT0iYnV0dG9uIgogICAgICAgICAgICBvbkNsaWNrPXsoKSA9PiB7CiAgICAgICAgICAgICAgdm9pZCBuYXZpZ2F0b3IuY2xpcGJvYXJkLndyaXRlVGV4dCgKICAgICAgICAgICAgICAgIGBjbGF1ZGUgbWNwIGFkZCAtLXRyYW5zcG9ydCBodHRwICR7cHJvamVjdFNsdWd9ICR7dHlwZW9mIHdpbmRvdyAhPT0gJ3VuZGVmaW5lZCcgPyB3aW5kb3cubG9jYXRpb24ub3JpZ2luIDogJ2h0dHBzOi8vdmF1YmFhbi5jb20nfS9tY3AgLS1oZWFkZXIgIkF1dGhvcml6YXRpb246IEJlYXJlciAke2FwaUtleX0iYCwKICAgICAgICAgICAgICApOwogICAgICAgICAgICB9fQogICAgICAgICAgICBzdHlsZT17ewogICAgICAgICAgICAgIG1hcmdpblRvcDogOCwKICAgICAgICAgICAgICBwYWRkaW5nOiAnNnB4IDEycHgnLAogICAgICAgICAgICAgIGJhY2tncm91bmQ6ICcjZmZmJywKICAgICAgICAgICAgICBjb2xvcjogJyMwMDAnLAogICAgICAgICAgICAgIGJvcmRlcjogMCwKICAgICAgICAgICAgICBib3JkZXJSYWRpdXM6IDYsCiAgICAgICAgICAgICAgZm9udFNpemU6IDEyLAogICAgICAgICAgICB9fQogICAgICAgICAgPgogICAgICAgICAgICBDb3B5IGNvbW1hbmQKICAgICAgICAgIDwvYnV0dG9uPgogICAgICAgIDwvZGV0YWlscz4KICAgICAgPC9tYWluPgogICAgKTsKICB9CgogIHJldHVybiAoCiAgICA8bWFpbj4KICAgICAgPGgxPk5ldyBhY2Nlc3MgdG9rZW48L2gxPgogICAgICA8Zm9ybSBvblN1Ym1pdD17b25TdWJtaXR9IHN0eWxlPXt7IGRpc3BsYXk6ICdncmlkJywgZ2FwOiAxMiwgbWF4V2lkdGg6IDU0MCB9fT4KICAgICAgICA8bGFiZWw+CiAgICAgICAgICA8ZGl2IHN0eWxlPXt7IG9wYWNpdHk6IDAuNywgbWFyZ2luQm90dG9tOiA0IH19PlRva2VuIG5hbWU8L2Rpdj4KICAgICAgICAgIDxpbnB1dAogICAgICAgICAgICB2YWx1ZT17bmFtZX0KICAgICAgICAgICAgb25DaGFuZ2U9eyhlKSA9PiBzZXROYW1lKGUudGFyZ2V0LnZhbHVlLnRvTG93ZXJDYXNlKCkucmVwbGFjZSgvW15hLXowLTktXS9nLCAnJykpfQogICAgICAgICAgICBwYXR0ZXJuPSJeW2EtejAtOV0oLT9bYS16MC05XSkqJCIKICAgICAgICAgICAgcmVxdWlyZWQKICAgICAgICAgICAgcGxhY2Vob2xkZXI9ImNpLWRlcGxveSIKICAgICAgICAgICAgc3R5bGU9e3sKICAgICAgICAgICAgICB3aWR0aDogJzEwMCUnLAogICAgICAgICAgICAgIHBhZGRpbmc6IDEwLAogICAgICAgICAgICAgIGJhY2tncm91bmQ6ICcjMWExYTFhJywKICAgICAgICAgICAgICBjb2xvcjogJyNmZmYnLAogICAgICAgICAgICAgIGJvcmRlcjogJzFweCBzb2xpZCAjMmEyYTJhJywKICAgICAgICAgICAgICBib3JkZXJSYWRpdXM6IDYsCiAgICAgICAgICAgIH19CiAgICAgICAgICAvPgogICAgICAgIDwvbGFiZWw+CiAgICAgICAgPGZpZWxkc2V0IHN0eWxlPXt7IGJvcmRlcjogJzFweCBzb2xpZCAjMmEyYTJhJywgYm9yZGVyUmFkaXVzOiA2LCBwYWRkaW5nOiAxMiB9fT4KICAgICAgICAgIDxsZWdlbmQgc3R5bGU9e3sgb3BhY2l0eTogMC43IH19PlJvbGVzPC9sZWdlbmQ+CiAgICAgICAgICB7YXZhaWxhYmxlUm9sZXMubWFwKChyKSA9PiAoCiAgICAgICAgICAgIDxsYWJlbCBrZXk9e3IuaWR9IHN0eWxlPXt7IGRpc3BsYXk6ICdibG9jaycsIHBhZGRpbmc6ICc2cHggMCcgfX0+CiAgICAgICAgICAgICAgPGlucHV0CiAgICAgICAgICAgICAgICB0eXBlPSJjaGVja2JveCIKICAgICAgICAgICAgICAgIGNoZWNrZWQ9e3NlbGVjdGVkLmhhcyhyLmlkKX0KICAgICAgICAgICAgICAgIG9uQ2hhbmdlPXsoZSkgPT4gewogICAgICAgICAgICAgICAgICBjb25zdCBuZXh0ID0gbmV3IFNldChzZWxlY3RlZCk7CiAgICAgICAgICAgICAgICAgIGlmIChlLnRhcmdldC5jaGVja2VkKSBuZXh0LmFkZChyLmlkKTsKICAgICAgICAgICAgICAgICAgZWxzZSBuZXh0LmRlbGV0ZShyLmlkKTsKICAgICAgICAgICAgICAgICAgc2V0U2VsZWN0ZWQobmV4dCk7CiAgICAgICAgICAgICAgICB9fQogICAgICAgICAgICAgIC8+eycgJ30KICAgICAgICAgICAgICA8c3Ryb25nPntyLm5hbWV9PC9zdHJvbmc+IDxzcGFuIHN0eWxlPXt7IG9wYWNpdHk6IDAuNTUgfX0+e3IuZGVzY3JpcHRpb259PC9zcGFuPgogICAgICAgICAgICA8L2xhYmVsPgogICAgICAgICAgKSl9CiAgICAgICAgPC9maWVsZHNldD4KICAgICAgICA8YnV0dG9uCiAgICAgICAgICB0eXBlPSJzdWJtaXQiCiAgICAgICAgICBkaXNhYmxlZD17YnVzeSB8fCBzZWxlY3RlZC5zaXplID09PSAwfQogICAgICAgICAgc3R5bGU9e3sKICAgICAgICAgICAgcGFkZGluZzogJzEwcHggMTRweCcsCiAgICAgICAgICAgIGJhY2tncm91bmQ6ICcjZmZmJywKICAgICAgICAgICAgY29sb3I6ICcjMDAwJywKICAgICAgICAgICAgYm9yZGVyOiAwLAogICAgICAgICAgICBib3JkZXJSYWRpdXM6IDYsCiAgICAgICAgICB9fQogICAgICAgID4KICAgICAgICAgIHtidXN5ID8gJ0NyZWF0aW5n4oCmJyA6ICdDcmVhdGUgYWNjZXNzIHRva2VuJ30KICAgICAgICA8L2J1dHRvbj4KICAgICAgICB7ZXJyb3IgJiYgPHAgc3R5bGU9e3sgY29sb3I6ICcjZmY3ZTdlJyB9fT57ZXJyb3J9PC9wPn0KICAgICAgPC9mb3JtPgogICAgPC9tYWluPgogICk7Cn0K
+'use client';
+
+import { useEffect, useState, use as usePromise } from 'react';
+import { useRouter } from 'next/navigation';
+import { getSupabaseBrowser } from '@/lib/supabase/client';
+
+interface RoleRow {
+  id: string;
+  name: string;
+  provider: string;
+  description: string | null;
+}
+
+export default function NewTokenPage({
+  params,
+}: {
+  params: Promise<{ slug: string; project: string }>;
+}) {
+  const { slug: orgSlug, project: projectSlug } = usePromise(params);
+  const [name, setName] = useState('');
+  const [availableRoles, setAvailableRoles] = useState<RoleRow[]>([]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [apiKey, setApiKey] = useState<string | null>(null);
+  const router = useRouter();
+
+  useEffect(() => {
+    const supabase = getSupabaseBrowser();
+    void supabase
+      .from('roles')
+      .select('id, name, provider, description')
+      .or('organization_id.is.null,organization_id.not.is.null')
+      .order('name')
+      .then((res) => {
+        if (res.error) setError(res.error.message);
+        else setAvailableRoles(res.data ?? []);
+      });
+  }, []);
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/tokens', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          orgSlug,
+          projectSlug,
+          name,
+          roleIds: Array.from(selected),
+        }),
+      });
+      const json = (await res.json()) as { api_key?: string; error?: string };
+      if (!res.ok || json.error) throw new Error(json.error ?? `HTTP ${res.status}`);
+      setApiKey(json.api_key ?? null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (apiKey) {
+    return (
+      <main>
+        <h1>Access token created — copy this api_key now</h1>
+        <div
+          style={{
+            padding: 24,
+            border: '2px solid #ffae5e',
+            borderRadius: 8,
+            background: '#1a1408',
+            marginTop: 24,
+          }}
+        >
+          <p style={{ color: '#ffae5e', marginTop: 0 }}>
+            ⚠️ This is the <strong>only time</strong> you&apos;ll see this api_key. After dismissing
+            this page, only the prefix is retrievable.
+          </p>
+          <pre
+            style={{
+              padding: 16,
+              background: '#000',
+              borderRadius: 4,
+              overflow: 'auto',
+              fontSize: 14,
+            }}
+          >
+            {apiKey}
+          </pre>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(apiKey);
+            }}
+            style={{
+              padding: '10px 14px',
+              background: '#fff',
+              color: '#000',
+              border: 0,
+              borderRadius: 6,
+              marginRight: 8,
+            }}
+          >
+            Copy
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push(`/orgs/${orgSlug}/projects/${projectSlug}`)}
+            style={{
+              padding: '10px 14px',
+              background: 'transparent',
+              color: '#fff',
+              border: '1px solid #2a2a2a',
+              borderRadius: 6,
+            }}
+          >
+            Done — back to project
+          </button>
+        </div>
+        <details style={{ marginTop: 24, opacity: 0.85 }}>
+          <summary>Add to your `mcp.json`</summary>
+          <pre
+            style={{
+              padding: 12,
+              background: '#0c0c0c',
+              borderRadius: 4,
+              overflow: 'auto',
+              fontSize: 13,
+            }}
+          >
+            {`{
+  "mcpServers": {
+    "vauban": {
+      "type": "http",
+      "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com'}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${apiKey}"
+      }
+    }
+  }
+}`}
+          </pre>
+        </details>
+        <details style={{ marginTop: 12, opacity: 0.85 }}>
+          <summary>Or add via Claude CLI</summary>
+          <pre
+            style={{
+              padding: 12,
+              background: '#0c0c0c',
+              borderRadius: 4,
+              overflow: 'auto',
+              fontSize: 13,
+            }}
+          >
+            {`claude mcp add --transport http ${projectSlug} ${typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com'}/mcp --header "Authorization: Bearer ${apiKey}"`}
+          </pre>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(
+                `claude mcp add --transport http ${projectSlug} ${typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com'}/mcp --header "Authorization: Bearer ${apiKey}"`,
+              );
+            }}
+            style={{
+              marginTop: 8,
+              padding: '6px 12px',
+              background: '#fff',
+              color: '#000',
+              border: 0,
+              borderRadius: 6,
+              fontSize: 12,
+            }}
+          >
+            Copy command
+          </button>
+        </details>
+      </main>
+    );
+  }
+
+  return (
+    <main>
+      <h1>New access token</h1>
+      <form onSubmit={onSubmit} style={{ display: 'grid', gap: 12, maxWidth: 540 }}>
+        <label>
+          <div style={{ opacity: 0.7, marginBottom: 4 }}>Token name</div>
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, ''))}
+            pattern="^[a-z0-9](-?[a-z0-9])*$"
+            required
+            placeholder="ci-deploy"
+            style={{
+              width: '100%',
+              padding: 10,
+              background: '#1a1a1a',
+              color: '#fff',
+              border: '1px solid #2a2a2a',
+              borderRadius: 6,
+            }}
+          />
+        </label>
+        <fieldset style={{ border: '1px solid #2a2a2a', borderRadius: 6, padding: 12 }}>
+          <legend style={{ opacity: 0.7 }}>Roles</legend>
+          {availableRoles.map((r) => (
+            <label key={r.id} style={{ display: 'block', padding: '6px 0' }}>
+              <input
+                type="checkbox"
+                checked={selected.has(r.id)}
+                onChange={(e) => {
+                  const next = new Set(selected);
+                  if (e.target.checked) next.add(r.id);
+                  else next.delete(r.id);
+                  setSelected(next);
+                }}
+              />{' '}
+              <strong>{r.name}</strong> <span style={{ opacity: 0.55 }}>{r.description}</span>
+            </label>
+          ))}
+        </fieldset>
+        <button
+          type="submit"
+          disabled={busy || selected.size === 0}
+          style={{
+            padding: '10px 14px',
+            background: '#fff',
+            color: '#000',
+            border: 0,
+            borderRadius: 6,
+          }}
+        >
+          {busy ? 'Creating…' : 'Create access token'}
+        </button>
+        {error && <p style={{ color: '#ff7e7e' }}>{error}</p>}
+      </form>
+    </main>
+  );
+}
