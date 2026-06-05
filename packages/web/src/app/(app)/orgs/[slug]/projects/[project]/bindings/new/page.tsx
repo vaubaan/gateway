@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { PROVIDERS } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState } from '@/lib/providers/state';
-import { Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
+import { Code } from '@/components/ui';
 import { BindingForm } from './binding-form';
 
 export const dynamic = 'force-dynamic';
@@ -66,27 +66,12 @@ export default async function NewBindingPage({
         </Link>
       </header>
 
-      {connected.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No providers connected</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <p style={{ color: 'var(--text-muted)' }}>
-              Connect at least one provider on the{' '}
-              <Link href={`/orgs/${org.slug}/providers`}>Cloud providers</Link> page before binding
-              resources to this project.
-            </p>
-          </CardBody>
-        </Card>
-      ) : (
-        <BindingForm
-          orgSlug={org.slug}
-          projectId={proj.id}
-          projectSlug={proj.slug}
-          offered={offered}
-        />
-      )}
+      <BindingForm
+        orgSlug={org.slug}
+        projectId={proj.id}
+        projectSlug={proj.slug}
+        offered={offered}
+      />
     </main>
   );
 }

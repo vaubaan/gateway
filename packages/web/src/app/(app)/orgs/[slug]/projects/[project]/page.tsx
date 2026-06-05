@@ -8,6 +8,7 @@ import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState } from '@/lib/providers/state';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import { BindingControls } from './binding-controls';
+import { SshBindingControls } from './ssh-binding-controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -16,6 +17,14 @@ interface BindingRow {
   provider: Provider;
   resource_ref: string;
   display_name: string | null;
+}
+
+interface SshBindingRow {
+  id: string;
+  host_slug: string;
+  host_address: string;
+  port: number;
+  ssh_user: string;
 }
 
 interface TokenRow {
@@ -51,20 +60,26 @@ export default async function ProjectPage({
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!proj) notFound();
 
-  const [{ data: bindings }, { data: tokens }, providerStates] = await Promise.all([
-    supabase
-      .from('provider_bindings')
-      .select('id, provider, resource_ref, display_name')
-      .eq('project_id', proj.id)
-      .returns<BindingRow[]>(),
-    supabase
-      .from('access_tokens')
-      .select('id, name, api_key_prefix, status, last_used_at')
-      .eq('project_id', proj.id)
-      .order('created_at', { ascending: false })
-      .returns<TokenRow[]>(),
-    Promise.all(ORG_PROVIDERS.map((p) => loadProviderState(org.id, p as Provider))),
-  ]);
+  const [{ data: bindings }, { data: sshBindings }, { data: tokens }, providerStates] =
+    await Promise.all([
+      supabase
+        .from('provider_bindings')
+        .select('id, provider, resource_ref, display_name')
+        .eq('project_id', proj.id)
+        .returns<BindingRow[]>(),
+      supabase
+        .from('ssh_bindings')
+        .select('id, host_slug, host_address, port, ssh_user')
+        .eq('project_id', proj.id)
+        .returns<SshBindingRow[]>(),
+      supabase
+        .from('access_tokens')
+        .select('id, name, api_key_prefix, status, last_used_at')
+        .eq('project_id', proj.id)
+        .order('created_at', { ascending: false })
+        .returns<TokenRow[]>(),
+      Promise.all(ORG_PROVIDERS.map((p) => loadProviderState(org.id, p as Provider))),
+    ]);
 
   const resourcesByProvider: Partial<Record<Provider, Array<{ ref: string; name: string }>>> = {
     github: [],
@@ -109,7 +124,7 @@ export default async function ProjectPage({
             </Link>
           </CardHeader>
           <CardBody>
-            {(bindings ?? []).length === 0 ? (
+            {(bindings ?? []).length === 0 && (sshBindings ?? []).length === 0 ? (
               <p style={{ color: 'var(--text-subtle)', margin: 0 }}>No bindings yet.</p>
             ) : (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -133,6 +148,31 @@ export default async function ProjectPage({
                       binding={b}
                       orgSlug={org.slug}
                       resources={resourcesByProvider[b.provider] ?? []}
+                    />
+                  </li>
+                ))}
+                {(sshBindings ?? []).map((b) => (
+                  <li
+                    key={`ssh-${b.id}`}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 'var(--space-3)',
+                      padding: 'var(--space-3) 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <span style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                      <Badge tone="neutral">ssh</Badge>
+                      <Code>
+                        {b.host_slug} · {b.ssh_user}@{b.host_address}:{b.port}
+                      </Code>
+                    </span>
+                    <SshBindingControls
+                      bindingId={b.id}
+                      hostSlug={b.host_slug}
+                      orgSlug={org.slug}
                     />
                   </li>
                 ))}
