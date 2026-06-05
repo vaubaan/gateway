@@ -25,11 +25,11 @@ interface Binding {
   created_at: string;
 }
 
-interface VpsSshPageProps {
+interface SshPageProps {
   params: Promise<{ slug: string; project: string }>;
 }
 
-export default function VpsSshPage({ params: paramsPromise }: VpsSshPageProps) {
+export default function SshPage({ params: paramsPromise }: SshPageProps) {
   const [orgSlug, setOrgSlug] = useState('');
   const [projectSlug, setProjectSlug] = useState('');
   const [bindings, setBindings] = useState<Binding[]>([]);
@@ -68,7 +68,7 @@ export default function VpsSshPage({ params: paramsPromise }: VpsSshPageProps) {
     setError('');
     try {
       const res = await fetch(
-        `/api/v1/vps-ssh-bindings?orgSlug=${encodeURIComponent(org)}&projectSlug=${encodeURIComponent(proj)}`,
+        `/api/v1/ssh-bindings?orgSlug=${encodeURIComponent(org)}&projectSlug=${encodeURIComponent(proj)}`,
       );
       const json = (await res.json()) as { bindings?: Binding[]; error?: string };
       if (!res.ok) throw new Error(json.error ?? 'Failed to load bindings');
@@ -99,7 +99,7 @@ export default function VpsSshPage({ params: paramsPromise }: VpsSshPageProps) {
       } else {
         body['ssh_private_key_pem'] = pastePem;
       }
-      const res = await fetch('/api/v1/vps-ssh-bindings', {
+      const res = await fetch('/api/v1/ssh-bindings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -127,7 +127,7 @@ export default function VpsSshPage({ params: paramsPromise }: VpsSshPageProps) {
   async function handleDelete(bindingId: string) {
     if (!confirm('Remove this SSH binding?')) return;
     const res = await fetch(
-      `/api/v1/vps-ssh-bindings/${bindingId}?orgSlug=${encodeURIComponent(orgSlug)}`,
+      `/api/v1/ssh-bindings/${bindingId}?orgSlug=${encodeURIComponent(orgSlug)}`,
       { method: 'DELETE' },
     );
     if (res.ok) {
@@ -139,7 +139,7 @@ export default function VpsSshPage({ params: paramsPromise }: VpsSshPageProps) {
     setTestingId(bindingId);
     try {
       const res = await fetch(
-        `/api/v1/vps-ssh-bindings/${bindingId}/test?orgSlug=${encodeURIComponent(orgSlug)}`,
+        `/api/v1/ssh-bindings/${bindingId}/test?orgSlug=${encodeURIComponent(orgSlug)}`,
         { method: 'POST' },
       );
       const json = (await res.json()) as {
@@ -168,10 +168,10 @@ export default function VpsSshPage({ params: paramsPromise }: VpsSshPageProps) {
   return (
     <main>
       <header style={{ marginBottom: 'var(--space-6)' }}>
-        <h1 style={{ margin: 0 }}>VPS SSH hosts</h1>
+        <h1 style={{ margin: 0 }}>SSH hosts</h1>
         <p style={{ color: 'var(--text-muted)', margin: 'var(--space-2) 0 0' }}>
-          Register VPS hosts so AI coding sessions can run shell commands via{' '}
-          <Code>vps_ssh__exec</Code>.
+          Register SSH hosts so AI coding sessions can run shell commands via <Code>ssh__exec</Code>
+          .
         </p>
       </header>
 

@@ -2,8 +2,8 @@ import type { McpToolDeclaration } from '@vaubaan/shared';
 
 export const availableTools: ReadonlyArray<McpToolDeclaration> = [
   {
-    name: 'vps_ssh__exec',
-    description: 'Execute a shell command on a registered VPS host.',
+    name: 'ssh__exec',
+    description: 'Execute a shell command on a registered SSH host.',
     inputSchema: {
       type: 'object',
       properties: {

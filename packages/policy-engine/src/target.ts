@@ -33,7 +33,7 @@ export function resolveTarget(target: AbstractTarget, bindings: ProviderBinding[
  * Wildcard `*` always matches.
  */
 export function callTargetMatches(
-  provider: 'github' | 'vercel' | 'supabase' | 'railway' | 'vps-ssh',
+  provider: 'github' | 'vercel' | 'supabase' | 'railway' | 'ssh',
   args: Record<string, unknown>,
   resolvedTargets: string[],
 ): boolean {
@@ -45,7 +45,7 @@ export function callTargetMatches(
 }
 
 export function extractCallRef(
-  provider: 'github' | 'vercel' | 'supabase' | 'railway' | 'vps-ssh',
+  provider: 'github' | 'vercel' | 'supabase' | 'railway' | 'ssh',
   args: Record<string, unknown>,
 ): string | null {
   if (provider === 'github') {

@@ -5,14 +5,14 @@
  * Spec : docs/spec/vaubaan-gateway.md §3.
  */
 
-export type Provider = 'github' | 'vercel' | 'supabase' | 'railway' | 'vps-ssh';
+export type Provider = 'github' | 'vercel' | 'supabase' | 'railway' | 'ssh';
 
 export const PROVIDERS = [
   'github',
   'vercel',
   'supabase',
   'railway',
-  'vps-ssh',
+  'ssh',
 ] as const satisfies readonly Provider[];
 
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';

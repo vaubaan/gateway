@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'vitest';
-import { isReadAllowed } from '@vaubaan/providers-vps-ssh';
+import { isReadAllowed } from '@vaubaan/providers-ssh';
 
-describe('vps-ssh isReadAllowed', () => {
+describe('ssh isReadAllowed', () => {
   // Commands that must be allowed with :read role
   const allowed = [
     'journalctl -u nginx -n 100',

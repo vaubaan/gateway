@@ -1,6 +1,6 @@
 /**
- * GET  /api/v1/vps-ssh-bindings?orgSlug=&projectSlug=  — list bindings
- * POST /api/v1/vps-ssh-bindings                        — create binding
+ * GET  /api/v1/ssh-bindings?orgSlug=&projectSlug=  — list bindings
+ * POST /api/v1/ssh-bindings                        — create binding
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
   if (!proj) return NextResponse.json({ error: 'project not found' }, { status: 404 });
 
   const { data, error } = await svc
-    .from('vps_ssh_bindings')
+    .from('ssh_bindings')
     .select('id, host_slug, host_address, port, ssh_user, created_at, updated_at')
     .eq('project_id', proj.id)
     .order('created_at', { ascending: true });
@@ -96,7 +96,7 @@ export async function POST(req: NextRequest) {
   }
 
   const { data: row, error } = await svc
-    .from('vps_ssh_bindings')
+    .from('ssh_bindings')
     .insert({
       project_id: proj.id,
       host_slug: body.host_slug,

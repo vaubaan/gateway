@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { type Provider } from '@vaubaan/shared';
 
-// vps-ssh is per-project via vps_ssh_bindings, not org-level — excluded here.
+// ssh is per-project via ssh_bindings, not org-level — excluded here.
 const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState } from '@/lib/providers/state';
@@ -71,7 +71,7 @@ export default async function ProjectPage({
     vercel: [],
     supabase: [],
     railway: [],
-    'vps-ssh': [],
+    ssh: [],
   };
   for (const s of providerStates) {
     resourcesByProvider[s.provider] = s.resources.map((r) => ({ ref: r.ref, name: r.name }));
