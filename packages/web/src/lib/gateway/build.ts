@@ -9,6 +9,12 @@ import { GitHubAdapter, githubAvailableTools } from '@vaubaan/providers-github';
 import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
+import {
+  vpsSshAvailableTools,
+  isReadAllowed,
+  sshExec,
+  type VpsSshBinding,
+} from '@vaubaan/providers-vps-ssh';
 import type {
   AccessTokenContext,
   Provider,
@@ -26,6 +32,102 @@ import {
 } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeBytea, encodeByteaHex } from '@/lib/providers/bytea';
+
+interface VpsSshBindingRow {
+  id: string;
+  project_id: string;
+  host_slug: string;
+  host_address: string;
+  port: number;
+  ssh_user: string;
+  ssh_private_key: unknown;
+}
+
+class VpsSshAdapter implements UpstreamAdapter {
+  readonly provider = 'vps-ssh' as const;
+  readonly availableTools = vpsSshAvailableTools;
+  readonly selfContained = true;
+
+  constructor(private readonly supabase: ReturnType<typeof getSupabaseServiceClient>) {}
+
+  async executeCall(
+    _admin: ProviderAdmin,
+    _binding: ProviderBinding,
+    _tool: string,
+    _args: Record<string, unknown>,
+  ): Promise<unknown> {
+    throw new Error('use executeCallSelfContained for vps-ssh');
+  }
+
+  async loadProviderAdmin(): Promise<ProviderAdmin | null> {
+    return null;
+  }
+
+  async executeCallSelfContained(
+    ctx: AccessTokenContext,
+    _tool: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const hostSlug = typeof args['host_slug'] === 'string' ? args['host_slug'] : '';
+    const cmd = typeof args['cmd'] === 'string' ? args['cmd'] : '';
+    const timeoutRaw = typeof args['timeout_s'] === 'number' ? args['timeout_s'] : 30;
+    const timeoutS = Math.min(timeoutRaw, 300);
+
+    if (!hostSlug) throw new Error('host_slug is required');
+    if (!cmd) throw new Error('cmd is required');
+
+    // Determine if caller has only :read role (not :write)
+    const vpsSshRoles = ctx.roles.filter((r) => r.provider === 'vps-ssh');
+    const hasWrite = vpsSshRoles.some((r) => r.name === 'vps-ssh:write');
+    if (!hasWrite && !isReadAllowed(cmd)) {
+      throw new Error(
+        `Command blocked by vps-ssh:read policy. Only read-only commands are allowed with this role.`,
+      );
+    }
+
+    // Load the SSH binding for this project + host
+    const { data: row } = await this.supabase
+      .from('vps_ssh_bindings')
+      .select('id, project_id, host_slug, host_address, port, ssh_user, ssh_private_key')
+      .eq('project_id', ctx.project.id)
+      .eq('host_slug', hostSlug)
+      .maybeSingle<VpsSshBindingRow>();
+
+    if (!row) {
+      throw new Error(`SSH binding '${hostSlug}' not found for this project.`);
+    }
+
+    const keyBytes = decodeBytea(row.ssh_private_key);
+    if (!keyBytes) {
+      throw new Error(`SSH private key for '${hostSlug}' is missing or corrupt.`);
+    }
+    const keyPem = new TextDecoder().decode(keyBytes);
+
+    const binding: VpsSshBinding = {
+      host_address: row.host_address,
+      port: row.port,
+      ssh_user: row.ssh_user,
+      ssh_private_key_pem: keyPem,
+    };
+
+    const result = await sshExec(binding, cmd, timeoutS);
+
+    // Write to vps_ssh_audit (best-effort)
+    void Promise.resolve(
+      this.supabase.from('vps_ssh_audit').insert({
+        project_id: ctx.project.id,
+        access_token_id: ctx.access_token.id,
+        host_slug: hostSlug,
+        cmd,
+        exit_code: result.exit_code,
+        stdout_len: result.stdout.length,
+        duration_ms: result.duration_ms,
+      }),
+    ).catch((e: unknown) => console.error('[vps-ssh] audit write failed', e));
+
+    return result;
+  }
+}
 
 function getGitHubAppCredentials() {
   const appId = process.env.GITHUB_APP_ID;
@@ -219,6 +321,10 @@ export function buildGateway(opts: {
       railwayAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
   };
+
+  // VPS-SSH: self-contained (per-project SSH bindings, no provider_admins row).
+  const vpsSshAdapter = new VpsSshAdapter(supabase);
+  upstreamByProvider['vps-ssh'] = vpsSshAdapter;
 
   return new McpGateway({
     cache: buildCacheClient(),

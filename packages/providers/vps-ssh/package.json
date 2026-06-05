@@ -1,0 +1,20 @@
+{
+  "name": "@vaubaan/providers-vps-ssh",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "type-check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@vaubaan/shared": "*",
+    "ssh2": "^1.16.0"
+  },
+  "devDependencies": {
+    "@types/ssh2": "^1.15.4",
+    "typescript": "^5.0.0"
+  }
+}

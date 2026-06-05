@@ -60,6 +60,26 @@ export interface UpstreamAdapter {
   ): Promise<unknown>;
   /** Full ProviderAdmin row (with tokens) — fetched by the caller, not cached. */
   loadProviderAdmin(orgId: string, provider: Provider): Promise<ProviderAdmin | null>;
+  /**
+   * When true the gateway skips the provider_admins "connected" check and
+   * loadProviderAdmin — the adapter is responsible for all credential loading
+   * inside executeCall. Used by providers that store credentials per-project
+   * (e.g. vps-ssh) rather than per-org.
+   *
+   * Self-contained adapters should also implement `executeCallSelfContained`
+   * so they receive the full request context (roles, project id, etc.).
+   */
+  selfContained?: boolean;
+  /**
+   * Called instead of `executeCall` when `selfContained` is true.
+   * Receives the full `AccessTokenContext` so the adapter can load
+   * per-project credentials and apply role-based policy internally.
+   */
+  executeCallSelfContained?(
+    ctx: AccessTokenContext,
+    tool: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown>;
 }
 
 export interface GatewayConfig {
@@ -156,12 +176,16 @@ export class McpGateway {
 
   private listTools(ctx: AccessTokenContext): McpToolDeclaration[] {
     const out: McpToolDeclaration[] = [];
-    for (const provider of ['github', 'vercel', 'supabase', 'railway'] as Provider[]) {
+    for (const provider of ['github', 'vercel', 'supabase', 'railway', 'vps-ssh'] as Provider[]) {
       const adapter = this.cfg.upstreamByProvider[provider];
       if (!adapter) continue;
       const providerRoles = ctx.roles.filter((r) => r.provider === provider);
       if (providerRoles.length === 0) continue;
       const filtered = filterAvailableTools(providerRoles, adapter.availableTools);
+      if (adapter.selfContained) {
+        out.push(...filtered);
+        continue;
+      }
       const adminEntry = ctx.provider_admins.find((p) => p.provider === provider);
       const plan = injectionPlanFor(provider, {
         bindings: ctx.bindings,
@@ -188,7 +212,7 @@ export class McpGateway {
     // Determine provider from tool prefix.
     const provider = this.providerFor(toolName);
     if (!provider) {
-      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__/railway__).`;
+      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__/railway__/vps_ssh__).`;
       await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
       return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
@@ -198,6 +222,41 @@ export class McpGateway {
       const reason = `provider '${provider}' is not enabled on this gateway.`;
       await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
       return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+    }
+
+    if (adapter.selfContained) {
+      // Self-contained adapters (e.g. vps-ssh) skip the provider_admins check
+      // and loadProviderAdmin. They handle credential loading and role-based
+      // policy internally via executeCallSelfContained.
+      const decision = evaluatePolicy(ctx.roles, ctx.bindings, {
+        provider,
+        tool: toolName,
+        arguments: rawArgs,
+      });
+      if (decision.decision === 'denied') {
+        await this.audit(ctx, toolName, rawArgs, 'denied', null, decision.reason, null);
+        return rpcError(id, -32603, `Vaubaan policy denied: ${decision.reason}`);
+      }
+      const t0 = Date.now();
+      try {
+        const execFn = adapter.executeCallSelfContained
+          ? adapter.executeCallSelfContained.bind(adapter)
+          : null;
+        if (!execFn) {
+          throw new Error(
+            `self-contained adapter for '${provider}' has no executeCallSelfContained`,
+          );
+        }
+        const result = await execFn(ctx, toolName, rawArgs);
+        const latency = Date.now() - t0;
+        await this.audit(ctx, toolName, rawArgs, 'allowed', decision.roleMatched, null, latency);
+        return rpcSuccess(id, this.shapeMcpResult(result));
+      } catch (e) {
+        const latency = Date.now() - t0;
+        const message = e instanceof Error ? e.message : String(e);
+        await this.audit(ctx, toolName, rawArgs, 'allowed', decision.roleMatched, null, latency);
+        return rpcError(id, -32603, `Upstream call failed: ${message}`);
+      }
     }
 
     // Provider must be connected.
@@ -276,6 +335,7 @@ export class McpGateway {
     if (tool.startsWith('vercel__')) return 'vercel';
     if (tool.startsWith('supabase__')) return 'supabase';
     if (tool.startsWith('railway__')) return 'railway';
+    if (tool.startsWith('vps_ssh__')) return 'vps-ssh';
     return null;
   }
 
