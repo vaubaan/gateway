@@ -9,11 +9,13 @@ ALTER TABLE provider_admins DROP CONSTRAINT IF EXISTS provider_admins_provider_c
 ALTER TABLE provider_admins ADD CONSTRAINT provider_admins_provider_check
   CHECK (provider IN ('github','vercel','supabase','railway','ssh'));
 
+-- Delete vps-ssh roles BEFORE adding the new constraint, otherwise existing
+-- rows with provider='vps-ssh' would violate the new CHECK and the ALTER fails.
+DELETE FROM roles WHERE provider = 'vps-ssh';
+
 ALTER TABLE roles DROP CONSTRAINT IF EXISTS roles_provider_check;
 ALTER TABLE roles ADD CONSTRAINT roles_provider_check
   CHECK (provider IN ('github','vercel','supabase','railway','ssh'));
-
-DELETE FROM roles WHERE provider = 'vps-ssh';
 
 CREATE TABLE ssh_bindings (
   id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
