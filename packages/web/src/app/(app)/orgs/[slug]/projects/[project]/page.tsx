@@ -1,6 +1,9 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { PROVIDERS, type Provider } from '@vaubaan/shared';
+import { type Provider } from '@vaubaan/shared';
+
+// vps-ssh is per-project via vps_ssh_bindings, not org-level — excluded here.
+const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState } from '@/lib/providers/state';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
@@ -60,14 +63,15 @@ export default async function ProjectPage({
       .eq('project_id', proj.id)
       .order('created_at', { ascending: false })
       .returns<TokenRow[]>(),
-    Promise.all(PROVIDERS.map((p) => loadProviderState(org.id, p))),
+    Promise.all(ORG_PROVIDERS.map((p) => loadProviderState(org.id, p as Provider))),
   ]);
 
-  const resourcesByProvider: Record<Provider, Array<{ ref: string; name: string }>> = {
+  const resourcesByProvider: Partial<Record<Provider, Array<{ ref: string; name: string }>>> = {
     github: [],
     vercel: [],
     supabase: [],
     railway: [],
+    'vps-ssh': [],
   };
   for (const s of providerStates) {
     resourcesByProvider[s.provider] = s.resources.map((r) => ({ ref: r.ref, name: r.name }));
@@ -128,7 +132,7 @@ export default async function ProjectPage({
                     <BindingControls
                       binding={b}
                       orgSlug={org.slug}
-                      resources={resourcesByProvider[b.provider]}
+                      resources={resourcesByProvider[b.provider] ?? []}
                     />
                   </li>
                 ))}

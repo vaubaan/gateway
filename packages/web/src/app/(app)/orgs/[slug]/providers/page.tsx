@@ -1,5 +1,5 @@
 import { notFound, redirect } from 'next/navigation';
-import { PROVIDERS, type Provider } from '@vaubaan/shared';
+import { type Provider } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState, type ProviderState } from '@/lib/providers/state';
 import { ProviderDisconnectButton } from '../provider-disconnect';
@@ -7,14 +7,18 @@ import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code, Row } from 
 
 export const dynamic = 'force-dynamic';
 
-const PROVIDER_LABEL: Record<Provider, string> = {
+// vps-ssh is per-project, not org-level — excluded from this page.
+const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
+type OrgProvider = (typeof ORG_PROVIDERS)[number];
+
+const PROVIDER_LABEL: Record<OrgProvider, string> = {
   github: 'GitHub',
   vercel: 'Vercel',
   supabase: 'Supabase',
   railway: 'Railway',
 };
 
-const PROVIDER_DESCRIPTION: Record<Provider, string> = {
+const PROVIDER_DESCRIPTION: Record<OrgProvider, string> = {
   github:
     'Install the Vaubaan Gateway GitHub App on the org or user account that owns the repos you want to expose.',
   vercel:
@@ -37,7 +41,9 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
     .maybeSingle<{ id: string; name: string; slug: string }>();
   if (!org) notFound();
 
-  const states = await Promise.all(PROVIDERS.map((p) => loadProviderState(org.id, p)));
+  const states = await Promise.all(
+    ORG_PROVIDERS.map((p) => loadProviderState(org.id, p as Provider)),
+  );
 
   return (
     <main>
@@ -67,11 +73,12 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
 
 function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: string }) {
   const connected = state.status === 'connected';
+  const label = PROVIDER_LABEL[state.provider as OrgProvider] ?? state.provider;
   return (
     <Card>
       <CardHeader>
         <Row gap="var(--space-3)">
-          <CardTitle>{PROVIDER_LABEL[state.provider]}</CardTitle>
+          <CardTitle>{label}</CardTitle>
           {state.status === 'not_connected' ? (
             <Badge tone="neutral">not connected</Badge>
           ) : (
@@ -79,7 +86,12 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
           )}
         </Row>
         <Row gap="var(--space-2)">
-          {connected && <ProviderDisconnectButton orgSlug={orgSlug} provider={state.provider} />}
+          {connected && (
+            <ProviderDisconnectButton
+              orgSlug={orgSlug}
+              provider={state.provider as 'github' | 'vercel' | 'supabase' | 'railway'}
+            />
+          )}
           {!connected && (
             <a
               href={`/api/integrations/${state.provider}/connect?org=${orgSlug}`}
@@ -95,7 +107,7 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
       <CardBody>
         {!connected ? (
           <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-            {PROVIDER_DESCRIPTION[state.provider]}
+            {PROVIDER_DESCRIPTION[state.provider as OrgProvider] ?? ''}
           </p>
         ) : (
           <ProviderDetails state={state} />

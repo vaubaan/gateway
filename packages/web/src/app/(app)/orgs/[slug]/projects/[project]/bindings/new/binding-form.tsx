@@ -15,7 +15,8 @@ import {
 } from '@/components/ui';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 
-const REF_HINT: Record<Provider, string> = {
+// vps-ssh bindings are managed in the dedicated /vps-ssh page, not here.
+const REF_HINT: Record<string, string> = {
   github: 'owner/repo (e.g. acme/website)',
   vercel: 'prj_XXXXXXXXXXXX',
   supabase: '20-char project ref',
