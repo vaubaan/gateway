@@ -37,9 +37,7 @@
       body {
         background-color: var(--bg);
         color: var(--text);
-        font-family:
-          -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial,
-          sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
         font-size: 16px;
         line-height: 1.7;
       }
@@ -298,7 +296,7 @@
       }
 
       .card code {
-        font-family: "SF Mono", "Fira Code", monospace;
+        font-family: 'SF Mono', 'Fira Code', monospace;
         font-size: 0.8rem;
         background: rgba(255, 174, 94, 0.1);
         color: var(--amber);
@@ -396,7 +394,7 @@
         color: var(--text);
       }
       .started-steps li code {
-        font-family: "SF Mono", "Fira Code", monospace;
+        font-family: 'SF Mono', 'Fira Code', monospace;
         font-size: 0.8rem;
         background: rgba(255, 174, 94, 0.1);
         color: var(--amber);
@@ -456,8 +454,8 @@
         <div class="hero-badge">Security Gateway for AI Agents</div>
         <h1>Your AI agent, <span>safely wired in</span>.</h1>
         <p class="hero-tagline">
-          Vaubaan sits between your AI coding tools and your cloud accounts — so
-          your real credentials never leave your hands.
+          Vaubaan sits between your AI coding tools and your cloud accounts — so your real
+          credentials never leave your hands.
         </p>
       </div>
 
@@ -466,27 +464,23 @@
         <h2>🏨 Think of it like a hotel key card system</h2>
         <p>
           Imagine you run a hotel. You wouldn't hand a guest
-          <strong>your master key</strong> — they'd have access to everything,
-          forever. Instead, you give them a <strong>key card</strong> that only
-          opens their room, only while they're booked in.
+          <strong>your master key</strong> — they'd have access to everything, forever. Instead, you
+          give them a <strong>key card</strong> that only opens their room, only while they're
+          booked in.
         </p>
         <p>
-          AI coding agents face the same problem. To do useful work — push code
-          to GitHub, trigger a deployment, read a database — they need
-          credentials. But handing them your real API keys is like giving away
-          your master key.
+          AI coding agents face the same problem. To do useful work — push code to GitHub, trigger a
+          deployment, read a database — they need credentials. But handing them your real API keys
+          is like giving away your master key.
         </p>
         <p>
           <strong>Vaubaan is the hotel key card system for AI agents:</strong>
         </p>
         <ul>
+          <li>You connect your real accounts to Vaubaan <em>once</em>, in a secure vault.</li>
           <li>
-            You connect your real accounts to Vaubaan <em>once</em>, in a secure
-            vault.
-          </li>
-          <li>
-            Each agent gets its own token (<code>vbn_live_…</code>) with a
-            defined set of permissions.
+            Each agent gets its own token (<code>vbn_live_…</code>) with a defined set of
+            permissions.
           </li>
           <li>The token only opens the doors you said it could.</li>
           <li>Every use is logged. Revoke it anytime.</li>
@@ -499,8 +493,8 @@
         <div class="section-label">How it works</div>
         <h2>Five steps, every request</h2>
         <p>
-          When an AI agent needs to do something — create a branch, deploy a
-          build, run a query — here is exactly what happens behind the scenes.
+          When an AI agent needs to do something — create a branch, deploy a build, run a query —
+          here is exactly what happens behind the scenes.
         </p>
 
         <div class="steps">
@@ -509,10 +503,9 @@
             <div class="step-body">
               <h3>Agent makes a call</h3>
               <p>
-                The AI agent sends a request through Vaubaan's MCP interface,
-                including its
-                <code>vbn_live_…</code> token. This is just like a regular API
-                call — from the agent's perspective, it's talking to a tool.
+                The AI agent sends a request through Vaubaan's MCP interface, including its
+                <code>vbn_live_…</code> token. This is just like a regular API call — from the
+                agent's perspective, it's talking to a tool.
               </p>
             </div>
           </div>
@@ -522,9 +515,8 @@
             <div class="step-body">
               <h3>Vaubaan verifies the token</h3>
               <p>
-                Vaubaan checks: is this token real? Is it still active? What
-                organisation, project, and roles does it belong to? All of this
-                happens in milliseconds.
+                Vaubaan checks: is this token real? Is it still active? What organisation, project,
+                and roles does it belong to? All of this happens in milliseconds.
               </p>
             </div>
           </div>
@@ -535,9 +527,8 @@
               <h3>Policy engine decides</h3>
               <p>
                 Vaubaan checks the agent's assigned
-                <strong>roles</strong> against the requested action. "Can this
-                token push to this specific repository?" If no, the request is
-                rejected cleanly right here.
+                <strong>roles</strong> against the requested action. "Can this token push to this
+                specific repository?" If no, the request is rejected cleanly right here.
               </p>
             </div>
           </div>
@@ -549,9 +540,8 @@
               <p>
                 If the policy says yes, Vaubaan mints a
                 <strong>short-lived, single-use credential</strong>
-                from your stored secrets, and makes the actual API call to
-                GitHub, Vercel, Supabase, or whichever service was requested.
-                The agent never sees this credential.
+                from your stored secrets, and makes the actual API call to GitHub, Vercel, Supabase,
+                or whichever service was requested. The agent never sees this credential.
               </p>
             </div>
           </div>
@@ -561,9 +551,8 @@
             <div class="step-body">
               <h3>Result returned, audit log written</h3>
               <p>
-                The result comes back to the agent. Simultaneously, Vaubaan
-                writes a detailed audit log entry: who, what, when, which
-                resource, and whether it was allowed or denied.
+                The result comes back to the agent. Simultaneously, Vaubaan writes a detailed audit
+                log entry: who, what, when, which resource, and whether it was allowed or denied.
               </p>
             </div>
           </div>
@@ -575,19 +564,17 @@
         <div class="section-label">Request flow</div>
         <h2>A picture of every request</h2>
         <p>
-          This diagram shows the same five steps as a sequence — from the
-          agent's call on the left, all the way to the cloud provider on the
-          right.
+          This diagram shows the same five steps as a sequence — from the agent's call on the left,
+          all the way to the cloud provider on the right.
         </p>
 
         <div class="diagram-wrap">
           <div class="mermaid">
-            sequenceDiagram participant A as 🤖 AI Agent participant V as 🛡️
-            Vaubaan participant P as 📋 Policy participant C as ☁️ Cloud
-            Provider A->>V: MCP call + vbn_live_... token V->>V: Verify token
-            &amp; load permissions V->>P: Is this action allowed? P-->>V: ✅
-            Allowed V->>C: Forward with short-lived credential C-->>V: Result
-            V-->>A: Result V->>V: Write audit log
+            sequenceDiagram participant A as 🤖 AI Agent participant V as 🛡️ Vaubaan participant P
+            as 📋 Policy participant C as ☁️ Cloud Provider A->>V: MCP call + vbn_live_... token
+            V->>V: Verify token &amp; load permissions V->>P: Is this action allowed? P-->>V: ✅
+            Allowed V->>C: Forward with short-lived credential C-->>V: Result V-->>A: Result V->>V:
+            Write audit log
           </div>
         </div>
       </section>
@@ -597,8 +584,8 @@
         <div class="section-label">Key concepts</div>
         <h2>The building blocks</h2>
         <p>
-          Vaubaan uses a handful of simple ideas that combine to give you
-          fine-grained control. Here's what each one means.
+          Vaubaan uses a handful of simple ideas that combine to give you fine-grained control.
+          Here's what each one means.
         </p>
 
         <div class="card-grid">
@@ -606,9 +593,9 @@
             <div class="card-icon">🏢</div>
             <h3>Organization</h3>
             <p>
-              Your team or company's top-level account in Vaubaan. All
-              providers, projects, and tokens belong to an organization. Think
-              of it as your company's entry in the Vaubaan directory.
+              Your team or company's top-level account in Vaubaan. All providers, projects, and
+              tokens belong to an organization. Think of it as your company's entry in the Vaubaan
+              directory.
             </p>
           </div>
 
@@ -616,9 +603,9 @@
             <div class="card-icon">🔌</div>
             <h3>Provider</h3>
             <p>
-              A cloud service that Vaubaan knows how to talk to — GitHub,
-              Vercel, Supabase, Railway, or an SSH server. You connect each
-              provider once by giving Vaubaan your real credentials for it.
+              A cloud service that Vaubaan knows how to talk to — GitHub, Vercel, Supabase, Railway,
+              or an SSH server. You connect each provider once by giving Vaubaan your real
+              credentials for it.
             </p>
           </div>
 
@@ -626,9 +613,9 @@
             <div class="card-icon">📁</div>
             <h3>Project</h3>
             <p>
-              A sub-unit of your organization, usually matching one product or
-              codebase. Each project gets its own set of resource bindings,
-              roles, and access tokens — keeping things neatly separated.
+              A sub-unit of your organization, usually matching one product or codebase. Each
+              project gets its own set of resource bindings, roles, and access tokens — keeping
+              things neatly separated.
             </p>
           </div>
 
@@ -636,10 +623,9 @@
             <div class="card-icon">📎</div>
             <h3>Provider Binding</h3>
             <p>
-              Links a project to a <em>specific resource</em> within a provider
-              — for example, the GitHub repository <code>acme/website</code>.
-              Bindings scope what an agent can reach; without a binding, an
-              action is automatically denied.
+              Links a project to a <em>specific resource</em> within a provider — for example, the
+              GitHub repository <code>acme/website</code>. Bindings scope what an agent can reach;
+              without a binding, an action is automatically denied.
             </p>
           </div>
 
@@ -648,9 +634,8 @@
             <h3>Role</h3>
             <p>
               A named bundle of permissions. For example,
-              <code>github:developer</code> might allow pushing branches and
-              opening pull requests, but not deleting repositories. Roles are
-              assigned to access tokens.
+              <code>github:developer</code> might allow pushing branches and opening pull requests,
+              but not deleting repositories. Roles are assigned to access tokens.
             </p>
           </div>
 
@@ -658,10 +643,9 @@
             <div class="card-icon">🔑</div>
             <h3>Access Token</h3>
             <p>
-              A <code>vbn_live_…</code> key you give to an AI agent. It
-              identifies which project and roles that agent has. The agent
-              presents this token on every request — it is the agent's identity
-              inside Vaubaan.
+              A <code>vbn_live_…</code> key you give to an AI agent. It identifies which project and
+              roles that agent has. The agent presents this token on every request — it is the
+              agent's identity inside Vaubaan.
             </p>
           </div>
 
@@ -669,9 +653,8 @@
             <div class="card-icon">⚙️</div>
             <h3>Management Key</h3>
             <p>
-              A <code>vbn_mgmt_…</code> key used by your own automation — CI
-              pipelines, scripts — to mint short-lived agent tokens
-              programmatically. Not for giving to agents directly.
+              A <code>vbn_mgmt_…</code> key used by your own automation — CI pipelines, scripts — to
+              mint short-lived agent tokens programmatically. Not for giving to agents directly.
             </p>
           </div>
         </div>
@@ -682,8 +665,8 @@
         <div class="section-label">Supported providers</div>
         <h2>What your agents can reach</h2>
         <p>
-          Vaubaan currently supports the following cloud services out of the
-          box. More are added regularly.
+          Vaubaan currently supports the following cloud services out of the box. More are added
+          regularly.
         </p>
 
         <div class="provider-list">
@@ -691,9 +674,7 @@
             <div class="provider-icon">🐙</div>
             <div class="provider-info">
               <span class="provider-name">GitHub</span>
-              <span class="provider-desc"
-                >Repos, PRs, issues, branches, and more</span
-              >
+              <span class="provider-desc">Repos, PRs, issues, branches, and more</span>
             </div>
           </div>
 
@@ -701,9 +682,7 @@
             <div class="provider-icon">▲</div>
             <div class="provider-info">
               <span class="provider-name">Vercel</span>
-              <span class="provider-desc"
-                >Deployments and project configuration</span
-              >
+              <span class="provider-desc">Deployments and project configuration</span>
             </div>
           </div>
 
@@ -719,9 +698,7 @@
             <div class="provider-icon">🚂</div>
             <div class="provider-info">
               <span class="provider-name">Railway</span>
-              <span class="provider-desc"
-                >Deployment services and environments</span
-              >
+              <span class="provider-desc">Deployment services and environments</span>
             </div>
           </div>
 
@@ -729,9 +706,7 @@
             <div class="provider-icon">🖥️</div>
             <div class="provider-info">
               <span class="provider-name">SSH</span>
-              <span class="provider-desc"
-                >VPS and server access via ssh__exec</span
-              >
+              <span class="provider-desc">VPS and server access via ssh__exec</span>
             </div>
           </div>
         </div>
@@ -742,47 +717,42 @@
         <div class="section-label">Get started</div>
         <h2>Setting it up (as an operator)</h2>
         <p>
-          You are the <em>operator</em> — the person who owns the cloud accounts
-          and decides what agents are allowed to do. Setup takes a few minutes
-          and you only do it once.
+          You are the <em>operator</em> — the person who owns the cloud accounts and decides what
+          agents are allowed to do. Setup takes a few minutes and you only do it once.
         </p>
 
         <ol class="started-steps">
           <li>
             <strong>Create your Vaubaan organization.</strong>
             Sign up at
-            <a href="https://vaubaan.com" style="color: var(--amber)"
-              >vaubaan.com</a
-            >
+            <a href="https://vaubaan.com" style="color: var(--amber)">vaubaan.com</a>
             and create an organization for your team or project.
           </li>
           <li>
             <strong>Connect a provider.</strong>
-            Go to Providers and add your GitHub, Vercel, Supabase, or other
-            credentials. Vaubaan stores them encrypted — this is the only time
-            your real keys are entered.
+            Go to Providers and add your GitHub, Vercel, Supabase, or other credentials. Vaubaan
+            stores them encrypted — this is the only time your real keys are entered.
           </li>
           <li>
             <strong>Create a project and bind a resource.</strong>
-            Create a project (e.g. "Website"), then add a provider binding to
-            tie it to a specific resource, like the
+            Create a project (e.g. "Website"), then add a provider binding to tie it to a specific
+            resource, like the
             <code>acme/website</code> GitHub repository.
           </li>
           <li>
             <strong>Define a role (or use a built-in one).</strong>
-            Pick the right level of access — read-only, developer (push/PR), or
-            admin. Roles are reusable across tokens.
+            Pick the right level of access — read-only, developer (push/PR), or admin. Roles are
+            reusable across tokens.
           </li>
           <li>
             <strong>Mint an access token for your agent.</strong>
-            Create a <code>vbn_live_…</code> token and assign it the project and
-            role. Hand this token — and only this token — to your AI agent.
+            Create a <code>vbn_live_…</code> token and assign it the project and role. Hand this
+            token — and only this token — to your AI agent.
           </li>
           <li>
             <strong>Point the agent at Vaubaan's MCP endpoint.</strong>
-            Configure the agent to use <code>https://vaubaan.com/mcp</code> with
-            your token. The agent can now do its job, safely, within the
-            boundaries you set.
+            Configure the agent to use <code>https://vaubaan.com/mcp</code> with your token. The
+            agent can now do its job, safely, within the boundaries you set.
           </li>
         </ol>
       </section>
@@ -792,19 +762,17 @@
         <div class="section-label">Org structure</div>
         <h2>How everything connects</h2>
         <p>
-          This diagram shows how your organization, projects, tokens, and roles
-          fit together — and where the AI agent plugs in.
+          This diagram shows how your organization, projects, tokens, and roles fit together — and
+          where the AI agent plugs in.
         </p>
 
         <div class="diagram-wrap">
           <div class="mermaid">
-            graph LR O[👤 Organization] --> PA[🔌 Provider Connections] PA -->
-            GH[🐙 GitHub] PA --> VC[▲ Vercel] PA --> SB[🟢 Supabase] O -->
-            PROJ[📁 Project] PROJ --> BIND[📎 Resource Bindings\ne.g.
-            acme/website] PROJ --> TOK[🔑 Access Token\nvbn_live_...] TOK -->
-            ROLE[📜 Roles\ne.g. github:developer] BOT[🤖 AI Agent] -->|uses
-            token| VBN[🛡️ Vaubaan] VBN -->|policy check| ROLE VBN -->|forwards
-            if allowed| BIND
+            graph LR O[👤 Organization] --> PA[🔌 Provider Connections] PA --> GH[🐙 GitHub] PA -->
+            VC[▲ Vercel] PA --> SB[🟢 Supabase] O --> PROJ[📁 Project] PROJ --> BIND[📎 Resource
+            Bindings\ne.g. acme/website] PROJ --> TOK[🔑 Access Token\nvbn_live_...] TOK --> ROLE[📜
+            Roles\ne.g. github:developer] BOT[🤖 AI Agent] -->|uses token| VBN[🛡️ Vaubaan] VBN
+            -->|policy check| ROLE VBN -->|forwards if allowed| BIND
           </div>
         </div>
       </section>
@@ -814,8 +782,8 @@
     <!-- Footer -->
     <footer>
       <p>
-        <strong style="color: var(--text-muted)">Vaubaan</strong> — Security
-        gateway for AI coding agents. &nbsp;·&nbsp;
+        <strong style="color: var(--text-muted)">Vaubaan</strong> — Security gateway for AI coding
+        agents. &nbsp;·&nbsp;
         <a href="https://vaubaan.com">vaubaan.com</a>
       </p>
     </footer>
@@ -823,19 +791,19 @@
     <script>
       mermaid.initialize({
         startOnLoad: true,
-        theme: "dark",
+        theme: 'dark',
         themeVariables: {
-          primaryColor: "#1c2128",
-          primaryTextColor: "#e6edf3",
-          primaryBorderColor: "#30363d",
-          lineColor: "#ffae5e",
-          secondaryColor: "#161b22",
-          tertiaryColor: "#0d1117",
-          edgeLabelBackground: "#161b22",
-          clusterBkg: "#1c2128",
-          titleColor: "#ffae5e",
-          nodeBorder: "#30363d",
-          mainBkg: "#1c2128",
+          primaryColor: '#1c2128',
+          primaryTextColor: '#e6edf3',
+          primaryBorderColor: '#30363d',
+          lineColor: '#ffae5e',
+          secondaryColor: '#161b22',
+          tertiaryColor: '#0d1117',
+          edgeLabelBackground: '#161b22',
+          clusterBkg: '#1c2128',
+          titleColor: '#ffae5e',
+          nodeBorder: '#30363d',
+          mainBkg: '#1c2128',
         },
         sequence: {
           actorFontSize: 14,
