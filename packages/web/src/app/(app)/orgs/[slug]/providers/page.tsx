@@ -2,6 +2,7 @@ import { notFound, redirect } from 'next/navigation';
 import { type Provider } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState, type ProviderState } from '@/lib/providers/state';
+import Link from 'next/link';
 import { ProviderDisconnectButton } from '../provider-disconnect';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code, Row } from '@/components/ui';
 
@@ -72,11 +73,17 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
               <CardTitle>SSH</CardTitle>
               <Badge tone="neutral">per-project</Badge>
             </Row>
+            <Link href={`/orgs/${org.slug}`} style={{ textDecoration: 'none' }}>
+              <Button size="sm" variant="secondary">
+                Add SSH binding →
+              </Button>
+            </Link>
           </CardHeader>
           <CardBody>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              SSH bindings are configured per project, not at the org level. Go to a project and
-              open the SSH tab to register hosts for the <code>ssh__exec</code> tool.
+              SSH bindings are configured per project via the standard binding form. Select a
+              project below, then click <strong>+ Bind a resource</strong> and choose{' '}
+              <strong>SSH</strong> from the provider dropdown.
             </p>
           </CardBody>
         </Card>
