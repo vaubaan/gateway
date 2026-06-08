@@ -5,6 +5,8 @@
  * Spec : docs/spec/vaubaan-gateway.md §3.
  */
 
+import type { Capability } from './capability.ts';
+
 export type Provider = 'github' | 'vercel' | 'supabase' | 'railway';
 
 export const PROVIDERS = [
@@ -63,17 +65,15 @@ export interface ProviderBinding {
   provider: Provider;
   resource_ref: string;
   display_name: string | null;
-  created_at: string;
-}
-
-export interface Role {
-  id: string;
-  organization_id: string | null;
-  provider: Provider;
-  name: string;
-  description: string | null;
-  is_builtin: boolean;
-  permissions: Permissions;
+  /**
+   * The named canonical environment this binding targets (e.g. 'staging',
+   * 'prod'), or null when the bound resource has no parallel instances.
+   * Backs the `env` of a Capability for providers where env = a distinct
+   * resource (Supabase: one project_ref per env). Mirrors the nullable
+   * `provider_bindings.environment` column (migration 0011). Optional on the
+   * TS shape so legacy binding literals stay valid; absent ≡ null.
+   */
+  environment?: string | null;
   created_at: string;
 }
 
@@ -107,12 +107,6 @@ export interface OrgManagementKey {
   created_at: string;
 }
 
-export interface AccessTokenRole {
-  access_token_id: string;
-  role_id: string;
-  added_at: string;
-}
-
 export interface AuditLogRow {
   id: string;
   organization_id: string;
@@ -121,47 +115,15 @@ export interface AuditLogRow {
   ts: string;
   tool_name: string;
   arguments_hash: string;
-  role_matched: string | null;
+  /** Shorthand of the capability that authorized the call ; null if denied.
+   *  Cf. capability.ts formatCapability(). */
+  capability_matched: string | null;
   decision: AuditDecision;
   denial_reason: string | null;
   upstream_latency_ms: number | null;
   client_ip: string | null;
   client_user_agent: string | null;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Policy DSL (cf. ADR policy-dsl-declarative-jsonb)
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface Permissions {
-  version: 1;
-  rules: Rule[];
-}
-
-export type AbstractTarget =
-  | 'project.repos'
-  | 'project.vercel'
-  | 'project.supabase'
-  | 'project.railway'
-  | '*';
-
-export interface Rule {
-  effect: 'allow' | 'deny';
-  target?: AbstractTarget;
-  tool?: string;
-  tool_matches?: string[];
-  constraints?: Record<string, Constraint>;
-  priority?: number;
-}
-
-export type Constraint =
-  | { equals: string | number | boolean }
-  | { in: (string | number)[] }
-  | { not_in: (string | number)[] }
-  | { match: string[] }
-  | { regex: string }
-  | { starts_with: string | string[] }
-  | { not_starts_with: string | string[] };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Access-token context loaded at hot-path (cached 60s)
@@ -174,7 +136,8 @@ export interface AccessTokenContext {
   >;
   project: Pick<Project, 'id' | 'slug' | 'organization_id'>;
   organization: Pick<Organization, 'id' | 'slug' | 'name'>;
-  roles: Role[];
+  /** The capability set granted to this access token (the full tuples). */
+  capabilities: Capability[];
   bindings: ProviderBinding[];
   provider_admins: Array<
     Pick<ProviderAdmin, 'provider' | 'status' | 'installation_id' | 'team_id'>

@@ -15,9 +15,15 @@
  * https://mcp.railway.com/ (cf. execute.ts).
  */
 
-import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
+import type {
+  Capability,
+  McpToolDeclaration,
+  ProviderAdmin,
+  ProviderBinding,
+} from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
 import { executeCall, type FetchImpl } from './execute.ts';
+import { classifyRailway, railwayToolCapabilities, type ClassifyResult } from './classify.ts';
 
 const TOKEN_ENDPOINT = 'https://backboard.railway.com/oauth/token';
 /** RFC 8707 resource indicator binding the token to the MCP audience. */
@@ -158,12 +164,16 @@ export class RailwayAdapter {
     return executeCall(this.fetchImpl, token, tool, args);
   }
 
-  resolveTarget(target: string, bindings: ProviderBinding[]): string[] {
-    if (target === '*') return ['*'];
-    if (target === 'project.railway') {
-      return bindings.filter((b) => b.provider === 'railway').map((b) => b.resource_ref);
-    }
-    return [];
+  toolCapabilities(tool: string): readonly Capability[] {
+    return railwayToolCapabilities(tool);
+  }
+
+  classify(
+    tool: string,
+    args: Record<string, unknown>,
+    bindings: ReadonlyArray<ProviderBinding>,
+  ): ClassifyResult {
+    return classifyRailway(tool, args, bindings);
   }
 }
 

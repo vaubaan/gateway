@@ -1,7 +1,7 @@
 /**
  * Access-token RW operations.
  *
- *   PATCH  /api/v1/tokens/:tokenId   body: { name?, status?, roleIds? }
+ *   PATCH  /api/v1/tokens/:tokenId   body: { name?, status?, capabilities? }
  *   DELETE /api/v1/tokens/:tokenId
  *
  * Spec : docs/spec/vaubaan-gateway.md §8.5.
@@ -13,6 +13,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { type Capability, parseCapability } from '@vaubaan/shared';
 import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
@@ -28,10 +29,10 @@ const PatchSchema = z
       .regex(/^[a-z0-9](-?[a-z0-9])*$/)
       .optional(),
     status: z.enum(['active', 'revoked']).optional(),
-    roleIds: z.array(z.string().uuid()).optional(),
+    capabilities: z.array(z.string().min(1)).optional(),
   })
-  .refine((b) => b.name || b.status || b.roleIds, {
-    message: 'must provide at least one of name, status, roleIds',
+  .refine((b) => b.name || b.status || b.capabilities, {
+    message: 'must provide at least one of name, status, capabilities',
   });
 
 async function invalidateCache(prefix: string) {
@@ -48,6 +49,27 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ tokenId: 
       { error: e instanceof Error ? e.message : 'invalid body' },
       { status: 400 },
     );
+  }
+
+  // Parse capabilities up front when present, so a malformed shorthand is a 400.
+  let capabilities: Capability[] | undefined;
+  if (body.capabilities) {
+    try {
+      capabilities = body.capabilities.map((s) => {
+        try {
+          return parseCapability(s);
+        } catch (e) {
+          throw new Error(
+            `invalid capability '${s}': ${e instanceof Error ? e.message : String(e)}`,
+          );
+        }
+      });
+    } catch (e) {
+      return NextResponse.json(
+        { error: e instanceof Error ? e.message : 'invalid capability' },
+        { status: 400 },
+      );
+    }
   }
 
   const guard = await requireOrgMember(body.orgSlug);
@@ -77,14 +99,9 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ tokenId: 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  if (body.roleIds) {
-    await svc.from('access_token_roles').delete().eq('access_token_id', tokenId);
-    if (body.roleIds.length > 0) {
-      const { error } = await svc
-        .from('access_token_roles')
-        .insert(body.roleIds.map((rid) => ({ access_token_id: tokenId, role_id: rid })));
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    }
+  if (capabilities) {
+    const { error } = await svc.from('access_tokens').update({ capabilities }).eq('id', tokenId);
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
   await invalidateCache(token.api_key_prefix);

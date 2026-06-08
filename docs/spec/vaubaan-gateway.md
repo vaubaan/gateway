@@ -2,6 +2,17 @@
 
 > **Statut :** spec greenfield.
 >
+> **⚠️ Note 2026-06-08 — Roles → Capabilities :** le modèle **roles +
+> policy-DSL déclaratif** (§0, §2.2, tables `roles`/`access_token_roles` en §3,
+> §5 roles builtin, §6 DSL) est **remplacé** par le **modèle de capabilities**.
+> Une capability est un tuple `(plane, operand, action, env?)` porté directement
+> par l'AccessToken (`access_tokens.capabilities` jsonb) ; la classification
+> `(tool, args) → capability` vit dans chaque plugin provider (`classify()`),
+> plus dans un DSL en base. Source de vérité du nouveau modèle :
+> [[gateway-capability-model.draft]] + migration `0011_capabilities_replace_roles.sql`.
+> ADR `capabilities-replace-roles` à venir. Les sections ci-dessous décrivant
+> roles/DSL sont historiques jusqu'à réécriture.
+>
 > **⚠️ Note 2026-05-26 :** depuis l'ADR
 > [[flat-membership-org-owner-access-token]] le terme **Bot** est renommé en
 > **AccessToken** (table `access_tokens`, URL `/tokens`) et le RBAC humain

@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
+import { type Capability, formatCapability, isValidCapability } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { TokenControls } from './controls';
 
@@ -12,13 +13,7 @@ interface TokenRow {
   status: 'active' | 'revoked';
   last_used_at: string | null;
   created_at: string;
-}
-
-interface RoleRow {
-  id: string;
-  name: string;
-  provider: 'github' | 'vercel' | 'supabase' | 'railway';
-  description: string | null;
+  capabilities: unknown;
 }
 
 export default async function TokenPage({
@@ -48,30 +43,28 @@ export default async function TokenPage({
 
   const { data: token } = await supabase
     .from('access_tokens')
-    .select('id, name, api_key_prefix, status, last_used_at, created_at')
+    .select('id, name, api_key_prefix, status, last_used_at, created_at, capabilities')
     .eq('id', tokenId)
     .eq('project_id', proj.id)
     .maybeSingle<TokenRow>();
   if (!token) notFound();
 
-  const [{ data: roleLinks }, { data: rolesCatalog }, { data: lastCalls }] = await Promise.all([
-    supabase.from('access_token_roles').select('role_id').eq('access_token_id', token.id),
-    supabase
-      .from('roles')
-      .select('id, name, provider, description')
-      .or(`organization_id.is.null,organization_id.eq.${org.id}`)
-      .order('name'),
-    supabase
-      .from('audit_log')
-      .select('id, ts, tool_name, decision, role_matched, upstream_latency_ms')
-      .eq('access_token_id', token.id)
-      .order('ts', { ascending: false })
-      .limit(10),
-  ]);
-  const attachedRoleIds = new Set(
-    ((roleLinks ?? []) as Array<{ role_id: string }>).map((r) => r.role_id),
-  );
-  const roles = (rolesCatalog ?? []) as unknown as RoleRow[];
+  const { data: lastCalls } = await supabase
+    .from('audit_log')
+    .select('id, ts, tool_name, decision, capability_matched, upstream_latency_ms')
+    .eq('access_token_id', token.id)
+    .order('ts', { ascending: false })
+    .limit(10);
+
+  // Capabilities are stored as full tuples; surface them as shorthand strings.
+  const capabilities: string[] = Array.isArray(token.capabilities)
+    ? (token.capabilities as unknown[])
+        .filter(
+          (c): c is Capability =>
+            typeof c === 'object' && c !== null && isValidCapability(c as Capability),
+        )
+        .map((c) => formatCapability(c))
+    : [];
 
   return (
     <main>
@@ -112,8 +105,7 @@ export default async function TokenPage({
         tokenStatus={token.status}
         orgSlug={org.slug}
         projectSlug={proj.slug}
-        roles={roles}
-        attachedRoleIds={Array.from(attachedRoleIds)}
+        capabilities={capabilities}
       />
 
       <section style={{ marginTop: 32 }}>
@@ -124,7 +116,7 @@ export default async function TokenPage({
               <th style={th}>Time</th>
               <th style={th}>Tool</th>
               <th style={th}>Decision</th>
-              <th style={th}>Role</th>
+              <th style={th}>Capability</th>
               <th style={th}>Latency</th>
             </tr>
           </thead>
@@ -135,7 +127,7 @@ export default async function TokenPage({
                 ts: string;
                 tool_name: string;
                 decision: 'allowed' | 'denied';
-                role_matched: string | null;
+                capability_matched: string | null;
                 upstream_latency_ms: number | null;
               }>
             ).map((r) => (
@@ -152,7 +144,7 @@ export default async function TokenPage({
                 >
                   {r.decision}
                 </td>
-                <td style={td}>{r.role_matched ?? '—'}</td>
+                <td style={td}>{r.capability_matched ?? '—'}</td>
                 <td style={td}>
                   {r.upstream_latency_ms !== null ? `${r.upstream_latency_ms}ms` : '—'}
                 </td>

@@ -11,11 +11,12 @@ import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supa
 import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
 import type {
   AccessTokenContext,
+  Capability,
   Provider,
   ProviderAdmin,
   ProviderBinding,
-  Role,
 } from '@vaubaan/shared';
+import { isValidCapability } from '@vaubaan/shared';
 import {
   McpGateway,
   buildCacheClient,
@@ -50,6 +51,7 @@ interface AccessTokenRow {
   status: 'active' | 'revoked';
   api_key_prefix: string;
   expires_at: string | null;
+  capabilities: unknown;
 }
 
 interface ProjectRow {
@@ -82,7 +84,7 @@ export function buildGateway(opts: {
     async loadAccessTokenContext(accessTokenId) {
       const { data: tk } = await supabase
         .from('access_tokens')
-        .select('id, name, project_id, status, api_key_prefix, expires_at')
+        .select('id, name, project_id, status, api_key_prefix, expires_at, capabilities')
         .eq('id', accessTokenId)
         .maybeSingle<AccessTokenRow>();
       if (!tk) return null;
@@ -98,13 +100,12 @@ export function buildGateway(opts: {
         .eq('id', project.organization_id)
         .maybeSingle<OrgRow>();
       if (!org) return null;
-      const { data: tokenRoles } = await supabase
-        .from('access_token_roles')
-        .select('role:roles(*)')
-        .eq('access_token_id', accessTokenId);
-      const roles: Role[] = ((tokenRoles ?? []) as unknown as Array<{ role: Role | null }>)
-        .map((r) => r.role)
-        .filter((r): r is Role => r !== null);
+      const capabilities: Capability[] = Array.isArray(tk.capabilities)
+        ? (tk.capabilities as unknown[]).filter(
+            (c): c is Capability =>
+              typeof c === 'object' && c !== null && isValidCapability(c as Capability),
+          )
+        : [];
       const bindingsResp = await supabase
         .from('provider_bindings')
         .select('*')
@@ -119,7 +120,7 @@ export function buildGateway(opts: {
         access_token: tk,
         project,
         organization: org,
-        roles,
+        capabilities,
         bindings: bindings as AccessTokenContext['bindings'],
         provider_admins: providerAdmins as AccessTokenContext['provider_admins'],
       };
@@ -173,6 +174,8 @@ export function buildGateway(opts: {
   upstreamByProvider.github = {
     provider: 'github',
     availableTools: githubAvailableTools,
+    toolCapabilities: (tool) => ghAdapter.toolCapabilities(tool),
+    classify: (tool, args, bindings) => ghAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) => ghAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
   };
@@ -182,6 +185,8 @@ export function buildGateway(opts: {
   upstreamByProvider.vercel = {
     provider: 'vercel',
     availableTools: vercelAvailableTools,
+    toolCapabilities: (tool) => vercelAdapter.toolCapabilities(tool),
+    classify: (tool, args, bindings) => vercelAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       vercelAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
@@ -192,6 +197,8 @@ export function buildGateway(opts: {
   upstreamByProvider.supabase = {
     provider: 'supabase',
     availableTools: supabaseAvailableTools,
+    toolCapabilities: (tool) => supabaseAdapter.toolCapabilities(tool),
+    classify: (tool, args, bindings) => supabaseAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       supabaseAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
@@ -215,6 +222,8 @@ export function buildGateway(opts: {
   upstreamByProvider.railway = {
     provider: 'railway',
     availableTools: railwayAvailableTools,
+    toolCapabilities: (tool) => railwayAdapter.toolCapabilities(tool),
+    classify: (tool, args, bindings) => railwayAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       railwayAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,

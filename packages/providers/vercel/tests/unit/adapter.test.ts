@@ -128,15 +128,83 @@ describe('VercelAdapter — executeCall (rewrap mcp.vercel.com)', () => {
   });
 });
 
-describe('VercelAdapter — resolveTarget', () => {
-  test('project.vercel returns vercel bindings', () => {
-    const adapter = new VercelAdapter();
-    expect(
-      adapter.resolveTarget('project.vercel', [
-        binding,
-        { ...binding, provider: 'github', resource_ref: 'acme/x' },
-      ]),
-    ).toEqual(['prj_abc']);
+describe('VercelAdapter — classify', () => {
+  const adapter = new VercelAdapter();
+
+  test('account-level read → runtime/account:read (env-less), no projectId required', () => {
+    const result = adapter.classify('vercel__list_projects', {}, [binding]);
+    expect(result).toEqual({
+      capability: { provider: 'vercel', plane: 'runtime', level: 'account', action: 'read' },
+    });
+  });
+
+  test('get_project → runtime/project-settings:read (env-less)', () => {
+    const result = adapter.classify('vercel__get_project', { projectId: 'prj_abc' }, [binding]);
+    expect(result).toEqual({
+      capability: {
+        provider: 'vercel',
+        plane: 'runtime',
+        level: 'project-settings',
+        action: 'read',
+      },
+    });
+  });
+
+  test('deploy to production → runtime/deployment:write @prod', () => {
+    const result = adapter.classify(
+      'vercel__deploy_to_vercel',
+      { projectId: 'prj_abc', target: 'production' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'vercel',
+        plane: 'runtime',
+        level: 'deployment',
+        action: 'write',
+        env: 'prod',
+      },
+    });
+  });
+
+  test('upsert_env_var with preview target → runtime/config:write @preview', () => {
+    const result = adapter.classify(
+      'vercel__upsert_env_var',
+      { projectId: 'prj_abc', key: 'X', value: 'y', target: 'preview' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'vercel',
+        plane: 'runtime',
+        level: 'config',
+        action: 'write',
+        env: 'preview',
+      },
+    });
+  });
+
+  test('update_project_settings → runtime/project-settings:write (env-less)', () => {
+    const result = adapter.classify(
+      'vercel__update_project_settings',
+      { projectId: 'prj_abc', rootDirectory: 'app' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'vercel',
+        plane: 'runtime',
+        level: 'project-settings',
+        action: 'write',
+      },
+    });
+  });
+
+  test('denies a call carrying an unbound projectId', () => {
+    const result = adapter.classify('vercel__get_project', { projectId: 'prj_unbound' }, [binding]);
+    expect(result).toEqual({
+      denied: "vercel project 'prj_unbound' is not bound to this project.",
+    });
   });
 });
 

@@ -1,15 +1,9 @@
 'use client';
 
-import { useEffect, useState, use as usePromise } from 'react';
+import { useState, use as usePromise } from 'react';
 import { useRouter } from 'next/navigation';
-import { getSupabaseBrowser } from '@/lib/supabase/client';
-
-interface RoleRow {
-  id: string;
-  name: string;
-  provider: string;
-  description: string | null;
-}
+import { parseCapability } from '@vaubaan/shared/capability';
+import { CAPABILITY_PRESETS } from '@/lib/capabilities/presets';
 
 export default function NewTokenPage({
   params,
@@ -18,25 +12,36 @@ export default function NewTokenPage({
 }) {
   const { slug: orgSlug, project: projectSlug } = usePromise(params);
   const [name, setName] = useState('');
-  const [availableRoles, setAvailableRoles] = useState<RoleRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [extra, setExtra] = useState<string[]>([]);
+  const [customInput, setCustomInput] = useState('');
+  const [customError, setCustomError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [apiKey, setApiKey] = useState<string | null>(null);
   const router = useRouter();
 
-  useEffect(() => {
-    const supabase = getSupabaseBrowser();
-    void supabase
-      .from('roles')
-      .select('id, name, provider, description')
-      .or('organization_id.is.null,organization_id.not.is.null')
-      .order('name')
-      .then((res) => {
-        if (res.error) setError(res.error.message);
-        else setAvailableRoles(res.data ?? []);
-      });
-  }, []);
+  const capabilities = [...Array.from(selected), ...extra];
+
+  function addCustom() {
+    const value = customInput.trim();
+    if (!value) return;
+    try {
+      parseCapability(value); // validate shorthand grammar before accepting
+    } catch (err) {
+      setCustomError(err instanceof Error ? err.message : 'invalid capability');
+      return;
+    }
+    if (!selected.has(value) && !extra.includes(value)) {
+      setExtra((cur) => [...cur, value]);
+    }
+    setCustomInput('');
+    setCustomError(null);
+  }
+
+  function removeExtra(value: string) {
+    setExtra((cur) => cur.filter((v) => v !== value));
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,7 +55,7 @@ export default function NewTokenPage({
           orgSlug,
           projectSlug,
           name,
-          roleIds: Array.from(selected),
+          capabilities,
         }),
       });
       const json = (await res.json()) as { api_key?: string; error?: string };
@@ -171,26 +176,87 @@ export default function NewTokenPage({
           />
         </label>
         <fieldset style={{ border: '1px solid #2a2a2a', borderRadius: 6, padding: 12 }}>
-          <legend style={{ opacity: 0.7 }}>Roles</legend>
-          {availableRoles.map((r) => (
-            <label key={r.id} style={{ display: 'block', padding: '6px 0' }}>
+          <legend style={{ opacity: 0.7 }}>Capabilities</legend>
+          {CAPABILITY_PRESETS.map((cap) => (
+            <label key={cap.value} style={{ display: 'block', padding: '6px 0' }}>
               <input
                 type="checkbox"
-                checked={selected.has(r.id)}
+                checked={selected.has(cap.value)}
                 onChange={(e) => {
                   const next = new Set(selected);
-                  if (e.target.checked) next.add(r.id);
-                  else next.delete(r.id);
+                  if (e.target.checked) next.add(cap.value);
+                  else next.delete(cap.value);
                   setSelected(next);
                 }}
               />{' '}
-              <strong>{r.name}</strong> <span style={{ opacity: 0.55 }}>{r.description}</span>
+              <strong>{cap.label}</strong> <code style={{ opacity: 0.55 }}>{cap.value}</code>
             </label>
           ))}
+          {extra.length > 0 && (
+            <div style={{ marginTop: 8, borderTop: '1px solid #2a2a2a', paddingTop: 8 }}>
+              {extra.map((value) => (
+                <label key={value} style={{ display: 'block', padding: '6px 0' }}>
+                  <input type="checkbox" checked readOnly /> <code>{value}</code>{' '}
+                  <button
+                    type="button"
+                    onClick={() => removeExtra(value)}
+                    style={{
+                      background: 'transparent',
+                      color: '#ff7e7e',
+                      border: 0,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    remove
+                  </button>
+                </label>
+              ))}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <input
+              value={customInput}
+              onChange={(e) => {
+                setCustomInput(e.target.value);
+                setCustomError(null);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  addCustom();
+                }
+              }}
+              placeholder="custom capability, e.g. dns:apply@prod"
+              style={{
+                flex: 1,
+                padding: 8,
+                background: '#1a1a1a',
+                color: '#fff',
+                border: '1px solid #2a2a2a',
+                borderRadius: 6,
+              }}
+            />
+            <button
+              type="button"
+              onClick={addCustom}
+              style={{
+                padding: '8px 12px',
+                background: 'transparent',
+                color: '#fff',
+                border: '1px solid #2a2a2a',
+                borderRadius: 6,
+              }}
+            >
+              Add
+            </button>
+          </div>
+          {customError && (
+            <p style={{ color: '#ff7e7e', fontSize: 13, margin: '6px 0 0' }}>{customError}</p>
+          )}
         </fieldset>
         <button
           type="submit"
-          disabled={busy || selected.size === 0}
+          disabled={busy || capabilities.length === 0}
           style={{
             padding: '10px 14px',
             background: '#fff',

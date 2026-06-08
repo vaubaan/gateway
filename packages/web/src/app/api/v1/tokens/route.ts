@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { generateApiKey, hashApiKey } from '@vaubaan/shared';
+import { type Capability, generateApiKey, hashApiKey, parseCapability } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 
@@ -11,7 +11,7 @@ const BodySchema = z.object({
   orgSlug: z.string().min(1),
   projectSlug: z.string().min(1),
   name: z.string().regex(/^[a-z0-9](-?[a-z0-9])*$/),
-  roleIds: z.array(z.string().uuid()).min(1),
+  capabilities: z.array(z.string().min(1)).min(1),
 });
 
 export async function POST(req: NextRequest) {
@@ -21,6 +21,23 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : 'invalid body' },
+      { status: 400 },
+    );
+  }
+
+  // Parse every capability shorthand into its stored tuple form.
+  let capabilities: Capability[];
+  try {
+    capabilities = body.capabilities.map((s) => {
+      try {
+        return parseCapability(s);
+      } catch (e) {
+        throw new Error(`invalid capability '${s}': ${e instanceof Error ? e.message : String(e)}`);
+      }
+    });
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid capability' },
       { status: 400 },
     );
   }
@@ -50,6 +67,7 @@ export async function POST(req: NextRequest) {
       api_key_prefix: apiKeyPrefix,
       api_key_hash: apiKeyHash,
       status: 'active',
+      capabilities,
       created_by: guard.userId,
     })
     .select('id, name, api_key_prefix, status, created_at')
@@ -66,14 +84,5 @@ export async function POST(req: NextRequest) {
       { status: 500 },
     );
   }
-  const token = inserted;
-
-  const { error: linkErr } = await svc
-    .from('access_token_roles')
-    .insert(body.roleIds.map((roleId) => ({ access_token_id: token.id, role_id: roleId })));
-  if (linkErr) {
-    return NextResponse.json({ error: linkErr.message }, { status: 500 });
-  }
-
   return NextResponse.json({ access_token: inserted, api_key: apiKey }, { status: 201 });
 }

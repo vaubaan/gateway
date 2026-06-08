@@ -13,28 +13,20 @@ import {
   generateApiKey,
   hashApiKey,
   type AccessTokenContext,
+  type Capability,
   type McpToolDeclaration,
   type ProviderAdmin,
   type ProviderBinding,
-  type Role,
 } from '@vaubaan/shared';
 import { MemoryAuditWriter } from '../../src/audit.ts';
 import { MemoryCacheClient } from '../../src/cache.ts';
 import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/gateway.ts';
+import { mockClassifyGithub, mockGithubToolCapabilities } from '../fixtures/github-classifier.ts';
 
-const readerRole: Role = {
-  id: 'role-reader',
-  organization_id: null,
-  provider: 'github',
-  name: 'github:reader',
-  description: null,
-  is_builtin: true,
-  permissions: {
-    version: 1,
-    rules: [{ effect: 'allow', target: 'project.repos', tool_matches: ['github__list_*'] }],
-  },
-  created_at: '2026-01-01',
-};
+// Read-only capability set — equivalent to the old `github:reader` role.
+const readerCapabilities: Capability[] = [
+  { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
+];
 
 const binding: ProviderBinding = {
   id: 'b1',
@@ -85,7 +77,7 @@ async function harness() {
     },
     project: { id: 'p1', slug: 'playground', organization_id: 'org1' },
     organization: { id: 'org1', slug: 'acme', name: 'Acme' },
-    roles: [readerRole],
+    capabilities: readerCapabilities,
     bindings: [binding],
     provider_admins: [
       { provider: 'github', status: 'connected', installation_id: null, team_id: null },
@@ -102,6 +94,8 @@ async function harness() {
   const adapter: UpstreamAdapter = {
     provider: 'github',
     availableTools: ghTools,
+    toolCapabilities: mockGithubToolCapabilities,
+    classify: mockClassifyGithub,
     executeCall: execute,
     loadProviderAdmin: vi.fn().mockResolvedValue(admin),
   };

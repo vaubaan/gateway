@@ -1,7 +1,7 @@
 ---
 title: Railway provider adapter
 status: current
-date: 2026-05-29
+date: 2026-06-08
 tracks:
   - packages/providers/railway/src/
   - packages/web/src/app/api/integrations/railway/
@@ -21,12 +21,13 @@ ADR : `docs/decisions/railway-rewrap-remote-mcp.md`.
 ```
 packages/providers/railway/
   src/
-    railway-adapter.ts   # RailwayAdapter — mint (+ refresh), executeCall, resolveTarget
+    railway-adapter.ts   # RailwayAdapter — mint (+ refresh), executeCall, classify, toolCapabilities
+    classify.ts          # classifyRailway + railwayToolCapabilities (capability model)
     execute.ts           # JSON-RPC forward → mcp.railway.com, parse SSE frame
     tools.ts             # availableTools[] + toUpstreamName (strip railway__)
     upstream-tools.json  # 10 tools frozen from upstream
     index.ts             # barrel
-  tests/unit/adapter.test.ts (11 tests)
+  tests/unit/adapter.test.ts (15 tests)
 ```
 
 ## Setup opérateur (une fois)
@@ -98,39 +99,53 @@ sont en kebab-case) :
 - **Read** : `railway__whoami`, `railway__list-projects`,
   `railway__list-services`, `railway__list-deployments`, `railway__get-status`,
   `railway__get-logs`.
-- **Write** : `railway__create-project`, `railway__redeploy`,
-  `railway__railway-agent`.
-- **DESTRUCTIVE (autorisé uniquement par `railway:deployer`)** :
+- **Apply** (`runtime/input:apply`) : `railway__redeploy`,
   `railway__accept-deploy` (commit les changements staged + déclenche un
-  deploy).
+  deploy), `railway__railway-agent`.
+- **Provision** (`runtime/container:provision`) : `railway__create-project`.
 
 Refresh de la liste : `POST tools/list` à `mcp.railway.com` avec un Bearer
 scopé `resource=https://mcp.railway.com`, recopier chaque tool avec le préfixe
 dans `src/upstream-tools.json`.
 
-## Roles builtin
+## Classification (capability model)
 
-Seedés en migrations `0004_add_railway_provider.sql` (viewer + member),
-`0008_add_railway_deployer_role.sql` (deployer), et patché par
-`0009_drop_cross_role_denies.sql` (retire le deny `accept-deploy` du
-member — cf. note sémantique plus bas) :
+`src/classify.ts` remplace l'ancien modèle « roles + policy DSL »
+(`resolveTarget` supprimé). Une capability est un tuple
+`{ plane, operand, action, env? }` (cf. `docs/spec/gateway-capability-model.draft.md`).
+Pour Railway le `plane` est toujours `runtime`.
 
-- `railway:viewer` — read-only (`whoami`, `list-*`, `get-*`).
-- `railway:member` — read + `create-project`/`redeploy`/`railway-agent`.
-  Ne couvre pas `accept-deploy` (mais ne le denie plus explicitement non
-  plus — default-deny suffit).
-- `railway:deployer` — read + `accept-deploy`. Target `project.railway`
-  (le commit-staged + deploy demande une binding explicite). Mirror du
-  pattern `vercel:deployer`.
+`classifyRailway(tool, args, bindings)` mappe un call concret vers la
+capability requise (ou un `{ denied }` structurel) :
 
-viewer/member utilisent `target: '*'` (plusieurs tools n'ont pas
-d'identifiant de projet) ; deployer scope sur `project.railway`.
+| Tools                                                                                    | Capability                    |
+| ---------------------------------------------------------------------------------------- | ----------------------------- |
+| `whoami`, `list-projects`, `list-services`, `list-deployments`, `get-status`, `get-logs` | `runtime/output:read`         |
+| `redeploy`, `accept-deploy`, `railway-agent`                                             | `runtime/input:apply`         |
+| `create-project`                                                                         | `runtime/container:provision` |
 
-**Multi-role = union d'allows.** Assigner `railway:member` + `railway:deployer`
-en parallèle donne bien la somme des deux droits (`create-project`,
-`redeploy`, `railway-agent`, ET `accept-deploy` sur projects bindés). C'est
-l'invariant depuis 0009 : ajouter un role n'enlève jamais de droits.
+`railwayToolCapabilities(tool)` renvoie la surface env-less d'un tool (pour le
+filtrage statique `tools/list`) : un tableau d'une seule capability, ou `[]`
+pour un tool inconnu.
+
+**ENV non résolu (MVP).** Les « environments » Railway demandent un lookup de
+nom upstream que le MVP ne fait pas (pas de check stateful dans le
+classifier) ; `env` est donc laissé `undefined` sur toutes les capabilities.
+Le câblage atterrira depuis la binding/les args quand la résolution sera
+ajoutée — pas inventé.
+
+**Binding check.** La binding Railway a pour `resource_ref` le `projectId`. Le
+call le porte sous `args.projectId` ou `args.project_id`. S'il est présent, il
+doit appartenir aux `resource_ref` des bindings railway du Project, sinon
+`{ denied: "railway project '<id>' is not bound to this project." }`. S'il est
+absent on ne fail PAS (scope-injection remplit le projectId pour les Projects
+mono-binding) ; les tools account-level (`whoami`, `list-projects`,
+`create-project`, `railway-agent`) ne portent jamais de `projectId` et passent
+sans binding check. Un tool inconnu →
+`{ denied: "unknown railway tool '<tool>'." }`.
 
 ## Tests
 
-`npx vitest run packages/providers/railway` — 11 tests, ~10ms.
+`npx vitest run packages/providers/railway` — 15 tests, ~10ms (dont 6 pour
+`classify` : reads, redeploy→input:apply, create-project→container:provision,
+deny unbound, deny unknown).

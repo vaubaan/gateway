@@ -388,41 +388,130 @@ describe('GitHubAdapter — mint_install_token', () => {
   });
 });
 
-describe('GitHubAdapter — resolveTarget', () => {
-  test('project.repos → list of resource_refs', () => {
-    const adapter = new GitHubAdapter({
-      appId: '123',
-      appSlug: 'vaubaan-gateway',
-      privateKeyPem: TEST_PRIVATE_KEY_PEM,
-    });
+describe('GitHubAdapter — classify (capability model)', () => {
+  const adapter = new GitHubAdapter({
+    appId: '123',
+    appSlug: 'vaubaan-gateway',
+    privateKeyPem: TEST_PRIVATE_KEY_PEM,
+  });
+  const bindings = [
+    {
+      id: 'b1',
+      project_id: 'p1',
+      provider: 'github' as const,
+      resource_ref: 'acme/app',
+      display_name: null,
+      created_at: '2026-01-01',
+    },
+  ];
+
+  test('read on a bound repo → repo/code:read (env-less)', () => {
     expect(
-      adapter.resolveTarget('project.repos', [
-        {
-          id: 'b1',
-          project_id: 'p1',
-          provider: 'github',
-          resource_ref: 'acme/a',
-          display_name: null,
-          created_at: '2026-01-01',
-        },
-        {
-          id: 'b2',
-          project_id: 'p1',
-          provider: 'github',
-          resource_ref: 'acme/b',
-          display_name: null,
-          created_at: '2026-01-01',
-        },
-      ]),
-    ).toEqual(['acme/a', 'acme/b']);
+      adapter.classify('github__list_branches', { owner: 'acme', repo: 'app' }, bindings),
+    ).toEqual({
+      capability: { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
+    });
   });
 
-  test('wildcard target', () => {
-    const adapter = new GitHubAdapter({
-      appId: '123',
-      appSlug: 'vaubaan-gateway',
-      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+  test('PR read → repo/code:read (env-less)', () => {
+    expect(
+      adapter.classify(
+        'github__get_pull_request',
+        { owner: 'acme', repo: 'app', pull_number: 1 },
+        bindings,
+      ),
+    ).toEqual({
+      capability: { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
     });
-    expect(adapter.resolveTarget('*', [])).toEqual(['*']);
+  });
+
+  test('write to a feature branch → repo/code:write @feature/x (env = the branch)', () => {
+    expect(
+      adapter.classify(
+        'github__create_or_update_file',
+        { owner: 'acme', repo: 'app', branch: 'feature/x', path: 'a', content: 'b', message: 'm' },
+        bindings,
+      ),
+    ).toEqual({
+      capability: {
+        provider: 'github',
+        plane: 'repo',
+        level: 'code',
+        action: 'write',
+        env: 'feature/x',
+      },
+    });
+  });
+
+  test('write to a protected branch (main) → repo/code:write @main', () => {
+    expect(
+      adapter.classify(
+        'github__push_files',
+        { owner: 'acme', repo: 'app', branch: 'main', message: 'm', files: [] },
+        bindings,
+      ),
+    ).toEqual({
+      capability: {
+        provider: 'github',
+        plane: 'repo',
+        level: 'code',
+        action: 'write',
+        env: 'main',
+      },
+    });
+  });
+
+  test('merge PR → repo/code:write @main (default protected branch)', () => {
+    expect(
+      adapter.classify(
+        'github__merge_pull_request',
+        { owner: 'acme', repo: 'app', pull_number: 1 },
+        bindings,
+      ),
+    ).toEqual({
+      capability: {
+        provider: 'github',
+        plane: 'repo',
+        level: 'code',
+        action: 'write',
+        env: 'main',
+      },
+    });
+  });
+
+  test('create_pull_request → repo/code:write @<head branch>', () => {
+    expect(
+      adapter.classify(
+        'github__create_pull_request',
+        { owner: 'acme', repo: 'app', head: 'feature/x', base: 'main', title: 't' },
+        bindings,
+      ),
+    ).toEqual({
+      capability: {
+        provider: 'github',
+        plane: 'repo',
+        level: 'code',
+        action: 'write',
+        env: 'feature/x',
+      },
+    });
+  });
+
+  test('unbound repo → denied', () => {
+    const d = adapter.classify('github__list_branches', { owner: 'evil', repo: 'x' }, bindings);
+    expect('denied' in d).toBe(true);
+  });
+
+  test('toolCapabilities surface for a write tool (env-less, for static filter)', () => {
+    expect(adapter.toolCapabilities('github__create_or_update_file')).toEqual([
+      { provider: 'github', plane: 'repo', level: 'code', action: 'write' },
+    ]);
+  });
+
+  test('toolCapabilities surface for mint_install_token (both purposes)', () => {
+    expect(adapter.toolCapabilities('github__mint_install_token')).toEqual([
+      { provider: 'github', plane: 'repo', level: 'access', action: 'read' },
+      { provider: 'github', plane: 'repo', level: 'code', action: 'write' },
+    ]);
   });
 });

@@ -1,13 +1,23 @@
 /**
  * Generic ProviderAdapter contract.
  *
- * Spec : docs/spec/vaubaan-gateway.md §5.1.
+ * Spec : docs/spec/gateway-capability-model.draft.md
  *
- * Every cloud provider (GitHub, Vercel, Supabase) implements this contract.
- * The MCP gateway dispatches against it without knowing provider specifics.
+ * Every cloud provider (GitHub, Vercel, Supabase, Railway) implements this
+ * contract. The MCP gateway dispatches against it without knowing provider
+ * specifics. Authorization is decided by classifying a concrete call into a
+ * capability and checking it against the token's granted set — the provider
+ * plugin owns that classification (`classify`), in the provider's *native*
+ * semantics (no runner house-style leaks in).
  */
 
-import type { McpToolDeclaration, Provider, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
+import type {
+  Capability,
+  McpToolDeclaration,
+  Provider,
+  ProviderAdmin,
+  ProviderBinding,
+} from '@vaubaan/shared';
 
 export interface ValidateResult {
   ok: boolean;
@@ -19,6 +29,9 @@ export interface MintedToken {
   token: string;
   expiresAt: Date;
 }
+
+/** The capability a concrete call requires, or a structural denial. */
+export type ClassifyResult = { capability: Capability } | { denied: string };
 
 export interface ProviderAdapter {
   readonly provider: Provider;
@@ -48,6 +61,23 @@ export interface ProviderAdapter {
     args: Record<string, unknown>,
   ): Promise<unknown>;
 
-  /** Resolve an abstract target into concrete resource refs from this project's bindings. */
-  resolveTarget(target: string, bindings: ProviderBinding[]): string[];
+  /**
+   * The env-less capability surface of a tool — every capability it may require
+   * across its argument space. Used for static `tools/list` filtering (a tool is
+   * listed when the granted set covers any of its surface capabilities, env
+   * ignored). Returns `[]` for an unknown tool.
+   */
+  toolCapabilities(tool: string): readonly Capability[];
+
+  /**
+   * The exact capability a concrete call requires. `env` is resolved here (from
+   * the call args, or from the matched binding for providers where env = a
+   * distinct resource). `denied` when the call is structurally illegal: unknown
+   * tool, missing/unbound target, or nonsensical arguments.
+   */
+  classify(
+    tool: string,
+    args: Record<string, unknown>,
+    bindings: ReadonlyArray<ProviderBinding>,
+  ): ClassifyResult;
 }

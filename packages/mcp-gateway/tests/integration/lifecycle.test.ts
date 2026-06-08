@@ -19,13 +19,14 @@ import {
   generateApiKey,
   hashApiKey,
   type AccessTokenContext,
+  type Capability,
   type ProviderAdmin,
-  type Role,
   type ProviderBinding,
 } from '@vaubaan/shared';
 import { MemoryCacheClient } from '../../src/cache.ts';
 import { MemoryAuditWriter } from '../../src/audit.ts';
 import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/gateway.ts';
+import { mockClassifyGithub, mockGithubToolCapabilities } from '../fixtures/github-classifier.ts';
 
 // ─── In-memory "DB" ──────────────────────────────────────────────────────────
 
@@ -85,35 +86,13 @@ class FakeDb {
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
-const developerRole: Role = {
-  id: 'role-dev',
-  organization_id: null,
-  provider: 'github',
-  name: 'github:developer',
-  description: null,
-  is_builtin: true,
-  permissions: {
-    version: 1,
-    rules: [
-      {
-        effect: 'allow',
-        target: 'project.repos',
-        tool_matches: ['github__list_*', 'github__get_*'],
-      },
-      {
-        effect: 'allow',
-        target: 'project.repos',
-        tool: 'github__create_pull_request',
-        constraints: {
-          'arguments.head': { match: ['feature/*'] },
-          'arguments.base': { equals: 'main' },
-        },
-      },
-      { effect: 'deny', tool_matches: ['github__delete_*', 'github__merge_pull_request'] },
-    ],
-  },
-  created_at: '2026-01-01',
-};
+// Capability set equivalent to the old `github:developer` role : read the
+// repo + write code on a feature branch only (env = feature/x). No
+// write@main grant, so writes to protected branches and PR merges deny.
+const developerCapabilities: Capability[] = [
+  { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
+  { provider: 'github', plane: 'repo', level: 'code', action: 'write', env: 'feature/x' },
+];
 
 const binding: ProviderBinding = {
   id: 'binding-1',
@@ -172,7 +151,7 @@ async function buildHarness(
     },
     project: { id: 'p1', slug: 'website', organization_id: 'org-1' },
     organization: { id: 'org-1', slug: 'acme', name: 'Acme' },
-    roles: [developerRole],
+    capabilities: developerCapabilities,
     bindings: [binding],
     provider_admins: [
       { provider: 'github', status: 'connected', installation_id: '99', team_id: null },
@@ -211,8 +190,10 @@ async function buildHarness(
       { name: 'github__list_branches', description: '', inputSchema: { type: 'object' } },
       { name: 'github__get_pull_request', description: '', inputSchema: { type: 'object' } },
       { name: 'github__create_pull_request', description: '', inputSchema: { type: 'object' } },
-      { name: 'github__delete_file', description: '', inputSchema: { type: 'object' } },
+      { name: 'github__merge_pull_request', description: '', inputSchema: { type: 'object' } },
     ],
+    toolCapabilities: mockGithubToolCapabilities,
+    classify: mockClassifyGithub,
     async executeCall(_admin, _binding, tool, args) {
       return stubExec(tool, args);
     },
@@ -254,7 +235,11 @@ describe('integration — lifecycle', () => {
       const tools = (list.result as { tools: { name: string }[] }).tools.map((t) => t.name);
       expect(tools).toContain('github__list_branches');
       expect(tools).toContain('github__create_pull_request');
-      expect(tools).not.toContain('github__delete_file');
+      // merge_pull_request's surface is [code:write] ; the developer set has a
+      // code:write @feature/x grant, so the tool IS discoverable (list filter is
+      // env-ignored). The env defensive filter at call time denies the actual
+      // merge — see the dedicated test below.
+      expect(tools).toContain('github__merge_pull_request');
     }
 
     const call = await harness.gateway.handle(ctx, {
@@ -269,26 +254,32 @@ describe('integration — lifecycle', () => {
     expect('result' in call).toBe(true);
     expect(harness.audit.rows).toHaveLength(1);
     expect(harness.audit.rows[0]?.decision).toBe('allowed');
-    expect(harness.audit.rows[0]?.role_matched).toBe('github:developer');
+    expect(harness.audit.rows[0]?.capability_matched).toBe('github:repo/code:write@feature/x');
     expect(harness.audit.rows[0]?.tool_name).toBe('github__create_pull_request');
   });
 
-  test('constraint mismatch → denied with branch suggestion', async () => {
+  test('write to a protected branch → denied for lack of code:write@main', async () => {
     const ctx = await harness.gateway.authenticate(`Bearer ${harness.apiKey}`);
     const call = await harness.gateway.handle(ctx, {
       jsonrpc: '2.0',
       id: 3,
       method: 'tools/call',
       params: {
-        name: 'github__create_pull_request',
-        arguments: { owner: 'acme', repo: 'app', head: 'main', base: 'main', title: 'sneaky' },
+        name: 'github__create_or_update_file',
+        arguments: {
+          owner: 'acme',
+          repo: 'app',
+          path: 'README.md',
+          message: 'sneaky',
+          branch: 'main', // ← protected → requires code:write@main
+          content: 'Zm9v',
+        },
       },
     });
     expect('error' in call).toBe(true);
     if ('error' in call) {
       expect(call.error.message).toMatch(/Vaubaan policy denied/);
-      expect(call.error.message).toMatch(/feature/);
-      expect(call.error.message).toMatch(/Suggestion/);
+      expect(call.error.message).toMatch(/github:repo\/code:write@main/);
     }
     expect(harness.audit.rows[0]?.decision).toBe('denied');
   });
@@ -344,25 +335,23 @@ describe('integration — lifecycle', () => {
     if ('error' in call) expect(call.error.message).toMatch(/not connected/);
   });
 
-  test('deny rule blocks delete even with no other matching rule', async () => {
+  test('merge_pull_request denied: developer set lacks code:write@main', async () => {
     const ctx = await harness.gateway.authenticate(`Bearer ${harness.apiKey}`);
     const call = await harness.gateway.handle(ctx, {
       jsonrpc: '2.0',
       id: 5,
       method: 'tools/call',
       params: {
-        name: 'github__delete_file',
+        name: 'github__merge_pull_request',
         arguments: {
           owner: 'acme',
           repo: 'app',
-          path: 'x',
-          message: 'gone',
-          branch: 'feature/x',
-          sha: 'abc',
+          pull_number: 12,
         },
       },
     });
     expect('error' in call).toBe(true);
+    if ('error' in call) expect(call.error.message).toMatch(/github:repo\/code:write@main/);
     expect(harness.audit.rows[0]?.decision).toBe('denied');
   });
 

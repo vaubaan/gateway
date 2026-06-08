@@ -18,7 +18,6 @@ import {
   IconLogout,
   IconMoon,
   IconSettings,
-  IconShield,
   IconSun,
   IconUsers,
 } from './icons';
@@ -145,7 +144,6 @@ export function Sidebar({ email, orgs, projectsByOrg }: SidebarProps) {
         },
         { href: `${orgBase}/providers`, label: 'Cloud providers', icon: <IconCloud /> },
         { href: `${orgBase}/members`, label: 'Members', icon: <IconUsers /> },
-        { href: `${orgBase}/roles`, label: 'Roles', icon: <IconShield /> },
         { href: `${orgBase}/audit`, label: 'Audit log', icon: <IconActivity /> },
         { href: `${orgBase}/settings`, label: 'Settings', icon: <IconSettings /> },
       ]

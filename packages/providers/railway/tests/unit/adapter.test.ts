@@ -178,19 +178,48 @@ describe('RailwayAdapter — validateBinding', () => {
   });
 });
 
-describe('RailwayAdapter — resolveTarget', () => {
-  test('project.railway returns railway bindings only', () => {
-    const adapter = new RailwayAdapter();
-    expect(
-      adapter.resolveTarget('project.railway', [
-        binding,
-        { ...binding, provider: 'github', resource_ref: 'acme/x' },
-      ]),
-    ).toEqual(['00000000-0000-4000-8000-000000000000']);
+describe('RailwayAdapter — classify', () => {
+  const adapter = new RailwayAdapter();
+
+  test('whoami → runtime/account:read (account-level, no binding check)', () => {
+    const res = adapter.classify('railway__whoami', {}, []);
+    expect(res).toEqual({
+      capability: { provider: 'railway', plane: 'runtime', level: 'account', action: 'read' },
+    });
   });
 
-  test('wildcard returns wildcard', () => {
-    const adapter = new RailwayAdapter();
-    expect(adapter.resolveTarget('*', [])).toEqual(['*']);
+  test('list-deployments → runtime/deployment:read', () => {
+    const res = adapter.classify('railway__list-deployments', {}, [binding]);
+    expect(res).toEqual({
+      capability: { provider: 'railway', plane: 'runtime', level: 'deployment', action: 'read' },
+    });
+  });
+
+  test('redeploy on a bound project → runtime/deployment:write', () => {
+    const res = adapter.classify(
+      'railway__redeploy',
+      { projectId: '00000000-0000-4000-8000-000000000000' },
+      [binding],
+    );
+    expect(res).toEqual({
+      capability: { provider: 'railway', plane: 'runtime', level: 'deployment', action: 'write' },
+    });
+  });
+
+  test('create-project → runtime/account:write', () => {
+    const res = adapter.classify('railway__create-project', { name: 'demo' }, []);
+    expect(res).toEqual({
+      capability: { provider: 'railway', plane: 'runtime', level: 'account', action: 'write' },
+    });
+  });
+
+  test('denies an unbound projectId', () => {
+    const res = adapter.classify('railway__redeploy', { projectId: 'unbound-id' }, [binding]);
+    expect(res).toEqual({ denied: "railway project 'unbound-id' is not bound to this project." });
+  });
+
+  test('denies an unknown tool', () => {
+    const res = adapter.classify('railway__nuke', {}, []);
+    expect(res).toEqual({ denied: "unknown railway tool 'railway__nuke'." });
   });
 });

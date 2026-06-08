@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { parseCapability } from '@vaubaan/shared/capability';
 import {
   Banner,
   Button,
@@ -13,13 +14,7 @@ import {
   Field,
   Input,
 } from '@/components/ui';
-
-interface RoleRow {
-  id: string;
-  name: string;
-  provider: 'github' | 'vercel' | 'supabase' | 'railway';
-  description: string | null;
-}
+import { CAPABILITY_PRESETS, PRESET_VALUES } from '@/lib/capabilities/presets';
 
 export function TokenControls({
   tokenId,
@@ -27,23 +22,48 @@ export function TokenControls({
   tokenStatus,
   orgSlug,
   projectSlug,
-  roles,
-  attachedRoleIds,
+  capabilities,
 }: {
   tokenId: string;
   tokenName: string;
   tokenStatus: 'active' | 'revoked';
   orgSlug: string;
   projectSlug: string;
-  roles: RoleRow[];
-  attachedRoleIds: string[];
+  capabilities: string[];
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set(attachedRoleIds));
+  // Preset capabilities currently granted, toggled via the checklist.
+  const [selected, setSelected] = useState<Set<string>>(
+    new Set(capabilities.filter((c) => PRESET_VALUES.has(c))),
+  );
+  // Granted capabilities that aren't one of the presets — kept as-is, editable.
+  const [extra, setExtra] = useState<string[]>(capabilities.filter((c) => !PRESET_VALUES.has(c)));
+  const [customInput, setCustomInput] = useState('');
+  const [customError, setCustomError] = useState<string | null>(null);
   const [name, setName] = useState(tokenName);
   const router = useRouter();
+
+  function addCustom() {
+    const value = customInput.trim();
+    if (!value) return;
+    try {
+      parseCapability(value);
+    } catch (err) {
+      setCustomError(err instanceof Error ? err.message : 'invalid capability');
+      return;
+    }
+    if (!selected.has(value) && !extra.includes(value)) {
+      setExtra((cur) => [...cur, value]);
+    }
+    setCustomInput('');
+    setCustomError(null);
+  }
+
+  function removeExtra(value: string) {
+    setExtra((cur) => cur.filter((v) => v !== value));
+  }
 
   async function saveName(e: React.FormEvent) {
     e.preventDefault();
@@ -108,14 +128,17 @@ export function TokenControls({
     }
   }
 
-  async function saveRoles() {
-    setBusy('roles');
+  async function saveCapabilities() {
+    setBusy('capabilities');
     setError(null);
     try {
       const res = await fetch(`/api/v1/tokens/${tokenId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ orgSlug, roleIds: Array.from(selected) }),
+        body: JSON.stringify({
+          orgSlug,
+          capabilities: [...Array.from(selected), ...extra],
+        }),
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
@@ -251,22 +274,22 @@ export function TokenControls({
 
       <Card>
         <CardHeader>
-          <CardTitle>Roles</CardTitle>
+          <CardTitle>Capabilities</CardTitle>
           <Button
             type="button"
             variant="primary"
             size="sm"
-            onClick={saveRoles}
+            onClick={saveCapabilities}
             disabled={busy !== null}
           >
-            {busy === 'roles' ? 'Saving…' : 'Save roles'}
+            {busy === 'capabilities' ? 'Saving…' : 'Save capabilities'}
           </Button>
         </CardHeader>
         <CardBody>
           <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-            {roles.map((r) => (
+            {CAPABILITY_PRESETS.map((cap) => (
               <label
-                key={r.id}
+                key={cap.value}
                 style={{
                   display: 'flex',
                   gap: 'var(--space-2)',
@@ -277,25 +300,74 @@ export function TokenControls({
               >
                 <input
                   type="checkbox"
-                  checked={selected.has(r.id)}
+                  checked={selected.has(cap.value)}
                   onChange={(e) => {
                     const next = new Set(selected);
-                    if (e.target.checked) next.add(r.id);
-                    else next.delete(r.id);
+                    if (e.target.checked) next.add(cap.value);
+                    else next.delete(cap.value);
                     setSelected(next);
                   }}
                 />
                 <span>
-                  <strong>{r.name}</strong>
-                  {r.description && (
-                    <span style={{ color: 'var(--text-muted)', marginLeft: 6 }}>
-                      {r.description}
-                    </span>
-                  )}
+                  <strong>{cap.label}</strong>
+                  <Code style={{ marginLeft: 6 }}>{cap.value}</Code>
+                </span>
+              </label>
+            ))}
+            {extra.map((value) => (
+              <label
+                key={value}
+                style={{
+                  display: 'flex',
+                  gap: 'var(--space-2)',
+                  alignItems: 'baseline',
+                  padding: 'var(--space-2) 0',
+                  borderBottom: '1px solid var(--border-subtle)',
+                }}
+              >
+                <input type="checkbox" checked readOnly />
+                <span>
+                  <Code>{value}</Code>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => removeExtra(value)}
+                    style={{ marginLeft: 'var(--space-2)' }}
+                  >
+                    Remove
+                  </Button>
                 </span>
               </label>
             ))}
           </fieldset>
+          <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
+            <Field>
+              <Input
+                value={customInput}
+                onChange={(e) => {
+                  setCustomInput(e.target.value);
+                  setCustomError(null);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    addCustom();
+                  }
+                }}
+                placeholder="custom capability, e.g. dns:apply@prod"
+                disabled={busy !== null}
+              />
+            </Field>
+            <Button type="button" variant="secondary" onClick={addCustom} disabled={busy !== null}>
+              Add
+            </Button>
+          </div>
+          {customError && (
+            <p style={{ color: 'var(--accent-danger-fg)', marginTop: 'var(--space-2)' }}>
+              {customError}
+            </p>
+          )}
         </CardBody>
       </Card>
     </div>

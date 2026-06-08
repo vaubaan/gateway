@@ -25,7 +25,7 @@ packages/web/
       auth/callback/route.ts                           # Supabase auth callback
       mcp/route.ts                                     # MCP gateway POST
       api/v1/tokens/route.ts                           # Access token create (api_key visible 1×)
-      api/v1/tokens/[tokenId]/route.ts                 # PATCH (name/status/roles) / DELETE
+      api/v1/tokens/[tokenId]/route.ts                 # PATCH (name/status/capabilities) / DELETE
       api/v1/tokens/[tokenId]/rotate-key/route.ts      # Rotate api_key
       api/v1/orgs/[slug]/transfer-ownership/route.ts   # Owner-only ownership transfer
       dashboard/page.tsx                               # User's organizations
@@ -88,8 +88,10 @@ Guards REST :
 selon l'URL :
 
 - **General** : lien Dashboard + dropdown org switcher.
-- **Org section** (si `/orgs/:slug` dans l'URL) : Overview / Members / Roles /
-  Audit log + dropdown project switcher.
+- **Org section** (si `/orgs/:slug` dans l'URL) : Projects / Cloud providers /
+  Members / Audit log / Settings + dropdown project switcher. (Plus de section
+  Roles : le modèle de rôles a été remplacé par les capabilities portées
+  directement par l'access token — cf. `0011_capabilities_replace_roles.sql`.)
 - **Project section** (si `/orgs/:slug/projects/:project`) : Overview / Audit
   log / Access tokens.
 - **Resources** : Documentation / Support.
@@ -111,14 +113,23 @@ Les listes orgs + projects sont fetched server-side dans
 Hot path :
 
 ```
-POST /api/v1/tokens {orgSlug, projectSlug, name, roleIds}
+POST /api/v1/tokens {orgSlug, projectSlug, name, capabilities}
+  ├─ capabilities[]: shorthand strings → parseCapability() (400 on malformed)
   ├─ requireOrgMember(orgSlug)
   ├─ generateApiKey('live') → {apiKey, apiKeyPrefix}
   ├─ hashApiKey(apiKey) → apiKeyHash (argon2id)
-  ├─ INSERT access_tokens (api_key_prefix, api_key_hash, ...)
-  ├─ INSERT access_token_roles (...)
+  ├─ INSERT access_tokens (api_key_prefix, api_key_hash, capabilities jsonb, ...)
   └─ → { access_token, api_key }  ← visible only here
 ```
+
+`capabilities` is an array of shorthand strings (`'source:apply'`,
+`'runtime:apply@prod'`, `'source/input:read'`, …) parsed via
+`parseCapability` from `@vaubaan/shared` and stored inline as the full
+`(plane, operand, action, env?)` tuples on the `access_tokens.capabilities`
+jsonb column. There is no more `roles` / `access_token_roles` join — the old
+role model was dropped in migration `0011_capabilities_replace_roles.sql`.
+Same swap applies to `POST /api/v1/mgmt/tokens` and the optional
+`capabilities` field of `PATCH /api/v1/tokens/[tokenId]`.
 
 UI : after create, a modal displays the full api_key with a Copy button and
 a warning `won't be shown again`. The modal also shows the snippet to drop in
@@ -138,6 +149,27 @@ a warning `won't be shown again`. The modal also shows the snippet to drop in
 The vocabulary is intentionally neutral — an access token can be consumed by
 an LLM agent, a CI job, a script, or a human curl. The UI placeholder is
 `ci-deploy` rather than `claude-dev` to avoid presuming agent usage.
+
+### Capability picker (create + edit)
+
+Both `tokens/new/page.tsx` and the `Capabilities` card of
+`tokens/[tokenId]/controls.tsx` drive the grant set the same way :
+
+- A checklist of curated presets from
+  `packages/web/src/lib/capabilities/presets.ts` (`CAPABILITY_PRESETS`,
+  label → shorthand). Each row submits its shorthand value.
+- A free-text field for an arbitrary capability shorthand, validated with
+  `parseCapability` from `@vaubaan/shared` before being added (rejects
+  malformed grammar client-side).
+- The submitted body is `capabilities: string[]` (shorthands). On the detail
+  page, the stored full tuples are read off `access_tokens.capabilities` and
+  rendered back to shorthand via `formatCapability` ; presets vs. custom are
+  split by membership in `PRESET_VALUES`.
+
+The per-token audit table and the org/project audit logs show
+`capability_matched` (the shorthand of the capability that allowed the call,
+or the denial reason) — renamed from `role_matched` in
+`0011_capabilities_replace_roles.sql`.
 
 ## Ownership transfer
 

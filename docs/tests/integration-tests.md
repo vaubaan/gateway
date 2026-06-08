@@ -22,11 +22,11 @@ Vitest, ~1s total. No browser, no Supabase server, no real GitHub.
 | `packages/policy-engine/tests/unit/tools-filter.test.ts`   |        3 |    ~8ms |
 | `packages/providers/github/tests/unit/adapter.test.ts`     |       18 |   ~50ms |
 | `packages/providers/vercel/tests/unit/adapter.test.ts`     |        7 |    ~7ms |
-| `packages/providers/supabase/tests/unit/adapter.test.ts`   |        5 |   ~12ms |
+| `packages/providers/supabase/tests/unit/adapter.test.ts`   |        8 |   ~12ms |
 | `packages/providers/railway/tests/unit/adapter.test.ts`    |       11 |   ~10ms |
 | `packages/mcp-gateway/tests/unit/gateway.test.ts`          |       13 |  ~520ms |
 | `packages/mcp-gateway/tests/integration/lifecycle.test.ts` |        7 |  ~500ms |
-| **TOTAL**                                                  | **~108** |   ~1.3s |
+| **TOTAL**                                                  | **~111** |   ~1.3s |
 
 ## Run
 
@@ -85,23 +85,26 @@ npx vitest run packages/policy-engine    # one package
 - Authenticate valid api_key → context returned.
 - Authenticate missing/malformed → AuthError thrown.
 - Authenticate cache hit re-verifies hash (defensive against cache poisoning).
-- `tools/list` returns filtered tools per Bot roles.
-- `tools/call` allowed → routes to adapter + audit row.
-- `tools/call` denied (constraint mismatch) → JSON-RPC error with actionable
-  Suggestion line + audit row decision='denied'.
-- `tools/call` explicit deny rule → blocks even when allow could match.
+- `tools/list` returns tools filtered by the granted capability set (a tool
+  surfaces when the set covers any of its env-less surface capabilities).
+- `tools/call` allowed → routes to adapter + audit row carrying
+  `capability_matched` (shorthand, e.g. `source:propose`).
+- `tools/call` write to a protected branch → denied (token has `source:propose`
+  but not `source:apply`) ; error mentions the missing capability.
+- `tools/call` `github__merge_pull_request` → denied (needs `source:apply`).
 - `tools/call` disconnected provider → denies with explicit reason.
 - Unknown method → -32601.
 - `initialize` returns MCP server info.
 
 ## Scénarios — Lifecycle integration
 
-- Auth → tools/list → tools/call allowed → audit row written.
-- Constraint mismatch → denied with branch-rename suggestion.
+- Auth → tools/list → tools/call allowed → audit row written
+  (`capability_matched='source:propose'`).
+- Write to a protected branch → denied for lack of `source:apply`.
 - Bot revocation → next call 401.
 - api_key rotation → new key works, old key 401.
 - Provider disconnect → calls targeting that provider denied.
-- Explicit deny rule blocks `github__delete_file`.
+- `github__merge_pull_request` denied: granted set lacks `source:apply`.
 - Arguments hash computed (16 hex chars) and stored.
 
 ## Hors-scope ces tests

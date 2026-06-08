@@ -11,7 +11,7 @@
  */
 
 import {
-  evaluatePolicy,
+  evaluateCapability,
   filterAvailableTools,
   injectionPlanFor,
   mergeInjectedArgs,
@@ -19,6 +19,7 @@ import {
 } from '@vaubaan/policy-engine';
 import type {
   AccessTokenContext,
+  Capability,
   JsonRpcRequest,
   JsonRpcResponse,
   McpToolDeclaration,
@@ -27,6 +28,9 @@ import type {
   ProviderBinding,
 } from '@vaubaan/shared';
 import { parseApiKey, verifyApiKey } from '@vaubaan/shared';
+
+/** What a provider plugin returns when classifying a concrete call. */
+export type ClassifyResult = { capability: Capability } | { denied: string };
 import type { CacheClient } from './cache.ts';
 import { hashArguments, type AuditWriter } from './audit.ts';
 import { AuthError, rpcError, rpcSuccess } from './errors.ts';
@@ -52,6 +56,14 @@ export interface ContextLoader {
 export interface UpstreamAdapter {
   provider: Provider;
   availableTools: ReadonlyArray<McpToolDeclaration>;
+  /** Env-less capability surface of a tool — for static tools/list filtering. */
+  toolCapabilities(tool: string): readonly Capability[];
+  /** Classify a concrete call into the capability it requires (env resolved). */
+  classify(
+    tool: string,
+    args: Record<string, unknown>,
+    bindings: ReadonlyArray<ProviderBinding>,
+  ): ClassifyResult;
   executeCall(
     admin: ProviderAdmin,
     binding: ProviderBinding,
@@ -159,9 +171,8 @@ export class McpGateway {
     for (const provider of ['github', 'vercel', 'supabase', 'railway'] as Provider[]) {
       const adapter = this.cfg.upstreamByProvider[provider];
       if (!adapter) continue;
-      const providerRoles = ctx.roles.filter((r) => r.provider === provider);
-      if (providerRoles.length === 0) continue;
-      const filtered = filterAvailableTools(providerRoles, adapter.availableTools);
+      const filtered = filterAvailableTools(ctx.capabilities, adapter);
+      if (filtered.length === 0) continue;
       const adminEntry = ctx.provider_admins.find((p) => p.provider === provider);
       const plan = injectionPlanFor(provider, {
         bindings: ctx.bindings,
@@ -217,18 +228,22 @@ export class McpGateway {
     });
     const args = plan ? mergeInjectedArgs(rawArgs, plan) : rawArgs;
 
-    // Evaluate policy with the injected args so target resolution + constraints
-    // see the same values the upstream will receive.
-    const decision = evaluatePolicy(ctx.roles, ctx.bindings, {
-      provider,
-      tool: toolName,
-      arguments: args,
-    });
+    // Classify the concrete call into the capability it requires (provider
+    // plugin, native semantics), with the injected args so env/target resolution
+    // sees the same values the upstream will receive.
+    const classified = adapter.classify(toolName, args, ctx.bindings);
+    if ('denied' in classified) {
+      await this.audit(ctx, toolName, args, 'denied', null, classified.denied, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${classified.denied}`);
+    }
 
+    // Pure set membership : is the required capability in the granted set ?
+    const decision = evaluateCapability(ctx.capabilities, classified.capability);
     if (decision.decision === 'denied') {
-      await this.audit(ctx, toolName, args, 'denied', null, decision.reason, null);
+      await this.audit(ctx, toolName, args, 'denied', null, decision.reason ?? null, null);
       return rpcError(id, -32603, `Vaubaan policy denied: ${decision.reason}`);
     }
+    const capabilityMatched = decision.capabilityMatched ?? null;
 
     // Load full ProviderAdmin (with tokens — never cached in clear).
     const admin = await adapter.loadProviderAdmin(ctx.organization.id, provider);
@@ -261,12 +276,12 @@ export class McpGateway {
         args,
       );
       const latency = Date.now() - t0;
-      await this.audit(ctx, toolName, args, 'allowed', decision.roleMatched, null, latency);
+      await this.audit(ctx, toolName, args, 'allowed', capabilityMatched, null, latency);
       return rpcSuccess(id, this.shapeMcpResult(result));
     } catch (e) {
       const latency = Date.now() - t0;
       const message = e instanceof Error ? e.message : String(e);
-      await this.audit(ctx, toolName, args, 'allowed', decision.roleMatched, null, latency);
+      await this.audit(ctx, toolName, args, 'allowed', capabilityMatched, null, latency);
       return rpcError(id, -32603, `Upstream call failed: ${message}`);
     }
   }
@@ -297,7 +312,7 @@ export class McpGateway {
     tool: string,
     args: Record<string, unknown>,
     decision: 'allowed' | 'denied',
-    roleMatched: string | null,
+    capabilityMatched: string | null,
     denialReason: string | null,
     latency: number | null,
   ): Promise<void> {
@@ -308,7 +323,7 @@ export class McpGateway {
         access_token_id: ctx.access_token.id,
         tool_name: tool,
         arguments_hash: hashArguments(args),
-        role_matched: roleMatched,
+        capability_matched: capabilityMatched,
         decision,
         denial_reason: denialReason,
         upstream_latency_ms: latency,
