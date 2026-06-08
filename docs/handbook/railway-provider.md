@@ -99,10 +99,10 @@ sont en kebab-case) :
 - **Read** : `railway__whoami`, `railway__list-projects`,
   `railway__list-services`, `railway__list-deployments`, `railway__get-status`,
   `railway__get-logs`.
-- **Apply** (`runtime/input:apply`) : `railway__redeploy`,
+- **Write deployment** (`railway:runtime/deployment:write`) : `railway__redeploy`,
   `railway__accept-deploy` (commit les changements staged + déclenche un
   deploy), `railway__railway-agent`.
-- **Provision** (`runtime/container:provision`) : `railway__create-project`.
+- **Write account** (`railway:runtime/account:write`) : `railway__create-project`.
 
 Refresh de la liste : `POST tools/list` à `mcp.railway.com` avec un Bearer
 scopé `resource=https://mcp.railway.com`, recopier chaque tool avec le préfixe
@@ -112,17 +112,21 @@ dans `src/upstream-tools.json`.
 
 `src/classify.ts` remplace l'ancien modèle « roles + policy DSL »
 (`resolveTarget` supprimé). Une capability est un tuple
-`{ plane, operand, action, env? }` (cf. `docs/spec/gateway-capability-model.draft.md`).
-Pour Railway le `plane` est toujours `runtime`.
+`{ provider, plane, level, action, env? }` (cf.
+`docs/spec/gateway-capability-model.draft.md`). Pour Railway le `provider` est
+`railway`, le `plane` est `runtime` (ladder : `deployment` → `config` →
+`project-settings` → `account` ; le MVP n'expose que les niveaux `deployment`
+et `account`).
 
 `classifyRailway(tool, args, bindings)` mappe un call concret vers la
 capability requise (ou un `{ denied }` structurel) :
 
-| Tools                                                                                    | Capability                    |
-| ---------------------------------------------------------------------------------------- | ----------------------------- |
-| `whoami`, `list-projects`, `list-services`, `list-deployments`, `get-status`, `get-logs` | `runtime/output:read`         |
-| `redeploy`, `accept-deploy`, `railway-agent`                                             | `runtime/input:apply`         |
-| `create-project`                                                                         | `runtime/container:provision` |
+| Tools                                                         | Capability                         |
+| ------------------------------------------------------------- | ---------------------------------- |
+| `whoami`, `list-projects`                                     | `railway:runtime/account:read`     |
+| `list-services`, `list-deployments`, `get-status`, `get-logs` | `railway:runtime/deployment:read`  |
+| `redeploy`, `accept-deploy`, `railway-agent`                  | `railway:runtime/deployment:write` |
+| `create-project`                                              | `railway:runtime/account:write`    |
 
 `railwayToolCapabilities(tool)` renvoie la surface env-less d'un tool (pour le
 filtrage statique `tools/list`) : un tableau d'une seule capability, ou `[]`
@@ -147,5 +151,6 @@ sans binding check. Un tool inconnu →
 ## Tests
 
 `npx vitest run packages/providers/railway` — 15 tests, ~10ms (dont 6 pour
-`classify` : reads, redeploy→input:apply, create-project→container:provision,
+`classify` : reads → `runtime/account|deployment:read`, redeploy →
+`runtime/deployment:write`, create-project → `runtime/account:write`,
 deny unbound, deny unknown).

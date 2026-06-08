@@ -122,14 +122,28 @@ POST /api/v1/tokens {orgSlug, projectSlug, name, capabilities}
   └─ → { access_token, api_key }  ← visible only here
 ```
 
-`capabilities` is an array of shorthand strings (`'source:apply'`,
-`'runtime:apply@prod'`, `'source/input:read'`, …) parsed via
-`parseCapability` from `@vaubaan/shared` and stored inline as the full
-`(plane, operand, action, env?)` tuples on the `access_tokens.capabilities`
-jsonb column. There is no more `roles` / `access_token_roles` join — the old
-role model was dropped in migration `0011_capabilities_replace_roles.sql`.
-Same swap applies to `POST /api/v1/mgmt/tokens` and the optional
-`capabilities` field of `PATCH /api/v1/tokens/[tokenId]`.
+`capabilities` is an array of notation strings (`'github:repo/code:read'`,
+`'vercel:runtime/deployment:write@prod'`, `'supabase:db/rows:read@staging'`, …)
+parsed via `parseCapability` from `@vaubaan/shared` and stored inline as the
+full `(provider, plane, level, action, env?)` tuples on the
+`access_tokens.capabilities` jsonb column. There is no more `roles` /
+`access_token_roles` join — the old role model was dropped in migration
+`0011_capabilities_replace_roles.sql`. Same swap applies to
+`POST /api/v1/mgmt/tokens` and the optional `capabilities` field of
+`PATCH /api/v1/tokens/[tokenId]`.
+
+**Policy + approval flow** (migrations `0012` & `0013`). At mint, both the
+mgmt and user routes consult `policy_rules` for the project and refuse any
+capability that resolves to `gate='human'` — by inserting an
+`approval_requests` row dispatched via the project's `ApprovalChannel`
+(manual or telegram) and returning **HTTP 202** with `{ approval_id, status:
+'pending', poll_url, channel, gated }`. Once the operator clicks ✅, the
+poll endpoint mints the access_token and returns the `api_key` once.
+`POST /api/v1/tokens` returns 201 immediately on the all-ai fast path.
+`POST /api/v1/mgmt/tokens` also accepts `singleUse?: bool` (the gateway
+consumes the token on the first call that matches a capability — spec §8)
+and `ttlSeconds?: number` (capped at 3600s) for short-lived single-use
+tokens.
 
 UI : after create, a modal displays the full api_key with a Copy button and
 a warning `won't be shown again`. The modal also shows the snippet to drop in
