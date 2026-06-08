@@ -12,7 +12,7 @@ interface Integration {
   status: 'GA' | 'Beta' | 'Soon';
   short: string;
   tools: number;
-  /** Capability shorthands this provider's tools map to (plane:action[@env]). */
+  /** Capability notations this provider's tools map to (provider:plane/level:action[@env]). */
   capabilities: string[];
   install: string;
 }
@@ -25,7 +25,7 @@ const integrations: Integration[] = [
     short:
       'GitHub App install. JIT installation tokens minted per call. 17 tools: read, search, branch, PR, comment. Dangerous ops deny-listed by default.',
     tools: 17,
-    capabilities: ['source:read', 'source:propose', 'source:apply'],
+    capabilities: ['github:repo/code:read', 'github:repo/code:write@main'],
     install: 'GitHub App install via OAuth-style consent screen — no token paste.',
   },
   {
@@ -35,7 +35,11 @@ const integrations: Integration[] = [
     short:
       'Team-scoped Personal Access Token, encrypted at rest. Project / deployment / domain / env-var tools, with per-environment write controls.',
     tools: 12,
-    capabilities: ['runtime:read', 'runtime:apply@staging', 'runtime:apply@prod'],
+    capabilities: [
+      'vercel:runtime/deployment:read@prod',
+      'vercel:runtime/deployment:write@preview',
+      'vercel:runtime/deployment:write@prod',
+    ],
     install: 'Org admin pastes a team-scoped PAT once. Stored AES-256-GCM encrypted.',
   },
   {
@@ -45,7 +49,11 @@ const integrations: Integration[] = [
     short:
       'Management API PAT, encrypted at rest. Project / DB / Edge Function / Storage tools, with destructive operations gated by capability.',
     tools: 14,
-    capabilities: ['data:read@staging', 'data:read@prod', 'runtime/settings:apply@prod'],
+    capabilities: [
+      'supabase:db/rows:read@staging',
+      'supabase:db/rows:read@prod',
+      'supabase:db/tables:read@prod',
+    ],
     install: 'Org admin pastes a Mgmt PAT once. Stored AES-256-GCM encrypted.',
   },
 ];

@@ -226,7 +226,7 @@ export default function NewTokenPage({
                   addCustom();
                 }
               }}
-              placeholder="custom capability, e.g. dns:apply@prod"
+              placeholder="custom capability, e.g. github:repo/code:write@feature/x"
               style={{
                 flex: 1,
                 padding: 8,

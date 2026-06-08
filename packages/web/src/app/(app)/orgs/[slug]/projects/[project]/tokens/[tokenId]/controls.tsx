@@ -355,7 +355,7 @@ export function TokenControls({
                     addCustom();
                   }
                 }}
-                placeholder="custom capability, e.g. dns:apply@prod"
+                placeholder="custom capability, e.g. github:repo/code:write@feature/x"
                 disabled={busy !== null}
               />
             </Field>

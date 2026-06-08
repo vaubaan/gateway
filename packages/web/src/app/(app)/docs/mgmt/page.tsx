@@ -86,28 +86,32 @@ export default function MgmtDocsPage() {
       <h3>4.1 Know the capabilities you need</h3>
       <p>
         There&apos;s no catalog to fetch — capabilities are a fixed grammar, not org-scoped objects.
-        A capability is a shorthand string <code>plane[/operand]:action[@env]</code>. Pick the set
-        the session needs, for example:
+        A capability is a notation string <code>provider:plane/level:action@env</code> where{' '}
+        <em>action</em> is <code>read</code> or <code>write</code>, and <em>env</em> is an instance
+        slug (a branch, an environment, a key mode — dynamic). Pick the set the session needs, for
+        example:
       </p>
       <ul>
         <li>
-          <code>source:read</code>, <code>source:propose</code>, <code>source:apply</code> — read,
-          PR, merge code.
+          <code>github:repo/code:read</code>, <code>github:repo/code:write@main</code> — read code,
+          merge.
         </li>
         <li>
-          <code>runtime:apply@staging</code>, <code>runtime:apply@prod</code> — deploy.
+          <code>vercel:runtime/deployment:write@preview</code>,{' '}
+          <code>vercel:runtime/deployment:write@prod</code> — deploy.
         </li>
         <li>
-          <code>runtime/settings:apply@prod</code> — change prod config / secrets.
+          <code>vercel:runtime/config:write@prod</code> — change prod env vars / secrets.
         </li>
         <li>
-          <code>data:read@staging</code>, <code>data:read@prod</code> — read data.
+          <code>supabase:db/rows:read@staging</code>, <code>supabase:db/rows:read@prod</code> — read
+          data.
         </li>
       </ul>
       <p>
         Pass them as the <code>capabilities</code> array in step 4.3. The gateway maps each MCP call
         to a required capability in code (per-provider <code>classify()</code>) and allows it only
-        if the token carries a covering capability.
+        if the token carries that exact capability (exact tuple — env defensive).
       </p>
 
       <h3>4.2 Discover projects and bindings</h3>
@@ -144,7 +148,11 @@ export default function MgmtDocsPage() {
   -H "Content-Type: application/json" \\
   -d '{
     "projectSlug": "website",
-    "capabilities": ["source:read", "source:propose", "runtime:apply@staging"],
+    "capabilities": [
+      "github:repo/code:read",
+      "github:repo/code:write@feature/x",
+      "vercel:runtime/deployment:write@preview"
+    ],
     "ttlHours": 24
   }'
 
@@ -231,9 +239,9 @@ export default function MgmtDocsPage() {
           (7 days).
         </li>
         <li>
-          <code>capabilities</code> is an array of capability shorthands (e.g.{' '}
-          <code>source:read</code>, <code>runtime:apply@prod</code>); each is validated against the
-          grammar and stored as its full tuple.
+          <code>capabilities</code> is an array of capability notations (e.g.{' '}
+          <code>github:repo/code:read</code>, <code>vercel:runtime/deployment:write@prod</code>);
+          each is validated against the grammar and stored as its full tuple.
         </li>
       </ul>
       <p>

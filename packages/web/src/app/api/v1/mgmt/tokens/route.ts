@@ -11,8 +11,9 @@
  * Behaviour
  *   - Auth via `Authorization: Bearer vbn_mgmt_…` (ManagementKey, org-scoped).
  *   - Validates that `projectSlug` resolves to a project of the bound org.
- *   - Parses every `capabilities[]` shorthand string into a (plane, operand,
- *     action, env?) tuple — rejects malformed input with 400.
+ *   - Parses every `capabilities[]` notation string (provider:plane/level:action@env)
+ *     into a (provider, plane, level, action, env?) tuple — rejects malformed
+ *     input with 400.
  *   - Mints a fresh AccessToken with `status='active'`, `expires_at = now + ttlHours`
  *     (default 24h, hard-capped at 168h = 7d).
  *   - Returns the `api_key` (visible **once** — argon2id at-rest).

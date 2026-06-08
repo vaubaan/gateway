@@ -239,12 +239,12 @@ curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/projects" \\
   -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
 
 # 3. Mint an ephemeral AccessToken for a coding session, granting just the
-#    capabilities it needs (shorthand plane[/operand]:action[@env]).
+#    capabilities it needs (notation provider:plane/level:action[@env]).
 #    ttlHours default 24, max 168 (7 days). Response.api_key visible ONCE.
 curl -sS -X POST "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/tokens" \\
   -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{ "projectSlug": "<slug>", "capabilities": ["source:read", "source:propose"], "ttlHours": 24 }'
+  -d '{ "projectSlug": "<slug>", "capabilities": ["github:repo/code:read", "github:repo/code:write@feature/x"], "ttlHours": 24 }'
 
 # 4. Hand the returned api_key (vbn_live_…) to the MCP client:
 # {

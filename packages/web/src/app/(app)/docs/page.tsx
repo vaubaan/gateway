@@ -62,9 +62,9 @@ export default function DocsPage() {
         </li>
         <li>
           <strong>Capability</strong> — a single grant in the form{' '}
-          <code>plane[/operand]:action[@env]</code> (e.g. <code>source:read</code>,{' '}
-          <code>runtime:apply@prod</code>). A token&apos;s capabilities are the exact set of
-          operations it may perform — provider-neutral, deny-by-default.
+          <code>provider:plane/level:action[@env]</code> (e.g. <code>github:repo/code:read</code>,{' '}
+          <code>vercel:runtime/deployment:write@prod</code>). A token&apos;s capabilities are the
+          exact set of operations it may perform — deny-by-default.
         </li>
       </ul>
 
@@ -141,46 +141,56 @@ export default function DocsPage() {
       <h2 id="capabilities">6. Capabilities & policy</h2>
       <p>
         Policy is evaluated <em>deny-by-default</em>: an MCP call is allowed only if the token
-        carries a capability that covers it. A capability is a 4-tuple written in shorthand as{' '}
-        <code>plane[/operand]:action[@env]</code>:
+        carries a capability that covers it. A capability is a 5-tuple written as{' '}
+        <code>provider:plane/level:action[@env]</code>:
       </p>
       <ul>
         <li>
-          <strong>plane</strong> — the surface, masking the concrete provider: <code>source</code>,{' '}
-          <code>runtime</code>, <code>data</code>, <code>dns</code>, …
+          <strong>provider</strong> — the vendor (<code>github</code>, <code>vercel</code>,{' '}
+          <code>supabase</code>, <code>railway</code>, …).
         </li>
         <li>
-          <strong>action</strong> — the step of the change lifecycle: <code>read</code>,{' '}
-          <code>propose</code>, <code>apply</code>, <code>provision</code>.
+          <strong>plane</strong> — one concentric stack of levels declared by the provider (
+          <code>github→repo</code>, <code>vercel→runtime</code>, <code>supabase→db</code>; a
+          provider may expose several planes).
         </li>
         <li>
-          <strong>env</strong> — the canonical instance (<code>@staging</code>, <code>@prod</code>),
-          present only when the targeted resource has parallel environments.
+          <strong>level</strong> — the slug of a peel inside that plane (<code>code</code>,{' '}
+          <code>rows</code>, <code>deployment</code>, <code>config</code>, …).
+        </li>
+        <li>
+          <strong>action</strong> — <code>read</code> or <code>write</code> (no <em>propose</em>, no{' '}
+          <em>apply</em>, no <em>provision</em> — those collapse into <code>write</code> at a given
+          env).
+        </li>
+        <li>
+          <strong>env</strong> — an instance/variant slug (<code>@main</code>, <code>@prod</code>,{' '}
+          <code>@feature/x</code>), dynamic — present only when the targeted data is overlaid on
+          that env.
         </li>
       </ul>
       <p>The token-creation checklist surfaces the common grants:</p>
       <ul>
         <li>
-          <code>source:read</code> — read code.
+          <code>github:repo/code:read</code> — read code, diffs, PRs.
         </li>
         <li>
-          <code>source:propose</code> — open branches and PRs.
+          <code>github:repo/code:write@main</code> — merge / apply to main.
         </li>
         <li>
-          <code>source:apply</code> — merge / apply to main.
+          <code>vercel:runtime/deployment:write@preview</code> /{' '}
+          <code>vercel:runtime/deployment:write@prod</code> — deploy.
         </li>
         <li>
-          <code>runtime:apply@staging</code> / <code>runtime:apply@prod</code> — deploy.
+          <code>vercel:runtime/config:write@prod</code> — change prod env vars / secrets.
         </li>
         <li>
-          <code>runtime/settings:apply@prod</code> — change prod config / secrets.
-        </li>
-        <li>
-          <code>data:read@staging</code> / <code>data:read@prod</code> — read data.
+          <code>supabase:db/rows:read@staging</code> / <code>supabase:db/rows:read@prod</code> —
+          read data.
         </li>
       </ul>
       <p>
-        Need a capability that isn&apos;t on the checklist? Type the shorthand directly in the
+        Need a capability that isn&apos;t on the checklist? Type the notation directly in the
         free-text field on the token page — it&apos;s validated against the grammar before it&apos;s
         accepted. The mapping from a concrete <code>(tool, args)</code> call to a required
         capability is done in code by each provider plugin&apos;s <code>classify()</code>, so
