@@ -63,6 +63,8 @@ async function buildHarness(opts: { execute?: UpstreamAdapter['executeCall'] } =
       status: 'active',
       api_key_prefix: apiKeyPrefix,
       expires_at: null,
+      single_use: false,
+      consumed_at: null,
     },
     project: { id: 'p1', slug: 'website', organization_id: 'org1' },
     organization: { id: 'org1', slug: 'acme', name: 'Acme' },
@@ -149,6 +151,8 @@ describe('McpGateway — kind/expiry guards', () => {
         status: 'active',
         api_key_prefix: apiKeyPrefix,
         expires_at: new Date(Date.now() - 60_000).toISOString(),
+        single_use: false,
+        consumed_at: null,
       },
       project: { id: 'p1', slug: 'website', organization_id: 'org1' },
       organization: { id: 'org1', slug: 'acme', name: 'Acme' },
@@ -298,6 +302,90 @@ describe('McpGateway — unknown method', () => {
     const res = await gateway.handle(ctx, { jsonrpc: '2.0', id: 11, method: 'wat' });
     expect('error' in res).toBe(true);
     if ('error' in res) expect(res.error.code).toBe(-32601);
+  });
+});
+
+describe('McpGateway — single-use tokens', () => {
+  test('first matching call allowed, token consumed; second call rejected', async () => {
+    // Read-only single-use token : the developer set has code:read, so the
+    // first list_repos call wins ; the second hits the consumed gate.
+    const { apiKey, apiKeyPrefix } = generateApiKey('test');
+    const apiKeyHash = await hashApiKey(apiKey);
+
+    // Mutable mirror of the access_token row : the loader updates it on
+    // consumeAccessToken so the next loadAccessTokenContext picks up the new
+    // consumed_at and authenticate() rejects.
+    const tokenState = {
+      consumed_at: null as string | null,
+      status: 'active' as 'active' | 'revoked',
+    };
+    const ctx: AccessTokenContext = {
+      access_token: {
+        id: 'tk-su',
+        name: 'single-use',
+        project_id: 'p1',
+        status: 'active',
+        api_key_prefix: apiKeyPrefix,
+        expires_at: null,
+        single_use: true,
+        consumed_at: null,
+      },
+      project: { id: 'p1', slug: 'website', organization_id: 'org1' },
+      organization: { id: 'org1', slug: 'acme', name: 'Acme' },
+      capabilities: [{ provider: 'github', plane: 'repo', level: 'code', action: 'read' }],
+      bindings: [fakeBinding],
+      provider_admins: [
+        { provider: 'github', status: 'connected', installation_id: '99', team_id: null },
+      ],
+    };
+    const loader: ContextLoader = {
+      loadAccessTokenForAuth: vi.fn().mockImplementation(async () => ({
+        id: 'tk-su',
+        api_key_hash: apiKeyHash,
+        status: tokenState.status,
+      })),
+      loadAccessTokenContext: vi.fn().mockImplementation(async () => ({
+        ...ctx,
+        access_token: { ...ctx.access_token, consumed_at: tokenState.consumed_at },
+      })),
+      touchLastUsed: vi.fn(),
+      consumeAccessToken: vi.fn().mockImplementation(async () => {
+        if (tokenState.consumed_at !== null) return false;
+        tokenState.consumed_at = new Date().toISOString();
+        tokenState.status = 'revoked';
+        return true;
+      }),
+    };
+
+    const githubAdapter: UpstreamAdapter = {
+      provider: 'github',
+      availableTools: fakeTools,
+      toolCapabilities: mockGithubToolCapabilities,
+      classify: mockClassifyGithub,
+      executeCall: vi.fn().mockResolvedValue({ ok: true }),
+      loadProviderAdmin: vi.fn().mockResolvedValue(fakeAdmin),
+    };
+    const cache = new MemoryCacheClient();
+    const gateway = new McpGateway({
+      cache,
+      audit: new MemoryAuditWriter(),
+      contextLoader: loader,
+      upstreamByProvider: { github: githubAdapter } as Record<Provider, UpstreamAdapter>,
+    });
+
+    // 1st call : authenticated + executes + consumes.
+    const auth1 = await gateway.authenticate(`Bearer ${apiKey}`);
+    const call1 = await gateway.handle(auth1, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'github__list_repos', arguments: { owner: 'acme', repo: 'app' } },
+    });
+    expect('result' in call1).toBe(true);
+    expect(loader.consumeAccessToken).toHaveBeenCalledTimes(1);
+
+    // 2nd call : token is now consumed → authenticate rejects.
+    await expect(gateway.authenticate(`Bearer ${apiKey}`)).rejects.toThrow(/consumed|revoked/);
   });
 });
 

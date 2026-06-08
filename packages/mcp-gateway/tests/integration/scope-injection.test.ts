@@ -74,6 +74,8 @@ async function harness() {
       status: 'active',
       api_key_prefix: apiKeyPrefix,
       expires_at: null,
+      single_use: false,
+      consumed_at: null,
     },
     project: { id: 'p1', slug: 'playground', organization_id: 'org1' },
     organization: { id: 'org1', slug: 'acme', name: 'Acme' },

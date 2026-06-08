@@ -40,6 +40,7 @@ export async function mintForApproval(
   tokenName: string,
   projectId: string,
   capabilities: Capability[],
+  singleUse = false,
 ): Promise<ApprovedMintResult> {
   const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
   const { apiKey, apiKeyPrefix } = generateApiKey('live');
@@ -55,6 +56,7 @@ export async function mintForApproval(
       status: 'active',
       expires_at: expiresAt,
       capabilities,
+      single_use: singleUse,
     })
     .select('id')
     .single<{ id: string }>();

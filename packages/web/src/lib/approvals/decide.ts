@@ -22,6 +22,7 @@ export interface DecideInput {
   capabilities: Capability[];
   tokenName: string;
   ttlHours: number;
+  singleUse?: boolean;
 }
 
 export interface DecideResult {
@@ -52,6 +53,7 @@ export async function decideApproval(
     input.tokenName,
     input.projectId,
     input.capabilities,
+    input.singleUse ?? false,
   );
   await svc
     .from('approval_requests')

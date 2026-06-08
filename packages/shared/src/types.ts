@@ -91,6 +91,13 @@ export interface AccessToken {
    *  When non-null and `now > expires_at` the gateway rejects the token
    *  with AuthError('access token expired'). */
   expires_at: string | null;
+  /** When true, the gateway consumes the token on the first /mcp call that
+   *  matches a granted capability — status flips to 'revoked', consumed_at
+   *  is set, and every subsequent call rejects (spec §8, single-use). */
+  single_use: boolean;
+  /** ISO timestamp of the consume event ; null until the first matching call
+   *  (or for non-single-use tokens). */
+  consumed_at: string | null;
 }
 
 export type ManagementKeyStatus = 'active' | 'revoked';
@@ -132,7 +139,14 @@ export interface AuditLogRow {
 export interface AccessTokenContext {
   access_token: Pick<
     AccessToken,
-    'id' | 'name' | 'project_id' | 'status' | 'api_key_prefix' | 'expires_at'
+    | 'id'
+    | 'name'
+    | 'project_id'
+    | 'status'
+    | 'api_key_prefix'
+    | 'expires_at'
+    | 'single_use'
+    | 'consumed_at'
   >;
   project: Pick<Project, 'id' | 'slug' | 'organization_id'>;
   organization: Pick<Organization, 'id' | 'slug' | 'name'>;

@@ -45,6 +45,7 @@ interface ApprovalRow {
   requested_capabilities: Capability[];
   requested_token_name: string;
   requested_ttl_hours: number;
+  requested_single_use: boolean;
   channel: string;
   channel_ref: string | null;
 }
@@ -82,7 +83,7 @@ export async function POST(req: NextRequest) {
   const { data: row } = await svc
     .from('approval_requests')
     .select(
-      'id, project_id, status, requested_capabilities, requested_token_name, requested_ttl_hours, channel, channel_ref',
+      'id, project_id, status, requested_capabilities, requested_token_name, requested_ttl_hours, requested_single_use, channel, channel_ref',
     )
     .eq('id', approvalId)
     .maybeSingle<ApprovalRow>();
@@ -109,6 +110,7 @@ export async function POST(req: NextRequest) {
     capabilities: row.requested_capabilities,
     tokenName: row.requested_token_name,
     ttlHours: row.requested_ttl_hours,
+    singleUse: row.requested_single_use,
   });
 
   await answerCallback(cb.id, decision === 'approve' ? '✅ approved' : '❌ denied');

@@ -148,6 +148,8 @@ async function buildHarness(
       status: 'active',
       api_key_prefix: apiKeyPrefix,
       expires_at: null,
+      single_use: false,
+      consumed_at: null,
     },
     project: { id: 'p1', slug: 'website', organization_id: 'org-1' },
     organization: { id: 'org-1', slug: 'acme', name: 'Acme' },

@@ -43,6 +43,7 @@ interface ApprovalRow {
   requested_capabilities: Capability[];
   requested_token_name: string;
   requested_ttl_hours: number;
+  requested_single_use: boolean;
   projects: { organization_id: string };
 }
 
@@ -67,7 +68,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { data: row } = await svc
     .from('approval_requests')
     .select(
-      'id, project_id, status, requested_capabilities, requested_token_name, requested_ttl_hours, projects!inner(organization_id)',
+      'id, project_id, status, requested_capabilities, requested_token_name, requested_ttl_hours, requested_single_use, projects!inner(organization_id)',
     )
     .eq('id', id)
     .maybeSingle<ApprovalRow>();
@@ -89,6 +90,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     capabilities: row.requested_capabilities,
     tokenName: row.requested_token_name,
     ttlHours: row.requested_ttl_hours,
+    singleUse: row.requested_single_use,
   });
 
   return NextResponse.json({ status: result.status }, { status: 200 });

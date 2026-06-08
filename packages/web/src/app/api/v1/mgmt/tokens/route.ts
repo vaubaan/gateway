@@ -46,6 +46,7 @@ export const dynamic = 'force-dynamic';
 
 const DEFAULT_TTL_HOURS = 24;
 const MAX_TTL_HOURS = 24 * 7;
+const MAX_TTL_SECONDS = 3600; // 1h cap on ttlSeconds (single-use territory).
 
 const BodySchema = z.object({
   projectSlug: z.string().min(1),
@@ -55,8 +56,26 @@ const BodySchema = z.object({
     .regex(/^[a-z0-9](-?[a-z0-9])*$/)
     .optional(),
   ttlHours: z.number().int().positive().max(MAX_TTL_HOURS).optional(),
+  ttlSeconds: z.number().int().positive().max(MAX_TTL_SECONDS).optional(),
+  singleUse: z.boolean().optional(),
   context: z.record(z.unknown()).optional(),
 });
+
+/** Compute the token's expires_at and the effective ttl in hours/seconds.
+ *  ttlSeconds wins when both are provided (single-use territory). */
+function ttlExpiresAt(body: { ttlHours?: number; ttlSeconds?: number }): {
+  expiresAt: string;
+  ttlHours: number;
+} {
+  if (body.ttlSeconds !== undefined) {
+    return {
+      expiresAt: new Date(Date.now() + body.ttlSeconds * 1000).toISOString(),
+      ttlHours: body.ttlSeconds / 3600,
+    };
+  }
+  const h = body.ttlHours ?? DEFAULT_TTL_HOURS;
+  return { expiresAt: new Date(Date.now() + h * 3600 * 1000).toISOString(), ttlHours: h };
+}
 
 function randomSuffix(): string {
   return Math.random().toString(36).slice(2, 10).padEnd(8, '0');
@@ -106,8 +125,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'project not found in this org' }, { status: 404 });
   }
 
-  const ttlHours = body.ttlHours ?? DEFAULT_TTL_HOURS;
+  const { expiresAt, ttlHours } = ttlExpiresAt(body);
   const tokenName = body.name ?? `mgmt-${randomSuffix()}`;
+  const singleUse = body.singleUse ?? false;
 
   // Consult the project's policy (spec §5.1).
   const { data: rulesRaw } = await svc
@@ -120,7 +140,6 @@ export async function POST(req: NextRequest) {
 
   // Branch — fast path (all-ai) vs approval path (at least one human gate).
   if (gated.length === 0) {
-    const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
     const { apiKey, apiKeyPrefix } = generateApiKey('live');
     const apiKeyHash = await hashApiKey(apiKey);
 
@@ -134,6 +153,7 @@ export async function POST(req: NextRequest) {
         status: 'active',
         expires_at: expiresAt,
         capabilities,
+        single_use: singleUse,
       })
       .select('id, name, project_id, api_key_prefix, status, expires_at, created_at')
       .single<{
@@ -167,6 +187,7 @@ export async function POST(req: NextRequest) {
       requested_capabilities: capabilities,
       requested_token_name: tokenName,
       requested_ttl_hours: ttlHours,
+      requested_single_use: singleUse,
       context: body.context ?? null,
       channel: channel.id,
       status: 'pending',

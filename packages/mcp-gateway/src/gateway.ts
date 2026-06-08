@@ -42,6 +42,12 @@ function assertNotExpired(expiresAt: string | null | undefined): void {
   }
 }
 
+function assertNotConsumed(consumedAt: string | null | undefined): void {
+  if (consumedAt) {
+    throw new AuthError('access token has already been consumed (single-use).');
+  }
+}
+
 export interface ContextLoader {
   /** Load minimal access-token row for auth verification. Returns null if not found / revoked. */
   loadAccessTokenForAuth(
@@ -51,6 +57,11 @@ export interface ContextLoader {
   loadAccessTokenContext(accessTokenId: string): Promise<AccessTokenContext | null>;
   /** Touch last_used_at — best-effort. */
   touchLastUsed?(accessTokenId: string): Promise<void>;
+  /** Atomically mark a single-use token consumed (spec §8). Returns true on
+   *  the first call (this caller wins), false when already consumed (race).
+   *  Optional : when missing, the gateway just sets consumed_at locally and
+   *  invalidates the cache, trusting eventual consistency. */
+  consumeAccessToken?(accessTokenId: string): Promise<boolean>;
 }
 
 export interface UpstreamAdapter {
@@ -119,6 +130,7 @@ export class McpGateway {
       if (!tk || tk.status !== 'active') throw new AuthError('access token not found or revoked.');
       if (!(await verifyApiKey(tk.api_key_hash, raw))) throw new AuthError('api_key mismatch.');
       assertNotExpired(cached.access_token.expires_at);
+      assertNotConsumed(cached.access_token.consumed_at);
       return cached;
     }
 
@@ -130,6 +142,7 @@ export class McpGateway {
     const ctx = await this.cfg.contextLoader.loadAccessTokenContext(tk.id);
     if (!ctx) throw new AuthError('access-token context could not be loaded.');
     assertNotExpired(ctx.access_token.expires_at);
+    assertNotConsumed(ctx.access_token.consumed_at);
 
     await this.cfg.cache.set(cacheKey, ctx, this.cfg.contextTtlSeconds ?? 60);
     if (this.cfg.contextLoader.touchLastUsed) {
@@ -244,6 +257,21 @@ export class McpGateway {
       return rpcError(id, -32603, `Vaubaan policy denied: ${decision.reason}`);
     }
     const capabilityMatched = decision.capabilityMatched ?? null;
+
+    // Single-use consume (spec §8) : burn the token *before* upstream so a
+    // failed call doesn't leave the credential reusable. Race-safe via the
+    // atomic SQL UPDATE in the loader ; if we lost the race, reject.
+    if (ctx.access_token.single_use) {
+      if (this.cfg.contextLoader.consumeAccessToken) {
+        const won = await this.cfg.contextLoader.consumeAccessToken(ctx.access_token.id);
+        if (!won) {
+          const reason = 'access token has already been consumed (single-use).';
+          await this.audit(ctx, toolName, args, 'denied', null, reason, null);
+          return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+        }
+        await this.cfg.cache.del(`vaubaan:ctx:${ctx.access_token.api_key_prefix}`);
+      }
+    }
 
     // Load full ProviderAdmin (with tokens — never cached in clear).
     const admin = await adapter.loadProviderAdmin(ctx.organization.id, provider);

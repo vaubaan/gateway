@@ -51,6 +51,8 @@ interface AccessTokenRow {
   status: 'active' | 'revoked';
   api_key_prefix: string;
   expires_at: string | null;
+  single_use: boolean;
+  consumed_at: string | null;
   capabilities: unknown;
 }
 
@@ -84,7 +86,9 @@ export function buildGateway(opts: {
     async loadAccessTokenContext(accessTokenId) {
       const { data: tk } = await supabase
         .from('access_tokens')
-        .select('id, name, project_id, status, api_key_prefix, expires_at, capabilities')
+        .select(
+          'id, name, project_id, status, api_key_prefix, expires_at, single_use, consumed_at, capabilities',
+        )
         .eq('id', accessTokenId)
         .maybeSingle<AccessTokenRow>();
       if (!tk) return null;
@@ -131,6 +135,21 @@ export function buildGateway(opts: {
         .from('access_tokens')
         .update({ last_used_at: new Date().toISOString() })
         .eq('id', accessTokenId);
+    },
+    async consumeAccessToken(accessTokenId) {
+      // Atomic single-use burn : the WHERE clause guarantees we win the race.
+      const { data, error } = await supabase
+        .from('access_tokens')
+        .update({ status: 'revoked', consumed_at: new Date().toISOString() })
+        .eq('id', accessTokenId)
+        .eq('single_use', true)
+        .is('consumed_at', null)
+        .select('id');
+      if (error) {
+        console.error('[gateway] consumeAccessToken failed', error);
+        return false;
+      }
+      return (data ?? []).length > 0;
     },
   };
 
