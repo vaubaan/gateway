@@ -48,7 +48,13 @@ export default async function ProjectPage({
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!proj) notFound();
 
-  const [{ data: bindings }, { data: tokens }, providerStates] = await Promise.all([
+  const [
+    { data: bindings },
+    { data: tokens },
+    providerStates,
+    { count: pendingApprovals },
+    { count: policyRulesCount },
+  ] = await Promise.all([
     supabase
       .from('provider_bindings')
       .select('id, provider, resource_ref, display_name')
@@ -61,6 +67,15 @@ export default async function ProjectPage({
       .order('created_at', { ascending: false })
       .returns<TokenRow[]>(),
     Promise.all(PROVIDERS.map((p) => loadProviderState(org.id, p))),
+    supabase
+      .from('approval_requests')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', proj.id)
+      .eq('status', 'pending'),
+    supabase
+      .from('policy_rules')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', proj.id),
   ]);
 
   const resourcesByProvider: Record<Provider, Array<{ ref: string; name: string }>> = {
@@ -95,6 +110,31 @@ export default async function ProjectPage({
       </header>
 
       <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
+        <Card>
+          <CardHeader>
+            <CardTitle>Policy &amp; approvals</CardTitle>
+            <span style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/policy`}>
+                <Button size="sm" variant="secondary">
+                  Policy rules ({policyRulesCount ?? 0})
+                </Button>
+              </Link>
+              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/approvals`}>
+                <Button size="sm" variant={pendingApprovals ? 'primary' : 'secondary'}>
+                  Approvals ({pendingApprovals ?? 0} pending)
+                </Button>
+              </Link>
+            </span>
+          </CardHeader>
+          <CardBody>
+            <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 'var(--text-sm)' }}>
+              Mint requests with human-gated capabilities (per the project&apos;s policy_rules) are
+              held until a human approves via Telegram or here. Tighten the policy in{' '}
+              <em>Policy rules</em> ; clear the queue in <em>Approvals</em>.
+            </p>
+          </CardBody>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Provider bindings</CardTitle>

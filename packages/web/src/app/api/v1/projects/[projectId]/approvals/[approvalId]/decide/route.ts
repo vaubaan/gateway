@@ -1,0 +1,87 @@
+/**
+ * Approve / deny a pending mint approval — user-session-authenticated path.
+ *
+ *   POST /api/v1/projects/:projectId/approvals/:approvalId/decide
+ *     body: { orgSlug, decision: 'approve' | 'deny' }
+ *
+ * Mirrors the mgmt-key version (/api/v1/mgmt/approvals/:id) but uses an
+ * org-member session instead of a vbn_mgmt_… key, so the dashboard can
+ * surface the action inline.
+ */
+
+import { type NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
+import type { Capability } from '@vaubaan/shared';
+import { getSupabaseServiceClient } from '@/lib/supabase/server';
+import { requireOrgMember } from '@/lib/auth/require-org-member';
+import { decideApproval } from '@/lib/approvals/decide';
+
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+const BodySchema = z.object({
+  orgSlug: z.string().min(1),
+  decision: z.enum(['approve', 'deny']),
+});
+
+interface ApprovalRow {
+  id: string;
+  project_id: string;
+  status: string;
+  requested_capabilities: Capability[];
+  requested_token_name: string;
+  requested_ttl_hours: number;
+  requested_single_use: boolean;
+  projects: { organization_id: string };
+}
+
+export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ projectId: string; approvalId: string }> },
+) {
+  const { projectId, approvalId } = await ctx.params;
+  let body: z.infer<typeof BodySchema>;
+  try {
+    body = BodySchema.parse(await req.json());
+  } catch (e) {
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : 'invalid body' },
+      { status: 400 },
+    );
+  }
+
+  const guard = await requireOrgMember(body.orgSlug);
+  if (!guard.ok) return guard.response;
+
+  const svc = getSupabaseServiceClient();
+  const { data: row } = await svc
+    .from('approval_requests')
+    .select(
+      'id, project_id, status, requested_capabilities, requested_token_name, requested_ttl_hours, requested_single_use, projects!inner(organization_id)',
+    )
+    .eq('id', approvalId)
+    .eq('project_id', projectId)
+    .maybeSingle<ApprovalRow>();
+  if (!row || row.projects.organization_id !== guard.orgId) {
+    return NextResponse.json({ error: 'approval not found in this project' }, { status: 404 });
+  }
+  if (row.status !== 'pending') {
+    return NextResponse.json(
+      { error: `approval is no longer pending (status=${row.status})` },
+      { status: 409 },
+    );
+  }
+
+  const result = await decideApproval(svc, {
+    approvalId: row.id,
+    decision: body.decision,
+    decidedBy: `user:${guard.userId}`,
+    projectId: row.project_id,
+    capabilities: row.requested_capabilities,
+    tokenName: row.requested_token_name,
+    ttlHours: row.requested_ttl_hours,
+    singleUse: row.requested_single_use,
+  });
+
+  return NextResponse.json({ status: result.status }, { status: 200 });
+}
