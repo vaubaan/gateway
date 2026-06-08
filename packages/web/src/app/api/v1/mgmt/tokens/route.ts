@@ -26,7 +26,14 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { type Capability, generateApiKey, hashApiKey, parseCapability } from '@vaubaan/shared';
+import {
+  type Capability,
+  formatCapability,
+  generateApiKey,
+  hashApiKey,
+  parseCapability,
+} from '@vaubaan/shared';
+import { evaluatePolicy, humanGatedDecisions, type PolicyRule } from '@vaubaan/policy-engine';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireManagementKey } from '@/lib/auth/require-management-key';
 
@@ -93,6 +100,35 @@ export async function POST(req: NextRequest) {
     .maybeSingle<{ id: string; slug: string }>();
   if (!project) {
     return NextResponse.json({ error: 'project not found in this org' }, { status: 404 });
+  }
+
+  // Consult the project's policy (spec §5.1). Default-deny: any capability
+  // without an explicit ai-allow rule falls back to human-gated, and we
+  // refuse to mint (Phase 4 will open an ApprovalChannel instead).
+  const { data: rulesRaw } = await svc
+    .from('policy_rules')
+    .select('id, project_id, provider, plane, level, action, env_pattern, gate, priority')
+    .eq('project_id', project.id);
+  const rules = (rulesRaw ?? []) as PolicyRule[];
+  const decisions = evaluatePolicy(capabilities, rules);
+  const gated = humanGatedDecisions(decisions);
+  if (gated.length > 0) {
+    return NextResponse.json(
+      {
+        error: 'one or more requested capabilities require human approval',
+        gated: gated.map((d) => ({
+          capability: formatCapability(d.capability),
+          matchedRule: d.matchedRule
+            ? { id: d.matchedRule.id, priority: d.matchedRule.priority }
+            : null,
+          reason: d.matchedRule
+            ? `policy rule ${d.matchedRule.id} sets gate='human'`
+            : 'no policy rule matches → default-deny',
+        })),
+        hint: 'add a more specific policy rule with gate=ai, or use the approval flow (coming soon).',
+      },
+      { status: 403 },
+    );
   }
 
   const ttlHours = body.ttlHours ?? DEFAULT_TTL_HOURS;
