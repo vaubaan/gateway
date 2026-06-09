@@ -17,14 +17,14 @@ describe('evaluateCapability', () => {
     const granted = [cap('github', 'repo', 'code', 'read')];
     const d = evaluateCapability(granted, cap('github', 'repo', 'code', 'read'));
     expect(d.decision).toBe('allowed');
-    expect(d.capabilityMatched).toBe('github:repo/code:read');
+    expect(d.capabilityMatched).toBe('github:code:read');
   });
 
   test('missing capability → denied with actionable reason', () => {
     const granted = [cap('github', 'repo', 'code', 'read')];
     const d = evaluateCapability(granted, cap('github', 'repo', 'code', 'write', 'main'));
     expect(d.decision).toBe('denied');
-    expect(d.reason).toContain('github:repo/code:write@main');
+    expect(d.reason).toContain('github:code:write@main');
   });
 
   test('env defensive filter: @prod required, only @staging granted → denied', () => {
@@ -43,7 +43,7 @@ describe('evaluateCapability', () => {
     const granted = [cap('vercel', 'runtime', 'deployment', 'write', 'prod')];
     const d = evaluateCapability(granted, cap('vercel', 'runtime', 'deployment', 'write', 'prod'));
     expect(d.decision).toBe('allowed');
-    expect(d.capabilityMatched).toBe('vercel:runtime/deployment:write@prod');
+    expect(d.capabilityMatched).toBe('vercel:deployment:write@prod');
   });
 
   test('level distinction: config:write not covered by deployment:write', () => {

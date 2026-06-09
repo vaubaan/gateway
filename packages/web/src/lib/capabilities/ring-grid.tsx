@@ -12,12 +12,16 @@
  * envs + free input).
  *
  * The composed capability set is emitted as an array of notation strings
- * (`provider:plane/level:action@env`). Levels with an action picked but
+ * (`provider:level:action@env` short form when the provider has a single
+ * plane, `provider:plane/level:action@env` otherwise). Levels with an action picked but
  * no env selected (when env-scoped) are emitted env-less, with a UI hint
  * that explains the *fan-out* implication for writes (spec §5.1 #3).
  */
 
 import { useMemo, useState } from 'react';
+// Direct path import (not the package barrel) so the client bundle stays
+// free of the Node-only `argon2` dep that `@vaubaan/shared` re-exports.
+import { formatCapability, parseCapability } from '@vaubaan/shared/capability';
 import { Badge, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import {
   PROVIDER_CATALOG,
@@ -62,23 +66,21 @@ function cellKey(p: string, plane: string, level: string): CellKey {
   return `${p}/${plane}/${level}`;
 }
 
+// Notation building/parsing delegates to @vaubaan/shared so we emit the short
+// form (`provider:level:action@env`) for single-plane providers, and accept
+// either form on input.
 function buildNotation(p: string, plane: string, level: string, action: Action, env?: string) {
-  return env ? `${p}:${plane}/${level}:${action}@${env}` : `${p}:${plane}/${level}:${action}`;
+  return formatCapability(
+    env ? { provider: p, plane, level, action, env } : { provider: p, plane, level, action },
+  );
 }
 
 function parseNotation(s: string) {
-  const m = /^([a-z][a-z0-9-]*):([a-z][a-z0-9-]*)\/([a-z][a-z0-9-]*):(read|write)(?:@(.+))?$/.exec(
-    s,
-  );
-  if (!m) return null;
-  const [, provider, plane, level, action, env] = m;
-  return {
-    provider: provider!,
-    plane: plane!,
-    level: level!,
-    action: action as Action,
-    env: env,
-  };
+  try {
+    return parseCapability(s);
+  } catch {
+    return null;
+  }
 }
 
 /** Build initial cell state from a current `value` array. */

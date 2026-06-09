@@ -18,7 +18,11 @@
  *               targeted *data* is overlaid on this env (per-data, not per-level —
  *               decision #5).
  *
- * Notation (wire + audit) : `provider:plane/level:action@env`.
+ * Notation (display) :
+ *  - long form  : `provider:plane/level:action@env`.
+ *  - short form : `provider:level:action@env` — when the provider has a single
+ *                 registered default plane (cf. `DEFAULT_PLANE`). The parser
+ *                 accepts both ; `formatCapability` emits short when possible.
  */
 
 export type Action = 'read' | 'write';
@@ -42,7 +46,7 @@ export interface Capability {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Notation: `provider:plane/level:action@env`
+// Notation : long `provider:plane/level:action@env` ; short `provider:level:action@env`.
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
@@ -54,33 +58,89 @@ export interface Capability {
  */
 const SLUG = '[a-z][a-z0-9-]*';
 const ENV_SLUG = '[a-z0-9](?:[a-z0-9/_-]*[a-z0-9])?';
-const NOTATION_RE = new RegExp(`^(${SLUG}):(${SLUG})/(${SLUG}):(read|write)(?:@(${ENV_SLUG}))?$`);
 
-/** Canonical, always-full-form string. Stable key for sets / storage / audit. */
+/** Long form. */
+const LONG_NOTATION_RE = new RegExp(
+  `^(${SLUG}):(${SLUG})/(${SLUG}):(read|write)(?:@(${ENV_SLUG}))?$`,
+);
+/** Short form — requires the provider to have a default plane. */
+const SHORT_NOTATION_RE = new RegExp(`^(${SLUG}):(${SLUG}):(read|write)(?:@(${ENV_SLUG}))?$`);
+
+/**
+ * Providers that expose a single plane get a default plane registered here.
+ * Callers can then write `provider:level:action@env` (short form) and the
+ * parser fills in the plane ; `formatCapability` also omits the plane for
+ * these providers. Providers with multiple planes (e.g. supabase = db |
+ * storage | auth | functions) are absent and require the long form.
+ */
+export const DEFAULT_PLANE: Record<string, string> = {
+  github: 'repo',
+  vercel: 'runtime',
+  railway: 'runtime',
+  ssh: 'host',
+};
+
+/** Always-long-form string. Stable identity for sets / DB storage / audit. */
 export function capabilityKey(c: Capability): string {
   return `${c.provider}:${c.plane}/${c.level}:${c.action}${c.env ? `@${c.env}` : ''}`;
 }
 
-/** Same as `capabilityKey` — kept for naming clarity at call sites. */
-export const formatCapability = capabilityKey;
+/**
+ * Display-friendly notation : short form (`provider:level:action@env`) when
+ * `DEFAULT_PLANE[c.provider] === c.plane`, otherwise long form.
+ */
+export function formatCapability(c: Capability): string {
+  const envSuffix = c.env ? `@${c.env}` : '';
+  if (DEFAULT_PLANE[c.provider] === c.plane) {
+    return `${c.provider}:${c.level}:${c.action}${envSuffix}`;
+  }
+  return `${c.provider}:${c.plane}/${c.level}:${c.action}${envSuffix}`;
+}
 
 /**
- * Parse the notation `provider:plane/level:action@env` into a Capability.
- * Throws on malformed input. Validation of *whether* a given (provider, plane,
- * level) is emittable by a real plugin is done elsewhere (cf. ProviderModel's
- * `capabilities()` surface, spec §6) — this function is purely syntactic.
+ * Parse the notation into a Capability. Accepts both forms :
+ *  - long  : `provider:plane/level:action@env`
+ *  - short : `provider:level:action@env` (requires the provider to have a
+ *            default plane in `DEFAULT_PLANE`).
+ *
+ * Throws on malformed input or on a short form for a multi-plane provider.
+ * Validation of *whether* a given (provider, plane, level) is emittable by
+ * a real plugin is done elsewhere (cf. ProviderModel's `capabilities()`
+ * surface, spec §6) — this function is purely syntactic.
  */
 export function parseCapability(s: string): Capability {
-  const m = NOTATION_RE.exec(s.trim());
-  if (!m) throw new Error(`invalid capability notation: '${s}'`);
-  const [, provider, plane, level, action, env] = m;
-  return {
-    provider: provider!,
-    plane: plane!,
-    level: level!,
-    action: action as Action,
-    ...(env ? { env } : {}),
-  };
+  const trimmed = s.trim();
+  // Try long form first — it's more specific.
+  const longMatch = LONG_NOTATION_RE.exec(trimmed);
+  if (longMatch) {
+    const [, provider, plane, level, action, env] = longMatch;
+    return {
+      provider: provider!,
+      plane: plane!,
+      level: level!,
+      action: action as Action,
+      ...(env ? { env } : {}),
+    };
+  }
+  const shortMatch = SHORT_NOTATION_RE.exec(trimmed);
+  if (shortMatch) {
+    const [, provider, level, action, env] = shortMatch;
+    const plane = DEFAULT_PLANE[provider!];
+    if (!plane) {
+      throw new Error(
+        `invalid capability notation: '${s}' — provider '${provider}' has multiple planes ; ` +
+          `use the long form 'provider:plane/level:action[@env]'.`,
+      );
+    }
+    return {
+      provider: provider!,
+      plane,
+      level: level!,
+      action: action as Action,
+      ...(env ? { env } : {}),
+    };
+  }
+  throw new Error(`invalid capability notation: '${s}'`);
 }
 
 /** Minimal structural check : action ∈ {read,write} + non-empty slugs. */
