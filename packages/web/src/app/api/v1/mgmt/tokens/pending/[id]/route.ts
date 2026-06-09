@@ -14,7 +14,7 @@
  * The api_key is shown ONCE — after the first successful poll, the row's
  * status flips to 'consumed' and `pending_api_key` is cleared.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §8.
+ * Spec : docs/spec/gateway-capability-model.md §8.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

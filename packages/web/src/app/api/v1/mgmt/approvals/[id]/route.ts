@@ -18,7 +18,7 @@
  * Telegram webhook handler reuses the same internal logic through
  * `decideApproval` — see /api/v1/integrations/telegram/webhook.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §8.
+ * Spec : docs/spec/gateway-capability-model.md §8.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

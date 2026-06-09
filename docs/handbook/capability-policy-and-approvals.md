@@ -1,22 +1,27 @@
 ---
-title: Capability policy + human-gate approvals
+title: Capability policy + approvals (allow/confirm/deny)
 status: current
-date: 2026-06-08
+date: 2026-06-09
 tracks:
   - packages/policy-engine/src/policy.ts
   - packages/web/src/lib/approvals/
+  - packages/web/src/lib/capabilities/peel-catalog.ts
+  - packages/web/src/lib/capabilities/peel-grid.tsx
   - packages/web/src/app/api/v1/mgmt/tokens/route.ts
   - packages/web/src/app/api/v1/mgmt/tokens/pending/[id]/route.ts
   - packages/web/src/app/api/v1/mgmt/approvals/[id]/route.ts
   - packages/web/src/app/api/v1/integrations/telegram/webhook/route.ts
-  - supabase/migrations/0012_policy_rules.sql
   - supabase/migrations/0013_approvals.sql
   - supabase/migrations/0014_single_use_tokens.sql
+  - supabase/migrations/0015_capabilities_replace_roles.sql
+  - supabase/migrations/0016_policy_rules.sql
+  - supabase/migrations/0017_approval_sweeper_cron.sql
+  - supabase/migrations/0018_gate_allow_confirm_deny.sql
 ---
 
 # Capability policy + human-gate approvals
 
-Two-layer authorization model (cf. `docs/spec/gateway-capability-model.draft.md`
+Two-layer authorization model (cf. `docs/spec/gateway-capability-model.md`
 §5, §5.1, §8) :
 
 1. **Plugin layer (mechanical, native semantics)** — `classify()` answers
@@ -39,26 +44,32 @@ policy_rules (
   provider, plane, level,           -- exact slug or '*'
   action,                            -- 'read' | 'write' | '*'
   env_pattern,                       -- exact slug or '*'
-  gate                               -- 'ai' | 'human'
+  gate                               -- 'allow' | 'confirm' | 'deny'
   priority                           -- ties broken by desc
 )
 ```
 
-- **Default-deny** : no matching rule ⟹ `gate='human'`. The rule database is
-  an allow-list.
+- **Gate semantics.**
+  - `allow` → mint immediately (201 + api_key).
+  - `confirm` → open an approval flow (Telegram / UI) ; mint returns 202
+    - `approval_id` + poll URL.
+  - `deny` → 403 final, no override possible.
+- **Default-deny** : no matching rule ⟹ `gate='deny'`. The rule database is
+  an explicit allow-list — anything not granted is refused.
 - **Most-specific wins** : specificity = number of fields ≠ `*`. Ties broken
   by `priority desc`.
 - **Anti-pattern guard** (SQL CHECK) : refuses
-  `(action='write', env_pattern='*', gate='ai')` — a blanket ai-allow on
+  `(action='write', env_pattern='*', gate='allow')` — a blanket allow on
   writes would silently authorize prod (spec §5.1 #2).
 - **Env-less caps** match `env_pattern='*'` only. The env-less _fan-out_ case
-  (e.g. Vercel all-env env var) is therefore default-human-gated, which is
-  the safe direction until `@all` is modeled (§5.1 #3).
+  (e.g. Vercel all-env env var) is therefore covered by the seed
+  `write → confirm` — pops for human approval until `@all` is modeled
+  (§5.1 #3).
 
 **Seed** : every project is auto-seeded (trigger) with two priority-0 rules :
-`*:*:*:read:* → ai` and `*:*:*:write:* → human`. Operators add specific
-overrides (e.g. `github:repo/code:write@feature/* → ai`) without touching the
-defaults.
+`*:*:*:read:* → allow` and `*:*:*:write:* → confirm`. Operators add specific
+overrides (e.g. `github:repo/code:write@feature/* → allow`,
+`*:*:access:write@* → deny`) without touching the defaults.
 
 `evaluatePolicy(caps, rules)` is the pure function. Tested in
 `packages/policy-engine/tests/unit/policy.test.ts` (10 tests).

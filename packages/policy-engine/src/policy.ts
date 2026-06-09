@@ -1,7 +1,7 @@
 /**
  * Capability policy — the client-side decision: who gets to exercise *what*.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §5, §5.1.
+ * Spec : docs/spec/gateway-capability-model.md §5, §5.1.
  *
  * The plugin layer (classify) decides *which* capability a call requires.
  * The policy layer decides *how* a requested capability gets minted on a

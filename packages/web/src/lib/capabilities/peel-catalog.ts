@@ -1,7 +1,7 @@
 /**
  * Static catalog of provider planes and their concentric levels (peels).
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §2, §2.1, §3.
+ * Spec : docs/spec/gateway-capability-model.md §2, §2.1, §3.
  *
  * Each provider declares one or more **planes** — concentric stacks of
  * **levels** (peels), ordered niv1 (interne) → nivN (externe). The outer

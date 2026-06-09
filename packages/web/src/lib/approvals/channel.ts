@@ -2,7 +2,7 @@
  * ApprovalChannel — the abstraction the mint endpoints use to ask a human
  * "may I grant this capability ?".
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §8.
+ * Spec : docs/spec/gateway-capability-model.md §8.
  *
  * Implementations
  *   - `ManualChannel`     : no notification. Operator approves via the

@@ -3,7 +3,7 @@
 /**
  * PeelGrid — visual composer for capability sets, project-aware.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §2 (peels), §3 (notation).
+ * Spec : docs/spec/gateway-capability-model.md §2 (peels), §3 (notation).
  *
  * Renders one card per provider present in the project's bindings, each
  * with the plane(s) and their concentric levels. For every (plane,level)

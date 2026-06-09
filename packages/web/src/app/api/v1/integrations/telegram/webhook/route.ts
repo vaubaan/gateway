@@ -15,7 +15,7 @@
  * The webhook is shared across all projects ; the per-project routing happens
  * via the `callback_data` payload `vbn:<approvalId>:<approve|deny>`.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §8.
+ * Spec : docs/spec/gateway-capability-model.md §8.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
