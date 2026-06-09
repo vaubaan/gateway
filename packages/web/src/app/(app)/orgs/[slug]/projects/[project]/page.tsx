@@ -68,6 +68,7 @@ export default async function ProjectPage({
     providerStates,
     { count: pendingApprovals },
     { count: policyRulesCount },
+    { count: servicesCount },
   ] = await Promise.all([
     supabase
       .from('provider_bindings')
@@ -93,6 +94,10 @@ export default async function ProjectPage({
       .eq('status', 'pending'),
     supabase
       .from('policy_rules')
+      .select('id', { count: 'exact', head: true })
+      .eq('project_id', proj.id),
+    supabase
+      .from('runner_services')
       .select('id', { count: 'exact', head: true })
       .eq('project_id', proj.id),
   ]);
@@ -137,6 +142,11 @@ export default async function ProjectPage({
               <Link href={`/orgs/${org.slug}/projects/${proj.slug}/rings`}>
                 <Button size="sm" variant="secondary">
                   Capability rings
+                </Button>
+              </Link>
+              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/services`}>
+                <Button size="sm" variant="secondary">
+                  Services ({servicesCount ?? 0})
                 </Button>
               </Link>
               <Link href={`/orgs/${org.slug}/projects/${proj.slug}/policy`}>
