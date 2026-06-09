@@ -1,5 +1,6 @@
 'use client';
 
+import { LocalDate } from '@/components/LocalDate';
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
@@ -174,11 +175,11 @@ export function ManagementKeysPanel({
                         )}
                         {k.last_used_at && (
                           <span style={{ marginLeft: 'var(--space-3)' }}>
-                            last used {new Date(k.last_used_at).toLocaleString()}
+                            last used <LocalDate ts={k.last_used_at} />
                           </span>
                         )}
                         <span style={{ marginLeft: 'var(--space-3)' }}>
-                          created {new Date(k.created_at).toLocaleDateString()}
+                          created <LocalDate ts={k.created_at} dateOnly />
                         </span>
                       </div>
                     </div>

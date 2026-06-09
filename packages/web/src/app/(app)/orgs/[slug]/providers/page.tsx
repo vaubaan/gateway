@@ -1,3 +1,4 @@
+import { LocalDate } from '@/components/LocalDate';
 import { notFound, redirect } from 'next/navigation';
 import { type Provider } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
@@ -73,11 +74,18 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
               <CardTitle>SSH</CardTitle>
               <Badge tone="neutral">per-project</Badge>
             </Row>
-            <Link href={`/orgs/${org.slug}`} style={{ textDecoration: 'none' }}>
-              <Button size="sm" variant="secondary">
-                Add SSH binding →
-              </Button>
-            </Link>
+            <Row gap="var(--space-2)">
+              <Link href={`/orgs/${org.slug}/providers/ssh`} style={{ textDecoration: 'none' }}>
+                <Button size="sm" variant="secondary">
+                  Rings ↗
+                </Button>
+              </Link>
+              <Link href={`/orgs/${org.slug}`} style={{ textDecoration: 'none' }}>
+                <Button size="sm" variant="secondary">
+                  Add SSH binding →
+                </Button>
+              </Link>
+            </Row>
           </CardHeader>
           <CardBody>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>
@@ -107,6 +115,14 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
           )}
         </Row>
         <Row gap="var(--space-2)">
+          <Link
+            href={`/orgs/${orgSlug}/providers/${state.provider}`}
+            style={{ textDecoration: 'none' }}
+          >
+            <Button size="sm" variant="secondary">
+              Rings ↗
+            </Button>
+          </Link>
           {connected && (
             <ProviderDisconnectButton
               orgSlug={orgSlug}
@@ -172,7 +188,7 @@ function ProviderDetails({ state }: { state: ProviderState }) {
           {state.connectedByEmail ?? '—'}{' '}
           {state.connectedAt && (
             <span style={{ color: 'var(--text-subtle)' }}>
-              · {new Date(state.connectedAt).toLocaleDateString()}
+              · <LocalDate ts={state.connectedAt} dateOnly />
             </span>
           )}
         </Desc>

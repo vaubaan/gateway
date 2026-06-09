@@ -1,3 +1,4 @@
+import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
@@ -267,7 +268,7 @@ export default async function ProjectAuditPage({
             {auditRows.map((r) => (
               <Tr key={r.id}>
                 <Td style={{ color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                  {new Date(r.ts).toLocaleString()}
+                  <LocalDate ts={r.ts} />
                 </Td>
                 <Td>{r.access_token_id ? (tokenNameById.get(r.access_token_id) ?? '—') : '—'}</Td>
                 <Td>

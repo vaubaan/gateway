@@ -1,3 +1,4 @@
+import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
@@ -109,7 +110,7 @@ export default async function TokensIndex({
               )}
               {t.last_used_at && (
                 <span style={{ marginLeft: 8 }}>
-                  used {new Date(t.last_used_at).toLocaleString()}
+                  used <LocalDate ts={t.last_used_at} />
                 </span>
               )}
             </span>

@@ -1,3 +1,4 @@
+import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { type Provider } from '@vaubaan/shared';
@@ -268,7 +269,9 @@ export default async function ProjectPage({
                     >
                       <Badge tone={t.status === 'active' ? 'success' : 'danger'}>{t.status}</Badge>
                       {t.last_used_at && (
-                        <span>used {new Date(t.last_used_at).toLocaleString()}</span>
+                        <span>
+                          used <LocalDate ts={t.last_used_at} />
+                        </span>
                       )}
                     </span>
                   </li>
