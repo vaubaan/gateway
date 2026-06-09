@@ -75,25 +75,18 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
               <CardTitle>SSH</CardTitle>
               <Badge tone="neutral">per-project</Badge>
             </Row>
-            <Row gap="var(--space-2)">
-              <Link
-                href={`/orgs/${org.slug}/providers/ssh`}
-                style={{ textDecoration: 'none' }}
-                title="Show provider rings & capabilities"
-              >
-                <Button size="sm" variant="secondary">
-                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                    <InfoIcon />
-                    Info
-                  </span>
-                </Button>
-              </Link>
-              <Link href={`/orgs/${org.slug}`} style={{ textDecoration: 'none' }}>
-                <Button size="sm" variant="secondary">
-                  Add SSH binding →
-                </Button>
-              </Link>
-            </Row>
+            <Link
+              href={`/orgs/${org.slug}/providers/ssh`}
+              style={{ textDecoration: 'none' }}
+              title="Show provider rings & capabilities"
+            >
+              <Button size="sm" variant="secondary">
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <InfoIcon />
+                  Info
+                </span>
+              </Button>
+            </Link>
           </CardHeader>
           <CardBody>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>
