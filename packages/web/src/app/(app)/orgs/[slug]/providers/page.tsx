@@ -75,9 +75,14 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
               <Badge tone="neutral">per-project</Badge>
             </Row>
             <Row gap="var(--space-2)">
-              <Link href={`/orgs/${org.slug}/providers/ssh`} style={{ textDecoration: 'none' }}>
+              <Link
+                href={`/orgs/${org.slug}/providers/ssh`}
+                style={{ textDecoration: 'none' }}
+                aria-label="More info about ssh rings"
+                title="Show provider rings & capabilities"
+              >
                 <Button size="sm" variant="secondary">
-                  Rings ↗
+                  (i)
                 </Button>
               </Link>
               <Link href={`/orgs/${org.slug}`} style={{ textDecoration: 'none' }}>
@@ -118,9 +123,11 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
           <Link
             href={`/orgs/${orgSlug}/providers/${state.provider}`}
             style={{ textDecoration: 'none' }}
+            aria-label={`More info about ${state.provider} rings`}
+            title="Show provider rings & capabilities"
           >
             <Button size="sm" variant="secondary">
-              Rings ↗
+              (i)
             </Button>
           </Link>
           {connected && (
