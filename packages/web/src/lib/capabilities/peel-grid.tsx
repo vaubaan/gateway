@@ -20,13 +20,16 @@
 import { useMemo, useState } from 'react';
 import { Badge, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import {
-  ARCHETYPE_LABEL,
   PROVIDER_CATALOG,
   type Action,
   type LevelDescriptor,
   type PlaneDescriptor,
   type ProviderDescriptor,
 } from './peel-catalog';
+
+function ringLabel(rank: number): string {
+  return `ring ${rank}`;
+}
 
 export interface PeelGridBindings {
   /** provider_bindings rows of the project (any provider). */
@@ -208,14 +211,15 @@ function DocCard() {
       <CardBody style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.5 }}>
         <p style={{ marginTop: 0 }}>
           A capability is a 5-tuple <Code>provider:plane/level:action@env</Code>. Pick R or W on
-          each level you need ; for env-scoped levels also pick one or more envs. Toggle nothing to
-          leave a level out of the token.
+          each ring you need ; for env-scoped rings also pick one or more envs. Toggle nothing to
+          leave a ring out of the token.
         </p>
         <ul style={{ paddingLeft: 'var(--space-4)', margin: 0 }}>
           <li>
-            Each <strong>plane</strong> is a concentric stack of <strong>levels</strong> — niv1 =
-            content (the living data), nivN = access (existence + creds). Outer governs inner, blast
-            grows outward.
+            Each <strong>plane</strong> is a fortress of concentric <strong>rings</strong>.{' '}
+            <strong>ring 1</strong> is the outer wall (the living data — code, rows, builds).{' '}
+            <strong>ring N</strong> is the keep at the center (account, credentials, install
+            tokens). Writing an inner ring forces every outer ring to obey — blast grows inward.
           </li>
           <li>
             <strong>R</strong> = read (observe), <strong>W</strong> = write (mutate). No
@@ -224,7 +228,7 @@ function DocCard() {
           <li>
             <strong>env</strong> = which instance (a Vercel target, a Supabase project, a git
             branch, an SSH host). Env-less caps cover the data when it has no env dimension ;
-            env-less <em>writes</em> on env-scoped levels (e.g. Vercel all-environments env var) are{' '}
+            env-less <em>writes</em> on env-scoped rings (e.g. Vercel all-environments env var) are{' '}
             <strong>fan-outs</strong> — the policy defaults treat them like the strictest env
             covered.
           </li>
@@ -313,65 +317,65 @@ function PlaneBlock({
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
         <thead>
           <tr style={{ color: 'var(--text-subtle)', fontSize: 12, textAlign: 'left' }}>
-            <th style={{ padding: '6px 8px', width: 60 }}>niv</th>
+            <th style={{ padding: '6px 8px', width: 100 }}>ring</th>
             <th style={{ padding: '6px 8px', width: 180 }}>level</th>
             <th style={{ padding: '6px 8px', width: 110 }}>R / W</th>
             <th style={{ padding: '6px 8px' }}>env</th>
           </tr>
         </thead>
         <tbody>
-          {plane.levels.map((level) => {
-            const c = cells[cellKey(provider, plane.slug, level.slug)] ?? {
-              action: null,
-              envs: [],
-            };
-            return (
-              <tr key={level.slug} style={{ borderTop: '1px solid var(--border-subtle)' }}>
-                <td
-                  style={{
-                    padding: '8px',
-                    color: 'var(--text-subtle)',
-                    verticalAlign: 'top',
-                  }}
-                >
-                  niv{level.rank}
-                </td>
-                <td style={{ padding: '8px', verticalAlign: 'top' }}>
-                  <Code>{level.slug}</Code>
-                  <div style={{ color: 'var(--text-subtle)', fontSize: 12, marginTop: 4 }}>
-                    {level.description}
-                  </div>
-                  <div style={{ color: 'var(--text-subtle)', fontSize: 11, marginTop: 2 }}>
-                    {ARCHETYPE_LABEL[level.archetype]}
-                  </div>
-                </td>
-                <td style={{ padding: '8px', verticalAlign: 'top' }}>
-                  <RWToggle
-                    action={c.action}
-                    onClick={(a) => onToggleAction(plane.slug, level.slug, a)}
-                  />
-                </td>
-                <td style={{ padding: '8px', verticalAlign: 'top' }}>
-                  {level.envScoped ? (
-                    <EnvPicker
-                      hint={plane.envHint}
-                      envs={envs}
-                      selected={c.envs}
-                      disabled={!c.action}
-                      onToggle={(env) => onToggleEnv(plane.slug, level.slug, env)}
-                    />
-                  ) : (
-                    <span style={{ color: 'var(--text-subtle)', fontSize: 12 }}>env-less</span>
-                  )}
-                  {c.action === 'write' && level.envScoped && c.envs.length === 0 && (
-                    <div style={{ marginTop: 'var(--space-2)' }}>
-                      <Badge tone="warning">env-less write = fan-out (touches every env)</Badge>
+          {[...plane.levels]
+            .sort((a, b) => a.rank - b.rank)
+            .map((level) => {
+              const c = cells[cellKey(provider, plane.slug, level.slug)] ?? {
+                action: null,
+                envs: [],
+              };
+              return (
+                <tr key={level.slug} style={{ borderTop: '1px solid var(--border-subtle)' }}>
+                  <td
+                    style={{
+                      padding: '8px',
+                      color: 'var(--text-subtle)',
+                      verticalAlign: 'top',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {ringLabel(level.rank)}
+                  </td>
+                  <td style={{ padding: '8px', verticalAlign: 'top' }}>
+                    <Code>{level.slug}</Code>
+                    <div style={{ color: 'var(--text-subtle)', fontSize: 12, marginTop: 4 }}>
+                      {level.description}
                     </div>
-                  )}
-                </td>
-              </tr>
-            );
-          })}
+                  </td>
+                  <td style={{ padding: '8px', verticalAlign: 'top' }}>
+                    <RWToggle
+                      action={c.action}
+                      onClick={(a) => onToggleAction(plane.slug, level.slug, a)}
+                    />
+                  </td>
+                  <td style={{ padding: '8px', verticalAlign: 'top' }}>
+                    {level.envScoped ? (
+                      <EnvPicker
+                        hint={plane.envHint}
+                        envs={envs}
+                        selected={c.envs}
+                        disabled={!c.action}
+                        onToggle={(env) => onToggleEnv(plane.slug, level.slug, env)}
+                      />
+                    ) : (
+                      <span style={{ color: 'var(--text-subtle)', fontSize: 12 }}>env-less</span>
+                    )}
+                    {c.action === 'write' && level.envScoped && c.envs.length === 0 && (
+                      <div style={{ marginTop: 'var(--space-2)' }}>
+                        <Badge tone="warning">env-less write = fan-out (touches every env)</Badge>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
         </tbody>
       </table>
     </div>

@@ -3,12 +3,15 @@ import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { Badge, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import {
-  ARCHETYPE_LABEL,
   PROVIDER_CATALOG,
   type LevelDescriptor,
   type PlaneDescriptor,
   type ProviderDescriptor,
 } from '@/lib/capabilities/peel-catalog';
+
+function ringLabel(rank: number): string {
+  return `ring ${rank}`;
+}
 
 export const dynamic = 'force-dynamic';
 
@@ -78,7 +81,7 @@ export default async function PeelsPage({
         }}
       >
         <div>
-          <h1 style={{ margin: 0 }}>Capability peels</h1>
+          <h1 style={{ margin: 0 }}>Rings</h1>
           <Code>
             /{org.slug}/{proj.slug}/peels
           </Code>
@@ -91,11 +94,12 @@ export default async function PeelsPage({
               lineHeight: 1.5,
             }}
           >
-            Reference for the concentric state model behind every capability. Each <em>plane</em> is
-            a stack of <em>levels</em> (peels) ordered niv1 (the living data) → nivN (existence +
-            creds). <strong>Outer governs inner</strong> — writing to an outer level affects the
-            rules of every inner one (blast monotone). Pick R or W on a level, scope it to an env,
-            you get a capability you can grant on a token.
+            Each provider plane is a fortress of concentric rings. <strong>ring 1</strong> is the
+            outer wall (the living data — code, rows, deployments) ; <strong>ring N</strong> is the
+            keep at the center (the account, credentials, install tokens). Writing an inner ring
+            forces every outer ring to obey — that&apos;s the <em>blast-monotone</em> invariant. To
+            compose a capability, pick R or W on a ring, scope it to an env, then grant it on a
+            token.
           </p>
         </div>
         <Link
@@ -151,25 +155,21 @@ function Legend() {
       <CardBody style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)', lineHeight: 1.6 }}>
         <ul style={{ paddingLeft: 'var(--space-4)', margin: 0 }}>
           <li>
-            <strong>niv</strong> — rank of the peel inside its plane. niv1 = innermost (the living
-            data) ; nivN = outermost (existence + creds). Outer governs inner ; writing an outer
-            level is strictly more dangerous than writing an inner one.
+            <strong>ring 1</strong> = outer wall (the living data : code, rows, builds — where
+            agents operate daily). <strong>ring N</strong> = the keep at the center (account,
+            credentials, install tokens). Writing an inner ring forces every outer ring to obey
+            (blast monotone).
           </li>
           <li>
-            <strong>archetype</strong> — descriptive label for cross-provider comparison (
-            <em>content</em>, <em>structure</em>, <em>governance</em>, <em>access</em>). UI hint
-            only ; the runtime contract is provider-local.
+            <strong>env-scoped</strong> — the ring exists in parallel instances (a branch, a Vercel
+            target, a Supabase project) ; qualify it with <Code>@env</Code>.{' '}
+            <strong>env-less</strong> — a global ring (branch protection, install tokens,
+            account-level settings).
           </li>
           <li>
-            <strong>env-scoped</strong> — operations on this level live on parallel instances (a
-            branch, a Vercel target, a Supabase project). You qualify them with an <Code>@env</Code>
-            . <strong>env-less</strong> levels have a single global instance (branch protection,
-            install tokens, account-level config).
-          </li>
-          <li>
-            On env-scoped levels, an <strong>env-less write</strong> is a{' '}
-            <Badge tone="warning">fan-out</Badge> : it touches every env at once. Default policy
-            treats it as the strictest covered env.
+            On an env-scoped ring, an <strong>env-less write</strong> is a{' '}
+            <Badge tone="warning">fan-out</Badge> — it touches every instance at once. The default
+            policy treats it as the strictest covered env.
           </li>
         </ul>
       </CardBody>
@@ -196,7 +196,9 @@ function ProviderPeels({ provider }: { provider: ProviderDescriptor }) {
 }
 
 function PlaneRings({ provider, plane }: { provider: string; plane: PlaneDescriptor }) {
-  const sorted = [...plane.levels].sort((a, b) => b.rank - a.rank); // outer first
+  // 1er rempart (rank=1) is the outermost box ; Nème rempart (rank=N) is the
+  // innermost (the heart of the fortress). Render outer-first, then nest.
+  const sorted = [...plane.levels].sort((a, b) => a.rank - b.rank);
   return (
     <div style={{ marginBottom: 'var(--space-4)' }}>
       <div
@@ -222,18 +224,20 @@ function PlaneRings({ provider, plane }: { provider: string; plane: PlaneDescrip
   );
 }
 
-/** Recursively renders nested borders : outer-most level wraps everything,
- *  niv1 is the deepest box. */
+/** Recursively renders nested borders : ring 1 is the outermost box (the
+ *  outer wall the enemy hits first), ring N is the innermost (the keep). */
 function Rings({ levels }: { levels: LevelDescriptor[] }) {
   if (levels.length === 0) return null;
   const [outer, ...rest] = levels;
   return <RingBox level={outer!}>{rest.length > 0 ? <Rings levels={rest} /> : null}</RingBox>;
 }
 
-const RING_PALETTE = ['#1f2330', '#222740', '#252b50', '#2a3160'];
+// Palette ranging from neutral (outer rampart, lowest blast) to deep red
+// (innermost, citadel-level danger). Index by rank-1.
+const RING_PALETTE = ['#1f2330', '#28253a', '#332744', '#3d2438', '#4a2030'];
 
 function RingBox({ level, children }: { level: LevelDescriptor; children: React.ReactNode }) {
-  const depthColor = RING_PALETTE[(level.rank - 1) % RING_PALETTE.length];
+  const depthColor = RING_PALETTE[Math.min(level.rank - 1, RING_PALETTE.length - 1)];
   return (
     <div
       style={{
@@ -255,19 +259,8 @@ function RingBox({ level, children }: { level: LevelDescriptor; children: React.
         }}
       >
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
-          <span
-            style={{
-              color: 'var(--text-subtle)',
-              fontSize: 12,
-              fontFamily: 'var(--font-geist-mono)',
-            }}
-          >
-            niv{level.rank}
-          </span>
+          <strong style={{ fontSize: 13 }}>{ringLabel(level.rank)}</strong>
           <Code>{level.slug}</Code>
-          <span style={{ color: 'var(--text-subtle)', fontSize: 11 }}>
-            {ARCHETYPE_LABEL[level.archetype]}
-          </span>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
           <Pill tone="info" label="R" />

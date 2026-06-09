@@ -1,3 +1,4 @@
+import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
@@ -75,7 +76,7 @@ export default async function OrgHomePage({ params }: { params: Promise<{ slug: 
                       </span>
                     </span>
                     <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
-                      {new Date(proj.created_at).toLocaleDateString()} · open →
+                      <LocalDate ts={proj.created_at} dateOnly /> · open →
                     </span>
                   </Link>
                 </li>

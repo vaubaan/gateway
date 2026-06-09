@@ -1,3 +1,4 @@
+import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { type Capability, formatCapability, isValidCapability } from '@vaubaan/shared';
@@ -107,11 +108,11 @@ export default async function TokenPage({
         </p>
         {token.last_used_at && (
           <p style={{ opacity: 0.6, fontSize: 13 }}>
-            Last call: {new Date(token.last_used_at).toLocaleString()}
+            Last call: <LocalDate ts={token.last_used_at} />
           </p>
         )}
         <p style={{ opacity: 0.6, fontSize: 13 }}>
-          Created: {new Date(token.created_at).toLocaleString()}
+          Created: <LocalDate ts={token.created_at} />
         </p>
       </section>
 
@@ -149,7 +150,9 @@ export default async function TokenPage({
               }>
             ).map((r) => (
               <tr key={r.id} style={{ borderBottom: '1px solid #2a2a2a' }}>
-                <td style={td}>{new Date(r.ts).toLocaleString()}</td>
+                <td style={td}>
+                  <LocalDate ts={r.ts} />
+                </td>
                 <td style={td}>
                   <code>{r.tool_name}</code>
                 </td>

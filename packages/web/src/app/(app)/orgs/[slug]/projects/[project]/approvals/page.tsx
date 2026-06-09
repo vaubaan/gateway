@@ -1,3 +1,4 @@
+import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { type Capability, formatCapability, isValidCapability } from '@vaubaan/shared';
@@ -135,8 +136,7 @@ export default async function ApprovalsPage({
                         <Badge tone="info">{a.channel}</Badge>{' '}
                         {a.requested_single_use && <Badge tone="warning">single-use</Badge>}{' '}
                         <span style={{ color: 'var(--text-subtle)', fontSize: 13 }}>
-                          ttl {a.requested_ttl_hours}h · expires{' '}
-                          {new Date(a.expires_at).toLocaleString()}
+                          ttl {a.requested_ttl_hours}h · expires <LocalDate ts={a.expires_at} />
                         </span>
                       </span>
                       <ApprovalControls projectId={proj.id} approvalId={a.id} orgSlug={org.slug} />
@@ -218,7 +218,7 @@ export default async function ApprovalsPage({
                       </span>
                     </span>
                     <span style={{ color: 'var(--text-subtle)' }}>
-                      {a.decided_at ? new Date(a.decided_at).toLocaleString() : '—'}
+                      {a.decided_at ? <LocalDate ts={a.decided_at} /> : '—'}
                     </span>
                   </li>
                 ))}

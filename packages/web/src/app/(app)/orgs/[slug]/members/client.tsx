@@ -1,5 +1,6 @@
 'use client';
 
+import { LocalDate } from '@/components/LocalDate';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 
@@ -149,7 +150,9 @@ export function MembersClient({
                     </span>
                   )}
                 </td>
-                <td style={{ ...td, opacity: 0.6 }}>{new Date(m.added_at).toLocaleDateString()}</td>
+                <td style={{ ...td, opacity: 0.6 }}>
+                  <LocalDate ts={m.added_at} dateOnly />
+                </td>
                 <td style={td}>
                   {!isMemberOwner && (
                     <button
