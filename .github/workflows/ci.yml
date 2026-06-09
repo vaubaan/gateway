@@ -11,15 +11,10 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# .npmrc points @sbw-vaubaan to GH Packages — even if we have no dep
-# under that scope today, defensive token wiring avoids future surprise
-# if the harness is ever added as a devDep. PAT used because the org
-# plan disables cross-repo GITHUB_TOKEN reads on packages.
+# @sbw-vaubaan/harness is optionalDependencies — npm install skips it gracefully
+# when NPM_READ_TOKEN is absent. Only Vercel and local dev need it.
 permissions:
   contents: read
-
-env:
-  NPM_PUBLISH_TOKEN: ${{ secrets.NPM_PUBLISH_TOKEN }}
 
 jobs:
   check:
@@ -36,3 +31,5 @@ jobs:
       - run: npm run format:check
       - run: npm run build
       - run: npm run test
+        env:
+          SKIP_LIVE: '1'

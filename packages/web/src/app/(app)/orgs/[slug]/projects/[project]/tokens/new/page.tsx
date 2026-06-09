@@ -140,6 +140,7 @@ export default function NewTokenPage({
             {`{
   "mcpServers": {
     "vauban": {
+      "type": "http",
       "url": "${typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com'}/mcp",
       "headers": {
         "Authorization": "Bearer ${apiKey}"
@@ -148,6 +149,39 @@ export default function NewTokenPage({
   }
 }`}
           </pre>
+        </details>
+        <details style={{ marginTop: 12, opacity: 0.85 }}>
+          <summary>Or add via Claude CLI</summary>
+          <pre
+            style={{
+              padding: 12,
+              background: '#0c0c0c',
+              borderRadius: 4,
+              overflow: 'auto',
+              fontSize: 13,
+            }}
+          >
+            {`claude mcp add --transport http ${projectSlug} ${typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com'}/mcp --header "Authorization: Bearer ${apiKey}"`}
+          </pre>
+          <button
+            type="button"
+            onClick={() => {
+              void navigator.clipboard.writeText(
+                `claude mcp add --transport http ${projectSlug} ${typeof window !== 'undefined' ? window.location.origin : 'https://vaubaan.com'}/mcp --header "Authorization: Bearer ${apiKey}"`,
+              );
+            }}
+            style={{
+              marginTop: 8,
+              padding: '6px 12px',
+              background: '#fff',
+              color: '#000',
+              border: 0,
+              borderRadius: 6,
+              fontSize: 12,
+            }}
+          >
+            Copy command
+          </button>
         </details>
       </main>
     );

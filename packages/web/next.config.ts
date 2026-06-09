@@ -29,8 +29,12 @@ const nextConfig: NextConfig = {
     '@vaubaan/providers-github',
     '@vaubaan/providers-vercel',
     '@vaubaan/providers-supabase',
+    '@vaubaan/providers-railway',
     '@vaubaan/mcp-gateway',
+    '@vaubaan/providers-ssh',
   ],
+  // ssh2 uses a native .node addon — must NOT be bundled by webpack.
+  serverExternalPackages: ['ssh2'],
   experimental: {
     serverActions: { allowedOrigins: ['localhost:3000', 'vaubaan.com'] },
   },

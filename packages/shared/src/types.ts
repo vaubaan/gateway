@@ -7,13 +7,14 @@
 
 import type { Capability } from './capability.ts';
 
-export type Provider = 'github' | 'vercel' | 'supabase' | 'railway';
+export type Provider = 'github' | 'vercel' | 'supabase' | 'railway' | 'ssh';
 
 export const PROVIDERS = [
   'github',
   'vercel',
   'supabase',
   'railway',
+  'ssh',
 ] as const satisfies readonly Provider[];
 
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';

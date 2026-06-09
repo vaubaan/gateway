@@ -1,10 +1,14 @@
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { PROVIDERS, type Provider } from '@vaubaan/shared';
+import { type Provider } from '@vaubaan/shared';
+
+// ssh is per-project via ssh_bindings, not org-level — excluded here.
+const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState } from '@/lib/providers/state';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import { BindingControls } from './binding-controls';
+import { SshBindingControls } from './ssh-binding-controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,6 +17,14 @@ interface BindingRow {
   provider: Provider;
   resource_ref: string;
   display_name: string | null;
+}
+
+interface SshBindingRow {
+  id: string;
+  host_slug: string;
+  host_address: string;
+  port: number;
+  ssh_user: string;
 }
 
 interface TokenRow {
@@ -50,6 +62,7 @@ export default async function ProjectPage({
 
   const [
     { data: bindings },
+    { data: sshBindings },
     { data: tokens },
     providerStates,
     { count: pendingApprovals },
@@ -61,12 +74,17 @@ export default async function ProjectPage({
       .eq('project_id', proj.id)
       .returns<BindingRow[]>(),
     supabase
+      .from('ssh_bindings')
+      .select('id, host_slug, host_address, port, ssh_user')
+      .eq('project_id', proj.id)
+      .returns<SshBindingRow[]>(),
+    supabase
       .from('access_tokens')
       .select('id, name, api_key_prefix, status, last_used_at')
       .eq('project_id', proj.id)
       .order('created_at', { ascending: false })
       .returns<TokenRow[]>(),
-    Promise.all(PROVIDERS.map((p) => loadProviderState(org.id, p))),
+    Promise.all(ORG_PROVIDERS.map((p) => loadProviderState(org.id, p as Provider))),
     supabase
       .from('approval_requests')
       .select('id', { count: 'exact', head: true })
@@ -78,11 +96,12 @@ export default async function ProjectPage({
       .eq('project_id', proj.id),
   ]);
 
-  const resourcesByProvider: Record<Provider, Array<{ ref: string; name: string }>> = {
+  const resourcesByProvider: Partial<Record<Provider, Array<{ ref: string; name: string }>>> = {
     github: [],
     vercel: [],
     supabase: [],
     railway: [],
+    ssh: [],
   };
   for (const s of providerStates) {
     resourcesByProvider[s.provider] = s.resources.map((r) => ({ ref: r.ref, name: r.name }));
@@ -145,7 +164,7 @@ export default async function ProjectPage({
             </Link>
           </CardHeader>
           <CardBody>
-            {(bindings ?? []).length === 0 ? (
+            {(bindings ?? []).length === 0 && (sshBindings ?? []).length === 0 ? (
               <p style={{ color: 'var(--text-subtle)', margin: 0 }}>No bindings yet.</p>
             ) : (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -168,7 +187,32 @@ export default async function ProjectPage({
                     <BindingControls
                       binding={b}
                       orgSlug={org.slug}
-                      resources={resourcesByProvider[b.provider]}
+                      resources={resourcesByProvider[b.provider] ?? []}
+                    />
+                  </li>
+                ))}
+                {(sshBindings ?? []).map((b) => (
+                  <li
+                    key={`ssh-${b.id}`}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 'var(--space-3)',
+                      padding: 'var(--space-3) 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <span style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                      <Badge tone="neutral">ssh</Badge>
+                      <Code>
+                        {b.host_slug} · {b.ssh_user}@{b.host_address}:{b.port}
+                      </Code>
+                    </span>
+                    <SshBindingControls
+                      bindingId={b.id}
+                      hostSlug={b.host_slug}
+                      orgSlug={org.slug}
                     />
                   </li>
                 ))}
