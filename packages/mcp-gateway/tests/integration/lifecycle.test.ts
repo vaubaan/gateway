@@ -256,7 +256,7 @@ describe('integration — lifecycle', () => {
     expect('result' in call).toBe(true);
     expect(harness.audit.rows).toHaveLength(1);
     expect(harness.audit.rows[0]?.decision).toBe('allowed');
-    expect(harness.audit.rows[0]?.capability_matched).toBe('github:repo/code:write@feature/x');
+    expect(harness.audit.rows[0]?.capability_matched).toBe('github:code:write@feature/x');
     expect(harness.audit.rows[0]?.tool_name).toBe('github__create_pull_request');
   });
 
@@ -281,7 +281,7 @@ describe('integration — lifecycle', () => {
     expect('error' in call).toBe(true);
     if ('error' in call) {
       expect(call.error.message).toMatch(/Vaubaan policy denied/);
-      expect(call.error.message).toMatch(/github:repo\/code:write@main/);
+      expect(call.error.message).toMatch(/github:code:write@main/);
     }
     expect(harness.audit.rows[0]?.decision).toBe('denied');
   });
@@ -353,7 +353,7 @@ describe('integration — lifecycle', () => {
       },
     });
     expect('error' in call).toBe(true);
-    if ('error' in call) expect(call.error.message).toMatch(/github:repo\/code:write@main/);
+    if ('error' in call) expect(call.error.message).toMatch(/github:code:write@main/);
     expect(harness.audit.rows[0]?.decision).toBe('denied');
   });
 

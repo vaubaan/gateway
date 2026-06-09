@@ -9,8 +9,8 @@ import {
   parseCapability,
 } from './capability.ts';
 
-describe('formatCapability / capabilityKey — always full form', () => {
-  test('write@env', () => {
+describe('formatCapability — short form when provider has a default plane', () => {
+  test('vercel single-plane → short form', () => {
     expect(
       formatCapability({
         provider: 'vercel',
@@ -19,18 +19,69 @@ describe('formatCapability / capabilityKey — always full form', () => {
         action: 'write',
         env: 'prod',
       }),
-    ).toBe('vercel:runtime/deployment:write@prod');
+    ).toBe('vercel:deployment:write@prod');
   });
 
-  test('env-less read', () => {
+  test('github single-plane → short form env-less', () => {
+    expect(
+      formatCapability({ provider: 'github', plane: 'repo', level: 'code', action: 'read' }),
+    ).toBe('github:code:read');
+  });
+
+  test('railway single-plane → short form env-less', () => {
+    expect(
+      formatCapability({
+        provider: 'railway',
+        plane: 'runtime',
+        level: 'deployment',
+        action: 'write',
+      }),
+    ).toBe('railway:deployment:write');
+  });
+
+  test('ssh single-plane → short form', () => {
+    expect(
+      formatCapability({
+        provider: 'ssh',
+        plane: 'host',
+        level: 'shell',
+        action: 'write',
+        env: 'vps-rp',
+      }),
+    ).toBe('ssh:shell:write@vps-rp');
+  });
+
+  test('supabase multi-plane → long form (no default)', () => {
+    expect(
+      formatCapability({
+        provider: 'supabase',
+        plane: 'db',
+        level: 'rows',
+        action: 'read',
+        env: 'staging',
+      }),
+    ).toBe('supabase:db/rows:read@staging');
+    expect(
+      formatCapability({
+        provider: 'supabase',
+        plane: 'storage',
+        level: 'objects',
+        action: 'write',
+      }),
+    ).toBe('supabase:storage/objects:write');
+  });
+});
+
+describe('capabilityKey — always long form (stable identity)', () => {
+  test('github long-form key even though displayed short', () => {
     expect(
       capabilityKey({ provider: 'github', plane: 'repo', level: 'code', action: 'read' }),
     ).toBe('github:repo/code:read');
   });
 
-  test('config write@prod', () => {
+  test('vercel long-form key for storage / audit', () => {
     expect(
-      formatCapability({
+      capabilityKey({
         provider: 'vercel',
         plane: 'runtime',
         level: 'config',
@@ -41,39 +92,62 @@ describe('formatCapability / capabilityKey — always full form', () => {
   });
 });
 
-describe('parseCapability — round-trips', () => {
-  const cases: Array<[string, Capability]> = [
-    ['github:repo/code:read', { provider: 'github', plane: 'repo', level: 'code', action: 'read' }],
-    [
-      'github:repo/code:write@main',
-      { provider: 'github', plane: 'repo', level: 'code', action: 'write', env: 'main' },
-    ],
-    [
-      'vercel:runtime/deployment:write@prod',
-      { provider: 'vercel', plane: 'runtime', level: 'deployment', action: 'write', env: 'prod' },
-    ],
-    [
-      'vercel:runtime/config:write@prod',
-      { provider: 'vercel', plane: 'runtime', level: 'config', action: 'write', env: 'prod' },
-    ],
-    [
-      'supabase:db/rows:read@staging',
-      { provider: 'supabase', plane: 'db', level: 'rows', action: 'read', env: 'staging' },
-    ],
-    [
-      'supabase:storage/objects:write',
-      { provider: 'supabase', plane: 'storage', level: 'objects', action: 'write' },
-    ],
-  ];
-  for (const [s, cap] of cases) {
-    test(`${s}`, () => {
-      expect(parseCapability(s)).toEqual(cap);
-      expect(formatCapability(cap)).toBe(s);
+describe('parseCapability — accepts both long and short form', () => {
+  test('long form (github)', () => {
+    expect(parseCapability('github:repo/code:read')).toEqual({
+      provider: 'github',
+      plane: 'repo',
+      level: 'code',
+      action: 'read',
     });
-  }
+  });
 
-  test('accepts branch-like env slug', () => {
-    expect(parseCapability('github:repo/code:write@feature/x')).toEqual({
+  test('short form expands via DEFAULT_PLANE (github)', () => {
+    expect(parseCapability('github:code:write@main')).toEqual({
+      provider: 'github',
+      plane: 'repo',
+      level: 'code',
+      action: 'write',
+      env: 'main',
+    });
+  });
+
+  test('short form expands via DEFAULT_PLANE (vercel)', () => {
+    expect(parseCapability('vercel:deployment:write@prod')).toEqual({
+      provider: 'vercel',
+      plane: 'runtime',
+      level: 'deployment',
+      action: 'write',
+      env: 'prod',
+    });
+  });
+
+  test('short form expands via DEFAULT_PLANE (ssh)', () => {
+    expect(parseCapability('ssh:shell:read@vps-rp')).toEqual({
+      provider: 'ssh',
+      plane: 'host',
+      level: 'shell',
+      action: 'read',
+      env: 'vps-rp',
+    });
+  });
+
+  test('supabase short form rejected — multi-plane provider', () => {
+    expect(() => parseCapability('supabase:rows:read@staging')).toThrow(/multiple planes/);
+  });
+
+  test('supabase long form accepted', () => {
+    expect(parseCapability('supabase:db/rows:read@staging')).toEqual({
+      provider: 'supabase',
+      plane: 'db',
+      level: 'rows',
+      action: 'read',
+      env: 'staging',
+    });
+  });
+
+  test('accepts branch-like env slug in short form', () => {
+    expect(parseCapability('github:code:write@feature/x')).toEqual({
       provider: 'github',
       plane: 'repo',
       level: 'code',
@@ -85,12 +159,20 @@ describe('parseCapability — round-trips', () => {
   test('rejects malformed notation', () => {
     expect(() => parseCapability('garbage')).toThrow();
     expect(() => parseCapability('vercel/runtime/deployment:write')).toThrow();
-    expect(() => parseCapability('vercel:runtime:write@prod')).toThrow();
   });
 
   test('rejects unsupported action', () => {
-    expect(() => parseCapability('vercel:runtime/deployment:apply@prod')).toThrow();
-    expect(() => parseCapability('vercel:runtime/deployment:propose')).toThrow();
+    expect(() => parseCapability('vercel:deployment:apply@prod')).toThrow();
+    expect(() => parseCapability('vercel:deployment:propose')).toThrow();
+  });
+
+  test('round-trip short ↔ short', () => {
+    const s = 'vercel:config:write@prod';
+    expect(formatCapability(parseCapability(s))).toBe(s);
+  });
+
+  test('long input → short output (same identity)', () => {
+    expect(formatCapability(parseCapability('github:repo/code:read'))).toBe('github:code:read');
   });
 });
 

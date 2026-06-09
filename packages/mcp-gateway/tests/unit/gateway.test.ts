@@ -223,7 +223,7 @@ describe('McpGateway — tools/call allowed', () => {
     expect(audit.rows[0]).toMatchObject({
       decision: 'allowed',
       tool_name: 'github__create_pull_request',
-      capability_matched: 'github:repo/code:write@feature/x',
+      capability_matched: 'github:code:write@feature/x',
     });
   });
 });
@@ -250,7 +250,7 @@ describe('McpGateway — tools/call denied', () => {
     expect('error' in res).toBe(true);
     if ('error' in res) {
       expect(res.error.message).toMatch(/Vaubaan policy denied/);
-      expect(res.error.message).toMatch(/github:repo\/code:write@main/);
+      expect(res.error.message).toMatch(/github:code:write@main/);
     }
     expect(audit.rows).toHaveLength(1);
     expect(audit.rows[0]).toMatchObject({
@@ -277,7 +277,7 @@ describe('McpGateway — tools/call denied', () => {
     expect('error' in res).toBe(true);
     if ('error' in res) {
       expect(res.error.code).toBe(-32603);
-      expect(res.error.message).toMatch(/github:repo\/code:write@main/);
+      expect(res.error.message).toMatch(/github:code:write@main/);
     }
     expect(audit.rows[0]).toMatchObject({ decision: 'denied' });
   });
