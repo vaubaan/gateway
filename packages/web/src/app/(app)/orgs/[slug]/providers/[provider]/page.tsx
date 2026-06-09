@@ -7,6 +7,7 @@ import {
   type LevelDescriptor,
   type PlaneDescriptor,
 } from '@/lib/capabilities/peel-catalog';
+import { ProviderSwitcher } from './provider-switcher';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,9 +66,16 @@ export default async function ProviderRingsPage({
             inner ring forces every outer ring to obey (blast monotone).
           </p>
         </div>
-        <Link href={`/orgs/${org.slug}/providers`} style={{ color: 'var(--text-muted)' }}>
-          ← all providers
-        </Link>
+        <div style={{ display: 'flex', gap: 'var(--space-3)', alignItems: 'center' }}>
+          <ProviderSwitcher
+            orgSlug={org.slug}
+            current={descriptor.slug}
+            options={PROVIDER_CATALOG.map((p) => ({ slug: p.slug, displayName: p.displayName }))}
+          />
+          <Link href={`/orgs/${org.slug}/providers`} style={{ color: 'var(--text-muted)' }}>
+            ← all providers
+          </Link>
+        </div>
       </header>
 
       <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
