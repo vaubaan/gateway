@@ -189,6 +189,95 @@ export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
           },
         ],
       },
+      {
+        slug: 'storage',
+        description: 'Object storage — files, buckets, bucket policies.',
+        knownEnvs: ['staging', 'prod'],
+        envHint: 'same environment slugs as the db plane (one project per env).',
+        levels: [
+          {
+            rank: 1,
+            slug: 'objects',
+            archetype: 'content',
+            description: 'Individual files stored in a bucket.',
+            envScoped: true,
+          },
+          {
+            rank: 2,
+            slug: 'buckets',
+            archetype: 'structure',
+            description: 'Buckets : their names, sizes, file count.',
+            envScoped: true,
+          },
+          {
+            rank: 3,
+            slug: 'storage-config',
+            archetype: 'governance',
+            description:
+              'Bucket policies (public access, file size limits, allowed MIME types), CORS rules.',
+            envScoped: true,
+          },
+        ],
+      },
+      {
+        slug: 'auth',
+        description: 'User identity — users, sessions, OAuth providers, JWT settings.',
+        knownEnvs: ['staging', 'prod'],
+        envHint: 'same environment slugs as the db plane.',
+        levels: [
+          {
+            rank: 1,
+            slug: 'users',
+            archetype: 'content',
+            description: 'Individual user records, sessions, password hashes.',
+            envScoped: true,
+          },
+          {
+            rank: 2,
+            slug: 'providers',
+            archetype: 'structure',
+            description:
+              'OAuth provider configuration (GitHub, Google, …) : client_id, redirect URLs.',
+            envScoped: true,
+          },
+          {
+            rank: 3,
+            slug: 'auth-config',
+            archetype: 'governance',
+            description: 'JWT secrets, expiry, email templates, SMTP config, password policy.',
+            envScoped: true,
+          },
+        ],
+      },
+      {
+        slug: 'functions',
+        description: 'Supabase Edge Functions — Deno runtime deployments + their config.',
+        knownEnvs: ['staging', 'prod'],
+        envHint: 'same environment slugs as the db plane.',
+        levels: [
+          {
+            rank: 1,
+            slug: 'deployment',
+            archetype: 'content',
+            description: 'Deployed function code/version + invocation logs.',
+            envScoped: true,
+          },
+          {
+            rank: 2,
+            slug: 'config',
+            archetype: 'structure',
+            description: 'Function-level env vars, build settings.',
+            envScoped: true,
+          },
+          {
+            rank: 3,
+            slug: 'functions-config',
+            archetype: 'governance',
+            description: 'Global function config — CORS, verify_jwt, max execution time.',
+            envScoped: true,
+          },
+        ],
+      },
     ],
   },
   {
