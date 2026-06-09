@@ -2,7 +2,7 @@
  * GitHub classifier — maps a concrete (tool, args) call to the capability it
  * requires, in GitHub-native semantics.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §3, §6.
+ * Spec : docs/spec/gateway-capability-model.md §3, §6.
  *
  * GitHub exposes the `repo` plane with the following ladder (interne → externe) :
  *

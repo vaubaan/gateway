@@ -2,7 +2,7 @@
  * SSH classifier — maps a concrete (tool, args) call to the capability it
  * requires, in SSH-native semantics.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §3, §6.
+ * Spec : docs/spec/gateway-capability-model.md §3, §6.
  *
  * SSH exposes the `host` plane with a single level `shell`. The `cmd` is a
  * shell string ; we use `isReadAllowed(cmd)` (regex whitelist) to decide

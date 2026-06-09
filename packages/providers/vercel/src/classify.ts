@@ -2,7 +2,7 @@
  * Vercel classifier — maps a concrete (tool, args) call to the capability it
  * requires, in Vercel-native semantics.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §3, §6.
+ * Spec : docs/spec/gateway-capability-model.md §3, §6.
  *
  * Vercel exposes the `runtime` plane with the ladder (interne → externe) :
  *

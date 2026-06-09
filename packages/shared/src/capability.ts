@@ -3,7 +3,7 @@
  *
  * A capability is a 5-tuple `(provider, plane, level, action, env?)`.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md
+ * Spec : docs/spec/gateway-capability-model.md
  *
  *  - provider : the vendor (routing + namespace).
  *  - plane    : a *pile concentrique* declared by the provider (`repo` for github,

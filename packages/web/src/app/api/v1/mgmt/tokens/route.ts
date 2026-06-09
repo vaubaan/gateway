@@ -24,7 +24,7 @@
  *     requests through the ApprovalChannel (spec §8).
  *
  * Spec : docs/spec/vaubaan-gateway.md §3.1, §8 (mgmt endpoints).
- *         docs/spec/gateway-capability-model.draft.md §5, §5.1, §8.
+ *         docs/spec/gateway-capability-model.md §5, §5.1, §8.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

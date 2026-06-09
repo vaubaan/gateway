@@ -4,7 +4,7 @@
  *   GET    /api/v1/projects/:projectId/policy?orgSlug=…    → list rules
  *   POST   /api/v1/projects/:projectId/policy              → create rule
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §5.
+ * Spec : docs/spec/gateway-capability-model.md §5.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

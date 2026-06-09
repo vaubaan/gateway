@@ -113,7 +113,7 @@ dans `src/upstream-tools.json`.
 `src/classify.ts` remplace l'ancien modèle « roles + policy DSL »
 (`resolveTarget` supprimé). Une capability est un tuple
 `{ provider, plane, level, action, env? }` (cf.
-`docs/spec/gateway-capability-model.draft.md`). Pour Railway le `provider` est
+`docs/spec/gateway-capability-model.md`). Pour Railway le `provider` est
 `railway`, le `plane` est `runtime` (ladder : `deployment` → `config` →
 `project-settings` → `account` ; le MVP n'expose que les niveaux `deployment`
 et `account`).

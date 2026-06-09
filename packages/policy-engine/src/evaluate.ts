@@ -1,7 +1,7 @@
 /**
  * Capability evaluation — the authorization decision.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §3, §7.
+ * Spec : docs/spec/gateway-capability-model.md §3, §7.
  *
  * The provider plugin has already classified the concrete (tool, args) call into
  * the capability it *requires* (env resolved). This step is pure set membership :

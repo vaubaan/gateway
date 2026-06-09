@@ -2,7 +2,7 @@
  * Shared approval-lifecycle helpers used by both the user `/api/v1/tokens`
  * route and the programmatic `/api/v1/mgmt/tokens` route.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §8.
+ * Spec : docs/spec/gateway-capability-model.md §8.
  */
 
 import { type Capability, generateApiKey, hashApiKey } from '@vaubaan/shared';

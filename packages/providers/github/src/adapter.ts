@@ -1,7 +1,7 @@
 /**
  * Generic ProviderAdapter contract.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md
+ * Spec : docs/spec/gateway-capability-model.md
  *
  * Every cloud provider (GitHub, Vercel, Supabase, Railway) implements this
  * contract. The MCP gateway dispatches against it without knowing provider

@@ -2,7 +2,7 @@
  * Supabase classifier — maps a concrete (tool, args) call to the capability it
  * requires, in Supabase-native semantics.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §2.1, §3, §6.
+ * Spec : docs/spec/gateway-capability-model.md §2.1, §3, §6.
  *
  * Supabase exposes (at least) the `db` plane with the ladder (interne → externe) :
  *

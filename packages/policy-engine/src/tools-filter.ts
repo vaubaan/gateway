@@ -1,7 +1,7 @@
 /**
  * Static filter for `tools/list` discovery.
  *
- * Spec : docs/spec/gateway-capability-model.draft.md §3.
+ * Spec : docs/spec/gateway-capability-model.md §3.
  *
  * The MCP gateway responds to `tools/list` by enumerating only the tools the
  * access token *could potentially call*. The filter is static : it compares the

@@ -27,12 +27,14 @@
 >    comme une branche git.
 > 6. **Deux couches étanches.** Le **plugin** est purement mécanique (déclare les
 >    niveaux + `classify`, ne connaît aucun droit). La **policy client** mappe
->    `(plane, level, env)` → *qui a le droit* (IA-autonome vs human-gated). La
+>    `(provider, plane, level, action, env_pattern)` → un `gate` au mint. La
 >    **sensibilité d'un env vit côté client**, pas côté provider (« ton prod ≠ mon
 >    prod »).
-> 7. **Human-gate au mint, pas au call.** `/mgmt/tokens` refuse d'émettre une
->    capability human-gated sans approbation humaine. Le moteur `/mcp` reste
->    **stateless** (`cap ∈ token`). Pour le grain par-acte : **token jetable
+> 7. **Triage au mint, pas au call.** `/mgmt/tokens` consulte `policy_rules`
+>    et résout chaque cap demandée à un des trois gates : **`allow`** (mint
+>    immédiat, 201), **`confirm`** (Telegram/UI, 202 + approval), **`deny`**
+>    (403 final, aucun override). Default no-match → `deny`. Le moteur `/mcp`
+>    reste **stateless** (`cap ∈ token`). Pour le grain par-acte : **token
 >    single-use** + TTL court ⟹ « approuver le mint » ≡ « approuver l'acte ».
 > 8. **Canal gateway ↔ humain pluggable.** **Telegram** en premier ; l'abstraction
 >    `ApprovalChannel` permet de diversifier ensuite (Slack, e-mail, webhook…).
@@ -272,7 +274,7 @@ flowchart LR
     end
     plug --> pol
     subgraph POL["POLICY — config du CLIENT gateway"]
-      pol["mappe (provider, plane, level, action, env-pattern) → gate: ai | human"]:::gate
+      pol["mappe (provider, plane, level, action, env-pattern) → gate: allow | confirm | deny"]:::gate
     end
     pol --> eng
     subgraph ENG["MOTEUR — générique, stateless"]
@@ -286,47 +288,50 @@ flowchart LR
 ```
 
 - **Plugin** : déclare les niveaux + `classify`. Ne connaît ni env-sensibilité ni
-  human-gate.
-- **Policy client** : exemple (pseudo) —
+  gating.
+- **Policy client** (table `policy_rules`) : 3 gates possibles —
+  **`allow`** (mint immédiat), **`confirm`** (Telegram/UI), **`deny`** (403
+  final, aucun override). Exemple :
 
   ```
-  # default-deny : tout ce qui n'a pas de règle ai-allow est human-gated.
-  supabase  db  rows  read   @ *          → ai
-  supabase  db  rows  write  @ feature/*  → ai
-  supabase  db  rows  write  @ prod       → human
-  supabase  db  rls   write  @ *          → human   # gouvernance = haut blast, jamais l'IA seule
+  # default no-match → deny. Le moteur consulte les règles dans l'ordre :
+  # most-specific wins, ties par priority desc.
+  supabase  db  rows  read   @ *          → allow
+  supabase  db  rows  write  @ feature/*  → allow
+  supabase  db  rows  write  @ prod       → confirm
+  supabase  db  rls   write  @ *          → confirm   # gouvernance = haut blast
+  github    repo access write @ *          → deny      # jamais d'install token via IA
   ```
 
-  La sensibilité d'un env y vit. Comme les envs sont dynamiques, les règles sont des
-  **patterns** + une règle par défaut (un `feature/x` neuf est gouverné sans saisie
-  manuelle).
-- **Moteur** : ne fait que matcher (cf. §7). Le gating (§8) est appliqué **au mint**,
-  pas au call.
+  Les envs sont dynamiques → les règles sont des **patterns** (avec `*` =
+  glob matching dans un champ donné). Un `feature/x` neuf hérite de la règle
+  `feature/*` sans saisie manuelle.
+
+- **Moteur** : ne fait que matcher (cf. §7). Le triage (§8) est appliqué
+  **au mint**, pas au call.
 
 ### 5.1 Policy par défaut, `*`, et la protection de prod
 
-Le couple `…:write@prod` (par-env) vs `…:write` (all-env, env-less) pose la question :
+Le couple `…:write@prod` (par-env) vs `…:write` (env-less) pose la question :
 **que couvre `*`, et qu'est-ce qui protège prod ?** Trois règles ferment le trou :
 
 1. **Default-deny.** La policy est une **allow-list**. En l'absence d'une règle
-   `→ ai` qui matche, une capability est **human-gated** (jamais ai-autonome par
-   défaut). Donc prod n'est jamais ouvert « par oubli » : pour que l'IA écrive prod, il
-   faut une règle *explicite* `write@prod → ai` — qu'on n'écrit pas.
+   qui matche, une capability tombe sur **`deny`** (403 final). Prod n'est jamais
+   ouvert « par oubli » : pour que l'IA écrive prod, il faut une règle *explicite*
+   `write@prod → allow` — qu'on n'écrit pas.
 2. **`*` est un glob de matching, pas « tout est ouvert ».** `@ *` dans une règle =
    « cette règle s'applique à n'importe quel slug d'env ». Combiné au default-deny, un
-   `* → ai` sur un `write` serait une faute énorme (il engloberait prod) : le moteur
-   **refuse au mint** un `* → ai` sur une action `write` (allow-list anti-pattern). On
-   scope toujours (`feature/* → ai`), jamais `* → ai` en écriture.
+   `* → allow` sur un `write` serait une faute énorme (il engloberait prod) : le moteur
+   **refuse au mint** un `(action='write', env_pattern='*', gate='allow')` via la CHECK
+   constraint SQL (anti-pattern). On scope toujours (`feature/* → allow`), jamais
+   `* → allow` en écriture.
 3. **L'env-less qui « fane out » ⊇ tous les envs ⟹ gate = max des envs couverts.**
    Une écriture *all-env* (`vercel:runtime/config:write` sans `@`) touche **prod
-   compris**. Elle ne peut donc **pas** être plus laxiste que `…@prod`. Deux options,
-   au choix du design :
-   - **(préférée) pas d'env-less trompeur** : le classifieur émet `@all` pour un
-     fan-out (au lieu de l'absence d'env). `@all` est *conspicu*, et la policy le
-     traite comme l'**union** des envs (⟹ gate ≥ le plus strict, donc ≥ prod). On
-     réserve l'env-less *vrai* aux data sans dimension env (branch protection, account).
-   - sinon, l'engine **expanse** l'env-less fan-out en l'union des envs connus au mint
-     et prend le max des gates.
+   compris**. Elle ne peut donc **pas** être plus laxiste que `…@prod`. En pratique,
+   le seed `*:*:*:write:* → confirm` la couvre déjà (l'env-less ne matche que les
+   règles `@ *`), donc tout env-less write pop pour confirmation humaine par défaut.
+   Si tu veux du grain plus fin, le classifieur peut émettre `@all` (conspicu, gateable
+   comme l'union des envs) ou l'engine peut expanser à l'union au mint.
 
 > Net : prod n'est jamais protégé par une exception sur `*` ; il l'est par le
 > **default-deny** (rien n'est ai sans règle) + l'interdiction de `*→ai` en write +
@@ -423,8 +428,8 @@ sequenceDiagram
 
     Note over Runner: étape = Deploy
     Runner->>Mgmt: POST /mgmt/tokens { caps:[vercel:runtime/deployment:write@prod], ttl }
-    Mgmt->>Mgmt: policy.gate(caps) → human ?
-    alt une cap est human-gated
+    Mgmt->>Mgmt: policy.gate(caps) → any deny ? any confirm ?
+    alt une cap est gate='confirm'
         Mgmt->>Chan: requestApproval(caps, requester, context)
         Chan->>Human: « approuver deploy@prod (commit X) ? »
         Human-->>Chan: ✅
@@ -472,7 +477,7 @@ sequenceDiagram
 | Test | `vercel:runtime/deployment:write@staging`, `vercel:runtime/deployment:read@staging`, `supabase:db/rows:read@staging` |
 | Review | `github:repo/code:read`, `vercel:runtime/deployment:read@staging` |
 | Merge | `github:repo/code:write@main` |
-| Deploy | `vercel:runtime/deployment:write@prod`, `supabase:db/rows:write@prod` *(human-gated)* |
+| Deploy | `vercel:runtime/deployment:write@prod`, `supabase:db/rows:write@prod` *(gate='confirm' par défaut)* |
 | Validate | `vercel:runtime/deployment:read@prod`, `supabase:db/rows:read@prod`, `github:repo/code:read` |
 
 ## 10. Impact data model (greenfield, on casse tout)

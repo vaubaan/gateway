@@ -15,7 +15,7 @@
 > `ApprovalChannel` (manual ou Telegram, migration `0013`) et sont consommées
 > via le poll endpoint. Les tokens `singleUse` (migration `0014`) sont
 > consommés au premier call qui matche, donnant le grain par-acte. Source de
-> vérité du nouveau modèle : [[gateway-capability-model.draft]] + migrations
+> vérité du nouveau modèle : [[gateway-capability-model]] + migrations
 > `0011`–`0014`. ADR `capabilities-replace-roles` à venir. Les sections
 > ci-dessous décrivant roles/DSL sont historiques jusqu'à réécriture.
 >
