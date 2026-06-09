@@ -131,7 +131,13 @@ function Rings({
   );
 }
 
-const RING_PALETTE = ['#1f2330', '#28253a', '#332744', '#3d2438', '#4a2030'];
+const RING_PALETTE = [
+  { bg: '#2b3242', text: 'rgba(255,255,255,0.92)', muted: 'rgba(255,255,255,0.7)' },
+  { bg: '#39354f', text: 'rgba(255,255,255,0.94)', muted: 'rgba(255,255,255,0.72)' },
+  { bg: '#4a3050', text: 'rgba(255,255,255,0.95)', muted: 'rgba(255,255,255,0.74)' },
+  { bg: '#5a2a44', text: 'rgba(255,255,255,0.97)', muted: 'rgba(255,255,255,0.78)' },
+  { bg: '#6e2333', text: 'rgba(255,255,255,1)', muted: 'rgba(255,255,255,0.82)' },
+];
 
 function RingBox({
   provider,
@@ -144,12 +150,13 @@ function RingBox({
   level: LevelDescriptor;
   children: React.ReactNode;
 }) {
-  const depthColor = RING_PALETTE[Math.min(level.rank - 1, RING_PALETTE.length - 1)];
+  const palette = RING_PALETTE[Math.min(level.rank - 1, RING_PALETTE.length - 1)]!;
   return (
     <div
       style={{
-        border: '1px solid var(--border-subtle)',
-        background: depthColor,
+        border: '1px solid rgba(255,255,255,0.12)',
+        background: palette.bg,
+        color: palette.text,
         borderRadius: 'var(--radius-md)',
         padding: 'var(--space-3)',
         marginBottom: children ? 0 : 'var(--space-2)',
@@ -166,7 +173,7 @@ function RingBox({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
-          <strong style={{ fontSize: 13 }}>{ringLabel(level.rank)}</strong>
+          <strong style={{ fontSize: 13, color: palette.text }}>{ringLabel(level.rank)}</strong>
           <Code>{level.slug}</Code>
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
@@ -178,7 +185,7 @@ function RingBox({
           </Code>
         </div>
       </div>
-      <p style={{ color: 'var(--text-muted)', fontSize: 13, margin: 0, lineHeight: 1.4 }}>
+      <p style={{ color: palette.muted, fontSize: 13, margin: 0, lineHeight: 1.4 }}>
         {level.description}
       </p>
       {!level.envScoped && (
