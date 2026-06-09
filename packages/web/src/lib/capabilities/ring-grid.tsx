@@ -163,10 +163,34 @@ export function RingGrid({ bindings, value, onChange }: RingGridProps) {
   function toggleAction(p: string, plane: string, level: string, action: Action) {
     const key = cellKey(p, plane, level);
     const cur = cells[key] ?? { action: null, envs: [] };
-    const next: CellMap = {
-      ...cells,
-      [key]: { ...cur, action: cur.action === action ? null : action },
-    };
+    const next: CellMap = { ...cells };
+    if (cur.action === action) {
+      // Untoggle this ring — don't cascade off the outer rings (the operator
+      // might want to keep them granted).
+      next[key] = { ...cur, action: null };
+    } else {
+      // Set/swap : cascade to all *outer* rings (lower rank) of the same plane
+      // that are currently OFF. The blast invariant says granting the inner
+      // ring already implies the outer ones, so we tick them too with the
+      // same envs as the trigger ring (operator can fine-tune by untoggling).
+      next[key] = { ...cur, action };
+      const planeDesc = PROVIDER_CATALOG.find((pp) => pp.slug === p)?.planes.find(
+        (pl) => pl.slug === plane,
+      );
+      const triggerRank = planeDesc?.levels.find((l) => l.slug === level)?.rank;
+      if (planeDesc && triggerRank !== undefined) {
+        const newEnvs = cur.envs.length > 0 ? cur.envs : (next[key]?.envs ?? []);
+        for (const outer of planeDesc.levels) {
+          if (outer.rank < triggerRank) {
+            const k = cellKey(p, plane, outer.slug);
+            const existing = next[k] ?? { action: null, envs: [] };
+            if (existing.action === null) {
+              next[k] = { action, envs: [...newEnvs] };
+            }
+          }
+        }
+      }
+    }
     update(next);
   }
 
