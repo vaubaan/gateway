@@ -6,6 +6,7 @@ import { loadProviderState, type ProviderState } from '@/lib/providers/state';
 import Link from 'next/link';
 import { ProviderDisconnectButton } from '../provider-disconnect';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code, Row } from '@/components/ui';
+import { InfoIcon } from '@/components/icons';
 
 export const dynamic = 'force-dynamic';
 
@@ -78,11 +79,13 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
               <Link
                 href={`/orgs/${org.slug}/providers/ssh`}
                 style={{ textDecoration: 'none' }}
-                aria-label="More info about ssh rings"
                 title="Show provider rings & capabilities"
               >
                 <Button size="sm" variant="secondary">
-                  (i)
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <InfoIcon />
+                    Info
+                  </span>
                 </Button>
               </Link>
               <Link href={`/orgs/${org.slug}`} style={{ textDecoration: 'none' }}>
@@ -123,11 +126,13 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
           <Link
             href={`/orgs/${orgSlug}/providers/${state.provider}`}
             style={{ textDecoration: 'none' }}
-            aria-label={`More info about ${state.provider} rings`}
             title="Show provider rings & capabilities"
           >
             <Button size="sm" variant="secondary">
-              (i)
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <InfoIcon />
+                Info
+              </span>
             </Button>
           </Link>
           {connected && (
