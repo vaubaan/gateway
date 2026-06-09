@@ -7,10 +7,16 @@
  */
 
 import { Octokit } from '@octokit/rest';
-import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
-import type { ProviderAdapter, ValidateResult, MintedToken } from './adapter.ts';
+import type {
+  Capability,
+  McpToolDeclaration,
+  ProviderAdmin,
+  ProviderBinding,
+} from '@vaubaan/shared';
+import type { ProviderAdapter, ValidateResult, MintedToken, ClassifyResult } from './adapter.ts';
 import { mintInstallationToken } from './app-install.ts';
 import { availableTools } from './tools.ts';
+import { classifyGithub, githubToolCapabilities } from './classify.ts';
 import { executeCall, type OctokitFactory } from './execute.ts';
 
 export interface GitHubAdapterConfig {
@@ -205,11 +211,15 @@ export class GitHubAdapter implements ProviderAdapter {
     };
   }
 
-  resolveTarget(target: string, bindings: ProviderBinding[]): string[] {
-    if (target === '*') return ['*'];
-    if (target === 'project.repos') {
-      return bindings.filter((b) => b.provider === 'github').map((b) => b.resource_ref);
-    }
-    return [];
+  toolCapabilities(tool: string): readonly Capability[] {
+    return githubToolCapabilities(tool);
+  }
+
+  classify(
+    tool: string,
+    args: Record<string, unknown>,
+    bindings: ReadonlyArray<ProviderBinding>,
+  ): ClassifyResult {
+    return classifyGithub(tool, args, bindings);
   }
 }

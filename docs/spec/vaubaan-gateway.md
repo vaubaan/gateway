@@ -2,6 +2,23 @@
 
 > **Statut :** spec greenfield.
 >
+> **⚠️ Note 2026-06-08 — Roles → Capabilities :** le modèle **roles +
+> policy-DSL déclaratif** (§0, §2.2, tables `roles`/`access_token_roles` en §3,
+> §5 roles builtin, §6 DSL) est **remplacé** par le **modèle de capabilities**.
+> Une capability est un tuple `(provider, plane, level, action, env?)` porté
+> directement par l'AccessToken (`access_tokens.capabilities` jsonb) ; la
+> classification `(tool, args) → capability` vit dans chaque plugin provider
+> (`classify()`), plus dans un DSL en base. Les actions se réduisent à
+> `read`/`write` ; `env` est un calque par-data (la branche **est** l'env pour
+> github). Au mint, le `policy_rules` du projet décide ai-autonome vs
+> human-gated (migration `0012`) ; les requêtes human-gated passent par un
+> `ApprovalChannel` (manual ou Telegram, migration `0013`) et sont consommées
+> via le poll endpoint. Les tokens `singleUse` (migration `0014`) sont
+> consommés au premier call qui matche, donnant le grain par-acte. Source de
+> vérité du nouveau modèle : [[gateway-capability-model.draft]] + migrations
+> `0011`–`0014`. ADR `capabilities-replace-roles` à venir. Les sections
+> ci-dessous décrivant roles/DSL sont historiques jusqu'à réécriture.
+>
 > **⚠️ Note 2026-05-26 :** depuis l'ADR
 > [[flat-membership-org-owner-access-token]] le terme **Bot** est renommé en
 > **AccessToken** (table `access_tokens`, URL `/tokens`) et le RBAC humain

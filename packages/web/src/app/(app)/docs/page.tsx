@@ -24,7 +24,7 @@ export default function DocsPage() {
           { id: 'create-project', label: '3. Create a project' },
           { id: 'bind-resources', label: '4. Bind resources' },
           { id: 'access-tokens', label: '5. Access tokens' },
-          { id: 'roles', label: '6. Roles & policy' },
+          { id: 'capabilities', label: '6. Capabilities & policy' },
           { id: 'agent-config', label: '7. Configure your agent' },
           { id: 'audit', label: '8. Audit log' },
           { id: 'billing', label: '9. Billing & plans' },
@@ -41,8 +41,8 @@ export default function DocsPage() {
       <p>The objects you'll work with:</p>
       <ul>
         <li>
-          <strong>Organization</strong> — your tenant. Has members, providers, projects, roles, an
-          audit log. Most teams have one.
+          <strong>Organization</strong> — your tenant. Has members, providers, projects, an audit
+          log. Most teams have one.
         </li>
         <li>
           <strong>Provider</strong> — GitHub, Vercel, or Supabase. Connected once per org, holds the
@@ -57,12 +57,14 @@ export default function DocsPage() {
           GitHub repo, a Vercel project, or a Supabase project.
         </li>
         <li>
-          <strong>Access token</strong> — what your agent sends. Project-scoped, role-attached,
-          revocable.
+          <strong>Access token</strong> — what your agent sends. Project-scoped, revocable, and
+          carries a set of <em>capabilities</em>.
         </li>
         <li>
-          <strong>Role</strong> — a named bundle of allow/deny rules over tools and targets.
-          Built-in roles ship per provider; you can author custom ones.
+          <strong>Capability</strong> — a single grant in the form{' '}
+          <code>provider:plane/level:action[@env]</code> (e.g. <code>github:repo/code:read</code>,{' '}
+          <code>vercel:runtime/deployment:write@prod</code>). A token&apos;s capabilities are the
+          exact set of operations it may perform — deny-by-default.
         </li>
       </ul>
 
@@ -127,7 +129,8 @@ export default function DocsPage() {
       <p>
         Inside a project, open <em>Access tokens</em> &rarr; <strong>+ New token</strong>. Name it
         after the agent that'll carry it (e.g. <code>cursor-laptop</code>, <code>ci-bot</code>).
-        Pick one or more roles to attach.
+        Tick the capabilities it needs from the checklist (or type an arbitrary capability
+        shorthand) — the token is granted exactly those.
       </p>
       <p>
         The token is shown <strong>once</strong> on creation — copy it into your agent config now.
@@ -135,31 +138,63 @@ export default function DocsPage() {
         the raw key — there is no recovery path. Revoke and re-issue if lost.
       </p>
 
-      <h2 id="roles">6. Roles & policy</h2>
+      <h2 id="capabilities">6. Capabilities & policy</h2>
       <p>
-        Roles are evaluated <em>deny-by-default</em>: an MCP call is allowed only if at least one
-        attached role contains a matching <code>allow</code> rule. Built-in roles cover the most
-        common patterns:
+        Policy is evaluated <em>deny-by-default</em>: an MCP call is allowed only if the token
+        carries a capability that covers it. A capability is a 5-tuple written as{' '}
+        <code>provider:plane/level:action[@env]</code>:
       </p>
       <ul>
         <li>
-          <code>github:reviewer</code> — read-only over PRs, issues, contents.
+          <strong>provider</strong> — the vendor (<code>github</code>, <code>vercel</code>,{' '}
+          <code>supabase</code>, <code>railway</code>, …).
         </li>
         <li>
-          <code>github:committer</code> — adds write to pull requests / commits.
+          <strong>plane</strong> — one concentric stack of levels declared by the provider (
+          <code>github→repo</code>, <code>vercel→runtime</code>, <code>supabase→db</code>; a
+          provider may expose several planes).
         </li>
         <li>
-          <code>vercel:deployer</code> — trigger deployments, read project state.
+          <strong>level</strong> — the slug of a peel inside that plane (<code>code</code>,{' '}
+          <code>rows</code>, <code>deployment</code>, <code>config</code>, …).
         </li>
         <li>
-          <code>supabase:editor</code> — read schema, run queries (no destructive DDL).
+          <strong>action</strong> — <code>read</code> or <code>write</code> (no <em>propose</em>, no{' '}
+          <em>apply</em>, no <em>provision</em> — those collapse into <code>write</code> at a given
+          env).
+        </li>
+        <li>
+          <strong>env</strong> — an instance/variant slug (<code>@main</code>, <code>@prod</code>,{' '}
+          <code>@feature/x</code>), dynamic — present only when the targeted data is overlaid on
+          that env.
+        </li>
+      </ul>
+      <p>The token-creation checklist surfaces the common grants:</p>
+      <ul>
+        <li>
+          <code>github:repo/code:read</code> — read code, diffs, PRs.
+        </li>
+        <li>
+          <code>github:repo/code:write@main</code> — merge / apply to main.
+        </li>
+        <li>
+          <code>vercel:runtime/deployment:write@preview</code> /{' '}
+          <code>vercel:runtime/deployment:write@prod</code> — deploy.
+        </li>
+        <li>
+          <code>vercel:runtime/config:write@prod</code> — change prod env vars / secrets.
+        </li>
+        <li>
+          <code>supabase:db/rows:read@staging</code> / <code>supabase:db/rows:read@prod</code> —
+          read data.
         </li>
       </ul>
       <p>
-        Custom roles live under <em>Roles</em> in the org sidebar. The schema is documented inline
-        in the role editor. Use <code>tool_matches</code> with glob patterns and <code>target</code>{' '}
-        = <code>project.repos</code> /<code>project.vercel</code> /<code>project.supabase</code> /
-        <code>project.railway</code> to scope rules to the project's own bindings.
+        Need a capability that isn&apos;t on the checklist? Type the notation directly in the
+        free-text field on the token page — it&apos;s validated against the grammar before it&apos;s
+        accepted. The mapping from a concrete <code>(tool, args)</code> call to a required
+        capability is done in code by each provider plugin&apos;s <code>classify()</code>, so
+        there&apos;s no per-org rule DSL to maintain.
       </p>
 
       <h2 id="agent-config">7. Configure your agent</h2>
@@ -175,9 +210,9 @@ export default function DocsPage() {
 }`}</code>
       </pre>
       <p>
-        The gateway advertises only the tools your roles allow. The agent sees a curated tool list,
-        not the union of every provider — that's the deny-by-default contract surfacing through
-        capability discovery.
+        The gateway advertises only the tools your capabilities allow. The agent sees a curated tool
+        list, not the union of every provider — that's the deny-by-default contract surfacing
+        through capability discovery.
       </p>
       <p>
         For agents that need a self-contained primer (auth, JSON-RPC shape, tool catalog, bootstrap

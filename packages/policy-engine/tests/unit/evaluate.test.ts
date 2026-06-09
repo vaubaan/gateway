@@ -1,210 +1,66 @@
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding, Role } from '@vaubaan/shared';
-import { evaluatePolicy } from '../../src/evaluate.ts';
+import type { Capability } from '@vaubaan/shared';
+import { evaluateCapability } from '../../src/evaluate.ts';
 
-function role(
-  name: string,
-  provider: 'github' | 'vercel' | 'supabase',
-  rules: Role['permissions']['rules'],
-): Role {
-  return {
-    id: name,
-    organization_id: null,
-    provider,
-    name,
-    description: null,
-    is_builtin: true,
-    permissions: { version: 1, rules },
-    created_at: '2026-01-01T00:00:00Z',
-  };
+function cap(
+  provider: string,
+  plane: string,
+  level: string,
+  action: 'read' | 'write',
+  env?: string,
+): Capability {
+  return env ? { provider, plane, level, action, env } : { provider, plane, level, action };
 }
 
-const ghBinding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
-  provider: 'github',
-  resource_ref: 'acme/app',
-  display_name: null,
-  created_at: '2026-01-01T00:00:00Z',
-};
-
-describe('evaluatePolicy — default deny', () => {
-  test('no rule → denied', () => {
-    const r = role('github:empty', 'github', [{ effect: 'allow', tool: 'github__list_repos' }]);
-    const result = evaluatePolicy([r], [ghBinding], {
-      provider: 'github',
-      tool: 'github__delete_repo',
-      arguments: { owner: 'acme', repo: 'app' },
-    });
-    expect(result.decision).toBe('denied');
+describe('evaluateCapability', () => {
+  test('exact tuple match → allowed', () => {
+    const granted = [cap('github', 'repo', 'code', 'read')];
+    const d = evaluateCapability(granted, cap('github', 'repo', 'code', 'read'));
+    expect(d.decision).toBe('allowed');
+    expect(d.capabilityMatched).toBe('github:repo/code:read');
   });
 
-  test('no role for provider → denied with explicit reason', () => {
-    const r = role('github:reader', 'github', [{ effect: 'allow', tool: 'github__list' }]);
-    const result = evaluatePolicy([r], [], {
-      provider: 'vercel',
-      tool: 'vercel__list_projects',
-      arguments: {},
-    });
-    expect(result.decision).toBe('denied');
-    if (result.decision === 'denied') expect(result.reason).toMatch(/vercel/);
-  });
-});
-
-describe('evaluatePolicy — allow', () => {
-  test('allow with target match', () => {
-    const r = role('github:reader', 'github', [
-      { effect: 'allow', target: 'project.repos', tool_matches: ['github__list_*'] },
-    ]);
-    const result = evaluatePolicy([r], [ghBinding], {
-      provider: 'github',
-      tool: 'github__list_pulls',
-      arguments: { owner: 'acme', repo: 'app' },
-    });
-    expect(result.decision).toBe('allowed');
-    if (result.decision === 'allowed') expect(result.roleMatched).toBe('github:reader');
+  test('missing capability → denied with actionable reason', () => {
+    const granted = [cap('github', 'repo', 'code', 'read')];
+    const d = evaluateCapability(granted, cap('github', 'repo', 'code', 'write', 'main'));
+    expect(d.decision).toBe('denied');
+    expect(d.reason).toContain('github:repo/code:write@main');
   });
 
-  test('allow with wildcard target', () => {
-    const r = role('github:wildcard', 'github', [
-      { effect: 'allow', target: '*', tool: 'github__get_user' },
-    ]);
-    const result = evaluatePolicy([r], [], {
-      provider: 'github',
-      tool: 'github__get_user',
-      arguments: {},
-    });
-    expect(result.decision).toBe('allowed');
+  test('env defensive filter: @prod required, only @staging granted → denied', () => {
+    const granted = [cap('vercel', 'runtime', 'deployment', 'write', 'staging')];
+    const d = evaluateCapability(granted, cap('vercel', 'runtime', 'deployment', 'write', 'prod'));
+    expect(d.decision).toBe('denied');
   });
 
-  test('allow with constraint match', () => {
-    const r = role('github:developer', 'github', [
-      {
-        effect: 'allow',
-        target: 'project.repos',
-        tool: 'github__create_pull_request',
-        constraints: {
-          'arguments.head': { match: ['feature/*'] },
-          'arguments.base': { equals: 'main' },
-        },
-      },
-    ]);
-    const result = evaluatePolicy([r], [ghBinding], {
-      provider: 'github',
-      tool: 'github__create_pull_request',
-      arguments: { owner: 'acme', repo: 'app', head: 'feature/foo', base: 'main' },
-    });
-    expect(result.decision).toBe('allowed');
+  test('env defensive filter: @prod required, env-less grant → denied', () => {
+    const granted = [cap('vercel', 'runtime', 'deployment', 'write')];
+    const d = evaluateCapability(granted, cap('vercel', 'runtime', 'deployment', 'write', 'prod'));
+    expect(d.decision).toBe('denied');
   });
 
-  test('constraint mismatch on allow → denied with actionable reason', () => {
-    const r = role('github:developer', 'github', [
-      {
-        effect: 'allow',
-        target: 'project.repos',
-        tool: 'github__push_files',
-        constraints: {
-          'arguments.branch': { match: ['feature/*', 'fix/*', 'claude/*'] },
-        },
-      },
-    ]);
-    const result = evaluatePolicy([r], [ghBinding], {
-      provider: 'github',
-      tool: 'github__push_files',
-      arguments: { owner: 'acme', repo: 'app', branch: 'main' },
-    });
-    expect(result.decision).toBe('denied');
-    if (result.decision === 'denied') {
-      expect(result.reason).toMatch(/branch/);
-      expect(result.reason).toMatch(/main/);
-      expect(result.reason).toMatch(/feature\/\*/);
-      expect(result.reason).toMatch(/Suggestion/);
-    }
-  });
-});
-
-describe('evaluatePolicy — deny override allow', () => {
-  test('deny wins when both match', () => {
-    const r = role('github:mixed', 'github', [
-      { effect: 'allow', target: '*', tool: 'github__delete_repo' },
-      { effect: 'deny', tool_matches: ['github__delete_*'] },
-    ]);
-    const result = evaluatePolicy([r], [ghBinding], {
-      provider: 'github',
-      tool: 'github__delete_repo',
-      arguments: { owner: 'acme', repo: 'app' },
-    });
-    expect(result.decision).toBe('denied');
+  test('env match → allowed, capability_matched carries env', () => {
+    const granted = [cap('vercel', 'runtime', 'deployment', 'write', 'prod')];
+    const d = evaluateCapability(granted, cap('vercel', 'runtime', 'deployment', 'write', 'prod'));
+    expect(d.decision).toBe('allowed');
+    expect(d.capabilityMatched).toBe('vercel:runtime/deployment:write@prod');
   });
 
-  test('priority tie-break on deny', () => {
-    const r1 = role('github:r1', 'github', [
-      { effect: 'deny', tool: 'github__merge_pr', priority: 50 },
-    ]);
-    const r2 = role('github:r2', 'github', [
-      { effect: 'deny', tool: 'github__merge_pr', priority: 200 },
-    ]);
-    const result = evaluatePolicy([r1, r2], [], {
-      provider: 'github',
-      tool: 'github__merge_pr',
-      arguments: {},
-    });
-    expect(result.decision).toBe('denied');
-    if (result.decision === 'denied') expect(result.ruleSource).toBe('github:r2');
-  });
-});
-
-describe('evaluatePolicy — target resolution', () => {
-  test('target.repos not matching args → denied (default deny)', () => {
-    const r = role('github:reader', 'github', [
-      { effect: 'allow', target: 'project.repos', tool_matches: ['github__list_*'] },
-    ]);
-    const result = evaluatePolicy([r], [ghBinding], {
-      provider: 'github',
-      tool: 'github__list_pulls',
-      arguments: { owner: 'other', repo: 'app' },
-    });
-    expect(result.decision).toBe('denied');
+  test('level distinction: config:write not covered by deployment:write', () => {
+    const granted = [cap('vercel', 'runtime', 'deployment', 'write', 'prod')];
+    const d = evaluateCapability(granted, cap('vercel', 'runtime', 'config', 'write', 'prod'));
+    expect(d.decision).toBe('denied');
   });
 
-  test('missing owner/repo args → denied', () => {
-    const r = role('github:reader', 'github', [
-      { effect: 'allow', target: 'project.repos', tool_matches: ['github__list_*'] },
-    ]);
-    const result = evaluatePolicy([r], [ghBinding], {
-      provider: 'github',
-      tool: 'github__list_pulls',
-      arguments: {},
-    });
-    expect(result.decision).toBe('denied');
+  test('provider distinction: different provider does not cover', () => {
+    const granted = [cap('github', 'repo', 'code', 'read')];
+    const d = evaluateCapability(granted, cap('gitlab', 'repo', 'code', 'read'));
+    expect(d.decision).toBe('denied');
   });
-});
 
-describe('evaluatePolicy — first allow wins between two allows', () => {
-  test('order is stable', () => {
-    const r = role('github:multi', 'github', [
-      { effect: 'allow', target: '*', tool: 'github__list_repos' },
-      { effect: 'allow', target: '*', tool: 'github__list_repos' },
-    ]);
-    const result = evaluatePolicy([r], [], {
-      provider: 'github',
-      tool: 'github__list_repos',
-      arguments: {},
-    });
-    expect(result.decision).toBe('allowed');
-  });
-});
-
-describe('evaluatePolicy — provider filtering', () => {
-  test('roles of other provider are ignored', () => {
-    const gh = role('github:reader', 'github', [
-      { effect: 'allow', target: '*', tool_matches: ['*'] },
-    ]);
-    const result = evaluatePolicy([gh], [], {
-      provider: 'vercel',
-      tool: 'vercel__list_projects',
-      arguments: {},
-    });
-    expect(result.decision).toBe('denied');
+  test('empty grant → denied with (none)', () => {
+    const d = evaluateCapability([], cap('github', 'repo', 'code', 'read'));
+    expect(d.decision).toBe('denied');
+    expect(d.reason).toContain('(none)');
   });
 });

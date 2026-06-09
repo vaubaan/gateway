@@ -22,6 +22,7 @@ const binding: ProviderBinding = {
   provider: 'supabase',
   resource_ref: 'qsockrvwpfzvxxecwjvh',
   display_name: null,
+  environment: 'staging',
   created_at: '2026-01-01',
 };
 
@@ -77,9 +78,109 @@ describe('SupabaseAdapter — executeCall', () => {
   });
 });
 
-describe('SupabaseAdapter — resolveTarget', () => {
-  test('project.supabase returns supabase bindings', () => {
+describe('SupabaseAdapter — classify', () => {
+  test('list_tables → db/tables:read @staging (env from binding)', () => {
     const adapter = new SupabaseAdapter();
-    expect(adapter.resolveTarget('project.supabase', [binding])).toEqual(['qsockrvwpfzvxxecwjvh']);
+    const result = adapter.classify(
+      'supabase__list_tables',
+      { project_ref: 'qsockrvwpfzvxxecwjvh' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'db',
+        level: 'tables',
+        action: 'read',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('execute_sql → db/rows:read @staging (MVP read-only)', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__execute_sql',
+      { project_ref: 'qsockrvwpfzvxxecwjvh', query: 'select 1;' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'db',
+        level: 'rows',
+        action: 'read',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('get_advisors → db/rls:read @staging', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__get_advisors',
+      { project_ref: 'qsockrvwpfzvxxecwjvh' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'db',
+        level: 'rls',
+        action: 'read',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('get_project → db/project:read @staging', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__get_project',
+      { project_ref: 'qsockrvwpfzvxxecwjvh' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'db',
+        level: 'project',
+        action: 'read',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('read with no matching binding is denied', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__get_project',
+      { project_ref: 'notbound000000000000' },
+      [binding],
+    );
+    expect(result).toEqual({
+      denied: "supabase project 'notbound000000000000' is not bound to this project.",
+    });
+  });
+
+  test('unknown tool is denied', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify('supabase__nope', { project_ref: 'qsockrvwpfzvxxecwjvh' }, [
+      binding,
+    ]);
+    expect(result).toEqual({ denied: "unknown supabase tool 'supabase__nope'." });
+  });
+
+  test('binding with environment=null yields an env-less capability', () => {
+    const adapter = new SupabaseAdapter();
+    const envlessBinding: ProviderBinding = { ...binding, environment: null };
+    const result = adapter.classify(
+      'supabase__execute_sql',
+      { project_ref: 'qsockrvwpfzvxxecwjvh', query: 'select 1;' },
+      [envlessBinding],
+    );
+    expect(result).toEqual({
+      capability: { provider: 'supabase', plane: 'db', level: 'rows', action: 'read' },
+    });
   });
 });

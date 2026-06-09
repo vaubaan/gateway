@@ -6,9 +6,15 @@
  *        Supabase OAuth app. v0 uses paste-token (`sbp_...`) directly.
  */
 
-import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
+import type {
+  Capability,
+  McpToolDeclaration,
+  ProviderAdmin,
+  ProviderBinding,
+} from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
 import { executeCall, type FetchImpl } from './execute.ts';
+import { classifySupabase, supabaseToolCapabilities, type ClassifyResult } from './classify.ts';
 
 export interface SupabaseAdapterConfig {
   /** Override fetch in tests. */
@@ -74,11 +80,15 @@ export class SupabaseAdapter {
     return executeCall(this.fetchImpl, token, tool, args);
   }
 
-  resolveTarget(target: string, bindings: ProviderBinding[]): string[] {
-    if (target === '*') return ['*'];
-    if (target === 'project.supabase') {
-      return bindings.filter((b) => b.provider === 'supabase').map((b) => b.resource_ref);
-    }
-    return [];
+  toolCapabilities(tool: string): readonly Capability[] {
+    return supabaseToolCapabilities(tool);
+  }
+
+  classify(
+    tool: string,
+    args: Record<string, unknown>,
+    bindings: ReadonlyArray<ProviderBinding>,
+  ): ClassifyResult {
+    return classifySupabase(tool, args, bindings);
   }
 }

@@ -2,8 +2,9 @@
  * PATCH  /api/v1/projects/:projectId  body: { orgSlug, name?, slug? }
  * DELETE /api/v1/projects/:projectId?orgSlug=...
  *
- * DELETE cascades to bindings + access_tokens + access_token_roles (cf. supabase
- * migration 0001_init.sql).
+ * DELETE cascades to bindings + access_tokens (cf. supabase migration
+ * 0001_init.sql). Capabilities live inline on each access_tokens row, so they
+ * disappear with it — no join table to clean up.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

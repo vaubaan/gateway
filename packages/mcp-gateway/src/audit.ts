@@ -16,7 +16,8 @@ export interface AuditRow {
   access_token_id: string | null;
   tool_name: string;
   arguments_hash: string;
-  role_matched: string | null;
+  /** Shorthand of the matched capability (allow) ; null if denied. */
+  capability_matched: string | null;
   decision: AuditDecision;
   denial_reason: string | null;
   upstream_latency_ms: number | null;

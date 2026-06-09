@@ -5,7 +5,7 @@ import { ProseHeader, ProseWrap, Toc } from '@/components/public/Prose';
 export const metadata: Metadata = {
   title: 'Management API — Vaubaan',
   description:
-    'Use the Vaubaan Management API: create a management key, discover roles and projects, mint and revoke ephemeral access tokens from a programmatic client.',
+    'Use the Vaubaan Management API: create a management key, discover projects, mint and revoke ephemeral access tokens with the capabilities they need, from a programmatic client.',
 };
 
 export default function MgmtDocsPage() {
@@ -49,14 +49,14 @@ export default function MgmtDocsPage() {
         </li>
         <li>
           <strong>Access token</strong> — <code>vbn_live_…</code>, project-scoped, ephemeral. What
-          the agent sends on every MCP call. Carries <em>roles</em> = the allow/deny rules that the
-          gateway enforces. Mint a fresh one per session with a TTL.
+          the agent sends on every MCP call. Carries a set of <em>capabilities</em> = the exact
+          operations the gateway will allow. Mint a fresh one per session with a TTL.
         </li>
       </ul>
       <p>
         If the management key leaks, the attacker can mint access tokens in the bound org until you
         revoke the key — but they can&apos;t consume MCP directly with it. If an access token leaks,
-        the blast radius is limited by its roles, its project scope, and its TTL.
+        the blast radius is limited by its capabilities, its project scope, and its TTL.
       </p>
 
       <h2 id="setup">3. Setup</h2>
@@ -83,23 +83,35 @@ export default function MgmtDocsPage() {
         clarity — port them to whatever HTTP client you use.
       </p>
 
-      <h3>4.1 Discover available roles</h3>
-      <pre>
-        <code>{`curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/roles" \\
-  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
-
-# Response (truncated):
-# {
-#   "roles": [
-#     { "id": "uuid-1", "name": "github:developer", "provider": "github", "is_builtin": true, "description": "..." },
-#     { "id": "uuid-2", "name": "github:reader",    "provider": "github", "is_builtin": true, "description": "..." },
-#     ...
-#   ]
-# }`}</code>
-      </pre>
+      <h3>4.1 Know the capabilities you need</h3>
       <p>
-        Returned roles are the union of global builtins and org-scoped custom roles. Cache the list
-        and pick the <code>id</code> values you want to attach for this session.
+        There&apos;s no catalog to fetch — capabilities are a fixed grammar, not org-scoped objects.
+        A capability is a notation string <code>provider:plane/level:action@env</code> where{' '}
+        <em>action</em> is <code>read</code> or <code>write</code>, and <em>env</em> is an instance
+        slug (a branch, an environment, a key mode — dynamic). Pick the set the session needs, for
+        example:
+      </p>
+      <ul>
+        <li>
+          <code>github:repo/code:read</code>, <code>github:repo/code:write@main</code> — read code,
+          merge.
+        </li>
+        <li>
+          <code>vercel:runtime/deployment:write@preview</code>,{' '}
+          <code>vercel:runtime/deployment:write@prod</code> — deploy.
+        </li>
+        <li>
+          <code>vercel:runtime/config:write@prod</code> — change prod env vars / secrets.
+        </li>
+        <li>
+          <code>supabase:db/rows:read@staging</code>, <code>supabase:db/rows:read@prod</code> — read
+          data.
+        </li>
+      </ul>
+      <p>
+        Pass them as the <code>capabilities</code> array in step 4.3. The gateway maps each MCP call
+        to a required capability in code (per-provider <code>classify()</code>) and allows it only
+        if the token carries that exact capability (exact tuple — env defensive).
       </p>
 
       <h3>4.2 Discover projects and bindings</h3>
@@ -124,9 +136,9 @@ export default function MgmtDocsPage() {
       </pre>
       <p>
         Use <code>slug</code> as the <code>projectSlug</code> in step 4.3. Inspect the{' '}
-        <code>bindings</code> array to know which providers are wired up — there&apos;s no point
-        attaching a <code>vercel:viewer</code> role to a session targeting a project that has no
-        Vercel binding.
+        <code>bindings</code> array to know which providers (and environments) are wired up —
+        there&apos;s no point granting <code>runtime:apply@prod</code> to a session whose project
+        has no prod runtime binding.
       </p>
 
       <h3>4.3 Mint an ephemeral access token</h3>
@@ -136,7 +148,11 @@ export default function MgmtDocsPage() {
   -H "Content-Type: application/json" \\
   -d '{
     "projectSlug": "website",
-    "roleIds": ["<role-id-from-4.1>"],
+    "capabilities": [
+      "github:repo/code:read",
+      "github:repo/code:write@feature/x",
+      "vercel:runtime/deployment:write@preview"
+    ],
     "ttlHours": 24
   }'
 
@@ -169,8 +185,8 @@ export default function MgmtDocsPage() {
 }`}</code>
       </pre>
       <p>
-        The agent calls <code>tools/list</code> and only sees the tools its roles allow. Every call
-        is policy-checked and audited under the org.
+        The agent calls <code>tools/list</code> and only sees the tools its capabilities allow.
+        Every call is policy-checked and audited under the org.
       </p>
 
       <h3>4.5 Revoke the access token after the session</h3>
@@ -194,14 +210,6 @@ export default function MgmtDocsPage() {
       </p>
 
       <h3>
-        <code>GET /api/v1/mgmt/roles</code>
-      </h3>
-      <p>
-        Returns <code>{`{ roles: [{ id, name, provider, description, is_builtin }] }`}</code>.
-        Includes global builtins and custom roles of the bound org.
-      </p>
-
-      <h3>
         <code>GET /api/v1/mgmt/projects</code>
       </h3>
       <p>
@@ -218,7 +226,7 @@ export default function MgmtDocsPage() {
       <p>
         Body:{' '}
         <code>
-          {`{ projectSlug: string, roleIds: string[], name?: string, ttlHours?: number }`}
+          {`{ projectSlug: string, capabilities: string[], name?: string, ttlHours?: number }`}
         </code>
         .
       </p>
@@ -231,8 +239,9 @@ export default function MgmtDocsPage() {
           (7 days).
         </li>
         <li>
-          <code>roleIds</code> must reference roles returned by <code>GET /mgmt/roles</code> (i.e.
-          builtin <em>or</em> custom of the bound org).
+          <code>capabilities</code> is an array of capability notations (e.g.{' '}
+          <code>github:repo/code:read</code>, <code>vercel:runtime/deployment:write@prod</code>);
+          each is validated against the grammar and stored as its full tuple.
         </li>
       </ul>
       <p>

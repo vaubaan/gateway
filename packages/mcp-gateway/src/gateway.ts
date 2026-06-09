@@ -11,7 +11,7 @@
  */
 
 import {
-  evaluatePolicy,
+  evaluateCapability,
   filterAvailableTools,
   injectionPlanFor,
   mergeInjectedArgs,
@@ -19,6 +19,7 @@ import {
 } from '@vaubaan/policy-engine';
 import type {
   AccessTokenContext,
+  Capability,
   JsonRpcRequest,
   JsonRpcResponse,
   McpToolDeclaration,
@@ -27,6 +28,9 @@ import type {
   ProviderBinding,
 } from '@vaubaan/shared';
 import { parseApiKey, verifyApiKey } from '@vaubaan/shared';
+
+/** What a provider plugin returns when classifying a concrete call. */
+export type ClassifyResult = { capability: Capability } | { denied: string };
 import type { CacheClient } from './cache.ts';
 import { hashArguments, type AuditWriter } from './audit.ts';
 import { AuthError, rpcError, rpcSuccess } from './errors.ts';
@@ -35,6 +39,12 @@ function assertNotExpired(expiresAt: string | null | undefined): void {
   if (!expiresAt) return;
   if (Date.parse(expiresAt) <= Date.now()) {
     throw new AuthError('access token has expired.');
+  }
+}
+
+function assertNotConsumed(consumedAt: string | null | undefined): void {
+  if (consumedAt) {
+    throw new AuthError('access token has already been consumed (single-use).');
   }
 }
 
@@ -47,11 +57,24 @@ export interface ContextLoader {
   loadAccessTokenContext(accessTokenId: string): Promise<AccessTokenContext | null>;
   /** Touch last_used_at — best-effort. */
   touchLastUsed?(accessTokenId: string): Promise<void>;
+  /** Atomically mark a single-use token consumed (spec §8). Returns true on
+   *  the first call (this caller wins), false when already consumed (race).
+   *  Optional : when missing, the gateway just sets consumed_at locally and
+   *  invalidates the cache, trusting eventual consistency. */
+  consumeAccessToken?(accessTokenId: string): Promise<boolean>;
 }
 
 export interface UpstreamAdapter {
   provider: Provider;
   availableTools: ReadonlyArray<McpToolDeclaration>;
+  /** Env-less capability surface of a tool — for static tools/list filtering. */
+  toolCapabilities(tool: string): readonly Capability[];
+  /** Classify a concrete call into the capability it requires (env resolved). */
+  classify(
+    tool: string,
+    args: Record<string, unknown>,
+    bindings: ReadonlyArray<ProviderBinding>,
+  ): ClassifyResult;
   executeCall(
     admin: ProviderAdmin,
     binding: ProviderBinding,
@@ -127,6 +150,7 @@ export class McpGateway {
       if (!tk || tk.status !== 'active') throw new AuthError('access token not found or revoked.');
       if (!(await verifyApiKey(tk.api_key_hash, raw))) throw new AuthError('api_key mismatch.');
       assertNotExpired(cached.access_token.expires_at);
+      assertNotConsumed(cached.access_token.consumed_at);
       return cached;
     }
 
@@ -138,6 +162,7 @@ export class McpGateway {
     const ctx = await this.cfg.contextLoader.loadAccessTokenContext(tk.id);
     if (!ctx) throw new AuthError('access-token context could not be loaded.');
     assertNotExpired(ctx.access_token.expires_at);
+    assertNotConsumed(ctx.access_token.consumed_at);
 
     await this.cfg.cache.set(cacheKey, ctx, this.cfg.contextTtlSeconds ?? 60);
     if (this.cfg.contextLoader.touchLastUsed) {
@@ -179,9 +204,10 @@ export class McpGateway {
     for (const provider of ['github', 'vercel', 'supabase', 'railway', 'ssh'] as Provider[]) {
       const adapter = this.cfg.upstreamByProvider[provider];
       if (!adapter) continue;
-      const providerRoles = ctx.roles.filter((r) => r.provider === provider);
-      if (providerRoles.length === 0) continue;
-      const filtered = filterAvailableTools(providerRoles, adapter.availableTools);
+      const filtered = filterAvailableTools(ctx.capabilities, adapter);
+      if (filtered.length === 0) continue;
+      // Self-contained adapters (e.g. ssh) load credentials per-call and
+      // therefore have no scope-injection plan.
       if (adapter.selfContained) {
         out.push(...filtered);
         continue;
@@ -225,23 +251,36 @@ export class McpGateway {
     }
 
     if (adapter.selfContained) {
-      // Self-contained adapters (e.g. ssh) skip the provider_admins check
-      // and loadProviderAdmin. They handle credential loading and role-based
-      // policy internally via executeCallSelfContained.
-      const decision = evaluatePolicy(ctx.roles, ctx.bindings, {
-        provider,
-        tool: toolName,
-        arguments: rawArgs,
-      });
+      // Self-contained adapters (e.g. ssh) skip provider_admins +
+      // loadProviderAdmin + scope-injection — they handle credential loading
+      // inside executeCallSelfContained. Authorization still goes through
+      // the unified classify + evaluateCapability path.
+      const classified = adapter.classify(toolName, rawArgs, ctx.bindings);
+      if ('denied' in classified) {
+        await this.audit(ctx, toolName, rawArgs, 'denied', null, classified.denied, null);
+        return rpcError(id, -32603, `Vaubaan policy denied: ${classified.denied}`);
+      }
+      const decision = evaluateCapability(ctx.capabilities, classified.capability);
       if (decision.decision === 'denied') {
-        await this.audit(ctx, toolName, rawArgs, 'denied', null, decision.reason, null);
+        await this.audit(ctx, toolName, rawArgs, 'denied', null, decision.reason ?? null, null);
         return rpcError(id, -32603, `Vaubaan policy denied: ${decision.reason}`);
       }
+      const capabilityMatched = decision.capabilityMatched ?? null;
+
+      // Single-use consume (spec §8) for self-contained adapters too.
+      if (ctx.access_token.single_use && this.cfg.contextLoader.consumeAccessToken) {
+        const won = await this.cfg.contextLoader.consumeAccessToken(ctx.access_token.id);
+        if (!won) {
+          const reason = 'access token has already been consumed (single-use).';
+          await this.audit(ctx, toolName, rawArgs, 'denied', null, reason, null);
+          return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+        }
+        await this.cfg.cache.del(`vaubaan:ctx:${ctx.access_token.api_key_prefix}`);
+      }
+
       const t0 = Date.now();
       try {
-        const execFn = adapter.executeCallSelfContained
-          ? adapter.executeCallSelfContained.bind(adapter)
-          : null;
+        const execFn = adapter.executeCallSelfContained?.bind(adapter);
         if (!execFn) {
           throw new Error(
             `self-contained adapter for '${provider}' has no executeCallSelfContained`,
@@ -249,12 +288,12 @@ export class McpGateway {
         }
         const result = await execFn(ctx, toolName, rawArgs);
         const latency = Date.now() - t0;
-        await this.audit(ctx, toolName, rawArgs, 'allowed', decision.roleMatched, null, latency);
+        await this.audit(ctx, toolName, rawArgs, 'allowed', capabilityMatched, null, latency);
         return rpcSuccess(id, this.shapeMcpResult(result));
       } catch (e) {
         const latency = Date.now() - t0;
         const message = e instanceof Error ? e.message : String(e);
-        await this.audit(ctx, toolName, rawArgs, 'allowed', decision.roleMatched, null, latency);
+        await this.audit(ctx, toolName, rawArgs, 'allowed', capabilityMatched, null, latency);
         return rpcError(id, -32603, `Upstream call failed: ${message}`);
       }
     }
@@ -276,17 +315,36 @@ export class McpGateway {
     });
     const args = plan ? mergeInjectedArgs(rawArgs, plan) : rawArgs;
 
-    // Evaluate policy with the injected args so target resolution + constraints
-    // see the same values the upstream will receive.
-    const decision = evaluatePolicy(ctx.roles, ctx.bindings, {
-      provider,
-      tool: toolName,
-      arguments: args,
-    });
+    // Classify the concrete call into the capability it requires (provider
+    // plugin, native semantics), with the injected args so env/target resolution
+    // sees the same values the upstream will receive.
+    const classified = adapter.classify(toolName, args, ctx.bindings);
+    if ('denied' in classified) {
+      await this.audit(ctx, toolName, args, 'denied', null, classified.denied, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${classified.denied}`);
+    }
 
+    // Pure set membership : is the required capability in the granted set ?
+    const decision = evaluateCapability(ctx.capabilities, classified.capability);
     if (decision.decision === 'denied') {
-      await this.audit(ctx, toolName, args, 'denied', null, decision.reason, null);
+      await this.audit(ctx, toolName, args, 'denied', null, decision.reason ?? null, null);
       return rpcError(id, -32603, `Vaubaan policy denied: ${decision.reason}`);
+    }
+    const capabilityMatched = decision.capabilityMatched ?? null;
+
+    // Single-use consume (spec §8) : burn the token *before* upstream so a
+    // failed call doesn't leave the credential reusable. Race-safe via the
+    // atomic SQL UPDATE in the loader ; if we lost the race, reject.
+    if (ctx.access_token.single_use) {
+      if (this.cfg.contextLoader.consumeAccessToken) {
+        const won = await this.cfg.contextLoader.consumeAccessToken(ctx.access_token.id);
+        if (!won) {
+          const reason = 'access token has already been consumed (single-use).';
+          await this.audit(ctx, toolName, args, 'denied', null, reason, null);
+          return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+        }
+        await this.cfg.cache.del(`vaubaan:ctx:${ctx.access_token.api_key_prefix}`);
+      }
     }
 
     // Load full ProviderAdmin (with tokens — never cached in clear).
@@ -320,12 +378,12 @@ export class McpGateway {
         args,
       );
       const latency = Date.now() - t0;
-      await this.audit(ctx, toolName, args, 'allowed', decision.roleMatched, null, latency);
+      await this.audit(ctx, toolName, args, 'allowed', capabilityMatched, null, latency);
       return rpcSuccess(id, this.shapeMcpResult(result));
     } catch (e) {
       const latency = Date.now() - t0;
       const message = e instanceof Error ? e.message : String(e);
-      await this.audit(ctx, toolName, args, 'allowed', decision.roleMatched, null, latency);
+      await this.audit(ctx, toolName, args, 'allowed', capabilityMatched, null, latency);
       return rpcError(id, -32603, `Upstream call failed: ${message}`);
     }
   }
@@ -357,7 +415,7 @@ export class McpGateway {
     tool: string,
     args: Record<string, unknown>,
     decision: 'allowed' | 'denied',
-    roleMatched: string | null,
+    capabilityMatched: string | null,
     denialReason: string | null,
     latency: number | null,
   ): Promise<void> {
@@ -368,7 +426,7 @@ export class McpGateway {
         access_token_id: ctx.access_token.id,
         tool_name: tool,
         arguments_hash: hashArguments(args),
-        role_matched: roleMatched,
+        capability_matched: capabilityMatched,
         decision,
         denial_reason: denialReason,
         upstream_latency_ms: latency,

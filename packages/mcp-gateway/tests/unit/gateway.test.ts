@@ -1,47 +1,25 @@
 import { describe, expect, test, vi } from 'vitest';
 import type {
   AccessTokenContext,
+  Capability,
   McpToolDeclaration,
   Provider,
   ProviderAdmin,
   ProviderBinding,
-  Role,
 } from '@vaubaan/shared';
 import { generateApiKey, hashApiKey } from '@vaubaan/shared';
 import { MemoryCacheClient } from '../../src/cache.ts';
 import { MemoryAuditWriter } from '../../src/audit.ts';
 import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/gateway.ts';
+import { mockClassifyGithub, mockGithubToolCapabilities } from '../fixtures/github-classifier.ts';
 
-function buildRole(
-  name: string,
-  rules: Role['permissions']['rules'],
-  provider: Provider = 'github',
-): Role {
-  return {
-    id: name,
-    organization_id: null,
-    provider,
-    name,
-    description: null,
-    is_builtin: true,
-    permissions: { version: 1, rules },
-    created_at: '2026-01-01',
-  };
-}
-
-const developerRole = buildRole('github:developer', [
-  { effect: 'allow', target: 'project.repos', tool_matches: ['github__list_*', 'github__get_*'] },
-  {
-    effect: 'allow',
-    target: 'project.repos',
-    tool: 'github__create_pull_request',
-    constraints: {
-      'arguments.head': { match: ['feature/*'] },
-      'arguments.base': { equals: 'main' },
-    },
-  },
-  { effect: 'deny', tool_matches: ['github__delete_*', 'github__merge_pull_request'] },
-]);
+// Capability set equivalent to the old `github:developer` role : read the
+// repo + write code only on a feature branch (env = feature/x). It does NOT
+// carry write@main, so writes to the protected branch and PR merges deny.
+const developerCapabilities: Capability[] = [
+  { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
+  { provider: 'github', plane: 'repo', level: 'code', action: 'write', env: 'feature/x' },
+];
 
 const fakeBinding: ProviderBinding = {
   id: 'b1',
@@ -85,10 +63,12 @@ async function buildHarness(opts: { execute?: UpstreamAdapter['executeCall'] } =
       status: 'active',
       api_key_prefix: apiKeyPrefix,
       expires_at: null,
+      single_use: false,
+      consumed_at: null,
     },
     project: { id: 'p1', slug: 'website', organization_id: 'org1' },
     organization: { id: 'org1', slug: 'acme', name: 'Acme' },
-    roles: [developerRole],
+    capabilities: developerCapabilities,
     bindings: [fakeBinding],
     provider_admins: [
       { provider: 'github', status: 'connected', installation_id: '99', team_id: null },
@@ -106,6 +86,8 @@ async function buildHarness(opts: { execute?: UpstreamAdapter['executeCall'] } =
   const githubAdapter: UpstreamAdapter = {
     provider: 'github',
     availableTools: fakeTools,
+    toolCapabilities: mockGithubToolCapabilities,
+    classify: mockClassifyGithub,
     executeCall: opts.execute ?? vi.fn().mockResolvedValue({ ok: true }),
     loadProviderAdmin: vi.fn().mockResolvedValue(fakeAdmin),
   };
@@ -169,10 +151,12 @@ describe('McpGateway — kind/expiry guards', () => {
         status: 'active',
         api_key_prefix: apiKeyPrefix,
         expires_at: new Date(Date.now() - 60_000).toISOString(),
+        single_use: false,
+        consumed_at: null,
       },
       project: { id: 'p1', slug: 'website', organization_id: 'org1' },
       organization: { id: 'org1', slug: 'acme', name: 'Acme' },
-      roles: [developerRole],
+      capabilities: developerCapabilities,
       bindings: [fakeBinding],
       provider_admins: [
         { provider: 'github', status: 'connected', installation_id: '99', team_id: null },
@@ -206,7 +190,10 @@ describe('McpGateway — tools/list', () => {
       expect(names).toContain('github__list_repos');
       expect(names).toContain('github__get_file_contents');
       expect(names).toContain('github__create_pull_request');
-      expect(names).not.toContain('github__delete_file');
+      // The list filter is env-ignored : delete_file's surface is [code:write],
+      // and the developer holds a code:write @feature/x grant, so the tool is
+      // discoverable. Env-scoped enforcement (write@main denial) is at call time.
+      expect(names).toContain('github__delete_file');
     }
   });
 });
@@ -236,60 +223,62 @@ describe('McpGateway — tools/call allowed', () => {
     expect(audit.rows[0]).toMatchObject({
       decision: 'allowed',
       tool_name: 'github__create_pull_request',
-      role_matched: 'github:developer',
+      capability_matched: 'github:repo/code:write@feature/x',
     });
   });
 });
 
 describe('McpGateway — tools/call denied', () => {
-  test('constraint mismatch denies with actionable reason', async () => {
+  test('write to a protected branch needs code:write@main, which developer lacks', async () => {
     const { gateway, audit, ctx } = await buildHarness();
     const res = await gateway.handle(ctx, {
       jsonrpc: '2.0',
       id: 8,
       method: 'tools/call',
       params: {
-        name: 'github__create_pull_request',
+        name: 'github__create_or_update_file',
         arguments: {
           owner: 'acme',
           repo: 'app',
-          head: 'main', // ← not feature/*
-          base: 'main',
-          title: 'sneaky',
+          path: 'x.md',
+          message: 'sneaky',
+          branch: 'main', // ← protected → requires code:write@main
+          content: 'Zm9v',
         },
       },
     });
     expect('error' in res).toBe(true);
     if ('error' in res) {
       expect(res.error.message).toMatch(/Vaubaan policy denied/);
-      expect(res.error.message).toMatch(/feature/);
+      expect(res.error.message).toMatch(/github:repo\/code:write@main/);
     }
     expect(audit.rows).toHaveLength(1);
     expect(audit.rows[0]).toMatchObject({
       decision: 'denied',
-      tool_name: 'github__create_pull_request',
+      tool_name: 'github__create_or_update_file',
     });
   });
 
-  test('explicit deny rule blocks delete', async () => {
+  test('merge_pull_request needs code:write@main, which developer lacks', async () => {
     const { gateway, audit, ctx } = await buildHarness();
     const res = await gateway.handle(ctx, {
       jsonrpc: '2.0',
       id: 9,
       method: 'tools/call',
       params: {
-        name: 'github__delete_file',
+        name: 'github__merge_pull_request',
         arguments: {
           owner: 'acme',
           repo: 'app',
-          path: 'x.md',
-          message: 'gone',
-          branch: 'feature/x',
-          sha: 'abc',
+          pull_number: 7,
         },
       },
     });
     expect('error' in res).toBe(true);
+    if ('error' in res) {
+      expect(res.error.code).toBe(-32603);
+      expect(res.error.message).toMatch(/github:repo\/code:write@main/);
+    }
     expect(audit.rows[0]).toMatchObject({ decision: 'denied' });
   });
 
@@ -313,6 +302,90 @@ describe('McpGateway — unknown method', () => {
     const res = await gateway.handle(ctx, { jsonrpc: '2.0', id: 11, method: 'wat' });
     expect('error' in res).toBe(true);
     if ('error' in res) expect(res.error.code).toBe(-32601);
+  });
+});
+
+describe('McpGateway — single-use tokens', () => {
+  test('first matching call allowed, token consumed; second call rejected', async () => {
+    // Read-only single-use token : the developer set has code:read, so the
+    // first list_repos call wins ; the second hits the consumed gate.
+    const { apiKey, apiKeyPrefix } = generateApiKey('test');
+    const apiKeyHash = await hashApiKey(apiKey);
+
+    // Mutable mirror of the access_token row : the loader updates it on
+    // consumeAccessToken so the next loadAccessTokenContext picks up the new
+    // consumed_at and authenticate() rejects.
+    const tokenState = {
+      consumed_at: null as string | null,
+      status: 'active' as 'active' | 'revoked',
+    };
+    const ctx: AccessTokenContext = {
+      access_token: {
+        id: 'tk-su',
+        name: 'single-use',
+        project_id: 'p1',
+        status: 'active',
+        api_key_prefix: apiKeyPrefix,
+        expires_at: null,
+        single_use: true,
+        consumed_at: null,
+      },
+      project: { id: 'p1', slug: 'website', organization_id: 'org1' },
+      organization: { id: 'org1', slug: 'acme', name: 'Acme' },
+      capabilities: [{ provider: 'github', plane: 'repo', level: 'code', action: 'read' }],
+      bindings: [fakeBinding],
+      provider_admins: [
+        { provider: 'github', status: 'connected', installation_id: '99', team_id: null },
+      ],
+    };
+    const loader: ContextLoader = {
+      loadAccessTokenForAuth: vi.fn().mockImplementation(async () => ({
+        id: 'tk-su',
+        api_key_hash: apiKeyHash,
+        status: tokenState.status,
+      })),
+      loadAccessTokenContext: vi.fn().mockImplementation(async () => ({
+        ...ctx,
+        access_token: { ...ctx.access_token, consumed_at: tokenState.consumed_at },
+      })),
+      touchLastUsed: vi.fn(),
+      consumeAccessToken: vi.fn().mockImplementation(async () => {
+        if (tokenState.consumed_at !== null) return false;
+        tokenState.consumed_at = new Date().toISOString();
+        tokenState.status = 'revoked';
+        return true;
+      }),
+    };
+
+    const githubAdapter: UpstreamAdapter = {
+      provider: 'github',
+      availableTools: fakeTools,
+      toolCapabilities: mockGithubToolCapabilities,
+      classify: mockClassifyGithub,
+      executeCall: vi.fn().mockResolvedValue({ ok: true }),
+      loadProviderAdmin: vi.fn().mockResolvedValue(fakeAdmin),
+    };
+    const cache = new MemoryCacheClient();
+    const gateway = new McpGateway({
+      cache,
+      audit: new MemoryAuditWriter(),
+      contextLoader: loader,
+      upstreamByProvider: { github: githubAdapter } as Record<Provider, UpstreamAdapter>,
+    });
+
+    // 1st call : authenticated + executes + consumes.
+    const auth1 = await gateway.authenticate(`Bearer ${apiKey}`);
+    const call1 = await gateway.handle(auth1, {
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'tools/call',
+      params: { name: 'github__list_repos', arguments: { owner: 'acme', repo: 'app' } },
+    });
+    expect('result' in call1).toBe(true);
+    expect(loader.consumeAccessToken).toHaveBeenCalledTimes(1);
+
+    // 2nd call : token is now consumed → authenticate rejects.
+    await expect(gateway.authenticate(`Bearer ${apiKey}`)).rejects.toThrow(/consumed|revoked/);
   });
 });
 

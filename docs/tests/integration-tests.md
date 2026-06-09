@@ -22,11 +22,11 @@ Vitest, ~1s total. No browser, no Supabase server, no real GitHub.
 | `packages/policy-engine/tests/unit/tools-filter.test.ts`   |        3 |    ~8ms |
 | `packages/providers/github/tests/unit/adapter.test.ts`     |       18 |   ~50ms |
 | `packages/providers/vercel/tests/unit/adapter.test.ts`     |        7 |    ~7ms |
-| `packages/providers/supabase/tests/unit/adapter.test.ts`   |        5 |   ~12ms |
+| `packages/providers/supabase/tests/unit/adapter.test.ts`   |        8 |   ~12ms |
 | `packages/providers/railway/tests/unit/adapter.test.ts`    |       11 |   ~10ms |
 | `packages/mcp-gateway/tests/unit/gateway.test.ts`          |       13 |  ~520ms |
 | `packages/mcp-gateway/tests/integration/lifecycle.test.ts` |        7 |  ~500ms |
-| **TOTAL**                                                  | **~108** |   ~1.3s |
+| **TOTAL**                                                  | **~111** |   ~1.3s |
 
 ## Run
 
@@ -85,24 +85,33 @@ npx vitest run packages/policy-engine    # one package
 - Authenticate valid api_key → context returned.
 - Authenticate missing/malformed → AuthError thrown.
 - Authenticate cache hit re-verifies hash (defensive against cache poisoning).
-- `tools/list` returns filtered tools per Bot roles.
-- `tools/call` allowed → routes to adapter + audit row.
-- `tools/call` denied (constraint mismatch) → JSON-RPC error with actionable
-  Suggestion line + audit row decision='denied'.
-- `tools/call` explicit deny rule → blocks even when allow could match.
+- `tools/list` returns tools filtered by the granted capability set (a tool
+  surfaces when the set covers any of its env-less surface capabilities).
+- `tools/call` allowed → routes to adapter + audit row carrying
+  `capability_matched` (notation, e.g. `github:repo/code:write@feature/x`).
+- `tools/call` write to a protected branch → denied (token has
+  `github:repo/code:write@feature/x` but not
+  `github:repo/code:write@main`) ; error mentions the missing capability.
+- `tools/call` `github__merge_pull_request` → denied (needs
+  `github:repo/code:write@main`).
 - `tools/call` disconnected provider → denies with explicit reason.
 - Unknown method → -32601.
 - `initialize` returns MCP server info.
 
 ## Scénarios — Lifecycle integration
 
-- Auth → tools/list → tools/call allowed → audit row written.
-- Constraint mismatch → denied with branch-rename suggestion.
+- Auth → tools/list → tools/call allowed → audit row written
+  (`capability_matched='github:repo/code:write@feature/x'`).
+- Write to a protected branch → denied for lack of
+  `github:repo/code:write@main`.
 - Bot revocation → next call 401.
 - api_key rotation → new key works, old key 401.
 - Provider disconnect → calls targeting that provider denied.
-- Explicit deny rule blocks `github__delete_file`.
+- `github__merge_pull_request` denied: granted set lacks
+  `github:repo/code:write@main`.
 - Arguments hash computed (16 hex chars) and stored.
+- **Single-use token (Phase 5)** : first matching call wins (audit
+  `allowed`) ; second call rejected on `consumed|revoked` with audit row.
 
 ## Hors-scope ces tests
 

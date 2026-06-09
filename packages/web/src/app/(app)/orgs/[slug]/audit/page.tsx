@@ -24,7 +24,7 @@ interface AuditRow {
   ts: string;
   tool_name: string;
   decision: 'allowed' | 'denied';
-  role_matched: string | null;
+  capability_matched: string | null;
   denial_reason: string | null;
   upstream_latency_ms: number | null;
   access_token_id: string | null;
@@ -98,7 +98,7 @@ export default async function AuditPage({
   let q = supabase
     .from('audit_log')
     .select(
-      'id, ts, tool_name, decision, role_matched, denial_reason, upstream_latency_ms, access_token_id',
+      'id, ts, tool_name, decision, capability_matched, denial_reason, upstream_latency_ms, access_token_id',
     )
     .eq('organization_id', org.id)
     .order('ts', { ascending: false })
@@ -253,7 +253,7 @@ export default async function AuditPage({
               <Th>Access token</Th>
               <Th>Tool</Th>
               <Th>Decision</Th>
-              <Th>Role / reason</Th>
+              <Th>Capability / reason</Th>
               <Th>Latency</Th>
             </Tr>
           </Thead>
@@ -271,7 +271,7 @@ export default async function AuditPage({
                   <Badge tone={r.decision === 'allowed' ? 'success' : 'danger'}>{r.decision}</Badge>
                 </Td>
                 <Td style={{ maxWidth: 480, color: 'var(--text-muted)' }}>
-                  {r.role_matched ?? r.denial_reason}
+                  {r.capability_matched ?? r.denial_reason}
                 </Td>
                 <Td style={{ color: 'var(--text-muted)' }}>
                   {r.upstream_latency_ms !== null ? `${r.upstream_latency_ms} ms` : '—'}

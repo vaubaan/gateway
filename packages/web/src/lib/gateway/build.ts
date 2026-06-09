@@ -11,17 +11,19 @@ import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supa
 import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
 import {
   sshAvailableTools,
-  isReadAllowed,
   sshExec,
+  classifySsh,
+  sshToolCapabilities,
   type VpsSshBinding,
 } from '@vaubaan/providers-ssh';
 import type {
   AccessTokenContext,
+  Capability,
   Provider,
   ProviderAdmin,
   ProviderBinding,
-  Role,
 } from '@vaubaan/shared';
+import { isValidCapability } from '@vaubaan/shared';
 import {
   McpGateway,
   buildCacheClient,
@@ -50,6 +52,14 @@ class SshAdapter implements UpstreamAdapter {
 
   constructor(private readonly supabase: ReturnType<typeof getSupabaseServiceClient>) {}
 
+  toolCapabilities(tool: string): readonly Capability[] {
+    return sshToolCapabilities(tool);
+  }
+
+  classify(tool: string, args: Record<string, unknown>, bindings: ReadonlyArray<ProviderBinding>) {
+    return classifySsh(tool, args, bindings);
+  }
+
   async executeCall(
     _admin: ProviderAdmin,
     _binding: ProviderBinding,
@@ -63,6 +73,9 @@ class SshAdapter implements UpstreamAdapter {
     return null;
   }
 
+  // Read/write authorization is enforced by the gateway via classifySsh +
+  // evaluateCapability *before* this method runs. We only handle the
+  // credential lookup + remote exec + audit here.
   async executeCallSelfContained(
     ctx: AccessTokenContext,
     _tool: string,
@@ -76,16 +89,6 @@ class SshAdapter implements UpstreamAdapter {
     if (!hostSlug) throw new Error('host_slug is required');
     if (!cmd) throw new Error('cmd is required');
 
-    // Determine if caller has only :read role (not :write)
-    const sshRoles = ctx.roles.filter((r) => r.provider === 'ssh');
-    const hasWrite = sshRoles.some((r) => r.name === 'ssh:write');
-    if (!hasWrite && !isReadAllowed(cmd)) {
-      throw new Error(
-        `Command blocked by ssh:read policy. Only read-only commands are allowed with this role.`,
-      );
-    }
-
-    // Load the SSH binding for this project + host
     const { data: row } = await this.supabase
       .from('ssh_bindings')
       .select('id, project_id, host_slug, host_address, port, ssh_user, ssh_private_key')
@@ -112,7 +115,6 @@ class SshAdapter implements UpstreamAdapter {
 
     const result = await sshExec(binding, cmd, timeoutS);
 
-    // Write to ssh_audit (best-effort)
     void Promise.resolve(
       this.supabase.from('ssh_audit').insert({
         project_id: ctx.project.id,
@@ -152,6 +154,9 @@ interface AccessTokenRow {
   status: 'active' | 'revoked';
   api_key_prefix: string;
   expires_at: string | null;
+  single_use: boolean;
+  consumed_at: string | null;
+  capabilities: unknown;
 }
 
 interface ProjectRow {
@@ -184,7 +189,9 @@ export function buildGateway(opts: {
     async loadAccessTokenContext(accessTokenId) {
       const { data: tk } = await supabase
         .from('access_tokens')
-        .select('id, name, project_id, status, api_key_prefix, expires_at')
+        .select(
+          'id, name, project_id, status, api_key_prefix, expires_at, single_use, consumed_at, capabilities',
+        )
         .eq('id', accessTokenId)
         .maybeSingle<AccessTokenRow>();
       if (!tk) return null;
@@ -200,13 +207,12 @@ export function buildGateway(opts: {
         .eq('id', project.organization_id)
         .maybeSingle<OrgRow>();
       if (!org) return null;
-      const { data: tokenRoles } = await supabase
-        .from('access_token_roles')
-        .select('role:roles(*)')
-        .eq('access_token_id', accessTokenId);
-      const roles: Role[] = ((tokenRoles ?? []) as unknown as Array<{ role: Role | null }>)
-        .map((r) => r.role)
-        .filter((r): r is Role => r !== null);
+      const capabilities: Capability[] = Array.isArray(tk.capabilities)
+        ? (tk.capabilities as unknown[]).filter(
+            (c): c is Capability =>
+              typeof c === 'object' && c !== null && isValidCapability(c as Capability),
+          )
+        : [];
       const bindingsResp = await supabase
         .from('provider_bindings')
         .select('*')
@@ -221,7 +227,7 @@ export function buildGateway(opts: {
         access_token: tk,
         project,
         organization: org,
-        roles,
+        capabilities,
         bindings: bindings as AccessTokenContext['bindings'],
         provider_admins: providerAdmins as AccessTokenContext['provider_admins'],
       };
@@ -232,6 +238,21 @@ export function buildGateway(opts: {
         .from('access_tokens')
         .update({ last_used_at: new Date().toISOString() })
         .eq('id', accessTokenId);
+    },
+    async consumeAccessToken(accessTokenId) {
+      // Atomic single-use burn : the WHERE clause guarantees we win the race.
+      const { data, error } = await supabase
+        .from('access_tokens')
+        .update({ status: 'revoked', consumed_at: new Date().toISOString() })
+        .eq('id', accessTokenId)
+        .eq('single_use', true)
+        .is('consumed_at', null)
+        .select('id');
+      if (error) {
+        console.error('[gateway] consumeAccessToken failed', error);
+        return false;
+      }
+      return (data ?? []).length > 0;
     },
   };
 
@@ -275,6 +296,8 @@ export function buildGateway(opts: {
   upstreamByProvider.github = {
     provider: 'github',
     availableTools: githubAvailableTools,
+    toolCapabilities: (tool) => ghAdapter.toolCapabilities(tool),
+    classify: (tool, args, bindings) => ghAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) => ghAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
   };
@@ -284,6 +307,8 @@ export function buildGateway(opts: {
   upstreamByProvider.vercel = {
     provider: 'vercel',
     availableTools: vercelAvailableTools,
+    toolCapabilities: (tool) => vercelAdapter.toolCapabilities(tool),
+    classify: (tool, args, bindings) => vercelAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       vercelAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
@@ -294,6 +319,8 @@ export function buildGateway(opts: {
   upstreamByProvider.supabase = {
     provider: 'supabase',
     availableTools: supabaseAvailableTools,
+    toolCapabilities: (tool) => supabaseAdapter.toolCapabilities(tool),
+    classify: (tool, args, bindings) => supabaseAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       supabaseAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
@@ -317,6 +344,8 @@ export function buildGateway(opts: {
   upstreamByProvider.railway = {
     provider: 'railway',
     availableTools: railwayAvailableTools,
+    toolCapabilities: (tool) => railwayAdapter.toolCapabilities(tool),
+    classify: (tool, args, bindings) => railwayAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       railwayAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,

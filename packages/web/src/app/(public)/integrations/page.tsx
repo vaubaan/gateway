@@ -12,7 +12,8 @@ interface Integration {
   status: 'GA' | 'Beta' | 'Soon';
   short: string;
   tools: number;
-  roles: string[];
+  /** Capability notations this provider's tools map to (provider:plane/level:action[@env]). */
+  capabilities: string[];
   install: string;
 }
 
@@ -24,7 +25,7 @@ const integrations: Integration[] = [
     short:
       'GitHub App install. JIT installation tokens minted per call. 17 tools: read, search, branch, PR, comment. Dangerous ops deny-listed by default.',
     tools: 17,
-    roles: ['github:reader', 'github:developer'],
+    capabilities: ['github:repo/code:read', 'github:repo/code:write@main'],
     install: 'GitHub App install via OAuth-style consent screen — no token paste.',
   },
   {
@@ -34,7 +35,11 @@ const integrations: Integration[] = [
     short:
       'Team-scoped Personal Access Token, encrypted at rest. Project / deployment / domain / env-var tools, with per-environment write controls.',
     tools: 12,
-    roles: ['vercel:viewer', 'vercel:deployer'],
+    capabilities: [
+      'vercel:runtime/deployment:read@prod',
+      'vercel:runtime/deployment:write@preview',
+      'vercel:runtime/deployment:write@prod',
+    ],
     install: 'Org admin pastes a team-scoped PAT once. Stored AES-256-GCM encrypted.',
   },
   {
@@ -42,9 +47,13 @@ const integrations: Integration[] = [
     name: 'Supabase',
     status: 'Beta',
     short:
-      'Management API PAT, encrypted at rest. Project / DB / Edge Function / Storage tools, with destructive operations gated by role.',
+      'Management API PAT, encrypted at rest. Project / DB / Edge Function / Storage tools, with destructive operations gated by capability.',
     tools: 14,
-    roles: ['supabase:viewer', 'supabase:operator'],
+    capabilities: [
+      'supabase:db/rows:read@staging',
+      'supabase:db/rows:read@prod',
+      'supabase:db/tables:read@prod',
+    ],
     install: 'Org admin pastes a Mgmt PAT once. Stored AES-256-GCM encrypted.',
   },
 ];
@@ -61,7 +70,7 @@ export default function IntegrationsPage() {
       <ProseHeader
         eyebrow="Catalog"
         title="Integrations"
-        lead="Every provider Vaubaan supports today, the tools it exposes, and the builtin roles you can attach to a bot."
+        lead="Every provider Vaubaan supports today, the tools it exposes, and the capabilities you can grant a bot."
       />
 
       <div style={{ display: 'grid', gap: 'var(--space-3)', marginTop: 'var(--space-6)' }}>
@@ -130,12 +139,12 @@ export default function IntegrationsPage() {
                     letterSpacing: '0.06em',
                   }}
                 >
-                  Builtin roles
+                  Capabilities
                 </dt>
                 <dd style={{ margin: 'var(--space-1) 0 0', fontSize: 'var(--text-sm)' }}>
-                  {i.roles.map((r) => (
-                    <code key={r} style={{ marginRight: 'var(--space-1)' }}>
-                      {r}
+                  {i.capabilities.map((c) => (
+                    <code key={c} style={{ marginRight: 'var(--space-1)' }}>
+                      {c}
                     </code>
                   ))}
                 </dd>

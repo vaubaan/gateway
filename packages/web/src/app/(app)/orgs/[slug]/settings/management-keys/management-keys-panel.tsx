@@ -234,22 +234,19 @@ function buildMgmtSnippet(apiKey: string, baseUrl: string): string {
 export VAUBAAN_MCP_GATEWAY_BASE_URL="${baseUrl}"
 export VAUBAAN_MCP_GATEWAY_MGMT_KEY="${apiKey}"
 
-# 2. Discover available roles
-curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/roles" \\
-  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
-
-# 3. Discover projects + bindings
+# 2. Discover projects + bindings
 curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/projects" \\
   -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
 
-# 4. Mint an ephemeral AccessToken for a coding session
+# 3. Mint an ephemeral AccessToken for a coding session, granting just the
+#    capabilities it needs (notation provider:plane/level:action[@env]).
 #    ttlHours default 24, max 168 (7 days). Response.api_key visible ONCE.
 curl -sS -X POST "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/tokens" \\
   -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY" \\
   -H "Content-Type: application/json" \\
-  -d '{ "projectSlug": "<slug>", "roleIds": ["<role-id>"], "ttlHours": 24 }'
+  -d '{ "projectSlug": "<slug>", "capabilities": ["github:repo/code:read", "github:repo/code:write@feature/x"], "ttlHours": 24 }'
 
-# 5. Hand the returned api_key (vbn_live_…) to the MCP client:
+# 4. Hand the returned api_key (vbn_live_…) to the MCP client:
 # {
 #   "mcpServers": {
 #     "vaubaan": {
@@ -259,7 +256,7 @@ curl -sS -X POST "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/tokens" \\
 #   }
 # }
 
-# 6. After the session, revoke the AccessToken to avoid accumulating rows:
+# 5. After the session, revoke the AccessToken to avoid accumulating rows:
 curl -sS -X DELETE "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/tokens/<token-id>" \\
   -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
 
