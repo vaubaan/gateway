@@ -36,7 +36,12 @@ import {
   hashApiKey,
   parseCapability,
 } from '@vaubaan/shared';
-import { evaluatePolicy, humanGatedDecisions, type PolicyRule } from '@vaubaan/policy-engine';
+import {
+  evaluatePolicy,
+  confirmDecisions,
+  denyDecisions,
+  type PolicyRule,
+} from '@vaubaan/policy-engine';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireManagementKey } from '@/lib/auth/require-management-key';
 import { pickChannel } from '@/lib/approvals';
@@ -136,9 +141,30 @@ export async function POST(req: NextRequest) {
     .eq('project_id', project.id);
   const rules = (rulesRaw ?? []) as PolicyRule[];
   const decisions = evaluatePolicy(capabilities, rules);
-  const gated = humanGatedDecisions(decisions);
 
-  // Branch — fast path (all-ai) vs approval path (at least one human gate).
+  // Hard deny — at least one capability is explicitly refused by policy.
+  // 403, no approval flow, no override.
+  const denied = denyDecisions(decisions);
+  if (denied.length > 0) {
+    return NextResponse.json(
+      {
+        error: 'one or more requested capabilities are denied by policy',
+        denied: denied.map((d) => ({
+          capability: formatCapability(d.capability),
+          matchedRule: d.matchedRule
+            ? { id: d.matchedRule.id, priority: d.matchedRule.priority }
+            : null,
+          reason: d.matchedRule
+            ? `policy rule ${d.matchedRule.id} sets gate='deny'`
+            : 'no policy rule matches → default-deny',
+        })),
+      },
+      { status: 403 },
+    );
+  }
+  const gated = confirmDecisions(decisions);
+
+  // Branch — fast path (all-allow) vs approval path (at least one confirm).
   if (gated.length === 0) {
     const { apiKey, apiKeyPrefix } = generateApiKey('live');
     const apiKeyHash = await hashApiKey(apiKey);
