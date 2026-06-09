@@ -22,7 +22,7 @@ export interface PolicyRuleRow {
   level: string;
   action: 'read' | 'write' | '*';
   env_pattern: string;
-  gate: 'ai' | 'human';
+  gate: 'allow' | 'confirm' | 'deny';
   priority: number;
 }
 
@@ -44,7 +44,7 @@ export function PolicyControls({
   const [level, setLevel] = useState('*');
   const [action, setAction] = useState<'read' | 'write' | '*'>('*');
   const [envPattern, setEnvPattern] = useState('*');
-  const [gate, setGate] = useState<'ai' | 'human'>('ai');
+  const [gate, setGate] = useState<'allow' | 'confirm' | 'deny'>('allow');
   const [priority, setPriority] = useState(100);
 
   async function addRule(e: React.FormEvent) {
@@ -139,9 +139,13 @@ export function PolicyControls({
               />
             </Field>
             <Field label="gate">
-              <Select value={gate} onChange={(e) => setGate(e.target.value as 'ai' | 'human')}>
-                <option value="ai">ai</option>
-                <option value="human">human</option>
+              <Select
+                value={gate}
+                onChange={(e) => setGate(e.target.value as 'allow' | 'confirm' | 'deny')}
+              >
+                <option value="allow">allow</option>
+                <option value="confirm">confirm</option>
+                <option value="deny">deny</option>
               </Select>
             </Field>
             <Field label="priority">
@@ -185,7 +189,11 @@ export function PolicyControls({
                     borderBottom: '1px solid var(--border-subtle)',
                   }}
                 >
-                  <Badge tone={r.gate === 'ai' ? 'success' : 'warning'}>{r.gate}</Badge>
+                  <Badge
+                    tone={r.gate === 'allow' ? 'success' : r.gate === 'deny' ? 'danger' : 'warning'}
+                  >
+                    {r.gate}
+                  </Badge>
                   <Code style={{ flex: 1 }}>
                     {r.provider}:{r.plane}/{r.level}:{r.action}@{r.env_pattern}
                   </Code>

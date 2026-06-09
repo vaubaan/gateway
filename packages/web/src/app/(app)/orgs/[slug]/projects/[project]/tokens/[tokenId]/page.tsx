@@ -49,12 +49,28 @@ export default async function TokenPage({
     .maybeSingle<TokenRow>();
   if (!token) notFound();
 
-  const { data: lastCalls } = await supabase
-    .from('audit_log')
-    .select('id, ts, tool_name, decision, capability_matched, upstream_latency_ms')
-    .eq('access_token_id', token.id)
-    .order('ts', { ascending: false })
-    .limit(10);
+  const [{ data: lastCalls }, { data: bindings }, { data: sshHostsRows }] = await Promise.all([
+    supabase
+      .from('audit_log')
+      .select('id, ts, tool_name, decision, capability_matched, upstream_latency_ms')
+      .eq('access_token_id', token.id)
+      .order('ts', { ascending: false })
+      .limit(10),
+    supabase
+      .from('provider_bindings')
+      .select('provider, resource_ref, environment')
+      .eq('project_id', proj.id)
+      .returns<Array<{ provider: string; resource_ref: string; environment: string | null }>>(),
+    supabase
+      .from('ssh_bindings')
+      .select('host_slug')
+      .eq('project_id', proj.id)
+      .returns<Array<{ host_slug: string }>>(),
+  ]);
+  const peelBindings = {
+    rows: bindings ?? [],
+    sshHosts: (sshHostsRows ?? []).map((r) => r.host_slug),
+  };
 
   // Capabilities are stored as full tuples; surface them as shorthand strings.
   const capabilities: string[] = Array.isArray(token.capabilities)
@@ -106,6 +122,7 @@ export default async function TokenPage({
         orgSlug={org.slug}
         projectSlug={proj.slug}
         capabilities={capabilities}
+        bindings={peelBindings}
       />
 
       <section style={{ marginTop: 32 }}>

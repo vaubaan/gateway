@@ -14,7 +14,7 @@ import {
   Field,
   Input,
 } from '@/components/ui';
-import { CAPABILITY_PRESETS, PRESET_VALUES } from '@/lib/capabilities/presets';
+import { PeelGrid, type PeelGridBindings } from '@/lib/capabilities/peel-grid';
 
 export function TokenControls({
   tokenId,
@@ -23,6 +23,7 @@ export function TokenControls({
   orgSlug,
   projectSlug,
   capabilities,
+  bindings,
 }: {
   tokenId: string;
   tokenName: string;
@@ -30,16 +31,12 @@ export function TokenControls({
   orgSlug: string;
   projectSlug: string;
   capabilities: string[];
+  bindings: PeelGridBindings;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [newApiKey, setNewApiKey] = useState<string | null>(null);
-  // Preset capabilities currently granted, toggled via the checklist.
-  const [selected, setSelected] = useState<Set<string>>(
-    new Set(capabilities.filter((c) => PRESET_VALUES.has(c))),
-  );
-  // Granted capabilities that aren't one of the presets — kept as-is, editable.
-  const [extra, setExtra] = useState<string[]>(capabilities.filter((c) => !PRESET_VALUES.has(c)));
+  const [caps, setCaps] = useState<string[]>(capabilities);
   const [customInput, setCustomInput] = useState('');
   const [customError, setCustomError] = useState<string | null>(null);
   const [name, setName] = useState(tokenName);
@@ -54,15 +51,9 @@ export function TokenControls({
       setCustomError(err instanceof Error ? err.message : 'invalid capability');
       return;
     }
-    if (!selected.has(value) && !extra.includes(value)) {
-      setExtra((cur) => [...cur, value]);
-    }
+    if (!caps.includes(value)) setCaps([...caps, value]);
     setCustomInput('');
     setCustomError(null);
-  }
-
-  function removeExtra(value: string) {
-    setExtra((cur) => cur.filter((v) => v !== value));
   }
 
   async function saveName(e: React.FormEvent) {
@@ -135,10 +126,7 @@ export function TokenControls({
       const res = await fetch(`/api/v1/tokens/${tokenId}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({
-          orgSlug,
-          capabilities: [...Array.from(selected), ...extra],
-        }),
+        body: JSON.stringify({ orgSlug, capabilities: caps }),
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
@@ -274,7 +262,7 @@ export function TokenControls({
 
       <Card>
         <CardHeader>
-          <CardTitle>Capabilities</CardTitle>
+          <CardTitle>Capabilities ({caps.length})</CardTitle>
           <Button
             type="button"
             variant="primary"
@@ -286,88 +274,95 @@ export function TokenControls({
           </Button>
         </CardHeader>
         <CardBody>
-          <fieldset style={{ border: 0, padding: 0, margin: 0 }}>
-            {CAPABILITY_PRESETS.map((cap) => (
-              <label
-                key={cap.value}
-                style={{
-                  display: 'flex',
-                  gap: 'var(--space-2)',
-                  alignItems: 'baseline',
-                  padding: 'var(--space-2) 0',
-                  borderBottom: '1px solid var(--border-subtle)',
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={selected.has(cap.value)}
-                  onChange={(e) => {
-                    const next = new Set(selected);
-                    if (e.target.checked) next.add(cap.value);
-                    else next.delete(cap.value);
-                    setSelected(next);
-                  }}
-                />
-                <span>
-                  <strong>{cap.label}</strong>
-                  <Code style={{ marginLeft: 6 }}>{cap.value}</Code>
-                </span>
-              </label>
-            ))}
-            {extra.map((value) => (
-              <label
-                key={value}
-                style={{
-                  display: 'flex',
-                  gap: 'var(--space-2)',
-                  alignItems: 'baseline',
-                  padding: 'var(--space-2) 0',
-                  borderBottom: '1px solid var(--border-subtle)',
-                }}
-              >
-                <input type="checkbox" checked readOnly />
-                <span>
-                  <Code>{value}</Code>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => removeExtra(value)}
-                    style={{ marginLeft: 'var(--space-2)' }}
-                  >
-                    Remove
-                  </Button>
-                </span>
-              </label>
-            ))}
-          </fieldset>
-          <div style={{ display: 'flex', gap: 'var(--space-2)', marginTop: 'var(--space-3)' }}>
-            <Field>
-              <Input
-                value={customInput}
-                onChange={(e) => {
-                  setCustomInput(e.target.value);
-                  setCustomError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    e.preventDefault();
-                    addCustom();
-                  }
-                }}
-                placeholder="custom capability, e.g. github:repo/code:write@feature/x"
-                disabled={busy !== null}
-              />
-            </Field>
-            <Button type="button" variant="secondary" onClick={addCustom} disabled={busy !== null}>
-              Add
-            </Button>
-          </div>
-          {customError && (
-            <p style={{ color: 'var(--accent-danger-fg)', marginTop: 'var(--space-2)' }}>
-              {customError}
+          <PeelGrid bindings={bindings} value={caps} onChange={setCaps} />
+
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <p
+              style={{
+                margin: 0,
+                marginBottom: 'var(--space-2)',
+                color: 'var(--text-muted)',
+                fontSize: 'var(--text-sm)',
+              }}
+            >
+              Custom capability — for grammar that isn&apos;t in the grid.
             </p>
-          )}
+            <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+              <Field>
+                <Input
+                  value={customInput}
+                  onChange={(e) => {
+                    setCustomInput(e.target.value);
+                    setCustomError(null);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      addCustom();
+                    }
+                  }}
+                  placeholder="e.g. github:repo/code:write@feature/x"
+                  disabled={busy !== null}
+                />
+              </Field>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={addCustom}
+                disabled={busy !== null}
+              >
+                Add
+              </Button>
+            </div>
+            {customError && (
+              <p style={{ color: 'var(--accent-danger-fg)', marginTop: 'var(--space-2)' }}>
+                {customError}
+              </p>
+            )}
+          </div>
+
+          <div style={{ marginTop: 'var(--space-4)' }}>
+            <strong style={{ fontSize: 'var(--text-sm)' }}>Granted ({caps.length})</strong>
+            {caps.length === 0 ? (
+              <p style={{ color: 'var(--text-subtle)', margin: 'var(--space-2) 0 0' }}>None.</p>
+            ) : (
+              <ul
+                style={{
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 'var(--space-2) 0 0',
+                  fontSize: 13,
+                }}
+              >
+                {caps.map((c) => (
+                  <li
+                    key={c}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      padding: '4px 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <Code>{c}</Code>
+                    <button
+                      type="button"
+                      onClick={() => setCaps(caps.filter((x) => x !== c))}
+                      style={{
+                        background: 'transparent',
+                        border: 0,
+                        color: 'var(--accent-danger-fg)',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                      }}
+                    >
+                      remove
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
         </CardBody>
       </Card>
     </div>

@@ -61,10 +61,16 @@ export default async function PolicyPage({
               fontSize: 'var(--text-sm)',
             }}
           >
-            Default-deny allow-list. A mint request whose capabilities lack an ai-allow rule is held
-            behind human approval (Telegram or manual). Each project is seeded with{' '}
-            <Code>*:*:*:read:* → ai</Code> and <Code>*:*:*:write:* → human</Code> at priority 0 —
-            add overrides like <Code>github:repo/code:write@feature/* → ai</Code>.
+            Default-deny allow-list — anything not matched by a rule is refused. Each rule resolves
+            a mint request to one of{' '}
+            <strong style={{ color: 'var(--accent-success-fg)' }}>allow</strong> (mint immediately),{' '}
+            <strong style={{ color: 'var(--accent-warning-fg)' }}>confirm</strong> (open a
+            Telegram/UI approval), or{' '}
+            <strong style={{ color: 'var(--accent-danger-fg)' }}>deny</strong> (403, no override).
+            Most-specific wins, ties broken by priority desc. Each project is seeded with{' '}
+            <Code>*:*:*:read:* → allow</Code> and <Code>*:*:*:write:* → confirm</Code> at priority 0
+            — add overrides like <Code>github:repo/code:write@feature/* → allow</Code> or{' '}
+            <Code>*:*:access:write@* → deny</Code>.
           </p>
         </div>
         <Link

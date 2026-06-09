@@ -26,7 +26,7 @@ const CreateBodySchema = z.object({
   level: z.string().regex(SLUG_OR_WILDCARD),
   action: z.enum(['read', 'write', '*']),
   env_pattern: z.string().regex(ENV_OR_WILDCARD),
-  gate: z.enum(['ai', 'human']),
+  gate: z.enum(['allow', 'confirm', 'deny']),
   priority: z.number().int().min(0).max(10000).default(100),
 });
 
@@ -77,11 +77,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ projectId:
   }
   // Defensive : reject the §5.1 anti-pattern at API level (SQL CHECK already
   // does it, but a clean 400 is friendlier than a 500).
-  if (body.action === 'write' && body.env_pattern === '*' && body.gate === 'ai') {
+  if (body.action === 'write' && body.env_pattern === '*' && body.gate === 'allow') {
     return NextResponse.json(
       {
         error:
-          'blanket ai-allow on writes is forbidden (env_pattern=* + action=write + gate=ai). Scope the env_pattern.',
+          'blanket allow on writes is forbidden (env_pattern=* + action=write + gate=allow). Scope the env_pattern.',
       },
       { status: 400 },
     );
