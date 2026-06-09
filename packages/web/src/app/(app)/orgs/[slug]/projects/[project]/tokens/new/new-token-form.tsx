@@ -14,7 +14,7 @@ import {
   Field,
   Input,
 } from '@/components/ui';
-import { PeelGrid, type PeelGridBindings } from '@/lib/capabilities/peel-grid';
+import { RingGrid, type RingGridBindings } from '@/lib/capabilities/ring-grid';
 
 export function NewTokenForm({
   orgSlug,
@@ -23,7 +23,7 @@ export function NewTokenForm({
 }: {
   orgSlug: string;
   projectSlug: string;
-  bindings: PeelGridBindings;
+  bindings: RingGridBindings;
 }) {
   const [name, setName] = useState('');
   const [caps, setCaps] = useState<string[]>([]);
@@ -189,7 +189,7 @@ export function NewTokenForm({
           </CardBody>
         </Card>
 
-        <PeelGrid bindings={bindings} value={caps} onChange={setCaps} />
+        <RingGrid bindings={bindings} value={caps} onChange={setCaps} />
 
         <Card>
           <CardHeader>

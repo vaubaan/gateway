@@ -134,9 +134,9 @@ export default async function ProjectPage({
           <CardHeader>
             <CardTitle>Policy &amp; approvals</CardTitle>
             <span style={{ display: 'flex', gap: 'var(--space-2)' }}>
-              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/peels`}>
+              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/rings`}>
                 <Button size="sm" variant="secondary">
-                  Capability peels
+                  Capability rings
                 </Button>
               </Link>
               <Link href={`/orgs/${org.slug}/projects/${proj.slug}/policy`}>

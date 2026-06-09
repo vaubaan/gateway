@@ -1,12 +1,12 @@
 /**
- * Static catalog of provider planes and their concentric levels (peels).
+ * Static catalog of provider planes and their concentric levels (rings).
  *
  * Spec : docs/spec/gateway-capability-model.md §2, §2.1, §3.
  *
  * Each provider declares one or more **planes** — concentric stacks of
  * **levels** (peels), ordered niv1 (interne) → nivN (externe). The outer
  * level governs the inner ; rank = blast radius. This file is the
- * UI-side source of truth for rendering the PeelGrid composer and the
+ * UI-side source of truth for rendering the RingGrid composer and the
  * inline documentation on the new-token page.
  *
  * NB : the runtime contract (gateway + classifier) is provider-local and
