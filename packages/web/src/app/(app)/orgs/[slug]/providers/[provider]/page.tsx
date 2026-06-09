@@ -6,7 +6,7 @@ import {
   PROVIDER_CATALOG,
   type LevelDescriptor,
   type PlaneDescriptor,
-} from '@/lib/capabilities/peel-catalog';
+} from '@/lib/capabilities/ring-catalog';
 import { ProviderSwitcher } from './provider-switcher';
 
 export const dynamic = 'force-dynamic';

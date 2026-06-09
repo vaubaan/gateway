@@ -134,9 +134,9 @@ export default async function ProjectPage({
           <CardHeader>
             <CardTitle>Policy &amp; approvals</CardTitle>
             <span style={{ display: 'flex', gap: 'var(--space-2)' }}>
-              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/peels`}>
+              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/rings`}>
                 <Button size="sm" variant="secondary">
-                  Capability peels
+                  Capability rings
                 </Button>
               </Link>
               <Link href={`/orgs/${org.slug}/projects/${proj.slug}/policy`}>
@@ -197,31 +197,61 @@ export default async function ProjectPage({
                     />
                   </li>
                 ))}
-                {(sshBindings ?? []).map((b) => (
+                {(sshBindings ?? []).length > 0 && (
                   <li
-                    key={`ssh-${b.id}`}
+                    key="ssh-group"
                     style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      gap: 'var(--space-3)',
                       padding: 'var(--space-3) 0',
                       borderBottom: '1px solid var(--border-subtle)',
                     }}
                   >
-                    <span style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 'var(--space-2)',
+                        marginBottom: 'var(--space-2)',
+                      }}
+                    >
                       <Badge tone="neutral">ssh</Badge>
-                      <Code>
-                        {b.host_slug} · {b.ssh_user}@{b.host_address}:{b.port}
-                      </Code>
-                    </span>
-                    <SshBindingControls
-                      bindingId={b.id}
-                      hostSlug={b.host_slug}
-                      orgSlug={org.slug}
-                    />
+                      <Code>{(sshBindings ?? []).length} hosts</Code>
+                      <span style={{ color: 'var(--text-subtle)', fontSize: 12 }}>
+                        each host_slug becomes an env in the <Code>ssh:host/shell</Code>{' '}
+                        capabilities.
+                      </span>
+                    </div>
+                    <ul
+                      style={{
+                        listStyle: 'none',
+                        padding: 0,
+                        margin: 0,
+                        paddingLeft: 'var(--space-4)',
+                      }}
+                    >
+                      {(sshBindings ?? []).map((b) => (
+                        <li
+                          key={`ssh-${b.id}`}
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            gap: 'var(--space-3)',
+                            padding: 'var(--space-2) 0',
+                          }}
+                        >
+                          <Code>
+                            @{b.host_slug} · {b.ssh_user}@{b.host_address}:{b.port}
+                          </Code>
+                          <SshBindingControls
+                            bindingId={b.id}
+                            hostSlug={b.host_slug}
+                            orgSlug={org.slug}
+                          />
+                        </li>
+                      ))}
+                    </ul>
                   </li>
-                ))}
+                )}
               </ul>
             )}
           </CardBody>

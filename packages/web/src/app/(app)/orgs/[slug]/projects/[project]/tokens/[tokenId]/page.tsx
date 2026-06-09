@@ -68,7 +68,7 @@ export default async function TokenPage({
       .eq('project_id', proj.id)
       .returns<Array<{ host_slug: string }>>(),
   ]);
-  const peelBindings = {
+  const ringBindings = {
     rows: bindings ?? [],
     sshHosts: (sshHostsRows ?? []).map((r) => r.host_slug),
   };
@@ -123,7 +123,7 @@ export default async function TokenPage({
         orgSlug={org.slug}
         projectSlug={proj.slug}
         capabilities={capabilities}
-        bindings={peelBindings}
+        bindings={ringBindings}
       />
 
       <section style={{ marginTop: 32 }}>

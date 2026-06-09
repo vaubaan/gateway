@@ -14,7 +14,7 @@ import {
   Field,
   Input,
 } from '@/components/ui';
-import { PeelGrid, type PeelGridBindings } from '@/lib/capabilities/peel-grid';
+import { RingGrid, type RingGridBindings } from '@/lib/capabilities/ring-grid';
 
 export function TokenControls({
   tokenId,
@@ -31,7 +31,7 @@ export function TokenControls({
   orgSlug: string;
   projectSlug: string;
   capabilities: string[];
-  bindings: PeelGridBindings;
+  bindings: RingGridBindings;
 }) {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -274,7 +274,7 @@ export function TokenControls({
           </Button>
         </CardHeader>
         <CardBody>
-          <PeelGrid bindings={bindings} value={caps} onChange={setCaps} />
+          <RingGrid bindings={bindings} value={caps} onChange={setCaps} />
 
           <div style={{ marginTop: 'var(--space-4)' }}>
             <p

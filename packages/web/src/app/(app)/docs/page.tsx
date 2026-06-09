@@ -155,7 +155,7 @@ export default function DocsPage() {
           provider may expose several planes).
         </li>
         <li>
-          <strong>level</strong> — the slug of a peel inside that plane (<code>code</code>,{' '}
+          <strong>level</strong> — the slug of a ring inside that plane (<code>code</code>,{' '}
           <code>rows</code>, <code>deployment</code>, <code>config</code>, …).
         </li>
         <li>

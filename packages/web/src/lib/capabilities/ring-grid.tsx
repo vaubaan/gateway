@@ -1,9 +1,9 @@
 'use client';
 
 /**
- * PeelGrid — visual composer for capability sets, project-aware.
+ * RingGrid — visual composer for capability sets, project-aware.
  *
- * Spec : docs/spec/gateway-capability-model.md §2 (peels), §3 (notation).
+ * Spec : docs/spec/gateway-capability-model.md §2 (rings), §3 (notation).
  *
  * Renders one card per provider present in the project's bindings, each
  * with the plane(s) and their concentric levels. For every (plane,level)
@@ -25,21 +25,21 @@ import {
   type LevelDescriptor,
   type PlaneDescriptor,
   type ProviderDescriptor,
-} from './peel-catalog';
+} from './ring-catalog';
 
 function ringLabel(rank: number): string {
   return `ring ${rank}`;
 }
 
-export interface PeelGridBindings {
+export interface RingGridBindings {
   /** provider_bindings rows of the project (any provider). */
   rows: Array<{ provider: string; resource_ref: string; environment: string | null }>;
   /** Registered SSH host slugs (per-project ssh_bindings). */
   sshHosts: string[];
 }
 
-export interface PeelGridProps {
-  bindings: PeelGridBindings;
+export interface RingGridProps {
+  bindings: RingGridBindings;
   /** Already-selected caps as notation strings (controlled). */
   value: string[];
   onChange: (caps: string[]) => void;
@@ -133,7 +133,7 @@ function cellsToValue(cells: CellMap, catalog: readonly ProviderDescriptor[]): s
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export function PeelGrid({ bindings, value, onChange }: PeelGridProps) {
+export function RingGrid({ bindings, value, onChange }: RingGridProps) {
   const initial = useMemo(() => valueToCells(value), [value]);
   const [cells, setCells] = useState<CellMap>(initial.cells);
 
@@ -163,10 +163,34 @@ export function PeelGrid({ bindings, value, onChange }: PeelGridProps) {
   function toggleAction(p: string, plane: string, level: string, action: Action) {
     const key = cellKey(p, plane, level);
     const cur = cells[key] ?? { action: null, envs: [] };
-    const next: CellMap = {
-      ...cells,
-      [key]: { ...cur, action: cur.action === action ? null : action },
-    };
+    const next: CellMap = { ...cells };
+    if (cur.action === action) {
+      // Untoggle this ring — don't cascade off the outer rings (the operator
+      // might want to keep them granted).
+      next[key] = { ...cur, action: null };
+    } else {
+      // Set/swap : cascade to all *outer* rings (lower rank) of the same plane
+      // that are currently OFF. The blast invariant says granting the inner
+      // ring already implies the outer ones, so we tick them too with the
+      // same envs as the trigger ring (operator can fine-tune by untoggling).
+      next[key] = { ...cur, action };
+      const planeDesc = PROVIDER_CATALOG.find((pp) => pp.slug === p)?.planes.find(
+        (pl) => pl.slug === plane,
+      );
+      const triggerRank = planeDesc?.levels.find((l) => l.slug === level)?.rank;
+      if (planeDesc && triggerRank !== undefined) {
+        const newEnvs = cur.envs.length > 0 ? cur.envs : (next[key]?.envs ?? []);
+        for (const outer of planeDesc.levels) {
+          if (outer.rank < triggerRank) {
+            const k = cellKey(p, plane, outer.slug);
+            const existing = next[k] ?? { action: null, envs: [] };
+            if (existing.action === null) {
+              next[k] = { action, envs: [...newEnvs] };
+            }
+          }
+        }
+      }
+    }
     update(next);
   }
 
@@ -252,7 +276,7 @@ function ProviderCard({
   onToggleEnv,
 }: {
   provider: ProviderDescriptor;
-  bindings: PeelGridBindings;
+  bindings: RingGridBindings;
   cells: CellMap;
   onToggleAction: (plane: string, level: string, action: Action) => void;
   onToggleEnv: (plane: string, level: string, env: string) => void;
@@ -505,13 +529,13 @@ function EnvPicker({
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-function bindingsForProvider(bindings: PeelGridBindings, provider: string): number {
+function bindingsForProvider(bindings: RingGridBindings, provider: string): number {
   if (provider === 'ssh') return bindings.sshHosts.length;
   return bindings.rows.filter((b) => b.provider === provider).length;
 }
 
 function envsForPlane(
-  bindings: PeelGridBindings,
+  bindings: RingGridBindings,
   provider: string,
   plane: PlaneDescriptor,
 ): string[] {

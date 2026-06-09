@@ -7,7 +7,7 @@ import {
   type LevelDescriptor,
   type PlaneDescriptor,
   type ProviderDescriptor,
-} from '@/lib/capabilities/peel-catalog';
+} from '@/lib/capabilities/ring-catalog';
 
 function ringLabel(rank: number): string {
   return `ring ${rank}`;
@@ -25,7 +25,7 @@ interface SshHostRow {
   host_slug: string;
 }
 
-export default async function PeelsPage({
+export default async function RingsPage({
   params,
 }: {
   params: Promise<{ slug: string; project: string }>;
@@ -83,7 +83,7 @@ export default async function PeelsPage({
         <div>
           <h1 style={{ margin: 0 }}>Rings</h1>
           <Code>
-            /{org.slug}/{proj.slug}/peels
+            /{org.slug}/{proj.slug}/rings
           </Code>
           <p
             style={{
@@ -117,12 +117,12 @@ export default async function PeelsPage({
       </h2>
       {visible.length === 0 ? (
         <p style={{ color: 'var(--text-subtle)' }}>
-          No providers bound yet. Bind a resource from the project page to see its peels.
+          No providers bound yet. Bind a resource from the project page to see its rings.
         </p>
       ) : (
         <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
           {visible.map((p) => (
-            <ProviderPeels key={p.slug} provider={p} />
+            <ProviderRings key={p.slug} provider={p} />
           ))}
         </div>
       )}
@@ -137,7 +137,7 @@ export default async function PeelsPage({
           </p>
           <div style={{ display: 'grid', gap: 'var(--space-4)', opacity: 0.8 }}>
             {others.map((p) => (
-              <ProviderPeels key={p.slug} provider={p} />
+              <ProviderRings key={p.slug} provider={p} />
             ))}
           </div>
         </>
@@ -177,7 +177,7 @@ function Legend() {
   );
 }
 
-function ProviderPeels({ provider }: { provider: ProviderDescriptor }) {
+function ProviderRings({ provider }: { provider: ProviderDescriptor }) {
   return (
     <Card>
       <CardHeader>
