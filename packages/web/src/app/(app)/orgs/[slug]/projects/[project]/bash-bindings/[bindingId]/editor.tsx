@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import {
   Badge,
   Banner,
@@ -13,14 +14,110 @@ import {
   Field,
   Input,
   Row,
-  Select,
+  Textarea,
 } from '@/components/ui';
-import type { ParsedTool } from '@/lib/services/parse';
+import type { ParsedScript, ParsedTool } from '@/lib/bash/parse';
 
-interface Binding {
-  host_slug: string;
-  host_address: string;
-  ssh_user: string;
+/**
+ * Two cards :
+ *   1. Script editor (textarea, save → PATCH the binding, re-parse).
+ *   2. Tool runner (one card per tool with args + Run button) — only when
+ *      parsed_meta exists.
+ */
+export function BashBindingEditor({
+  orgSlug,
+  bindingId,
+  hostSlug,
+  initialBash,
+  parsedMeta,
+}: {
+  orgSlug: string;
+  bindingId: string;
+  hostSlug: string;
+  initialBash: string;
+  parsedMeta: ParsedScript | null;
+}) {
+  return (
+    <>
+      <ScriptEditor orgSlug={orgSlug} bindingId={bindingId} initial={initialBash} />
+      {parsedMeta && (
+        <ToolRunner
+          orgSlug={orgSlug}
+          bindingId={bindingId}
+          hostSlug={hostSlug}
+          tools={parsedMeta.tools}
+        />
+      )}
+    </>
+  );
+}
+
+function ScriptEditor({
+  orgSlug,
+  bindingId,
+  initial,
+}: {
+  orgSlug: string;
+  bindingId: string;
+  initial: string;
+}) {
+  const router = useRouter();
+  const [bash, setBash] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [okMsg, setOkMsg] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    setOkMsg(null);
+    try {
+      const res = await fetch(`/api/v1/bash-bindings/${bindingId}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ orgSlug, bash_content: bash || null }),
+      });
+      const json = (await res.json()) as { binding?: unknown; error?: string };
+      if (!res.ok) {
+        setError(json.error ?? `HTTP ${res.status}`);
+        return;
+      }
+      setOkMsg('Saved.');
+      router.refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'unknown error');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Script</CardTitle>
+        <Button size="sm" variant="primary" onClick={() => void save()} disabled={busy}>
+          {busy ? 'Saving…' : 'Save'}
+        </Button>
+      </CardHeader>
+      <CardBody>
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginTop: 0 }}>
+          Annotated bash. Each function with <Code>{`# @vaubaan: ring=X action=Y`}</Code> above it
+          becomes an MCP tool ; functions without an annotation are private helpers.
+        </p>
+        {error && <Banner tone="danger">{error}</Banner>}
+        {okMsg && <Banner tone="success">{okMsg}</Banner>}
+        <Textarea
+          rows={24}
+          value={bash}
+          onChange={(e) => setBash(e.target.value)}
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}
+          placeholder={
+            '#!/usr/bin/env bash\n# @vaubaan-rings: process\n\n# @vaubaan: ring=process action=read\n# @vaubaan-doc: ...\nmy_status() {\n  systemctl status my.service\n}\n'
+          }
+        />
+      </CardBody>
+    </Card>
+  );
 }
 
 interface TestResult {
@@ -33,57 +130,24 @@ interface TestResult {
   error?: string;
 }
 
-/**
- * Per-tool runner UI : for each declared function, render an inline form
- * with its args + a Run button. Results land in a small log below each form.
- */
-export function ServiceRunner({
+function ToolRunner({
   orgSlug,
-  serviceId,
+  bindingId,
+  hostSlug,
   tools,
-  bindings,
 }: {
   orgSlug: string;
-  serviceId: string;
+  bindingId: string;
+  hostSlug: string;
   tools: ParsedTool[];
-  bindings: Binding[];
 }) {
-  if (bindings.length === 0) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>Test runner</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <Banner tone="warning">
-            No SSH binding for this project — add one to invoke the service&apos;s tools.
-          </Banner>
-        </CardBody>
-      </Card>
-    );
-  }
-
-  const [host, setHost] = useState(bindings[0]!.host_slug);
-
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Test runner</CardTitle>
-        <Badge tone="neutral">{bindings.length} host(s)</Badge>
+        <CardTitle>Run tools on {hostSlug}</CardTitle>
+        <Badge tone="neutral">{tools.length} tool(s)</Badge>
       </CardHeader>
       <CardBody>
-        <div style={{ marginBottom: 'var(--space-3)' }}>
-          <Field label="Target host">
-            <Select value={host} onChange={(e) => setHost(e.target.value)}>
-              {bindings.map((b) => (
-                <option key={b.host_slug} value={b.host_slug}>
-                  {b.host_slug} — {b.ssh_user}@{b.host_address}
-                </option>
-              ))}
-            </Select>
-          </Field>
-        </div>
-
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {tools.map((t) => (
             <li
@@ -93,7 +157,7 @@ export function ServiceRunner({
                 borderBottom: '1px solid var(--border-subtle)',
               }}
             >
-              <ToolRow orgSlug={orgSlug} serviceId={serviceId} host={host} tool={t} />
+              <ToolRow orgSlug={orgSlug} bindingId={bindingId} hostSlug={hostSlug} tool={t} />
             </li>
           ))}
         </ul>
@@ -104,13 +168,13 @@ export function ServiceRunner({
 
 function ToolRow({
   orgSlug,
-  serviceId,
-  host,
+  bindingId,
+  hostSlug,
   tool,
 }: {
   orgSlug: string;
-  serviceId: string;
-  host: string;
+  bindingId: string;
+  hostSlug: string;
   tool: ParsedTool;
 }) {
   const [args, setArgs] = useState<Record<string, string>>({});
@@ -121,12 +185,11 @@ function ToolRow({
     setRunning(true);
     setResult(null);
     try {
-      const res = await fetch(`/api/v1/services/${serviceId}/test`, {
+      const res = await fetch(`/api/v1/bash-bindings/${bindingId}/run-tool`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           orgSlug,
-          host_slug: host,
           tool: tool.functionName,
           args,
           timeout_s: 60,
@@ -194,8 +257,8 @@ function ToolRow({
         </div>
       )}
 
-      <Button size="sm" variant="secondary" onClick={run} disabled={running}>
-        {running ? 'Running…' : '▶ Run on ' + host}
+      <Button size="sm" variant="secondary" onClick={() => void run()} disabled={running}>
+        {running ? 'Running…' : `▶ Run on ${hostSlug}`}
       </Button>
 
       {result && (

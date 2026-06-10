@@ -10,7 +10,7 @@ import { InfoIcon } from '@/components/icons';
 
 export const dynamic = 'force-dynamic';
 
-// ssh is per-project, not org-level — shown as a static info card below.
+// bash is per-project, not org-level — shown as a static info card below.
 const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
 type OrgProvider = (typeof ORG_PROVIDERS)[number];
 
@@ -72,11 +72,11 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
         <Card>
           <CardHeader>
             <Row gap="var(--space-3)">
-              <CardTitle>SSH</CardTitle>
+              <CardTitle>Bash</CardTitle>
               <Badge tone="neutral">per-project</Badge>
             </Row>
             <Link
-              href={`/orgs/${org.slug}/providers/ssh`}
+              href={`/orgs/${org.slug}/providers/bash`}
               style={{ textDecoration: 'none' }}
               title="Show provider rings & capabilities"
             >
@@ -90,9 +90,10 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
           </CardHeader>
           <CardBody>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              SSH bindings are configured per project via the standard binding form. Select a
-              project below, then click <strong>+ Bind a resource</strong> and choose{' '}
-              <strong>SSH</strong> from the provider dropdown.
+              A bash binding = an SSH-reachable host + an annotated bash script. Each function of
+              the script becomes an MCP tool ; its <Code>{`# @vaubaan: ring=… action=…`}</Code>{' '}
+              comments declare the required capability. Bindings live per-project — add one from the
+              project&apos;s <strong>+ Bind a resource</strong> form.
             </p>
           </CardBody>
         </Card>

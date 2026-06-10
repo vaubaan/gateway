@@ -1,5 +1,5 @@
 /**
- * Build the SSH command that executes one annotated-bash tool function.
+ * Build the SSH command that executes one annotated bash tool function.
  *
  * Strategy : base64-encode the script + a trailing `<fn> "$@"` call, then on
  * the host decode it and pipe to `bash -s -- arg1 arg2 …`. This avoids all

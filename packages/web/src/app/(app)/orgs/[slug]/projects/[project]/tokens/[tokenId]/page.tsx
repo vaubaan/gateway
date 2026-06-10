@@ -50,7 +50,7 @@ export default async function TokenPage({
     .maybeSingle<TokenRow>();
   if (!token) notFound();
 
-  const [{ data: lastCalls }, { data: bindings }, { data: sshHostsRows }] = await Promise.all([
+  const [{ data: lastCalls }, { data: bindings }, { data: bashHostsRows }] = await Promise.all([
     supabase
       .from('audit_log')
       .select('id, ts, tool_name, decision, capability_matched, upstream_latency_ms')
@@ -70,7 +70,7 @@ export default async function TokenPage({
   ]);
   const ringBindings = {
     rows: bindings ?? [],
-    sshHosts: (sshHostsRows ?? []).map((r) => r.host_slug),
+    bashHosts: (bashHostsRows ?? []).map((r) => r.host_slug),
   };
 
   // Capabilities are stored as full tuples; surface them as shorthand strings.

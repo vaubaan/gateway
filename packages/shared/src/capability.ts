@@ -77,7 +77,7 @@ export const DEFAULT_PLANE: Record<string, string> = {
   github: 'repo',
   vercel: 'runtime',
   railway: 'runtime',
-  ssh: 'host',
+  bash: 'host',
 };
 
 /** Always-long-form string. Stable identity for sets / DB storage / audit. */

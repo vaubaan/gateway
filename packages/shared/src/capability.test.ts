@@ -39,16 +39,16 @@ describe('formatCapability — short form when provider has a default plane', ()
     ).toBe('railway:deployment:write');
   });
 
-  test('ssh single-plane → short form', () => {
+  test('bash single-plane → short form', () => {
     expect(
       formatCapability({
-        provider: 'ssh',
+        provider: 'bash',
         plane: 'host',
-        level: 'shell',
+        level: 'process',
         action: 'write',
         env: 'vps-rp',
       }),
-    ).toBe('ssh:shell:write@vps-rp');
+    ).toBe('bash:process:write@vps-rp');
   });
 
   test('supabase multi-plane → long form (no default)', () => {
@@ -122,11 +122,11 @@ describe('parseCapability — accepts both long and short form', () => {
     });
   });
 
-  test('short form expands via DEFAULT_PLANE (ssh)', () => {
-    expect(parseCapability('ssh:shell:read@vps-rp')).toEqual({
-      provider: 'ssh',
+  test('short form expands via DEFAULT_PLANE (bash)', () => {
+    expect(parseCapability('bash:process:read@vps-rp')).toEqual({
+      provider: 'bash',
       plane: 'host',
-      level: 'shell',
+      level: 'process',
       action: 'read',
       env: 'vps-rp',
     });

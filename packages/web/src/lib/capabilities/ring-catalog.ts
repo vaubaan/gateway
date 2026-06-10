@@ -309,21 +309,38 @@ export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
     ],
   },
   {
-    slug: 'ssh',
-    displayName: 'SSH',
+    slug: 'bash',
+    displayName: 'Bash',
     planes: [
       {
         slug: 'host',
-        description: 'A registered SSH host — shell commands.',
+        description:
+          'A SSH-reachable host that exposes an annotated bash script. Each ring of the script is a tool surface ; the script itself decides what is read vs write.',
         knownEnvs: [],
-        envHint: 'a host slug from your SSH bindings (e.g. vps-rp).',
+        envHint: 'a host slug from your bash bindings (e.g. vps-rp).',
         levels: [
           {
             rank: 1,
-            slug: 'shell',
+            slug: 'process',
             archetype: 'content',
             description:
-              'Shell commands (`ssh__exec`). Read = whitelisted observe-only commands (uptime, ls, journalctl, …). Write = anything.',
+              'Long-running services on the host (systemd units, daemons). Read = status/inspect. Write = start/stop/restart.',
+            envScoped: true,
+          },
+          {
+            rank: 1,
+            slug: 'logs',
+            archetype: 'content',
+            description:
+              'Service logs (journald, files). Read-only by definition. Sits at ring 1 alongside process — it observes process state.',
+            envScoped: true,
+          },
+          {
+            rank: 2,
+            slug: 'binary',
+            archetype: 'structure',
+            description:
+              'The service binary or installed code itself. Write = swap the binary / install a new version. Read = inspect version, checksum.',
             envScoped: true,
           },
         ],

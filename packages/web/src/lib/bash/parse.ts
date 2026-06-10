@@ -1,14 +1,16 @@
 /**
- * Parser for annotated bash services.
+ * Parser for annotated bash scripts attached to bash-provider bindings.
  *
- * Spec : docs/spec/gateway-capability-model.md §6 (plugin layer / classify).
+ * Each binding has its own script ; the binding's `host_slug` is the env
+ * dimension of the resulting capabilities. The capability surface produced
+ * by a binding is :
  *
- * Annotations are line comments at the top of the file (service-level) and
+ *   bash:<ring>:<action>@<host_slug>
+ *
+ * Annotations are line comments at the top of the file (script-level) and
  * directly above each tool function (function-level) :
  *
- *   # @vaubaan-service: runner
- *   # @vaubaan-description: Manage the runner daemon on a SSH-bound host.
- *   # @vaubaan-plane: service
+ *   # @vaubaan-plane: host             (optional, default 'host')
  *   # @vaubaan-rings: process binary logs
  *
  *   # @vaubaan: ring=process action=read
@@ -45,12 +47,8 @@ export interface ParsedTool {
   args: ParsedArg[];
 }
 
-export interface ParsedService {
-  /** Slug from `# @vaubaan-service:`. */
-  slug: string;
-  /** Free-form description from `# @vaubaan-description:`. */
-  description: string;
-  /** Plane slug from `# @vaubaan-plane:`. Defaults to `service`. */
+export interface ParsedScript {
+  /** Plane slug from `# @vaubaan-plane:`. Defaults to `host`. */
   plane: string;
   /** Ordered ring slugs from `# @vaubaan-rings:`. ring 1 = first, ring N = last. */
   rings: string[];
@@ -66,11 +64,9 @@ export class ParseError extends Error {
 }
 
 /** Parse an annotated bash file. Throws ParseError on structural problems. */
-export function parseAnnotatedBash(content: string): ParsedService {
+export function parseAnnotatedBash(content: string): ParsedScript {
   const lines = content.split('\n');
-  let slug = '';
-  let description = '';
-  let plane = 'service';
+  let plane = 'host';
   let rings: string[] = [];
   const tools: ParsedTool[] = [];
 
@@ -86,17 +82,7 @@ export function parseAnnotatedBash(content: string): ParsedService {
     const raw = lines[i] ?? '';
     const line = raw.trim();
 
-    // ── Service-level annotations
-    const svcSlug = match(line, '@vaubaan-service:');
-    if (svcSlug !== null) {
-      slug = svcSlug.trim();
-      continue;
-    }
-    const svcDesc = match(line, '@vaubaan-description:');
-    if (svcDesc !== null) {
-      description = svcDesc.trim();
-      continue;
-    }
+    // ── Script-level annotations
     const svcPlane = match(line, '@vaubaan-plane:');
     if (svcPlane !== null) {
       plane = svcPlane.trim();
@@ -178,13 +164,6 @@ export function parseAnnotatedBash(content: string): ParsedService {
   }
 
   // ── Structural validation
-  if (!slug) throw new ParseError('missing `# @vaubaan-service:` at the top of the file');
-  if (!/^[a-z][a-z0-9-]*$/.test(slug)) {
-    throw new ParseError(`invalid service slug '${slug}' — must match [a-z][a-z0-9-]*`);
-  }
-  if (['github', 'vercel', 'supabase', 'railway', 'ssh'].includes(slug)) {
-    throw new ParseError(`service slug '${slug}' clashes with a built-in provider`);
-  }
   if (rings.length === 0) {
     throw new ParseError('missing `# @vaubaan-rings:` declaration');
   }
@@ -199,7 +178,7 @@ export function parseAnnotatedBash(content: string): ParsedService {
     throw new ParseError('no annotated tool functions found in the file');
   }
 
-  return { slug, description, plane, rings, tools };
+  return { plane, rings, tools };
 }
 
 function match(line: string, marker: string): string | null {
@@ -208,8 +187,8 @@ function match(line: string, marker: string): string | null {
   return m ? (m[1] ?? '') : null;
 }
 
-/** Pretty-print the parsed service for debugging / UI preview. */
-export function summarize(svc: ParsedService): string {
+/** Pretty-print the parsed script for debugging / UI preview. */
+export function summarize(svc: ParsedScript): string {
   const ringLines = svc.rings
     .map((r, i) => {
       const ts = svc.tools.filter((t) => t.ring === r);
@@ -217,5 +196,5 @@ export function summarize(svc: ParsedService): string {
       return `  ring ${i + 1} ${r} — ${ops || '(no tools)'}`;
     })
     .join('\n');
-  return `${svc.slug} (plane=${svc.plane})\n${ringLines}`;
+  return `plane=${svc.plane}\n${ringLines}`;
 }

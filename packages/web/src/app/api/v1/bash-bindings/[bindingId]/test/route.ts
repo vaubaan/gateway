@@ -1,7 +1,9 @@
 /**
- * POST /api/v1/ssh-bindings/:bindingId/test?orgSlug=
+ * POST /api/v1/bash-bindings/:bindingId/test?orgSlug=
  *
- * Runs `uptime` to verify the SSH connection is working.
+ * Runs `uptime` to verify the SSH transport works for this binding.
+ * This is a smoke test ; per-tool invocation lives in
+ * /api/v1/bash-bindings/:id/run-tool.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';

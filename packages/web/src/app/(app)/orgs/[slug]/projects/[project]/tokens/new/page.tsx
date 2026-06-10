@@ -10,7 +10,7 @@ interface BindingRow {
   environment: string | null;
 }
 
-interface SshHostRow {
+interface BashHostRow {
   host_slug: string;
 }
 
@@ -39,7 +39,7 @@ export default async function NewTokenPage({
     .maybeSingle<{ id: string; slug: string }>();
   if (!proj) notFound();
 
-  const [{ data: bindings }, { data: sshHostsRows }] = await Promise.all([
+  const [{ data: bindings }, { data: bashHostsRows }] = await Promise.all([
     supabase
       .from('provider_bindings')
       .select('provider, resource_ref, environment')
@@ -49,7 +49,7 @@ export default async function NewTokenPage({
       .from('ssh_bindings')
       .select('host_slug')
       .eq('project_id', proj.id)
-      .returns<SshHostRow[]>(),
+      .returns<BashHostRow[]>(),
   ]);
 
   return (
@@ -58,7 +58,7 @@ export default async function NewTokenPage({
       projectSlug={proj.slug}
       bindings={{
         rows: bindings ?? [],
-        sshHosts: (sshHostsRows ?? []).map((r) => r.host_slug),
+        bashHosts: (bashHostsRows ?? []).map((r) => r.host_slug),
       }}
     />
   );

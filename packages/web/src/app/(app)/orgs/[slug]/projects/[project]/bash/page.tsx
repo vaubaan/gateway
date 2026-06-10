@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation';
 
-export default async function SshRedirect({
+export default async function BashRedirect({
   params,
 }: {
   params: Promise<{ slug: string; project: string }>;
