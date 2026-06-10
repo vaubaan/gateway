@@ -1,15 +1,13 @@
 /**
  * POST /api/v1/bash-bindings/:bindingId/run-tool
  *
- * Body : { orgSlug, tool, args, timeout_s? }
+ * Body : { orgSlug, host_slug, tool, args, timeout_s? }
  *
- * Loads the binding's annotated bash script + private key, executes the
- * requested tool function over SSH on the bound host, returns stdout /
- * stderr / exit_code / duration.
+ * Loads the binding's script + the requested host (the env) + executes the
+ * tool function on it via SSH. Returns stdout/stderr/exit_code/duration.
  *
- * This is the in-UI exec path : it bypasses /mcp policy (the user is
- * authenticated as an org member via session). The /mcp wiring for
- * dynamic per-binding tools lands in a follow-up PR.
+ * Bypasses /mcp policy : the caller is authenticated as an org member via
+ * session. /mcp wiring for per-binding dispatch lands in a follow-up PR.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -26,6 +24,7 @@ export const dynamic = 'force-dynamic';
 
 const BodySchema = z.object({
   orgSlug: z.string().min(1),
+  host_slug: z.string().min(1),
   tool: z.string().min(1),
   args: z.record(z.string(), z.union([z.string(), z.number()])).default({}),
   timeout_s: z.number().int().min(1).max(300).default(60),
@@ -33,13 +32,18 @@ const BodySchema = z.object({
 
 interface BindingRow {
   id: string;
+  bash_content: string | null;
+  parsed_meta: ParsedScript | null;
+  projects: { organization_id: string };
+}
+
+interface HostRow {
+  id: string;
+  host_slug: string;
   host_address: string;
   port: number;
   ssh_user: string;
   ssh_private_key: unknown;
-  bash_content: string | null;
-  parsed_meta: ParsedScript | null;
-  projects: { organization_id: string };
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId: string }> }) {
@@ -58,11 +62,10 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();
+
   const { data: binding } = await svc
-    .from('ssh_bindings')
-    .select(
-      'id, host_address, port, ssh_user, ssh_private_key, bash_content, parsed_meta, projects!inner(organization_id)',
-    )
+    .from('bash_bindings')
+    .select('id, bash_content, parsed_meta, projects!inner(organization_id)')
     .eq('id', bindingId)
     .maybeSingle<BindingRow>();
 
@@ -71,7 +74,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
   }
   if (!binding.bash_content || !binding.parsed_meta) {
     return NextResponse.json(
-      { error: 'this binding has no script attached — add one before running tools' },
+      { error: 'this binding has no script — add one before running tools' },
       { status: 400 },
     );
   }
@@ -81,7 +84,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
   );
   if (!tool) {
     return NextResponse.json(
-      { error: `tool '${body.tool}' is not declared by this binding's script` },
+      { error: `tool '${body.tool}' is not declared by this script` },
       { status: 400 },
     );
   }
@@ -99,7 +102,21 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
     }
   }
 
-  const keyBytes = decodeBytea(binding.ssh_private_key);
+  const { data: host } = await svc
+    .from('ssh_bindings')
+    .select('id, host_slug, host_address, port, ssh_user, ssh_private_key')
+    .eq('bash_binding_id', bindingId)
+    .eq('host_slug', body.host_slug)
+    .maybeSingle<HostRow>();
+
+  if (!host) {
+    return NextResponse.json(
+      { error: `no host '${body.host_slug}' attached to this binding` },
+      { status: 404 },
+    );
+  }
+
+  const keyBytes = decodeBytea(host.ssh_private_key);
   if (!keyBytes) {
     return NextResponse.json({ error: 'SSH private key is missing or corrupt.' }, { status: 500 });
   }
@@ -108,9 +125,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
   try {
     const result = await sshExec(
       {
-        host_address: binding.host_address,
-        port: binding.port,
-        ssh_user: binding.ssh_user,
+        host_address: host.host_address,
+        port: host.port,
+        ssh_user: host.ssh_user,
         ssh_private_key_pem: new TextDecoder().decode(keyBytes),
       },
       cmd,

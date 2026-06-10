@@ -4,17 +4,17 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Provider } from '@vaubaan/shared';
 import {
-  Banner,
   Button,
   Card,
   CardBody,
   CardHeader,
   CardTitle,
+  Code,
   Field,
   Input,
-  Label,
   Select,
   Stack,
+  Textarea,
 } from '@/components/ui';
 import { getSupabaseBrowser } from '@/lib/supabase/client';
 
@@ -50,14 +50,10 @@ export function BindingForm({
   const current = offered.find((o) => o.provider === provider) ?? null;
   const [ref, setRef] = useState<string>(current?.resources[0]?.ref ?? '');
 
-  // SSH fields
-  const [hostSlug, setHostSlug] = useState('');
-  const [hostAddress, setHostAddress] = useState('');
-  const [port, setPort] = useState('22');
-  const [sshUser, setSshUser] = useState('dev');
-  const [keyMode, setKeyMode] = useState<'generate' | 'paste'>('generate');
-  const [pastePem, setPastePem] = useState('');
-  const [publicKey, setPublicKey] = useState('');
+  // Bash binding fields (script holder ; hosts come from the detail page).
+  const [bashSlug, setBashSlug] = useState('');
+  const [bashName, setBashName] = useState('');
+  const [bashContent, setBashContent] = useState('');
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,7 +65,6 @@ export function BindingForm({
       setRef(next?.resources[0]?.ref ?? '');
     }
     setError(null);
-    setPublicKey('');
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -107,37 +102,33 @@ export function BindingForm({
   }
 
   async function submitBash() {
+    if (!bashSlug || !bashName) {
+      setError('Slug and display name are required.');
+      return;
+    }
     setBusy(true);
     setError(null);
-    setPublicKey('');
     try {
-      const body: Record<string, unknown> = {
-        orgSlug,
-        projectSlug,
-        host_slug: hostSlug,
-        host_address: hostAddress,
-        port: parseInt(port, 10),
-        ssh_user: sshUser,
-      };
-      if (keyMode === 'generate') {
-        body['generate_key'] = true;
-      } else {
-        body['ssh_private_key_pem'] = pastePem;
-      }
       const res = await fetch('/api/v1/bash-bindings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          orgSlug,
+          projectSlug,
+          slug: bashSlug,
+          display_name: bashName,
+          bash_content: bashContent || undefined,
+        }),
       });
-      const json = (await res.json()) as { binding?: unknown; public_key?: string; error?: string };
-      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
-      if (json.public_key) {
-        setPublicKey(json.public_key);
-        setBusy(false);
-      } else {
-        router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
-        router.refresh();
+      const json = (await res.json()) as {
+        binding?: { id: string };
+        error?: string;
+      };
+      if (!res.ok || !json.binding) {
+        throw new Error(json.error ?? `HTTP ${res.status}`);
       }
+      router.push(`/orgs/${orgSlug}/projects/${projectSlug}/bash-bindings/${json.binding.id}`);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -146,43 +137,12 @@ export function BindingForm({
 
   return (
     <Stack gap="var(--space-4)">
-      {publicKey && (
-        <Banner tone="success">
-          <p style={{ margin: '0 0 var(--space-2)' }}>
-            Key pair generated! Add this public key to <code>~/.ssh/authorized_keys</code> on your
-            server:
-          </p>
-          <pre
-            style={{
-              background: 'var(--surface-raised)',
-              padding: 'var(--space-3)',
-              borderRadius: 4,
-              overflowX: 'auto',
-              fontSize: '0.8em',
-              margin: 'var(--space-2) 0',
-            }}
-          >
-            {`mkdir -p ~/.ssh && chmod 700 ~/.ssh\necho '${publicKey}' >> ~/.ssh/authorized_keys\nchmod 600 ~/.ssh/authorized_keys`}
-          </pre>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => {
-              router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
-              router.refresh();
-            }}
-          >
-            Done — go to project →
-          </Button>
-        </Banner>
-      )}
-
       <form onSubmit={(e) => void onSubmit(e)}>
         <Card>
           <CardHeader>
             <CardTitle>
               {isBash
-                ? 'Add a Bash binding (host + key + optional script)'
+                ? 'New Bash binding (script identity ; add hosts after)'
                 : 'Pick a resource from a connected provider'}
             </CardTitle>
           </CardHeader>
@@ -199,24 +159,18 @@ export function BindingForm({
                       {o.resources.length === 0 ? ' (no resources)' : ''}
                     </option>
                   ))}
-                  <option value="ssh">SSH</option>
+                  <option value="bash">Bash (SSH transport)</option>
                 </Select>
               </Field>
 
               {isBash ? (
                 <BashFields
-                  hostSlug={hostSlug}
-                  setHostSlug={setHostSlug}
-                  hostAddress={hostAddress}
-                  setHostAddress={setHostAddress}
-                  port={port}
-                  setPort={setPort}
-                  sshUser={sshUser}
-                  setSshUser={setSshUser}
-                  keyMode={keyMode}
-                  setKeyMode={setKeyMode}
-                  pastePem={pastePem}
-                  setPastePem={setPastePem}
+                  bashSlug={bashSlug}
+                  setBashSlug={setBashSlug}
+                  bashName={bashName}
+                  setBashName={setBashName}
+                  bashContent={bashContent}
+                  setBashContent={setBashContent}
                 />
               ) : (
                 <Field
@@ -266,120 +220,72 @@ export function BindingForm({
 }
 
 function BashFields({
-  hostSlug,
-  setHostSlug,
-  hostAddress,
-  setHostAddress,
-  port,
-  setPort,
-  sshUser,
-  setSshUser,
-  keyMode,
-  setKeyMode,
-  pastePem,
-  setPastePem,
+  bashSlug,
+  setBashSlug,
+  bashName,
+  setBashName,
+  bashContent,
+  setBashContent,
 }: {
-  hostSlug: string;
-  setHostSlug: (v: string) => void;
-  hostAddress: string;
-  setHostAddress: (v: string) => void;
-  port: string;
-  setPort: (v: string) => void;
-  sshUser: string;
-  setSshUser: (v: string) => void;
-  keyMode: 'generate' | 'paste';
-  setKeyMode: (v: 'generate' | 'paste') => void;
-  pastePem: string;
-  setPastePem: (v: string) => void;
+  bashSlug: string;
+  setBashSlug: (v: string) => void;
+  bashName: string;
+  setBashName: (v: string) => void;
+  bashContent: string;
+  setBashContent: (v: string) => void;
 }) {
   return (
     <>
-      <div
+      <p
         style={{
-          display: 'grid',
-          gridTemplateColumns: '1fr 2fr 80px',
-          gap: 'var(--space-3)',
+          color: 'var(--text-muted)',
+          fontSize: 'var(--text-sm)',
+          margin: 0,
         }}
       >
-        <Field label="Host slug">
+        A bash binding holds an annotated script. Hosts are attached on the binding&apos;s detail
+        page (you&apos;ll be redirected there after creation). The same script runs on every host.
+      </p>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 2fr', gap: 'var(--space-3)' }}>
+        <Field
+          label="Slug"
+          hint={
+            <>
+              Used in capability notation as the binding identity (
+              <Code>bash:&lt;ring&gt;:&lt;action&gt;@&lt;host&gt;</Code> — slug is implicit on the
+              binding).
+            </>
+          }
+        >
           <Input
-            placeholder="vps-rp"
-            value={hostSlug}
-            onChange={(e) => setHostSlug(e.target.value)}
+            placeholder="runner"
+            value={bashSlug}
+            onChange={(e) => setBashSlug(e.target.value)}
+            pattern="[a-z][a-z0-9-]*"
             required
           />
         </Field>
-        <Field label="Host address (IP or hostname)">
+        <Field label="Display name">
           <Input
-            placeholder="192.168.1.10"
-            value={hostAddress}
-            onChange={(e) => setHostAddress(e.target.value)}
-            required
-          />
-        </Field>
-        <Field label="Port">
-          <Input
-            type="number"
-            value={port}
-            onChange={(e) => setPort(e.target.value)}
-            min={1}
-            max={65535}
+            placeholder="Runner"
+            value={bashName}
+            onChange={(e) => setBashName(e.target.value)}
             required
           />
         </Field>
       </div>
 
-      <Field label="SSH user">
-        <Input
-          placeholder="dev"
-          value={sshUser}
-          onChange={(e) => setSshUser(e.target.value)}
-          required
-          style={{ maxWidth: 200 }}
+      <Field label="Annotated bash (optional — you can add it later from the detail page)">
+        <Textarea
+          rows={12}
+          value={bashContent}
+          onChange={(e) => setBashContent(e.target.value)}
+          placeholder={
+            '#!/usr/bin/env bash\n# @vaubaan-rings: process\n\n# @vaubaan: ring=process action=read\n# @vaubaan-doc: ...\nmy_status() {\n  systemctl status my.service\n}\n'
+          }
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}
         />
       </Field>
-
-      <div>
-        <Label>Key source</Label>
-        <div style={{ display: 'flex', gap: 'var(--space-2)', margin: 'var(--space-2) 0' }}>
-          <Button
-            type="button"
-            size="sm"
-            variant={keyMode === 'generate' ? 'primary' : 'secondary'}
-            onClick={() => setKeyMode('generate')}
-          >
-            Generate key pair
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={keyMode === 'paste' ? 'primary' : 'secondary'}
-            onClick={() => setKeyMode('paste')}
-          >
-            Paste private key
-          </Button>
-        </div>
-        {keyMode === 'paste' && (
-          <textarea
-            rows={6}
-            placeholder={'-----BEGIN OPENSSH PRIVATE KEY-----\n...'}
-            value={pastePem}
-            onChange={(e) => setPastePem(e.target.value)}
-            required
-            style={{
-              width: '100%',
-              fontFamily: 'monospace',
-              fontSize: '0.8em',
-              padding: 'var(--space-2)',
-              boxSizing: 'border-box',
-            }}
-          />
-        )}
-      </div>
-
-      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
-        Your private key is stored encrypted. Never reuse a key across multiple services.
-      </p>
     </>
   );
 }

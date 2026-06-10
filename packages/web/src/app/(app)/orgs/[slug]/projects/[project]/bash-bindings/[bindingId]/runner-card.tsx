@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import {
   Badge,
   Banner,
@@ -14,110 +13,14 @@ import {
   Field,
   Input,
   Row,
-  Textarea,
+  Select,
 } from '@/components/ui';
-import type { ParsedScript, ParsedTool } from '@/lib/bash/parse';
+import type { ParsedTool } from '@/lib/bash/parse';
 
-/**
- * Two cards :
- *   1. Script editor (textarea, save → PATCH the binding, re-parse).
- *   2. Tool runner (one card per tool with args + Run button) — only when
- *      parsed_meta exists.
- */
-export function BashBindingEditor({
-  orgSlug,
-  bindingId,
-  hostSlug,
-  initialBash,
-  parsedMeta,
-}: {
-  orgSlug: string;
-  bindingId: string;
-  hostSlug: string;
-  initialBash: string;
-  parsedMeta: ParsedScript | null;
-}) {
-  return (
-    <>
-      <ScriptEditor orgSlug={orgSlug} bindingId={bindingId} initial={initialBash} />
-      {parsedMeta && (
-        <ToolRunner
-          orgSlug={orgSlug}
-          bindingId={bindingId}
-          hostSlug={hostSlug}
-          tools={parsedMeta.tools}
-        />
-      )}
-    </>
-  );
-}
-
-function ScriptEditor({
-  orgSlug,
-  bindingId,
-  initial,
-}: {
-  orgSlug: string;
-  bindingId: string;
-  initial: string;
-}) {
-  const router = useRouter();
-  const [bash, setBash] = useState(initial);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [okMsg, setOkMsg] = useState<string | null>(null);
-
-  async function save() {
-    setBusy(true);
-    setError(null);
-    setOkMsg(null);
-    try {
-      const res = await fetch(`/api/v1/bash-bindings/${bindingId}`, {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ orgSlug, bash_content: bash || null }),
-      });
-      const json = (await res.json()) as { binding?: unknown; error?: string };
-      if (!res.ok) {
-        setError(json.error ?? `HTTP ${res.status}`);
-        return;
-      }
-      setOkMsg('Saved.');
-      router.refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'unknown error');
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Script</CardTitle>
-        <Button size="sm" variant="primary" onClick={() => void save()} disabled={busy}>
-          {busy ? 'Saving…' : 'Save'}
-        </Button>
-      </CardHeader>
-      <CardBody>
-        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginTop: 0 }}>
-          Annotated bash. Each function with <Code>{`# @vaubaan: ring=X action=Y`}</Code> above it
-          becomes an MCP tool ; functions without an annotation are private helpers.
-        </p>
-        {error && <Banner tone="danger">{error}</Banner>}
-        {okMsg && <Banner tone="success">{okMsg}</Banner>}
-        <Textarea
-          rows={24}
-          value={bash}
-          onChange={(e) => setBash(e.target.value)}
-          style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--text-xs)' }}
-          placeholder={
-            '#!/usr/bin/env bash\n# @vaubaan-rings: process\n\n# @vaubaan: ring=process action=read\n# @vaubaan-doc: ...\nmy_status() {\n  systemctl status my.service\n}\n'
-          }
-        />
-      </CardBody>
-    </Card>
-  );
+interface Host {
+  host_slug: string;
+  host_address: string;
+  ssh_user: string;
 }
 
 interface TestResult {
@@ -130,24 +33,42 @@ interface TestResult {
   error?: string;
 }
 
-function ToolRunner({
+/**
+ * Per-tool runner ; the target host (env) is picked once at the top, then
+ * every Run button targets that selection.
+ */
+export function RunnerCard({
   orgSlug,
   bindingId,
-  hostSlug,
   tools,
+  hosts,
 }: {
   orgSlug: string;
   bindingId: string;
-  hostSlug: string;
   tools: ParsedTool[];
+  hosts: Host[];
 }) {
+  const [host, setHost] = useState(hosts[0]!.host_slug);
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Run tools on {hostSlug}</CardTitle>
+        <CardTitle>Run tools</CardTitle>
         <Badge tone="neutral">{tools.length} tool(s)</Badge>
       </CardHeader>
       <CardBody>
+        <div style={{ marginBottom: 'var(--space-3)' }}>
+          <Field label="Target host (env)">
+            <Select value={host} onChange={(e) => setHost(e.target.value)}>
+              {hosts.map((h) => (
+                <option key={h.host_slug} value={h.host_slug}>
+                  {h.host_slug} — {h.ssh_user}@{h.host_address}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        </div>
+
         <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
           {tools.map((t) => (
             <li
@@ -157,7 +78,7 @@ function ToolRunner({
                 borderBottom: '1px solid var(--border-subtle)',
               }}
             >
-              <ToolRow orgSlug={orgSlug} bindingId={bindingId} hostSlug={hostSlug} tool={t} />
+              <ToolRow orgSlug={orgSlug} bindingId={bindingId} host={host} tool={t} />
             </li>
           ))}
         </ul>
@@ -169,12 +90,12 @@ function ToolRunner({
 function ToolRow({
   orgSlug,
   bindingId,
-  hostSlug,
+  host,
   tool,
 }: {
   orgSlug: string;
   bindingId: string;
-  hostSlug: string;
+  host: string;
   tool: ParsedTool;
 }) {
   const [args, setArgs] = useState<Record<string, string>>({});
@@ -190,6 +111,7 @@ function ToolRow({
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
           orgSlug,
+          host_slug: host,
           tool: tool.functionName,
           args,
           timeout_s: 60,
@@ -258,7 +180,7 @@ function ToolRow({
       )}
 
       <Button size="sm" variant="secondary" onClick={() => void run()} disabled={running}>
-        {running ? 'Running…' : `▶ Run on ${hostSlug}`}
+        {running ? 'Running…' : `▶ Run on ${host}`}
       </Button>
 
       {result && (

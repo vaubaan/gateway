@@ -23,11 +23,12 @@ interface BindingRow {
 
 interface BashBindingRow {
   id: string;
-  host_slug: string;
-  host_address: string;
-  port: number;
-  ssh_user: string;
+  slug: string;
+  display_name: string;
+  description: string | null;
   parsed_meta: { tools: Array<{ functionName: string }>; rings: string[] } | null;
+  parse_error: string | null;
+  hosts: Array<{ id: string; host_slug: string; host_address: string; ssh_user: string }>;
 }
 
 interface TokenRow {
@@ -77,9 +78,12 @@ export default async function ProjectPage({
       .eq('project_id', proj.id)
       .returns<BindingRow[]>(),
     supabase
-      .from('ssh_bindings')
-      .select('id, host_slug, host_address, port, ssh_user, parsed_meta')
+      .from('bash_bindings')
+      .select(
+        'id, slug, display_name, description, parsed_meta, parse_error, hosts:ssh_bindings(id, host_slug, host_address, ssh_user)',
+      )
       .eq('project_id', proj.id)
+      .order('created_at', { ascending: true })
       .returns<BashBindingRow[]>(),
     supabase
       .from('access_tokens')
@@ -199,75 +203,53 @@ export default async function ProjectPage({
                     />
                   </li>
                 ))}
-                {(bashBindings ?? []).length > 0 && (
+                {(bashBindings ?? []).map((b) => (
                   <li
-                    key="bash-group"
+                    key={`bash-${b.id}`}
                     style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 'var(--space-3)',
                       padding: 'var(--space-3) 0',
                       borderBottom: '1px solid var(--border-subtle)',
                     }}
                   >
-                    <div
+                    <Link
+                      href={`/orgs/${org.slug}/projects/${proj.slug}/bash-bindings/${b.id}`}
                       style={{
-                        display: 'flex',
-                        alignItems: 'center',
+                        textDecoration: 'none',
+                        color: 'inherit',
+                        display: 'inline-flex',
                         gap: 'var(--space-2)',
-                        marginBottom: 'var(--space-2)',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
                       }}
                     >
                       <Badge tone="neutral">bash</Badge>
-                      <Code>{(bashBindings ?? []).length} hosts</Code>
-                      <span style={{ color: 'var(--text-subtle)', fontSize: 12 }}>
-                        each host_slug is an env in{' '}
-                        <Code>bash:&lt;ring&gt;:&lt;action&gt;@&lt;host&gt;</Code> capabilities.
+                      <Code>{b.display_name}</Code>
+                      {b.parse_error ? (
+                        <Badge tone="danger">parse error</Badge>
+                      ) : b.parsed_meta ? (
+                        <Badge tone="success">
+                          {b.parsed_meta.tools.length} tools · {b.hosts.length} host
+                          {b.hosts.length === 1 ? '' : 's'}
+                        </Badge>
+                      ) : (
+                        <Badge tone="neutral">no script · {b.hosts.length} hosts</Badge>
+                      )}
+                      <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
+                        {b.hosts.map((h) => `@${h.host_slug}`).join(', ')}
                       </span>
-                    </div>
-                    <ul
-                      style={{
-                        listStyle: 'none',
-                        padding: 0,
-                        margin: 0,
-                        paddingLeft: 'var(--space-4)',
-                      }}
-                    >
-                      {(bashBindings ?? []).map((b) => (
-                        <li
-                          key={`bash-${b.id}`}
-                          style={{
-                            display: 'flex',
-                            justifyContent: 'space-between',
-                            alignItems: 'center',
-                            gap: 'var(--space-3)',
-                            padding: 'var(--space-2) 0',
-                          }}
-                        >
-                          <Link
-                            href={`/orgs/${org.slug}/projects/${proj.slug}/bash-bindings/${b.id}`}
-                            style={{
-                              textDecoration: 'none',
-                              color: 'inherit',
-                              display: 'inline-flex',
-                              gap: 'var(--space-2)',
-                              alignItems: 'center',
-                            }}
-                          >
-                            <Code>
-                              @{b.host_slug} · {b.ssh_user}@{b.host_address}:{b.port}
-                            </Code>
-                            <Badge tone={b.parsed_meta ? 'success' : 'neutral'}>
-                              {b.parsed_meta ? `${b.parsed_meta.tools.length} tools` : 'no script'}
-                            </Badge>
-                          </Link>
-                          <BashBindingControls
-                            bindingId={b.id}
-                            hostSlug={b.host_slug}
-                            orgSlug={org.slug}
-                          />
-                        </li>
-                      ))}
-                    </ul>
+                    </Link>
+                    <BashBindingControls
+                      bindingId={b.id}
+                      displayName={b.display_name}
+                      orgSlug={org.slug}
+                      detailHref={`/orgs/${org.slug}/projects/${proj.slug}/bash-bindings/${b.id}`}
+                    />
                   </li>
-                )}
+                ))}
               </ul>
             )}
           </CardBody>
