@@ -14,9 +14,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
-import { decodeBytea } from '@/lib/providers/bytea';
-import { sshExec } from '@vaubaan/providers-ssh';
 import { buildToolInvocation } from '@/lib/bash/exec';
+import { execOnHost, loadHostBySlugInOrg, type BashSupabaseLike } from '@/lib/bash/exec-host';
 import type { ParsedScript, ParsedTool } from '@/lib/bash/parse';
 
 export const runtime = 'nodejs';
@@ -35,15 +34,6 @@ interface BindingRow {
   bash_content: string | null;
   parsed_meta: ParsedScript | null;
   projects: { organization_id: string };
-}
-
-interface HostRow {
-  id: string;
-  host_slug: string;
-  host_address: string;
-  port: number;
-  ssh_user: string;
-  ssh_private_key: unknown;
 }
 
 export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId: string }> }) {
@@ -102,13 +92,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
     }
   }
 
-  const { data: host } = await svc
-    .from('ssh_bindings')
-    .select('id, host_slug, host_address, port, ssh_user, ssh_private_key')
-    .eq('bash_binding_id', bindingId)
-    .eq('host_slug', body.host_slug)
-    .maybeSingle<HostRow>();
-
+  const host = await loadHostBySlugInOrg(svc as unknown as BashSupabaseLike, {
+    hostSlug: body.host_slug,
+    bindingId,
+    orgId: guard.orgId,
+  });
   if (!host) {
     return NextResponse.json(
       { error: `no host '${body.host_slug}' attached to this binding` },
@@ -116,23 +104,16 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
     );
   }
 
-  const keyBytes = decodeBytea(host.ssh_private_key);
-  if (!keyBytes) {
-    return NextResponse.json({ error: 'SSH private key is missing or corrupt.' }, { status: 500 });
-  }
-
   const { cmd } = buildToolInvocation(binding.bash_content, tool.functionName, argv);
   try {
-    const result = await sshExec(
-      {
-        host_address: host.host_address,
-        port: host.port,
-        ssh_user: host.ssh_user,
-        ssh_private_key_pem: new TextDecoder().decode(keyBytes),
-      },
-      cmd,
-      body.timeout_s,
-    );
+    const exec = await execOnHost(host, cmd, body.timeout_s);
+    if (!exec.ok) {
+      return NextResponse.json(
+        { error: 'SSH private key is missing or corrupt.' },
+        { status: 500 },
+      );
+    }
+    const { result } = exec;
     return NextResponse.json({
       ok: result.exit_code === 0,
       exit_code: result.exit_code,

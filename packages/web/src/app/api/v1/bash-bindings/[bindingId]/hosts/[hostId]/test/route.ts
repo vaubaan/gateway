@@ -7,21 +7,10 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
-import { decodeBytea } from '@/lib/providers/bytea';
-import { sshExec } from '@vaubaan/providers-ssh';
+import { execOnHost, loadHostByIdInOrg, type BashSupabaseLike } from '@/lib/bash/exec-host';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-interface HostRow {
-  id: string;
-  host_address: string;
-  port: number;
-  ssh_user: string;
-  ssh_private_key: unknown;
-  bash_binding_id: string;
-  bash_bindings: { projects: { organization_id: string } };
-}
 
 export async function POST(
   req: NextRequest,
@@ -34,36 +23,23 @@ export async function POST(
   const guard = await requireOrgMember(orgSlug);
   if (!guard.ok) return guard.response;
 
-  const svc = getSupabaseServiceClient();
-  const { data: host } = await svc
-    .from('ssh_bindings')
-    .select(
-      'id, host_address, port, ssh_user, ssh_private_key, bash_binding_id, bash_bindings!inner(projects!inner(organization_id))',
-    )
-    .eq('id', hostId)
-    .eq('bash_binding_id', bindingId)
-    .maybeSingle<HostRow>();
-
-  if (!host || host.bash_bindings.projects.organization_id !== guard.orgId) {
-    return NextResponse.json({ error: 'host not found' }, { status: 404 });
-  }
-
-  const keyBytes = decodeBytea(host.ssh_private_key);
-  if (!keyBytes) {
-    return NextResponse.json({ error: 'SSH private key is missing or corrupt.' }, { status: 500 });
-  }
+  const svc = getSupabaseServiceClient() as unknown as BashSupabaseLike;
+  const host = await loadHostByIdInOrg(svc, {
+    hostId,
+    bindingId,
+    orgId: guard.orgId,
+  });
+  if (!host) return NextResponse.json({ error: 'host not found' }, { status: 404 });
 
   try {
-    const result = await sshExec(
-      {
-        host_address: host.host_address,
-        port: host.port,
-        ssh_user: host.ssh_user,
-        ssh_private_key_pem: new TextDecoder().decode(keyBytes),
-      },
-      'uptime',
-      10,
-    );
+    const exec = await execOnHost(host, 'uptime', 10);
+    if (!exec.ok) {
+      return NextResponse.json(
+        { error: 'SSH private key is missing or corrupt.' },
+        { status: 500 },
+      );
+    }
+    const { result } = exec;
     return NextResponse.json({
       ok: result.exit_code === 0,
       exit_code: result.exit_code,
