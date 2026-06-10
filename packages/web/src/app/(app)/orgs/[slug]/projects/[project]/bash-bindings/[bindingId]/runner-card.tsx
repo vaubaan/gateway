@@ -36,6 +36,11 @@ interface TestResult {
 /**
  * Per-tool runner ; the target host (env) is picked once at the top, then
  * every Run button targets that selection.
+ *
+ * Renders nothing when no host is attached — the parent gates the render
+ * on `hosts.length > 0` today, but typing the early-return locally avoids
+ * relying on that invariant (and removes the `hosts[0]!` non-null assertion
+ * that flagged a future-bug risk if the gate ever drifts).
  */
 export function RunnerCard({
   orgSlug,
@@ -48,7 +53,9 @@ export function RunnerCard({
   tools: ParsedTool[];
   hosts: Host[];
 }) {
-  const [host, setHost] = useState(hosts[0]!.host_slug);
+  const firstHost = hosts[0];
+  const [host, setHost] = useState<string>(firstHost?.host_slug ?? '');
+  if (!firstHost) return null;
 
   return (
     <Card>
