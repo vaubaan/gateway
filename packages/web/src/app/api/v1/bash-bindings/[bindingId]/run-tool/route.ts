@@ -16,6 +16,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 import { buildToolInvocation } from '@/lib/bash/exec';
 import { execOnHost, loadHostBySlugInOrg, type BashSupabaseLike } from '@/lib/bash/exec-host';
+import { materializeArgs } from '@/lib/bash/args';
 import type { ParsedScript, ParsedTool } from '@/lib/bash/parse';
 
 export const runtime = 'nodejs';
@@ -79,18 +80,11 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
     );
   }
 
-  const argv: string[] = [];
-  for (const a of tool.args) {
-    const raw = body.args[a.name];
-    if (raw === undefined || raw === '') {
-      if (a.required && a.defaultValue === undefined) {
-        return NextResponse.json({ error: `arg '${a.name}' is required` }, { status: 400 });
-      }
-      argv.push(a.defaultValue ?? '');
-    } else {
-      argv.push(String(raw));
-    }
+  const materialized = materializeArgs(tool, body.args);
+  if (!materialized.ok) {
+    return NextResponse.json({ error: materialized.error }, { status: 400 });
   }
+  const { argv } = materialized;
 
   const host = await loadHostBySlugInOrg(svc as unknown as BashSupabaseLike, {
     hostSlug: body.host_slug,
