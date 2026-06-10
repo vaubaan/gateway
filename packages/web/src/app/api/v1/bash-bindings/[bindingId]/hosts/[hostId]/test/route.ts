@@ -1,9 +1,7 @@
 /**
- * POST /api/v1/bash-bindings/:bindingId/test?orgSlug=
+ * POST /api/v1/bash-bindings/:bindingId/hosts/:hostId/test?orgSlug=
  *
- * Runs `uptime` to verify the SSH transport works for this binding.
- * This is a smoke test ; per-tool invocation lives in
- * /api/v1/bash-bindings/:id/run-tool.
+ * SSH connectivity smoke test for one host : runs `uptime`.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -15,40 +13,42 @@ import { sshExec } from '@vaubaan/providers-ssh';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-interface BindingRow {
+interface HostRow {
   id: string;
-  project_id: string;
   host_address: string;
   port: number;
   ssh_user: string;
   ssh_private_key: unknown;
-  projects: { organization_id: string };
+  bash_binding_id: string;
+  bash_bindings: { projects: { organization_id: string } };
 }
 
-export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId: string }> }) {
-  const { bindingId } = await ctx.params;
+export async function POST(
+  req: NextRequest,
+  ctx: { params: Promise<{ bindingId: string; hostId: string }> },
+) {
+  const { bindingId, hostId } = await ctx.params;
   const orgSlug = req.nextUrl.searchParams.get('orgSlug');
-  if (!orgSlug) {
-    return NextResponse.json({ error: 'orgSlug query param required' }, { status: 400 });
-  }
+  if (!orgSlug) return NextResponse.json({ error: 'orgSlug required' }, { status: 400 });
 
   const guard = await requireOrgMember(orgSlug);
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();
-  const { data: row } = await svc
+  const { data: host } = await svc
     .from('ssh_bindings')
     .select(
-      'id, project_id, host_address, port, ssh_user, ssh_private_key, projects!inner(organization_id)',
+      'id, host_address, port, ssh_user, ssh_private_key, bash_binding_id, bash_bindings!inner(projects!inner(organization_id))',
     )
-    .eq('id', bindingId)
-    .maybeSingle<BindingRow>();
+    .eq('id', hostId)
+    .eq('bash_binding_id', bindingId)
+    .maybeSingle<HostRow>();
 
-  if (!row || row.projects.organization_id !== guard.orgId) {
-    return NextResponse.json({ error: 'binding not found in this org' }, { status: 404 });
+  if (!host || host.bash_bindings.projects.organization_id !== guard.orgId) {
+    return NextResponse.json({ error: 'host not found' }, { status: 404 });
   }
 
-  const keyBytes = decodeBytea(row.ssh_private_key);
+  const keyBytes = decodeBytea(host.ssh_private_key);
   if (!keyBytes) {
     return NextResponse.json({ error: 'SSH private key is missing or corrupt.' }, { status: 500 });
   }
@@ -56,9 +56,9 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
   try {
     const result = await sshExec(
       {
-        host_address: row.host_address,
-        port: row.port,
-        ssh_user: row.ssh_user,
+        host_address: host.host_address,
+        port: host.port,
+        ssh_user: host.ssh_user,
         ssh_private_key_pem: new TextDecoder().decode(keyBytes),
       },
       'uptime',

@@ -1,7 +1,7 @@
 /**
- * GET    /api/v1/bash-bindings/:bindingId?orgSlug=   — fetch one (with script)
- * PATCH  /api/v1/bash-bindings/:bindingId            — update bash_content
- * DELETE /api/v1/bash-bindings/:bindingId?orgSlug=   — drop
+ * GET    /api/v1/bash-bindings/:bindingId?orgSlug=
+ * PATCH  /api/v1/bash-bindings/:bindingId             — display_name / description / bash_content
+ * DELETE /api/v1/bash-bindings/:bindingId?orgSlug=    — cascades attached hosts
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -16,14 +16,12 @@ export const dynamic = 'force-dynamic';
 interface BindingRow {
   id: string;
   project_id: string;
-  host_slug: string;
-  host_address: string;
-  port: number;
-  ssh_user: string;
+  slug: string;
+  display_name: string;
+  description: string | null;
   bash_content: string | null;
   parsed_meta: unknown;
   parse_error: string | null;
-  created_at: string;
   updated_at: string;
   projects: { organization_id: string };
 }
@@ -37,9 +35,9 @@ async function loadOrFail(
 
   const svc = getSupabaseServiceClient();
   const { data: row } = await svc
-    .from('ssh_bindings')
+    .from('bash_bindings')
     .select(
-      'id, project_id, host_slug, host_address, port, ssh_user, bash_content, parsed_meta, parse_error, created_at, updated_at, projects!inner(organization_id)',
+      'id, project_id, slug, display_name, description, bash_content, parsed_meta, parse_error, updated_at, projects!inner(organization_id)',
     )
     .eq('id', bindingId)
     .maybeSingle<BindingRow>();
@@ -60,12 +58,14 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ bindingId: 
 
   const res = await loadOrFail(bindingId, orgSlug);
   if (!res.ok) return res.response;
-  const { projects: _projects, ...binding } = res.row;
+  const { projects: _p, ...binding } = res.row;
   return NextResponse.json({ binding });
 }
 
 const PatchSchema = z.object({
   orgSlug: z.string().min(1),
+  display_name: z.string().min(1).max(100).optional(),
+  description: z.string().max(500).nullable().optional(),
   bash_content: z.string().max(100_000).nullable().optional(),
 });
 
@@ -85,6 +85,8 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ bindingId
   if (!res.ok) return res.response;
 
   const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
+  if (body.display_name !== undefined) update.display_name = body.display_name;
+  if (body.description !== undefined) update.description = body.description;
   if (body.bash_content !== undefined) {
     if (body.bash_content === null || body.bash_content === '') {
       update.bash_content = null;
@@ -106,12 +108,10 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ bindingId
 
   const svc = getSupabaseServiceClient();
   const { data: updated, error } = await svc
-    .from('ssh_bindings')
+    .from('bash_bindings')
     .update(update)
     .eq('id', bindingId)
-    .select(
-      'id, host_slug, host_address, port, ssh_user, bash_content, parsed_meta, parse_error, updated_at',
-    )
+    .select('id, slug, display_name, description, parsed_meta, parse_error, updated_at')
     .single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
@@ -121,16 +121,13 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ bindingId
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ bindingId: string }> }) {
   const { bindingId } = await ctx.params;
   const orgSlug = req.nextUrl.searchParams.get('orgSlug');
-  if (!orgSlug) {
-    return NextResponse.json({ error: 'orgSlug query param required' }, { status: 400 });
-  }
+  if (!orgSlug) return NextResponse.json({ error: 'orgSlug required' }, { status: 400 });
 
   const res = await loadOrFail(bindingId, orgSlug);
   if (!res.ok) return res.response;
 
   const svc = getSupabaseServiceClient();
-  const { error } = await svc.from('ssh_bindings').delete().eq('id', bindingId);
+  const { error } = await svc.from('bash_bindings').delete().eq('id', bindingId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-
   return NextResponse.json({ ok: true });
 }

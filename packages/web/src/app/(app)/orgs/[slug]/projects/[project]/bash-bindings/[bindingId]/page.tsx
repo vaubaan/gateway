@@ -3,22 +3,32 @@ import Link from 'next/link';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { Badge, Card, CardBody, CardHeader, CardTitle, Code, Row } from '@/components/ui';
 import { LocalDate } from '@/components/LocalDate';
-import { BashBindingEditor } from './editor';
+import { ScriptCard } from './script-card';
+import { HostsCard } from './hosts-card';
+import { RunnerCard } from './runner-card';
 import type { ParsedScript } from '@/lib/bash/parse';
 
 export const dynamic = 'force-dynamic';
 
 interface BindingRow {
   id: string;
-  host_slug: string;
-  host_address: string;
-  port: number;
-  ssh_user: string;
+  slug: string;
+  display_name: string;
+  description: string | null;
   bash_content: string | null;
   parsed_meta: ParsedScript | null;
   parse_error: string | null;
   created_at: string;
   updated_at: string;
+}
+
+interface HostRow {
+  id: string;
+  host_slug: string;
+  host_address: string;
+  port: number;
+  ssh_user: string;
+  created_at: string;
 }
 
 export default async function BashBindingPage({
@@ -47,21 +57,28 @@ export default async function BashBindingPage({
   if (!proj) notFound();
 
   const { data: binding } = await supabase
-    .from('ssh_bindings')
+    .from('bash_bindings')
     .select(
-      'id, host_slug, host_address, port, ssh_user, bash_content, parsed_meta, parse_error, created_at, updated_at',
+      'id, slug, display_name, description, bash_content, parsed_meta, parse_error, created_at, updated_at',
     )
     .eq('project_id', proj.id)
     .eq('id', bindingId)
     .maybeSingle<BindingRow>();
   if (!binding) notFound();
 
+  const { data: hosts } = await supabase
+    .from('ssh_bindings')
+    .select('id, host_slug, host_address, port, ssh_user, created_at')
+    .eq('bash_binding_id', binding.id)
+    .order('host_slug', { ascending: true })
+    .returns<HostRow[]>();
+
   return (
     <main>
       <header style={{ marginBottom: 'var(--space-6)' }}>
         <Row gap="var(--space-3)">
           <h1 style={{ margin: 0 }}>
-            Bash · <Code>@{binding.host_slug}</Code>
+            Bash · <Code>{binding.display_name}</Code>
           </h1>
           {binding.parsed_meta ? (
             <Badge tone="success">{binding.parsed_meta.tools.length} tools</Badge>
@@ -70,9 +87,12 @@ export default async function BashBindingPage({
           ) : (
             <Badge tone="neutral">no script</Badge>
           )}
+          <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
+            updated <LocalDate ts={binding.updated_at} />
+          </span>
         </Row>
         <Code>
-          /{org.slug}/{proj.slug}/bash-bindings/{binding.host_slug}
+          /{org.slug}/{proj.slug}/bash-bindings/{binding.slug}
         </Code>{' '}
         ·{' '}
         <Link
@@ -84,20 +104,6 @@ export default async function BashBindingPage({
       </header>
 
       <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Connection</CardTitle>
-            <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
-              created <LocalDate ts={binding.created_at} dateOnly />
-            </span>
-          </CardHeader>
-          <CardBody>
-            <Code>
-              {binding.ssh_user}@{binding.host_address}:{binding.port}
-            </Code>
-          </CardBody>
-        </Card>
-
         {binding.parse_error && (
           <Card>
             <CardHeader>
@@ -118,6 +124,12 @@ export default async function BashBindingPage({
           </Card>
         )}
 
+        <ScriptCard
+          orgSlug={org.slug}
+          bindingId={binding.id}
+          initial={binding.bash_content ?? ''}
+        />
+
         {binding.parsed_meta && (
           <Card>
             <CardHeader>
@@ -126,8 +138,9 @@ export default async function BashBindingPage({
             </CardHeader>
             <CardBody>
               <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', marginTop: 0 }}>
-                Tools declared by this binding&apos;s script, grouped by ring. Calling a tool via{' '}
-                <Code>/mcp</Code> requires the listed capability on the access token.
+                Tools declared by this script, grouped by ring. Calling a tool via <Code>/mcp</Code>{' '}
+                requires the listed capability on the access token (<Code>@&lt;env&gt;</Code> = the
+                targeted host).
               </p>
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
                 {binding.parsed_meta.rings.map((ring, idx) => {
@@ -165,7 +178,7 @@ export default async function BashBindingPage({
                             <span style={{ color: 'var(--text-subtle)' }}>
                               requires{' '}
                               <Code>
-                                bash:{ring}:{t.action}@{binding.host_slug}
+                                bash:{ring}:{t.action}@&lt;env&gt;
                               </Code>
                             </span>
                             {t.doc && (
@@ -184,13 +197,20 @@ export default async function BashBindingPage({
           </Card>
         )}
 
-        <BashBindingEditor
-          orgSlug={org.slug}
-          bindingId={binding.id}
-          hostSlug={binding.host_slug}
-          initialBash={binding.bash_content ?? ''}
-          parsedMeta={binding.parsed_meta}
-        />
+        <HostsCard orgSlug={org.slug} bindingId={binding.id} hosts={hosts ?? []} />
+
+        {binding.parsed_meta && (hosts ?? []).length > 0 && (
+          <RunnerCard
+            orgSlug={org.slug}
+            bindingId={binding.id}
+            tools={binding.parsed_meta.tools}
+            hosts={(hosts ?? []).map((h) => ({
+              host_slug: h.host_slug,
+              host_address: h.host_address,
+              ssh_user: h.ssh_user,
+            }))}
+          />
+        )}
       </div>
     </main>
   );
