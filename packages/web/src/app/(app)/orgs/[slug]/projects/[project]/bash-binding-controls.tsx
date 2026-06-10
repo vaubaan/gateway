@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui';
 
-export function SshBindingControls({
+export function BashBindingControls({
   bindingId,
   hostSlug,
   orgSlug,
@@ -18,12 +18,12 @@ export function SshBindingControls({
   const [error, setError] = useState<string | null>(null);
 
   async function destroy() {
-    if (!window.confirm(`Remove SSH binding for host '${hostSlug}'?`)) return;
+    if (!window.confirm(`Remove bash binding for host '${hostSlug}'?`)) return;
     setBusy(true);
     setError(null);
     try {
       const res = await fetch(
-        `/api/v1/ssh-bindings/${bindingId}?orgSlug=${encodeURIComponent(orgSlug)}`,
+        `/api/v1/bash-bindings/${bindingId}?orgSlug=${encodeURIComponent(orgSlug)}`,
         { method: 'DELETE' },
       );
       const json = (await res.json()) as { error?: string };

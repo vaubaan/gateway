@@ -44,8 +44,8 @@ export function BindingForm({
 }) {
   const router = useRouter();
 
-  const [provider, setProvider] = useState<Provider>(offered[0]?.provider ?? 'ssh');
-  const isSsh = provider === 'ssh';
+  const [provider, setProvider] = useState<Provider>(offered[0]?.provider ?? 'bash');
+  const isBash = provider === 'bash';
 
   const current = offered.find((o) => o.provider === provider) ?? null;
   const [ref, setRef] = useState<string>(current?.resources[0]?.ref ?? '');
@@ -64,7 +64,7 @@ export function BindingForm({
 
   function onProviderChange(p: Provider) {
     setProvider(p);
-    if (p !== 'ssh') {
+    if (p !== 'bash') {
       const next = offered.find((o) => o.provider === p);
       setRef(next?.resources[0]?.ref ?? '');
     }
@@ -74,8 +74,8 @@ export function BindingForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (isSsh) {
-      await submitSsh();
+    if (isBash) {
+      await submitBash();
     } else {
       await submitStandard();
     }
@@ -106,7 +106,7 @@ export function BindingForm({
     }
   }
 
-  async function submitSsh() {
+  async function submitBash() {
     setBusy(true);
     setError(null);
     setPublicKey('');
@@ -124,7 +124,7 @@ export function BindingForm({
       } else {
         body['ssh_private_key_pem'] = pastePem;
       }
-      const res = await fetch('/api/v1/ssh-bindings', {
+      const res = await fetch('/api/v1/bash-bindings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -181,7 +181,9 @@ export function BindingForm({
         <Card>
           <CardHeader>
             <CardTitle>
-              {isSsh ? 'Add SSH binding' : 'Pick a resource from a connected provider'}
+              {isBash
+                ? 'Add a Bash binding (host + key + optional script)'
+                : 'Pick a resource from a connected provider'}
             </CardTitle>
           </CardHeader>
           <CardBody>
@@ -201,8 +203,8 @@ export function BindingForm({
                 </Select>
               </Field>
 
-              {isSsh ? (
-                <SshFields
+              {isBash ? (
+                <BashFields
                   hostSlug={hostSlug}
                   setHostSlug={setHostSlug}
                   hostAddress={hostAddress}
@@ -251,8 +253,8 @@ export function BindingForm({
               {error && <p style={{ color: 'var(--accent-danger-fg)', margin: 0 }}>{error}</p>}
 
               <div>
-                <Button type="submit" disabled={busy || (!isSsh && !ref)} variant="primary">
-                  {busy ? 'Saving…' : isSsh ? 'Save SSH binding' : 'Save binding'}
+                <Button type="submit" disabled={busy || (!isBash && !ref)} variant="primary">
+                  {busy ? 'Saving…' : isBash ? 'Save bash binding' : 'Save binding'}
                 </Button>
               </div>
             </div>
@@ -263,7 +265,7 @@ export function BindingForm({
   );
 }
 
-function SshFields({
+function BashFields({
   hostSlug,
   setHostSlug,
   hostAddress,

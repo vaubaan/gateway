@@ -1,10 +1,8 @@
 import { describe, expect, test } from 'vitest';
-import { ParseError, parseAnnotatedBash } from './parse';
+import { parseAnnotatedBash } from './parse';
 
 const RUNNER_SH = `#!/usr/bin/env bash
-# @vaubaan-service: runner
-# @vaubaan-description: Manage the Vaubaan runner daemon.
-# @vaubaan-plane: service
+# @vaubaan-plane: host
 # @vaubaan-rings: process binary logs
 
 # @vaubaan: ring=process action=read
@@ -41,15 +39,18 @@ _log() {
 `;
 
 describe('parseAnnotatedBash', () => {
-  test('parses service-level annotations', () => {
+  test('parses script-level annotations', () => {
     const svc = parseAnnotatedBash(RUNNER_SH);
-    expect(svc.slug).toBe('runner');
-    expect(svc.description).toBe('Manage the Vaubaan runner daemon.');
-    expect(svc.plane).toBe('service');
+    expect(svc.plane).toBe('host');
     expect(svc.rings).toEqual(['process', 'binary', 'logs']);
   });
 
-  test('extracts annotated tools', () => {
+  test('defaults plane to "host" when @vaubaan-plane omitted', () => {
+    const svc = parseAnnotatedBash(`# @vaubaan-rings: a\n# @vaubaan: ring=a action=read\nx() {}\n`);
+    expect(svc.plane).toBe('host');
+  });
+
+  test('extracts annotated tools in source order', () => {
     const svc = parseAnnotatedBash(RUNNER_SH);
     const names = svc.tools.map((t) => t.functionName);
     expect(names).toEqual(['runner_status', 'runner_logs', 'runner_stop', 'runner_update']);
@@ -79,39 +80,35 @@ describe('parseAnnotatedBash', () => {
     expect(svc.tools.find((t) => t.functionName === '_log')).toBeUndefined();
   });
 
-  test('rejects missing @vaubaan-service', () => {
-    expect(() =>
-      parseAnnotatedBash(`# @vaubaan-rings: a\n# @vaubaan: ring=a action=read\nx() {}\n`),
-    ).toThrow(ParseError);
+  test('ignores @vaubaan-service: directives (legacy, harmless)', () => {
+    const svc = parseAnnotatedBash(
+      `# @vaubaan-service: ignored\n# @vaubaan-rings: a\n# @vaubaan: ring=a action=read\nx() {}\n`,
+    );
+    expect(svc.rings).toEqual(['a']);
+    expect(svc.tools).toHaveLength(1);
   });
 
-  test('rejects reserved slug', () => {
-    expect(() =>
-      parseAnnotatedBash(
-        `# @vaubaan-service: github\n# @vaubaan-rings: a\n# @vaubaan: ring=a action=read\nx() {}\n`,
-      ),
-    ).toThrow(/built-in/);
+  test('rejects missing @vaubaan-rings', () => {
+    expect(() => parseAnnotatedBash(`# @vaubaan: ring=a action=read\nx() {}\n`)).toThrow(
+      /missing.*@vaubaan-rings/,
+    );
   });
 
   test('rejects tool whose ring is not declared in @vaubaan-rings', () => {
     expect(() =>
-      parseAnnotatedBash(
-        `# @vaubaan-service: foo\n# @vaubaan-rings: a\n# @vaubaan: ring=z action=read\nx() {}\n`,
-      ),
+      parseAnnotatedBash(`# @vaubaan-rings: a\n# @vaubaan: ring=z action=read\nx() {}\n`),
     ).toThrow(/isn't in @vaubaan-rings/);
   });
 
   test('rejects invalid action', () => {
     expect(() =>
-      parseAnnotatedBash(
-        `# @vaubaan-service: foo\n# @vaubaan-rings: a\n# @vaubaan: ring=a action=delete\nx() {}\n`,
-      ),
+      parseAnnotatedBash(`# @vaubaan-rings: a\n# @vaubaan: ring=a action=delete\nx() {}\n`),
     ).toThrow(/action must be/);
   });
 
   test('rejects empty tool list', () => {
-    expect(() =>
-      parseAnnotatedBash(`# @vaubaan-service: foo\n# @vaubaan-rings: a\nx() {}\n`),
-    ).toThrow(/no annotated tool functions/);
+    expect(() => parseAnnotatedBash(`# @vaubaan-rings: a\nx() {}\n`)).toThrow(
+      /no annotated tool functions/,
+    );
   });
 });

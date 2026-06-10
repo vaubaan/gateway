@@ -38,8 +38,8 @@ function ringLabel(rank: number): string {
 export interface RingGridBindings {
   /** provider_bindings rows of the project (any provider). */
   rows: Array<{ provider: string; resource_ref: string; environment: string | null }>;
-  /** Registered SSH host slugs (per-project ssh_bindings). */
-  sshHosts: string[];
+  /** Registered Bash host slugs (per-project bash bindings). */
+  bashHosts: string[];
 }
 
 export interface RingGridProps {
@@ -144,7 +144,7 @@ export function RingGrid({ bindings, value, onChange }: RingGridProps) {
   // additions still surface their grid).
   const usedProviders = useMemo(() => {
     const set = new Set<string>(bindings.rows.map((b) => b.provider));
-    if (bindings.sshHosts.length > 0) set.add('ssh');
+    if (bindings.bashHosts.length > 0) set.add('bash');
     for (const k of Object.keys(cells)) {
       const provider = k.split('/')[0]!;
       set.add(provider);
@@ -532,7 +532,7 @@ function EnvPicker({
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function bindingsForProvider(bindings: RingGridBindings, provider: string): number {
-  if (provider === 'ssh') return bindings.sshHosts.length;
+  if (provider === 'bash') return bindings.bashHosts.length;
   return bindings.rows.filter((b) => b.provider === provider).length;
 }
 
@@ -541,8 +541,8 @@ function envsForPlane(
   provider: string,
   plane: PlaneDescriptor,
 ): string[] {
-  // SSH : envs = host slugs.
-  if (provider === 'ssh') return bindings.sshHosts;
+  // Bash : envs = host slugs.
+  if (provider === 'bash') return bindings.bashHosts;
   // Supabase : env per binding row.
   if (provider === 'supabase') {
     const fromBindings = bindings.rows
@@ -555,5 +555,5 @@ function envsForPlane(
   return [...plane.knownEnvs];
 }
 
-// Re-exported for ssh-bindings count in the page.
+// Re-exported for bash-bindings count in the page.
 export type { LevelDescriptor };

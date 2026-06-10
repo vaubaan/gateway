@@ -1,6 +1,11 @@
 /**
- * GET  /api/v1/ssh-bindings?orgSlug=&projectSlug=  — list bindings
- * POST /api/v1/ssh-bindings                        — create binding
+ * GET  /api/v1/bash-bindings?orgSlug=&projectSlug=  — list bindings
+ * POST /api/v1/bash-bindings                        — create binding
+ *
+ * The table is still named `ssh_bindings` for storage continuity ; the
+ * provider exposed to users is `bash` (SSH is the transport). A binding
+ * may carry an annotated bash script (`bash_content`) whose functions
+ * become the MCP tools the binding exposes.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -9,6 +14,7 @@ import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember, resolveProject } from '@/lib/auth/require-org-member';
 import { encodeByteaHex } from '@/lib/providers/bytea';
 import { generateKeyPairSync } from 'node:crypto';
+import { parseAnnotatedBash, ParseError } from '@/lib/bash/parse';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -27,6 +33,8 @@ const CreateSchema = z.object({
   ssh_private_key_pem: z.string().optional(),
   /** generate mode: generate a new key pair */
   generate_key: z.boolean().optional(),
+  /** Optional : annotated bash script (may be added later via PATCH). */
+  bash_content: z.string().max(100_000).optional(),
 });
 
 export async function GET(req: NextRequest) {
@@ -45,7 +53,9 @@ export async function GET(req: NextRequest) {
 
   const { data, error } = await svc
     .from('ssh_bindings')
-    .select('id, host_slug, host_address, port, ssh_user, created_at, updated_at')
+    .select(
+      'id, host_slug, host_address, port, ssh_user, parsed_meta, parse_error, created_at, updated_at',
+    )
     .eq('project_id', proj.id)
     .order('created_at', { ascending: true });
 
@@ -80,7 +90,6 @@ export async function POST(req: NextRequest) {
       privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
     });
     privateKeyPem = privateKey;
-    // Convert DER SPKI to OpenSSH one-liner for authorized_keys
     const derB64 = publicKey
       .replace(/-----BEGIN PUBLIC KEY-----/, '')
       .replace(/-----END PUBLIC KEY-----/, '')
@@ -95,6 +104,18 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // Parse the optional bash content up front so we can store cached meta.
+  let parsedMeta: unknown = null;
+  let parseError: string | null = null;
+  if (body.bash_content) {
+    try {
+      parsedMeta = parseAnnotatedBash(body.bash_content);
+    } catch (e) {
+      if (e instanceof ParseError) parseError = e.message;
+      else throw e;
+    }
+  }
+
   const { data: row, error } = await svc
     .from('ssh_bindings')
     .insert({
@@ -104,8 +125,11 @@ export async function POST(req: NextRequest) {
       port: body.port,
       ssh_user: body.ssh_user,
       ssh_private_key: encodeByteaHex(privateKeyPem),
+      bash_content: body.bash_content ?? null,
+      parsed_meta: parsedMeta,
+      parse_error: parseError,
     })
-    .select('id, host_slug, host_address, port, ssh_user, created_at')
+    .select('id, host_slug, host_address, port, ssh_user, parsed_meta, parse_error, created_at')
     .single();
 
   if (error) {

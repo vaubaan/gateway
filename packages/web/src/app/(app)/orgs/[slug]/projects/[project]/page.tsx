@@ -3,13 +3,14 @@ import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { type Provider } from '@vaubaan/shared';
 
-// ssh is per-project via ssh_bindings, not org-level — excluded here.
+// bash is per-project (table ssh_bindings, kept for storage continuity),
+// not org-level — excluded from ORG_PROVIDERS.
 const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState } from '@/lib/providers/state';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import { BindingControls } from './binding-controls';
-import { SshBindingControls } from './ssh-binding-controls';
+import { BashBindingControls } from './bash-binding-controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -20,12 +21,13 @@ interface BindingRow {
   display_name: string | null;
 }
 
-interface SshBindingRow {
+interface BashBindingRow {
   id: string;
   host_slug: string;
   host_address: string;
   port: number;
   ssh_user: string;
+  parsed_meta: { tools: Array<{ functionName: string }>; rings: string[] } | null;
 }
 
 interface TokenRow {
@@ -63,12 +65,11 @@ export default async function ProjectPage({
 
   const [
     { data: bindings },
-    { data: sshBindings },
+    { data: bashBindings },
     { data: tokens },
     providerStates,
     { count: pendingApprovals },
     { count: policyRulesCount },
-    { count: servicesCount },
   ] = await Promise.all([
     supabase
       .from('provider_bindings')
@@ -77,9 +78,9 @@ export default async function ProjectPage({
       .returns<BindingRow[]>(),
     supabase
       .from('ssh_bindings')
-      .select('id, host_slug, host_address, port, ssh_user')
+      .select('id, host_slug, host_address, port, ssh_user, parsed_meta')
       .eq('project_id', proj.id)
-      .returns<SshBindingRow[]>(),
+      .returns<BashBindingRow[]>(),
     supabase
       .from('access_tokens')
       .select('id, name, api_key_prefix, status, last_used_at')
@@ -96,10 +97,6 @@ export default async function ProjectPage({
       .from('policy_rules')
       .select('id', { count: 'exact', head: true })
       .eq('project_id', proj.id),
-    supabase
-      .from('runner_services')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', proj.id),
   ]);
 
   const resourcesByProvider: Partial<Record<Provider, Array<{ ref: string; name: string }>>> = {
@@ -107,7 +104,7 @@ export default async function ProjectPage({
     vercel: [],
     supabase: [],
     railway: [],
-    ssh: [],
+    bash: [],
   };
   for (const s of providerStates) {
     resourcesByProvider[s.provider] = s.resources.map((r) => ({ ref: r.ref, name: r.name }));
@@ -144,11 +141,6 @@ export default async function ProjectPage({
                   Capability rings
                 </Button>
               </Link>
-              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/services`}>
-                <Button size="sm" variant="secondary">
-                  Services ({servicesCount ?? 0})
-                </Button>
-              </Link>
               <Link href={`/orgs/${org.slug}/projects/${proj.slug}/policy`}>
                 <Button size="sm" variant="secondary">
                   Policy rules ({policyRulesCount ?? 0})
@@ -180,7 +172,7 @@ export default async function ProjectPage({
             </Link>
           </CardHeader>
           <CardBody>
-            {(bindings ?? []).length === 0 && (sshBindings ?? []).length === 0 ? (
+            {(bindings ?? []).length === 0 && (bashBindings ?? []).length === 0 ? (
               <p style={{ color: 'var(--text-subtle)', margin: 0 }}>No bindings yet.</p>
             ) : (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -207,9 +199,9 @@ export default async function ProjectPage({
                     />
                   </li>
                 ))}
-                {(sshBindings ?? []).length > 0 && (
+                {(bashBindings ?? []).length > 0 && (
                   <li
-                    key="ssh-group"
+                    key="bash-group"
                     style={{
                       padding: 'var(--space-3) 0',
                       borderBottom: '1px solid var(--border-subtle)',
@@ -223,11 +215,11 @@ export default async function ProjectPage({
                         marginBottom: 'var(--space-2)',
                       }}
                     >
-                      <Badge tone="neutral">ssh</Badge>
-                      <Code>{(sshBindings ?? []).length} hosts</Code>
+                      <Badge tone="neutral">bash</Badge>
+                      <Code>{(bashBindings ?? []).length} hosts</Code>
                       <span style={{ color: 'var(--text-subtle)', fontSize: 12 }}>
-                        each host_slug becomes an env in the <Code>ssh:host/shell</Code>{' '}
-                        capabilities.
+                        each host_slug is an env in{' '}
+                        <Code>bash:&lt;ring&gt;:&lt;action&gt;@&lt;host&gt;</Code> capabilities.
                       </span>
                     </div>
                     <ul
@@ -238,9 +230,9 @@ export default async function ProjectPage({
                         paddingLeft: 'var(--space-4)',
                       }}
                     >
-                      {(sshBindings ?? []).map((b) => (
+                      {(bashBindings ?? []).map((b) => (
                         <li
-                          key={`ssh-${b.id}`}
+                          key={`bash-${b.id}`}
                           style={{
                             display: 'flex',
                             justifyContent: 'space-between',
@@ -249,10 +241,24 @@ export default async function ProjectPage({
                             padding: 'var(--space-2) 0',
                           }}
                         >
-                          <Code>
-                            @{b.host_slug} · {b.ssh_user}@{b.host_address}:{b.port}
-                          </Code>
-                          <SshBindingControls
+                          <Link
+                            href={`/orgs/${org.slug}/projects/${proj.slug}/bash-bindings/${b.id}`}
+                            style={{
+                              textDecoration: 'none',
+                              color: 'inherit',
+                              display: 'inline-flex',
+                              gap: 'var(--space-2)',
+                              alignItems: 'center',
+                            }}
+                          >
+                            <Code>
+                              @{b.host_slug} · {b.ssh_user}@{b.host_address}:{b.port}
+                            </Code>
+                            <Badge tone={b.parsed_meta ? 'success' : 'neutral'}>
+                              {b.parsed_meta ? `${b.parsed_meta.tools.length} tools` : 'no script'}
+                            </Badge>
+                          </Link>
+                          <BashBindingControls
                             bindingId={b.id}
                             hostSlug={b.host_slug}
                             orgSlug={org.slug}
