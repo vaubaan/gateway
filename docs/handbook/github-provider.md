@@ -1,16 +1,19 @@
 ---
 title: GitHub provider adapter
 status: current
-date: 2026-05-22
+date: 2026-06-11
 tracks:
   - packages/providers/github/src/
+  - packages/web/src/app/api/integrations/github/
   - supabase/migrations/0001_init.sql
 ---
 
 # GitHub provider — `@vaubaan/providers-github`
 
-L'unique provider intégré au MVP. OAuth/App install, JIT installation token,
-17 MCP tools synthétisés via Octokit.
+Le provider de référence : App install + JIT installation token + 18 MCP
+tools synthétisés via Octokit, plus le tool éphémère `github__mint_install_token`.
+Le pattern (contrat `ProviderAdapter` + classifier + executor) est répliqué
+par les 4 autres providers (vercel, supabase, railway, bash).
 
 ## Layout
 
@@ -19,42 +22,66 @@ packages/providers/github/
   src/
     adapter.ts          # ProviderAdapter contract (générique, ré-exporté)
     app-install.ts      # buildAppJwt + mintInstallationToken (RS256 JWT + POST /access_tokens)
-    tools.ts            # availableTools[] — 17 MCP tool declarations
+    classify.ts         # classifyGithub + githubToolCapabilities (capability model)
+    tools.ts            # availableTools[] — 18 MCP tool declarations
     execute.ts          # executeCall(factory, token, tool, args) — switch sur tool_name
-    github-adapter.ts   # GitHubAdapter class — assemble app-install + execute + tools
+    github-adapter.ts   # GitHubAdapter class — assemble app-install + execute + classify + tools
     index.ts            # barrel
-  tests/unit/adapter.test.ts (9 tests)
+  tests/unit/adapter.test.ts (25 tests)
 ```
 
 ## Le contrat `ProviderAdapter`
 
-Toute intégration provider implémente :
+Défini dans [`adapter.ts:36`](../../packages/providers/github/src/adapter.ts).
+Implémenté par les 5 providers ; le gateway dispatche dessus sans
+spécificité (cf. [[mcp-gateway]]).
 
 ```ts
 interface ProviderAdapter {
   readonly provider: Provider;
   readonly availableTools: ReadonlyArray<McpToolDeclaration>;
   authorizationUrl(orgId, returnUrl, state): string;
-  handleCallback(orgId, params): Promise<{installation_id?, team_id?, access_token_encrypted?, ...}>;
-  mintUpstreamToken(admin): Promise<{token, expiresAt}>;
-  validateBinding(admin, resourceRef): Promise<{ok, displayName?, error?}>;
+  handleCallback(
+    orgId,
+    params,
+  ): Promise<{
+    installation_id;
+    team_id;
+    access_token_encrypted;
+    refresh_token_encrypted;
+    expires_at;
+  }>;
+  mintUpstreamToken(admin): Promise<{ token; expiresAt }>;
+  validateBinding(admin, resourceRef): Promise<{ ok; displayName?; error? }>;
   executeCall(admin, binding, tool, args): Promise<unknown>;
-  resolveTarget(target, bindings): string[];
+  // Capability model (spec §3, §6) :
+  toolCapabilities(tool): readonly Capability[]; // env-less surface — for tools/list filter
+  classify(tool, args, bindings): ClassifyResult; // → { capability } | { denied }
 }
 ```
 
-Vercel et Supabase suivront le même contrat en Phase 5.
+`resolveTarget(target, bindings)` n'existe plus — l'autorisation se fait
+maintenant par classification capability + exact-tuple match côté
+[[policy-engine]] / `evaluateCapability`, pas par résolution de cible.
 
 ## GitHub App install flow
 
-1. Org admin → `Connect GitHub` button.
-2. UI redirige vers `https://github.com/apps/vaubaan-gateway/installations/new?state=<nonce>`.
+Path **slug-agnostique** côté GitHub App ("Setup URL" stable). Le slug
+de l'org est encodé dans le `state` nonce, pas dans l'URL.
+
+1. Org admin → `Connect GitHub` button → `GET /api/integrations/github/connect?org=<slug>`.
+2. Handler vérifie `requireOrgMember(slug)`, génère un `state` qui
+   encode `orgId` (`lib/oauth/state.ts:generateState`), stocke ce state
+   en cookie `vbn_oauth_state` (5min, single-use), et redirige vers
+   `https://github.com/apps/<GITHUB_APP_SLUG>/installations/new?state=<state>`.
 3. GitHub écran consent. Admin choisit org + repos. Click Authorize.
-4. GitHub redirige vers `/orgs/<slug>/providers/github/callback?installation_id=<id>&state=<nonce>`.
-5. Callback handler :
-   - vérifie le `state` cookie (`vbn_oauth_state`, single-use, 5min TTL).
-   - upserts `provider_admins` row avec `installation_id` (status='connected').
-6. UI : page `/orgs/<slug>` montre GitHub connected ✓.
+4. GitHub redirige vers
+   `GET /api/integrations/github/callback?installation_id=<id>&state=<state>&setup_action=install`.
+5. Callback handler (`callback/route.ts`) :
+   - vérifie le `state` cookie + décode `orgId` via `decodeStateOrgId`.
+   - upsert `provider_admins` row (service_role) avec `installation_id`
+     et `status='connected'`.
+6. UI : page `/orgs/<slug>/providers` montre GitHub connected ✓.
 
 ## JIT installation token
 
@@ -86,12 +113,14 @@ PEM avec `\n` escaped). Jamais en DB.
 - **Write files** : `github__create_or_update_file`, `github__push_files`.
 - **Write PR / comments** : `github__create_pull_request`, `github__add_issue_comment`.
 - **Ephemeral credential** : `github__mint_install_token` (cf. ADR
-  `mint-install-token-credential`) — mint un token ghs\_\* court-vivant
+  [[mint-install-token-credential]]) — mint un token `ghs_*` court-vivant
   scopé aux repos du Project. Les flows clone et push appellent ce tool au
   lieu de stocker un PAT sur le host d'exécution.
-- **Dangerous (aucun builtin role ne les autorise — default-deny)** :
-  `github__merge_pull_request`, `github__delete_file`. Pour les autoriser,
-  créer un role custom org-scopé.
+- **Sensitive (gated par policy)** : `github__merge_pull_request`,
+  `github__delete_file`. Classifiés sur `repo/code:write@main` (resp.
+  `code:write` sur la branche cible) ; la policy par défaut force
+  `confirm` (human-gate) sur tout write env-less ou `@main` cf.
+  [[capability-policy-and-approvals]].
 
 Le mapping `tool_name → Octokit call` vit dans `src/execute.ts`. Le mint
 vit dans `src/github-adapter.ts` (a accès à `admin.installation_id` + l'App
@@ -126,20 +155,56 @@ Output (passé au caller via le wrap MCP) :
 
 Le caller fait ensuite `git clone https://x-access-token:$TOKEN@github.com/<repo>.git`.
 
-## Roles builtin
+## Capability surface
 
-Seedés en migration `0001_init.sql` :
+Le classifier `classifyGithub` (`classify.ts:91`) mappe chaque
+`(tool, args)` en capability `github:repo/<level>:<action>[@<env>]` (cf.
+spec `gateway-capability-model.md` §3, §6).
 
-- `github:reader` — read-only sur les repos bindés.
-- `github:developer` — read + writes sur `feature/*`, `fix/*`, `claude/*`,
-  PRs vers `main`, pas de merge, pas de delete. **Inclut** `mint_install_token`
-  avec `purpose IN ('clone','push')`.
-- `github:provisioner` (migration `0005`, **internal**) — mint
-  `github__mint_install_token` avec `purpose='clone'` uniquement. Utilisé
-  au bootstrap d'une session, **ne pas assigner à des humains**.
+Ladder du plane `repo` (interne → externe) :
+
+| Niveau | Slug     | Concerne                                         |
+| ------ | -------- | ------------------------------------------------ |
+| niv1   | `code`   | Files, commits, branches, PRs, issues            |
+| niv2   | `ci`     | Workflows (`.github/workflows/*.yml`), Actions   |
+| niv3   | `rules`  | Branch protection, required reviews, merge rules |
+| niv4   | `access` | Repo, collaborators, install tokens, secrets     |
+
+**Env sur `code`** = la branche cible (décision spec §4 #5 : la branche
+EST l'env). `code:write@main` ≡ merge / canonical write ;
+`code:write@<feature>` ≡ propose. Reads sont env-less.
+
+Exemples de classification (`classify.ts:31-50`) :
+
+| Tool                          | Capability classifiée                                           |
+| ----------------------------- | --------------------------------------------------------------- |
+| `github__list_branches`       | `code:read` (env-less)                                          |
+| `github__push_files`          | `code:write@<args.branch>`                                      |
+| `github__create_pull_request` | `code:write@<args.head>`                                        |
+| `github__merge_pull_request`  | `code:write@<args.base ?? 'main'>`                              |
+| `github__search_code`         | `code:read` (global, env-less)                                  |
+| `github__mint_install_token`  | clone → `access:read` ; push → `code:write` (env-less, fan-out) |
+
+La protection des writes sensibles (merge sur `main`, delete sur prod)
+est portée par les `policy_rules` du projet ([[capability-policy-and-approvals]]),
+pas par des rôles builtin. Le modèle Roles seedé en `0001_init.sql` a été
+remplacé par les capabilities en migration `0015_capabilities_replace_roles.sql`
+— les tables `roles` et `access_token_roles` ont été droppées
+(`0015:27-28`).
 
 ## Tests
 
-`npx vitest run packages/providers/github` — 18 tests (~50ms), dont 6 pour
-`mint_install_token` (purpose mapping, repoFullName validation, scope par
-défaut = tous les bindings).
+`npx vitest run packages/providers/github` — 25 tests (~50ms), dont :
+
+- 6 pour `mint_install_token` (purpose mapping, repoFullName validation,
+  scope par défaut = tous les bindings).
+- Tests `classifyGithub` couvrant chaque kind du `TOOL_KIND` (`classify.ts:31`)
+  - branches d'erreur (unknown tool, missing owner/repo, repo non-bindé).
+- Tests `mintInstallationToken` (JWT signing avec `jose` réel, échange
+  via fetch mocké, gestion des 4xx).
+
+## Références
+
+- Spec : [`docs/spec/gateway-capability-model.md`](../spec/gateway-capability-model.md) §3, §6 (capability model + classifier).
+- ADRs : [[mint-install-token-credential]], [[oauth-app-install-per-provider]], [[dispatch-upstream-option-a-synthese]].
+- Handbooks voisins : [[web-app]] (OAuth flow côté Next.js), [[mcp-gateway]] (hot-path dispatch), [[capability-policy-and-approvals]] (policy + approval flow), [[policy-engine]] (evaluateCapability).
