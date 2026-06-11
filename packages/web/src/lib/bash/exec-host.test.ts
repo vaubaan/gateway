@@ -63,7 +63,6 @@ describe('loadHostByIdInOrg', () => {
       port: 22,
       ssh_user: 'dev',
       ssh_private_key: '\\xdead',
-      bash_binding_id: 'b1',
       bash_bindings: { projects: { organization_id: 'org-1' } },
     };
     const { client } = fakeSupabase(row);
@@ -88,7 +87,6 @@ describe('loadHostByIdInOrg', () => {
       port: 22,
       ssh_user: 'dev',
       ssh_private_key: '\\xdead',
-      bash_binding_id: 'b1',
       bash_bindings: { projects: { organization_id: 'OTHER-org' } },
     };
     const { client } = fakeSupabase(row);

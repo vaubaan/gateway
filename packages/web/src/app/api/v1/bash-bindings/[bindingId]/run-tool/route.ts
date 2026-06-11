@@ -12,6 +12,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { hashArguments } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
@@ -61,10 +62,7 @@ interface AuditCallSummary {
   clientUserAgent: string | null;
 }
 
-async function writeRestBypassAudit(
-  svc: ReturnType<typeof getSupabaseServiceClient>,
-  call: AuditCallSummary,
-): Promise<void> {
+async function writeRestBypassAudit(svc: SupabaseClient, call: AuditCallSummary): Promise<void> {
   const { error } = await svc.from('audit_log').insert({
     organization_id: call.organizationId,
     project_id: call.projectId,
