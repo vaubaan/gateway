@@ -1,12 +1,10 @@
 ---
 title: Vercel provider adapter
 status: current
-date: 2026-05-31
+date: 2026-06-11
 tracks:
   - packages/providers/vercel/src/
-  - supabase/migrations/0002_add_builtin_roles_vercel_supabase.sql
-  - supabase/migrations/0006_add_vercel_editor_role.sql
-  - supabase/migrations/0007_add_vercel_deployer_role.sql
+  - packages/web/src/app/api/integrations/vercel/
 ---
 
 # Vercel provider — `@vaubaan/providers-vercel`
@@ -28,13 +26,14 @@ ADRs opérantes : `docs/decisions/rewrap-official-mcps.md`,
 ```
 packages/providers/vercel/
   src/
-    vercel-adapter.ts    # VercelAdapter — mint (long-lived), executeCall, resolveTarget
+    vercel-adapter.ts    # VercelAdapter — mint (long-lived), executeCall, classify, toolCapabilities
+    classify.ts          # classifyVercel + vercelToolCapabilities (capability model)
     execute.ts           # JSON-RPC forward → mcp.vercel.com + REST dispatch pour custom tools
     tools.ts             # availableTools[] = upstream + custom
     upstream-tools.json  # 18 tools frozen from mcp.vercel.com (refresh manuel)
     custom-tools.ts      # 2 tools REST (update_project_settings, upsert_env_var)
     index.ts             # barrel
-  tests/unit/adapter.test.ts
+  tests/unit/adapter.test.ts (18 tests)
 ```
 
 ## Concepts du cloud — supportés / non-supportés
@@ -43,29 +42,29 @@ Vocabulaire Vercel ↔ Vaubaan. Sourcing : Context7 `/llmstxt/vercel_llms-full_t
 (query "Vercel concepts: teams, projects, deployments, env vars, scopes,
 RBAC"), 2026-05-31.
 
-| Concept Vercel                                                                              | Supporté                                                                                           | Pourquoi                                                                                                                                                                                                                                                                                          |
-| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Team                                                                                        | Oui — résolu via `provider_admins.team_id` (auto-injecté en query param `teamId` par `execute.ts`) | Vercel exige `teamId` pour toutes les requêtes quand l'installation est team-scoped (cf. doc REST API "Team-Based API Requests").                                                                                                                                                                 |
-| Project                                                                                     | Oui — `target: 'project.vercel'`, `resource_ref = prj_<...>`                                       | Bindings stockés en `provider_bindings`. Vaubaan filtre les calls aux projects bindés via `resolveTarget`.                                                                                                                                                                                        |
-| Deployment                                                                                  | Oui (read + trigger)                                                                               | tools `list_deployments`, `get_deployment`, `deploy_to_vercel`.                                                                                                                                                                                                                                   |
-| Build logs                                                                                  | Oui                                                                                                | `vercel__get_deployment_build_logs` (stream ou JSON selon paramètres).                                                                                                                                                                                                                            |
-| Runtime logs                                                                                | Oui (avec filtres environment / level / source / requestId / since-until)                          | `vercel__get_runtime_logs`.                                                                                                                                                                                                                                                                       |
-| Env vars (project-scoped)                                                                   | Oui (read + upsert)                                                                                | upstream get via `get_project`, upsert via custom REST `upsert_env_var` (POST `/v10/projects/{id}/env?upsert=true`).                                                                                                                                                                              |
-| Env vars (global account-wide)                                                              | Non                                                                                                | Hors-scope MVP. Le scope Vercel `global-project-env-vars` n'est pas demandé.                                                                                                                                                                                                                      |
-| Project settings (rootDirectory, framework, build/dev/install/output commands, nodeVersion) | Oui (read + update)                                                                                | custom REST `update_project_settings` (PATCH `/v9/projects/{id}`).                                                                                                                                                                                                                                |
-| Deploy trigger                                                                              | Oui                                                                                                | `vercel__deploy_to_vercel`.                                                                                                                                                                                                                                                                       |
-| Domain check / pricing                                                                      | Oui (read)                                                                                         | `vercel__check_domain_availability_and_price` (jusqu'à 10 noms par appel).                                                                                                                                                                                                                        |
-| Domain CRUD (add/remove/DNS records)                                                        | Non v1                                                                                             | Pas de tool exposé. Scope `domain:Read+Write` non demandé.                                                                                                                                                                                                                                        |
-| Toolbar threads                                                                             | Oui (read + write — list/get/reply/edit/react/resolve)                                             | 6 tools upstream couvrant le flow toolbar comments complet.                                                                                                                                                                                                                                       |
-| Bypass token URL (deployment protection)                                                    | Oui (read)                                                                                         | `vercel__get_access_to_vercel_url` génère un lien temporaire qui bypass l'auth.                                                                                                                                                                                                                   |
-| Documentation search                                                                        | Oui                                                                                                | `vercel__search_vercel_documentation` (utile pour qu'un agent vérifie la syntaxe d'un setting).                                                                                                                                                                                                   |
-| Per-project tokens / per-deployment tokens                                                  | **Non** (limitation Vercel)                                                                        | Vercel ne propose pas de token scopé per-project. Les access tokens sont team-wide (Integration) ou account-wide (PAT). Le scoping projet est appliqué **côté Vaubaan** via le policy DSL (`target: 'project.vercel'`) et le filtrage de `bindings`. Cf. ADR `vercel-augment-with-rest-tools.md`. |
-| Team RBAC natif (Owner/Member/Developer/Viewer/Contributor + project roles)                 | Non — non utilisé                                                                                  | Vaubaan ne mappe pas vers les roles Vercel. La granularité d'accès est exprimée via nos propres Roles + le minimum d'API Scopes côté Integration.                                                                                                                                                 |
-| Webhooks                                                                                    | Non v1                                                                                             | Pas de tool exposé. Possible v2 si un cas d'usage métier le justifie (`deployment.succeeded` etc.).                                                                                                                                                                                               |
-| Edge Config                                                                                 | Non v1                                                                                             | Pas d'usage métier identifié. Scope `edge-config` non demandé.                                                                                                                                                                                                                                    |
-| Log drains                                                                                  | Non v1                                                                                             | Pas de tool exposé. Scope `log-drain` non demandé.                                                                                                                                                                                                                                                |
-| Project create                                                                              | Non v1                                                                                             | Pas de tool upstream à ce jour, pas de besoin métier.                                                                                                                                                                                                                                             |
-| Marketplace billing / native integration                                                    | Non — hors-scope                                                                                   | Vaubaan est une **Connectable Account Integration** (registration owner-installed), pas une Marketplace listing.                                                                                                                                                                                  |
+| Concept Vercel                                                                              | Supporté                                                                                           | Pourquoi                                                                                                                                                                                                                                                                                                                                                   |
+| ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Team                                                                                        | Oui — résolu via `provider_admins.team_id` (auto-injecté en query param `teamId` par `execute.ts`) | Vercel exige `teamId` pour toutes les requêtes quand l'installation est team-scoped (cf. doc REST API "Team-Based API Requests").                                                                                                                                                                                                                          |
+| Project                                                                                     | Oui — `resource_ref = prj_<...>`                                                                   | Bindings stockés en `provider_bindings`. Le classifier `classifyVercel` (`classify.ts:97`) refuse tout `args.projectId` non bindé ; auto-injecté par `mergeInjectedArgs` quand le projet a un seul binding Vercel.                                                                                                                                         |
+| Deployment                                                                                  | Oui (read + trigger)                                                                               | tools `list_deployments`, `get_deployment`, `deploy_to_vercel`.                                                                                                                                                                                                                                                                                            |
+| Build logs                                                                                  | Oui                                                                                                | `vercel__get_deployment_build_logs` (stream ou JSON selon paramètres).                                                                                                                                                                                                                                                                                     |
+| Runtime logs                                                                                | Oui (avec filtres environment / level / source / requestId / since-until)                          | `vercel__get_runtime_logs`.                                                                                                                                                                                                                                                                                                                                |
+| Env vars (project-scoped)                                                                   | Oui (read + upsert)                                                                                | upstream get via `get_project`, upsert via custom REST `upsert_env_var` (POST `/v10/projects/{id}/env?upsert=true`).                                                                                                                                                                                                                                       |
+| Env vars (global account-wide)                                                              | Non                                                                                                | Hors-scope MVP. Le scope Vercel `global-project-env-vars` n'est pas demandé.                                                                                                                                                                                                                                                                               |
+| Project settings (rootDirectory, framework, build/dev/install/output commands, nodeVersion) | Oui (read + update)                                                                                | custom REST `update_project_settings` (PATCH `/v9/projects/{id}`).                                                                                                                                                                                                                                                                                         |
+| Deploy trigger                                                                              | Oui                                                                                                | `vercel__deploy_to_vercel`.                                                                                                                                                                                                                                                                                                                                |
+| Domain check / pricing                                                                      | Oui (read)                                                                                         | `vercel__check_domain_availability_and_price` (jusqu'à 10 noms par appel).                                                                                                                                                                                                                                                                                 |
+| Domain CRUD (add/remove/DNS records)                                                        | Non v1                                                                                             | Pas de tool exposé. Scope `domain:Read+Write` non demandé.                                                                                                                                                                                                                                                                                                 |
+| Toolbar threads                                                                             | Oui (read + write — list/get/reply/edit/react/resolve)                                             | 6 tools upstream couvrant le flow toolbar comments complet.                                                                                                                                                                                                                                                                                                |
+| Bypass token URL (deployment protection)                                                    | Oui (read)                                                                                         | `vercel__get_access_to_vercel_url` génère un lien temporaire qui bypass l'auth.                                                                                                                                                                                                                                                                            |
+| Documentation search                                                                        | Oui                                                                                                | `vercel__search_vercel_documentation` (utile pour qu'un agent vérifie la syntaxe d'un setting).                                                                                                                                                                                                                                                            |
+| Per-project tokens / per-deployment tokens                                                  | **Non** (limitation Vercel)                                                                        | Vercel ne propose pas de token scopé per-project. Les access tokens sont team-wide (Integration) ou account-wide (PAT). Le scoping projet est appliqué **côté Vaubaan** via le classifier (`classify.ts`) qui check `args.projectId ∈ bindings` + les capabilities `vercel:runtime/<level>:<action>[@<env>]`. Cf. ADR `vercel-augment-with-rest-tools.md`. |
+| Team RBAC natif (Owner/Member/Developer/Viewer/Contributor + project roles)                 | Non — non utilisé                                                                                  | Vaubaan ne mappe pas vers les roles Vercel. La granularité d'accès est exprimée via nos capabilities (cf. ladder ci-dessous) + le minimum d'API Scopes côté Integration.                                                                                                                                                                                   |
+| Webhooks                                                                                    | Non v1                                                                                             | Pas de tool exposé. Possible v2 si un cas d'usage métier le justifie (`deployment.succeeded` etc.).                                                                                                                                                                                                                                                        |
+| Edge Config                                                                                 | Non v1                                                                                             | Pas d'usage métier identifié. Scope `edge-config` non demandé.                                                                                                                                                                                                                                                                                             |
+| Log drains                                                                                  | Non v1                                                                                             | Pas de tool exposé. Scope `log-drain` non demandé.                                                                                                                                                                                                                                                                                                         |
+| Project create                                                                              | Non v1                                                                                             | Pas de tool upstream à ce jour, pas de besoin métier.                                                                                                                                                                                                                                                                                                      |
+| Marketplace billing / native integration                                                    | Non — hors-scope                                                                                   | Vaubaan est une **Connectable Account Integration** (registration owner-installed), pas une Marketplace listing.                                                                                                                                                                                                                                           |
 
 ## Setup opérateur (une fois)
 
@@ -111,10 +110,10 @@ Source de la procédure : Context7 `/llmstxt/vercel_llms-full_txt` (queries
 
 ### Mode dégradé v0 : Paste-token (sans Integration)
 
-Tant que le flow `authorizationUrl` / `handleCallback` n'est pas implémenté
-côté `VercelAdapter` (commentaires de `vercel-adapter.ts:38-46` : `Phase 5+`),
-le seul moyen de connecter Vercel est de **coller un token long-lived**
-directement en DB :
+Tant que le flow `authorizationUrl` / `handleCallback` reste un stub qui
+throw (`vercel-adapter.ts:44-52` — _"OAuth Integration flow not
+implemented yet — use paste-token mode"_), le seul moyen de connecter
+Vercel est de **coller un token long-lived** directement en DB :
 
 1. Sur le compte qui owne le team Vercel cible : ouvrir
    [https://vercel.com/account/tokens](https://vercel.com/account/tokens)
@@ -130,7 +129,7 @@ directement en DB :
 > **Limitation paste-token v0** : pas de rotation auto, pas de UI de
 > connexion guidée, pas de scoping fin (le PAT est account-wide ou
 > team-wide selon le choix lors de la création). Pour la prod, prévoir la
-> bascule vers l'Integration (Phase 5+).
+> bascule vers l'Integration (TODO côté `vercel-adapter.ts`).
 
 ### Côté Vaubaan (env vars)
 
@@ -145,7 +144,7 @@ Mode paste-token v0 : aucune env var requise (l'INSERT manuel suffit).
 
 ### Vérification
 
-**Integration (Phase 5+) :**
+**Integration (flow TODO) :**
 
 1. Connecté en tant qu'org admin Vaubaan, naviguer `/orgs/<slug>/providers`.
 2. Cliquer **Connect Vercel** → redirige vers
@@ -219,7 +218,7 @@ Context7 `query-docs` "Vercel scopes per endpoint", 2026-05-31.
 
 ## Token mint / hot-path
 
-`VercelAdapter.mintUpstreamToken` (`vercel-adapter.ts:48-54`) :
+`VercelAdapter.mintUpstreamToken` (`vercel-adapter.ts:54-60`) :
 
 ```ts
 // 1. lit admin.access_token_encrypted (bytea, Vault-encrypted v0)
@@ -257,50 +256,67 @@ Pas de tool **DESTRUCTIVE** deny-listé en v1 — `mcp.vercel.com` n'expose pas
 de delete (le delete project, env var, deployment passe par REST direct et
 n'est pas wrappé côté Vaubaan en MVP).
 
-## Roles builtin
+## Capability surface
 
-Seedés par migrations :
+Le classifier `classifyVercel` (`classify.ts:97`) mappe chaque
+`(tool, args)` en capability `vercel:runtime/<level>:<action>[@<env>]`
+(cf. spec `gateway-capability-model.md` §3, §6).
 
-- **`vercel:viewer`** (migration `0002_add_builtin_roles_vercel_supabase.sql`) —
-  read-only. `allow tool_matches: ['vercel__list_*', 'vercel__get_*',
-'vercel__search_*', 'vercel__check_*', 'vercel__web_fetch_*']`,
-  `target: '*'`.
-- **`vercel:editor`** (migration `0006_add_vercel_editor_role.sql`) — read +
-  edit project settings + env vars (pas de deploy, pas de toolbar writes).
-  `allow tool_matches: ['vercel__list_*', 'vercel__get_*',
-'vercel__update_*', 'vercel__upsert_*']`, `target: 'project.vercel'`.
-- **`vercel:deployer`** (migration `0007_add_vercel_deployer_role.sql`,
-  ajoutée 2026-05-31) — read + trigger deploy (pas d'edit, pas de toolbar
-  writes). `allow tool_matches: ['vercel__list_*', 'vercel__get_*',
-'vercel__deploy_to_vercel']`, `target: 'project.vercel'`.
+Ladder du plane `runtime` (interne → externe) :
 
-Toolbar writes (`reply_to_toolbar_thread`, `edit_toolbar_message`,
-`add_toolbar_reaction`, `change_toolbar_thread_resolve_status`) : **pas de
-role builtin** en v1. Décision : attendre un signal métier réel avant
-d'exposer un `vercel:commenter`. En attendant, un org admin peut créer un
-role custom (org-scoped) qui autorise ces 4 tools.
+| Niveau | Slug               | Concerne                       |
+| ------ | ------------------ | ------------------------------ |
+| niv1   | `deployment`       | Build servi + runtime logs     |
+| niv2   | `config`           | Env vars, build settings       |
+| niv3   | `project-settings` | Domains, deployment protection |
+| niv4   | `account`          | Project, team, tokens          |
 
-### Cheat sheet use-case → Roles à attacher
+**Env sur `deployment` / `config`** = `args.target` normalisé en
+`prod` / `preview` / `development` (défaut `prod` quand absent —
+conservateur, `classify.ts:envOf`).
 
-Cette table aide l'opérateur (humain ou management key) à composer un
-AccessToken pour un coding agent au use case près. Pas de presets DB ; un
-AccessToken porte simplement N Roles (premier `allow` matched gagne, `deny`
-override).
+Exemples de classification (`classify.ts:31-57`) :
 
-| Use case (coding agent)                                                             | Roles à attacher                                                            |
-| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Audit / debug read-only (logs build + runtime, list/get deploys, list/get projects) | `vercel:viewer`                                                             |
-| Edit project settings + env vars sur un projet bindé (no deploy)                    | `vercel:editor`                                                             |
-| Trigger deploy + read logs (CI-style, pas d'edit)                                   | `vercel:deployer`                                                           |
-| Full developer (edit + deploy + read)                                               | `vercel:editor` + `vercel:deployer`                                         |
-| Diagnostic prod incident (read logs + list deploys + redeploy si besoin)            | `vercel:viewer` + `vercel:deployer`                                         |
-| Repondre à toolbar threads sur previews (collab UX)                                 | `vercel:viewer` + role custom org-level pour les `vercel__*toolbar*` writes |
+| Tool                              | Capability classifiée         |
+| --------------------------------- | ----------------------------- |
+| `vercel__list_projects`           | `account:read`                |
+| `vercel__get_project`             | `project-settings:read`       |
+| `vercel__get_deployment`          | `deployment:read`             |
+| `vercel__deploy_to_vercel`        | `deployment:write@<target>`   |
+| `vercel__upsert_env_var`          | `config:write@<target>`       |
+| `vercel__update_project_settings` | `project-settings:write`      |
+| `vercel__reply_to_toolbar_thread` | `deployment:write` (env-less) |
+
+La protection des writes sensibles (deploy prod, env vars prod) est
+portée par les `policy_rules` du projet ([[capability-policy-and-approvals]]),
+pas par des rôles builtin. Le modèle Roles seedé en
+`0002_add_builtin_roles_vercel_supabase.sql` / `0006` / `0007` a été
+remplacé par les capabilities en migration `0015_capabilities_replace_roles.sql`
+— tables `roles` + `access_token_roles` droppées (`0015:27-28`).
+
+### Cheat sheet use-case → capabilities à mint
+
+Aide l'opérateur (humain ou management key) à composer un access token
+pour un coding agent au use case près. La policy par défaut force
+`confirm` sur tout `write` env-less ou `@prod` ; ajuster via
+`policy_rules` si l'opération doit passer en `allow` autonome.
+
+| Use case (coding agent)                                                   | Capabilities à mint                                                                                     |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| Audit / debug read-only (logs build + runtime, list/get deploys/projects) | `vercel:runtime/deployment:read`, `vercel:runtime/account:read`, `vercel:runtime/project-settings:read` |
+| Edit project settings + env vars sur un projet bindé (no deploy)          | + `vercel:runtime/config:write@preview`, `vercel:runtime/project-settings:write`                        |
+| Trigger deploy + read logs (CI-style, pas d'edit)                         | + `vercel:runtime/deployment:write@preview` (ou `@prod` avec confirm)                                   |
+| Full developer (edit + deploy + read)                                     | union des 3 lignes au-dessus                                                                            |
+| Diagnostic prod incident (read logs + redeploy)                           | reads + `vercel:runtime/deployment:write@prod` (déclenchera confirm)                                    |
+| Répondre à toolbar threads sur previews                                   | reads + `vercel:runtime/deployment:write` (env-less, surface toolbar)                                   |
 
 ## Tests
 
-`npx vitest run packages/providers/vercel` — voir `tests/unit/adapter.test.ts`
-pour le détail (mint, validateBinding, executeCall avec teamId injection,
-custom REST dispatch).
+`npx vitest run packages/providers/vercel` — 18 tests dans
+`tests/unit/adapter.test.ts` (mint long-lived, validateBinding sur
+`prj_*`, executeCall avec teamId injection, custom REST dispatch
+`update_project_settings` + `upsert_env_var`, classify branches par
+kind).
 
 ## Refresh procedure (rewrap)
 
@@ -322,14 +338,20 @@ détecter un drift entre `upstream-tools.json` et la version live :
 ## Limitations connues / dette
 
 - **OAuth Integration flow non implémenté** côté code (v0 = paste-token).
-  Cf. `vercel-adapter.ts:38-46` (`authorizationUrl` et `handleCallback`
-  throw). Phase 5+ : implémenter le flow `redirectLoginUrl` → `code` →
+  Cf. `vercel-adapter.ts:44-52` (`authorizationUrl` et `handleCallback`
+  throw). TODO : implémenter le flow `redirectLoginUrl` → `code` →
   exchange → upsert `provider_admins`.
 - **PAT account-wide ou team-wide**. Pas de granularité project-level
-  côté token Vercel. Le scoping projet vit dans la policy Vaubaan via
-  `target: 'project.vercel'` + `bindings`.
+  côté token Vercel. Le scoping projet vit dans le classifier Vaubaan
+  via check `args.projectId ∈ bindings` (`classify.ts:108-113`).
 - **Pas de webhook** Vercel intégré. Si on veut écouter `deployment.succeeded`
   pour déclencher des callbacks coding agent, v2.
 - **Pas de delete tool** exposé. Le delete project / env var / deployment
-  n'est pas wrappé en MVP. À ajouter sur demande, avec garde-fou deny
-  similar au pattern Railway (`accept-deploy`).
+  n'est pas wrappé en MVP. À ajouter sur demande, avec garde-fou
+  default-deny côté policy similar au pattern Railway (`accept-deploy`).
+
+## Références
+
+- Spec : [`docs/spec/gateway-capability-model.md`](../spec/gateway-capability-model.md) §3, §6 (capability model + classifier).
+- ADRs : [[rewrap-official-mcps]], [[vercel-augment-with-rest-tools]], [[oauth-app-install-per-provider]], [[provider-onboarding-handbook-template]], [[use-context7-for-provider-docs]].
+- Handbooks voisins : [[github-provider]] (pattern de référence), [[mcp-gateway]] (hot-path dispatch), [[capability-policy-and-approvals]] (policy + approval flow), [[policy-engine]] (`evaluateCapability` + scope injection).
