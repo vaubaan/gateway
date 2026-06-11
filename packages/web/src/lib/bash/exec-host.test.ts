@@ -1,6 +1,13 @@
 import { describe, expect, test, vi, beforeEach } from 'vitest';
-import { loadHostByIdInOrg, loadHostBySlugInOrg, type BashSupabaseLike } from './exec-host';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import { loadHostByIdInOrg, loadHostBySlugInOrg } from './exec-host';
 
+/**
+ * Structural mock of just the `from().select().eq().eq().maybeSingle<T>()` chain
+ * the production code under test uses. Cast once to `SupabaseClient` so the
+ * production signatures stay strictly typed ; the cast is the price of not
+ * spinning up a real Postgrest stub.
+ */
 interface SelectChain {
   select: (cols: string) => {
     eq: (
@@ -18,7 +25,7 @@ interface SelectChain {
 }
 
 function fakeSupabase(returns: unknown): {
-  client: BashSupabaseLike;
+  client: SupabaseClient;
   capturedSelect: { columns?: string };
   capturedEqs: Array<{ col: string; value: string }>;
 } {
@@ -44,11 +51,7 @@ function fakeSupabase(returns: unknown): {
       };
     },
   };
-  const client: BashSupabaseLike = {
-    from() {
-      return chain;
-    },
-  };
+  const client = { from: () => chain } as unknown as SupabaseClient;
   return { client, capturedSelect: captured, capturedEqs: eqs };
 }
 

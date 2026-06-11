@@ -7,7 +7,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
-import { execOnHost, loadHostByIdInOrg, type BashSupabaseLike } from '@/lib/bash/exec-host';
+import { execOnHost, loadHostByIdInOrg } from '@/lib/bash/exec-host';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,7 +23,7 @@ export async function POST(
   const guard = await requireOrgMember(orgSlug);
   if (!guard.ok) return guard.response;
 
-  const svc = getSupabaseServiceClient() as unknown as BashSupabaseLike;
+  const svc = getSupabaseServiceClient();
   const host = await loadHostByIdInOrg(svc, {
     hostId,
     bindingId,

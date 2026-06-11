@@ -13,27 +13,9 @@
  * The functions stay thin (one supabase select each + one `sshExec`) ;
  * routes still own status code mapping and audit logging.
  */
+import type { SupabaseClient } from '@supabase/supabase-js';
 import { sshExec, type ExecResult } from '@vaubaan/providers-ssh';
 import { decodeBytea } from '@/lib/providers/bytea';
-
-/** Minimal supabase-client surface — same shape the REST routes already use. */
-export interface BashSupabaseLike {
-  from(table: string): {
-    select(columns: string): {
-      eq(
-        column: string,
-        value: string,
-      ): {
-        eq(
-          column: string,
-          value: string,
-        ): {
-          maybeSingle<T>(): Promise<{ data: T | null }>;
-        };
-      };
-    };
-  };
-}
 
 /**
  * Row returned by `loadHostByIdInOrg` / `loadHostBySlugInOrg` — the
@@ -50,16 +32,10 @@ export interface BashHostRow {
   ssh_private_key: unknown;
 }
 
-const SELECT_COLUMNS = 'id, host_address, port, ssh_user, ssh_private_key';
-const HOST_ID_SELECT = `${SELECT_COLUMNS}, bash_binding_id, bash_bindings!inner(projects!inner(organization_id))`;
-const HOST_SLUG_SELECT = `${SELECT_COLUMNS}, bash_bindings!inner(projects!inner(organization_id))`;
+const HOST_SELECT =
+  'id, host_address, port, ssh_user, ssh_private_key, bash_bindings!inner(projects!inner(organization_id))';
 
-interface HostByIdRow extends BashHostRow {
-  bash_binding_id: string;
-  bash_bindings: { projects: { organization_id: string } };
-}
-
-interface HostBySlugRow extends BashHostRow {
+interface HostJoinedRow extends BashHostRow {
   bash_bindings: { projects: { organization_id: string } };
 }
 
@@ -69,15 +45,15 @@ interface HostBySlugRow extends BashHostRow {
  * collapsing the two cases is intentional (don't leak existence).
  */
 export async function loadHostByIdInOrg(
-  svc: BashSupabaseLike,
+  svc: SupabaseClient,
   args: { hostId: string; bindingId: string; orgId: string },
 ): Promise<BashHostRow | null> {
   const { data } = await svc
     .from('ssh_bindings')
-    .select(HOST_ID_SELECT)
+    .select(HOST_SELECT)
     .eq('id', args.hostId)
     .eq('bash_binding_id', args.bindingId)
-    .maybeSingle<HostByIdRow>();
+    .maybeSingle<HostJoinedRow>();
   if (!data) return null;
   if (data.bash_bindings.projects.organization_id !== args.orgId) return null;
   return stripJoinKeys(data);
@@ -88,15 +64,15 @@ export async function loadHostByIdInOrg(
  * Same null-collapsing rule as `loadHostByIdInOrg`.
  */
 export async function loadHostBySlugInOrg(
-  svc: BashSupabaseLike,
+  svc: SupabaseClient,
   args: { hostSlug: string; bindingId: string; orgId: string },
 ): Promise<BashHostRow | null> {
   const { data } = await svc
     .from('ssh_bindings')
-    .select(HOST_SLUG_SELECT)
+    .select(HOST_SELECT)
     .eq('bash_binding_id', args.bindingId)
     .eq('host_slug', args.hostSlug)
-    .maybeSingle<HostBySlugRow>();
+    .maybeSingle<HostJoinedRow>();
   if (!data) return null;
   if (data.bash_bindings.projects.organization_id !== args.orgId) return null;
   return stripJoinKeys(data);
@@ -138,7 +114,7 @@ export async function execOnHost(
   return { ok: true, result };
 }
 
-function stripJoinKeys<T extends BashHostRow>(row: T): BashHostRow {
+function stripJoinKeys(row: HostJoinedRow): BashHostRow {
   return {
     id: row.id,
     host_address: row.host_address,

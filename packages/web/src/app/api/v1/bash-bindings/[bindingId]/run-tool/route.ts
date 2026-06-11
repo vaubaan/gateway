@@ -10,13 +10,13 @@
  * session. /mcp wiring for per-binding dispatch lands in a follow-up PR.
  */
 
-import { createHash } from 'node:crypto';
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { hashArguments } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 import { buildToolInvocation } from '@/lib/bash/exec';
-import { execOnHost, loadHostBySlugInOrg, type BashSupabaseLike } from '@/lib/bash/exec-host';
+import { execOnHost, loadHostBySlugInOrg } from '@/lib/bash/exec-host';
 import { materializeArgs } from '@/lib/bash/args';
 import type { ParsedScript, ParsedTool } from '@/lib/bash/parse';
 
@@ -84,13 +84,6 @@ async function writeRestBypassAudit(
   }
 }
 
-function hashArgs(args: unknown): string {
-  return createHash('sha256')
-    .update(JSON.stringify(args ?? {}))
-    .digest('hex')
-    .slice(0, 16);
-}
-
 export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId: string }> }) {
   const { bindingId } = await ctx.params;
   let body: z.infer<typeof BodySchema>;
@@ -140,7 +133,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
   }
   const { argv } = materialized;
 
-  const host = await loadHostBySlugInOrg(svc as unknown as BashSupabaseLike, {
+  const host = await loadHostBySlugInOrg(svc, {
     hostSlug: body.host_slug,
     bindingId,
     orgId: guard.orgId,
@@ -158,7 +151,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
     projectId: binding.project_id,
     toolName: `bash__rest__${tool.functionName}`,
     capabilityShorthand: `bash:${tool.ring}:${tool.action}@${body.host_slug}`,
-    argumentsHash: hashArgs(body.args),
+    argumentsHash: hashArguments(body.args),
     clientIp: req.headers.get('x-forwarded-for') ?? null,
     clientUserAgent: req.headers.get('user-agent') ?? null,
   };
