@@ -3,8 +3,6 @@ title: RBAC — modèle Org × Project × Role × Bot
 status: superseded
 date: 2026-05-22
 superseded-by: flat-membership-org-owner-access-token
-tracks:
-  - docs/spec/vaubaan-gateway.md
 ---
 
 # RBAC — modèle Org × Project × Role × Bot

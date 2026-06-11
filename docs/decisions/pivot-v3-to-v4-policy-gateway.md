@@ -2,8 +2,6 @@
 title: Pivot v3 → v4 — du Cloud Resource Manager vers le Policy-Enforcing MCP Gateway
 status: accepted
 date: 2026-05-22
-tracks:
-  - docs/spec/vaubaan-gateway.md
 ---
 
 # Pivot v3 → v4 — du Cloud Resource Manager vers le Policy-Enforcing MCP Gateway

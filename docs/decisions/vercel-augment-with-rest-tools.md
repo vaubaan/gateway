@@ -2,10 +2,6 @@
 title: Augmenter le provider Vercel avec quelques tools REST custom
 status: accepted
 date: 2026-05-31
-tracks:
-  - packages/providers/vercel/src/custom-tools.ts
-  - packages/providers/vercel/src/tools.ts
-  - packages/providers/vercel/src/execute.ts
 ---
 
 # Augmenter le provider Vercel avec quelques tools REST custom

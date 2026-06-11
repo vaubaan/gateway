@@ -2,8 +2,6 @@
 title: Trust model — IdP-style, clear-in-memory, encrypted at-rest
 status: accepted
 date: 2026-05-22
-tracks:
-  - docs/spec/vaubaan-gateway.md
 ---
 
 # Trust model — IdP-style, clear-in-memory, encrypted at-rest

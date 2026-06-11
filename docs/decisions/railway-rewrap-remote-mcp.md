@@ -2,10 +2,6 @@
 title: Railway — rewrap du MCP remote (mcp.railway.com) via OAuth audience-binding
 status: accepted
 date: 2026-05-29
-tracks:
-  - packages/providers/railway/src/execute.ts
-  - packages/web/src/app/api/integrations/railway/callback/route.ts
-  - supabase/migrations/0004_add_railway_provider.sql
 ---
 
 # Railway — rewrap du MCP remote via OAuth audience-binding

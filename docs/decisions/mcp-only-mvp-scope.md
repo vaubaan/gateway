@@ -2,8 +2,6 @@
 title: MCP-only en MVP — pas de CLI/SDK proxy
 status: accepted
 date: 2026-05-22
-tracks:
-  - docs/spec/vaubaan-gateway.md
 ---
 
 # MCP-only en MVP — pas de CLI/SDK proxy

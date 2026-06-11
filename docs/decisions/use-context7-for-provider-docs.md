@@ -2,9 +2,6 @@
 title: Context7 MCP comme source canonique de doc des providers tiers
 status: accepted
 date: 2026-05-31
-tracks:
-  - docs/handbook/
-  - docs/decisions/provider-onboarding-handbook-template.md
 ---
 
 # Context7 MCP comme source canonique de doc des providers tiers

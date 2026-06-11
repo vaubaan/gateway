@@ -2,10 +2,6 @@
 title: Rewrap des MCP officiels par provider (Vercel = oui, Supabase = non, GitHub = non)
 status: accepted
 date: 2026-05-23
-tracks:
-  - packages/providers/vercel/src/execute.ts
-  - packages/providers/supabase/src/execute.ts
-  - packages/providers/github/src/execute.ts
 ---
 
 # Rewrap des MCP officiels par provider

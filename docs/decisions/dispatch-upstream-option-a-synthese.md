@@ -2,9 +2,6 @@
 title: Dispatch upstream — Option A (synthèse REST), pas de sidecar Docker MVP
 status: accepted
 date: 2026-05-22
-tracks:
-  - docs/spec/vaubaan-gateway.md
-  - packages/providers/github/src/execute.ts
 ---
 
 # Dispatch upstream — Option A (synthèse REST), pas de sidecar Docker MVP

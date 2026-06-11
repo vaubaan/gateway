@@ -2,10 +2,6 @@
 title: Template normatif des handbooks d'onboarding provider (4 axes)
 status: accepted
 date: 2026-05-31
-tracks:
-  - docs/handbook/github-provider.md
-  - docs/handbook/vercel-provider.md
-  - docs/handbook/railway-provider.md
 ---
 
 # Template normatif des handbooks d'onboarding provider (4 axes)

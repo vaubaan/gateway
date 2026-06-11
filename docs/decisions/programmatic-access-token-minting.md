@@ -3,15 +3,6 @@ title: Programmatic AccessToken minting — neutral namespace, DELETE, expired p
 status: accepted
 date: 2026-06-01
 supersedes: org-management-keys-for-runner
-tracks:
-  - docs/spec/vaubaan-gateway.md
-  - supabase/migrations/0003_org_management_keys.sql
-  - supabase/migrations/0010_purge_expired_access_tokens.sql
-  - packages/web/src/app/api/v1/mgmt/tokens/route.ts
-  - packages/web/src/app/api/v1/mgmt/tokens/[tokenId]/route.ts
-  - packages/web/src/app/api/v1/mgmt/roles/route.ts
-  - packages/web/src/app/api/v1/mgmt/projects/route.ts
-  - packages/web/src/lib/auth/require-management-key.ts
 ---
 
 # Programmatic AccessToken minting — neutral namespace, DELETE, expired purge

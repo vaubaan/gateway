@@ -3,9 +3,6 @@ title: Flat membership + Org owner + Access Token (renaming Bot)
 status: accepted
 date: 2026-05-26
 supersedes: rbac-org-role-bot-project
-tracks:
-  - docs/spec/vaubaan-gateway.md
-  - supabase/migrations/0001_init.sql
 ---
 
 # Flat membership + Org owner + Access Token (renaming Bot)

@@ -2,10 +2,6 @@
 title: github__mint_install_token — kill host-side git credentials on session hosts
 status: accepted
 date: 2026-05-30
-tracks:
-  - packages/providers/github/src/github-adapter.ts
-  - packages/providers/github/src/app-install.ts
-  - supabase/migrations/0005_add_github_provisioner.sql
 ---
 
 # `github__mint_install_token` — kill host-side git credentials on session hosts
