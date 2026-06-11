@@ -11,7 +11,7 @@ tracks:
   - packages/web/src/app/api/v1/mgmt/approvals/[id]/route.ts
   - packages/web/src/app/api/v1/projects/[projectId]/policy/route.ts
   - packages/web/src/app/api/v1/projects/[projectId]/policy/[ruleId]/route.ts
-  - packages/web/src/app/api/v1/projects/[projectId]/approvals/[approvalId]/route.ts
+  - packages/web/src/app/api/v1/projects/[projectId]/approvals/[approvalId]/decide/route.ts
   - packages/web/src/app/api/v1/integrations/telegram/webhook/route.ts
   - supabase/migrations/0013_approvals.sql
   - supabase/migrations/0014_single_use_tokens.sql
@@ -169,10 +169,9 @@ UPDATE that runs once per token, and the cache invalidation that follows.
   flippe les rows stale à `expired` et clear tout `pending_api_key`
   oublié. Schedulée par `0017_approval_sweeper_cron.sql` (pg_cron, à côté
   du purge `0010_purge_expired_access_tokens.sql`).
-- **Routes operator** — `POST /api/v1/projects/:projectId/approvals/:approvalId`
-  pour cancel/list operations sur les approbations en cours d'une UI
-  org-member (différent de la route `mgmt/approvals/[id]` qui consomme un
-  PAT Vaubaan).
+- **Routes operator** — `POST /api/v1/projects/:projectId/approvals/:approvalId/decide`
+  pour approve/deny depuis l'UI org-member (différent de la route
+  `mgmt/approvals/[id]` qui consomme un PAT Vaubaan).
 - **Cap notation `bash:` supportée**. Les capabilities `bash:<ring>:<action>@<host>`
   sont éligibles au même flow policy + approval. Cf.
   [`bash-provider.md`](./bash-provider.md) pour la dérivation des rings
