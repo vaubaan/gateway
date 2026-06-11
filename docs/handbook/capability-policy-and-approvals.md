@@ -1,15 +1,17 @@
 ---
 title: Capability policy + approvals (allow/confirm/deny)
 status: current
-date: 2026-06-09
+date: 2026-06-11
 tracks:
   - packages/policy-engine/src/policy.ts
   - packages/web/src/lib/approvals/
-  - packages/web/src/lib/capabilities/peel-catalog.ts
-  - packages/web/src/lib/capabilities/peel-grid.tsx
+  - packages/web/src/app/api/v1/tokens/route.ts
   - packages/web/src/app/api/v1/mgmt/tokens/route.ts
   - packages/web/src/app/api/v1/mgmt/tokens/pending/[id]/route.ts
   - packages/web/src/app/api/v1/mgmt/approvals/[id]/route.ts
+  - packages/web/src/app/api/v1/projects/[projectId]/policy/route.ts
+  - packages/web/src/app/api/v1/projects/[projectId]/policy/[ruleId]/route.ts
+  - packages/web/src/app/api/v1/projects/[projectId]/approvals/[approvalId]/route.ts
   - packages/web/src/app/api/v1/integrations/telegram/webhook/route.ts
   - supabase/migrations/0013_approvals.sql
   - supabase/migrations/0014_single_use_tokens.sql
@@ -71,8 +73,16 @@ policy_rules (
 overrides (e.g. `github:repo/code:write@feature/* → allow`,
 `*:*:access:write@* → deny`) without touching the defaults.
 
-`evaluatePolicy(caps, rules)` is the pure function. Tested in
-`packages/policy-engine/tests/unit/policy.test.ts` (10 tests).
+`evaluatePolicy(caps, rules)` (`packages/policy-engine/src/policy.ts:60`)
+is the pure function ; `allCapsAllowed` / `confirmDecisions` /
+`denyDecisions` (`policy.ts:76-89`) sont les filtres de décisions utilisés
+par les routes mint. Tested in
+`packages/policy-engine/tests/unit/policy.test.ts` (12 tests).
+
+Le CRUD des règles vit côté UI sur
+`packages/web/src/app/api/v1/projects/[projectId]/policy/{route,[ruleId]/route}.ts`
+(GET liste, POST crée, PATCH/DELETE par `ruleId`). La page operator
+`(app)/orgs/[slug]/projects/[project]/policy/page.tsx` rend ces règles.
 
 ## Mint flow
 
@@ -148,10 +158,22 @@ UPDATE that runs once per token, and the cache invalidation that follows.
 { url: 'https://<host>/api/v1/integrations/telegram/webhook',
   secret_token: '<TELEGRAM_WEBHOOK_SECRET>' }`.
 - **Per-project channel** — insert a `project_approval_channels` row with
-  `channel='telegram', telegram_chat_id='<chat_id>'`. Without it, the
-  picker falls back to `ManualChannel` and the mint returns 202 with no
-  notification — operator approves via the API.
-- **Approval TTL** — 15 min by default (column default). The
-  `expire_stale_approval_requests()` SQL function flips stale rows to
-  `expired` and clears any forgotten `pending_api_key`. Wire it into the
-  existing nightly cron next to the `purge_expired_access_tokens` call.
+  `channel='telegram', telegram_chat_id='<chat_id>'`. Without it,
+  `pickChannel` (`approvals/index.ts:28`) falls back to `ManualChannel`
+  and le mint renvoie 202 sans notification — operator approuve via l'API.
+  Le bot token peut être surchargé per-project
+  (`telegram_bot_token_encrypted` bytea) ; sinon fallback sur
+  `process.env.TELEGRAM_BOT_TOKEN`.
+- **Approval TTL** — 15 min par défaut (column default). La fonction SQL
+  `expire_stale_approval_requests()` (définie dans `0013_approvals.sql`)
+  flippe les rows stale à `expired` et clear tout `pending_api_key`
+  oublié. Schedulée par `0017_approval_sweeper_cron.sql` (pg_cron, à côté
+  du purge `0010_purge_expired_access_tokens.sql`).
+- **Routes operator** — `POST /api/v1/projects/:projectId/approvals/:approvalId`
+  pour cancel/list operations sur les approbations en cours d'une UI
+  org-member (différent de la route `mgmt/approvals/[id]` qui consomme un
+  PAT Vaubaan).
+- **Cap notation `bash:` supportée**. Les capabilities `bash:<ring>:<action>@<host>`
+  sont éligibles au même flow policy + approval. Cf.
+  [`bash-provider.md`](./bash-provider.md) pour la dérivation des rings
+  depuis les annotations du script.
