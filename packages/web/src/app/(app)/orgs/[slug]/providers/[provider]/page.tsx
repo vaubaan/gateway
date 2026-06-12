@@ -7,6 +7,7 @@ import {
   type LevelDescriptor,
   type PlaneDescriptor,
 } from '@/lib/capabilities/ring-catalog';
+import { providerPlaneTools, type ToolEntry } from '@/lib/capabilities/tool-catalog';
 import { ProviderSwitcher } from './provider-switcher';
 
 export const dynamic = 'force-dynamic';
@@ -99,6 +100,7 @@ export default async function ProviderRingsPage({
               </p>
               <PlaneRings provider={descriptor.slug} plane={plane} />
               <EnvFooter plane={plane} />
+              <ToolsList provider={descriptor.slug} planeSlug={plane.slug} />
             </CardBody>
           </Card>
         ))}
@@ -195,6 +197,87 @@ function RingBox({
       )}
       {children && <div style={{ marginTop: 'var(--space-3)' }}>{children}</div>}
     </div>
+  );
+}
+
+function ToolsList({ provider, planeSlug }: { provider: string; planeSlug: string }) {
+  const tools = providerPlaneTools(provider, planeSlug);
+  return (
+    <div style={{ marginTop: 'var(--space-3)' }}>
+      <strong style={{ fontSize: 13 }}>
+        MCP tools on this plane{tools.length > 0 ? ` (${tools.length})` : ''}
+      </strong>
+      {tools.length === 0 ? (
+        <p
+          style={{
+            margin: 'var(--space-2) 0 0',
+            color: 'var(--text-muted)',
+            fontSize: 13,
+          }}
+        >
+          No MCP tool is wired on this plane yet.
+        </p>
+      ) : (
+        <ul
+          style={{
+            margin: 'var(--space-2) 0 0',
+            padding: 0,
+            listStyle: 'none',
+            display: 'grid',
+            gap: 'var(--space-2)',
+          }}
+        >
+          {tools.map((tool) => (
+            <ToolRow key={tool.name} tool={tool} planeSlug={planeSlug} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function ToolRow({ tool, planeSlug }: { tool: ToolEntry; planeSlug: string }) {
+  const onPlane = tool.capabilities.filter((c) => c.plane === planeSlug);
+  return (
+    <li
+      style={{
+        padding: 'var(--space-2) var(--space-3)',
+        background: 'var(--surface-base)',
+        border: '1px solid var(--border-subtle)',
+        borderRadius: 'var(--radius-md)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          justifyContent: 'space-between',
+          gap: 'var(--space-2)',
+          flexWrap: 'wrap',
+        }}
+      >
+        <Code>{tool.name}</Code>
+        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+          {onPlane.map((cap) => (
+            <Code key={`${cap.level}:${cap.action}`}>
+              {cap.provider}:{cap.plane}/{cap.level}:{cap.action}
+            </Code>
+          ))}
+        </div>
+      </div>
+      {tool.description && (
+        <p
+          style={{
+            margin: 'var(--space-1) 0 0',
+            color: 'var(--text-muted)',
+            fontSize: 13,
+            lineHeight: 1.4,
+          }}
+        >
+          {tool.description}
+        </p>
+      )}
+    </li>
   );
 }
 
