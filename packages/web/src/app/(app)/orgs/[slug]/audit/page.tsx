@@ -65,11 +65,11 @@ export default async function AuditPage({
   // Access tokens for the filter dropdown.
   const { data: tokens } = await supabase
     .from('access_tokens')
-    .select('id, name, projects!inner(organization_id)')
+    .select('id, name, projects!inner(slug, organization_id)')
     .eq('projects.organization_id', org.id);
-  const tokenOpts: TokenOpt[] = ((tokens ?? []) as Array<{ id: string; name: string }>).map(
-    (t) => ({ id: t.id, name: t.name }),
-  );
+  const tokenOpts: TokenOpt[] = (
+    (tokens ?? []) as unknown as Array<{ id: string; name: string; projects: { slug: string } }>
+  ).map((t) => ({ id: t.id, name: `${t.projects.slug}/${t.name}` }));
 
   // Last 7 days stats.
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
@@ -271,7 +271,14 @@ export default async function AuditPage({
                 <Td>
                   <Badge tone={r.decision === 'allowed' ? 'success' : 'danger'}>{r.decision}</Badge>
                 </Td>
-                <Td style={{ maxWidth: 480, color: 'var(--text-muted)' }}>
+                <Td
+                  style={{
+                    maxWidth: 480,
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'normal',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
                   {r.capability_matched ?? r.denial_reason}
                 </Td>
                 <Td style={{ color: 'var(--text-muted)' }}>

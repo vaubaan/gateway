@@ -277,7 +277,14 @@ export default async function ProjectAuditPage({
                 <Td>
                   <Badge tone={r.decision === 'allowed' ? 'success' : 'danger'}>{r.decision}</Badge>
                 </Td>
-                <Td style={{ maxWidth: 480, color: 'var(--text-muted)' }}>
+                <Td
+                  style={{
+                    maxWidth: 480,
+                    color: 'var(--text-muted)',
+                    whiteSpace: 'normal',
+                    overflowWrap: 'anywhere',
+                  }}
+                >
                   {r.capability_matched ?? r.denial_reason}
                 </Td>
                 <Td style={{ color: 'var(--text-muted)' }}>
