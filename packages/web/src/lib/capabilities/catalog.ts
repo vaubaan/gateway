@@ -14,7 +14,12 @@
  * vice-versa.
  */
 
-import { formatCapability, type Capability, type McpToolDeclaration } from '@vaubaan/shared';
+import {
+  formatCapability,
+  type Capability,
+  type McpToolDeclaration,
+  type ProviderBinding,
+} from '@vaubaan/shared';
 import { coversIgnoringEnv } from '@vaubaan/policy-engine';
 
 export interface ProviderSource {
@@ -74,4 +79,30 @@ export function buildProviderCatalog(
     displayName: src.displayName,
     tools: src.tools.map((t) => buildToolEntry(t, src.capabilitiesOf(t.name), granted)),
   }));
+}
+
+/** One upstream resource the project is bound to (e.g. a Vercel projectId, a
+ *  Supabase project_ref). Surfaced on the catalog so agents can discover the
+ *  refs they need to pass at `tools/call` time. Without this, the gateway is
+ *  the only thing that knows the binding — chicken-and-egg : the agent needs
+ *  the ref to call, but cannot learn it from anywhere. */
+export interface BindingDescriptor {
+  resourceRef: string;
+  environment: string | null;
+  displayName: string | null;
+}
+
+/** Group provider bindings by provider slug. Empty providers are not emitted. */
+export function groupBindings(
+  bindings: readonly ProviderBinding[],
+): Record<string, BindingDescriptor[]> {
+  const out: Record<string, BindingDescriptor[]> = {};
+  for (const b of bindings) {
+    (out[b.provider] ??= []).push({
+      resourceRef: b.resource_ref,
+      environment: b.environment ?? null,
+      displayName: b.display_name,
+    });
+  }
+  return out;
 }

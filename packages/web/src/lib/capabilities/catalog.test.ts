@@ -1,6 +1,11 @@
 import { describe, expect, test } from 'vitest';
-import type { Capability, McpToolDeclaration } from '@vaubaan/shared';
-import { buildProviderCatalog, buildToolEntry, type ProviderSource } from './catalog.ts';
+import type { Capability, McpToolDeclaration, ProviderBinding } from '@vaubaan/shared';
+import {
+  buildProviderCatalog,
+  buildToolEntry,
+  groupBindings,
+  type ProviderSource,
+} from './catalog.ts';
 
 const cap = (
   provider: string,
@@ -98,6 +103,56 @@ describe('buildToolEntry — granted=[…] (live-token path)', () => {
     const entry = buildToolEntry(fakeTool('vercel__list_deployments'), surface, granted);
     expect(entry.callable).toBe(false);
     expect(entry.missingCapabilities).toEqual(['vercel:deployment:read']);
+  });
+});
+
+describe('groupBindings — agent discovery of upstream resource refs', () => {
+  const binding = (
+    provider: ProviderBinding['provider'],
+    resource_ref: string,
+    environment: string | null,
+    display_name: string | null,
+  ): ProviderBinding => ({
+    id: `bnd-${provider}-${resource_ref}`,
+    project_id: 'prj-1',
+    provider,
+    resource_ref,
+    display_name,
+    environment,
+    created_at: '2026-06-12T00:00:00Z',
+  });
+
+  test('groups by provider slug, keeps every ref', () => {
+    const out = groupBindings([
+      binding('vercel', 'prj_VERCEL_A', null, 'Web'),
+      binding('supabase', 'abcd1234', 'prod', 'Prod DB'),
+      binding('supabase', 'efgh5678', 'staging', 'Staging DB'),
+    ]);
+    expect(out).toEqual({
+      vercel: [{ resourceRef: 'prj_VERCEL_A', environment: null, displayName: 'Web' }],
+      supabase: [
+        { resourceRef: 'abcd1234', environment: 'prod', displayName: 'Prod DB' },
+        { resourceRef: 'efgh5678', environment: 'staging', displayName: 'Staging DB' },
+      ],
+    });
+  });
+
+  test('empty input → empty object (no provider keys emitted)', () => {
+    expect(groupBindings([])).toEqual({});
+  });
+
+  test('normalizes legacy environment=undefined to null', () => {
+    const legacy: ProviderBinding = {
+      id: 'bnd-legacy',
+      project_id: 'prj-1',
+      provider: 'github',
+      resource_ref: 'acme/app',
+      display_name: null,
+      created_at: '2026-06-12T00:00:00Z',
+    };
+    expect(groupBindings([legacy])).toEqual({
+      github: [{ resourceRef: 'acme/app', environment: null, displayName: null }],
+    });
   });
 });
 

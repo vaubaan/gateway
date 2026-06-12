@@ -33,6 +33,8 @@ import { buildGateway } from '@/lib/gateway/build';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import {
   buildProviderCatalog,
+  groupBindings,
+  type BindingDescriptor,
   type ProviderCatalogEntry,
   type ProviderSource,
 } from '@/lib/capabilities/catalog';
@@ -79,6 +81,11 @@ interface CatalogResponse {
     organization: { id: string; slug: string; name?: string };
     project?: { id: string; slug: string };
     granted?: string[];
+    /** Upstream resource refs the project is bound to, keyed by provider slug.
+     *  Only emitted on `live` mode (a mgmt key isn't tied to one project).
+     *  Each entry carries the `resourceRef` you need to pass at `tools/call`
+     *  time (e.g. Vercel projectId, Supabase project_ref). */
+    bindings?: Record<string, BindingDescriptor[]>;
   };
   providers: ProviderCatalogEntry[];
   /** Hint for the unlock flow when `callable: false`. UI/agents can render
@@ -142,6 +149,7 @@ export async function GET(req: NextRequest) {
         },
         project: { id: ctx.project.id, slug: ctx.project.slug },
         granted: granted.map(formatCapability),
+        bindings: groupBindings(ctx.bindings),
       },
       providers: buildProviderCatalog(PROVIDER_SOURCES, granted),
       mintHint: MINT_HINT,

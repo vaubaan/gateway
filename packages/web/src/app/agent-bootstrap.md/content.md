@@ -79,7 +79,12 @@ Response shape :
     "kind": "live",
     "organization": { "id": "...", "slug": "...", "name": "..." },
     "project": { "id": "...", "slug": "..." },
-    "granted": ["vercel:runtime/deployment:read@prod", ...]
+    "granted": ["vercel:runtime/deployment:read@prod", ...],
+    "bindings": {
+      "vercel":   [{ "resourceRef": "prj_xxx", "environment": null,     "displayName": "Web" }],
+      "supabase": [{ "resourceRef": "abcd1234", "environment": "prod",  "displayName": "Prod DB" }],
+      "github":   [{ "resourceRef": "acme/app", "environment": null,    "displayName": null }]
+    }
   },
   "providers": [
     {
@@ -114,8 +119,15 @@ Response shape :
 }
 ```
 
+`auth.bindings` lists, per provider, the upstream resource refs the project
+is bound to — the `resourceRef` is what you'll pass at `tools/call` time
+(`projectId` for Vercel, `project_ref` for Supabase, `owner/repo` for
+GitHub…). The gateway already validates the ref server-side ; the catalog
+is the single source of truth that lets you discover it without guessing.
+
 The endpoint also accepts `Bearer vbn_mgmt_*` (org-wide catalog, no
-`callable` info — a mgmt key can mint anything modulo policy gates). The
+`callable` info — a mgmt key can mint anything modulo policy gates ; and
+no `auth.bindings` — a mgmt key isn't scoped to one project). The
 `callable` predicate matches `tools/list` filtering exactly — same
 `coversIgnoringEnv` from the policy engine — so what you see here is the
 ground truth for what `tools/list` will return.
