@@ -18,7 +18,10 @@ export interface ToolSurfaceProvider {
   toolCapabilities(tool: string): readonly Capability[];
 }
 
-function coversIgnoringEnv(granted: Capability, surface: Capability): boolean {
+/** True when `granted` covers `surface` ignoring env. The shared predicate
+ *  used by `filterAvailableTools` and by external consumers (e.g. the
+ *  `/api/v1/catalog` callable-flag computation) so both stay in lockstep. */
+export function coversIgnoringEnv(granted: Capability, surface: Capability): boolean {
   return (
     granted.provider === surface.provider &&
     granted.plane === surface.plane &&

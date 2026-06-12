@@ -59,7 +59,68 @@ When you _do_ try to call a tool that isn't listed, the gateway responds
 with `Vaubaan policy denied: this access token is not granted '<cap>'. …`
 which names the exact capability slug you need to add at re-mint.
 
-### 3.2 Initialize (optional, for clients that need it)
+### 3.2 Catalog discovery (what exists vs what you can call)
+
+`tools/list` is filtered — it hides every tool you can't call. To see the
+**full surface** with the required capability per tool (and, for your
+token, a `callable` flag + the `missingCapabilities` you'd need to mint to
+unlock each), hit the catalog endpoint :
+
+```bash
+curl -sS https://vaubaan.com/api/v1/catalog \
+  -H "Authorization: Bearer $VBN"
+```
+
+Response shape :
+
+```json
+{
+  "auth": {
+    "kind": "live",
+    "organization": { "id": "...", "slug": "...", "name": "..." },
+    "project": { "id": "...", "slug": "..." },
+    "granted": ["vercel:runtime/deployment:read@prod", ...]
+  },
+  "providers": [
+    {
+      "slug": "vercel",
+      "displayName": "Vercel",
+      "tools": [
+        {
+          "name": "vercel__list_deployments",
+          "description": "...",
+          "inputSchema": {...},
+          "requiredCapabilities": ["vercel:deployment:read"],
+          "callable": true
+        },
+        {
+          "name": "vercel__upsert_env_var",
+          "description": "...",
+          "inputSchema": {...},
+          "requiredCapabilities": ["vercel:config:write"],
+          "callable": false,
+          "missingCapabilities": ["vercel:config:write"]
+        }
+      ]
+    },
+    ...
+  ],
+  "mintHint": {
+    "endpoint": "/api/v1/mgmt/tokens",
+    "method": "POST",
+    "bodyShape": "{ \"projectSlug\": \"<slug>\", \"capabilities\": [\"<cap>\", ...] }",
+    "note": "Requires a Bearer vbn_mgmt_* key. The mint may return 202 + approval_id …"
+  }
+}
+```
+
+The endpoint also accepts `Bearer vbn_mgmt_*` (org-wide catalog, no
+`callable` info — a mgmt key can mint anything modulo policy gates). The
+`callable` predicate matches `tools/list` filtering exactly — same
+`coversIgnoringEnv` from the policy engine — so what you see here is the
+ground truth for what `tools/list` will return.
+
+### 3.3 Initialize (optional, for clients that need it)
 
 ```bash
 curl -sS https://vaubaan.com/mcp \
