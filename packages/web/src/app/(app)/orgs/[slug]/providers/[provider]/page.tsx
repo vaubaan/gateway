@@ -185,18 +185,17 @@ function RingBox({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
-          <strong style={{ fontSize: 13, color: palette.text }}>{ringLabel(level.rank)}</strong>
-          <Code>{level.slug}</Code>
+          <span style={{ fontSize: 12, color: palette.muted, letterSpacing: '0.04em' }}>
+            {ringLabel(level.rank)}
+          </span>
+          <strong style={{ fontSize: 15, color: palette.text, letterSpacing: '0.01em' }}>
+            {level.slug}
+          </strong>
           <EnvChip plane={plane} envScoped={level.envScoped} />
         </div>
-        <div style={{ display: 'flex', gap: 4 }}>
-          <Code>
-            {provider}:{plane.slug}/{level.slug}:read
-          </Code>
-          <Code>
-            {provider}:{plane.slug}/{level.slug}:write
-          </Code>
-        </div>
+        <Code>
+          {provider}:{plane.slug}/{level.slug}:
+        </Code>
       </div>
       <p style={{ color: palette.muted, fontSize: 13, margin: 0, lineHeight: 1.4 }}>
         {level.description}
