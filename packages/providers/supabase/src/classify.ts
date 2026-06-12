@@ -39,6 +39,7 @@ interface StaticEntry {
 const TOOL_SURFACE: Record<string, StaticEntry> = {
   // db plane — fixed-shape reads
   supabase__get_project: { plane: 'db', level: 'project', action: 'read' },
+  supabase__get_anon_key: { plane: 'db', level: 'project', action: 'read' },
   supabase__list_tables: { plane: 'db', level: 'tables', action: 'read' },
   supabase__list_migrations: { plane: 'db', level: 'tables', action: 'read' },
   supabase__get_advisors: { plane: 'db', level: 'rls', action: 'read' },

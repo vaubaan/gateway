@@ -23,6 +23,12 @@ export const availableTools: readonly McpToolDeclaration[] = [
     inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
   },
   {
+    name: 'supabase__get_anon_key',
+    description:
+      'Get the project API URL (https://{ref}.supabase.co) and anonymous (public) API key. These are the values you need for client-side env vars (e.g. NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_ANON_KEY). The anon key is meant to be shipped in browser code — service_role is NOT returned by this tool.',
+    inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
+  },
+  {
     name: 'supabase__list_tables',
     description: 'List tables in the public schema (and optional extra schemas).',
     inputSchema: {

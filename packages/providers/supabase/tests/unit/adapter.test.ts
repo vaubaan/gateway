@@ -350,6 +350,35 @@ describe('SupabaseAdapter — executeCall (new mgmt-api tools)', () => {
     expect(url).toBe('https://api.supabase.com/v1/projects/abc/functions/my%20fn%2Fwith%20space');
   });
 
+  test('get_anon_key GETs /v1/projects/:ref/api-keys and returns {url, anon_key}', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonResponse([
+        { name: 'anon', api_key: 'eyJhbGc.anon.sig' },
+        { name: 'service_role', api_key: 'eyJhbGc.service_role.sig' },
+      ]),
+    );
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    const out = (await adapter.executeCall(baseAdmin, binding, 'supabase__get_anon_key', {
+      project_ref: 'qsockrvwpfzvxxecwjvh',
+    })) as { url: string; anon_key: string };
+    expect(out).toEqual({
+      url: 'https://qsockrvwpfzvxxecwjvh.supabase.co',
+      anon_key: 'eyJhbGc.anon.sig',
+    });
+    const [url] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/qsockrvwpfzvxxecwjvh/api-keys');
+  });
+
+  test('get_anon_key throws when no anon entry is returned', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonResponse([{ name: 'service_role', api_key: 'sr' }]));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await expect(
+      adapter.executeCall(baseAdmin, binding, 'supabase__get_anon_key', { project_ref: 'abc' }),
+    ).rejects.toThrow(/no 'anon' entry/);
+  });
+
   test('apply_migration POSTs /v1/projects/:ref/database/migrations with body', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ version: '20260611' }));
     const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
