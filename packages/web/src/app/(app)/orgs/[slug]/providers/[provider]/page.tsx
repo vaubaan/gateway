@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
@@ -98,9 +99,8 @@ export default async function ProviderRingsPage({
               >
                 {plane.description}
               </p>
-              <PlaneRings provider={descriptor.slug} plane={plane} />
               <EnvFooter plane={plane} />
-              <ToolsList provider={descriptor.slug} planeSlug={plane.slug} />
+              <PlaneRings provider={descriptor.slug} plane={plane} />
             </CardBody>
           </Card>
         ))}
@@ -112,23 +112,28 @@ export default async function ProviderRingsPage({
 function PlaneRings({ provider, plane }: { provider: string; plane: PlaneDescriptor }) {
   // ring 1 outermost → ring N innermost (the keep).
   const sorted = [...plane.levels].sort((a, b) => a.rank - b.rank);
-  return <Rings provider={provider} planeSlug={plane.slug} levels={sorted} />;
+  const tools = providerPlaneTools(provider, plane.slug);
+  return <Rings provider={provider} plane={plane} levels={sorted} tools={tools} />;
 }
 
 function Rings({
   provider,
-  planeSlug,
+  plane,
   levels,
+  tools,
 }: {
   provider: string;
-  planeSlug: string;
+  plane: PlaneDescriptor;
   levels: LevelDescriptor[];
+  tools: readonly ToolEntry[];
 }) {
   if (levels.length === 0) return null;
   const [outer, ...rest] = levels;
   return (
-    <RingBox provider={provider} planeSlug={planeSlug} level={outer!}>
-      {rest.length > 0 ? <Rings provider={provider} planeSlug={planeSlug} levels={rest} /> : null}
+    <RingBox provider={provider} plane={plane} level={outer!} tools={tools}>
+      {rest.length > 0 ? (
+        <Rings provider={provider} plane={plane} levels={rest} tools={tools} />
+      ) : null}
     </RingBox>
   );
 }
@@ -143,16 +148,21 @@ const RING_PALETTE = [
 
 function RingBox({
   provider,
-  planeSlug,
+  plane,
   level,
+  tools,
   children,
 }: {
   provider: string;
-  planeSlug: string;
+  plane: PlaneDescriptor;
   level: LevelDescriptor;
+  tools: readonly ToolEntry[];
   children: React.ReactNode;
 }) {
   const palette = RING_PALETTE[Math.min(level.rank - 1, RING_PALETTE.length - 1)]!;
+  const toolsAtLevel = tools.filter((t) =>
+    t.capabilities.some((c) => c.plane === plane.slug && c.level === level.slug),
+  );
   return (
     <div
       style={{
@@ -177,108 +187,125 @@ function RingBox({
         <div style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-2)' }}>
           <strong style={{ fontSize: 13, color: palette.text }}>{ringLabel(level.rank)}</strong>
           <Code>{level.slug}</Code>
+          <EnvChip plane={plane} envScoped={level.envScoped} />
         </div>
         <div style={{ display: 'flex', gap: 4 }}>
           <Code>
-            {provider}:{planeSlug}/{level.slug}:read
+            {provider}:{plane.slug}/{level.slug}:read
           </Code>
           <Code>
-            {provider}:{planeSlug}/{level.slug}:write
+            {provider}:{plane.slug}/{level.slug}:write
           </Code>
         </div>
       </div>
       <p style={{ color: palette.muted, fontSize: 13, margin: 0, lineHeight: 1.4 }}>
         {level.description}
       </p>
-      {!level.envScoped && (
-        <div style={{ marginTop: 'var(--space-2)' }}>
-          <Badge tone="neutral">env-less</Badge>
-        </div>
+      {toolsAtLevel.length > 0 && (
+        <LevelToolsTable
+          tools={toolsAtLevel}
+          planeSlug={plane.slug}
+          levelSlug={level.slug}
+          mutedColor={palette.muted}
+        />
       )}
       {children && <div style={{ marginTop: 'var(--space-3)' }}>{children}</div>}
     </div>
   );
 }
 
-function ToolsList({ provider, planeSlug }: { provider: string; planeSlug: string }) {
-  const tools = providerPlaneTools(provider, planeSlug);
+function EnvChip({ plane, envScoped }: { plane: PlaneDescriptor; envScoped: boolean }) {
+  if (!envScoped) return <Badge tone="neutral">env-less</Badge>;
+  const envs = plane.knownEnvs;
+  const label =
+    envs.length === 0
+      ? 'env-scoped'
+      : envs.length <= 2
+        ? `env: ${envs.join(', ')}`
+        : `env: ${envs.slice(0, 2).join(', ')}, …`;
   return (
-    <div style={{ marginTop: 'var(--space-3)' }}>
-      <div
-        style={{
-          fontSize: 12,
-          textTransform: 'uppercase',
-          letterSpacing: '0.04em',
-          color: 'var(--text-muted)',
-          marginBottom: 'var(--space-2)',
-        }}
-      >
-        MCP tools{tools.length > 0 ? ` · ${tools.length}` : ''}
-      </div>
-      {tools.length === 0 ? (
-        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>
-          No MCP tool is wired on this plane yet.
-        </p>
-      ) : (
-        <div
-          role="table"
-          style={{
-            display: 'grid',
-            // col 1 & 2 = max-content (tool name + capability slugs) ;
-            // col 3 = minmax(0, 1fr) so the description cell can shrink
-            // below its content width and get the ellipsis treatment.
-            gridTemplateColumns: 'max-content max-content minmax(0, 1fr)',
-            columnGap: 'var(--space-3)',
-            rowGap: '4px',
-            fontSize: 13,
-            lineHeight: 1.5,
-            alignItems: 'baseline',
-          }}
-        >
-          {tools.map((tool) => (
-            <ToolRow key={tool.name} tool={tool} planeSlug={planeSlug} />
-          ))}
-        </div>
-      )}
+    <span title={plane.envHint}>
+      <Badge tone="neutral">{label}</Badge>
+    </span>
+  );
+}
+
+function LevelToolsTable({
+  tools,
+  planeSlug,
+  levelSlug,
+  mutedColor,
+}: {
+  tools: readonly ToolEntry[];
+  planeSlug: string;
+  levelSlug: string;
+  mutedColor: string;
+}) {
+  return (
+    <div
+      role="table"
+      style={{
+        marginTop: 'var(--space-3)',
+        display: 'grid',
+        // col 1 & 2 = max-content (tool name + R/W chips) ;
+        // col 3 = minmax(0, 1fr) so the description can truncate with ellipsis.
+        gridTemplateColumns: 'max-content max-content minmax(0, 1fr)',
+        columnGap: 'var(--space-3)',
+        rowGap: '4px',
+        fontSize: 13,
+        lineHeight: 1.5,
+        alignItems: 'baseline',
+      }}
+    >
+      {tools.map((tool) => {
+        const actions = uniqueActionsAtLevel(tool, planeSlug, levelSlug);
+        return (
+          <Fragment key={tool.name}>
+            <div role="cell">
+              <Code>{tool.name}</Code>
+            </div>
+            <div role="cell" style={{ display: 'flex', gap: 4 }}>
+              {actions.map((a) => (
+                <Code key={a}>{a === 'read' ? 'R' : 'W'}</Code>
+              ))}
+            </div>
+            <div
+              role="cell"
+              style={{
+                color: mutedColor,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+              title={tool.description}
+            >
+              {tool.description}
+            </div>
+          </Fragment>
+        );
+      })}
     </div>
   );
 }
 
-function ToolRow({ tool, planeSlug }: { tool: ToolEntry; planeSlug: string }) {
-  const onPlane = tool.capabilities.filter((c) => c.plane === planeSlug);
-  return (
-    <>
-      <div role="cell">
-        <Code>{tool.name}</Code>
-      </div>
-      <div role="cell" style={{ display: 'flex', gap: 4 }}>
-        {onPlane.map((cap) => (
-          <Code key={`${cap.level}:${cap.action}`}>
-            {cap.provider}:{cap.plane}/{cap.level}:{cap.action}
-          </Code>
-        ))}
-      </div>
-      <div
-        role="cell"
-        style={{
-          color: 'var(--text-muted)',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-        title={tool.description}
-      >
-        {tool.description}
-      </div>
-    </>
-  );
+function uniqueActionsAtLevel(
+  tool: ToolEntry,
+  planeSlug: string,
+  levelSlug: string,
+): readonly ('read' | 'write')[] {
+  const set = new Set<'read' | 'write'>();
+  for (const cap of tool.capabilities) {
+    if (cap.plane === planeSlug && cap.level === levelSlug) set.add(cap.action);
+  }
+  // Stable order : read before write.
+  return (['read', 'write'] as const).filter((a) => set.has(a));
 }
 
 function EnvFooter({ plane }: { plane: PlaneDescriptor }) {
   return (
     <div
       style={{
-        marginTop: 'var(--space-3)',
+        marginBottom: 'var(--space-3)',
         padding: 'var(--space-2) var(--space-3)',
         background: 'var(--surface-base)',
         border: '1px dashed var(--border-subtle)',
