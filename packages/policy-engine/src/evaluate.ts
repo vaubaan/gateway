@@ -34,6 +34,8 @@ export function evaluateCapability(
     reason:
       `this access token is not granted '${need}'. ` +
       `Granted capabilities: ${have}. ` +
-      `Mint a token carrying '${need}' to perform this call.`,
+      `Mint a new token carrying '${need}' — ` +
+      `POST /api/v1/mgmt/tokens with body \`{ "projectSlug": "<slug>", "capabilities": ["${need}"] }\` ` +
+      `using your management key. The mint may return 202 + approval_id if the capability requires human gate.`,
   };
 }

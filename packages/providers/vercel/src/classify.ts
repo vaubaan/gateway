@@ -23,6 +23,7 @@ type Kind =
   | 'read-account'
   | 'read-project-settings'
   | 'read-deployment'
+  | 'read-config'
   | 'write-deployment'
   | 'write-deployment-targeted'
   | 'write-config-targeted'
@@ -50,9 +51,12 @@ const TOOL_KIND: Record<string, Kind> = {
   vercel__reply_to_toolbar_thread: 'write-deployment',
   vercel__edit_toolbar_message: 'write-deployment',
   vercel__add_toolbar_reaction: 'write-deployment',
+  // Config (env vars) reads
+  vercel__list_env_vars: 'read-config',
   // Real writes
   vercel__deploy_to_vercel: 'write-deployment-targeted',
   vercel__upsert_env_var: 'write-config-targeted',
+  vercel__delete_env_var: 'write-config-targeted',
   vercel__update_project_settings: 'write-project-settings',
 };
 
@@ -62,7 +66,9 @@ function cap(level: string, action: 'read' | 'write', env?: string): Capability 
     : { provider: 'vercel', plane: 'runtime', level, action };
 }
 
-/** Map a Vercel `target` arg to a Vaubaan env slug. Absent → 'prod' (conservative). */
+/** Map a Vercel `target` arg to a Vaubaan env slug. Absent → 'prod' (conservative).
+ *  When `target` is an array (upsert_env_var), only the scalar case is honored;
+ *  the env-less fan-out case falls through to 'prod'. */
 function envOf(target: unknown): string {
   if (target === 'preview') return 'preview';
   if (target === 'development') return 'development';
@@ -80,6 +86,8 @@ export function vercelToolCapabilities(tool: string): readonly Capability[] {
       return [cap('project-settings', 'read')];
     case 'read-deployment':
       return [cap('deployment', 'read')];
+    case 'read-config':
+      return [cap('config', 'read')];
     case 'write-deployment':
     case 'write-deployment-targeted':
       return [cap('deployment', 'write')];
@@ -119,6 +127,8 @@ export function classifyVercel(
       return { capability: cap('project-settings', 'read') };
     case 'read-deployment':
       return { capability: cap('deployment', 'read') };
+    case 'read-config':
+      return { capability: cap('config', 'read') };
     case 'write-deployment':
       return { capability: cap('deployment', 'write') };
     case 'write-deployment-targeted':

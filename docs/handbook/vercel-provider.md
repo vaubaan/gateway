@@ -9,11 +9,12 @@ tracks:
 
 # Vercel provider — `@vaubaan/providers-vercel`
 
-Rewrap du MCP remote officiel `mcp.vercel.com` (18 tools) augmenté de 2 tools
-REST custom (`update_project_settings`, `upsert_env_var`) qui couvrent les
-trous d'écriture du MCP officiel. Auth = Bearer long-lived (token
-d'Integration `vca_*` ou PAT `vcp_*`), pas de refresh, scoping par `teamId`
-auto-injecté côté adapter.
+Rewrap du MCP remote officiel `mcp.vercel.com` (18 tools) augmenté de 4 tools
+REST custom (`update_project_settings`, `upsert_env_var`, `list_env_vars`,
+`delete_env_var`) qui couvrent les trous read/write du MCP officiel sur env
+vars + project settings. Auth = Bearer long-lived (token d'Integration
+`vca_*` ou PAT `vcp_*`), pas de refresh, scoping par `teamId` auto-injecté
+côté adapter.
 
 ADRs opérantes : `docs/decisions/rewrap-official-mcps.md`,
 `docs/decisions/vercel-augment-with-rest-tools.md`,
@@ -31,9 +32,9 @@ packages/providers/vercel/
     execute.ts           # JSON-RPC forward → mcp.vercel.com + REST dispatch pour custom tools
     tools.ts             # availableTools[] = upstream + custom
     upstream-tools.json  # 18 tools frozen from mcp.vercel.com (refresh manuel)
-    custom-tools.ts      # 2 tools REST (update_project_settings, upsert_env_var)
+    custom-tools.ts      # 4 tools REST (update_project_settings, upsert_env_var, list_env_vars, delete_env_var)
     index.ts             # barrel
-  tests/unit/adapter.test.ts (18 tests)
+  tests/unit/adapter.test.ts
 ```
 
 ## Concepts du cloud — supportés / non-supportés
@@ -49,7 +50,7 @@ RBAC"), 2026-05-31.
 | Deployment                                                                                  | Oui (read + trigger)                                                                               | tools `list_deployments`, `get_deployment`, `deploy_to_vercel`.                                                                                                                                                                                                                                                                                            |
 | Build logs                                                                                  | Oui                                                                                                | `vercel__get_deployment_build_logs` (stream ou JSON selon paramètres).                                                                                                                                                                                                                                                                                     |
 | Runtime logs                                                                                | Oui (avec filtres environment / level / source / requestId / since-until)                          | `vercel__get_runtime_logs`.                                                                                                                                                                                                                                                                                                                                |
-| Env vars (project-scoped)                                                                   | Oui (read + upsert)                                                                                | upstream get via `get_project`, upsert via custom REST `upsert_env_var` (POST `/v10/projects/{id}/env?upsert=true`).                                                                                                                                                                                                                                       |
+| Env vars (project-scoped)                                                                   | Oui (list + upsert + delete)                                                                       | custom REST : `list_env_vars` (GET `/v10/projects/{id}/env`, optional `?decrypt=true`), `upsert_env_var` (POST `/v10/projects/{id}/env?upsert=true`), `delete_env_var` (DELETE `/v9/projects/{id}/env/{envId}`).                                                                                                                                           |
 | Env vars (global account-wide)                                                              | Non                                                                                                | Hors-scope MVP. Le scope Vercel `global-project-env-vars` n'est pas demandé.                                                                                                                                                                                                                                                                               |
 | Project settings (rootDirectory, framework, build/dev/install/output commands, nodeVersion) | Oui (read + update)                                                                                | custom REST `update_project_settings` (PATCH `/v9/projects/{id}`).                                                                                                                                                                                                                                                                                         |
 | Deploy trigger                                                                              | Oui                                                                                                | `vercel__deploy_to_vercel`.                                                                                                                                                                                                                                                                                                                                |
@@ -190,7 +191,7 @@ Vercel disponibles, nous en cochons 5.
 
 ### Table B — Surface tool → upstream → scope provider requis
 
-20 tools exposés (18 upstream + 2 custom REST). Sourcing scopes per-tool :
+22 tools exposés (18 upstream + 4 custom REST). Sourcing scopes per-tool :
 Context7 `query-docs` "Vercel scopes per endpoint", 2026-05-31.
 
 | Vaubaan tool                                      | Upstream call                                           | Scope Vercel requis                                           |
@@ -215,6 +216,8 @@ Context7 `query-docs` "Vercel scopes per endpoint", 2026-05-31.
 | `vercel__add_toolbar_reaction`                    | mcp.vercel.com / add_toolbar_reaction                   | `deployment:Write`                                            |
 | `vercel__update_project_settings` _(custom REST)_ | PATCH `api.vercel.com/v9/projects/{id}`                 | `project:Write`                                               |
 | `vercel__upsert_env_var` _(custom REST)_          | POST `api.vercel.com/v10/projects/{id}/env?upsert=true` | `project-env-vars:Write`                                      |
+| `vercel__list_env_vars` _(custom REST)_           | GET `api.vercel.com/v10/projects/{id}/env`              | `project-env-vars:Read`                                       |
+| `vercel__delete_env_var` _(custom REST)_          | DELETE `api.vercel.com/v9/projects/{id}/env/{envId}`    | `project-env-vars:Write`                                      |
 
 ## Token mint / hot-path
 
@@ -231,9 +234,9 @@ Context7 `query-docs` "Vercel scopes per endpoint", 2026-05-31.
 Contrairement à Railway (refresh 1h) et GitHub (JIT JWT exchange), Vercel =
 **use direct** du Bearer long-lived. Pas de cron, pas de refresh hot-path.
 
-## Tools exposés (20)
+## Tools exposés (22)
 
-Rewrap de 18 tools upstream `mcp.vercel.com` + 2 tools REST custom. Préfixe
+Rewrap de 18 tools upstream `mcp.vercel.com` + 4 tools REST custom. Préfixe
 `vercel__`, noms upstream en snake_case (différent de Railway en kebab-case).
 
 - **Read list** : `vercel__list_projects`, `vercel__list_deployments`,
@@ -245,16 +248,18 @@ Rewrap de 18 tools upstream `mcp.vercel.com` + 2 tools REST custom. Préfixe
 - **Read meta / utilities** : `vercel__search_vercel_documentation`,
   `vercel__check_domain_availability_and_price`,
   `vercel__web_fetch_vercel_url`, `vercel__get_access_to_vercel_url`.
+- **Read config (custom REST)** : `vercel__list_env_vars`.
 - **Write deploy** : `vercel__deploy_to_vercel`.
 - **Write toolbar** : `vercel__reply_to_toolbar_thread`,
   `vercel__edit_toolbar_message`, `vercel__add_toolbar_reaction`,
   `vercel__change_toolbar_thread_resolve_status`.
 - **Write project (custom REST)** : `vercel__update_project_settings`,
-  `vercel__upsert_env_var`.
+  `vercel__upsert_env_var`, `vercel__delete_env_var`.
 
-Pas de tool **DESTRUCTIVE** deny-listé en v1 — `mcp.vercel.com` n'expose pas
-de delete (le delete project, env var, deployment passe par REST direct et
-n'est pas wrappé côté Vaubaan en MVP).
+`vercel__delete_env_var` est le seul tool potentiellement destructive du
+wrap Vercel. Il n'est pas deny-listé : la protection passe par la policy
+(`config:write@<env>` → `confirm` par défaut sur le seed), comme pour
+`upsert_env_var`. Le delete project / deployment reste hors-scope.
 
 ## Capability surface
 
@@ -282,8 +287,10 @@ Exemples de classification (`classify.ts:31-57`) :
 | `vercel__list_projects`           | `account:read`                |
 | `vercel__get_project`             | `project-settings:read`       |
 | `vercel__get_deployment`          | `deployment:read`             |
+| `vercel__list_env_vars`           | `config:read` (env-less)      |
 | `vercel__deploy_to_vercel`        | `deployment:write@<target>`   |
 | `vercel__upsert_env_var`          | `config:write@<target>`       |
+| `vercel__delete_env_var`          | `config:write@<target>`       |
 | `vercel__update_project_settings` | `project-settings:write`      |
 | `vercel__reply_to_toolbar_thread` | `deployment:write` (env-less) |
 
@@ -312,11 +319,12 @@ pour un coding agent au use case près. La policy par défaut force
 
 ## Tests
 
-`npx vitest run packages/providers/vercel` — 18 tests dans
-`tests/unit/adapter.test.ts` (mint long-lived, validateBinding sur
-`prj_*`, executeCall avec teamId injection, custom REST dispatch
-`update_project_settings` + `upsert_env_var`, classify branches par
-kind).
+`npx vitest run packages/providers/vercel` — `tests/unit/adapter.test.ts`
+couvre : mint long-lived, validateBinding sur `prj_*`, executeCall avec
+teamId injection, custom REST dispatch (`update_project_settings`,
+`upsert_env_var`, `list_env_vars` GET no-body, `delete_env_var` DELETE
+no-body), classify branches par kind (incl. `read-config` env-less et
+`write-config-targeted` pour delete).
 
 ## Refresh procedure (rewrap)
 
@@ -346,9 +354,10 @@ détecter un drift entre `upstream-tools.json` et la version live :
   via check `args.projectId ∈ bindings` (`classify.ts:108-113`).
 - **Pas de webhook** Vercel intégré. Si on veut écouter `deployment.succeeded`
   pour déclencher des callbacks coding agent, v2.
-- **Pas de delete tool** exposé. Le delete project / env var / deployment
-  n'est pas wrappé en MVP. À ajouter sur demande, avec garde-fou
-  default-deny côté policy similar au pattern Railway (`accept-deploy`).
+- **Delete tool partiel** : seul `delete_env_var` est wrappé. Le delete
+  project / deployment n'est pas exposé en MVP (à ajouter sur demande,
+  avec garde-fou default-deny côté policy similaire au pattern Railway
+  `accept-deploy`).
 
 ## Références
 

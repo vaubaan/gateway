@@ -41,11 +41,23 @@ curl -sS https://vaubaan.com/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-The response only includes the tools your roles **could** call. If a tool you
-expect is missing, either:
+The response only includes the tools your token's **granted capabilities**
+could potentially call (static filter, env-less). If a tool you expect is
+missing, the cause is one of:
 
-- your token's roles don't allow it, or
-- the corresponding provider isn't connected on the organization yet.
+- your token's capabilities don't cover that tool — **re-mint** a token that
+  carries the required capability (e.g. `vercel:config:write@prod` to expose
+  `vercel__upsert_env_var`). `POST /api/v1/mgmt/tokens` with
+  `{ "projectSlug": "<slug>", "capabilities": ["<cap>"] }` using your
+  management key ; the mint may return 202 + `approval_id` when the
+  capability requires a human gate (default seed gates all writes through
+  `confirm`).
+- the corresponding provider isn't connected on the organization yet — tell
+  the operator, you cannot self-serve.
+
+When you _do_ try to call a tool that isn't listed, the gateway responds
+with `Vaubaan policy denied: this access token is not granted '<cap>'. …`
+which names the exact capability slug you need to add at re-mint.
 
 ### 3.2 Initialize (optional, for clients that need it)
 
@@ -122,13 +134,18 @@ high-level map.
 
 ### 5.2 Vercel (`vercel__…`)
 
-Rewrap of `mcp.vercel.com` — 18 tools. Common ones :
+Rewrap of `mcp.vercel.com` (18 upstream tools) plus 4 custom REST-backed
+tools layered on top. Common ones :
 
 - `vercel__list_projects`, `vercel__get_project`, `vercel__list_deployments`
-- `vercel__get_deployment`, `vercel__get_deployment_build_logs`
-- `vercel__get_deployment_runtime_logs`
-- `vercel__list_env_vars`, `vercel__get_env_var`
-- `vercel__create_deployment` (where allowed by role)
+- `vercel__get_deployment`, `vercel__get_deployment_build_logs`,
+  `vercel__get_runtime_logs`
+- `vercel__deploy_to_vercel` (write, env-targeted via `target`)
+- Custom (REST-backed, not in upstream MCP) :
+  `vercel__list_env_vars` (`config:read`),
+  `vercel__upsert_env_var` (`config:write@<target>`),
+  `vercel__delete_env_var` (`config:write@<target>`),
+  `vercel__update_project_settings` (`project-settings:write`)
 
 The gateway auto-fills `teamId` from the connected admin and `projectId`
 from the project's Vercel binding — you usually don't need to pass them.

@@ -15,7 +15,12 @@
  */
 
 import { isCustomTool, toUpstreamName } from './tools.ts';
-import { UPDATE_PROJECT_SETTINGS, UPSERT_ENV_VAR } from './custom-tools.ts';
+import {
+  DELETE_ENV_VAR,
+  LIST_ENV_VARS,
+  UPDATE_PROJECT_SETTINGS,
+  UPSERT_ENV_VAR,
+} from './custom-tools.ts';
 
 export type FetchImpl = typeof fetch;
 
@@ -96,22 +101,23 @@ async function callUpstreamMcp(
 async function callRest(
   fetchImpl: FetchImpl,
   token: string,
-  method: 'PATCH' | 'POST',
+  method: 'GET' | 'PATCH' | 'POST' | 'DELETE',
   path: string,
   query: Record<string, string>,
-  body: Record<string, unknown>,
+  body: Record<string, unknown> | null,
 ): Promise<unknown> {
   const qs = new URLSearchParams(query).toString();
   const url = `${REST_BASE}${path}${qs ? `?${qs}` : ''}`;
-  const res = await fetchImpl(url, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
+  const headers: Record<string, string> = {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/json',
+  };
+  const init: RequestInit = { method, headers };
+  if (body !== null) {
+    headers['Content-Type'] = 'application/json';
+    init.body = JSON.stringify(body);
+  }
+  const res = await fetchImpl(url, init);
   const text = await res.text();
   if (!res.ok) {
     throw new Error(`Vercel REST ${method} ${path} ${res.status}: ${text.slice(0, 300)}`);
@@ -168,6 +174,22 @@ async function executeCustom(
     query.upsert = 'true';
     const body = pickDefined(args, ENV_VAR_FIELDS);
     return callRest(fetchImpl, token, 'POST', `/v10/projects/${projectId}/env`, query, body);
+  }
+  if (tool === LIST_ENV_VARS) {
+    if (args.decrypt === true) query.decrypt = 'true';
+    return callRest(fetchImpl, token, 'GET', `/v10/projects/${projectId}/env`, query, null);
+  }
+  if (tool === DELETE_ENV_VAR) {
+    const envVarId = typeof args.id === 'string' ? args.id : '';
+    if (!envVarId) throw new Error(`Vercel custom tool ${tool}: id is required.`);
+    return callRest(
+      fetchImpl,
+      token,
+      'DELETE',
+      `/v9/projects/${projectId}/env/${envVarId}`,
+      query,
+      null,
+    );
   }
   throw new Error(`Vercel custom tool not implemented: ${tool}`);
 }

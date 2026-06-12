@@ -184,6 +184,47 @@ describe('VercelAdapter — classify', () => {
     });
   });
 
+  test('list_env_vars → runtime/config:read (env-less)', () => {
+    const result = adapter.classify('vercel__list_env_vars', { projectId: 'prj_abc' }, [binding]);
+    expect(result).toEqual({
+      capability: { provider: 'vercel', plane: 'runtime', level: 'config', action: 'read' },
+    });
+  });
+
+  test('delete_env_var without target → runtime/config:write @prod (defensive default)', () => {
+    const result = adapter.classify(
+      'vercel__delete_env_var',
+      { projectId: 'prj_abc', id: 'env_xyz' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'vercel',
+        plane: 'runtime',
+        level: 'config',
+        action: 'write',
+        env: 'prod',
+      },
+    });
+  });
+
+  test('delete_env_var with preview target → runtime/config:write @preview', () => {
+    const result = adapter.classify(
+      'vercel__delete_env_var',
+      { projectId: 'prj_abc', id: 'env_xyz', target: 'preview' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'vercel',
+        plane: 'runtime',
+        level: 'config',
+        action: 'write',
+        env: 'preview',
+      },
+    });
+  });
+
   test('update_project_settings → runtime/project-settings:write (env-less)', () => {
     const result = adapter.classify(
       'vercel__update_project_settings',
@@ -309,7 +350,60 @@ describe('VercelAdapter — executeCall (custom REST tools)', () => {
     const names = adapter.availableTools.map((t) => t.name);
     expect(names).toContain('vercel__update_project_settings');
     expect(names).toContain('vercel__upsert_env_var');
+    expect(names).toContain('vercel__list_env_vars');
+    expect(names).toContain('vercel__delete_env_var');
     // Sanity check: upstream tools are still present.
     expect(names).toContain('vercel__list_projects');
+  });
+
+  test('list_env_vars GETs /v10/projects/{id}/env with no body and teamId query', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) =>
+      jsonResponse({ envs: [{ id: 'env_a', key: 'X', target: ['production'] }] }),
+    );
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    const out = (await adapter.executeCall(baseAdmin, binding, 'vercel__list_env_vars', {
+      projectId: 'prj_abc',
+    })) as { envs: { id: string }[] };
+    expect(out.envs[0]?.id).toBe('env_a');
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.vercel.com/v10/projects/prj_abc/env?teamId=team_abc');
+    expect(init.method).toBe('GET');
+    expect(init.body).toBeUndefined();
+    expect((init.headers as Record<string, string>)['Content-Type']).toBeUndefined();
+  });
+
+  test('list_env_vars passes decrypt=true when requested', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) => jsonResponse({ envs: [] }));
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'vercel__list_env_vars', {
+      projectId: 'prj_abc',
+      decrypt: true,
+    });
+    const [url] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      'https://api.vercel.com/v10/projects/prj_abc/env?teamId=team_abc&decrypt=true',
+    );
+  });
+
+  test('delete_env_var DELETEs /v9/projects/{id}/env/{envId} with no body', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) => jsonResponse({}));
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'vercel__delete_env_var', {
+      projectId: 'prj_abc',
+      id: 'env_xyz',
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.vercel.com/v9/projects/prj_abc/env/env_xyz?teamId=team_abc');
+    expect(init.method).toBe('DELETE');
+    expect(init.body).toBeUndefined();
+  });
+
+  test('delete_env_var throws when id missing', async () => {
+    const fetchImpl = vi.fn();
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await expect(
+      adapter.executeCall(baseAdmin, binding, 'vercel__delete_env_var', { projectId: 'prj_abc' }),
+    ).rejects.toThrow(/id is required/);
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 });

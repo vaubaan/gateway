@@ -14,6 +14,8 @@ import type { McpToolDeclaration } from '@vaubaan/shared';
 
 export const UPDATE_PROJECT_SETTINGS = 'vercel__update_project_settings';
 export const UPSERT_ENV_VAR = 'vercel__upsert_env_var';
+export const LIST_ENV_VARS = 'vercel__list_env_vars';
+export const DELETE_ENV_VAR = 'vercel__delete_env_var';
 
 export const customTools: readonly McpToolDeclaration[] = [
   {
@@ -115,6 +117,60 @@ export const customTools: readonly McpToolDeclaration[] = [
         },
       },
       required: ['projectId', 'key', 'value'],
+    },
+  },
+  {
+    name: LIST_ENV_VARS,
+    description:
+      'List environment variables on a Vercel project. Values are returned encrypted by default; pass `decrypt: true` to receive plaintext (requires the access token to have plaintext-read rights on Vercel). Backed by GET /v10/projects/{projectId}/env.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Vercel project id (e.g. `prj_xxx`).',
+        },
+        teamId: {
+          type: 'string',
+          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
+        },
+        decrypt: {
+          type: 'boolean',
+          description:
+            'When true, request plaintext values from Vercel (`?decrypt=true`). Default false.',
+        },
+      },
+      required: ['projectId'],
+    },
+  },
+  {
+    name: DELETE_ENV_VAR,
+    description:
+      'Delete an environment variable on a Vercel project by its Vercel-issued id. Pass `target` to declare which Vaubaan env this delete touches — the gateway uses it to gate the capability (write@prod, write@preview, …). Backed by DELETE /v9/projects/{projectId}/env/{id}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Vercel project id (e.g. `prj_xxx`).',
+        },
+        teamId: {
+          type: 'string',
+          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
+        },
+        id: {
+          type: 'string',
+          description:
+            'Vercel-issued env var id (returned by `vercel__list_env_vars`). Distinct from the variable name.',
+        },
+        target: {
+          type: 'string',
+          enum: ['production', 'preview', 'development'],
+          description:
+            'Vaubaan env target hint for capability gating. The Vercel API does not need it (the var is removed from all its targets at once), but Vaubaan uses it to require `config:write@<env>`. Defaults to `production` (conservative).',
+        },
+      },
+      required: ['projectId', 'id'],
     },
   },
 ];
