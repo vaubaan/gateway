@@ -10,7 +10,10 @@ interface Binding {
   provider: Provider;
   resource_ref: string;
   display_name: string | null;
+  environment: string | null;
 }
+
+const ENV_REGEX = /^[a-z0-9](-?[a-z0-9])*$/;
 
 export function BindingControls({
   binding,
@@ -24,22 +27,36 @@ export function BindingControls({
   const router = useRouter();
   const [editing, setEditing] = useState(false);
   const [ref, setRef] = useState(binding.resource_ref);
+  const [envSlug, setEnvSlug] = useState<string>(binding.environment ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function save() {
-    if (ref === binding.resource_ref) {
+    const envClean = envSlug.trim();
+    const refChanged = ref !== binding.resource_ref;
+    const envChanged = (envClean || null) !== binding.environment;
+    if (!refChanged && !envChanged) {
       setEditing(false);
+      return;
+    }
+    if (envClean && !ENV_REGEX.test(envClean)) {
+      setError(`Env slug '${envClean}' must be lowercase kebab-case (e.g. 'prod', 'staging').`);
       return;
     }
     setBusy(true);
     setError(null);
     try {
       const display = resources.find((r) => r.ref === ref)?.name ?? ref;
+      const body: Record<string, string | null> = { orgSlug };
+      if (refChanged) {
+        body.resource_ref = ref;
+        body.display_name = display;
+      }
+      if (envChanged) body.environment = envClean || null;
       const res = await fetch(`/api/v1/bindings/${binding.id}`, {
         method: 'PATCH',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ orgSlug, resource_ref: ref, display_name: display }),
+        body: JSON.stringify(body),
       });
       const json = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
@@ -97,6 +114,16 @@ export function BindingControls({
             spellCheck={false}
           />
         )}
+        <Input
+          value={envSlug}
+          onChange={(e) => setEnvSlug(e.target.value)}
+          disabled={busy}
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="env (e.g. prod)"
+          pattern="^[a-z0-9](-?[a-z0-9])*$"
+          style={{ width: 140 }}
+        />
         <Button type="button" size="sm" variant="primary" onClick={save} disabled={busy}>
           {busy ? 'Saving…' : 'Save'}
         </Button>
@@ -107,6 +134,7 @@ export function BindingControls({
           onClick={() => {
             setEditing(false);
             setRef(binding.resource_ref);
+            setEnvSlug(binding.environment ?? '');
             setError(null);
           }}
           disabled={busy}

@@ -25,6 +25,26 @@ const REF_HINT: Record<string, string> = {
   railway: 'project id (UUID)',
 };
 
+/** Per-provider hint for the env slug input. Mirrors `PlaneDescriptor.envHint`
+ *  in the ring catalog ; kept local here so the form stays a pure client
+ *  component without dragging the full catalog through props. */
+const ENV_HINT: Record<string, string> = {
+  github: 'a branch name (e.g. main, feature/x). Leave blank for env-less.',
+  vercel: 'a Vercel target — prod, preview, or development. Leave blank for env-less.',
+  supabase:
+    'one Supabase project = one env. Defaults to the picked project name ; override with prod/staging if you want short capability slugs (e.g. supabase:db/rows:read@prod).',
+  railway: 'env resolution not wired in MVP — leave blank.',
+};
+
+/** Kebab-case a free-form display name so it fits the `environment` column
+ *  check constraint (`^[a-z0-9](-?[a-z0-9])*$`). Empty result → null env. */
+function kebabize(s: string): string {
+  return s
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 interface OfferedProvider {
   provider: Provider;
   resources: Array<{ ref: string; name: string; description?: string; url?: string }>;
@@ -49,6 +69,14 @@ export function BindingForm({
 
   const current = offered.find((o) => o.provider === provider) ?? null;
   const [ref, setRef] = useState<string>(current?.resources[0]?.ref ?? '');
+  // Env slug (persisted to provider_bindings.environment). Defaults to the
+  // picked resource's display name (kebabed) so the common case "one Supabase
+  // project per env, named after the env" needs no extra typing.
+  const initialEnv = kebabize(current?.resources[0]?.name ?? '');
+  const [envSlug, setEnvSlug] = useState<string>(initialEnv);
+  // Track whether the operator has touched the env field — if not, the field
+  // tracks the picked resource name. Once edited, we stop overwriting.
+  const [envTouched, setEnvTouched] = useState(false);
 
   // Bash binding fields (script holder ; hosts come from the detail page).
   const [bashSlug, setBashSlug] = useState('');
@@ -63,8 +91,24 @@ export function BindingForm({
     if (p !== 'bash') {
       const next = offered.find((o) => o.provider === p);
       setRef(next?.resources[0]?.ref ?? '');
+      if (!envTouched) {
+        setEnvSlug(kebabize(next?.resources[0]?.name ?? ''));
+      }
     }
     setError(null);
+  }
+
+  function onRefChange(nextRef: string) {
+    setRef(nextRef);
+    if (!envTouched) {
+      const name = current?.resources.find((r) => r.ref === nextRef)?.name ?? '';
+      setEnvSlug(kebabize(name));
+    }
+  }
+
+  function onEnvChange(nextEnv: string) {
+    setEnvSlug(nextEnv);
+    setEnvTouched(true);
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -86,11 +130,21 @@ export function BindingForm({
     try {
       const supabase = getSupabaseBrowser();
       const display = current?.resources.find((r) => r.ref === ref)?.name ?? ref;
+      const envClean = envSlug.trim();
+      // Empty env → null (env-less binding). The DB CHECK constraint enforces
+      // the kebab-case shape ; surface the violation up front rather than
+      // letting Postgres reject the insert with a generic message.
+      if (envClean && !/^[a-z0-9](-?[a-z0-9])*$/.test(envClean)) {
+        throw new Error(
+          `Env slug '${envClean}' must be lowercase kebab-case (e.g. 'prod', 'staging', 'preview').`,
+        );
+      }
       const { error: err } = await supabase.from('provider_bindings').insert({
         project_id: projectId,
         provider,
         resource_ref: ref,
         display_name: display,
+        environment: envClean || null,
       });
       if (err) throw err;
       router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
@@ -184,7 +238,7 @@ export function BindingForm({
                   }
                 >
                   {current && current.resources.length > 0 ? (
-                    <Select value={ref} onChange={(e) => setRef(e.target.value)}>
+                    <Select value={ref} onChange={(e) => onRefChange(e.target.value)}>
                       {(current?.resources ?? []).map((r) => (
                         <option key={r.ref} value={r.ref}>
                           {r.name}
@@ -195,12 +249,30 @@ export function BindingForm({
                   ) : (
                     <Input
                       value={ref}
-                      onChange={(e) => setRef(e.target.value)}
+                      onChange={(e) => onRefChange(e.target.value)}
                       placeholder={REF_HINT[provider]}
                       autoComplete="off"
                       spellCheck={false}
                     />
                   )}
+                </Field>
+              )}
+
+              {!isBash && (
+                <Field
+                  label="Env slug (optional)"
+                  hint={
+                    ENV_HINT[provider] ?? 'Lowercase kebab-case. Leave blank for env-less bindings.'
+                  }
+                >
+                  <Input
+                    value={envSlug}
+                    onChange={(e) => onEnvChange(e.target.value)}
+                    placeholder="prod"
+                    autoComplete="off"
+                    spellCheck={false}
+                    pattern="^[a-z0-9](-?[a-z0-9])*$"
+                  />
                 </Field>
               )}
 

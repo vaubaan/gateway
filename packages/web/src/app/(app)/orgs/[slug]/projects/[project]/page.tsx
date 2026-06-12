@@ -19,6 +19,7 @@ interface BindingRow {
   provider: Provider;
   resource_ref: string;
   display_name: string | null;
+  environment: string | null;
 }
 
 interface BashBindingRow {
@@ -74,7 +75,7 @@ export default async function ProjectPage({
   ] = await Promise.all([
     supabase
       .from('provider_bindings')
-      .select('id, provider, resource_ref, display_name')
+      .select('id, provider, resource_ref, display_name, environment')
       .eq('project_id', proj.id)
       .returns<BindingRow[]>(),
     supabase
@@ -195,6 +196,15 @@ export default async function ProjectPage({
                     <span style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                       <Badge tone="neutral">{b.provider}</Badge>
                       <Code>{b.display_name ?? b.resource_ref}</Code>
+                      {b.environment ? (
+                        <Badge tone="info" mono>
+                          @{b.environment}
+                        </Badge>
+                      ) : (
+                        <Badge tone="warning" mono>
+                          env-less
+                        </Badge>
+                      )}
                     </span>
                     <BindingControls
                       binding={b}
