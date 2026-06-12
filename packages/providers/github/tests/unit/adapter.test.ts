@@ -514,4 +514,33 @@ describe('GitHubAdapter — classify (capability model)', () => {
       { provider: 'github', plane: 'repo', level: 'code', action: 'write' },
     ]);
   });
+
+  test('list_workflows → repo/ci:read (covers the ci plane)', () => {
+    const d = adapter.classify('github__list_workflows', { owner: 'acme', repo: 'app' }, bindings);
+    expect(d).toEqual({
+      capability: { provider: 'github', plane: 'repo', level: 'ci', action: 'read' },
+    });
+  });
+
+  test('list_workflow_runs → repo/ci:read', () => {
+    const d = adapter.classify(
+      'github__list_workflow_runs',
+      { owner: 'acme', repo: 'app', branch: 'main' },
+      bindings,
+    );
+    expect(d).toEqual({
+      capability: { provider: 'github', plane: 'repo', level: 'ci', action: 'read' },
+    });
+  });
+
+  test('get_branch_protection → repo/rules:read', () => {
+    const d = adapter.classify(
+      'github__get_branch_protection',
+      { owner: 'acme', repo: 'app', branch: 'main' },
+      bindings,
+    );
+    expect(d).toEqual({
+      capability: { provider: 'github', plane: 'repo', level: 'rules', action: 'read' },
+    });
+  });
 });

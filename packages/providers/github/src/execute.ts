@@ -202,6 +202,37 @@ export async function executeCall(
       });
       return data;
     }
+    case 'github__list_workflows': {
+      const { data } = await octokit.rest.actions.listRepoWorkflows({ ...githubArgs(args) });
+      return data;
+    }
+    case 'github__list_workflow_runs': {
+      const workflowId = args.workflow_id;
+      const branch = args.branch as string | undefined;
+      const perPage = typeof args.per_page === 'number' ? args.per_page : undefined;
+      if (workflowId !== undefined) {
+        const { data } = await octokit.rest.actions.listWorkflowRuns({
+          ...githubArgs(args),
+          workflow_id: workflowId as string | number,
+          branch,
+          per_page: perPage,
+        });
+        return data;
+      }
+      const { data } = await octokit.rest.actions.listWorkflowRunsForRepo({
+        ...githubArgs(args),
+        branch,
+        per_page: perPage,
+      });
+      return data;
+    }
+    case 'github__get_branch_protection': {
+      const { data } = await octokit.rest.repos.getBranchProtection({
+        ...githubArgs(args),
+        branch: args.branch as string,
+      });
+      return data;
+    }
     default:
       throw new Error(`Unknown GitHub MCP tool: ${tool}`);
   }

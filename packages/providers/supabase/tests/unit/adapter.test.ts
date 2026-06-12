@@ -97,7 +97,7 @@ describe('SupabaseAdapter — classify', () => {
     });
   });
 
-  test('execute_sql → db/rows:read @staging (MVP read-only)', () => {
+  test('execute_sql SELECT → db/rows:read @staging', () => {
     const adapter = new SupabaseAdapter();
     const result = adapter.classify(
       'supabase__execute_sql',
@@ -110,6 +110,78 @@ describe('SupabaseAdapter — classify', () => {
         plane: 'db',
         level: 'rows',
         action: 'read',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('execute_sql INSERT → db/rows:write @staging (security: not read)', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__execute_sql',
+      { project_ref: 'qsockrvwpfzvxxecwjvh', query: "insert into t(x) values('a');" },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'db',
+        level: 'rows',
+        action: 'write',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('execute_sql DROP TABLE → db/tables:write @staging (security: rises level)', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__execute_sql',
+      { project_ref: 'qsockrvwpfzvxxecwjvh', query: 'drop table users;' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'db',
+        level: 'tables',
+        action: 'write',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('execute_sql GRANT → db/rls:write @staging', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__execute_sql',
+      { project_ref: 'qsockrvwpfzvxxecwjvh', query: 'grant select on t to anon;' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'db',
+        level: 'rls',
+        action: 'write',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('execute_sql ALTER SYSTEM → db/project:write @staging', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__execute_sql',
+      { project_ref: 'qsockrvwpfzvxxecwjvh', query: 'alter system set work_mem = "64MB";' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'db',
+        level: 'project',
+        action: 'write',
         env: 'staging',
       },
     });
@@ -130,6 +202,19 @@ describe('SupabaseAdapter — classify', () => {
         action: 'read',
         env: 'staging',
       },
+    });
+  });
+
+  test('binding with environment=null yields an env-less capability for execute_sql', () => {
+    const adapter = new SupabaseAdapter();
+    const envlessBinding: ProviderBinding = { ...binding, environment: null };
+    const result = adapter.classify(
+      'supabase__execute_sql',
+      { project_ref: 'qsockrvwpfzvxxecwjvh', query: 'drop table users;' },
+      [envlessBinding],
+    );
+    expect(result).toEqual({
+      capability: { provider: 'supabase', plane: 'db', level: 'tables', action: 'write' },
     });
   });
 
@@ -171,16 +256,112 @@ describe('SupabaseAdapter — classify', () => {
     expect(result).toEqual({ denied: "unknown supabase tool 'supabase__nope'." });
   });
 
-  test('binding with environment=null yields an env-less capability', () => {
+  test('list_buckets → storage/buckets:read @staging', () => {
     const adapter = new SupabaseAdapter();
-    const envlessBinding: ProviderBinding = { ...binding, environment: null };
     const result = adapter.classify(
-      'supabase__execute_sql',
-      { project_ref: 'qsockrvwpfzvxxecwjvh', query: 'select 1;' },
-      [envlessBinding],
+      'supabase__list_buckets',
+      { project_ref: 'qsockrvwpfzvxxecwjvh' },
+      [binding],
     );
     expect(result).toEqual({
-      capability: { provider: 'supabase', plane: 'db', level: 'rows', action: 'read' },
+      capability: {
+        provider: 'supabase',
+        plane: 'storage',
+        level: 'buckets',
+        action: 'read',
+        env: 'staging',
+      },
     });
+  });
+
+  test('get_auth_config → auth/auth-config:read @staging', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__get_auth_config',
+      { project_ref: 'qsockrvwpfzvxxecwjvh' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'auth',
+        level: 'auth-config',
+        action: 'read',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('list_functions → functions/deployment:read @staging', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__list_functions',
+      { project_ref: 'qsockrvwpfzvxxecwjvh' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'functions',
+        level: 'deployment',
+        action: 'read',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('apply_migration → db/tables:write @staging', () => {
+    const adapter = new SupabaseAdapter();
+    const result = adapter.classify(
+      'supabase__apply_migration',
+      { project_ref: 'qsockrvwpfzvxxecwjvh', name: 'add_index', query: 'create index ...' },
+      [binding],
+    );
+    expect(result).toEqual({
+      capability: {
+        provider: 'supabase',
+        plane: 'db',
+        level: 'tables',
+        action: 'write',
+        env: 'staging',
+      },
+    });
+  });
+});
+
+describe('SupabaseAdapter — executeCall (new mgmt-api tools)', () => {
+  test('list_buckets GETs /v1/projects/:ref/storage/buckets', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse([{ id: 'avatars' }]));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__list_buckets', { project_ref: 'abc' });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/storage/buckets');
+    expect(init.method ?? 'GET').toBe('GET');
+  });
+
+  test('get_function GETs /v1/projects/:ref/functions/:slug (slug url-encoded)', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ slug: 'my-fn' }));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__get_function', {
+      project_ref: 'abc',
+      function_slug: 'my fn/with space',
+    });
+    const [url] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/functions/my%20fn%2Fwith%20space');
+  });
+
+  test('apply_migration POSTs /v1/projects/:ref/database/migrations with body', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ version: '20260611' }));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__apply_migration', {
+      project_ref: 'abc',
+      name: 'add_index',
+      query: 'create index ix on t(x);',
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/database/migrations');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body).toEqual({ name: 'add_index', query: 'create index ix on t(x);' });
   });
 });

@@ -102,13 +102,18 @@ Authorization: Bearer <jwt>
 La privkey de l'App vit dans `GITHUB_APP_PRIVATE_KEY` (env var Vercel — multiline
 PEM avec `\n` escaped). Jamais en DB.
 
-## Tools exposés (18)
+## Tools exposés (21)
 
 - **Read list** : `github__list_branches`, `github__list_commits`,
   `github__list_pull_requests`, `github__list_issues`.
 - **Read get** : `github__get_file_contents`, `github__get_pull_request`,
   `github__get_issue`, `github__get_commit`.
 - **Search** : `github__search_code`, `github__search_issues`.
+- **Read ci** : `github__list_workflows`, `github__list_workflow_runs`
+  (Octokit `actions.listRepoWorkflows` / `listWorkflowRuns(ForRepo)`).
+  Classifiés sur `repo/ci:read`.
+- **Read rules** : `github__get_branch_protection` (Octokit
+  `repos.getBranchProtection`). Classifié sur `repo/rules:read`.
 - **Write branches** : `github__create_branch`.
 - **Write files** : `github__create_or_update_file`, `github__push_files`.
 - **Write PR / comments** : `github__create_pull_request`, `github__add_issue_comment`.

@@ -70,6 +70,29 @@ export async function executeCall(
       const type = (args.type as string) ?? 'security';
       return mgmtFetch(fetchImpl, token, `/projects/${ref}/advisors/${type}`);
     }
+    case 'supabase__apply_migration':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/database/migrations`, {
+        method: 'POST',
+        body: JSON.stringify({ name: args.name as string, query: args.query as string }),
+      });
+    case 'supabase__list_buckets':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/storage/buckets`);
+    case 'supabase__get_storage_config':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/storage`);
+    case 'supabase__get_auth_config':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth`);
+    case 'supabase__list_sso_providers':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth/sso/providers`);
+    case 'supabase__list_functions':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/functions`);
+    case 'supabase__get_function': {
+      const slug = encodeURIComponent(args.function_slug as string);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/functions/${slug}`);
+    }
+    case 'supabase__get_function_body': {
+      const slug = encodeURIComponent(args.function_slug as string);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/functions/${slug}/body`);
+    }
     default:
       throw new Error(`Unknown Supabase MCP tool: ${tool}`);
   }

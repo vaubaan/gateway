@@ -4,58 +4,82 @@
  *
  * Spec : docs/spec/gateway-capability-model.md §2.1, §3, §6.
  *
- * Supabase exposes (at least) the `db` plane with the ladder (interne → externe) :
+ * Supabase exposes four planes :
  *
- *   niv1 `rows`    — données (`execute_sql` SELECT)
- *   niv2 `tables`  — tables, colonnes, migrations
- *   niv3 `rls`     — policies, roles, advisors
- *   niv4 `project` — projet, clés, conn string
+ *   db        rows → tables → rls → project
+ *   storage   objects → buckets → storage-config
+ *   auth      users → providers → auth-config
+ *   functions deployment → config → functions-config
  *
- * The MVP scope is read-only on `db`. Env comes from the matched binding (one
- * Supabase project_ref per env — `staging` vs `prod` are *distinct projects*).
- * If write SQL (INSERT/UPDATE/DDL) is ever exposed through `execute_sql`, it
- * MUST be reclassified as a `rows:write` (and the gating rises with it).
+ * Env comes from the matched binding (one Supabase project_ref per env —
+ * `staging` vs `prod` are *distinct projects*).
+ *
+ * `supabase__execute_sql` is a generic SQL passthrough : its capability is
+ * computed dynamically by parsing the query (see `sql-classify.ts`) — a
+ * SELECT lands on `db/rows:read`, an `INSERT` on `db/rows:write`, a
+ * `CREATE POLICY` on `db/rls:write`, etc.
  */
 
 import type { Capability, ProviderBinding } from '@vaubaan/shared';
+import { classifySql, type Action as SqlAction, type Level as SqlLevel } from './sql-classify.ts';
 
 export type ClassifyResult = { capability: Capability } | { denied: string };
 
-type Kind = 'read-project' | 'read-tables' | 'read-rows' | 'read-rls';
+type Plane = 'db' | 'storage' | 'auth' | 'functions';
 
-const TOOL_KIND: Record<string, Kind> = {
-  supabase__get_project: 'read-project',
-  supabase__list_tables: 'read-tables',
-  supabase__list_migrations: 'read-tables',
-  // MVP: read-only query path. See module note — becomes rows:write if write
-  // SQL is ever exposed.
-  supabase__execute_sql: 'read-rows',
-  supabase__get_advisors: 'read-rls',
+interface StaticEntry {
+  plane: Plane;
+  level: string;
+  action: 'read' | 'write';
+}
+
+/** Surface for tools whose capability is fixed by the tool name alone.
+ *  `execute_sql` is intentionally NOT in this map — it is classified
+ *  per-statement via `classifySql`. */
+const TOOL_SURFACE: Record<string, StaticEntry> = {
+  // db plane — fixed-shape reads
+  supabase__get_project: { plane: 'db', level: 'project', action: 'read' },
+  supabase__list_tables: { plane: 'db', level: 'tables', action: 'read' },
+  supabase__list_migrations: { plane: 'db', level: 'tables', action: 'read' },
+  supabase__get_advisors: { plane: 'db', level: 'rls', action: 'read' },
+  // db plane — writes
+  supabase__apply_migration: { plane: 'db', level: 'tables', action: 'write' },
+  // storage plane
+  supabase__list_buckets: { plane: 'storage', level: 'buckets', action: 'read' },
+  supabase__get_storage_config: { plane: 'storage', level: 'storage-config', action: 'read' },
+  // auth plane
+  supabase__get_auth_config: { plane: 'auth', level: 'auth-config', action: 'read' },
+  supabase__list_sso_providers: { plane: 'auth', level: 'providers', action: 'read' },
+  // functions plane
+  supabase__list_functions: { plane: 'functions', level: 'deployment', action: 'read' },
+  supabase__get_function: { plane: 'functions', level: 'deployment', action: 'read' },
+  supabase__get_function_body: { plane: 'functions', level: 'deployment', action: 'read' },
 };
 
-function levelOf(kind: Kind): string {
-  switch (kind) {
-    case 'read-project':
-      return 'project';
-    case 'read-tables':
-      return 'tables';
-    case 'read-rows':
-      return 'rows';
-    case 'read-rls':
-      return 'rls';
-  }
-}
+const EXECUTE_SQL = 'supabase__execute_sql';
 
-function cap(level: string, env?: string): Capability {
+function cap(plane: Plane, level: string, action: 'read' | 'write', env?: string): Capability {
   return env
-    ? { provider: 'supabase', plane: 'db', level, action: 'read', env }
-    : { provider: 'supabase', plane: 'db', level, action: 'read' };
+    ? { provider: 'supabase', plane, level, action, env }
+    : { provider: 'supabase', plane, level, action };
 }
 
-/** Env-less capability surface of a tool, for static tools/list filtering. */
+/** Env-less capability surface of a tool, for static tools/list filtering.
+ *  `execute_sql` is dynamic — its static surface advertises every (level,
+ *  action) on the db plane so the tools/list filter exposes it to any token
+ *  that has at least one db capability. */
 export function supabaseToolCapabilities(tool: string): readonly Capability[] {
-  const kind = TOOL_KIND[tool];
-  return kind ? [cap(levelOf(kind))] : [];
+  if (tool === EXECUTE_SQL) {
+    const levels: SqlLevel[] = ['rows', 'tables', 'rls', 'project'];
+    const actions: SqlAction[] = ['read', 'write'];
+    const out: Capability[] = [];
+    for (const level of levels) {
+      for (const action of actions) out.push(cap('db', level, action));
+    }
+    return out;
+  }
+  const entry = TOOL_SURFACE[tool];
+  return entry ? [cap(entry.plane, entry.level, entry.action)] : [];
 }
 
 /** The Supabase project ref carried by the call, if any. */
@@ -69,8 +93,9 @@ export function classifySupabase(
   args: Record<string, unknown>,
   bindings: ReadonlyArray<ProviderBinding>,
 ): ClassifyResult {
-  const kind = TOOL_KIND[tool];
-  if (!kind) return { denied: `unknown supabase tool '${tool}'.` };
+  if (tool !== EXECUTE_SQL && !TOOL_SURFACE[tool]) {
+    return { denied: `unknown supabase tool '${tool}'.` };
+  }
 
   const supabaseBindings = bindings.filter((b) => b.provider === 'supabase');
 
@@ -89,8 +114,14 @@ export function classifySupabase(
   if (!binding) {
     return { denied: `supabase project '${targetRef}' is not bound to this project.` };
   }
-
-  // env = the binding's environment. null/absent → env-less capability.
   const env = binding.environment ?? undefined;
-  return { capability: cap(levelOf(kind), env) };
+
+  if (tool === EXECUTE_SQL) {
+    const query = typeof args.query === 'string' ? args.query : '';
+    const req = classifySql(query);
+    return { capability: cap('db', req.level, req.action, env) };
+  }
+
+  const entry = TOOL_SURFACE[tool]!;
+  return { capability: cap(entry.plane, entry.level, entry.action, env) };
 }

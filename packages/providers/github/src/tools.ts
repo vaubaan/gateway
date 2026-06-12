@@ -203,6 +203,41 @@ export const availableTools: readonly McpToolDeclaration[] = [
       required: ['purpose'],
     },
   },
+  // Read - ci (workflows + their runs)
+  {
+    name: 'github__list_workflows',
+    description: 'List the workflows defined under .github/workflows on the repository.',
+    inputSchema: { type: 'object', properties: { ...repoArgs }, required: ['owner', 'repo'] },
+  },
+  {
+    name: 'github__list_workflow_runs',
+    description:
+      'List recent workflow runs on the repository (optionally filtered by branch or workflow id).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...repoArgs,
+        branch: { type: 'string', description: 'Filter to runs on this branch.' },
+        workflow_id: {
+          type: ['string', 'number'],
+          description: 'Filter to runs of a specific workflow (numeric id or filename slug).',
+        },
+        per_page: { type: 'number' },
+      },
+      required: ['owner', 'repo'],
+    },
+  },
+  // Read - rules (branch protection)
+  {
+    name: 'github__get_branch_protection',
+    description:
+      'Get the protection rules for a branch (required reviewers, status checks, restrictions).',
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, branch: { type: 'string', description: 'Branch name.' } },
+      required: ['owner', 'repo', 'branch'],
+    },
+  },
   // Dangerous — not granted by any builtin role (default-deny applies).
   {
     name: 'github__merge_pull_request',

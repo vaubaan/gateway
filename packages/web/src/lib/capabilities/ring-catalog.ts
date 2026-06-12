@@ -309,6 +309,29 @@ export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
     ],
   },
   {
+    slug: 'ssh',
+    displayName: 'SSH',
+    planes: [
+      {
+        slug: 'host',
+        description:
+          'A SSH-reachable host that exposes a generic shell tool (`ssh__exec`). The cmd itself decides whether it is a read (regex-whitelisted introspection) or a write (anything else).',
+        knownEnvs: [],
+        envHint: 'a host slug from your ssh bindings (e.g. vps-rp).',
+        levels: [
+          {
+            rank: 1,
+            slug: 'shell',
+            archetype: 'content',
+            description:
+              'A free-form shell on the host. Read = whitelisted commands (ls, cat, ps, …) ; write = anything else (mutations, installs, restarts).',
+            envScoped: true,
+          },
+        ],
+      },
+    ],
+  },
+  {
     slug: 'bash',
     displayName: 'Bash',
     planes: [

@@ -21,6 +21,8 @@ import type { ClassifyResult } from './adapter.ts';
 
 type Kind =
   | 'read-code'
+  | 'read-ci'
+  | 'read-rules'
   | 'write-code'
   | 'write-code-branch' // env = args.branch
   | 'write-code-head' // env = args.head (PR creation)
@@ -37,6 +39,9 @@ const TOOL_KIND: Record<string, Kind> = {
   github__get_pull_request: 'read-code',
   github__get_issue: 'read-code',
   github__get_commit: 'read-code',
+  github__list_workflows: 'read-ci',
+  github__list_workflow_runs: 'read-ci',
+  github__get_branch_protection: 'read-rules',
   github__add_issue_comment: 'write-code',
   github__create_branch: 'write-code-branch',
   github__create_or_update_file: 'write-code-branch',
@@ -69,6 +74,10 @@ export function githubToolCapabilities(tool: string): readonly Capability[] {
   switch (kind) {
     case 'read-code':
       return [cap('code', 'read')];
+    case 'read-ci':
+      return [cap('ci', 'read')];
+    case 'read-rules':
+      return [cap('rules', 'read')];
     case 'write-code':
     case 'write-code-branch':
     case 'write-code-head':
@@ -130,6 +139,10 @@ export function classifyGithub(
   switch (kind) {
     case 'read-code':
       return { capability: cap('code', 'read') };
+    case 'read-ci':
+      return { capability: cap('ci', 'read') };
+    case 'read-rules':
+      return { capability: cap('rules', 'read') };
     case 'write-code':
       return { capability: cap('code', 'write') };
     case 'write-code-branch': {
