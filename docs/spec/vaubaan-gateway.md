@@ -896,20 +896,26 @@ Content-Type: application/json
 ### 7.2 Discovery (`tools/list`)
 
 Le gateway répond à `tools/list` en énumérant **uniquement les tools que
-le Bot peut potentiellement appeler** :
+le token peut potentiellement appeler** :
 
 ```
-allowed_tools(bot) = union over role in bot.roles of
-                       {tool ∈ role.provider.availableTools |
-                        ∃ rule in role.permissions.rules where
-                            rule.effect = 'allow' and
-                            tool match (rule.tool or rule.tool_matches)}
+allowed_tools(token) = ⋃ provider {
+  tool ∈ provider.availableTools |
+    ∃ s ∈ provider.toolCapabilities(tool) ·
+      isToolPotentiallyCallable(token.capabilities, [s], provider.toolEnvResolution(tool))
+}
 ```
 
-Filtrage statique (sans évaluer les constraints qui dépendent des args).
-Ça évite de lister des tools impossibles → réduit la confusion de l'agent.
+Filtrage statique — pas d'évaluation des args. Le prédicat
+`isToolPotentiallyCallable` switche sur le `EnvResolution` du tool (cf.
+[gateway-capability-model.md §7.1](./gateway-capability-model.md#71-filtre-statique--filtre-runtime-modulo-envresolution)) :
 
-Index calculé au seed des roles builtin + invalidé sur write côté custom roles.
+- tools **env-static** → match strict 5-tuple incl. env (un grant
+  `cap@env` ne couvre pas un requirement env-less, et inversement).
+- tools **env-runtime** → match 4-tuple, env-defensive filter au call.
+
+Cette dichotomie garantit que `callable: true` dans le catalog
+(§7.6) ⇒ pas de 403 surprise à `tools/call` pour un mismatch d'env.
 
 ### 7.3 Streaming
 
@@ -939,6 +945,74 @@ Si l'appel upstream échoue (rate limit, network, 5xx provider), le gateway :
   pas exécuté avec succès) + `denial_reason: null` + `upstream_latency_ms`
 - Renvoie une JSON-RPC error -32603 avec le message du provider passé
   intact (sauf si secret leakage suspect → strip)
+
+### 7.6 Catalog discovery (`GET /api/v1/catalog`)
+
+Endpoint Bearer-authentifié, séparé de `/mcp`, qui retourne la **surface
+complète** des tools + ce que le token peut callable. Sert deux clients :
+
+- `Bearer vbn_live_…` → catalog scopé au projet du token, avec `callable` +
+  `missingCapabilities` par tool + `auth.bindings` (les refs amont du
+  projet).
+- `Bearer vbn_mgmt_…` → catalog org-wide, sans `callable` ni `bindings`
+  (un mgmt key n'est pas scopé à un projet et peut mint n'importe quoi
+  modulo policy gate).
+
+Forme de la réponse (mode `live`) :
+
+```jsonc
+{
+  "auth": {
+    "kind": "live",
+    "organization": { "id": "...", "slug": "...", "name": "..." },
+    "project":      { "id": "...", "slug": "..." },
+    "granted":      ["vercel:deployment:read", "supabase:db/rows:read@prod", ...],
+    "bindings": {
+      "vercel":   [{ "resourceRef": "prj_xxx",  "environment": null,   "displayName": "Web" }],
+      "supabase": [{ "resourceRef": "abcd1234", "environment": "prod", "displayName": "Prod DB" }],
+      "github":   [{ "resourceRef": "acme/app", "environment": null,   "displayName": null }]
+    }
+  },
+  "providers": [
+    {
+      "slug": "vercel",
+      "displayName": "Vercel",
+      "tools": [
+        {
+          "name": "vercel__list_deployments",
+          "requiredCapabilities": ["vercel:deployment:read"],
+          "callable": true
+        },
+        {
+          "name": "vercel__upsert_env_var",
+          "requiredCapabilities": ["vercel:config:write"],
+          "callable": false,
+          "missingCapabilities": ["vercel:config:write"]
+        }
+      ]
+    }
+  ],
+  "mintHint": { "endpoint": "/api/v1/mgmt/tokens", "method": "POST", ... }
+}
+```
+
+**Contrats** :
+
+- `auth.bindings` est groupé par slug provider. Chaque entrée carry le
+  `resourceRef` que l'agent passera à `tools/call` (`projectId` pour
+  Vercel, `project_ref` pour Supabase, `owner/repo` pour GitHub…) +
+  l'`environment` du binding (null si la ressource n'est pas calquée par
+  env, cf. capability-model §4). C'est l'**unique** source de discovery
+  des refs amont — sans ce champ, l'agent n'a aucun moyen d'apprendre le
+  ref qu'il doit citer (chicken-and-egg : le gateway *valide* le ref mais
+  ne le divulguait pas).
+- `callable` matche **exactement** ce que `tools/list` retourne — même
+  prédicat `isToolPotentiallyCallable` (§7.2). Un tool listé `callable: true`
+  ne 403e pas pour mismatch d'env ; il peut encore denied pour un env
+  défensif si `EnvResolution = runtime` et le grant @env ne correspond pas
+  à l'env résolu des args.
+- `missingCapabilities` n'est posé que quand `callable: false` ; il
+  enumere les caps à mint (n'importe laquelle suffit) pour débloquer.
 
 ## 8. API REST
 

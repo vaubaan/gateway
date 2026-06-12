@@ -404,13 +404,40 @@ flowchart TD
   capabilities du token. Aucun état d'approbation ici (tout est joué au mint, §8).
 - **Filtre env défensif** : pas de wildcard implicite. Pour staging **et** prod, le
   token porte les deux capabilities énumérées. Chaque accès calqué est une grant
-  explicite et auditable.
+  explicite et auditable. **Symétriquement**, un grant calqué (`@prod`) ne couvre
+  **pas** un requirement non-calqué : `vercel:deployment:read@prod` et
+  `vercel:deployment:read` sont deux capabilities distinctes — la première autorise
+  des lectures bornées à prod, la seconde des lectures globales (non calquées).
 - **Least-privilege par le rang** : une grant `niv k` n'implique **jamais** `niv k±1`.
   L'ordre sert au raisonnement de blast, pas à un héritage.
 - **Validation au mint** : une capability demandée doit appartenir à la surface
   émissible par le plugin (`capabilities()`). Un `env` sur un data qui n'est jamais
   calqué est rejeté — mais c'est le **plugin** qui le sait (par-data), pas une règle
   de rang.
+
+### 7.1 Filtre statique = filtre runtime, modulo `EnvResolution`
+
+`tools/list` et la flag `callable` du catalog (`/api/v1/catalog`) doivent rester
+**lockstep** avec la décision runtime — sinon le gateway promettrait au caller des
+tools qui 403 à `tools/call`. Or la surface statique d'un tool est toujours
+énumérée **sans env** (le calque dépend des args). Pour réconcilier les deux
+couches, chaque tool porte un tag `EnvResolution` :
+
+| mode | sémantique | filtre statique | runtime |
+|---|---|---|---|
+| `static` | le classifieur émet une capability **non calquée** quels que soient les args (ex: `vercel__list_deployments` → `vercel:deployment:read`). | un grant doit matcher **5-tuple exact, env compris** (i.e. env-less ↔ env-less). | idem `covers()`. |
+| `runtime` | le classifieur résout `env` depuis les args ou le binding matché (ex: `vercel__upsert_env_var` lit `args.target` ; les tools Supabase lisent l'`environment` du binding). | un grant matche dès que le 4-tuple `(provider, plane, level, action)` coïncide — n'importe quel `@env` côté grant est un match potentiel. | `covers()` re-mord avec env strict ; un grant `@preview` qui survit au filtre statique sera denied au call si l'env résolu est `@prod`. |
+
+Le mode est **par-tool**, pas par-cap : chaque provider expose un
+`<provider>ToolEnvResolution(tool): 'static' | 'runtime'` à côté de
+`toolCapabilities`. Les deux callsites (`tools/list` filter + catalog `callable`)
+utilisent le même prédicat `isToolPotentiallyCallable(granted, surface, envResolution)`
+défini dans `@vaubaan/policy-engine/tools-filter.ts`.
+
+Conséquence opérationnelle : si un tool est listé `callable: true` dans le
+catalog, le runtime garantit **soit** ALLOW soit DENY-pour-mauvais-env (jamais
+ALLOW pour `bad-shape`). Pour les tools env-static, `callable: true` ⟹ ALLOW
+direct — pas de second filtre.
 
 ## 8. Human-gate au mint + token jetable + canal pluggable
 
