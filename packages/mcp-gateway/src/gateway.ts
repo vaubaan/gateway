@@ -20,6 +20,7 @@ import {
 import type {
   AccessTokenContext,
   Capability,
+  EnvResolution,
   JsonRpcRequest,
   JsonRpcResponse,
   McpToolDeclaration,
@@ -69,6 +70,10 @@ export interface UpstreamAdapter {
   availableTools: ReadonlyArray<McpToolDeclaration>;
   /** Env-less capability surface of a tool — for static tools/list filtering. */
   toolCapabilities(tool: string): readonly Capability[];
+  /** How env is resolved at call time for this tool — drives the lockstep
+   *  between the static filter and the runtime `covers()` check. See
+   *  `EnvResolution` in `@vaubaan/shared`. */
+  toolEnvResolution(tool: string): EnvResolution;
   /** Classify a concrete call into the capability it requires (env resolved). */
   classify(
     tool: string,

@@ -21,7 +21,11 @@ import {
 import { MemoryAuditWriter } from '../../src/audit.ts';
 import { MemoryCacheClient } from '../../src/cache.ts';
 import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/gateway.ts';
-import { mockClassifyGithub, mockGithubToolCapabilities } from '../fixtures/github-classifier.ts';
+import {
+  mockClassifyGithub,
+  mockGithubToolCapabilities,
+  mockGithubToolEnvResolution,
+} from '../fixtures/github-classifier.ts';
 
 // Read-only capability set — equivalent to the old `github:reader` role.
 const readerCapabilities: Capability[] = [
@@ -97,6 +101,7 @@ async function harness() {
     provider: 'github',
     availableTools: ghTools,
     toolCapabilities: mockGithubToolCapabilities,
+    toolEnvResolution: mockGithubToolEnvResolution,
     classify: mockClassifyGithub,
     executeCall: execute,
     loadProviderAdmin: vi.fn().mockResolvedValue(admin),

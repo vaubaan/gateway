@@ -16,7 +16,7 @@
  * Reads and meta operations are env-less.
  */
 
-import type { Capability, ProviderBinding } from '@vaubaan/shared';
+import type { Capability, EnvResolution, ProviderBinding } from '@vaubaan/shared';
 import type { ClassifyResult } from './adapter.ts';
 
 type Kind =
@@ -86,6 +86,17 @@ export function githubToolCapabilities(tool: string): readonly Capability[] {
     case 'global-read':
       return [cap('code', 'read')];
   }
+}
+
+/** How env is determined at `tools/call` time. Branch/PR writes resolve env
+ *  from the branch arg ; reads, account-level and mint operations stay
+ *  env-less and require an env-less grant exactly. */
+export function githubToolEnvResolution(tool: string): EnvResolution {
+  const kind = TOOL_KIND[tool];
+  if (kind === 'write-code-branch' || kind === 'write-code-head' || kind === 'merge-pr') {
+    return 'runtime';
+  }
+  return 'static';
 }
 
 function boundRepos(bindings: ReadonlyArray<ProviderBinding>): string[] {

@@ -13,6 +13,7 @@
 
 import type {
   Capability,
+  EnvResolution,
   McpToolDeclaration,
   Provider,
   ProviderAdmin,
@@ -63,11 +64,19 @@ export interface ProviderAdapter {
 
   /**
    * The env-less capability surface of a tool — every capability it may require
-   * across its argument space. Used for static `tools/list` filtering (a tool is
-   * listed when the granted set covers any of its surface capabilities, env
-   * ignored). Returns `[]` for an unknown tool.
+   * across its argument space. Used for static `tools/list` filtering and the
+   * catalog's `callable` flag. Returns `[]` for an unknown tool.
    */
   toolCapabilities(tool: string): readonly Capability[];
+
+  /**
+   * How env is determined at `tools/call` time for this tool — drives whether
+   * the static filter requires an exact env-less grant (`'static'`) or accepts
+   * any env-qualified grant on the right 4-tuple (`'runtime'`). See
+   * `EnvResolution` in `@vaubaan/shared/types.ts` for the full contract.
+   * Defaults to `'static'` for unknown tools (safer : less false `callable`).
+   */
+  toolEnvResolution(tool: string): EnvResolution;
 
   /**
    * The exact capability a concrete call requires. `env` is resolved here (from

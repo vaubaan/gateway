@@ -32,12 +32,15 @@ const fakeSource = (): ProviderSource => ({
     if (name === 'vercel__upsert_env_var') return [cap('vercel', 'runtime', 'config', 'write')];
     return [];
   },
+  // `list_deployments` is env-static (no `target` arg) ; `upsert_env_var`
+  // resolves env from `args.target` at call time.
+  envResolutionOf: (name) => (name === 'vercel__upsert_env_var' ? 'runtime' : 'static'),
 });
 
 describe('buildToolEntry — granted=null (mgmt-key path)', () => {
   test('emits requiredCapabilities, no callable / no missingCapabilities', () => {
     const surface = [cap('vercel', 'runtime', 'config', 'write')];
-    const entry = buildToolEntry(fakeTool('vercel__upsert_env_var'), surface, null);
+    const entry = buildToolEntry(fakeTool('vercel__upsert_env_var'), surface, 'runtime', null);
     expect(entry).toEqual({
       name: 'vercel__upsert_env_var',
       description: 'description of vercel__upsert_env_var',
@@ -53,54 +56,75 @@ describe('buildToolEntry — granted=null (mgmt-key path)', () => {
       cap('github', 'repo', 'access', 'read'),
       cap('github', 'repo', 'code', 'write'),
     ];
-    const entry = buildToolEntry(fakeTool('github__mint_install_token'), surface, null);
+    const entry = buildToolEntry(fakeTool('github__mint_install_token'), surface, 'static', null);
     expect(entry.requiredCapabilities).toEqual(['github:access:read', 'github:code:write']);
   });
 });
 
-describe('buildToolEntry — granted=[…] (live-token path)', () => {
-  test('callable=true when granted covers surface (env ignored)', () => {
-    const granted = [cap('vercel', 'runtime', 'deployment', 'read', 'prod')];
-    const surface = [cap('vercel', 'runtime', 'deployment', 'read')];
-    const entry = buildToolEntry(fakeTool('vercel__list_deployments'), surface, granted);
+describe('buildToolEntry — granted=[…], envResolution="runtime"', () => {
+  test('any env-qualified grant on the right 4-tuple makes it callable', () => {
+    // upsert_env_var resolves env from args.target at call time. The env
+    // defensive filter at tools/call will reject mismatched envs ; the
+    // catalog only filters on (provider, plane, level, action).
+    const granted = [cap('vercel', 'runtime', 'config', 'write', 'preview')];
+    const surface = [cap('vercel', 'runtime', 'config', 'write')];
+    const entry = buildToolEntry(fakeTool('vercel__upsert_env_var'), surface, 'runtime', granted);
     expect(entry.callable).toBe(true);
     expect(entry.missingCapabilities).toBeUndefined();
   });
 
-  test('callable=false when nothing covers surface, missingCapabilities echoes the surface', () => {
+  test('callable=false when no grant matches the 4-tuple at all', () => {
     const granted = [cap('vercel', 'runtime', 'deployment', 'read', 'prod')];
     const surface = [cap('vercel', 'runtime', 'config', 'write')];
-    const entry = buildToolEntry(fakeTool('vercel__upsert_env_var'), surface, granted);
+    const entry = buildToolEntry(fakeTool('vercel__upsert_env_var'), surface, 'runtime', granted);
     expect(entry.callable).toBe(false);
     expect(entry.missingCapabilities).toEqual(['vercel:config:write']);
   });
 
-  test('multi-capability surface: callable=true if granted covers any one of them', () => {
-    // github__mint_install_token surface = [access:read, code:write]. Token has code:write only.
+  test('multi-capability surface: callable=true if any one matches', () => {
     const granted = [cap('github', 'repo', 'code', 'write', 'main')];
     const surface = [
       cap('github', 'repo', 'access', 'read'),
       cap('github', 'repo', 'code', 'write'),
     ];
-    const entry = buildToolEntry(fakeTool('github__mint_install_token'), surface, granted);
+    const entry = buildToolEntry(
+      fakeTool('github__create_or_update_file'),
+      surface,
+      'runtime',
+      granted,
+    );
+    expect(entry.callable).toBe(true);
+  });
+});
+
+describe('buildToolEntry — granted=[…], envResolution="static"', () => {
+  // env-static surfaces require an exact 5-tuple match : env-less grant for
+  // an env-less requirement. This is the lockstep with the runtime covers()
+  // check that was missing pre-fix #1.
+  test('env-less surface + env-less grant → callable=true', () => {
+    const granted = [cap('vercel', 'runtime', 'deployment', 'read')];
+    const surface = [cap('vercel', 'runtime', 'deployment', 'read')];
+    const entry = buildToolEntry(fakeTool('vercel__list_deployments'), surface, 'static', granted);
     expect(entry.callable).toBe(true);
   });
 
-  test('env defensive: a granted @prod does NOT cover a different env, but callable is env-less', () => {
-    // The tools/list filter is env-less by spec — env defensive only applies at
-    // tools/call time. So a granted vercel:config:write@preview still makes
-    // upsert_env_var "callable" in the catalog (it might still be denied at
-    // call time on @prod args, but that's a different layer).
-    const granted = [cap('vercel', 'runtime', 'config', 'write', 'preview')];
-    const surface = [cap('vercel', 'runtime', 'config', 'write')];
-    const entry = buildToolEntry(fakeTool('vercel__upsert_env_var'), surface, granted);
-    expect(entry.callable).toBe(true);
+  test('env-less surface + env-qualified grant → callable=false (the original bug)', () => {
+    // Pre-fix this returned callable=true, then tools/call 403'd. The runtime
+    // requires env-less grant for env-less requirement ; the catalog now
+    // mirrors that.
+    const granted = [cap('vercel', 'runtime', 'deployment', 'read', 'prod')];
+    const surface = [cap('vercel', 'runtime', 'deployment', 'read')];
+    const entry = buildToolEntry(fakeTool('vercel__list_deployments'), surface, 'static', granted);
+    expect(entry.callable).toBe(false);
+    expect(entry.missingCapabilities).toEqual(['vercel:deployment:read']);
   });
+});
 
-  test('empty granted set → every tool callable=false', () => {
+describe('buildToolEntry — granted=[] (empty set)', () => {
+  test('every tool callable=false, missingCapabilities echoes the surface', () => {
     const granted: Capability[] = [];
     const surface = [cap('vercel', 'runtime', 'deployment', 'read')];
-    const entry = buildToolEntry(fakeTool('vercel__list_deployments'), surface, granted);
+    const entry = buildToolEntry(fakeTool('vercel__list_deployments'), surface, 'static', granted);
     expect(entry.callable).toBe(false);
     expect(entry.missingCapabilities).toEqual(['vercel:deployment:read']);
   });
@@ -172,8 +196,9 @@ describe('buildProviderCatalog — multi-provider wiring', () => {
   });
 
   test('live-token path: per-tool callable flag matches granted set', () => {
-    // Token has only deployment:read → list_deployments callable, upsert_env_var not.
-    const granted = [cap('vercel', 'runtime', 'deployment', 'read', 'prod')];
+    // Token has only deployment:read (env-less) → list_deployments callable
+    // (env-static, exact match), upsert_env_var not (wrong 4-tuple).
+    const granted = [cap('vercel', 'runtime', 'deployment', 'read')];
     const out = buildProviderCatalog([fakeSource()], granted);
     const tools = out[0]!.tools;
     expect(tools[0]).toMatchObject({ name: 'vercel__list_deployments', callable: true });
@@ -181,6 +206,29 @@ describe('buildProviderCatalog — multi-provider wiring', () => {
       name: 'vercel__upsert_env_var',
       callable: false,
       missingCapabilities: ['vercel:config:write'],
+    });
+  });
+
+  test('env-qualified grant for env-static surface → callable=false (fix #1)', () => {
+    // list_deployments is env-static. A @prod grant must NOT make it callable :
+    // runtime would return 403 because covers() requires exact env match.
+    const granted = [cap('vercel', 'runtime', 'deployment', 'read', 'prod')];
+    const out = buildProviderCatalog([fakeSource()], granted);
+    expect(out[0]!.tools[0]).toMatchObject({
+      name: 'vercel__list_deployments',
+      callable: false,
+      missingCapabilities: ['vercel:deployment:read'],
+    });
+  });
+
+  test('env-qualified grant for env-runtime surface → callable=true', () => {
+    // upsert_env_var is env-runtime — a @preview grant is a potential match
+    // (the env defensive filter blocks the wrong env at call time).
+    const granted = [cap('vercel', 'runtime', 'config', 'write', 'preview')];
+    const out = buildProviderCatalog([fakeSource()], granted);
+    expect(out[0]!.tools[1]).toMatchObject({
+      name: 'vercel__upsert_env_var',
+      callable: true,
     });
   });
 });

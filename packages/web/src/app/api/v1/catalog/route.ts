@@ -23,11 +23,31 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { AuthError } from '@vaubaan/mcp-gateway';
 import { formatCapability, parseApiKey, type Capability } from '@vaubaan/shared';
-import { githubAvailableTools, githubToolCapabilities } from '@vaubaan/providers-github';
-import { vercelAvailableTools, vercelToolCapabilities } from '@vaubaan/providers-vercel';
-import { supabaseAvailableTools, supabaseToolCapabilities } from '@vaubaan/providers-supabase';
-import { railwayAvailableTools, railwayToolCapabilities } from '@vaubaan/providers-railway';
-import { sshAvailableTools, sshToolCapabilities } from '@vaubaan/providers-ssh';
+import {
+  githubAvailableTools,
+  githubToolCapabilities,
+  githubToolEnvResolution,
+} from '@vaubaan/providers-github';
+import {
+  vercelAvailableTools,
+  vercelToolCapabilities,
+  vercelToolEnvResolution,
+} from '@vaubaan/providers-vercel';
+import {
+  supabaseAvailableTools,
+  supabaseToolCapabilities,
+  supabaseToolEnvResolution,
+} from '@vaubaan/providers-supabase';
+import {
+  railwayAvailableTools,
+  railwayToolCapabilities,
+  railwayToolEnvResolution,
+} from '@vaubaan/providers-railway';
+import {
+  sshAvailableTools,
+  sshToolCapabilities,
+  sshToolEnvResolution,
+} from '@vaubaan/providers-ssh';
 import { requireManagementKey } from '@/lib/auth/require-management-key';
 import { buildGateway } from '@/lib/gateway/build';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
@@ -48,30 +68,35 @@ const PROVIDER_SOURCES: readonly ProviderSource[] = [
     displayName: 'GitHub',
     tools: githubAvailableTools,
     capabilitiesOf: githubToolCapabilities,
+    envResolutionOf: githubToolEnvResolution,
   },
   {
     slug: 'vercel',
     displayName: 'Vercel',
     tools: vercelAvailableTools,
     capabilitiesOf: vercelToolCapabilities,
+    envResolutionOf: vercelToolEnvResolution,
   },
   {
     slug: 'supabase',
     displayName: 'Supabase',
     tools: supabaseAvailableTools,
     capabilitiesOf: supabaseToolCapabilities,
+    envResolutionOf: supabaseToolEnvResolution,
   },
   {
     slug: 'railway',
     displayName: 'Railway',
     tools: railwayAvailableTools,
     capabilitiesOf: railwayToolCapabilities,
+    envResolutionOf: railwayToolEnvResolution,
   },
   {
     slug: 'ssh',
     displayName: 'SSH',
     tools: sshAvailableTools,
     capabilitiesOf: sshToolCapabilities,
+    envResolutionOf: sshToolEnvResolution,
   },
 ];
 

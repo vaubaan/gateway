@@ -9,6 +9,7 @@
 import { Octokit } from '@octokit/rest';
 import type {
   Capability,
+  EnvResolution,
   McpToolDeclaration,
   ProviderAdmin,
   ProviderBinding,
@@ -16,7 +17,7 @@ import type {
 import type { ProviderAdapter, ValidateResult, MintedToken, ClassifyResult } from './adapter.ts';
 import { mintInstallationToken } from './app-install.ts';
 import { availableTools } from './tools.ts';
-import { classifyGithub, githubToolCapabilities } from './classify.ts';
+import { classifyGithub, githubToolCapabilities, githubToolEnvResolution } from './classify.ts';
 import { executeCall, type OctokitFactory } from './execute.ts';
 
 export interface GitHubAdapterConfig {
@@ -213,6 +214,10 @@ export class GitHubAdapter implements ProviderAdapter {
 
   toolCapabilities(tool: string): readonly Capability[] {
     return githubToolCapabilities(tool);
+  }
+
+  toolEnvResolution(tool: string): EnvResolution {
+    return githubToolEnvResolution(tool);
   }
 
   classify(

@@ -13,13 +13,19 @@
 
 import type {
   Capability,
+  EnvResolution,
   McpToolDeclaration,
   ProviderAdmin,
   ProviderBinding,
 } from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
 import { executeCall, type FetchImpl } from './execute.ts';
-import { classifyVercel, vercelToolCapabilities, type ClassifyResult } from './classify.ts';
+import {
+  classifyVercel,
+  vercelToolCapabilities,
+  vercelToolEnvResolution,
+  type ClassifyResult,
+} from './classify.ts';
 
 export interface VercelAdapterConfig {
   /** Override fetch in tests. */
@@ -101,6 +107,10 @@ export class VercelAdapter {
 
   toolCapabilities(tool: string): readonly Capability[] {
     return vercelToolCapabilities(tool);
+  }
+
+  toolEnvResolution(tool: string): EnvResolution {
+    return vercelToolEnvResolution(tool);
   }
 
   classify(

@@ -17,7 +17,7 @@
  * will be wired from the matched binding / args, not invented.
  */
 
-import type { Capability, ProviderBinding } from '@vaubaan/shared';
+import type { Capability, EnvResolution, ProviderBinding } from '@vaubaan/shared';
 
 export type ClassifyResult = { capability: Capability } | { denied: string };
 
@@ -52,6 +52,15 @@ const KIND_SURFACE: Record<Kind, Capability> = {
 export function railwayToolCapabilities(tool: string): readonly Capability[] {
   const kind = TOOL_KIND[tool];
   return kind ? [KIND_SURFACE[kind]] : [];
+}
+
+/** How env is determined at `tools/call` time. Railway env resolution is not
+ *  in MVP (see file header) — every classified capability is env-less, so the
+ *  static filter must require an env-less grant. When env resolution lands,
+ *  flip this per kind. */
+export function railwayToolEnvResolution(tool: string): EnvResolution {
+  void tool;
+  return 'static';
 }
 
 function boundProjects(bindings: ReadonlyArray<ProviderBinding>): string[] {

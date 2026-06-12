@@ -11,7 +11,11 @@ import { generateApiKey, hashApiKey } from '@vaubaan/shared';
 import { MemoryCacheClient } from '../../src/cache.ts';
 import { MemoryAuditWriter } from '../../src/audit.ts';
 import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/gateway.ts';
-import { mockClassifyGithub, mockGithubToolCapabilities } from '../fixtures/github-classifier.ts';
+import {
+  mockClassifyGithub,
+  mockGithubToolCapabilities,
+  mockGithubToolEnvResolution,
+} from '../fixtures/github-classifier.ts';
 
 // Capability set equivalent to the old `github:developer` role : read the
 // repo + write code only on a feature branch (env = feature/x). It does NOT
@@ -87,6 +91,7 @@ async function buildHarness(opts: { execute?: UpstreamAdapter['executeCall'] } =
     provider: 'github',
     availableTools: fakeTools,
     toolCapabilities: mockGithubToolCapabilities,
+    toolEnvResolution: mockGithubToolEnvResolution,
     classify: mockClassifyGithub,
     executeCall: opts.execute ?? vi.fn().mockResolvedValue({ ok: true }),
     loadProviderAdmin: vi.fn().mockResolvedValue(fakeAdmin),
@@ -361,6 +366,7 @@ describe('McpGateway — single-use tokens', () => {
       provider: 'github',
       availableTools: fakeTools,
       toolCapabilities: mockGithubToolCapabilities,
+      toolEnvResolution: mockGithubToolEnvResolution,
       classify: mockClassifyGithub,
       executeCall: vi.fn().mockResolvedValue({ ok: true }),
       loadProviderAdmin: vi.fn().mockResolvedValue(fakeAdmin),

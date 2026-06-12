@@ -26,7 +26,11 @@ import {
 import { MemoryCacheClient } from '../../src/cache.ts';
 import { MemoryAuditWriter } from '../../src/audit.ts';
 import { McpGateway, type ContextLoader, type UpstreamAdapter } from '../../src/gateway.ts';
-import { mockClassifyGithub, mockGithubToolCapabilities } from '../fixtures/github-classifier.ts';
+import {
+  mockClassifyGithub,
+  mockGithubToolCapabilities,
+  mockGithubToolEnvResolution,
+} from '../fixtures/github-classifier.ts';
 
 // ─── In-memory "DB" ──────────────────────────────────────────────────────────
 
@@ -195,6 +199,7 @@ async function buildHarness(
       { name: 'github__merge_pull_request', description: '', inputSchema: { type: 'object' } },
     ],
     toolCapabilities: mockGithubToolCapabilities,
+    toolEnvResolution: mockGithubToolEnvResolution,
     classify: mockClassifyGithub,
     async executeCall(_admin, _binding, tool, args) {
       return stubExec(tool, args);

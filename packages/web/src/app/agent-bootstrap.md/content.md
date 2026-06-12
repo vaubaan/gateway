@@ -129,8 +129,19 @@ The endpoint also accepts `Bearer vbn_mgmt_*` (org-wide catalog, no
 `callable` info — a mgmt key can mint anything modulo policy gates ; and
 no `auth.bindings` — a mgmt key isn't scoped to one project). The
 `callable` predicate matches `tools/list` filtering exactly — same
-`coversIgnoringEnv` from the policy engine — so what you see here is the
-ground truth for what `tools/list` will return.
+`isToolPotentiallyCallable` from the policy engine — so what you see here
+is the ground truth for what `tools/list` will return.
+
+**Env-resolution caveat.** A tool's required capability either stays
+env-less (e.g. `vercel__list_deployments` → `vercel:deployment:read`) or
+gets an `@<env>` resolved from args/binding at call time (e.g.
+`vercel__upsert_env_var` resolves env from `args.target`). Because of
+that, a grant like `vercel:deployment:read@prod` does NOT satisfy the
+env-less `vercel:deployment:read` requirement of `list_deployments` — and
+the catalog now correctly reports `callable: false` for that mismatch
+(pre-fix it lied with `callable: true` and the call 403'd). If you see
+`callable: false` with the surface cap you "thought you had", check
+whether your grant carries an `@env` qualifier the tool doesn't need.
 
 ### 3.3 Initialize (optional, for clients that need it)
 

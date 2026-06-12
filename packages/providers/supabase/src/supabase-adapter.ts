@@ -8,13 +8,19 @@
 
 import type {
   Capability,
+  EnvResolution,
   McpToolDeclaration,
   ProviderAdmin,
   ProviderBinding,
 } from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
 import { executeCall, type FetchImpl } from './execute.ts';
-import { classifySupabase, supabaseToolCapabilities, type ClassifyResult } from './classify.ts';
+import {
+  classifySupabase,
+  supabaseToolCapabilities,
+  supabaseToolEnvResolution,
+  type ClassifyResult,
+} from './classify.ts';
 
 export interface SupabaseAdapterConfig {
   /** Override fetch in tests. */
@@ -82,6 +88,10 @@ export class SupabaseAdapter {
 
   toolCapabilities(tool: string): readonly Capability[] {
     return supabaseToolCapabilities(tool);
+  }
+
+  toolEnvResolution(tool: string): EnvResolution {
+    return supabaseToolEnvResolution(tool);
   }
 
   classify(

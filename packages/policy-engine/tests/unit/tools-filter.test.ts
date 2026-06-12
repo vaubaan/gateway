@@ -1,6 +1,10 @@
 import { describe, expect, test } from 'vitest';
-import type { Capability, McpToolDeclaration } from '@vaubaan/shared';
-import { filterAvailableTools, type ToolSurfaceProvider } from '../../src/tools-filter.ts';
+import type { Capability, EnvResolution, McpToolDeclaration } from '@vaubaan/shared';
+import {
+  filterAvailableTools,
+  isToolPotentiallyCallable,
+  type ToolSurfaceProvider,
+} from '../../src/tools-filter.ts';
 
 const tools: McpToolDeclaration[] = [
   { name: 'github__list_branches', description: '', inputSchema: { type: 'object' } },
@@ -21,13 +25,23 @@ const SURFACE: Record<string, Capability[]> = {
   ],
 };
 
+// Reads are env-static (no branch arg) ; write-PR + merge resolve env from
+// `args.head` / `args.base` at call time.
+const ENV_RESOLUTION: Record<string, EnvResolution> = {
+  github__list_branches: 'static',
+  github__get_file_contents: 'static',
+  github__create_pull_request: 'runtime',
+  github__merge_pull_request: 'runtime',
+};
+
 const provider: ToolSurfaceProvider = {
   availableTools: tools,
   toolCapabilities: (t) => SURFACE[t] ?? [],
+  toolEnvResolution: (t) => ENV_RESOLUTION[t] ?? 'static',
 };
 
 describe('filterAvailableTools', () => {
-  test('lists tools whose surface is covered by the granted set (env ignored)', () => {
+  test('lists tools whose surface is covered by the granted set (reads are env-static)', () => {
     const granted: Capability[] = [
       { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
     ];
@@ -39,9 +53,9 @@ describe('filterAvailableTools', () => {
     expect(names).not.toContain('github__merge_pull_request');
   });
 
-  test('static filter ignores env on the grant', () => {
-    // Granting code:write @feature/x is enough to surface ALL write tools at
-    // list time — env enforcement happens at call time, not at list time.
+  test('env-runtime writes accept any env-qualified grant on the right 4-tuple', () => {
+    // Granting code:write @feature/x surfaces the env-runtime write tools
+    // (PR creation, merge) — env defensive check fires at call time.
     const granted: Capability[] = [
       { provider: 'github', plane: 'repo', level: 'code', action: 'write', env: 'feature/x' },
       { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
@@ -55,6 +69,18 @@ describe('filterAvailableTools', () => {
     ]);
   });
 
+  test('env-static read with env-qualified grant → hidden (fix #1 lockstep)', () => {
+    // The runtime requires an env-less grant for an env-less read. An @main
+    // grant must NOT surface env-static reads — otherwise tools/call would
+    // 403 after tools/list listed them.
+    const granted: Capability[] = [
+      { provider: 'github', plane: 'repo', level: 'code', action: 'read', env: 'main' },
+    ];
+    const names = filterAvailableTools(granted, provider).map((t) => t.name);
+    expect(names).not.toContain('github__list_branches');
+    expect(names).not.toContain('github__get_file_contents');
+  });
+
   test('different provider does not surface', () => {
     const granted: Capability[] = [
       { provider: 'gitlab', plane: 'repo', level: 'code', action: 'read' },
@@ -64,5 +90,32 @@ describe('filterAvailableTools', () => {
 
   test('empty grant → empty', () => {
     expect(filterAvailableTools([], provider)).toEqual([]);
+  });
+});
+
+describe('isToolPotentiallyCallable — direct predicate', () => {
+  const surface: Capability[] = [
+    { provider: 'vercel', plane: 'runtime', level: 'deployment', action: 'read' },
+  ];
+
+  test('static: env-less grant covers env-less surface', () => {
+    const granted: Capability[] = [
+      { provider: 'vercel', plane: 'runtime', level: 'deployment', action: 'read' },
+    ];
+    expect(isToolPotentiallyCallable(granted, surface, 'static')).toBe(true);
+  });
+
+  test('static: @prod grant does NOT cover env-less surface (the catalog bug)', () => {
+    const granted: Capability[] = [
+      { provider: 'vercel', plane: 'runtime', level: 'deployment', action: 'read', env: 'prod' },
+    ];
+    expect(isToolPotentiallyCallable(granted, surface, 'static')).toBe(false);
+  });
+
+  test('runtime: @prod grant DOES cover env-less surface (env-defensive at call time)', () => {
+    const granted: Capability[] = [
+      { provider: 'vercel', plane: 'runtime', level: 'deployment', action: 'read', env: 'prod' },
+    ];
+    expect(isToolPotentiallyCallable(granted, surface, 'runtime')).toBe(true);
   });
 });

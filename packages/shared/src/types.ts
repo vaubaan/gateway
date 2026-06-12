@@ -173,6 +173,29 @@ export interface McpToolDeclaration {
   };
 }
 
+/**
+ * How a tool's `env` is determined at `tools/call` time. Drives the lockstep
+ * between the catalog's `callable` flag, `tools/list` filtering, and the
+ * runtime `covers()` 5-tuple match (spec §3, §7).
+ *
+ *  - `'static'`  : the required capability is **env-less** regardless of
+ *                  args. The runtime enforces an exact 5-tuple match
+ *                  (env-less ↔ env-less). Therefore the static filter must
+ *                  also require an env-less grant — an `@prod` grant does NOT
+ *                  make this tool callable. Examples : `vercel__list_deployments`,
+ *                  most GitHub reads.
+ *  - `'runtime'` : the required capability's `env` is resolved from args
+ *                  (or from the matched binding) at call time, ranging over
+ *                  a per-provider env vocabulary. The static filter ignores
+ *                  env (any env-qualified grant on the same 4-tuple is a
+ *                  potential match) — the actual env defensive check then
+ *                  happens at `tools/call`. Examples : `vercel__upsert_env_var`
+ *                  (env from `args.target`), every Supabase tool (env from
+ *                  the binding), `github__create_branch` (env from
+ *                  `args.branch`).
+ */
+export type EnvResolution = 'static' | 'runtime';
+
 export interface JsonRpcRequest {
   jsonrpc: '2.0';
   id?: string | number;

@@ -17,13 +17,19 @@
 
 import type {
   Capability,
+  EnvResolution,
   McpToolDeclaration,
   ProviderAdmin,
   ProviderBinding,
 } from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
 import { executeCall, type FetchImpl } from './execute.ts';
-import { classifyRailway, railwayToolCapabilities, type ClassifyResult } from './classify.ts';
+import {
+  classifyRailway,
+  railwayToolCapabilities,
+  railwayToolEnvResolution,
+  type ClassifyResult,
+} from './classify.ts';
 
 const TOKEN_ENDPOINT = 'https://backboard.railway.com/oauth/token';
 /** RFC 8707 resource indicator binding the token to the MCP audience. */
@@ -166,6 +172,10 @@ export class RailwayAdapter {
 
   toolCapabilities(tool: string): readonly Capability[] {
     return railwayToolCapabilities(tool);
+  }
+
+  toolEnvResolution(tool: string): EnvResolution {
+    return railwayToolEnvResolution(tool);
   }
 
   classify(

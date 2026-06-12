@@ -20,7 +20,7 @@
  * `CREATE POLICY` on `db/rls:write`, etc.
  */
 
-import type { Capability, ProviderBinding } from '@vaubaan/shared';
+import type { Capability, EnvResolution, ProviderBinding } from '@vaubaan/shared';
 import { classifySql, type Action as SqlAction, type Level as SqlLevel } from './sql-classify.ts';
 
 export type ClassifyResult = { capability: Capability } | { denied: string };
@@ -80,6 +80,16 @@ export function supabaseToolCapabilities(tool: string): readonly Capability[] {
   }
   const entry = TOOL_SURFACE[tool];
   return entry ? [cap(entry.plane, entry.level, entry.action)] : [];
+}
+
+/** How env is determined at `tools/call` time. Every Supabase tool resolves
+ *  env from the matched binding's `environment` (one project_ref per env), so
+ *  the static filter ignores env — any env-qualified grant on the right plane
+ *  is a potential match ; the binding-bound env defensive check fires at call
+ *  time. Unknown tools default to `static` (env-less surface, no callability). */
+export function supabaseToolEnvResolution(tool: string): EnvResolution {
+  if (tool === EXECUTE_SQL || tool in TOOL_SURFACE) return 'runtime';
+  return 'static';
 }
 
 /** The Supabase project ref carried by the call, if any. */

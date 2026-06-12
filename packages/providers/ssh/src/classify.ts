@@ -12,7 +12,7 @@
  * anything (including destructive commands) on that host.
  */
 
-import type { Capability, ProviderBinding } from '@vaubaan/shared';
+import type { Capability, EnvResolution, ProviderBinding } from '@vaubaan/shared';
 import { isReadAllowed } from './policy.ts';
 
 export type ClassifyResult = { capability: Capability } | { denied: string };
@@ -30,6 +30,14 @@ export function sshToolCapabilities(tool: string): readonly Capability[] {
     ];
   }
   return [];
+}
+
+/** How env is determined at `tools/call` time. `ssh__exec` always resolves
+ *  env from `args.host_slug` — any `@<host>` grant on the right action is a
+ *  potential match. */
+export function sshToolEnvResolution(tool: string): EnvResolution {
+  if (tool === 'ssh__exec') return 'runtime';
+  return 'static';
 }
 
 function strArg(args: Record<string, unknown>, key: string): string | undefined {

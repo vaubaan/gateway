@@ -12,7 +12,7 @@
  * as a convenient read example — the real classifier doesn't expose it.
  */
 
-import type { Capability, ProviderBinding } from '@vaubaan/shared';
+import type { Capability, EnvResolution, ProviderBinding } from '@vaubaan/shared';
 import type { ClassifyResult } from '../../src/gateway.ts';
 
 type Kind = 'read-code' | 'write-code' | 'write-code-branch' | 'write-code-head' | 'merge-pr';
@@ -58,6 +58,16 @@ export function mockGithubToolCapabilities(tool: string): readonly Capability[] 
     case 'merge-pr':
       return [cap('code', 'write')];
   }
+}
+
+/** Mirrors the real classifier : branch/PR writes resolve env from args, the
+ *  rest is env-static. Drives the static filter lockstep with `covers()`. */
+export function mockGithubToolEnvResolution(tool: string): EnvResolution {
+  const kind = TOOL_KIND[tool];
+  if (kind === 'write-code-branch' || kind === 'write-code-head' || kind === 'merge-pr') {
+    return 'runtime';
+  }
+  return 'static';
 }
 
 function boundRepos(bindings: ReadonlyArray<ProviderBinding>): string[] {

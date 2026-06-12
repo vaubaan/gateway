@@ -15,7 +15,7 @@
  * | 'development' (default 'prod' when absent — conservative).
  */
 
-import type { Capability, ProviderBinding } from '@vaubaan/shared';
+import type { Capability, EnvResolution, ProviderBinding } from '@vaubaan/shared';
 
 export type ClassifyResult = { capability: Capability } | { denied: string };
 
@@ -96,6 +96,14 @@ export function vercelToolCapabilities(tool: string): readonly Capability[] {
     case 'write-project-settings':
       return [cap('project-settings', 'write')];
   }
+}
+
+/** How env is determined at `tools/call` time. Targeted writes resolve env
+ *  from `args.target` ; everything else keeps an env-less requirement. */
+export function vercelToolEnvResolution(tool: string): EnvResolution {
+  const kind = TOOL_KIND[tool];
+  if (kind === 'write-deployment-targeted' || kind === 'write-config-targeted') return 'runtime';
+  return 'static';
 }
 
 function boundProjects(bindings: ReadonlyArray<ProviderBinding>): string[] {

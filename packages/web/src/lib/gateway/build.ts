@@ -194,6 +194,7 @@ export function buildGateway(opts: {
     provider: 'github',
     availableTools: githubAvailableTools,
     toolCapabilities: (tool) => ghAdapter.toolCapabilities(tool),
+    toolEnvResolution: (tool) => ghAdapter.toolEnvResolution(tool),
     classify: (tool, args, bindings) => ghAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) => ghAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
@@ -205,6 +206,7 @@ export function buildGateway(opts: {
     provider: 'vercel',
     availableTools: vercelAvailableTools,
     toolCapabilities: (tool) => vercelAdapter.toolCapabilities(tool),
+    toolEnvResolution: (tool) => vercelAdapter.toolEnvResolution(tool),
     classify: (tool, args, bindings) => vercelAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       vercelAdapter.executeCall(admin, binding, tool, args),
@@ -217,6 +219,7 @@ export function buildGateway(opts: {
     provider: 'supabase',
     availableTools: supabaseAvailableTools,
     toolCapabilities: (tool) => supabaseAdapter.toolCapabilities(tool),
+    toolEnvResolution: (tool) => supabaseAdapter.toolEnvResolution(tool),
     classify: (tool, args, bindings) => supabaseAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       supabaseAdapter.executeCall(admin, binding, tool, args),
@@ -242,6 +245,7 @@ export function buildGateway(opts: {
     provider: 'railway',
     availableTools: railwayAvailableTools,
     toolCapabilities: (tool) => railwayAdapter.toolCapabilities(tool),
+    toolEnvResolution: (tool) => railwayAdapter.toolEnvResolution(tool),
     classify: (tool, args, bindings) => railwayAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       railwayAdapter.executeCall(admin, binding, tool, args),

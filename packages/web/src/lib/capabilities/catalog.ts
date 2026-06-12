@@ -8,25 +8,29 @@
  * `app/api/v1/catalog/route.ts` so the logic is unit-testable without a
  * live gateway / Supabase context.
  *
- * The `callable` predicate matches `coversIgnoringEnv` from
- * `@vaubaan/policy-engine/tools-filter` exactly — both paths must stay in
- * lockstep so a tool listed by `tools/list` is `callable: true` here and
- * vice-versa.
+ * The `callable` predicate uses `isToolPotentiallyCallable` from
+ * `@vaubaan/policy-engine/tools-filter` — the same predicate that filters
+ * `tools/list`. It switches on the tool's `EnvResolution` so it stays in
+ * lockstep with the runtime `covers()` enforcement (an env-less surface for
+ * a `static` tool requires an env-less grant ; for `runtime` tools env is
+ * ignored at this layer and the env defensive filter fires at call time).
  */
 
 import {
   formatCapability,
   type Capability,
+  type EnvResolution,
   type McpToolDeclaration,
   type ProviderBinding,
 } from '@vaubaan/shared';
-import { coversIgnoringEnv } from '@vaubaan/policy-engine';
+import { isToolPotentiallyCallable } from '@vaubaan/policy-engine';
 
 export interface ProviderSource {
   slug: string;
   displayName: string;
   tools: ReadonlyArray<McpToolDeclaration>;
   capabilitiesOf: (tool: string) => readonly Capability[];
+  envResolutionOf: (tool: string) => EnvResolution;
 }
 
 export interface ToolCatalogEntry {
@@ -53,6 +57,7 @@ export interface ProviderCatalogEntry {
 export function buildToolEntry(
   tool: McpToolDeclaration,
   surface: readonly Capability[],
+  envResolution: EnvResolution,
   granted: readonly Capability[] | null,
 ): ToolCatalogEntry {
   const required = surface.map(formatCapability);
@@ -63,7 +68,7 @@ export function buildToolEntry(
     requiredCapabilities: required,
   };
   if (granted) {
-    const callable = surface.some((s) => granted.some((g) => coversIgnoringEnv(g, s)));
+    const callable = isToolPotentiallyCallable(granted, surface, envResolution);
     entry.callable = callable;
     if (!callable) entry.missingCapabilities = required;
   }
@@ -77,7 +82,9 @@ export function buildProviderCatalog(
   return sources.map((src) => ({
     slug: src.slug,
     displayName: src.displayName,
-    tools: src.tools.map((t) => buildToolEntry(t, src.capabilitiesOf(t.name), granted)),
+    tools: src.tools.map((t) =>
+      buildToolEntry(t, src.capabilitiesOf(t.name), src.envResolutionOf(t.name), granted),
+    ),
   }));
 }
 
