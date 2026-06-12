@@ -220,11 +220,25 @@ function ToolsList({ provider, planeSlug }: { provider: string; planeSlug: strin
           No MCP tool is wired on this plane yet.
         </p>
       ) : (
-        <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+        <div
+          role="table"
+          style={{
+            display: 'grid',
+            // col 1 & 2 = max-content (tool name + capability slugs) ;
+            // col 3 = minmax(0, 1fr) so the description cell can shrink
+            // below its content width and get the ellipsis treatment.
+            gridTemplateColumns: 'max-content max-content minmax(0, 1fr)',
+            columnGap: 'var(--space-3)',
+            rowGap: '4px',
+            fontSize: 13,
+            lineHeight: 1.5,
+            alignItems: 'baseline',
+          }}
+        >
           {tools.map((tool) => (
             <ToolRow key={tool.name} tool={tool} planeSlug={planeSlug} />
           ))}
-        </ul>
+        </div>
       )}
     </div>
   );
@@ -233,25 +247,30 @@ function ToolsList({ provider, planeSlug }: { provider: string; planeSlug: strin
 function ToolRow({ tool, planeSlug }: { tool: ToolEntry; planeSlug: string }) {
   const onPlane = tool.capabilities.filter((c) => c.plane === planeSlug);
   return (
-    <li
-      style={{
-        display: 'flex',
-        alignItems: 'baseline',
-        gap: 'var(--space-2)',
-        padding: '2px 0',
-        fontSize: 13,
-        lineHeight: 1.5,
-        flexWrap: 'wrap',
-      }}
-    >
-      <Code>{tool.name}</Code>
-      {onPlane.map((cap) => (
-        <Code key={`${cap.level}:${cap.action}`}>
-          {cap.provider}:{cap.plane}/{cap.level}:{cap.action}
-        </Code>
-      ))}
-      {tool.description && <span style={{ color: 'var(--text-muted)' }}>— {tool.description}</span>}
-    </li>
+    <>
+      <div role="cell">
+        <Code>{tool.name}</Code>
+      </div>
+      <div role="cell" style={{ display: 'flex', gap: 4 }}>
+        {onPlane.map((cap) => (
+          <Code key={`${cap.level}:${cap.action}`}>
+            {cap.provider}:{cap.plane}/{cap.level}:{cap.action}
+          </Code>
+        ))}
+      </div>
+      <div
+        role="cell"
+        style={{
+          color: 'var(--text-muted)',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+        title={tool.description}
+      >
+        {tool.description}
+      </div>
+    </>
   );
 }
 
