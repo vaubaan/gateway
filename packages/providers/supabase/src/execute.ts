@@ -41,6 +41,22 @@ export async function executeCall(
   switch (tool) {
     case 'supabase__get_project':
       return mgmtFetch(fetchImpl, token, `/projects/${ref}`);
+    case 'supabase__get_anon_key': {
+      // Supabase Mgmt API returns an array of `{name, api_key}` entries.
+      // We surface only the public anon key (service_role is intentionally
+      // not exposed by this tool — it would require a write-level cap).
+      const keys = (await mgmtFetch(fetchImpl, token, `/projects/${ref}/api-keys`)) as Array<{
+        name: string;
+        api_key: string;
+      }> | null;
+      const anon = keys?.find((k) => k.name === 'anon')?.api_key;
+      if (!anon) {
+        throw new Error(`Supabase /projects/${ref}/api-keys returned no 'anon' entry`);
+      }
+      // Project URL is the canonical Supabase convention — we surface it here
+      // to spare callers a string interpolation.
+      return { url: `https://${args.project_ref as string}.supabase.co`, anon_key: anon };
+    }
     case 'supabase__list_tables': {
       const schemas = Array.isArray(args.schemas) ? (args.schemas as string[]) : ['public'];
       const listLiteral = schemas.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
