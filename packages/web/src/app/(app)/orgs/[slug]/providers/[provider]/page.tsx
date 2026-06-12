@@ -47,7 +47,7 @@ export default async function ProviderRingsPage({
         }}
       >
         <div>
-          <h1 style={{ margin: 0 }}>{descriptor.displayName} — rings</h1>
+          <h1 style={{ margin: 0 }}>{descriptor.displayName}</h1>
           <Code>
             /{org.slug}/providers/{descriptor.slug}
           </Code>
@@ -204,29 +204,23 @@ function ToolsList({ provider, planeSlug }: { provider: string; planeSlug: strin
   const tools = providerPlaneTools(provider, planeSlug);
   return (
     <div style={{ marginTop: 'var(--space-3)' }}>
-      <strong style={{ fontSize: 13 }}>
-        MCP tools on this plane{tools.length > 0 ? ` (${tools.length})` : ''}
-      </strong>
+      <div
+        style={{
+          fontSize: 12,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          color: 'var(--text-muted)',
+          marginBottom: 'var(--space-2)',
+        }}
+      >
+        MCP tools{tools.length > 0 ? ` · ${tools.length}` : ''}
+      </div>
       {tools.length === 0 ? (
-        <p
-          style={{
-            margin: 'var(--space-2) 0 0',
-            color: 'var(--text-muted)',
-            fontSize: 13,
-          }}
-        >
+        <p style={{ margin: 0, color: 'var(--text-muted)', fontSize: 13 }}>
           No MCP tool is wired on this plane yet.
         </p>
       ) : (
-        <ul
-          style={{
-            margin: 'var(--space-2) 0 0',
-            padding: 0,
-            listStyle: 'none',
-            display: 'grid',
-            gap: 'var(--space-2)',
-          }}
-        >
+        <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
           {tools.map((tool) => (
             <ToolRow key={tool.name} tool={tool} planeSlug={planeSlug} />
           ))}
@@ -241,42 +235,22 @@ function ToolRow({ tool, planeSlug }: { tool: ToolEntry; planeSlug: string }) {
   return (
     <li
       style={{
-        padding: 'var(--space-2) var(--space-3)',
-        background: 'var(--surface-base)',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-md)',
+        display: 'flex',
+        alignItems: 'baseline',
+        gap: 'var(--space-2)',
+        padding: '2px 0',
+        fontSize: 13,
+        lineHeight: 1.5,
+        flexWrap: 'wrap',
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          justifyContent: 'space-between',
-          gap: 'var(--space-2)',
-          flexWrap: 'wrap',
-        }}
-      >
-        <Code>{tool.name}</Code>
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-          {onPlane.map((cap) => (
-            <Code key={`${cap.level}:${cap.action}`}>
-              {cap.provider}:{cap.plane}/{cap.level}:{cap.action}
-            </Code>
-          ))}
-        </div>
-      </div>
-      {tool.description && (
-        <p
-          style={{
-            margin: 'var(--space-1) 0 0',
-            color: 'var(--text-muted)',
-            fontSize: 13,
-            lineHeight: 1.4,
-          }}
-        >
-          {tool.description}
-        </p>
-      )}
+      <Code>{tool.name}</Code>
+      {onPlane.map((cap) => (
+        <Code key={`${cap.level}:${cap.action}`}>
+          {cap.provider}:{cap.plane}/{cap.level}:{cap.action}
+        </Code>
+      ))}
+      {tool.description && <span style={{ color: 'var(--text-muted)' }}>— {tool.description}</span>}
     </li>
   );
 }
