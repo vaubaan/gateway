@@ -407,3 +407,131 @@ describe('VercelAdapter — executeCall (custom REST tools)', () => {
     expect(fetchImpl).not.toHaveBeenCalled();
   });
 });
+
+describe('VercelAdapter — classify (new domain + protection surface)', () => {
+  const adapter = new VercelAdapter();
+  type Row = { tool: string; level: string; action: 'read' | 'write' };
+  const cases: readonly Row[] = [
+    { tool: 'vercel__list_project_domains', level: 'project-settings', action: 'read' },
+    { tool: 'vercel__add_project_domain', level: 'project-settings', action: 'write' },
+    { tool: 'vercel__verify_project_domain', level: 'project-settings', action: 'write' },
+    { tool: 'vercel__remove_project_domain', level: 'project-settings', action: 'write' },
+    { tool: 'vercel__update_deployment_protection', level: 'project-settings', action: 'write' },
+  ];
+  for (const { tool, level, action } of cases) {
+    test(`${tool} → runtime/${level}:${action} (env-less, no target arg)`, () => {
+      const res = adapter.classify(tool, { projectId: 'prj_abc' }, [binding]);
+      expect(res).toEqual({
+        capability: { provider: 'vercel', plane: 'runtime', level, action },
+      });
+    });
+  }
+});
+
+describe('VercelAdapter — executeCall (custom domain + protection tools)', () => {
+  test('list_project_domains GETs /v9/projects/{id}/domains with teamId query', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) =>
+      jsonResponse({ domains: [{ name: 'example.com', verified: true }] }),
+    );
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    const out = (await adapter.executeCall(baseAdmin, binding, 'vercel__list_project_domains', {
+      projectId: 'prj_abc',
+    })) as { domains: { name: string }[] };
+    expect(out.domains[0]?.name).toBe('example.com');
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.vercel.com/v9/projects/prj_abc/domains?teamId=team_abc');
+    expect(init.method).toBe('GET');
+    expect(init.body).toBeUndefined();
+  });
+
+  test('add_project_domain POSTs /v10/projects/{id}/domains with whitelisted body', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) =>
+      jsonResponse({ name: 'www.example.com', verified: false }),
+    );
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'vercel__add_project_domain', {
+      projectId: 'prj_abc',
+      name: 'www.example.com',
+      gitBranch: 'main',
+      // a field not in the whitelist must be dropped
+      sneakyExtra: 'nope',
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.vercel.com/v10/projects/prj_abc/domains?teamId=team_abc');
+    expect(init.method).toBe('POST');
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body).toEqual({ name: 'www.example.com', gitBranch: 'main' });
+  });
+
+  test('add_project_domain throws when name missing', async () => {
+    const fetchImpl = vi.fn();
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await expect(
+      adapter.executeCall(baseAdmin, binding, 'vercel__add_project_domain', {
+        projectId: 'prj_abc',
+      }),
+    ).rejects.toThrow(/name is required/);
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  test('verify_project_domain POSTs /v9/projects/{id}/domains/{domain}/verify (URL-encoded)', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) =>
+      jsonResponse({ verified: true }),
+    );
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'vercel__verify_project_domain', {
+      projectId: 'prj_abc',
+      domain: 'www.example.com',
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      'https://api.vercel.com/v9/projects/prj_abc/domains/www.example.com/verify?teamId=team_abc',
+    );
+    expect(init.method).toBe('POST');
+  });
+
+  test('remove_project_domain DELETEs /v9/projects/{id}/domains/{domain}', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) => jsonResponse({}));
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'vercel__remove_project_domain', {
+      projectId: 'prj_abc',
+      domain: 'www.example.com',
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(
+      'https://api.vercel.com/v9/projects/prj_abc/domains/www.example.com?teamId=team_abc',
+    );
+    expect(init.method).toBe('DELETE');
+    expect(init.body).toBeUndefined();
+  });
+
+  test('update_deployment_protection PATCHes /v9/projects/{id} with ssoProtection + passwordProtection only', async () => {
+    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) => jsonResponse({}));
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'vercel__update_deployment_protection', {
+      projectId: 'prj_abc',
+      ssoProtection: { deploymentType: 'all' },
+      passwordProtection: null,
+      // a field not in the whitelist must be dropped
+      rootDirectory: 'leak',
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.vercel.com/v9/projects/prj_abc?teamId=team_abc');
+    expect(init.method).toBe('PATCH');
+    const body = JSON.parse(init.body as string) as Record<string, unknown>;
+    expect(body).toEqual({
+      ssoProtection: { deploymentType: 'all' },
+      passwordProtection: null,
+    });
+  });
+
+  test('new custom tools exposed in availableTools', () => {
+    const adapter = new VercelAdapter();
+    const names = adapter.availableTools.map((t) => t.name);
+    expect(names).toContain('vercel__list_project_domains');
+    expect(names).toContain('vercel__add_project_domain');
+    expect(names).toContain('vercel__verify_project_domain');
+    expect(names).toContain('vercel__remove_project_domain');
+    expect(names).toContain('vercel__update_deployment_protection');
+  });
+});

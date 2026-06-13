@@ -58,6 +58,12 @@ const TOOL_KIND: Record<string, Kind> = {
   vercel__upsert_env_var: 'write-config-targeted',
   vercel__delete_env_var: 'write-config-targeted',
   vercel__update_project_settings: 'write-project-settings',
+  // Custom REST tools — project domains + deployment protection
+  vercel__list_project_domains: 'read-project-settings',
+  vercel__add_project_domain: 'write-project-settings',
+  vercel__verify_project_domain: 'write-project-settings',
+  vercel__remove_project_domain: 'write-project-settings',
+  vercel__update_deployment_protection: 'write-project-settings',
 };
 
 function cap(level: string, action: 'read' | 'write', env?: string): Capability {

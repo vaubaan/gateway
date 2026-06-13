@@ -16,6 +16,11 @@ export const UPDATE_PROJECT_SETTINGS = 'vercel__update_project_settings';
 export const UPSERT_ENV_VAR = 'vercel__upsert_env_var';
 export const LIST_ENV_VARS = 'vercel__list_env_vars';
 export const DELETE_ENV_VAR = 'vercel__delete_env_var';
+export const LIST_DOMAINS = 'vercel__list_project_domains';
+export const ADD_DOMAIN = 'vercel__add_project_domain';
+export const VERIFY_DOMAIN = 'vercel__verify_project_domain';
+export const REMOVE_DOMAIN = 'vercel__remove_project_domain';
+export const UPDATE_DEPLOYMENT_PROTECTION = 'vercel__update_deployment_protection';
 
 export const customTools: readonly McpToolDeclaration[] = [
   {
@@ -171,6 +176,103 @@ export const customTools: readonly McpToolDeclaration[] = [
         },
       },
       required: ['projectId', 'id'],
+    },
+  },
+  {
+    name: LIST_DOMAINS,
+    description:
+      'List custom domains attached to a Vercel project (including verification status). Backed by GET /v9/projects/{projectId}/domains.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string', description: 'Vercel project id (e.g. `prj_xxx`).' },
+        teamId: {
+          type: 'string',
+          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
+        },
+      },
+      required: ['projectId'],
+    },
+  },
+  {
+    name: ADD_DOMAIN,
+    description:
+      'Attach a custom domain to a Vercel project. Backed by POST /v10/projects/{projectId}/domains. If `verified: false` in the response, call `verify_project_domain` after configuring DNS.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string' },
+        teamId: { type: 'string' },
+        name: {
+          type: 'string',
+          description: 'The domain name to attach (e.g. `www.example.com`).',
+        },
+        gitBranch: {
+          type: 'string',
+          description: 'Optional Git branch this domain mirrors (preview-style branch deploys).',
+        },
+        redirect: {
+          type: 'string',
+          description: 'Redirect target domain (e.g. `example.com`).',
+        },
+        redirectStatusCode: {
+          type: 'number',
+          enum: [301, 302, 307, 308],
+          description: 'HTTP redirect status code when `redirect` is set.',
+        },
+      },
+      required: ['projectId', 'name'],
+    },
+  },
+  {
+    name: VERIFY_DOMAIN,
+    description:
+      'Trigger Vercel re-check of a domain attachment (re-runs the verification challenge after DNS records are in place). Backed by POST /v9/projects/{projectId}/domains/{domain}/verify.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string' },
+        teamId: { type: 'string' },
+        domain: { type: 'string', description: 'The exact domain name attached to the project.' },
+      },
+      required: ['projectId', 'domain'],
+    },
+  },
+  {
+    name: REMOVE_DOMAIN,
+    description:
+      'Detach a custom domain from a Vercel project. Backed by DELETE /v9/projects/{projectId}/domains/{domain}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string' },
+        teamId: { type: 'string' },
+        domain: { type: 'string', description: 'The exact domain name to detach.' },
+      },
+      required: ['projectId', 'domain'],
+    },
+  },
+  {
+    name: UPDATE_DEPLOYMENT_PROTECTION,
+    description:
+      'Toggle / configure Vercel deployment protection (Vercel Auth SSO + Password Protection). Backed by PATCH /v9/projects/{projectId} with `ssoProtection` and/or `passwordProtection` fields. Pass `null` for a field to disable it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: { type: 'string' },
+        teamId: { type: 'string' },
+        ssoProtection: {
+          type: ['object', 'null'],
+          description:
+            'Vercel SSO/team auth — `{ deploymentType: "all" | "preview" | "prod_deployment_urls_and_all_previews" | null }`. Pass null to disable.',
+        },
+        passwordProtection: {
+          type: ['object', 'null'],
+          description:
+            'Password gate — `{ password: string, deploymentType: same enum as ssoProtection }`. Pass null to disable.',
+        },
+      },
+      required: ['projectId'],
     },
   },
 ];

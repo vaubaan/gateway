@@ -16,10 +16,15 @@
 
 import { isCustomTool, toUpstreamName } from './tools.ts';
 import {
+  ADD_DOMAIN,
   DELETE_ENV_VAR,
+  LIST_DOMAINS,
   LIST_ENV_VARS,
+  REMOVE_DOMAIN,
+  UPDATE_DEPLOYMENT_PROTECTION,
   UPDATE_PROJECT_SETTINGS,
   UPSERT_ENV_VAR,
+  VERIFY_DOMAIN,
 } from './custom-tools.ts';
 
 export type FetchImpl = typeof fetch;
@@ -152,6 +157,14 @@ const PROJECT_SETTINGS_FIELDS = [
 ] as const;
 
 const ENV_VAR_FIELDS = ['key', 'value', 'target', 'type', 'gitBranch', 'comment'] as const;
+const ADD_DOMAIN_FIELDS = [
+  'name',
+  'gitBranch',
+  'redirect',
+  'redirectStatusCode',
+  'customEnvironmentId',
+] as const;
+const PROTECTION_FIELDS = ['ssoProtection', 'passwordProtection'] as const;
 
 async function executeCustom(
   fetchImpl: FetchImpl,
@@ -190,6 +203,44 @@ async function executeCustom(
       query,
       null,
     );
+  }
+  if (tool === LIST_DOMAINS) {
+    return callRest(fetchImpl, token, 'GET', `/v9/projects/${projectId}/domains`, query, null);
+  }
+  if (tool === ADD_DOMAIN) {
+    if (typeof args.name !== 'string') {
+      throw new Error(`Vercel custom tool ${tool}: name is required.`);
+    }
+    const body = pickDefined(args, ADD_DOMAIN_FIELDS);
+    return callRest(fetchImpl, token, 'POST', `/v10/projects/${projectId}/domains`, query, body);
+  }
+  if (tool === VERIFY_DOMAIN) {
+    const domain = typeof args.domain === 'string' ? args.domain : '';
+    if (!domain) throw new Error(`Vercel custom tool ${tool}: domain is required.`);
+    return callRest(
+      fetchImpl,
+      token,
+      'POST',
+      `/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}/verify`,
+      query,
+      {},
+    );
+  }
+  if (tool === REMOVE_DOMAIN) {
+    const domain = typeof args.domain === 'string' ? args.domain : '';
+    if (!domain) throw new Error(`Vercel custom tool ${tool}: domain is required.`);
+    return callRest(
+      fetchImpl,
+      token,
+      'DELETE',
+      `/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`,
+      query,
+      null,
+    );
+  }
+  if (tool === UPDATE_DEPLOYMENT_PROTECTION) {
+    const body = pickDefined(args, PROTECTION_FIELDS);
+    return callRest(fetchImpl, token, 'PATCH', `/v9/projects/${projectId}`, query, body);
   }
   throw new Error(`Vercel custom tool not implemented: ${tool}`);
 }
