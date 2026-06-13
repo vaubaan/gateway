@@ -394,3 +394,295 @@ describe('SupabaseAdapter — executeCall (new mgmt-api tools)', () => {
     expect(body).toEqual({ name: 'add_index', query: 'create index ix on t(x);' });
   });
 });
+
+describe('SupabaseAdapter — classify (new write surface)', () => {
+  type Row = {
+    tool: string;
+    args: Record<string, unknown>;
+    plane: 'storage' | 'auth' | 'functions';
+    level: string;
+    action: 'read' | 'write';
+  };
+  const cases: readonly Row[] = [
+    {
+      tool: 'supabase__update_storage_config',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', config: { fileSizeLimit: 1048576 } },
+      plane: 'storage',
+      level: 'storage-config',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__update_auth_config',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', config: { site_url: 'https://app.example' } },
+      plane: 'auth',
+      level: 'auth-config',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__list_third_party_auth',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh' },
+      plane: 'auth',
+      level: 'providers',
+      action: 'read',
+    },
+    {
+      tool: 'supabase__create_third_party_auth',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', type: 'oidc' },
+      plane: 'auth',
+      level: 'providers',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__delete_third_party_auth',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', tpa_id: 'tpa-1' },
+      plane: 'auth',
+      level: 'providers',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__create_sso_provider',
+      args: {
+        project_ref: 'qsockrvwpfzvxxecwjvh',
+        type: 'saml',
+        metadata_url: 'https://idp/metadata.xml',
+      },
+      plane: 'auth',
+      level: 'providers',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__update_sso_provider',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', provider_id: 'uuid-1', domains: ['acme.com'] },
+      plane: 'auth',
+      level: 'providers',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__delete_sso_provider',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', provider_id: 'uuid-1' },
+      plane: 'auth',
+      level: 'providers',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__create_function',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', slug: 'hello', body: 'export default ...' },
+      plane: 'functions',
+      level: 'deployment',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__delete_function',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', function_slug: 'hello' },
+      plane: 'functions',
+      level: 'deployment',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__list_function_secrets',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh' },
+      plane: 'functions',
+      level: 'config',
+      action: 'read',
+    },
+    {
+      tool: 'supabase__create_function_secrets',
+      args: {
+        project_ref: 'qsockrvwpfzvxxecwjvh',
+        secrets: [{ name: 'API_KEY', value: 'k' }],
+      },
+      plane: 'functions',
+      level: 'config',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__delete_function_secrets',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', names: ['API_KEY'] },
+      plane: 'functions',
+      level: 'config',
+      action: 'write',
+    },
+  ];
+
+  for (const { tool, args, plane, level, action } of cases) {
+    test(`${tool} → ${plane}/${level}:${action} @staging`, () => {
+      const adapter = new SupabaseAdapter();
+      expect(adapter.classify(tool, args, [binding])).toEqual({
+        capability: { provider: 'supabase', plane, level, action, env: 'staging' },
+      });
+    });
+  }
+});
+
+describe('SupabaseAdapter — executeCall (new write surface)', () => {
+  test('update_auth_config PATCHes /config/auth with the config body', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__update_auth_config', {
+      project_ref: 'abc',
+      config: { site_url: 'https://app.example', jwt_exp: 3600 },
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/config/auth');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({
+      site_url: 'https://app.example',
+      jwt_exp: 3600,
+    });
+  });
+
+  test('update_storage_config PATCHes /config/storage with the config body', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__update_storage_config', {
+      project_ref: 'abc',
+      config: { fileSizeLimit: 1048576 },
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/config/storage');
+    expect(init.method).toBe('PATCH');
+    expect(JSON.parse(init.body as string)).toEqual({ fileSizeLimit: 1048576 });
+  });
+
+  test('create_sso_provider POSTs /config/auth/sso/providers with project_ref stripped', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ id: 'uuid-x' }));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__create_sso_provider', {
+      project_ref: 'abc',
+      type: 'saml',
+      metadata_url: 'https://idp/m.xml',
+      domains: ['acme.com'],
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/config/auth/sso/providers');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      type: 'saml',
+      metadata_url: 'https://idp/m.xml',
+      domains: ['acme.com'],
+    });
+  });
+
+  test('update_sso_provider PUTs /sso/providers/:id with provider_id stripped', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__update_sso_provider', {
+      project_ref: 'abc',
+      provider_id: 'uuid-1',
+      domains: ['x.com'],
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/config/auth/sso/providers/uuid-1');
+    expect(init.method).toBe('PUT');
+    expect(JSON.parse(init.body as string)).toEqual({ domains: ['x.com'] });
+  });
+
+  test('delete_sso_provider DELETEs /sso/providers/:id', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: () => Promise.resolve(null),
+      text: () => Promise.resolve(''),
+    });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    const out = await adapter.executeCall(baseAdmin, binding, 'supabase__delete_sso_provider', {
+      project_ref: 'abc',
+      provider_id: 'uuid-1',
+    });
+    expect(out).toBeNull();
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/config/auth/sso/providers/uuid-1');
+    expect(init.method).toBe('DELETE');
+  });
+
+  test('create_function POSTs /functions with body, project_ref stripped', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ slug: 'hello' }));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__create_function', {
+      project_ref: 'abc',
+      slug: 'hello',
+      body: 'export default () => "ok"',
+      verify_jwt: false,
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/functions');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      slug: 'hello',
+      body: 'export default () => "ok"',
+      verify_jwt: false,
+    });
+  });
+
+  test('deploy_function POSTs /functions/deploy?slug=… with body sans slug/project_ref', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({ version: 2 }));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__deploy_function', {
+      project_ref: 'abc',
+      slug: 'my fn',
+      entrypoint_path: 'index.ts',
+      files: [{ name: 'index.ts', content: 'x' }],
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/functions/deploy?slug=my%20fn');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual({
+      entrypoint_path: 'index.ts',
+      files: [{ name: 'index.ts', content: 'x' }],
+    });
+  });
+
+  test('delete_function DELETEs /functions/:slug', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: () => Promise.resolve(null),
+      text: () => Promise.resolve(''),
+    });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__delete_function', {
+      project_ref: 'abc',
+      function_slug: 'hello',
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/functions/hello');
+    expect(init.method).toBe('DELETE');
+  });
+
+  test('create_function_secrets POSTs /secrets with the secrets array body', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({}));
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__create_function_secrets', {
+      project_ref: 'abc',
+      secrets: [
+        { name: 'API_KEY', value: 'k1' },
+        { name: 'DB_URL', value: 'postgres://...' },
+      ],
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/secrets');
+    expect(init.method).toBe('POST');
+    expect(JSON.parse(init.body as string)).toEqual([
+      { name: 'API_KEY', value: 'k1' },
+      { name: 'DB_URL', value: 'postgres://...' },
+    ]);
+  });
+
+  test('delete_function_secrets DELETEs /secrets with the names body', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 204,
+      json: () => Promise.resolve(null),
+      text: () => Promise.resolve(''),
+    });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__delete_function_secrets', {
+      project_ref: 'abc',
+      names: ['API_KEY', 'DB_URL'],
+    });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://api.supabase.com/v1/projects/abc/secrets');
+    expect(init.method).toBe('DELETE');
+    expect(JSON.parse(init.body as string)).toEqual(['API_KEY', 'DB_URL']);
+  });
+});

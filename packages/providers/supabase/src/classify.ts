@@ -48,13 +48,32 @@ const TOOL_SURFACE: Record<string, StaticEntry> = {
   // storage plane
   supabase__list_buckets: { plane: 'storage', level: 'buckets', action: 'read' },
   supabase__get_storage_config: { plane: 'storage', level: 'storage-config', action: 'read' },
-  // auth plane
+  supabase__update_storage_config: { plane: 'storage', level: 'storage-config', action: 'write' },
+  // auth plane — reads
   supabase__get_auth_config: { plane: 'auth', level: 'auth-config', action: 'read' },
   supabase__list_sso_providers: { plane: 'auth', level: 'providers', action: 'read' },
-  // functions plane
+  supabase__get_sso_provider: { plane: 'auth', level: 'providers', action: 'read' },
+  supabase__list_third_party_auth: { plane: 'auth', level: 'providers', action: 'read' },
+  supabase__get_third_party_auth: { plane: 'auth', level: 'providers', action: 'read' },
+  // auth plane — writes
+  supabase__update_auth_config: { plane: 'auth', level: 'auth-config', action: 'write' },
+  supabase__create_sso_provider: { plane: 'auth', level: 'providers', action: 'write' },
+  supabase__update_sso_provider: { plane: 'auth', level: 'providers', action: 'write' },
+  supabase__delete_sso_provider: { plane: 'auth', level: 'providers', action: 'write' },
+  supabase__create_third_party_auth: { plane: 'auth', level: 'providers', action: 'write' },
+  supabase__delete_third_party_auth: { plane: 'auth', level: 'providers', action: 'write' },
+  // functions plane — reads
   supabase__list_functions: { plane: 'functions', level: 'deployment', action: 'read' },
   supabase__get_function: { plane: 'functions', level: 'deployment', action: 'read' },
   supabase__get_function_body: { plane: 'functions', level: 'deployment', action: 'read' },
+  supabase__list_function_secrets: { plane: 'functions', level: 'config', action: 'read' },
+  // functions plane — writes
+  supabase__create_function: { plane: 'functions', level: 'deployment', action: 'write' },
+  supabase__update_function: { plane: 'functions', level: 'deployment', action: 'write' },
+  supabase__delete_function: { plane: 'functions', level: 'deployment', action: 'write' },
+  supabase__deploy_function: { plane: 'functions', level: 'deployment', action: 'write' },
+  supabase__create_function_secrets: { plane: 'functions', level: 'config', action: 'write' },
+  supabase__delete_function_secrets: { plane: 'functions', level: 'config', action: 'write' },
 };
 
 const EXECUTE_SQL = 'supabase__execute_sql';

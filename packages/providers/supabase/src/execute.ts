@@ -109,7 +109,117 @@ export async function executeCall(
       const slug = encodeURIComponent(args.function_slug as string);
       return mgmtFetch(fetchImpl, token, `/projects/${ref}/functions/${slug}/body`);
     }
+
+    // ─── storage plane — writes ──────────────────────────────────────────
+    case 'supabase__update_storage_config':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/storage`, {
+        method: 'PATCH',
+        body: JSON.stringify(args.config ?? {}),
+      });
+
+    // ─── auth plane — writes ─────────────────────────────────────────────
+    case 'supabase__update_auth_config':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth`, {
+        method: 'PATCH',
+        body: JSON.stringify(args.config ?? {}),
+      });
+    case 'supabase__list_third_party_auth':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth/third-party-auth`);
+    case 'supabase__get_third_party_auth': {
+      const tpa = encodeURIComponent(args.tpa_id as string);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth/third-party-auth/${tpa}`);
+    }
+    case 'supabase__create_third_party_auth':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth/third-party-auth`, {
+        method: 'POST',
+        body: JSON.stringify(stripProjectRef(args)),
+      });
+    case 'supabase__delete_third_party_auth': {
+      const tpa = encodeURIComponent(args.tpa_id as string);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth/third-party-auth/${tpa}`, {
+        method: 'DELETE',
+      });
+    }
+    case 'supabase__get_sso_provider': {
+      const pid = encodeURIComponent(args.provider_id as string);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth/sso/providers/${pid}`);
+    }
+    case 'supabase__create_sso_provider':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth/sso/providers`, {
+        method: 'POST',
+        body: JSON.stringify(stripProjectRef(args)),
+      });
+    case 'supabase__update_sso_provider': {
+      const pid = encodeURIComponent(args.provider_id as string);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth/sso/providers/${pid}`, {
+        method: 'PUT',
+        body: JSON.stringify(stripProjectRef(args, ['provider_id'])),
+      });
+    }
+    case 'supabase__delete_sso_provider': {
+      const pid = encodeURIComponent(args.provider_id as string);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/config/auth/sso/providers/${pid}`, {
+        method: 'DELETE',
+      });
+    }
+
+    // ─── functions plane — writes ────────────────────────────────────────
+    case 'supabase__create_function':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/functions`, {
+        method: 'POST',
+        body: JSON.stringify(stripProjectRef(args)),
+      });
+    case 'supabase__update_function': {
+      const slug = encodeURIComponent(args.function_slug as string);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/functions/${slug}`, {
+        method: 'PATCH',
+        body: JSON.stringify(stripProjectRef(args, ['function_slug'])),
+      });
+    }
+    case 'supabase__delete_function': {
+      const slug = encodeURIComponent(args.function_slug as string);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/functions/${slug}`, {
+        method: 'DELETE',
+      });
+    }
+    case 'supabase__deploy_function': {
+      // The deploy endpoint takes the slug as a query param + a JSON body that
+      // describes the bundle (entrypoint, optional import map, verify_jwt, files).
+      const slug = encodeURIComponent(args.slug as string);
+      const body = stripProjectRef(args, ['slug']);
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/functions/deploy?slug=${slug}`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
+    }
+    case 'supabase__list_function_secrets':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/secrets`);
+    case 'supabase__create_function_secrets':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/secrets`, {
+        method: 'POST',
+        body: JSON.stringify(args.secrets ?? []),
+      });
+    case 'supabase__delete_function_secrets':
+      return mgmtFetch(fetchImpl, token, `/projects/${ref}/secrets`, {
+        method: 'DELETE',
+        body: JSON.stringify(args.names ?? []),
+      });
+
     default:
       throw new Error(`Unknown Supabase MCP tool: ${tool}`);
   }
+}
+
+/** Build a body object from MCP args, dropping the project_ref (path param,
+ *  never a body field) and any other path-binding args. */
+function stripProjectRef(
+  args: Record<string, unknown>,
+  alsoStrip: readonly string[] = [],
+): Record<string, unknown> {
+  const drop = new Set<string>(['project_ref', 'projectRef', ...alsoStrip]);
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(args)) {
+    if (!drop.has(k) && v !== undefined) out[k] = v;
+  }
+  return out;
 }
