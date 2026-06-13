@@ -16,6 +16,12 @@
     "allowJs": true,
     "incremental": true
   },
-  "include": ["next-env.d.ts", "src/**/*", "tests/**/*", ".next/types/**/*.ts"],
+  "include": [
+    "next-env.d.ts",
+    "src/**/*",
+    "src/app/.well-known/**/*",
+    "tests/**/*",
+    ".next/types/**/*.ts"
+  ],
   "exclude": ["node_modules", ".next", "dist"]
 }

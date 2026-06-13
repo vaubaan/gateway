@@ -1,10 +1,11 @@
 ---
 title: MCP gateway
 status: current
-date: 2026-06-11
+date: 2026-06-13
 tracks:
   - packages/mcp-gateway/src/
   - packages/web/src/app/mcp/route.ts
+  - packages/web/src/app/.well-known/oauth-protected-resource/route.ts
   - packages/web/src/lib/gateway/build.ts
 ---
 
@@ -197,6 +198,31 @@ et audit row passent par le même chemin que les non-self-contained
 - Le GitHub installation token (mint JIT 1h) est _éphémère_ — pas de cache
   persistant en clair en MVP (peut être ajouté en v1.1 — cache 50min Upstash
   pour éviter le mint à chaque call ; cf. ADR [[redis-cache-upstash-with-memory-fallback]]).
+
+## Client compatibility — Claude Code OAuth probe
+
+Claude Code (and other MCP clients suivant la spec auth) probent
+`/.well-known/oauth-protected-resource` au connect pour découvrir un
+serveur OAuth. Sur 404 (notre état initial), Claude Code régresse côté
+client : il n'envoie plus le `Authorization: Bearer vbn_live_*` configuré
+dans `.mcp.json` — cf. [anthropics/claude-code#59467](https://github.com/anthropics/claude-code/issues/59467).
+
+Pour court-circuiter : `packages/web/src/app/.well-known/oauth-protected-resource/route.ts`
+répond 200 en RFC 9728 avec `authorization_servers: []` et
+`bearer_methods_supported: ["header"]`. Le client lit "pas d'OAuth, juste
+des bearers" et retombe sur le header statique.
+
+> Si un client reste bloqué sur le flow OAuth malgré la metadata, le
+> workaround côté lanceur Claude Code est :
+>
+> ```bash
+> claude --permission-mode bypassPermissions \
+>        --strict-mcp-config \
+>        --mcp-config .mcp.json
+> ```
+>
+> `--strict-mcp-config` désactive les sources MCP implicites (config user)
+> et force l'usage exclusif du fichier passé en argument.
 
 ## Tests
 
