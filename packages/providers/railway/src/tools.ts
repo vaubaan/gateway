@@ -18,9 +18,12 @@
 
 import type { McpToolDeclaration } from '@vaubaan/shared';
 import upstream from './upstream-tools.json' with { type: 'json' };
+import { customTools } from './custom-tools.ts';
 
-export const availableTools: readonly McpToolDeclaration[] =
-  upstream as ReadonlyArray<McpToolDeclaration>;
+export const availableTools: readonly McpToolDeclaration[] = [
+  ...(upstream as ReadonlyArray<McpToolDeclaration>),
+  ...customTools,
+];
 
 /** Strip the `railway__` prefix to get the upstream tool name. */
 export function toUpstreamName(toolName: string): string {

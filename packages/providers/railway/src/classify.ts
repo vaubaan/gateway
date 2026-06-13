@@ -22,7 +22,13 @@ import type { Capability, EnvResolution, ProviderBinding } from '@vaubaan/shared
 
 export type ClassifyResult = { capability: Capability } | { denied: string };
 
-type Kind = 'read-account' | 'read-deployment' | 'write-deployment' | 'write-account';
+type Kind =
+  | 'read-account'
+  | 'read-deployment'
+  | 'write-deployment'
+  | 'write-account'
+  | 'read-config'
+  | 'write-config';
 
 const TOOL_KIND: Record<string, Kind> = {
   railway__whoami: 'read-account',
@@ -35,6 +41,11 @@ const TOOL_KIND: Record<string, Kind> = {
   'railway__accept-deploy': 'write-deployment',
   'railway__railway-agent': 'write-deployment',
   'railway__create-project': 'write-account',
+  // Custom GraphQL env-var tools — runtime/config (cf. custom-tools.ts).
+  'railway__list-variables': 'read-config',
+  'railway__upsert-variable': 'write-config',
+  'railway__upsert-variables': 'write-config',
+  'railway__delete-variable': 'write-config',
 };
 
 /** Tools whose env is resolved from the matched binding at call time. Their
@@ -47,6 +58,10 @@ const ENV_FROM_BINDING: ReadonlySet<string> = new Set([
   'railway__get-logs',
   'railway__redeploy',
   'railway__accept-deploy',
+  'railway__list-variables',
+  'railway__upsert-variable',
+  'railway__upsert-variables',
+  'railway__delete-variable',
 ]);
 
 function cap(level: string, action: 'read' | 'write', env?: string): Capability {
@@ -60,6 +75,8 @@ const KIND_SURFACE: Record<Kind, Capability> = {
   'read-deployment': cap('deployment', 'read'),
   'write-deployment': cap('deployment', 'write'),
   'write-account': cap('account', 'write'),
+  'read-config': cap('config', 'read'),
+  'write-config': cap('config', 'write'),
 };
 
 /** Env-less capability surface of a tool, for static tools/list filtering. */

@@ -261,4 +261,203 @@ describe('RailwayAdapter — classify', () => {
     const res = adapter.classify('railway__nuke', {}, []);
     expect(res).toEqual({ denied: "unknown railway tool 'railway__nuke'." });
   });
+
+  test('list-variables → runtime/config:read @staging (env from binding)', () => {
+    const res = adapter.classify('railway__list-variables', { environmentId: 'env-uuid-1' }, [
+      binding,
+    ]);
+    expect(res).toEqual({
+      capability: {
+        provider: 'railway',
+        plane: 'runtime',
+        level: 'config',
+        action: 'read',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('upsert-variable → runtime/config:write @staging', () => {
+    const res = adapter.classify(
+      'railway__upsert-variable',
+      {
+        projectId: '00000000-0000-4000-8000-000000000000',
+        environmentId: 'env-uuid-1',
+        name: 'API_KEY',
+        value: 'k',
+      },
+      [binding],
+    );
+    expect(res).toEqual({
+      capability: {
+        provider: 'railway',
+        plane: 'runtime',
+        level: 'config',
+        action: 'write',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('delete-variable → runtime/config:write @staging', () => {
+    const res = adapter.classify(
+      'railway__delete-variable',
+      {
+        projectId: '00000000-0000-4000-8000-000000000000',
+        environmentId: 'env-uuid-1',
+        name: 'API_KEY',
+      },
+      [binding],
+    );
+    expect(res).toEqual({
+      capability: {
+        provider: 'railway',
+        plane: 'runtime',
+        level: 'config',
+        action: 'write',
+        env: 'staging',
+      },
+    });
+  });
+});
+
+describe('RailwayAdapter — executeCall (custom GraphQL env-var tools)', () => {
+  function jsonOk(body: unknown) {
+    return {
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body)),
+    };
+  }
+
+  test('list-variables POSTs the variables query to backboard and returns the map', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonOk({
+        data: { variables: { DATABASE_URL: 'postgres://...', NODE_ENV: 'production' } },
+      }),
+    );
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    const out = await adapter.executeCall(baseAdmin, binding, 'railway__list-variables', {
+      projectId: '00000000-0000-4000-8000-000000000000',
+      environmentId: 'env-uuid-1',
+    });
+    expect(out).toEqual({ DATABASE_URL: 'postgres://...', NODE_ENV: 'production' });
+    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://backboard.railway.com/graphql/v2');
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer rlwy_at');
+    const body = JSON.parse(init.body as string) as {
+      query: string;
+      variables: Record<string, unknown>;
+    };
+    expect(body.query).toContain('query variables');
+    expect(body.variables).toEqual({
+      projectId: '00000000-0000-4000-8000-000000000000',
+      environmentId: 'env-uuid-1',
+      serviceId: null,
+      unrendered: false,
+    });
+  });
+
+  test('upsert-variable sends the variableUpsert mutation with input stripped of undefined', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonOk({ data: { variableUpsert: true } }));
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    const out = await adapter.executeCall(baseAdmin, binding, 'railway__upsert-variable', {
+      projectId: '00000000-0000-4000-8000-000000000000',
+      environmentId: 'env-uuid-1',
+      name: 'API_KEY',
+      value: 'k1',
+      // serviceId and skipDeploys deliberately omitted
+    });
+    expect(out).toEqual({ ok: true });
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      query: string;
+      variables: { input: Record<string, unknown> };
+    };
+    expect(body.query).toContain('mutation variableUpsert');
+    expect(body.variables.input).toEqual({
+      projectId: '00000000-0000-4000-8000-000000000000',
+      environmentId: 'env-uuid-1',
+      name: 'API_KEY',
+      value: 'k1',
+    });
+  });
+
+  test('upsert-variables (bulk) sends variableCollectionUpsert with replace flag', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonOk({ data: { variableCollectionUpsert: true } }));
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'railway__upsert-variables', {
+      projectId: '00000000-0000-4000-8000-000000000000',
+      environmentId: 'env-uuid-1',
+      serviceId: 'svc-1',
+      variables: { A: '1', B: '2' },
+      replace: true,
+    });
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      query: string;
+      variables: { input: Record<string, unknown> };
+    };
+    expect(body.query).toContain('mutation variableCollectionUpsert');
+    expect(body.variables.input).toEqual({
+      projectId: '00000000-0000-4000-8000-000000000000',
+      environmentId: 'env-uuid-1',
+      serviceId: 'svc-1',
+      variables: { A: '1', B: '2' },
+      replace: true,
+    });
+  });
+
+  test('delete-variable sends the variableDelete mutation', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonOk({ data: { variableDelete: true } }));
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'railway__delete-variable', {
+      projectId: '00000000-0000-4000-8000-000000000000',
+      environmentId: 'env-uuid-1',
+      name: 'OLD_KEY',
+    });
+    const [, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as {
+      query: string;
+      variables: { input: Record<string, unknown> };
+    };
+    expect(body.query).toContain('mutation variableDelete');
+    expect(body.variables.input).toEqual({
+      projectId: '00000000-0000-4000-8000-000000000000',
+      environmentId: 'env-uuid-1',
+      name: 'OLD_KEY',
+    });
+  });
+
+  test('surfaces backboard 401 (audience-bound token) as a clear error', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve('Unauthorized'),
+    });
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    await expect(
+      adapter.executeCall(baseAdmin, binding, 'railway__list-variables', {
+        environmentId: 'env-uuid-1',
+      }),
+    ).rejects.toThrow(/Railway GraphQL 401/);
+  });
+
+  test('surfaces GraphQL `errors` array', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonOk({ errors: [{ message: 'project not found' }] }));
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    await expect(
+      adapter.executeCall(baseAdmin, binding, 'railway__upsert-variable', {
+        projectId: '00000000-0000-4000-8000-000000000000',
+        environmentId: 'env-uuid-1',
+        name: 'K',
+        value: 'V',
+      }),
+    ).rejects.toThrow(/project not found/);
+  });
 });
