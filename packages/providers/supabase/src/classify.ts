@@ -74,6 +74,22 @@ const TOOL_SURFACE: Record<string, StaticEntry> = {
   supabase__deploy_function: { plane: 'functions', level: 'deployment', action: 'write' },
   supabase__create_function_secrets: { plane: 'functions', level: 'config', action: 'write' },
   supabase__delete_function_secrets: { plane: 'functions', level: 'config', action: 'write' },
+  // auth/users — data plane (gateway uses service_role internally)
+  supabase__list_users: { plane: 'auth', level: 'users', action: 'read' },
+  supabase__get_user: { plane: 'auth', level: 'users', action: 'read' },
+  supabase__create_user: { plane: 'auth', level: 'users', action: 'write' },
+  supabase__update_user: { plane: 'auth', level: 'users', action: 'write' },
+  supabase__delete_user: { plane: 'auth', level: 'users', action: 'write' },
+  supabase__generate_link: { plane: 'auth', level: 'users', action: 'write' },
+  // storage/buckets — data plane writes
+  supabase__create_bucket: { plane: 'storage', level: 'buckets', action: 'write' },
+  supabase__update_bucket: { plane: 'storage', level: 'buckets', action: 'write' },
+  supabase__delete_bucket: { plane: 'storage', level: 'buckets', action: 'write' },
+  // storage/objects — data plane
+  supabase__list_objects: { plane: 'storage', level: 'objects', action: 'read' },
+  supabase__upload_object: { plane: 'storage', level: 'objects', action: 'write' },
+  supabase__delete_object: { plane: 'storage', level: 'objects', action: 'write' },
+  supabase__create_signed_url: { plane: 'storage', level: 'objects', action: 'read' },
 };
 
 const EXECUTE_SQL = 'supabase__execute_sql';

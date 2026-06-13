@@ -443,4 +443,248 @@ export const availableTools: readonly McpToolDeclaration[] = [
       required: ['project_ref', 'names'],
     },
   },
+
+  // ─── auth/users — data plane (gateway fetches service_role internally) ────
+  {
+    name: 'supabase__list_users',
+    description:
+      'List project users (GoTrue admin). The gateway fetches `service_role` server-side — the key never leaves the gateway. Backed by GET {ref}.supabase.co/auth/v1/admin/users.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        page: { type: 'number', description: 'Page number (1-based, default 1).' },
+        per_page: { type: 'number', description: 'Page size (default 50, max 200).' },
+      },
+      required: ['project_ref'],
+    },
+  },
+  {
+    name: 'supabase__get_user',
+    description:
+      'Get a single project user by id. Backed by GET {ref}.supabase.co/auth/v1/admin/users/{user_id}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        user_id: { type: 'string', description: 'GoTrue user id (UUID).' },
+      },
+      required: ['project_ref', 'user_id'],
+    },
+  },
+  {
+    name: 'supabase__create_user',
+    description:
+      'Create a project user. Backed by POST {ref}.supabase.co/auth/v1/admin/users. Common fields: email, password, email_confirm, phone, phone_confirm, user_metadata, app_metadata, ban_duration.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        email: { type: 'string' },
+        password: { type: 'string' },
+        email_confirm: { type: 'boolean' },
+        phone: { type: 'string' },
+        phone_confirm: { type: 'boolean' },
+        user_metadata: { type: 'object' },
+        app_metadata: { type: 'object' },
+        ban_duration: { type: 'string', description: 'ISO-8601 duration (e.g. `24h`).' },
+      },
+      required: ['project_ref'],
+    },
+  },
+  {
+    name: 'supabase__update_user',
+    description:
+      'Update a project user (PUT semantics — sent fields overwrite). Backed by PUT {ref}.supabase.co/auth/v1/admin/users/{user_id}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        user_id: { type: 'string', description: 'GoTrue user id (UUID).' },
+        email: { type: 'string' },
+        password: { type: 'string' },
+        email_confirm: { type: 'boolean' },
+        phone: { type: 'string' },
+        phone_confirm: { type: 'boolean' },
+        user_metadata: { type: 'object' },
+        app_metadata: { type: 'object' },
+        ban_duration: { type: 'string', description: 'ISO-8601 duration (e.g. `24h`).' },
+      },
+      required: ['project_ref', 'user_id'],
+    },
+  },
+  {
+    name: 'supabase__delete_user',
+    description:
+      'Delete a project user by id. Backed by DELETE {ref}.supabase.co/auth/v1/admin/users/{user_id}. Irreversible — pops the human gate by default.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        user_id: { type: 'string', description: 'GoTrue user id (UUID).' },
+      },
+      required: ['project_ref', 'user_id'],
+    },
+  },
+  {
+    name: 'supabase__generate_link',
+    description:
+      'Generate a one-time auth link (signup / invite / magiclink / recovery / email_change_current / email_change_new). Backed by POST {ref}.supabase.co/auth/v1/admin/generate_link. Response includes `action_link` (URL).',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        type: {
+          type: 'string',
+          enum: [
+            'signup',
+            'invite',
+            'magiclink',
+            'recovery',
+            'email_change_current',
+            'email_change_new',
+          ],
+          description: 'Link kind.',
+        },
+        email: { type: 'string', description: 'Target email.' },
+        password: { type: 'string', description: 'For `type: signup`.' },
+        new_email: { type: 'string', description: 'For `type: email_change_*`.' },
+        redirect_to: {
+          type: 'string',
+          description: 'Post-redirect URL (allow-listed in auth config).',
+        },
+        data: { type: 'object', description: 'Optional user_metadata to set on signup.' },
+      },
+      required: ['project_ref', 'type', 'email'],
+    },
+  },
+
+  // ─── storage/buckets — data plane writes ─────────────────────────────────
+  {
+    name: 'supabase__create_bucket',
+    description:
+      'Create a storage bucket. Backed by POST {ref}.supabase.co/storage/v1/bucket. Set `public: true` for a public-read bucket (URL-served), otherwise consumers need a signed URL.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        id: { type: 'string', description: 'Bucket id (slug — usually same as `name`).' },
+        name: { type: 'string', description: 'Bucket display name.' },
+        public: { type: 'boolean', description: 'If true, objects are reachable by public URL.' },
+        file_size_limit: { type: 'number', description: 'Per-object byte size cap.' },
+        allowed_mime_types: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'MIME types accepted (e.g. `image/png`).',
+        },
+      },
+      required: ['project_ref', 'id', 'name'],
+    },
+  },
+  {
+    name: 'supabase__update_bucket',
+    description:
+      'Update a storage bucket (public flag, size limit, MIME list). Backed by PUT {ref}.supabase.co/storage/v1/bucket/{id}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        id: { type: 'string', description: 'Bucket id.' },
+        public: { type: 'boolean' },
+        file_size_limit: { type: 'number' },
+        allowed_mime_types: { type: 'array', items: { type: 'string' } },
+      },
+      required: ['project_ref', 'id'],
+    },
+  },
+  {
+    name: 'supabase__delete_bucket',
+    description:
+      'Delete a storage bucket. Backed by DELETE {ref}.supabase.co/storage/v1/bucket/{id}. Bucket must be empty (use list_objects + delete_object first).',
+    inputSchema: {
+      type: 'object',
+      properties: { ...projectArg, id: { type: 'string', description: 'Bucket id.' } },
+      required: ['project_ref', 'id'],
+    },
+  },
+
+  // ─── storage/objects — data plane ────────────────────────────────────────
+  {
+    name: 'supabase__list_objects',
+    description:
+      'List objects in a bucket (with prefix filter + pagination). Backed by POST {ref}.supabase.co/storage/v1/object/list/{bucket}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        bucket: { type: 'string', description: 'Bucket id.' },
+        prefix: { type: 'string', description: 'Path prefix to scope the listing.' },
+        limit: { type: 'number', description: 'Max entries (default 100).' },
+        offset: { type: 'number', description: 'Pagination offset.' },
+        sortBy: {
+          type: 'object',
+          description: '`{ column: "name"|"created_at"|…, order: "asc"|"desc" }`.',
+        },
+      },
+      required: ['project_ref', 'bucket'],
+    },
+  },
+  {
+    name: 'supabase__upload_object',
+    description:
+      'Upload an object to a bucket. The body is sent as base64 (decoded gateway-side). Backed by POST {ref}.supabase.co/storage/v1/object/{bucket}/{path}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        bucket: { type: 'string' },
+        path: {
+          type: 'string',
+          description: 'Object path inside the bucket (e.g. `folder/file.png`).',
+        },
+        content_base64: { type: 'string', description: 'File content base64-encoded.' },
+        content_type: {
+          type: 'string',
+          description: 'MIME type (defaults to `application/octet-stream`).',
+        },
+        upsert: {
+          type: 'boolean',
+          description: 'Overwrite if the object already exists (default false).',
+        },
+      },
+      required: ['project_ref', 'bucket', 'path', 'content_base64'],
+    },
+  },
+  {
+    name: 'supabase__delete_object',
+    description:
+      'Delete a single object. Backed by DELETE {ref}.supabase.co/storage/v1/object/{bucket}/{path}.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        bucket: { type: 'string' },
+        path: { type: 'string' },
+      },
+      required: ['project_ref', 'bucket', 'path'],
+    },
+  },
+  {
+    name: 'supabase__create_signed_url',
+    description:
+      'Issue a signed URL for time-limited read access to a private object. Backed by POST {ref}.supabase.co/storage/v1/object/sign/{bucket}/{path}. Response includes `signedURL`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...projectArg,
+        bucket: { type: 'string' },
+        path: { type: 'string' },
+        expires_in: {
+          type: 'number',
+          description: 'TTL in seconds (default 3600).',
+        },
+      },
+      required: ['project_ref', 'bucket', 'path'],
+    },
+  },
 ];

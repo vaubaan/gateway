@@ -686,3 +686,310 @@ describe('SupabaseAdapter — executeCall (new write surface)', () => {
     expect(JSON.parse(init.body as string)).toEqual(['API_KEY', 'DB_URL']);
   });
 });
+
+describe('SupabaseAdapter — classify (data plane surface)', () => {
+  type Row = {
+    tool: string;
+    args: Record<string, unknown>;
+    plane: 'auth' | 'storage';
+    level: string;
+    action: 'read' | 'write';
+  };
+  const cases: readonly Row[] = [
+    {
+      tool: 'supabase__list_users',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh' },
+      plane: 'auth',
+      level: 'users',
+      action: 'read',
+    },
+    {
+      tool: 'supabase__create_user',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', email: 'a@b.c' },
+      plane: 'auth',
+      level: 'users',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__delete_user',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', user_id: 'uuid-1' },
+      plane: 'auth',
+      level: 'users',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__generate_link',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', type: 'magiclink', email: 'a@b.c' },
+      plane: 'auth',
+      level: 'users',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__create_bucket',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', id: 'avatars', name: 'avatars' },
+      plane: 'storage',
+      level: 'buckets',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__delete_bucket',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', id: 'avatars' },
+      plane: 'storage',
+      level: 'buckets',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__list_objects',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', bucket: 'avatars' },
+      plane: 'storage',
+      level: 'objects',
+      action: 'read',
+    },
+    {
+      tool: 'supabase__upload_object',
+      args: {
+        project_ref: 'qsockrvwpfzvxxecwjvh',
+        bucket: 'avatars',
+        path: 'a.png',
+        content_base64: 'xx',
+      },
+      plane: 'storage',
+      level: 'objects',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__delete_object',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', bucket: 'avatars', path: 'a.png' },
+      plane: 'storage',
+      level: 'objects',
+      action: 'write',
+    },
+    {
+      tool: 'supabase__create_signed_url',
+      args: { project_ref: 'qsockrvwpfzvxxecwjvh', bucket: 'avatars', path: 'a.png' },
+      plane: 'storage',
+      level: 'objects',
+      action: 'read',
+    },
+  ];
+
+  for (const { tool, args, plane, level, action } of cases) {
+    test(`${tool} → ${plane}/${level}:${action} @staging`, () => {
+      const adapter = new SupabaseAdapter();
+      expect(adapter.classify(tool, args, [binding])).toEqual({
+        capability: { provider: 'supabase', plane, level, action, env: 'staging' },
+      });
+    });
+  }
+});
+
+describe('SupabaseAdapter — executeCall (data plane via service_role)', () => {
+  /** Mock fetch that returns service_role on the first /api-keys call, then a
+   *  scripted response on the next data plane call. */
+  function dataPlaneFetch(dataResponse: {
+    ok?: boolean;
+    status?: number;
+    body?: unknown;
+    contentType?: string;
+  }) {
+    const fetchImpl = vi.fn();
+    // First call: /api-keys returns service_role.
+    fetchImpl.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve([
+          { name: 'anon', api_key: 'eyJ.anon.x' },
+          { name: 'service_role', api_key: 'eyJ.service_role.x' },
+        ]),
+      text: () => Promise.resolve('[]'),
+    });
+    // Second call: the actual data plane endpoint.
+    const ct = dataResponse.contentType ?? 'application/json';
+    fetchImpl.mockResolvedValueOnce({
+      ok: dataResponse.ok ?? true,
+      status: dataResponse.status ?? 200,
+      headers: { get: () => ct },
+      json: () => Promise.resolve(dataResponse.body ?? {}),
+      text: () => Promise.resolve(JSON.stringify(dataResponse.body ?? '')),
+    });
+    return fetchImpl;
+  }
+
+  test('list_users GETs /auth/v1/admin/users with service_role Bearer + apikey', async () => {
+    const fetchImpl = dataPlaneFetch({ body: { users: [{ id: 'u1' }] } });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    const out = (await adapter.executeCall(baseAdmin, binding, 'supabase__list_users', {
+      project_ref: 'abc',
+      per_page: 25,
+    })) as { users: { id: string }[] };
+    expect(out.users[0]?.id).toBe('u1');
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    // First call: PAT → /api-keys (Mgmt API).
+    const [mgmtUrl, mgmtInit] = fetchImpl.mock.calls[0] as [string, RequestInit];
+    expect(mgmtUrl).toBe('https://api.supabase.com/v1/projects/abc/api-keys');
+    expect((mgmtInit.headers as Record<string, string>).Authorization).toBe('Bearer sbp_xxx');
+    // Second call: service_role → data plane.
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    expect(dpUrl).toBe('https://abc.supabase.co/auth/v1/admin/users?page=1&per_page=25');
+    const headers = dpInit.headers as Record<string, string>;
+    expect(headers.Authorization).toBe('Bearer eyJ.service_role.x');
+    expect(headers.apikey).toBe('eyJ.service_role.x');
+  });
+
+  test('create_user POSTs /auth/v1/admin/users with project_ref stripped', async () => {
+    const fetchImpl = dataPlaneFetch({ body: { id: 'u1', email: 'a@b.c' } });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__create_user', {
+      project_ref: 'abc',
+      email: 'a@b.c',
+      password: 'secret',
+      email_confirm: true,
+    });
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    expect(dpUrl).toBe('https://abc.supabase.co/auth/v1/admin/users');
+    expect(dpInit.method).toBe('POST');
+    expect(JSON.parse(dpInit.body as string)).toEqual({
+      email: 'a@b.c',
+      password: 'secret',
+      email_confirm: true,
+    });
+  });
+
+  test('update_user PUTs /auth/v1/admin/users/{user_id} with user_id stripped from body', async () => {
+    const fetchImpl = dataPlaneFetch({ body: { id: 'u1' } });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__update_user', {
+      project_ref: 'abc',
+      user_id: 'u1',
+      app_metadata: { role: 'admin' },
+    });
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    expect(dpUrl).toBe('https://abc.supabase.co/auth/v1/admin/users/u1');
+    expect(dpInit.method).toBe('PUT');
+    expect(JSON.parse(dpInit.body as string)).toEqual({ app_metadata: { role: 'admin' } });
+  });
+
+  test('delete_user DELETEs /auth/v1/admin/users/{user_id}', async () => {
+    const fetchImpl = dataPlaneFetch({ status: 204, body: null });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__delete_user', {
+      project_ref: 'abc',
+      user_id: 'u1',
+    });
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    expect(dpUrl).toBe('https://abc.supabase.co/auth/v1/admin/users/u1');
+    expect(dpInit.method).toBe('DELETE');
+  });
+
+  test('generate_link POSTs /auth/v1/admin/generate_link', async () => {
+    const fetchImpl = dataPlaneFetch({ body: { action_link: 'https://abc/...' } });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__generate_link', {
+      project_ref: 'abc',
+      type: 'magiclink',
+      email: 'a@b.c',
+    });
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    expect(dpUrl).toBe('https://abc.supabase.co/auth/v1/admin/generate_link');
+    expect(dpInit.method).toBe('POST');
+    expect(JSON.parse(dpInit.body as string)).toEqual({ type: 'magiclink', email: 'a@b.c' });
+  });
+
+  test('create_bucket POSTs /storage/v1/bucket', async () => {
+    const fetchImpl = dataPlaneFetch({ body: { name: 'avatars' } });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__create_bucket', {
+      project_ref: 'abc',
+      id: 'avatars',
+      name: 'avatars',
+      public: true,
+    });
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    expect(dpUrl).toBe('https://abc.supabase.co/storage/v1/bucket');
+    expect(dpInit.method).toBe('POST');
+    expect(JSON.parse(dpInit.body as string)).toEqual({
+      id: 'avatars',
+      name: 'avatars',
+      public: true,
+    });
+  });
+
+  test('delete_bucket DELETEs /storage/v1/bucket/{id}', async () => {
+    const fetchImpl = dataPlaneFetch({ body: {} });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__delete_bucket', {
+      project_ref: 'abc',
+      id: 'avatars',
+    });
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    expect(dpUrl).toBe('https://abc.supabase.co/storage/v1/bucket/avatars');
+    expect(dpInit.method).toBe('DELETE');
+  });
+
+  test('list_objects POSTs /storage/v1/object/list/{bucket} with prefix body', async () => {
+    const fetchImpl = dataPlaneFetch({ body: [{ name: 'a.png' }] });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__list_objects', {
+      project_ref: 'abc',
+      bucket: 'avatars',
+      prefix: 'sub/',
+      limit: 10,
+    });
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    expect(dpUrl).toBe('https://abc.supabase.co/storage/v1/object/list/avatars');
+    expect(dpInit.method).toBe('POST');
+    expect(JSON.parse(dpInit.body as string)).toEqual({ prefix: 'sub/', limit: 10 });
+  });
+
+  test('upload_object POSTs raw bytes (base64-decoded) with Content-Type + x-upsert header', async () => {
+    const fetchImpl = dataPlaneFetch({ body: { Key: 'avatars/a.png' } });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__upload_object', {
+      project_ref: 'abc',
+      bucket: 'avatars',
+      path: 'folder/a.png',
+      content_base64: Buffer.from('hello').toString('base64'),
+      content_type: 'image/png',
+      upsert: true,
+    });
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    // Path separators preserved, segments URL-encoded.
+    expect(dpUrl).toBe('https://abc.supabase.co/storage/v1/object/avatars/folder/a.png');
+    expect(dpInit.method).toBe('POST');
+    const headers = dpInit.headers as Record<string, string>;
+    expect(headers['Content-Type']).toBe('image/png');
+    expect(headers['x-upsert']).toBe('true');
+    // Body is the raw Buffer (bytes) — not JSON.
+    expect((dpInit.body as Buffer).toString('utf8')).toBe('hello');
+  });
+
+  test('create_signed_url POSTs /storage/v1/object/sign/{bucket}/{path} with expiresIn', async () => {
+    const fetchImpl = dataPlaneFetch({ body: { signedURL: '/object/sign/...' } });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await adapter.executeCall(baseAdmin, binding, 'supabase__create_signed_url', {
+      project_ref: 'abc',
+      bucket: 'avatars',
+      path: 'folder/a.png',
+      expires_in: 600,
+    });
+    const [dpUrl, dpInit] = fetchImpl.mock.calls[1] as [string, RequestInit];
+    expect(dpUrl).toBe('https://abc.supabase.co/storage/v1/object/sign/avatars/folder/a.png');
+    expect(dpInit.method).toBe('POST');
+    expect(JSON.parse(dpInit.body as string)).toEqual({ expiresIn: 600 });
+  });
+
+  test('data plane throws if /api-keys returns no service_role', async () => {
+    const fetchImpl = vi.fn();
+    fetchImpl.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve([{ name: 'anon', api_key: 'eyJ.anon.x' }]),
+      text: () => Promise.resolve('[]'),
+    });
+    const adapter = new SupabaseAdapter({ fetchImpl: fetchImpl as never });
+    await expect(
+      adapter.executeCall(baseAdmin, binding, 'supabase__list_users', { project_ref: 'abc' }),
+    ).rejects.toThrow(/no 'service_role' entry/);
+  });
+});
