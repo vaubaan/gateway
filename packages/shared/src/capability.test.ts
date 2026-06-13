@@ -205,7 +205,7 @@ describe('isValidCapability', () => {
   });
 });
 
-describe('covers / isGranted — exact 5-tuple, env defensive', () => {
+describe('covers / isGranted — asymmetric env (fan-out for env-less grants)', () => {
   const need: Capability = {
     provider: 'vercel',
     plane: 'runtime',
@@ -213,19 +213,40 @@ describe('covers / isGranted — exact 5-tuple, env defensive', () => {
     action: 'write',
     env: 'prod',
   };
+  const envLessGrant: Capability = {
+    provider: 'vercel',
+    plane: 'runtime',
+    level: 'deployment',
+    action: 'write',
+  };
 
   test('exact match covers', () => {
     expect(covers({ ...need }, need)).toBe(true);
   });
 
-  test('wrong env does not cover', () => {
+  test('grant @staging does not cover @prod', () => {
     expect(covers({ ...need, env: 'staging' }, need)).toBe(false);
   });
 
-  test('env-less grant does not cover @prod requirement', () => {
-    expect(
-      covers({ provider: 'vercel', plane: 'runtime', level: 'deployment', action: 'write' }, need),
-    ).toBe(false);
+  test('env-less grant covers @prod (fan-out, spec §5.1 #3)', () => {
+    expect(covers(envLessGrant, need)).toBe(true);
+  });
+
+  test('env-less grant covers env-less required', () => {
+    expect(covers(envLessGrant, { ...envLessGrant })).toBe(true);
+  });
+
+  test('grant @prod does NOT cover env-less required (asymmetric)', () => {
+    expect(covers(need, { ...envLessGrant })).toBe(false);
+  });
+
+  test('excludeEnvs narrows the fan-out (spec §5.1 #4)', () => {
+    expect(covers(envLessGrant, need, { excludeEnvs: ['prod'] })).toBe(false);
+    expect(covers(envLessGrant, { ...need, env: 'staging' }, { excludeEnvs: ['prod'] })).toBe(true);
+  });
+
+  test('excludeEnvs only bites env-less grants — explicit @X grant ignores it', () => {
+    expect(covers({ ...need }, need, { excludeEnvs: ['prod'] })).toBe(true);
   });
 
   test('different provider does not cover', () => {
@@ -247,5 +268,12 @@ describe('covers / isGranted — exact 5-tuple, env defensive', () => {
     ];
     expect(isGranted(set, need)).toBe(true);
     expect(isGranted(set, { ...need, env: 'staging' })).toBe(false);
+  });
+
+  test('isGranted with env-less grant fans out across envs', () => {
+    const set: Capability[] = [envLessGrant];
+    expect(isGranted(set, need)).toBe(true);
+    expect(isGranted(set, { ...need, env: 'staging' })).toBe(true);
+    expect(isGranted(set, need, { excludeEnvs: ['prod'] })).toBe(false);
   });
 });

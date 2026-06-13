@@ -155,7 +155,7 @@ export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
       {
         slug: 'db',
         description: 'The Postgres database — rows, tables, RLS, project.',
-        knownEnvs: ['staging', 'prod'],
+        knownEnvs: [],
         envHint: 'an environment slug from your Supabase bindings (one project per env).',
         levels: [
           {
@@ -192,7 +192,7 @@ export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
       {
         slug: 'storage',
         description: 'Object storage — files, buckets, bucket policies.',
-        knownEnvs: ['staging', 'prod'],
+        knownEnvs: [],
         envHint: 'same environment slugs as the db plane (one project per env).',
         levels: [
           {
@@ -222,7 +222,7 @@ export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
       {
         slug: 'auth',
         description: 'User identity — users, sessions, OAuth providers, JWT settings.',
-        knownEnvs: ['staging', 'prod'],
+        knownEnvs: [],
         envHint: 'same environment slugs as the db plane.',
         levels: [
           {
@@ -252,7 +252,7 @@ export const PROVIDER_CATALOG: readonly ProviderDescriptor[] = [
       {
         slug: 'functions',
         description: 'Supabase Edge Functions — Deno runtime deployments + their config.',
-        knownEnvs: ['staging', 'prod'],
+        knownEnvs: [],
         envHint: 'same environment slugs as the db plane.',
         levels: [
           {

@@ -75,6 +75,17 @@ export interface ProviderBinding {
    * TS shape so legacy binding literals stay valid; absent ≡ null.
    */
   environment?: string | null;
+  /**
+   * GitHub-only knobs that narrow an env-less grant's fan-out (spec §5.1 #4).
+   * A grant `github:repo/code:write` (env-less) covers any branch by default ;
+   * these fields subtract from that fan-out at runtime.
+   *  - `env_less_exclude_branch`    : a single branch name to deny.
+   *  - `env_less_exclude_protected` : when true, deny the repo's protected
+   *    branches (resolved at call time, cached short-TTL).
+   * Mutually exclusive (DB CHECK XOR). Always null/false outside github.
+   */
+  env_less_exclude_branch?: string | null;
+  env_less_exclude_protected?: boolean | null;
   created_at: string;
 }
 

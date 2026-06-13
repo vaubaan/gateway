@@ -325,17 +325,31 @@ Le couple `…:write@prod` (par-env) vs `…:write` (env-less) pose la question 
    **refuse au mint** un `(action='write', env_pattern='*', gate='allow')` via la CHECK
    constraint SQL (anti-pattern). On scope toujours (`feature/* → allow`), jamais
    `* → allow` en écriture.
-3. **L'env-less qui « fane out » ⊇ tous les envs ⟹ gate = max des envs couverts.**
-   Une écriture *all-env* (`vercel:runtime/config:write` sans `@`) touche **prod
-   compris**. Elle ne peut donc **pas** être plus laxiste que `…@prod`. En pratique,
-   le seed `*:*:*:write:* → confirm` la couvre déjà (l'env-less ne matche que les
-   règles `@ *`), donc tout env-less write pop pour confirmation humaine par défaut.
-   Si tu veux du grain plus fin, le classifieur peut émettre `@all` (conspicu, gateable
-   comme l'union des envs) ou l'engine peut expanser à l'union au mint.
+3. **L'env-less *grant* = fan-out réel.** Une grant `vercel:runtime/config:write`
+   sans `@` couvre **n'importe quel env requis** au runtime (`@prod` compris).
+   `covers()` autorise donc une grant env-less à matcher un required `@X` quel
+   que soit X — c'est ça, le fan-out. Combiné au default-deny côté policy : pour
+   que l'IA tire une grant env-less, la règle qui l'a mintée doit avoir explicitement
+   accepté l'écriture all-env (en pratique seed `*:*:*:write:* → confirm` → toute
+   grant env-less write pop pour confirmation humaine).
+4. **Exclusion par binding (opt-in, github-only en MVP).** Chaque binding
+   `provider_bindings` peut déclarer un *exclude set* qui retire des envs du
+   fan-out d'une grant env-less. Sur GitHub :
+   - `env_less_exclude_branch text` : un nom de branche unique à exclure (typiquement
+     `main`) ; ou
+   - `env_less_exclude_protected boolean` : exclut dynamiquement la liste des
+     **protected branches** du repo (lookup via l'install token, cachée TTL court).
 
-> Net : prod n'est jamais protégé par une exception sur `*` ; il l'est par le
-> **default-deny** (rien n'est ai sans règle) + l'interdiction de `*→ai` en write +
-> le fait qu'un fan-out (`@all`) hérite du gate le plus strict.
+   Au runtime, `covers(granted, required, { excludeEnvs })` retourne `false`
+   quand `granted.env === undefined && required.env ∈ excludeEnvs`. Net : une
+   grant env-less sur un repo avec `exclude_branch='main'` peut écrire sur
+   `feature/*` mais 403 sur `main` — l'opérateur n'a pas besoin de doubler avec
+   des règles policy par-branche.
+
+> Net : prod / main / branches protégées sont protégés par la **couche policy**
+> au mint (default-deny + interdiction `*→allow` en write) ET par la **couche
+> binding** au runtime (exclude set qui rétrécit le fan-out d'une grant env-less).
+> Les deux couches sont indépendantes ; chacune peut suffire selon le scenario.
 
 ## 6. Le classifieur : le cœur déplacé dans le plugin
 
@@ -402,12 +416,13 @@ flowchart TD
 
 - **Stateless** : le hot-path ne fait que comparer la capability requise aux
   capabilities du token. Aucun état d'approbation ici (tout est joué au mint, §8).
-- **Filtre env défensif** : pas de wildcard implicite. Pour staging **et** prod, le
-  token porte les deux capabilities énumérées. Chaque accès calqué est une grant
-  explicite et auditable. **Symétriquement**, un grant calqué (`@prod`) ne couvre
-  **pas** un requirement non-calqué : `vercel:deployment:read@prod` et
-  `vercel:deployment:read` sont deux capabilities distinctes — la première autorise
-  des lectures bornées à prod, la seconde des lectures globales (non calquées).
+- **Filtre env défensif, asymétrique** :
+  - Grant **calqué** (`@X`) → couvre exactement le required `@X`. `@prod` ne
+    couvre pas `@staging`, et ne couvre pas non plus un required env-less : ce
+    sont deux capabilities distinctes (la première borne à prod, la seconde
+    traite des data non-calqués).
+  - Grant **env-less** → couvre n'importe quel required env (fan-out, cf. §5.1 #3)
+    sauf les envs listés dans l'`excludeEnvs` du binding matché. Cf. §5.1 #4.
 - **Least-privilege par le rang** : une grant `niv k` n'implique **jamais** `niv k±1`.
   L'ordre sert au raisonnement de blast, pas à un héritage.
 - **Validation au mint** : une capability demandée doit appartenir à la surface
@@ -425,8 +440,8 @@ couches, chaque tool porte un tag `EnvResolution` :
 
 | mode | sémantique | filtre statique | runtime |
 |---|---|---|---|
-| `static` | le classifieur émet une capability **non calquée** quels que soient les args (ex: `vercel__list_deployments` → `vercel:deployment:read`). | un grant doit matcher **5-tuple exact, env compris** (i.e. env-less ↔ env-less). | idem `covers()`. |
-| `runtime` | le classifieur résout `env` depuis les args ou le binding matché (ex: `vercel__upsert_env_var` lit `args.target` ; les tools Supabase lisent l'`environment` du binding). | un grant matche dès que le 4-tuple `(provider, plane, level, action)` coïncide — n'importe quel `@env` côté grant est un match potentiel. | `covers()` re-mord avec env strict ; un grant `@preview` qui survit au filtre statique sera denied au call si l'env résolu est `@prod`. |
+| `static` | le classifieur émet une capability **non calquée** quels que soient les args (ex: `vercel__list_deployments` → `vercel:deployment:read`). | grant `@X` denied (env-less requis), grant env-less ALLOW. | `covers()` autorise grant env-less ↔ required env-less ; grant `@X` ne couvre pas un required env-less. |
+| `runtime` | le classifieur résout `env` depuis les args ou le binding matché (ex: `vercel__upsert_env_var` lit `args.target` ; les tools Supabase lisent l'`environment` du binding). | un grant matche dès que le 4-tuple `(provider, plane, level, action)` coïncide — n'importe quel `@env` côté grant est un match potentiel. | `covers()` re-mord avec : grant `@X` couvre required `@X` exact ; grant env-less couvre required `@*` (fan-out §5.1 #3) modulo `excludeEnvs` du binding (§5.1 #4). |
 
 Le mode est **par-tool**, pas par-cap : chaque provider expose un
 `<provider>ToolEnvResolution(tool): 'static' | 'runtime'` à côté de

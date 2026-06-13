@@ -31,8 +31,14 @@ export interface MintedToken {
   expiresAt: Date;
 }
 
-/** The capability a concrete call requires, or a structural denial. */
-export type ClassifyResult = { capability: Capability } | { denied: string };
+/** The capability a concrete call requires, or a structural denial.
+ *  `binding` is the binding the call resolved to (when applicable) — the
+ *  gateway uses it to read per-binding policy knobs like the github
+ *  env-less-exclude set (spec §5.1 #4). Optional ; not all classifiers / not
+ *  all tools resolve to a binding. */
+export type ClassifyResult =
+  | { capability: Capability; binding?: ProviderBinding }
+  | { denied: string };
 
 export interface ProviderAdapter {
   readonly provider: Provider;

@@ -103,6 +103,13 @@ function boundRepos(bindings: ReadonlyArray<ProviderBinding>): string[] {
   return bindings.filter((b) => b.provider === 'github').map((b) => b.resource_ref);
 }
 
+function bindingFor(
+  bindings: ReadonlyArray<ProviderBinding>,
+  ref: string,
+): ProviderBinding | undefined {
+  return bindings.find((b) => b.provider === 'github' && b.resource_ref === ref);
+}
+
 function strArg(args: Record<string, unknown>, key: string): string | undefined {
   const v = args[key];
   return typeof v === 'string' && v.length > 0 ? v : undefined;
@@ -146,29 +153,30 @@ export function classifyGithub(
   if (!repos.includes(ref)) {
     return { denied: `repo '${ref}' is not bound to this project.` };
   }
+  const binding = bindingFor(bindings, ref);
 
   switch (kind) {
     case 'read-code':
-      return { capability: cap('code', 'read') };
+      return { capability: cap('code', 'read'), binding };
     case 'read-ci':
-      return { capability: cap('ci', 'read') };
+      return { capability: cap('ci', 'read'), binding };
     case 'read-rules':
-      return { capability: cap('rules', 'read') };
+      return { capability: cap('rules', 'read'), binding };
     case 'write-code':
-      return { capability: cap('code', 'write') };
+      return { capability: cap('code', 'write'), binding };
     case 'write-code-branch': {
       const branch = strArg(args, 'branch');
-      return { capability: cap('code', 'write', branch) };
+      return { capability: cap('code', 'write', branch), binding };
     }
     case 'write-code-head': {
       const head = strArg(args, 'head');
-      return { capability: cap('code', 'write', head) };
+      return { capability: cap('code', 'write', head), binding };
     }
     case 'merge-pr':
       // The base branch isn't always in args ; assume the default protected branch.
       // The policy layer gates `write@main` strictly (human-gated by default).
-      return { capability: cap('code', 'write', strArg(args, 'base') ?? 'main') };
+      return { capability: cap('code', 'write', strArg(args, 'base') ?? 'main'), binding };
     case 'global-read':
-      return { capability: cap('code', 'read') };
+      return { capability: cap('code', 'read'), binding };
   }
 }

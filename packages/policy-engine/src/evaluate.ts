@@ -10,7 +10,12 @@
  * env defensive filter : a `@prod` requirement needs a `@prod` grant.
  */
 
-import { type Capability, formatCapability, isGranted } from '@vaubaan/shared';
+import {
+  type Capability,
+  type CoverageContext,
+  formatCapability,
+  isGranted,
+} from '@vaubaan/shared';
 
 export interface PolicyDecision {
   decision: 'allowed' | 'denied';
@@ -23,8 +28,9 @@ export interface PolicyDecision {
 export function evaluateCapability(
   granted: readonly Capability[],
   required: Capability,
+  ctx?: CoverageContext,
 ): PolicyDecision {
-  if (isGranted(granted, required)) {
+  if (isGranted(granted, required, ctx)) {
     return { decision: 'allowed', capabilityMatched: formatCapability(required) };
   }
   const need = formatCapability(required);

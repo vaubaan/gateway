@@ -8,6 +8,8 @@ interface BindingRow {
   provider: string;
   resource_ref: string;
   environment: string | null;
+  env_less_exclude_branch: string | null;
+  env_less_exclude_protected: boolean | null;
 }
 
 interface BashHostRow {
@@ -42,7 +44,9 @@ export default async function NewTokenPage({
   const [{ data: bindings }, { data: bashHostsRows }] = await Promise.all([
     supabase
       .from('provider_bindings')
-      .select('provider, resource_ref, environment')
+      .select(
+        'provider, resource_ref, environment, env_less_exclude_branch, env_less_exclude_protected',
+      )
       .eq('project_id', proj.id)
       .returns<BindingRow[]>(),
     supabase

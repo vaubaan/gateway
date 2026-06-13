@@ -156,22 +156,49 @@ export function isValidCapability(c: Capability): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Does a granted capability authorize a required one ? Exact 5-tuple match. No
- * implicit ladder, no env wildcard — that is the env defensive filter (spec
- * §7) : a `@prod` requirement needs a `@prod` grant ; an env-less requirement
- * needs an env-less grant. The two are distinct capabilities.
+ * Optional coverage context. Today its only field is `excludeEnvs` — the set
+ * of envs that an env-less grant should NOT fan-out to, sourced from the
+ * matched binding (spec §5.1 #4 ; github-only in MVP).
  */
-export function covers(granted: Capability, required: Capability): boolean {
-  return (
-    granted.provider === required.provider &&
-    granted.plane === required.plane &&
-    granted.level === required.level &&
-    granted.action === required.action &&
-    granted.env === required.env
-  );
+export interface CoverageContext {
+  excludeEnvs?: readonly string[];
+}
+
+/**
+ * Does a granted capability authorize a required one ? Asymmetric env match
+ * (spec §5.1, §7) :
+ *
+ *  - granted `@X` covers required `@X` exactly ; no other env, and not
+ *    env-less required.
+ *  - granted env-less covers required env-less, AND covers any required `@X`
+ *    (fan-out) — unless `X ∈ ctx.excludeEnvs`.
+ *
+ * The (provider, plane, level, action) 4-tuple must match exactly in all
+ * cases. No implicit rank ladder.
+ */
+export function covers(granted: Capability, required: Capability, ctx?: CoverageContext): boolean {
+  if (
+    granted.provider !== required.provider ||
+    granted.plane !== required.plane ||
+    granted.level !== required.level ||
+    granted.action !== required.action
+  ) {
+    return false;
+  }
+  if (granted.env !== undefined) {
+    return granted.env === required.env;
+  }
+  // granted env-less : fan-out.
+  if (required.env === undefined) return true;
+  if (ctx?.excludeEnvs && ctx.excludeEnvs.includes(required.env)) return false;
+  return true;
 }
 
 /** Is the required capability satisfied by any capability in the granted set ? */
-export function isGranted(grantedSet: readonly Capability[], required: Capability): boolean {
-  return grantedSet.some((g) => covers(g, required));
+export function isGranted(
+  grantedSet: readonly Capability[],
+  required: Capability,
+  ctx?: CoverageContext,
+): boolean {
+  return grantedSet.some((g) => covers(g, required, ctx));
 }

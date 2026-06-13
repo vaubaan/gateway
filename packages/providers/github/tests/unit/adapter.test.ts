@@ -408,7 +408,7 @@ describe('GitHubAdapter — classify (capability model)', () => {
   test('read on a bound repo → repo/code:read (env-less)', () => {
     expect(
       adapter.classify('github__list_branches', { owner: 'acme', repo: 'app' }, bindings),
-    ).toEqual({
+    ).toMatchObject({
       capability: { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
     });
   });
@@ -420,7 +420,7 @@ describe('GitHubAdapter — classify (capability model)', () => {
         { owner: 'acme', repo: 'app', pull_number: 1 },
         bindings,
       ),
-    ).toEqual({
+    ).toMatchObject({
       capability: { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
     });
   });
@@ -432,7 +432,7 @@ describe('GitHubAdapter — classify (capability model)', () => {
         { owner: 'acme', repo: 'app', branch: 'feature/x', path: 'a', content: 'b', message: 'm' },
         bindings,
       ),
-    ).toEqual({
+    ).toMatchObject({
       capability: {
         provider: 'github',
         plane: 'repo',
@@ -450,7 +450,7 @@ describe('GitHubAdapter — classify (capability model)', () => {
         { owner: 'acme', repo: 'app', branch: 'main', message: 'm', files: [] },
         bindings,
       ),
-    ).toEqual({
+    ).toMatchObject({
       capability: {
         provider: 'github',
         plane: 'repo',
@@ -468,7 +468,7 @@ describe('GitHubAdapter — classify (capability model)', () => {
         { owner: 'acme', repo: 'app', pull_number: 1 },
         bindings,
       ),
-    ).toEqual({
+    ).toMatchObject({
       capability: {
         provider: 'github',
         plane: 'repo',
@@ -486,7 +486,7 @@ describe('GitHubAdapter — classify (capability model)', () => {
         { owner: 'acme', repo: 'app', head: 'feature/x', base: 'main', title: 't' },
         bindings,
       ),
-    ).toEqual({
+    ).toMatchObject({
       capability: {
         provider: 'github',
         plane: 'repo',
@@ -517,7 +517,7 @@ describe('GitHubAdapter — classify (capability model)', () => {
 
   test('list_workflows → repo/ci:read (covers the ci plane)', () => {
     const d = adapter.classify('github__list_workflows', { owner: 'acme', repo: 'app' }, bindings);
-    expect(d).toEqual({
+    expect(d).toMatchObject({
       capability: { provider: 'github', plane: 'repo', level: 'ci', action: 'read' },
     });
   });
@@ -528,7 +528,7 @@ describe('GitHubAdapter — classify (capability model)', () => {
       { owner: 'acme', repo: 'app', branch: 'main' },
       bindings,
     );
-    expect(d).toEqual({
+    expect(d).toMatchObject({
       capability: { provider: 'github', plane: 'repo', level: 'ci', action: 'read' },
     });
   });
@@ -539,8 +539,18 @@ describe('GitHubAdapter — classify (capability model)', () => {
       { owner: 'acme', repo: 'app', branch: 'main' },
       bindings,
     );
-    expect(d).toEqual({
+    expect(d).toMatchObject({
       capability: { provider: 'github', plane: 'repo', level: 'rules', action: 'read' },
     });
+  });
+
+  test('classify result carries the matched binding (for excludeEnvs lookup)', () => {
+    const d = adapter.classify(
+      'github__create_or_update_file',
+      { owner: 'acme', repo: 'app', branch: 'main', path: 'a', content: 'b', message: 'm' },
+      bindings,
+    );
+    if ('denied' in d) throw new Error('expected capability');
+    expect(d.binding?.resource_ref).toBe('acme/app');
   });
 });

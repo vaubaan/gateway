@@ -33,9 +33,18 @@ describe('evaluateCapability', () => {
     expect(d.decision).toBe('denied');
   });
 
-  test('env defensive filter: @prod required, env-less grant → denied', () => {
+  test('env-less grant fans out to @prod (spec §5.1 #3)', () => {
     const granted = [cap('vercel', 'runtime', 'deployment', 'write')];
     const d = evaluateCapability(granted, cap('vercel', 'runtime', 'deployment', 'write', 'prod'));
+    expect(d.decision).toBe('allowed');
+    expect(d.capabilityMatched).toBe('vercel:deployment:write@prod');
+  });
+
+  test('env-less grant + excludeEnvs → fan-out denied on excluded env (spec §5.1 #4)', () => {
+    const granted = [cap('github', 'repo', 'code', 'write')];
+    const d = evaluateCapability(granted, cap('github', 'repo', 'code', 'write', 'main'), {
+      excludeEnvs: ['main'],
+    });
     expect(d.decision).toBe('denied');
   });
 

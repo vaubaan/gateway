@@ -83,6 +83,14 @@ export function BindingForm({
   const [bashName, setBashName] = useState('');
   const [bashContent, setBashContent] = useState('');
 
+  // GitHub-only : narrows the fan-out of an env-less grant (spec §5.1 #4).
+  // Default = exclude 'main', the dominant SaaS pattern (main = canonical /
+  // protected). Operator picks 'protected' for repos that already declare a
+  // protected-branches set on GitHub.
+  type ExcludeMode = 'none' | 'branch' | 'protected';
+  const [excludeMode, setExcludeMode] = useState<ExcludeMode>('branch');
+  const [excludeBranch, setExcludeBranch] = useState<string>('main');
+
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -139,12 +147,24 @@ export function BindingForm({
           `Env slug '${envClean}' must be lowercase kebab-case (e.g. 'prod', 'staging', 'preview').`,
         );
       }
+      // GitHub-only knobs : the DB CHECK enforces both XOR and github-only,
+      // so we pass nulls/false on other providers (the row will fail any
+      // accidental mis-set).
+      const githubExclude =
+        provider === 'github'
+          ? {
+              env_less_exclude_branch:
+                excludeMode === 'branch' && excludeBranch.trim() ? excludeBranch.trim() : null,
+              env_less_exclude_protected: excludeMode === 'protected',
+            }
+          : { env_less_exclude_branch: null, env_less_exclude_protected: false };
       const { error: err } = await supabase.from('provider_bindings').insert({
         project_id: projectId,
         provider,
         resource_ref: ref,
         display_name: display,
         environment: envClean || null,
+        ...githubExclude,
       });
       if (err) throw err;
       router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
@@ -276,6 +296,15 @@ export function BindingForm({
                 </Field>
               )}
 
+              {provider === 'github' && !isBash && (
+                <GithubExcludeOptions
+                  mode={excludeMode}
+                  setMode={setExcludeMode}
+                  branch={excludeBranch}
+                  setBranch={setExcludeBranch}
+                />
+              )}
+
               {error && <p style={{ color: 'var(--accent-danger-fg)', margin: 0 }}>{error}</p>}
 
               <div>
@@ -364,4 +393,86 @@ function BashFields({
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+/** GitHub binding sub-form : narrow the fan-out of env-less grants. The two
+ *  options are mutually exclusive (XOR, enforced by the DB CHECK) — see
+ *  docs/spec/gateway-capability-model.md §5.1 #4. */
+function GithubExcludeOptions({
+  mode,
+  setMode,
+  branch,
+  setBranch,
+}: {
+  mode: 'none' | 'branch' | 'protected';
+  setMode: (m: 'none' | 'branch' | 'protected') => void;
+  branch: string;
+  setBranch: (s: string) => void;
+}) {
+  return (
+    <Field
+      label="Env-less grants on this repo cover…"
+      hint={
+        <>
+          A token granted <Code>github:code:write</Code> without an <Code>@branch</Code> fans out to
+          every branch by default. Pick what to subtract from that fan-out — typically{' '}
+          <Code>main</Code> or the repo&apos;s protected set.
+        </>
+      }
+    >
+      <div style={{ display: 'grid', gap: 'var(--space-2)' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <input
+            type="radio"
+            name="exclude-mode"
+            checked={mode === 'none'}
+            onChange={() => setMode('none')}
+          />
+          <span>All branches (true fan-out, no exclusion).</span>
+        </label>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            flexWrap: 'wrap',
+          }}
+        >
+          <input
+            type="radio"
+            name="exclude-mode"
+            checked={mode === 'branch'}
+            onChange={() => setMode('branch')}
+          />
+          <span>All branches except a named one:</span>
+          <Input
+            value={branch}
+            onChange={(e) => setBranch(e.target.value)}
+            placeholder="main"
+            disabled={mode !== 'branch'}
+            autoComplete="off"
+            spellCheck={false}
+            pattern="^[a-z0-9](?:[a-z0-9/_-]*[a-z0-9])?$"
+            style={{ maxWidth: 220 }}
+          />
+        </label>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--space-2)',
+            opacity: 0.5,
+            cursor: 'not-allowed',
+          }}
+          title="Runtime enforcement for the protected-branches set is not wired yet — coming in a follow-up. For now use the named-branch option above."
+        >
+          <input type="radio" name="exclude-mode" disabled checked={mode === 'protected'} />
+          <span>
+            All branches except the repo&apos;s <strong>protected branches</strong>{' '}
+            <em>(preview — runtime enforcement pending)</em>
+          </span>
+        </label>
+      </div>
+    </Field>
+  );
 }

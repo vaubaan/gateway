@@ -30,11 +30,31 @@ import type {
 } from '@vaubaan/shared';
 import { parseApiKey, verifyApiKey } from '@vaubaan/shared';
 
-/** What a provider plugin returns when classifying a concrete call. */
-export type ClassifyResult = { capability: Capability } | { denied: string };
+/** What a provider plugin returns when classifying a concrete call. The
+ *  optional `binding` is the binding the call resolved to ; the gateway uses
+ *  it to derive per-binding policy knobs (excludeEnvs for env-less fan-out,
+ *  spec §5.1 #4). */
+export type ClassifyResult =
+  | { capability: Capability; binding?: ProviderBinding }
+  | { denied: string };
 import type { CacheClient } from './cache.ts';
 import { hashArguments, type AuditWriter } from './audit.ts';
 import { AuthError, rpcError, rpcSuccess } from './errors.ts';
+
+/** Build the `excludeEnvs` set that narrows a env-less grant's fan-out for a
+ *  given binding. Today only github bindings carry exclude knobs ; the
+ *  `env_less_exclude_protected` mode is declared in the DB but its runtime
+ *  resolution (fetch protected branches list) is not wired yet — we ignore it
+ *  here and the binding form labels it as preview. */
+function excludeEnvsFor(
+  binding: ProviderBinding | undefined,
+): { excludeEnvs?: readonly string[] } | undefined {
+  if (!binding) return undefined;
+  const exclude: string[] = [];
+  if (binding.env_less_exclude_branch) exclude.push(binding.env_less_exclude_branch);
+  if (exclude.length === 0) return undefined;
+  return { excludeEnvs: exclude };
+}
 
 function assertNotExpired(expiresAt: string | null | undefined): void {
   if (!expiresAt) return;
@@ -265,7 +285,11 @@ export class McpGateway {
         await this.audit(ctx, toolName, rawArgs, 'denied', null, classified.denied, null);
         return rpcError(id, -32603, `Vaubaan policy denied: ${classified.denied}`);
       }
-      const decision = evaluateCapability(ctx.capabilities, classified.capability);
+      const decision = evaluateCapability(
+        ctx.capabilities,
+        classified.capability,
+        excludeEnvsFor(classified.binding),
+      );
       if (decision.decision === 'denied') {
         await this.audit(ctx, toolName, rawArgs, 'denied', null, decision.reason ?? null, null);
         return rpcError(id, -32603, `Vaubaan policy denied: ${decision.reason}`);
@@ -330,7 +354,13 @@ export class McpGateway {
     }
 
     // Pure set membership : is the required capability in the granted set ?
-    const decision = evaluateCapability(ctx.capabilities, classified.capability);
+    // The matched binding may carry per-binding exclude knobs that narrow the
+    // fan-out of an env-less grant (spec §5.1 #4 ; github-only in MVP).
+    const decision = evaluateCapability(
+      ctx.capabilities,
+      classified.capability,
+      excludeEnvsFor(classified.binding),
+    );
     if (decision.decision === 'denied') {
       await this.audit(ctx, toolName, args, 'denied', null, decision.reason ?? null, null);
       return rpcError(id, -32603, `Vaubaan policy denied: ${decision.reason}`);

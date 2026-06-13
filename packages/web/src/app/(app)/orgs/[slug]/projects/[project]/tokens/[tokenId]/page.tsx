@@ -59,9 +59,19 @@ export default async function TokenPage({
       .limit(10),
     supabase
       .from('provider_bindings')
-      .select('provider, resource_ref, environment')
+      .select(
+        'provider, resource_ref, environment, env_less_exclude_branch, env_less_exclude_protected',
+      )
       .eq('project_id', proj.id)
-      .returns<Array<{ provider: string; resource_ref: string; environment: string | null }>>(),
+      .returns<
+        Array<{
+          provider: string;
+          resource_ref: string;
+          environment: string | null;
+          env_less_exclude_branch: string | null;
+          env_less_exclude_protected: boolean | null;
+        }>
+      >(),
     supabase
       .from('ssh_bindings')
       .select('host_slug')

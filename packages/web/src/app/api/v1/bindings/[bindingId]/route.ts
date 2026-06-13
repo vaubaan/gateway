@@ -1,13 +1,13 @@
 /**
- * PATCH  /api/v1/bindings/:bindingId  body: { orgSlug, resource_ref?, display_name?, environment? }
+ * PATCH  /api/v1/bindings/:bindingId  body: { orgSlug, resource_ref?, display_name?, environment?, env_less_exclude_branch?, env_less_exclude_protected? }
  * DELETE /api/v1/bindings/:bindingId?orgSlug=...
  *
- * Spec : docs/spec/vaubaan-gateway.md §8.3.
+ * Spec : docs/spec/vaubaan-gateway.md §8.3, capability §5.1 #4.
  *
- * `environment` accepts a kebab-case slug or `null` (env-less binding). The
- * gateway `covers()` check is env-strict for env-static tools, so an
- * env-qualified grant cannot reach an env-less binding — getting this field
- * right matters operationally.
+ * `environment` accepts a kebab-case slug or `null` (env-less binding).
+ * `env_less_exclude_branch` / `env_less_exclude_protected` are github-only
+ * knobs that narrow the fan-out of an env-less grant (the DB CHECK constraint
+ * enforces github-only + XOR between the two).
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -31,6 +31,15 @@ const PatchSchema = z.object({
     )
     .nullable()
     .optional(),
+  env_less_exclude_branch: z
+    .string()
+    .regex(
+      /^[a-z0-9](?:[a-z0-9/_-]*[a-z0-9])?$/,
+      "env_less_exclude_branch must be a branch slug (e.g. 'main', 'feature/x').",
+    )
+    .nullable()
+    .optional(),
+  env_less_exclude_protected: z.boolean().optional(),
 });
 
 async function invalidateOrg(orgId: string) {
@@ -71,10 +80,16 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ bindingId
     return NextResponse.json({ error: 'binding not found in this org' }, { status: 404 });
   }
 
-  const updates: Record<string, string | null> = {};
+  const updates: Record<string, string | boolean | null> = {};
   if (body.resource_ref !== undefined) updates.resource_ref = body.resource_ref;
   if (body.display_name !== undefined) updates.display_name = body.display_name;
   if (body.environment !== undefined) updates.environment = body.environment;
+  if (body.env_less_exclude_branch !== undefined) {
+    updates.env_less_exclude_branch = body.env_less_exclude_branch;
+  }
+  if (body.env_less_exclude_protected !== undefined) {
+    updates.env_less_exclude_protected = body.env_less_exclude_protected;
+  }
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: 'nothing to update' }, { status: 400 });
   }
