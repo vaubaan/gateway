@@ -25,19 +25,22 @@ const REF_HINT: Record<string, string> = {
   railway: 'project id (UUID)',
 };
 
-/** Per-provider hint for the env slug input. Mirrors `PlaneDescriptor.envHint`
- *  in the ring catalog ; kept local here so the form stays a pure client
- *  component without dragging the full catalog through props. */
-const ENV_HINT: Record<string, string> = {
-  github: 'a branch name (e.g. main, feature/x). Leave blank for env-less.',
-  vercel: 'a Vercel target — prod, preview, or development. Leave blank for env-less.',
+/** Providers that follow the "one upstream project = one env" pattern. For
+ *  these, the optional binding slug doubles as the env name stamped on every
+ *  capability resolved at call time (cf. supabase/railway classifiers).
+ *  Other providers resolve env from call args (github = branch, vercel =
+ *  target) — exposing a slug here would be misleading. */
+const PROVIDERS_WITH_BINDING_SLUG: ReadonlySet<Provider> = new Set(['supabase', 'railway']);
+
+const SLUG_HINT: Partial<Record<Provider, string>> = {
   supabase:
     'one Supabase project = one env. Defaults to the picked project name ; override with prod/staging if you want short capability slugs (e.g. supabase:db/rows:read@prod).',
-  railway: 'env resolution not wired in MVP — leave blank.',
+  railway:
+    'one Railway project = one env. Defaults to the picked project name ; override with prod/staging if you want short capability slugs (e.g. railway:runtime/deployment:write@prod).',
 };
 
 /** Kebab-case a free-form display name so it fits the `environment` column
- *  check constraint (`^[a-z0-9](-?[a-z0-9])*$`). Empty result → null env. */
+ *  check constraint (`^[a-z0-9](-?[a-z0-9])*$`). Empty result → null slug. */
 function kebabize(s: string): string {
   return s
     .toLowerCase()
@@ -51,34 +54,70 @@ interface OfferedProvider {
   error: string | null;
 }
 
+/** When set, the form switches to edit mode : provider is locked, fields are
+ *  pre-filled, and submit hits PATCH /api/v1/bindings/:id instead of an
+ *  INSERT on provider_bindings. Bash bindings have their own detail page and
+ *  are NOT edited here. */
+export interface BindingInitial {
+  bindingId: string;
+  provider: Exclude<Provider, 'bash'>;
+  resource_ref: string;
+  environment: string | null;
+  env_less_exclude_branch: string | null;
+  env_less_exclude_protected: boolean;
+}
+
+type ExcludeMode = 'none' | 'branch' | 'protected';
+
+function initialExcludeMode(init?: BindingInitial): ExcludeMode {
+  if (!init) return 'branch';
+  if (init.env_less_exclude_protected) return 'protected';
+  if (init.env_less_exclude_branch) return 'branch';
+  return 'none';
+}
+
 export function BindingForm({
   orgSlug,
   projectId,
   projectSlug,
   offered,
+  initial,
 }: {
   orgSlug: string;
   projectId: string;
   projectSlug: string;
   offered: OfferedProvider[];
+  initial?: BindingInitial;
 }) {
   const router = useRouter();
+  const isEdit = initial !== undefined;
 
-  const [provider, setProvider] = useState<Provider>(offered[0]?.provider ?? 'bash');
-  const isBash = provider === 'bash';
+  const [provider, setProvider] = useState<Provider>(
+    initial?.provider ?? offered[0]?.provider ?? 'bash',
+  );
+  // Bash sub-form only exists in create mode (bash bindings have their own
+  // detail page for editing).
+  const isBash = !isEdit && provider === 'bash';
+  const supportsBindingSlug = !isBash && PROVIDERS_WITH_BINDING_SLUG.has(provider);
 
   const current = offered.find((o) => o.provider === provider) ?? null;
-  const [ref, setRef] = useState<string>(current?.resources[0]?.ref ?? '');
-  // Env slug (persisted to provider_bindings.environment). Defaults to the
-  // picked resource's display name (kebabed) so the common case "one Supabase
-  // project per env, named after the env" needs no extra typing.
-  const initialEnv = kebabize(current?.resources[0]?.name ?? '');
-  const [envSlug, setEnvSlug] = useState<string>(initialEnv);
-  // Track whether the operator has touched the env field — if not, the field
-  // tracks the picked resource name. Once edited, we stop overwriting.
-  const [envTouched, setEnvTouched] = useState(false);
+  const [ref, setRef] = useState<string>(initial?.resource_ref ?? current?.resources[0]?.ref ?? '');
+  // Binding slug (persisted to provider_bindings.environment). Defaults to the
+  // picked resource's display name (kebabed) so the common case "one project
+  // per env, named after the env" needs no extra typing. Only relevant for
+  // providers in PROVIDERS_WITH_BINDING_SLUG.
+  const initialSlug = initial
+    ? (initial.environment ?? '')
+    : supportsBindingSlug
+      ? kebabize(current?.resources[0]?.name ?? '')
+      : '';
+  const [bindingSlug, setBindingSlug] = useState<string>(initialSlug);
+  // Once the operator edits the slug, stop tracking the picked resource name.
+  // In edit mode, start as "touched" so we never overwrite the stored slug.
+  const [slugTouched, setSlugTouched] = useState(isEdit);
 
   // Bash binding fields (script holder ; hosts come from the detail page).
+  // Create-mode only — never reached in edit.
   const [bashSlug, setBashSlug] = useState('');
   const [bashName, setBashName] = useState('');
   const [bashContent, setBashContent] = useState('');
@@ -87,9 +126,10 @@ export function BindingForm({
   // Default = exclude 'main', the dominant SaaS pattern (main = canonical /
   // protected). Operator picks 'protected' for repos that already declare a
   // protected-branches set on GitHub.
-  type ExcludeMode = 'none' | 'branch' | 'protected';
-  const [excludeMode, setExcludeMode] = useState<ExcludeMode>('branch');
-  const [excludeBranch, setExcludeBranch] = useState<string>('main');
+  const [excludeMode, setExcludeMode] = useState<ExcludeMode>(initialExcludeMode(initial));
+  const [excludeBranch, setExcludeBranch] = useState<string>(
+    initial?.env_less_exclude_branch ?? 'main',
+  );
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -99,8 +139,11 @@ export function BindingForm({
     if (p !== 'bash') {
       const next = offered.find((o) => o.provider === p);
       setRef(next?.resources[0]?.ref ?? '');
-      if (!envTouched) {
-        setEnvSlug(kebabize(next?.resources[0]?.name ?? ''));
+      if (!slugTouched) {
+        const slugForNext = PROVIDERS_WITH_BINDING_SLUG.has(p)
+          ? kebabize(next?.resources[0]?.name ?? '')
+          : '';
+        setBindingSlug(slugForNext);
       }
     }
     setError(null);
@@ -108,27 +151,43 @@ export function BindingForm({
 
   function onRefChange(nextRef: string) {
     setRef(nextRef);
-    if (!envTouched) {
+    if (!slugTouched && supportsBindingSlug) {
       const name = current?.resources.find((r) => r.ref === nextRef)?.name ?? '';
-      setEnvSlug(kebabize(name));
+      setBindingSlug(kebabize(name));
     }
   }
 
-  function onEnvChange(nextEnv: string) {
-    setEnvSlug(nextEnv);
-    setEnvTouched(true);
+  function onSlugChange(next: string) {
+    setBindingSlug(next);
+    setSlugTouched(true);
   }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (isBash) {
       await submitBash();
+    } else if (isEdit) {
+      await submitPatch();
     } else {
-      await submitStandard();
+      await submitInsert();
     }
   }
 
-  async function submitStandard() {
+  /** Clean + validate the slug. Returns the cleaned value (string or null).
+   *  Throws on invalid kebab shape. */
+  function cleanSlug(): string | null {
+    if (!supportsBindingSlug) return null;
+    const slugClean = bindingSlug.trim();
+    if (!slugClean) return null;
+    if (!/^[a-z0-9](-?[a-z0-9])*$/.test(slugClean)) {
+      throw new Error(
+        `Binding slug '${slugClean}' must be lowercase kebab-case (e.g. 'prod', 'staging', 'preview').`,
+      );
+    }
+    return slugClean;
+  }
+
+  async function submitInsert() {
     if (!ref) {
       setError('Pick a resource first.');
       return;
@@ -138,15 +197,9 @@ export function BindingForm({
     try {
       const supabase = getSupabaseBrowser();
       const display = current?.resources.find((r) => r.ref === ref)?.name ?? ref;
-      const envClean = envSlug.trim();
-      // Empty env → null (env-less binding). The DB CHECK constraint enforces
-      // the kebab-case shape ; surface the violation up front rather than
-      // letting Postgres reject the insert with a generic message.
-      if (envClean && !/^[a-z0-9](-?[a-z0-9])*$/.test(envClean)) {
-        throw new Error(
-          `Env slug '${envClean}' must be lowercase kebab-case (e.g. 'prod', 'staging', 'preview').`,
-        );
-      }
+      // The DB CHECK constraint enforces the kebab-case shape ; surface the
+      // violation up front rather than letting Postgres reject the insert.
+      const slugValue = cleanSlug();
       // GitHub-only knobs : the DB CHECK enforces both XOR and github-only,
       // so we pass nulls/false on other providers (the row will fail any
       // accidental mis-set).
@@ -163,10 +216,60 @@ export function BindingForm({
         provider,
         resource_ref: ref,
         display_name: display,
-        environment: envClean || null,
+        environment: slugValue,
         ...githubExclude,
       });
       if (err) throw err;
+      router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  }
+
+  async function submitPatch() {
+    if (!initial) return;
+    if (!ref) {
+      setError('Pick a resource first.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const display = current?.resources.find((r) => r.ref === ref)?.name ?? ref;
+      const slugValue = cleanSlug();
+      const body: Record<string, unknown> = { orgSlug };
+      if (ref !== initial.resource_ref) {
+        body.resource_ref = ref;
+        body.display_name = display;
+      }
+      if (slugValue !== initial.environment) {
+        body.environment = slugValue;
+      }
+      if (provider === 'github') {
+        const nextBranch =
+          excludeMode === 'branch' && excludeBranch.trim() ? excludeBranch.trim() : null;
+        const nextProtected = excludeMode === 'protected';
+        if (nextBranch !== initial.env_less_exclude_branch) {
+          body.env_less_exclude_branch = nextBranch;
+        }
+        if (nextProtected !== initial.env_less_exclude_protected) {
+          body.env_less_exclude_protected = nextProtected;
+        }
+      }
+      if (Object.keys(body).length === 1) {
+        // only orgSlug — nothing to change
+        router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
+        return;
+      }
+      const res = await fetch(`/api/v1/bindings/${initial.bindingId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const json = (await res.json()) as { error?: string };
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
       router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
       router.refresh();
     } catch (err) {
@@ -209,23 +312,29 @@ export function BindingForm({
     }
   }
 
+  const cardTitle = isEdit
+    ? `Edit ${provider} binding`
+    : isBash
+      ? 'New Bash binding (script identity ; add hosts after)'
+      : 'Pick a resource from a connected provider';
+
   return (
     <Stack gap="var(--space-4)">
       <form onSubmit={(e) => void onSubmit(e)}>
         <Card>
           <CardHeader>
-            <CardTitle>
-              {isBash
-                ? 'New Bash binding (script identity ; add hosts after)'
-                : 'Pick a resource from a connected provider'}
-            </CardTitle>
+            <CardTitle>{cardTitle}</CardTitle>
           </CardHeader>
           <CardBody>
             <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
-              <Field label="Provider">
+              <Field
+                label="Provider"
+                hint={isEdit ? 'Provider is fixed for an existing binding.' : undefined}
+              >
                 <Select
                   value={provider}
                   onChange={(e) => onProviderChange(e.target.value as Provider)}
+                  disabled={isEdit}
                 >
                   {offered.map((o) => (
                     <option key={o.provider} value={o.provider}>
@@ -233,7 +342,7 @@ export function BindingForm({
                       {o.resources.length === 0 ? ' (no resources)' : ''}
                     </option>
                   ))}
-                  <option value="bash">Bash (SSH transport)</option>
+                  {!isEdit && <option value="bash">Bash (SSH transport)</option>}
                 </Select>
               </Field>
 
@@ -278,16 +387,11 @@ export function BindingForm({
                 </Field>
               )}
 
-              {!isBash && (
-                <Field
-                  label="Env slug (optional)"
-                  hint={
-                    ENV_HINT[provider] ?? 'Lowercase kebab-case. Leave blank for env-less bindings.'
-                  }
-                >
+              {supportsBindingSlug && (
+                <Field label="Binding slug (optional)" hint={SLUG_HINT[provider]}>
                   <Input
-                    value={envSlug}
-                    onChange={(e) => onEnvChange(e.target.value)}
+                    value={bindingSlug}
+                    onChange={(e) => onSlugChange(e.target.value)}
                     placeholder="prod"
                     autoComplete="off"
                     spellCheck={false}
@@ -309,7 +413,13 @@ export function BindingForm({
 
               <div>
                 <Button type="submit" disabled={busy || (!isBash && !ref)} variant="primary">
-                  {busy ? 'Saving…' : isBash ? 'Save bash binding' : 'Save binding'}
+                  {busy
+                    ? 'Saving…'
+                    : isEdit
+                      ? 'Save changes'
+                      : isBash
+                        ? 'Save bash binding'
+                        : 'Save binding'}
                 </Button>
               </div>
             </div>

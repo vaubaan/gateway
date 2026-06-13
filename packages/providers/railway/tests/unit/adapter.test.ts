@@ -22,6 +22,7 @@ const binding: ProviderBinding = {
   provider: 'railway',
   resource_ref: '00000000-0000-4000-8000-000000000000',
   display_name: null,
+  environment: 'staging',
   created_at: '2026-01-01',
 };
 
@@ -188,19 +189,46 @@ describe('RailwayAdapter — classify', () => {
     });
   });
 
-  test('list-deployments → runtime/deployment:read', () => {
+  test('list-deployments → runtime/deployment:read @staging (env from binding)', () => {
     const res = adapter.classify('railway__list-deployments', {}, [binding]);
     expect(res).toEqual({
-      capability: { provider: 'railway', plane: 'runtime', level: 'deployment', action: 'read' },
+      capability: {
+        provider: 'railway',
+        plane: 'runtime',
+        level: 'deployment',
+        action: 'read',
+        env: 'staging',
+      },
     });
   });
 
-  test('redeploy on a bound project → runtime/deployment:write', () => {
+  test('redeploy on a bound project → runtime/deployment:write @staging', () => {
     const res = adapter.classify(
       'railway__redeploy',
       { projectId: '00000000-0000-4000-8000-000000000000' },
       [binding],
     );
+    expect(res).toEqual({
+      capability: {
+        provider: 'railway',
+        plane: 'runtime',
+        level: 'deployment',
+        action: 'write',
+        env: 'staging',
+      },
+    });
+  });
+
+  test('binding with environment=null yields an env-less deployment capability', () => {
+    const envlessBinding: ProviderBinding = { ...binding, environment: null };
+    const res = adapter.classify('railway__list-deployments', {}, [envlessBinding]);
+    expect(res).toEqual({
+      capability: { provider: 'railway', plane: 'runtime', level: 'deployment', action: 'read' },
+    });
+  });
+
+  test('railway-agent stays env-less (account-level, no project arg)', () => {
+    const res = adapter.classify('railway__railway-agent', { instruction: 'noop' }, [binding]);
     expect(res).toEqual({
       capability: { provider: 'railway', plane: 'runtime', level: 'deployment', action: 'write' },
     });
@@ -216,6 +244,17 @@ describe('RailwayAdapter — classify', () => {
   test('denies an unbound projectId', () => {
     const res = adapter.classify('railway__redeploy', { projectId: 'unbound-id' }, [binding]);
     expect(res).toEqual({ denied: "railway project 'unbound-id' is not bound to this project." });
+  });
+
+  test('denies ambiguous deployment call with multiple bindings', () => {
+    const other: ProviderBinding = {
+      ...binding,
+      id: 'b2',
+      resource_ref: '11111111-1111-4111-8111-111111111111',
+      environment: 'prod',
+    };
+    const res = adapter.classify('railway__list-deployments', {}, [binding, other]);
+    expect(res).toEqual({ denied: 'ambiguous railway target: specify projectId.' });
   });
 
   test('denies an unknown tool', () => {

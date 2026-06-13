@@ -2,12 +2,7 @@ import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { type Provider } from '@vaubaan/shared';
-
-// bash is per-project (table ssh_bindings, kept for storage continuity),
-// not org-level — excluded from ORG_PROVIDERS.
-const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
 import { getSupabaseServer } from '@/lib/supabase/server';
-import { loadProviderState } from '@/lib/providers/state';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import { BindingControls } from './binding-controls';
 import { BashBindingControls } from './bash-binding-controls';
@@ -69,7 +64,6 @@ export default async function ProjectPage({
     { data: bindings },
     { data: bashBindings },
     { data: tokens },
-    providerStates,
     { count: pendingApprovals },
     { count: policyRulesCount },
   ] = await Promise.all([
@@ -92,7 +86,6 @@ export default async function ProjectPage({
       .eq('project_id', proj.id)
       .order('created_at', { ascending: false })
       .returns<TokenRow[]>(),
-    Promise.all(ORG_PROVIDERS.map((p) => loadProviderState(org.id, p as Provider))),
     supabase
       .from('approval_requests')
       .select('id', { count: 'exact', head: true })
@@ -103,17 +96,6 @@ export default async function ProjectPage({
       .select('id', { count: 'exact', head: true })
       .eq('project_id', proj.id),
   ]);
-
-  const resourcesByProvider: Partial<Record<Provider, Array<{ ref: string; name: string }>>> = {
-    github: [],
-    vercel: [],
-    supabase: [],
-    railway: [],
-    bash: [],
-  };
-  for (const s of providerStates) {
-    resourcesByProvider[s.provider] = s.resources.map((r) => ({ ref: r.ref, name: r.name }));
-  }
 
   return (
     <main>
@@ -195,22 +177,18 @@ export default async function ProjectPage({
                   >
                     <span style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
                       <Badge tone="neutral">{b.provider}</Badge>
-                      <Code>{b.display_name ?? b.resource_ref}</Code>
                       {b.environment ? (
-                        <Badge tone="info" mono>
-                          @{b.environment}
-                        </Badge>
+                        <>
+                          <Code>{b.environment}</Code>
+                          <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
+                            ({b.display_name ?? b.resource_ref})
+                          </span>
+                        </>
                       ) : (
-                        <Badge tone="warning" mono>
-                          env-less
-                        </Badge>
+                        <Code>{b.display_name ?? b.resource_ref}</Code>
                       )}
                     </span>
-                    <BindingControls
-                      binding={b}
-                      orgSlug={org.slug}
-                      resources={resourcesByProvider[b.provider] ?? []}
-                    />
+                    <BindingControls binding={b} orgSlug={org.slug} projectSlug={proj.slug} />
                   </li>
                 ))}
                 {(bashBindings ?? []).map((b) => (

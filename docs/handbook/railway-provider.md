@@ -1,7 +1,7 @@
 ---
 title: Railway provider adapter
 status: current
-date: 2026-06-08
+date: 2026-06-13
 tracks:
   - packages/providers/railway/src/
   - packages/web/src/app/api/integrations/railway/
@@ -132,25 +132,31 @@ capability requise (ou un `{ denied }` structurel) :
 filtrage statique `tools/list`) : un tableau d'une seule capability, ou `[]`
 pour un tool inconnu.
 
-**ENV non résolu (MVP).** Les « environments » Railway demandent un lookup de
-nom upstream que le MVP ne fait pas (pas de check stateful dans le
-classifier) ; `env` est donc laissé `undefined` sur toutes les capabilities.
-Le câblage atterrira depuis la binding/les args quand la résolution sera
-ajoutée — pas inventé.
+**ENV depuis la binding.** Même modèle que Supabase : un Railway project = un
+env. Le slug est porté par `binding.environment` (kebab-case, persisté à la
+création ou via la PATCH `/api/v1/bindings/:id`). Pour les tools project-scoped
+(`list-services`, `list-deployments`, `get-status`, `get-logs`, `redeploy`,
+`accept-deploy`), `classifyRailway` résout la binding via `projectId` (arg
+explicite ou rempli par scope-injection en mono-binding) et stamp
+`binding.environment` sur la capability. Les tools account-level (`whoami`,
+`list-projects`, `create-project`, `railway-agent`) ne portent pas de
+`projectId` — leur capability reste env-less.
+
+`railwayToolEnvResolution(tool)` renvoie `'runtime'` pour la liste env-from-binding
+ci-dessus et `'static'` pour le reste, en accord avec le filtre catalog/tools-list.
 
 **Binding check.** La binding Railway a pour `resource_ref` le `projectId`. Le
-call le porte sous `args.projectId` ou `args.project_id`. S'il est présent, il
-doit appartenir aux `resource_ref` des bindings railway du Project, sinon
-`{ denied: "railway project '<id>' is not bound to this project." }`. S'il est
-absent on ne fail PAS (scope-injection remplit le projectId pour les Projects
-mono-binding) ; les tools account-level (`whoami`, `list-projects`,
-`create-project`, `railway-agent`) ne portent jamais de `projectId` et passent
-sans binding check. Un tool inconnu →
-`{ denied: "unknown railway tool '<tool>'." }`.
+call le porte sous `args.projectId` ou `args.project_id`. Sur un tool
+project-scoped sans `projectId` ET sans binding unique →
+`{ denied: "ambiguous railway target: specify projectId." }`. Sur un
+`projectId` non bindé →
+`{ denied: "railway project '<id>' is not bound to this project." }`. Un tool
+inconnu → `{ denied: "unknown railway tool '<tool>'." }`.
 
 ## Tests
 
-`npx vitest run packages/providers/railway` — 15 tests, ~10ms (dont 6 pour
-`classify` : reads → `runtime/account|deployment:read`, redeploy →
-`runtime/deployment:write`, create-project → `runtime/account:write`,
-deny unbound, deny unknown).
+`npx vitest run packages/providers/railway` — 18 tests, ~10ms (dont 9 pour
+`classify` : reads → `runtime/account|deployment:read` (avec env), redeploy →
+`runtime/deployment:write@<env>`, fallback env-less si `binding.environment=null`,
+`railway-agent` env-less (account-level), create-project → `runtime/account:write`,
+deny unbound, deny ambiguous multi-binding, deny unknown).
