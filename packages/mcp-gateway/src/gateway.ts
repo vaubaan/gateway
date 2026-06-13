@@ -42,16 +42,30 @@ import { hashArguments, type AuditWriter } from './audit.ts';
 import { AuthError, rpcError, rpcSuccess } from './errors.ts';
 
 /** Build the `excludeEnvs` set that narrows a env-less grant's fan-out for a
- *  given binding. Today only github bindings carry exclude knobs ; the
- *  `env_less_exclude_protected` mode is declared in the DB but its runtime
- *  resolution (fetch protected branches list) is not wired yet — we ignore it
- *  here and the binding form labels it as preview. */
-function excludeEnvsFor(
+ *  given binding (spec §5.1 #4). Two sources :
+ *
+ *   1. Static, per-binding column (`env_less_exclude_branch`) — read inline.
+ *   2. Dynamic, provider-resolved (`env_less_exclude_protected` for github :
+ *      the live protected-branches list, fetched via Octokit and cached).
+ *      Delegated to `adapter.resolveExcludeEnvs(admin, binding)` when present.
+ *
+ *  Returns `undefined` when there's nothing to exclude — pass through to
+ *  `evaluateCapability` as "no context" (true fan-out). */
+async function excludeEnvsFor(
   binding: ProviderBinding | undefined,
-): { excludeEnvs?: readonly string[] } | undefined {
+  adapter: UpstreamAdapter,
+  admin: ProviderAdmin | undefined,
+): Promise<{ excludeEnvs?: readonly string[] } | undefined> {
   if (!binding) return undefined;
-  const exclude: string[] = [];
-  if (binding.env_less_exclude_branch) exclude.push(binding.env_less_exclude_branch);
+  let exclude: readonly string[] = [];
+  if (admin && adapter.resolveExcludeEnvs) {
+    exclude = await adapter.resolveExcludeEnvs(admin, binding);
+  } else if (binding.env_less_exclude_branch) {
+    // Self-contained adapters (no provider admin loaded) still honor the
+    // static branch exclude — only the dynamic protected-branches resolution
+    // needs an admin.
+    exclude = [binding.env_less_exclude_branch];
+  }
   if (exclude.length === 0) return undefined;
   return { excludeEnvs: exclude };
 }
@@ -106,6 +120,13 @@ export interface UpstreamAdapter {
     tool: string,
     args: Record<string, unknown>,
   ): Promise<unknown>;
+  /**
+   * Resolve the runtime exclude set that narrows an env-less grant's fan-out
+   * for this binding (spec §5.1 #4). Today only github implements it (static
+   * branch + dynamic protected-branches list). Returning `[]` (or omitting
+   * the method) means "no exclusion" = true fan-out.
+   */
+  resolveExcludeEnvs?(admin: ProviderAdmin, binding: ProviderBinding): Promise<readonly string[]>;
   /** Full ProviderAdmin row (with tokens) — fetched by the caller, not cached. */
   loadProviderAdmin(orgId: string, provider: Provider): Promise<ProviderAdmin | null>;
   /**
@@ -288,7 +309,7 @@ export class McpGateway {
       const decision = evaluateCapability(
         ctx.capabilities,
         classified.capability,
-        excludeEnvsFor(classified.binding),
+        await excludeEnvsFor(classified.binding, adapter, undefined),
       );
       if (decision.decision === 'denied') {
         await this.audit(ctx, toolName, rawArgs, 'denied', null, decision.reason ?? null, null);
@@ -353,13 +374,23 @@ export class McpGateway {
       return rpcError(id, -32603, `Vaubaan policy denied: ${classified.denied}`);
     }
 
+    // Load full ProviderAdmin (with tokens — never cached in clear) before the
+    // policy check : the adapter may need upstream creds to resolve dynamic
+    // excludeEnvs (e.g. github protected-branches lookup ; spec §5.1 #4).
+    const admin = await adapter.loadProviderAdmin(ctx.organization.id, provider);
+    if (!admin) {
+      const reason = `provider_admin for '${provider}' could not be loaded — re-connect required.`;
+      await this.audit(ctx, toolName, args, 'denied', null, reason, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+    }
+
     // Pure set membership : is the required capability in the granted set ?
     // The matched binding may carry per-binding exclude knobs that narrow the
     // fan-out of an env-less grant (spec §5.1 #4 ; github-only in MVP).
     const decision = evaluateCapability(
       ctx.capabilities,
       classified.capability,
-      excludeEnvsFor(classified.binding),
+      await excludeEnvsFor(classified.binding, adapter, admin),
     );
     if (decision.decision === 'denied') {
       await this.audit(ctx, toolName, args, 'denied', null, decision.reason ?? null, null);
@@ -380,14 +411,6 @@ export class McpGateway {
         }
         await this.cfg.cache.del(`vaubaan:ctx:${ctx.access_token.api_key_prefix}`);
       }
-    }
-
-    // Load full ProviderAdmin (with tokens — never cached in clear).
-    const admin = await adapter.loadProviderAdmin(ctx.organization.id, provider);
-    if (!admin) {
-      const reason = `provider_admin for '${provider}' could not be loaded — re-connect required.`;
-      await this.audit(ctx, toolName, args, 'denied', null, reason, null);
-      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
 
     // Pick binding for the project (if any).

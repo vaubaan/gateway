@@ -336,15 +336,25 @@ Le couple `…:write@prod` (par-env) vs `…:write` (env-less) pose la question 
    `provider_bindings` peut déclarer un *exclude set* qui retire des envs du
    fan-out d'une grant env-less. Sur GitHub :
    - `env_less_exclude_branch text` : un nom de branche unique à exclure (typiquement
-     `main`) ; ou
-   - `env_less_exclude_protected boolean` : exclut dynamiquement la liste des
-     **protected branches** du repo (lookup via l'install token, cachée TTL court).
+     `main`) ; **ou**
+   - `env_less_exclude_protected boolean` : exclut la liste des **protected
+     branches** du repo, résolue au moment du call via Octokit
+     `repos.listBranches({protected:true})` avec un cache 60s (in-memory dans
+     l'instance gateway). Les deux options sont mutuellement exclusives (XOR
+     enforcé par CHECK constraint SQL).
+
+   L'adapter provider expose `resolveExcludeEnvs(admin, binding) →
+   Promise<string[]>` ; le gateway l'appelle juste après `loadProviderAdmin`,
+   avant `evaluateCapability`. Le coût hot-path : un GET cache (hit la plupart
+   du temps) ou un GitHub API call par minute par repo (miss).
 
    Au runtime, `covers(granted, required, { excludeEnvs })` retourne `false`
    quand `granted.env === undefined && required.env ∈ excludeEnvs`. Net : une
-   grant env-less sur un repo avec `exclude_branch='main'` peut écrire sur
-   `feature/*` mais 403 sur `main` — l'opérateur n'a pas besoin de doubler avec
-   des règles policy par-branche.
+   grant env-less sur un repo avec `exclude_protected=true` peut écrire sur
+   `feature/*` mais 403 sur n'importe quelle branche que GitHub déclare
+   protected — l'opérateur n'a pas besoin de doubler avec des règles policy
+   par-branche, et les toggles de protection sur github.com sont reflétés en
+   moins d'une minute.
 
 > Net : prod / main / branches protégées sont protégés par la **couche policy**
 > au mint (default-deny + interdiction `*→allow` en write) ET par la **couche

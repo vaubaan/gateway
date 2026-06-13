@@ -554,3 +554,103 @@ describe('GitHubAdapter — classify (capability model)', () => {
     expect(d.binding?.resource_ref).toBe('acme/app');
   });
 });
+
+describe('GitHubAdapter — resolveExcludeEnvs (env-less grant fan-out narrowing)', () => {
+  const baseBinding = {
+    id: 'b1',
+    project_id: 'p1',
+    provider: 'github' as const,
+    resource_ref: 'acme/app',
+    display_name: null,
+    created_at: '2026-01-01',
+  };
+
+  test('no exclude knob → empty set', async () => {
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+    });
+    const out = await adapter.resolveExcludeEnvs(baseAdmin, baseBinding);
+    expect(out).toEqual([]);
+  });
+
+  test('env_less_exclude_branch → that branch is returned as-is, no API call', async () => {
+    const listBranches = vi.fn();
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () => ({ rest: { repos: { listBranches } }, request: vi.fn() }) as never,
+    });
+    const out = await adapter.resolveExcludeEnvs(baseAdmin, {
+      ...baseBinding,
+      env_less_exclude_branch: 'main',
+    });
+    expect(out).toEqual(['main']);
+    expect(listBranches).not.toHaveBeenCalled();
+  });
+
+  test('env_less_exclude_protected → calls listBranches({protected:true}) and caches result', async () => {
+    const listBranches = vi
+      .fn()
+      .mockResolvedValue({ data: [{ name: 'main' }, { name: 'release/2026' }] });
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ token: 'ghs_xxx', expires_at: '2026-05-22T11:00:00Z' }),
+    });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () => ({ rest: { repos: { listBranches } }, request: vi.fn() }) as never,
+      fetchImpl: fetchImpl as never,
+    });
+    const binding = { ...baseBinding, env_less_exclude_protected: true };
+    const first = await adapter.resolveExcludeEnvs(baseAdmin, binding);
+    expect(first).toEqual(['main', 'release/2026']);
+    expect(listBranches).toHaveBeenCalledTimes(1);
+    expect(listBranches).toHaveBeenCalledWith({
+      owner: 'acme',
+      repo: 'app',
+      protected: true,
+      per_page: 100,
+      page: 1,
+    });
+    // Second call within TTL → served from cache, no new API call.
+    const second = await adapter.resolveExcludeEnvs(baseAdmin, binding);
+    expect(second).toEqual(['main', 'release/2026']);
+    expect(listBranches).toHaveBeenCalledTimes(1);
+  });
+
+  test('paginates listBranches when first page is full (100 items)', async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({ name: `b${i}` }));
+    const page2 = [{ name: 'main' }];
+    const listBranches = vi
+      .fn()
+      .mockResolvedValueOnce({ data: page1 })
+      .mockResolvedValueOnce({ data: page2 });
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ token: 'ghs_xxx', expires_at: '2026-05-22T11:00:00Z' }),
+    });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () => ({ rest: { repos: { listBranches } }, request: vi.fn() }) as never,
+      fetchImpl: fetchImpl as never,
+    });
+    const out = await adapter.resolveExcludeEnvs(baseAdmin, {
+      ...baseBinding,
+      resource_ref: 'acme/big',
+      env_less_exclude_protected: true,
+    });
+    expect(out).toHaveLength(101);
+    expect(out).toContain('main');
+    expect(listBranches).toHaveBeenCalledTimes(2);
+    expect((listBranches.mock.calls[1]![0] as { page: number }).page).toBe(2);
+  });
+});

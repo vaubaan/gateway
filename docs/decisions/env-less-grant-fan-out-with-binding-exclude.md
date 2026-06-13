@@ -39,9 +39,18 @@ fastidieux et muet pour l'opérateur qui composait son token.
    XOR enforcé en DB ; github-only enforcé en DB. Le BindingForm expose les
    deux options en radio, avec defaults `branch=main`.
 
-3. **Plumbing runtime** : le classifier GitHub renvoie la binding matchée
-   alongside la capability ; le gateway en dérive `excludeEnvs` et la passe à
-   `evaluateCapability`.
+3. **Plumbing runtime** :
+   - Le classifier GitHub renvoie la binding matchée alongside la capability ;
+     le gateway en dérive `excludeEnvs` et la passe à `evaluateCapability`.
+   - L'`UpstreamAdapter` expose un `resolveExcludeEnvs(admin, binding) →
+Promise<string[]>` optionnel. La GitHubAdapter l'implémente : recopie le
+     `env_less_exclude_branch` statique et, si `env_less_exclude_protected`
+     est vrai, fait un Octokit `repos.listBranches({protected:true})` paginé
+     avec un cache in-memory 60s par repo.
+   - Le gateway charge `ProviderAdmin` **avant** `evaluateCapability` (au
+     lieu de juste avant `executeCall`) pour que la résolution dynamique ait
+     les credentials disponibles. Coût : 1 DB lookup avancé pour les calls
+     déniés par la policy (rare).
 
 ## Conséquences
 
@@ -71,11 +80,13 @@ fastidieux et muet pour l'opérateur qui composait son token.
 
 ## Dette restante
 
-- **`env_less_exclude_protected` n'est pas wired runtime** dans ce PR. Le
-  champ est stocké, l'UI affiche l'option (en disabled / "preview"), mais le
-  gateway l'ignore. La résolution dynamique de la liste des protected
-  branches (Octokit `repos.listBranches({ protected: true })` + cache TTL)
-  reste à implémenter. À ouvrir comme follow-up dédié.
 - Vercel / Supabase pourraient bénéficier des mêmes knobs (`@prod` à exclure
   du fan-out par-binding). Pas implémenté ici — github-first parce que c'est
-  là que la demande utilisateur est apparue.
+  là que la demande utilisateur est apparue. Pour les ajouter, il suffira
+  d'étendre la migration aux autres providers + implémenter `resolveExcludeEnvs`
+  sur leur adapter (statique : pas de fetch upstream, juste recopie de
+  colonnes).
+- Le cache `protectedBranchesCache` est **in-memory par-instance** (Map).
+  Multi-instance gateway = quelques GitHub API calls dupliqués par TTL. Si ça
+  devient un problème, basculer sur `CacheClient` partagé (Redis) — l'API est
+  déjà compatible.

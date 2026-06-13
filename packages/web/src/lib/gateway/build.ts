@@ -197,6 +197,7 @@ export function buildGateway(opts: {
     toolEnvResolution: (tool) => ghAdapter.toolEnvResolution(tool),
     classify: (tool, args, bindings) => ghAdapter.classify(tool, args, bindings),
     executeCall: (admin, binding, tool, args) => ghAdapter.executeCall(admin, binding, tool, args),
+    resolveExcludeEnvs: (admin, binding) => ghAdapter.resolveExcludeEnvs(admin, binding),
     loadProviderAdmin,
   };
 

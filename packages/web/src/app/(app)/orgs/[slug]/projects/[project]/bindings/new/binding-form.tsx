@@ -456,20 +456,16 @@ function GithubExcludeOptions({
             style={{ maxWidth: 220 }}
           />
         </label>
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--space-2)',
-            opacity: 0.5,
-            cursor: 'not-allowed',
-          }}
-          title="Runtime enforcement for the protected-branches set is not wired yet — coming in a follow-up. For now use the named-branch option above."
-        >
-          <input type="radio" name="exclude-mode" disabled checked={mode === 'protected'} />
+        <label style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
+          <input
+            type="radio"
+            name="exclude-mode"
+            checked={mode === 'protected'}
+            onChange={() => setMode('protected')}
+          />
           <span>
-            All branches except the repo&apos;s <strong>protected branches</strong>{' '}
-            <em>(preview — runtime enforcement pending)</em>
+            All branches except the repo&apos;s <strong>protected branches</strong> (resolved at
+            call time via the GitHub install token, cached 60s).
           </span>
         </label>
       </div>

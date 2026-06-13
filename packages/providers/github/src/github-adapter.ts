@@ -56,11 +56,23 @@ const MINT_PERMISSIONS: Record<'clone' | 'push', Record<string, string>> = {
 
 const defaultOctokitFactory: OctokitFactory = (token) => new Octokit({ auth: token });
 
+/** Cache TTL for the per-repo protected-branches list. Short — operators can
+ *  toggle a branch's protected flag on github.com and reasonably expect Vaubaan
+ *  to pick up the change within a minute. The cache reduces the per-call
+ *  pressure on GitHub's REST API for hot repos. */
+const PROTECTED_BRANCHES_TTL_MS = 60_000;
+
+interface ProtectedBranchesEntry {
+  branches: readonly string[];
+  expiresAt: number;
+}
+
 export class GitHubAdapter implements ProviderAdapter {
   readonly provider = 'github' as const;
   readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
 
   private readonly config: GitHubAdapterConfig;
+  private readonly protectedBranchesCache = new Map<string, ProtectedBranchesEntry>();
 
   constructor(config: GitHubAdapterConfig) {
     this.config = config;
@@ -147,6 +159,72 @@ export class GitHubAdapter implements ProviderAdapter {
     }
     const { token } = await this.mintUpstreamToken(admin);
     return executeCall(this.config.octokitFactory ?? defaultOctokitFactory, token, tool, args);
+  }
+
+  /**
+   * Build the runtime exclude set for an env-less grant on this binding
+   * (spec gateway-capability-model.md §5.1 #4) :
+   *
+   *  - `env_less_exclude_branch` : single static slug ; copied as-is.
+   *  - `env_less_exclude_protected` : we call GitHub's
+   *    `repos.listBranches({protected:true})` and exclude every returned
+   *    branch. The result is cached per-repo with a short TTL so the hot path
+   *    pays at most one API call per minute per repo (operators can flip
+   *    protection on github.com and see it picked up within the TTL).
+   *
+   * Returns an empty array when no knob is set — the gateway treats that as
+   * "no exclusion" (true fan-out).
+   */
+  async resolveExcludeEnvs(
+    admin: ProviderAdmin,
+    binding: ProviderBinding,
+  ): Promise<readonly string[]> {
+    const out: string[] = [];
+    if (binding.env_less_exclude_branch) out.push(binding.env_less_exclude_branch);
+    if (binding.env_less_exclude_protected) {
+      const protectedBranches = await this.listProtectedBranches(admin, binding.resource_ref);
+      for (const b of protectedBranches) {
+        if (!out.includes(b)) out.push(b);
+      }
+    }
+    return out;
+  }
+
+  private async listProtectedBranches(
+    admin: ProviderAdmin,
+    resourceRef: string,
+  ): Promise<readonly string[]> {
+    const now = Date.now();
+    const cached = this.protectedBranchesCache.get(resourceRef);
+    if (cached && cached.expiresAt > now) return cached.branches;
+
+    const m = resourceRef.match(/^([^/]+)\/([^/]+)$/);
+    if (!m) return [];
+    const [, owner, repo] = m;
+
+    const { token } = await this.mintUpstreamToken(admin);
+    const octokit = (this.config.octokitFactory ?? defaultOctokitFactory)(token);
+    // listBranches with `protected: true` returns the protected ones only.
+    // Paginate defensively even though most repos have only a handful.
+    const branches: string[] = [];
+    let page = 1;
+    while (true) {
+      const { data } = await octokit.rest.repos.listBranches({
+        owner: owner!,
+        repo: repo!,
+        protected: true,
+        per_page: 100,
+        page,
+      });
+      for (const b of data) branches.push(b.name);
+      if (data.length < 100) break;
+      page += 1;
+    }
+    this.protectedBranchesCache.set(resourceRef, {
+      branches,
+      expiresAt: now + PROTECTED_BRANCHES_TTL_MS,
+    });
+    return branches;
   }
 
   /**
