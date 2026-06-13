@@ -654,3 +654,242 @@ describe('GitHubAdapter — resolveExcludeEnvs (env-less grant fan-out narrowing
     expect((listBranches.mock.calls[1]![0] as { page: number }).page).toBe(2);
   });
 });
+
+describe('GitHubAdapter — classify (new ci/rules/release surface)', () => {
+  const adapter = new GitHubAdapter({
+    appId: '123',
+    appSlug: 'vaubaan-gateway',
+    privateKeyPem: TEST_PRIVATE_KEY_PEM,
+  });
+  const binding = {
+    id: 'b1',
+    project_id: 'p1',
+    provider: 'github' as const,
+    resource_ref: 'acme/app',
+    display_name: null,
+    created_at: '2026-01-01',
+  };
+
+  test('dispatch_workflow → repo/ci:write (env-less)', () => {
+    const res = adapter.classify(
+      'github__dispatch_workflow',
+      { owner: 'acme', repo: 'app', workflow_id: 'ci.yml', ref: 'main' },
+      [binding],
+    );
+    expect(res).toMatchObject({
+      capability: { provider: 'github', plane: 'repo', level: 'ci', action: 'write' },
+    });
+  });
+
+  test('cancel_workflow_run → repo/ci:write (env-less)', () => {
+    const res = adapter.classify(
+      'github__cancel_workflow_run',
+      { owner: 'acme', repo: 'app', run_id: 42 },
+      [binding],
+    );
+    expect(res).toMatchObject({
+      capability: { provider: 'github', plane: 'repo', level: 'ci', action: 'write' },
+    });
+  });
+
+  test('update_branch_protection → repo/rules:write (env-less)', () => {
+    const res = adapter.classify(
+      'github__update_branch_protection',
+      { owner: 'acme', repo: 'app', branch: 'main' },
+      [binding],
+    );
+    expect(res).toMatchObject({
+      capability: { provider: 'github', plane: 'repo', level: 'rules', action: 'write' },
+    });
+  });
+
+  test('list_releases → repo/code:read (env-less)', () => {
+    const res = adapter.classify('github__list_releases', { owner: 'acme', repo: 'app' }, [
+      binding,
+    ]);
+    expect(res).toMatchObject({
+      capability: { provider: 'github', plane: 'repo', level: 'code', action: 'read' },
+    });
+  });
+
+  test('create_release → repo/code:write (env-less — releases are repo-wide)', () => {
+    const res = adapter.classify(
+      'github__create_release',
+      { owner: 'acme', repo: 'app', tag_name: 'v1.0.0' },
+      [binding],
+    );
+    expect(res).toMatchObject({
+      capability: { provider: 'github', plane: 'repo', level: 'code', action: 'write' },
+    });
+  });
+});
+
+describe('GitHubAdapter — executeCall dispatch (new ci/rules/release tools)', () => {
+  const baseBinding = {
+    id: 'b1',
+    project_id: 'p1',
+    provider: 'github' as const,
+    resource_ref: 'acme/app',
+    display_name: null,
+    created_at: '2026-01-01',
+  };
+
+  function fetchImplOk() {
+    return vi.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ token: 'ghs_xxx', expires_at: '2026-05-22T11:00:00Z' }),
+    });
+  }
+
+  test('dispatch_workflow → octokit.rest.actions.createWorkflowDispatch', async () => {
+    const createWorkflowDispatch = vi.fn().mockResolvedValue({ data: undefined });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () =>
+        ({
+          rest: { actions: { createWorkflowDispatch } },
+          request: vi.fn(),
+        }) as never,
+      fetchImpl: fetchImplOk() as never,
+    });
+    const res = await adapter.executeCall(baseAdmin, baseBinding, 'github__dispatch_workflow', {
+      owner: 'acme',
+      repo: 'app',
+      workflow_id: 'ci.yml',
+      ref: 'main',
+      inputs: { env: 'prod' },
+    });
+    expect(res).toEqual({ dispatched: true, workflow_id: 'ci.yml', ref: 'main' });
+    expect(createWorkflowDispatch).toHaveBeenCalledWith({
+      owner: 'acme',
+      repo: 'app',
+      workflow_id: 'ci.yml',
+      ref: 'main',
+      inputs: { env: 'prod' },
+    });
+  });
+
+  test('cancel_workflow_run → octokit.rest.actions.cancelWorkflowRun', async () => {
+    const cancelWorkflowRun = vi.fn().mockResolvedValue({ data: undefined });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () =>
+        ({
+          rest: { actions: { cancelWorkflowRun } },
+          request: vi.fn(),
+        }) as never,
+      fetchImpl: fetchImplOk() as never,
+    });
+    const res = await adapter.executeCall(baseAdmin, baseBinding, 'github__cancel_workflow_run', {
+      owner: 'acme',
+      repo: 'app',
+      run_id: 42,
+    });
+    expect(res).toEqual({ cancelled: true, run_id: 42 });
+    expect(cancelWorkflowRun).toHaveBeenCalledWith({ owner: 'acme', repo: 'app', run_id: 42 });
+  });
+
+  test('rerun_workflow_run → octokit.rest.actions.reRunWorkflow', async () => {
+    const reRunWorkflow = vi.fn().mockResolvedValue({ data: undefined });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () => ({ rest: { actions: { reRunWorkflow } }, request: vi.fn() }) as never,
+      fetchImpl: fetchImplOk() as never,
+    });
+    const res = await adapter.executeCall(baseAdmin, baseBinding, 'github__rerun_workflow_run', {
+      owner: 'acme',
+      repo: 'app',
+      run_id: 42,
+    });
+    expect(res).toEqual({ rerun: true, run_id: 42 });
+  });
+
+  test('update_branch_protection → octokit.rest.repos.updateBranchProtection', async () => {
+    const updateBranchProtection = vi.fn().mockResolvedValue({ data: { url: 'p' } });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () =>
+        ({
+          rest: { repos: { updateBranchProtection } },
+          request: vi.fn(),
+        }) as never,
+      fetchImpl: fetchImplOk() as never,
+    });
+    await adapter.executeCall(baseAdmin, baseBinding, 'github__update_branch_protection', {
+      owner: 'acme',
+      repo: 'app',
+      branch: 'main',
+      required_status_checks: { strict: true, contexts: ['ci'] },
+      enforce_admins: true,
+      required_pull_request_reviews: { required_approving_review_count: 1 },
+      restrictions: null,
+    });
+    expect(updateBranchProtection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        owner: 'acme',
+        repo: 'app',
+        branch: 'main',
+        required_status_checks: { strict: true, contexts: ['ci'] },
+        enforce_admins: true,
+        restrictions: null,
+      }),
+    );
+  });
+
+  test('list_releases / list_tags / create_release / delete_release', async () => {
+    const listReleases = vi.fn().mockResolvedValue({ data: [{ tag_name: 'v1' }] });
+    const listTags = vi.fn().mockResolvedValue({ data: [{ name: 'v1' }] });
+    const createRelease = vi.fn().mockResolvedValue({ data: { id: 999, tag_name: 'v2' } });
+    const deleteRelease = vi.fn().mockResolvedValue({ data: undefined });
+    const adapter = new GitHubAdapter({
+      appId: '123',
+      appSlug: 'vaubaan-gateway',
+      privateKeyPem: TEST_PRIVATE_KEY_PEM,
+      octokitFactory: () =>
+        ({
+          rest: { repos: { listReleases, listTags, createRelease, deleteRelease } },
+          request: vi.fn(),
+        }) as never,
+      fetchImpl: fetchImplOk() as never,
+    });
+    expect(
+      await adapter.executeCall(baseAdmin, baseBinding, 'github__list_releases', {
+        owner: 'acme',
+        repo: 'app',
+      }),
+    ).toEqual([{ tag_name: 'v1' }]);
+    expect(
+      await adapter.executeCall(baseAdmin, baseBinding, 'github__list_tags', {
+        owner: 'acme',
+        repo: 'app',
+      }),
+    ).toEqual([{ name: 'v1' }]);
+    expect(
+      await adapter.executeCall(baseAdmin, baseBinding, 'github__create_release', {
+        owner: 'acme',
+        repo: 'app',
+        tag_name: 'v2',
+        name: 'Two',
+      }),
+    ).toEqual({ id: 999, tag_name: 'v2' });
+    expect(createRelease).toHaveBeenCalledWith(
+      expect.objectContaining({ owner: 'acme', repo: 'app', tag_name: 'v2', name: 'Two' }),
+    );
+    expect(
+      await adapter.executeCall(baseAdmin, baseBinding, 'github__delete_release', {
+        owner: 'acme',
+        repo: 'app',
+        release_id: 999,
+      }),
+    ).toEqual({ deleted: true, release_id: 999 });
+  });
+});

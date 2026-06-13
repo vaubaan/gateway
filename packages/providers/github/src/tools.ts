@@ -267,4 +267,130 @@ export const availableTools: readonly McpToolDeclaration[] = [
       required: ['owner', 'repo', 'path', 'message', 'branch', 'sha'],
     },
   },
+  // Write - ci (workflow dispatch, cancel, rerun)
+  {
+    name: 'github__dispatch_workflow',
+    description:
+      'Trigger a `workflow_dispatch` run on a workflow. Backed by POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...repoArgs,
+        workflow_id: {
+          type: ['string', 'number'],
+          description: 'Workflow filename slug (e.g. `ci.yml`) or numeric id.',
+        },
+        ref: { type: 'string', description: 'Git ref (branch or tag) to dispatch on.' },
+        inputs: { type: 'object', description: 'Optional input map for the workflow.' },
+      },
+      required: ['owner', 'repo', 'workflow_id', 'ref'],
+    },
+  },
+  {
+    name: 'github__cancel_workflow_run',
+    description:
+      'Cancel an in-flight workflow run. Backed by POST /repos/{owner}/{repo}/actions/runs/{run_id}/cancel.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, run_id: { type: 'number', description: 'Workflow run id.' } },
+      required: ['owner', 'repo', 'run_id'],
+    },
+  },
+  {
+    name: 'github__rerun_workflow_run',
+    description:
+      'Re-run a previously completed workflow run. Backed by POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, run_id: { type: 'number', description: 'Workflow run id.' } },
+      required: ['owner', 'repo', 'run_id'],
+    },
+  },
+  // Write - rules (branch protection)
+  {
+    name: 'github__update_branch_protection',
+    description:
+      'Set/replace branch protection rules. Backed by PUT /repos/{owner}/{repo}/branches/{branch}/protection. `required_status_checks`, `required_pull_request_reviews`, `enforce_admins`, `restrictions` follow the GitHub REST shape. Pass `null` for any top-level field to disable it.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...repoArgs,
+        branch: { type: 'string', description: 'Branch to protect (e.g. `main`).' },
+        required_status_checks: {
+          type: ['object', 'null'],
+          description: '{ strict: bool, contexts: string[] } — null to clear.',
+        },
+        enforce_admins: {
+          type: ['boolean', 'null'],
+          description: 'Apply rules to admins. Null to clear.',
+        },
+        required_pull_request_reviews: {
+          type: ['object', 'null'],
+          description:
+            '{ dismissal_restrictions, dismiss_stale_reviews, required_approving_review_count, … }',
+        },
+        restrictions: {
+          type: ['object', 'null'],
+          description: '{ users: string[], teams: string[], apps: string[] }',
+        },
+        required_linear_history: { type: 'boolean' },
+        allow_force_pushes: { type: ['boolean', 'null'] },
+        allow_deletions: { type: 'boolean' },
+        required_conversation_resolution: { type: 'boolean' },
+      },
+      required: ['owner', 'repo', 'branch'],
+    },
+  },
+  // Read - releases & tags (sit on the code level — they reference commits/tags)
+  {
+    name: 'github__list_releases',
+    description: 'List releases on a repository. Backed by GET /repos/{owner}/{repo}/releases.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, per_page: { type: 'number' } },
+      required: ['owner', 'repo'],
+    },
+  },
+  {
+    name: 'github__list_tags',
+    description: 'List tags on a repository. Backed by GET /repos/{owner}/{repo}/tags.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, per_page: { type: 'number' } },
+      required: ['owner', 'repo'],
+    },
+  },
+  // Write - releases (create a tag + a release record)
+  {
+    name: 'github__create_release',
+    description:
+      'Create a new release on a tag (creates the tag if needed). Backed by POST /repos/{owner}/{repo}/releases.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...repoArgs,
+        tag_name: { type: 'string', description: 'Tag name (e.g. `v1.2.3`).' },
+        target_commitish: {
+          type: 'string',
+          description: 'Branch or commit SHA to tag — defaults to the repo default branch.',
+        },
+        name: { type: 'string', description: 'Release display name.' },
+        body: { type: 'string', description: 'Release notes (Markdown).' },
+        draft: { type: 'boolean' },
+        prerelease: { type: 'boolean' },
+        generate_release_notes: { type: 'boolean' },
+      },
+      required: ['owner', 'repo', 'tag_name'],
+    },
+  },
+  {
+    name: 'github__delete_release',
+    description:
+      'Delete a release (does not delete the underlying tag). Backed by DELETE /repos/{owner}/{repo}/releases/{release_id}.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...repoArgs, release_id: { type: 'number' } },
+      required: ['owner', 'repo', 'release_id'],
+    },
+  },
 ];

@@ -26,6 +26,8 @@ type Kind =
   | 'write-code'
   | 'write-code-branch' // env = args.branch
   | 'write-code-head' // env = args.head (PR creation)
+  | 'write-ci'
+  | 'write-rules'
   | 'merge-pr' // env = 'main' (default protected branch)
   | 'global-read';
 
@@ -39,16 +41,24 @@ const TOOL_KIND: Record<string, Kind> = {
   github__get_pull_request: 'read-code',
   github__get_issue: 'read-code',
   github__get_commit: 'read-code',
+  github__list_releases: 'read-code',
+  github__list_tags: 'read-code',
   github__list_workflows: 'read-ci',
   github__list_workflow_runs: 'read-ci',
   github__get_branch_protection: 'read-rules',
   github__add_issue_comment: 'write-code',
+  github__create_release: 'write-code',
+  github__delete_release: 'write-code',
   github__create_branch: 'write-code-branch',
   github__create_or_update_file: 'write-code-branch',
   github__push_files: 'write-code-branch',
   github__delete_file: 'write-code-branch',
   github__create_pull_request: 'write-code-head',
   github__merge_pull_request: 'merge-pr',
+  github__dispatch_workflow: 'write-ci',
+  github__cancel_workflow_run: 'write-ci',
+  github__rerun_workflow_run: 'write-ci',
+  github__update_branch_protection: 'write-rules',
 };
 
 /** Global (not repo-scoped) reads. */
@@ -83,6 +93,10 @@ export function githubToolCapabilities(tool: string): readonly Capability[] {
     case 'write-code-head':
     case 'merge-pr':
       return [cap('code', 'write')];
+    case 'write-ci':
+      return [cap('ci', 'write')];
+    case 'write-rules':
+      return [cap('rules', 'write')];
     case 'global-read':
       return [cap('code', 'read')];
   }
@@ -176,6 +190,10 @@ export function classifyGithub(
       // The base branch isn't always in args ; assume the default protected branch.
       // The policy layer gates `write@main` strictly (human-gated by default).
       return { capability: cap('code', 'write', strArg(args, 'base') ?? 'main'), binding };
+    case 'write-ci':
+      return { capability: cap('ci', 'write'), binding };
+    case 'write-rules':
+      return { capability: cap('rules', 'write'), binding };
     case 'global-read':
       return { capability: cap('code', 'read'), binding };
   }

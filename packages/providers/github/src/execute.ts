@@ -233,6 +233,81 @@ export async function executeCall(
       });
       return data;
     }
+    case 'github__dispatch_workflow': {
+      // Octokit returns 204 No Content → empty data object.
+      await octokit.rest.actions.createWorkflowDispatch({
+        ...githubArgs(args),
+        workflow_id: args.workflow_id as string | number,
+        ref: args.ref as string,
+        inputs: args.inputs as Record<string, string> | undefined,
+      });
+      return { dispatched: true, workflow_id: args.workflow_id, ref: args.ref };
+    }
+    case 'github__cancel_workflow_run': {
+      await octokit.rest.actions.cancelWorkflowRun({
+        ...githubArgs(args),
+        run_id: args.run_id as number,
+      });
+      return { cancelled: true, run_id: args.run_id };
+    }
+    case 'github__rerun_workflow_run': {
+      await octokit.rest.actions.reRunWorkflow({
+        ...githubArgs(args),
+        run_id: args.run_id as number,
+      });
+      return { rerun: true, run_id: args.run_id };
+    }
+    case 'github__update_branch_protection': {
+      const { data } = await octokit.rest.repos.updateBranchProtection({
+        ...githubArgs(args),
+        branch: args.branch as string,
+        required_status_checks: args.required_status_checks as never,
+        enforce_admins: args.enforce_admins as never,
+        required_pull_request_reviews: args.required_pull_request_reviews as never,
+        restrictions: args.restrictions as never,
+        required_linear_history: args.required_linear_history as boolean | undefined,
+        allow_force_pushes: args.allow_force_pushes as boolean | undefined,
+        allow_deletions: args.allow_deletions as boolean | undefined,
+        required_conversation_resolution: args.required_conversation_resolution as
+          | boolean
+          | undefined,
+      });
+      return data;
+    }
+    case 'github__list_releases': {
+      const { data } = await octokit.rest.repos.listReleases({
+        ...githubArgs(args),
+        per_page: typeof args.per_page === 'number' ? args.per_page : undefined,
+      });
+      return data;
+    }
+    case 'github__list_tags': {
+      const { data } = await octokit.rest.repos.listTags({
+        ...githubArgs(args),
+        per_page: typeof args.per_page === 'number' ? args.per_page : undefined,
+      });
+      return data;
+    }
+    case 'github__create_release': {
+      const { data } = await octokit.rest.repos.createRelease({
+        ...githubArgs(args),
+        tag_name: args.tag_name as string,
+        target_commitish: args.target_commitish as string | undefined,
+        name: args.name as string | undefined,
+        body: args.body as string | undefined,
+        draft: args.draft as boolean | undefined,
+        prerelease: args.prerelease as boolean | undefined,
+        generate_release_notes: args.generate_release_notes as boolean | undefined,
+      });
+      return data;
+    }
+    case 'github__delete_release': {
+      await octokit.rest.repos.deleteRelease({
+        ...githubArgs(args),
+        release_id: args.release_id as number,
+      });
+      return { deleted: true, release_id: args.release_id };
+    }
     default:
       throw new Error(`Unknown GitHub MCP tool: ${tool}`);
   }
