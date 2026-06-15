@@ -9,5 +9,5 @@ const BASE = process.env.E2E_BASE_URL ?? 'https://vaubaan.com';
 test('landing renders with Sign in CTA', async ({ page }) => {
   await page.goto(BASE);
   await expect(page.getByText('Vaubaan').first()).toBeVisible();
-  await expect(page.getByRole('link', { name: /Sign in|Start free/ })).toBeVisible();
+  await expect(page.getByRole('link', { name: /Sign in|Start free/ }).first()).toBeVisible();
 });
