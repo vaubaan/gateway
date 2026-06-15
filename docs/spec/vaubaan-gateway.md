@@ -62,42 +62,53 @@
 
 ## 0. Vocabulaire
 
-Le MCP Proxy raisonne sur 11 mots, distincts et non-interchangeables :
+Le MCP Gateway raisonne sur ces termes (modèle risk-based — cf.
+[[gateway-risk-model]] pour la spec détaillée) :
 
-- **CloudProvider** — le SaaS lui-même (GitHub, Vercel, Supabase…). Statique
-  dans le catalogue. Pas une row DB, juste une string référencée par les
-  ProviderAdmins, ProviderBindings et Roles.
+- **CloudProvider** — le SaaS lui-même (GitHub, Vercel, Supabase, Railway,
+  SSH). Statique dans le catalogue. Pas une row DB, juste une string
+  référencée par les ProviderAdmins et ProviderBindings.
 - **Organization** — tenant racine côté Vaubaan. Isolation RLS stricte.
-- **Project** — sous-unité d'une Organization. Porte ses ProviderBindings
-  et ses AccessTokens.
+- **Project** — sous-unité d'une Organization. Porte ses ProviderBindings,
+  ses AccessTokens, sa risk-policy.
 - **ProviderAdmin** — bundle de credentials que Vaubaan Core détient au niveau
   organisation pour un Provider, **issu d'un flow OAuth/App install** (jamais
   paste-token). Stocké chiffré at-rest, déchiffré en mémoire à chaque
   call upstream.
 - **ProviderBinding** — lien concret entre un Project et une ressource côté
-  Provider (`acme/app` pour GitHub, `prj_xxx` pour Vercel, project_id pour
-  Supabase). C'est ce que les targets abstraits des Roles (`project.repos`,
-  `project.vercel`, `project.supabase`) résolvent à l'évaluation.
-- **Role** — bundle nommé de permissions, **provider-scoped** (1 Role ne
-  touche qu'à 1 Provider). Naming `<provider>:<role-name>` (`github:developer`,
-  `supabase:writer-staging`). Builtin global ou custom org-level.
-- **AccessToken** — identité émise par Vaubaan, **project-scoped**, porteur de
-  N Roles. Identifié par une `api_key` Vaubaan (`vbn_live_xxxx…`). Consommé
+  Provider (`acme/app` pour GitHub, `prj_xxx` pour Vercel, project_ref pour
+  Supabase, UUID projet pour Railway). Le segment du data-model qui qualifie
+  les slices émises par le classifieur du plugin.
+- **AccessToken** — identité émise par Vaubaan, **project-scoped**, porteur
+  d'un `accepted_risks: RiskId[]` (et d'un éventuel `denied_risks` opt-out).
+  Identifié par une `api_key` Vaubaan (`vbn_live_xxxx…`). Consommé
   indistinctement par un agent LLM, un script CI, un cron ou un humain.
-  Peut porter un `expires_at` (TTL) — les AccessTokens créés via l'UI sont
-  long-lived (`NULL`), ceux émis programmatiquement via
-  `POST /api/v1/mgmt/tokens` sont éphémères (default 24h, max 7j).
+  Peut porter un `expires_at` (TTL — default 24h, max 7j) et un flag
+  `singleUse`.
 - **ManagementKey** — Bearer credential **org-scoped**, distinct des
   AccessTokens et **inutilisable** sur le MCP gateway. Préfixe `vbn_mgmt_…`.
   Authentifie tout client programmatique (CI job, script de bootstrap,
   automation) sur `POST /api/v1/mgmt/tokens` pour qu'il puisse mint des
-  AccessTokens éphémères. Cf. ADR [[programmatic-access-token-minting]].
-- **Policy** — une `rule` JSON dans `Role.permissions` : `{effect, tool/tool_matches,
-  target?, constraints?}`. Le DSL est strictement déclaratif.
+  AccessTokens. Cf. ADR [[programmatic-access-token-minting]].
+- **RiskId** — identifiant d'une entrée du catalogue de risques d'un
+  provider (`supabase[staging].bulk-row-write`, `github.mint-install-token`).
+  Forme `<provider>[<env>].<name>` ou `<provider>.<name>`. C'est ce que le
+  token accepte (`accepted_risks`).
+- **Slice** — selecteur interne `provider.entity[selector].action` émis par
+  le classifieur au call (`github.repo[acme/app].branch[main].W`). Jamais
+  dans le wire utilisateur — purement plomberie entre plugin et runtime.
+- **RiskCatalog** — fichier YAML par provider (`packages/providers/<vendor>/
+  src/risk-catalog.yaml`) listant les `RiskEntry` avec leur `matches` (slice
+  pattern), `vector` (6D), `default_gate` (`allow|confirm|deny`).
+- **ProjectRiskPolicy** — table `project_risk_policies` qui override le
+  `default_gate` du catalogue pour un projet donné (par `risk_id` ±
+  `env_scope`). Trois gates : `allow`, `confirm` (déclenche approval),
+  `deny`.
 - **MCPGateway** — endpoint `/mcp` de Vaubaan Core. JSON-RPC. Auth par
   `Authorization: Bearer <api_key>`.
 - **AuditLog** — une row par call MCP, allow ou deny : (access_token, tool,
-  args_hash, role_matched, decision, upstream_latency).
+  args_hash, slices_executed, risks_touched, token_accepted_risks_snapshot,
+  decision, upstream_latency).
 
 **Distinction clé :** Vaubaan ne *distribue* plus de credentials cloud. Vaubaan
 *intermédie* des calls MCP. L'agent ne reçoit jamais de token provider ;

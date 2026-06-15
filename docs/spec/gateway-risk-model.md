@@ -1,6 +1,7 @@
-# Gateway — modèle de risque (DRAFT v4, supersède gateway-capability-model.md)
+# Gateway — modèle de risque (CURRENT, supersède gateway-capability-model.md)
 
-> Brouillon à valider. Ce doc remplace en bloc
+> Modèle actuel implémenté dans le code (depuis 2026-06-15, commit
+> `chore(v1-drop)`). Remplace en bloc
 > [`gateway-capability-model.md`](./gateway-capability-model.md) (v1, "rings
 > concentriques") et trois itérations intermédiaires (v2 macros, v3 slices
 > capability-based) qui n'ont jamais été actées. Le modèle ci-dessous est
