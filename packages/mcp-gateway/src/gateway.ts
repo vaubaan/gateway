@@ -273,10 +273,26 @@ export class McpGateway {
 
   private listTools(ctx: AccessTokenContext): McpToolDeclaration[] {
     const out: McpToolDeclaration[] = [];
+    const useV4 = (ctx.accepted_risks?.length ?? 0) > 0;
     for (const provider of ['github', 'vercel', 'supabase', 'railway', 'bash'] as Provider[]) {
       const adapter = this.cfg.upstreamByProvider[provider];
       if (!adapter) continue;
-      const filtered = filterAvailableTools(ctx.capabilities, adapter);
+      // v4 path : show ALL tools of a provider iff the token has at least one
+      // accepted risk targeting that provider. The actual per-tool gate fires
+      // at tools/call time when the slice is intersected with the catalog —
+      // attempting a tool whose slice does not match any accepted risk returns
+      // a structured 403 `risk-not-accepted`. Coarse but predictable.
+      // v1 path : capability-based filter (legacy).
+      let filtered: McpToolDeclaration[];
+      if (useV4) {
+        const targets = ctx.accepted_risks ?? [];
+        const matchesProvider = targets.some(
+          (r) => r.startsWith(`${provider}.`) || r.startsWith(`${provider}[`),
+        );
+        filtered = matchesProvider ? [...adapter.availableTools] : [];
+      } else {
+        filtered = filterAvailableTools(ctx.capabilities, adapter);
+      }
       if (filtered.length === 0) continue;
       // Self-contained adapters (e.g. ssh) load credentials per-call and
       // therefore have no scope-injection plan.

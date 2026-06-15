@@ -5,7 +5,7 @@
  * ADRs : docs/decisions/redis-cache-upstash-with-memory-fallback.md.
  */
 
-import { GitHubAdapter, githubAvailableTools } from '@vaubaan/providers-github';
+import { GitHubAdapter, githubAvailableTools, classifyGithubV4 } from '@vaubaan/providers-github';
 import { VercelAdapter, vercelAvailableTools, classifyVercelV4 } from '@vaubaan/providers-vercel';
 import {
   SupabaseAdapter,
@@ -17,6 +17,7 @@ import {
   railwayAvailableTools,
   classifyRailwayV4,
 } from '@vaubaan/providers-railway';
+import { classifySshV4 } from '@vaubaan/providers-ssh';
 import type {
   AccessTokenContext,
   Capability,
@@ -282,12 +283,10 @@ export function buildGateway(opts: {
   // session-authenticated path.
 
   // ── v4 plumbing ──────────────────────────────────────────────────────────
-  // Wire the v4 classifiers we currently have. GitHub and SSH have no
-  // classifyV4 shipped at the time of writing — tokens with v4
-  // accepted_risks targeting those providers will get a `risk-not-accepted`
-  // until the corresponding classifiers ship. The YAML catalogs are loaded
-  // lazily by `getCatalog(provider)`.
+  // All 5 providers wired. v4 tokens dispatch through the right plugin's
+  // classifyV4 ; the YAML catalogs are loaded lazily by `getCatalog(provider)`.
   const v4ClassifierByProvider: Partial<Record<Provider, V4ClassifierAdapter>> = {
+    github: { classifyV4: (tool, args, bindings) => classifyGithubV4(tool, args, bindings) },
     vercel: { classifyV4: (tool, args, bindings) => classifyVercelV4(tool, args, bindings) },
     supabase: {
       classifyV4: (tool, args, bindings) => classifySupabaseV4(tool, args, bindings),
@@ -295,6 +294,7 @@ export function buildGateway(opts: {
     railway: {
       classifyV4: (tool, args, bindings) => classifyRailwayV4(tool, args, bindings),
     },
+    bash: { classifyV4: (tool, args, bindings) => classifySshV4(tool, args, bindings) },
   };
   const v4CatalogByProvider: Partial<Record<Provider, IndexedRiskCatalog>> = {};
   for (const provider of ['github', 'vercel', 'supabase', 'railway', 'bash'] as Provider[]) {
