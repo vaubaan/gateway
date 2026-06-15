@@ -1,0 +1,293 @@
+/**
+ * Unit tests for `classifyVercelV4` — the v4 risk-based classifier.
+ *
+ * Each test pins down :
+ *   - the slice(s) emitted for a given (tool, args) call,
+ *   - the four bug-fixes vs v1 (fan-out, delete-all-envs, bypass-token-mint,
+ *     plaintext-read),
+ *   - the custom REST tools surface (domains, deployment-protection,
+ *     project-settings, env-var CRUD),
+ *   - binding enforcement (denial for an unbound projectId).
+ *
+ * Wherever possible, tests assert the *serialised* form via the policy-
+ * engine's `serializeSlice` to make the expected wire shape readable.
+ */
+import { describe, expect, test } from 'vitest';
+import type { ProviderBinding } from '@vaubaan/shared';
+import { serializeSlice } from '@vaubaan/policy-engine';
+
+import { classifyVercelV4 } from '../../src/risk-classifier.ts';
+
+const binding: ProviderBinding = {
+  id: 'b1',
+  project_id: 'p1',
+  provider: 'vercel',
+  resource_ref: 'prj_abc',
+  display_name: null,
+  created_at: '2026-01-01',
+};
+
+function classify(tool: string, args: Record<string, unknown> = {}) {
+  const result = classifyVercelV4(tool, args, [binding]);
+  if ('denied' in result) {
+    throw new Error(`unexpected denial: ${result.denied}`);
+  }
+  return result.slices.map((s) => serializeSlice(s));
+}
+
+describe('classifyVercelV4 — reads', () => {
+  test('search_vercel_documentation → account.docs.R', () => {
+    expect(classify('vercel__search_vercel_documentation')).toEqual(['vercel.account.docs.R']);
+  });
+
+  test('list_teams → account.team[*].R', () => {
+    expect(classify('vercel__list_teams')).toEqual(['vercel.account.team[*].R']);
+  });
+
+  test('list_projects → account.project[*].R', () => {
+    expect(classify('vercel__list_projects')).toEqual(['vercel.account.project[*].R']);
+  });
+
+  test('get_project → project[prj_abc].project-settings.R', () => {
+    expect(classify('vercel__get_project', { projectId: 'prj_abc' })).toEqual([
+      'vercel.project[prj_abc].project-settings.R',
+    ]);
+  });
+
+  test('list_project_domains → project[prj_abc].domain[*].R', () => {
+    expect(classify('vercel__list_project_domains', { projectId: 'prj_abc' })).toEqual([
+      'vercel.project[prj_abc].domain[*].R',
+    ]);
+  });
+
+  test('list_deployments → project[prj_abc].deployment[*].R', () => {
+    expect(classify('vercel__list_deployments', { projectId: 'prj_abc' })).toEqual([
+      'vercel.project[prj_abc].deployment[*].R',
+    ]);
+  });
+
+  test('get_deployment with idOrUrl → project[prj_abc].deployment[dep_xyz].R', () => {
+    expect(
+      classify('vercel__get_deployment', { idOrUrl: 'dep_xyz', projectId: 'prj_abc' }),
+    ).toEqual(['vercel.project[prj_abc].deployment[dep_xyz].R']);
+  });
+
+  test('get_runtime_logs → project[prj_abc].deployment[dep_xyz].runtime-log.R', () => {
+    expect(
+      classify('vercel__get_runtime_logs', { projectId: 'prj_abc', deploymentId: 'dep_xyz' }),
+    ).toEqual(['vercel.project[prj_abc].deployment[dep_xyz].runtime-log.R']);
+  });
+
+  test('list_env_vars (decrypt=false) → single env-var read slice', () => {
+    expect(classify('vercel__list_env_vars', { projectId: 'prj_abc' })).toEqual([
+      'vercel.project[prj_abc].env-var[*].R',
+    ]);
+  });
+});
+
+describe('classifyVercelV4 — bug-fix #4 : decrypt=true emits plaintext slice', () => {
+  test('list_env_vars decrypt=true → both env-var.R AND env-var.plaintext.R', () => {
+    const slices = classify('vercel__list_env_vars', { projectId: 'prj_abc', decrypt: true });
+    expect(slices).toContain('vercel.project[prj_abc].env-var[*].R');
+    expect(slices).toContain('vercel.project[prj_abc].env-var[*].plaintext.R');
+    expect(slices).toHaveLength(2);
+  });
+});
+
+describe('classifyVercelV4 — writes (deploy)', () => {
+  test('deploy_to_vercel target=production → env[prod].deployment.W', () => {
+    expect(
+      classify('vercel__deploy_to_vercel', { projectId: 'prj_abc', target: 'production' }),
+    ).toEqual(['vercel.project[prj_abc].env[prod].deployment.W']);
+  });
+
+  test('deploy_to_vercel target=preview → env[preview].deployment.W', () => {
+    expect(
+      classify('vercel__deploy_to_vercel', { projectId: 'prj_abc', target: 'preview' }),
+    ).toEqual(['vercel.project[prj_abc].env[preview].deployment.W']);
+  });
+
+  test('deploy_to_vercel missing target → defaults to prod (conservative)', () => {
+    expect(classify('vercel__deploy_to_vercel', { projectId: 'prj_abc' })).toEqual([
+      'vercel.project[prj_abc].env[prod].deployment.W',
+    ]);
+  });
+});
+
+describe('classifyVercelV4 — bug-fix #3 : get_access_to_vercel_url is a credential mint', () => {
+  test('emits bypass-token.W (not deployment.R)', () => {
+    const slices = classify('vercel__get_access_to_vercel_url', {
+      projectId: 'prj_abc',
+      url: 'dep-foo',
+    });
+    expect(slices).toEqual(['vercel.project[prj_abc].deployment[dep-foo].bypass-token.W']);
+  });
+
+  test('non-ident URL value falls back to wildcard ident', () => {
+    const slices = classify('vercel__get_access_to_vercel_url', {
+      projectId: 'prj_abc',
+      url: 'https://dep-foo.vercel.app/',
+    });
+    expect(slices).toEqual(['vercel.project[prj_abc].deployment[*].bypass-token.W']);
+  });
+});
+
+describe('classifyVercelV4 — bug-fix #1 : upsert_env_var fan-out', () => {
+  test('target=[preview] → single env slice, no fan-out marker', () => {
+    const slices = classify('vercel__upsert_env_var', {
+      projectId: 'prj_abc',
+      key: 'API_URL',
+      value: 'x',
+      target: ['preview'],
+    });
+    expect(slices).toEqual(['vercel.project[prj_abc].env[preview].env-var[API_URL].W']);
+  });
+
+  test('target=[production] → single prod slice, no fan-out', () => {
+    const slices = classify('vercel__upsert_env_var', {
+      projectId: 'prj_abc',
+      key: 'STRIPE',
+      value: 'x',
+      target: ['production'],
+    });
+    expect(slices).toEqual(['vercel.project[prj_abc].env[prod].env-var[STRIPE].W']);
+  });
+
+  test('target=[production,preview,development] → 3 env slices + fan-out marker', () => {
+    const slices = classify('vercel__upsert_env_var', {
+      projectId: 'prj_abc',
+      key: 'DB_URL',
+      value: 'x',
+      target: ['production', 'preview', 'development'],
+    });
+    expect(slices).toContain('vercel.project[prj_abc].env[prod].env-var[DB_URL].W');
+    expect(slices).toContain('vercel.project[prj_abc].env[preview].env-var[DB_URL].W');
+    expect(slices).toContain('vercel.project[prj_abc].env[development].env-var[DB_URL].W');
+    expect(slices).toContain('vercel.project[prj_abc].env-var-fan-out.W');
+    expect(slices).toHaveLength(4);
+  });
+
+  test('target omitted → defaults to all 3 envs + fan-out marker', () => {
+    const slices = classify('vercel__upsert_env_var', {
+      projectId: 'prj_abc',
+      key: 'DB_URL',
+      value: 'x',
+    });
+    expect(slices).toContain('vercel.project[prj_abc].env[prod].env-var[DB_URL].W');
+    expect(slices).toContain('vercel.project[prj_abc].env[preview].env-var[DB_URL].W');
+    expect(slices).toContain('vercel.project[prj_abc].env[development].env-var[DB_URL].W');
+    expect(slices).toContain('vercel.project[prj_abc].env-var-fan-out.W');
+  });
+});
+
+describe('classifyVercelV4 — bug-fix #2 : delete_env_var always touches all 3 envs', () => {
+  test('delete_env_var with hint=preview → still emits 3 env slices + fan-out marker', () => {
+    const slices = classify('vercel__delete_env_var', {
+      projectId: 'prj_abc',
+      id: 'env_xyz',
+      target: 'preview',
+    });
+    expect(slices).toContain('vercel.project[prj_abc].env[prod].env-var[env_xyz].W');
+    expect(slices).toContain('vercel.project[prj_abc].env[preview].env-var[env_xyz].W');
+    expect(slices).toContain('vercel.project[prj_abc].env[development].env-var[env_xyz].W');
+    expect(slices).toContain('vercel.project[prj_abc].env-var-fan-out.W');
+    expect(slices).toHaveLength(4);
+  });
+
+  test('delete_env_var without target hint also fans out', () => {
+    const slices = classify('vercel__delete_env_var', { projectId: 'prj_abc', id: 'env_xyz' });
+    expect(slices).toHaveLength(4);
+    expect(slices).toContain('vercel.project[prj_abc].env-var-fan-out.W');
+  });
+});
+
+describe('classifyVercelV4 — custom REST tools (project settings, domains, protection)', () => {
+  test('update_project_settings → project[prj_abc].project-settings.W', () => {
+    expect(
+      classify('vercel__update_project_settings', { projectId: 'prj_abc', rootDirectory: 'app' }),
+    ).toEqual(['vercel.project[prj_abc].project-settings.W']);
+  });
+
+  test('update_deployment_protection → project[prj_abc].deployment-protection.W', () => {
+    expect(
+      classify('vercel__update_deployment_protection', {
+        projectId: 'prj_abc',
+        ssoProtection: null,
+      }),
+    ).toEqual(['vercel.project[prj_abc].deployment-protection.W']);
+  });
+
+  test('add_project_domain with ident-safe name → domain[NAME].W', () => {
+    expect(
+      classify('vercel__add_project_domain', { projectId: 'prj_abc', name: 'staging' }),
+    ).toEqual(['vercel.project[prj_abc].domain[staging].W']);
+  });
+
+  test('add_project_domain with FQDN name → domain[*].W (FQDN not slice-safe)', () => {
+    expect(
+      classify('vercel__add_project_domain', { projectId: 'prj_abc', name: 'www.example.com' }),
+    ).toEqual(['vercel.project[prj_abc].domain[*].W']);
+  });
+
+  test('verify_project_domain → domain.W', () => {
+    expect(
+      classify('vercel__verify_project_domain', { projectId: 'prj_abc', domain: 'staging' }),
+    ).toEqual(['vercel.project[prj_abc].domain[staging].W']);
+  });
+
+  test('remove_project_domain → domain.W', () => {
+    expect(
+      classify('vercel__remove_project_domain', { projectId: 'prj_abc', domain: 'staging' }),
+    ).toEqual(['vercel.project[prj_abc].domain[staging].W']);
+  });
+});
+
+describe('classifyVercelV4 — toolbar surface', () => {
+  test('reply_to_toolbar_thread → toolbar-message.W under the thread', () => {
+    const slices = classify('vercel__reply_to_toolbar_thread', {
+      projectId: 'prj_abc',
+      threadId: 'thr_1',
+      markdown: 'hi',
+    });
+    expect(slices).toEqual([
+      'vercel.project[prj_abc].deployment[*].toolbar-thread[thr_1].toolbar-message.W',
+    ]);
+  });
+
+  test('change_toolbar_thread_resolve_status → toolbar-thread[T].W', () => {
+    expect(
+      classify('vercel__change_toolbar_thread_resolve_status', {
+        projectId: 'prj_abc',
+        threadId: 'thr_1',
+        resolved: true,
+      }),
+    ).toEqual(['vercel.project[prj_abc].deployment[*].toolbar-thread[thr_1].W']);
+  });
+
+  test('edit_toolbar_message → toolbar-message[M].W', () => {
+    expect(
+      classify('vercel__edit_toolbar_message', {
+        projectId: 'prj_abc',
+        threadId: 'thr_1',
+        messageId: 'msg_2',
+        markdown: 'edited',
+      }),
+    ).toEqual([
+      'vercel.project[prj_abc].deployment[*].toolbar-thread[thr_1].toolbar-message[msg_2].W',
+    ]);
+  });
+});
+
+describe('classifyVercelV4 — denials', () => {
+  test('unknown tool → denied', () => {
+    const result = classifyVercelV4('vercel__bogus', {}, [binding]);
+    expect(result).toEqual({ denied: "unknown vercel tool 'vercel__bogus'." });
+  });
+
+  test('unbound projectId → denied', () => {
+    const result = classifyVercelV4('vercel__get_project', { projectId: 'prj_unbound' }, [binding]);
+    expect(result).toEqual({
+      denied: "vercel project 'prj_unbound' is not bound to this project.",
+    });
+  });
+});
