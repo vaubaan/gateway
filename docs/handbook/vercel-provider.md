@@ -9,6 +9,17 @@ tracks:
 
 # Vercel provider — `@vaubaan/providers-vercel`
 
+> **⚠️ 2026-06-15 — v4 risk-based catalog added.** Files added to
+> `packages/providers/vercel/src/` : `data-model.ts` (14 entities of
+> the `runtime` plane), `risk-catalog.yaml` (15 risks + fallback),
+> `risk-classifier.ts` (classifyVercelV4). The v4 classifier fixes 4
+> latent v1 bugs : (1) `upsert_env_var` honors the full `target: string[]`
+> instead of degrading to scalar ; (2) `delete_env_var` emits on all 3
+> envs (Vercel deletes cross-env) ; (3) `get_access_to_vercel_url` is
+> classified as `bypass-token.W` (credential mint) ; (4) `list_env_vars
+decrypt=true` emits a `plaintext.R` slice for the `deny`-gated
+> `read-env-var-plaintext` risk. See `.vaubaan/research/providers/vercel.md`.
+
 Rewrap du MCP remote officiel `mcp.vercel.com` (18 tools) augmenté de 4 tools
 REST custom (`update_project_settings`, `upsert_env_var`, `list_env_vars`,
 `delete_env_var`) qui couvrent les trous read/write du MCP officiel sur env

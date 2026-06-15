@@ -11,6 +11,21 @@ tracks:
 
 # Policy engine — `@vaubaan/policy-engine`
 
+> **⚠️ 2026-06-15 — v4 risk-based modules added.** The 4 v1 modules
+> below (`policy.ts`, `evaluate.ts`, `scope-injection.ts`,
+> `tools-filter.ts`) are **kept** for the dual-mode boot ; the package
+> now also exports the v4 risk-based engine :
+>
+> - `slice-dsl.ts` : parseSlice / serializeSlice (DSL §3 of spec v4).
+> - `slice-matcher.ts` : matches / covers / intersects.
+> - `risk-evaluator.ts` : indexCatalog, risksTouchedBy(All), findRiskEntry.
+> - `risk-policy.ts` : resolveEffectiveGate, checkAcceptableInEnv,
+>   requiresAdminToOverrideDenyAllow, seedDefaultGate,
+>   prepareCatalog.
+> - `risk-runtime.ts` : evaluateCall — pure decision function.
+>   See [[gateway-risk-model]] §1, §3, §4, §6 for the conceptual model and
+>   the catalog format.
+
 Quatre modules purs autour des _capabilities_ Vaubaan (cf. spec
 `docs/spec/gateway-capability-model.md` §3, §5, §7).
 Le pré-migration `0015_capabilities_replace_roles.sql` (DSL Roles

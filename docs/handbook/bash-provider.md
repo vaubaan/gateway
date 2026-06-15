@@ -13,6 +13,14 @@ tracks:
 
 # Bash provider — `bash:<ring>:<action>@<host>`
 
+> **⚠️ 2026-06-15 — v4 risk-based notes.** A v4 catalog + classifier
+> are added under `packages/providers/ssh/src/` (the package is named
+> `ssh` but the provider slug remains `bash` for back-compat). The v4
+> path emits slices like `ssh.host[X].command.R|W` and the catalog has
+> 5 risks + 1 fallback. The `isReadAllowed` regex described below stays
+> in use — the v4 classifier wraps it. See [[gateway-risk-model]] §3
+> and `.vaubaan/research/providers/railway-ssh.md` §2.
+
 Le provider `bash` expose un dispatcher générique : chaque _binding_ porte un
 script bash annoté, et N hôtes SSH s'y rattachent comme _envs_. Le script
 déclare lui-même sa surface de capabilities via des commentaires

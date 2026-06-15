@@ -11,6 +11,16 @@ tracks:
 
 # MCP gateway — `@vaubaan/mcp-gateway` + `/mcp` route
 
+> **⚠️ 2026-06-15 — v4 risk-based path active in dual-mode.** Tokens
+> carrying `accepted_risks: RiskId[]` route through `callToolV4`
+> (`risk-gateway.ts` + `risk-runtime.evaluateCall`) ; tokens carrying
+> `capabilities[]` keep the v1 path described below. `tools/list` is
+> v4-aware : a v4 token sees the full tool list of every provider for
+> which it accepted at least one risk. Audit rows gain optional
+> `slices_executed`, `risks_touched`, `token_accepted_risks_snapshot`
+> columns. See [[gateway-risk-model]] §8 for the decision flow and §12
+> for the audit shape.
+
 Le hot-path produit. Auth → context load (cached) → classify call → evaluate
 capability → mint upstream JIT → executeCall → audit → JSON-RPC response.
 

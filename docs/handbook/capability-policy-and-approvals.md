@@ -1,7 +1,9 @@
 ---
 title: Capability policy + approvals (allow/confirm/deny)
-status: current
+status: partially-superseded
 date: 2026-06-11
+superseded-by: gateway-risk-model
+superseded-date: 2026-06-15
 tracks:
   - packages/policy-engine/src/policy.ts
   - packages/web/src/lib/approvals/
@@ -22,6 +24,18 @@ tracks:
 ---
 
 # Capability policy + human-gate approvals
+
+> **⚠️ 2026-06-15 — Partially superseded by v4 risk-based model.**
+> The capability-based policy (`policy_rules`, `(provider, plane, level,
+action, env_pattern)` → gate) described below is **kept active in
+> dual-mode** alongside the new v4 risk-based path. New mints using
+> `accepted_risks: RiskId[]` go through `project_risk_policies` +
+> the YAML catalog instead — see [[gateway-risk-model]] §6 and §9.
+> Approval channels (`manual`, `telegram`, `email` — new in Phase 6)
+> still use the lifecycle and tables described here. The
+> EmailChannel is documented in `lib/approvals/email.ts` and
+> `lib/approvals/email-token.ts`. The long-poll endpoint
+> `GET /pending/:id?wait=25` is documented in spec v4 §11.
 
 Two-layer authorization model (cf. `docs/spec/gateway-capability-model.md`
 §5, §5.1, §8) :

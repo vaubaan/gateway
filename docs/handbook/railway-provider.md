@@ -10,6 +10,18 @@ tracks:
 
 # Railway provider — `@vaubaan/providers-railway`
 
+> **⚠️ 2026-06-15 — v4 risk-based catalog added.** Files added to
+> `packages/providers/railway/src/` : `data-model.ts` (8 entities of
+> the `runtime` plane), `risk-catalog.{yaml,ts}` (11 risks + fallback),
+> `risk-classifier.ts` (classifyRailwayV4). The v4 classifier fixes
+> the v1 TODO on `upsert-variables` : it now reads `args.replace` and
+> emits a distinct slice (`service-var[*].W` wildcard for the
+> destructive `replace=true` branch) that triggers the
+> `bulk-variables-replace` deny risk. The `railway-agent` meta-tool
+> emits THREE parallel slices (account+deployment+service-var) so the
+> token must accept the full union. See
+> `.vaubaan/research/providers/railway-ssh.md` §1.
+
 Rewrap du MCP remote officiel `mcp.railway.com`. OAuth Auth app
 (`authorization_code` + PKCE), token 1h refreshé sur le hot-path, 10 MCP tools
 forwardés en JSON-RPC. Même style d'adapter que Vercel.

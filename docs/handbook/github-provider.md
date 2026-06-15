@@ -10,6 +10,17 @@ tracks:
 
 # GitHub provider — `@vaubaan/providers-github`
 
+> **⚠️ 2026-06-15 — v4 risk-based catalog added.** Files added to
+> `packages/providers/github/src/` : `data-model.ts` (17 entities of
+> the `repo` plane), `risk-catalog.yaml` (14 risks + fallback),
+> `risk-classifier.ts` (classifyGithubV4). Three tools retired in v4
+> (`dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`)
+> — see [[gateway-risk-model]] §7.2 #1 for rationale. Notable risks :
+> `github.merge-protected` (confirm), `github.workflow-write-via-file`
+> (deny), `github.branch-protection-write` (deny),
+> `github.mint-install-token-push` (deny). See
+> `.vaubaan/research/providers/github.md` for the full mapping.
+
 Le provider de référence : App install + JIT installation token + 18 MCP
 tools synthétisés via Octokit, plus le tool éphémère `github__mint_install_token`.
 Le pattern (contrat `ProviderAdapter` + classifier + executor) est répliqué
