@@ -6,6 +6,7 @@
  */
 
 import type { Capability } from './capability.ts';
+import type { RiskId } from './risk.ts';
 
 export type Provider = 'github' | 'vercel' | 'supabase' | 'railway' | 'bash';
 
@@ -162,8 +163,15 @@ export interface AccessTokenContext {
   >;
   project: Pick<Project, 'id' | 'slug' | 'organization_id'>;
   organization: Pick<Organization, 'id' | 'slug' | 'name'>;
-  /** The capability set granted to this access token (the full tuples). */
+  /** The capability set granted to this access token (the full tuples).
+   *  Empty array on v4 tokens that grant via `accepted_risks` only. */
   capabilities: Capability[];
+  /** v4 risk-based grants. Non-empty marks the token as v4-shaped — the
+   *  runtime dispatches via `risk-gateway.ts` instead of the v1 capability
+   *  path. */
+  accepted_risks?: RiskId[];
+  /** v4 explicit opt-outs (defaults to []). */
+  denied_risks?: RiskId[];
   bindings: ProviderBinding[];
   provider_admins: Array<
     Pick<ProviderAdmin, 'provider' | 'status' | 'installation_id' | 'team_id'>

@@ -16,6 +16,7 @@ import {
   injectionPlanFor,
   mergeInjectedArgs,
   stripInjectedArgs,
+  type IndexedRiskCatalog,
 } from '@vaubaan/policy-engine';
 import type {
   AccessTokenContext,
@@ -27,8 +28,16 @@ import type {
   Provider,
   ProviderAdmin,
   ProviderBinding,
+  RiskId,
+  Slice,
 } from '@vaubaan/shared';
 import { parseApiKey, verifyApiKey } from '@vaubaan/shared';
+import {
+  denyResponseBody,
+  evaluateCallForToken,
+  shouldUseV4Path,
+  type V4ClassifierAdapter,
+} from './risk-gateway.ts';
 
 /** What a provider plugin returns when classifying a concrete call. The
  *  optional `binding` is the binding the call resolved to ; the gateway uses
@@ -161,6 +170,23 @@ export interface GatewayConfig {
   /** Optional request metadata captured into audit_log. */
   clientIp?: string | null;
   clientUserAgent?: string | null;
+  /**
+   * Optional v4 risk-based plumbing — when present, tokens with non-empty
+   * `accepted_risks` route through the v4 path (`callToolV4`). Absent or
+   * `undefined` ⇒ every token uses the v1 capability path (back-compat).
+   *
+   *  - `v4ClassifierByProvider` : per-provider plugin returning the
+   *    `Slice[]` for a tool call (cf. `classifyV4` in
+   *    `packages/providers/<vendor>/src/risk-classifier.ts`).
+   *  - `v4CatalogByProvider`    : per-provider indexed risk catalog
+   *    (`prepareCatalog(yamlContents)` at boot).
+   *
+   * Per-provider classifier/catalog absence ⇒ the v4 call is denied with
+   * `risk-not-accepted` (catalog missing). The fallback to v1 only happens
+   * when the TOKEN itself is v1-shaped (no accepted_risks).
+   */
+  v4ClassifierByProvider?: Partial<Record<Provider, V4ClassifierAdapter>>;
+  v4CatalogByProvider?: Partial<Record<Provider, IndexedRiskCatalog>>;
 }
 
 export class McpGateway {
@@ -280,6 +306,16 @@ export class McpGateway {
     const toolName = typeof params.name === 'string' ? params.name : '';
     if (!toolName) return rpcError(id, -32602, 'tools/call requires params.name');
     const rawArgs = (params.arguments as Record<string, unknown> | undefined) ?? {};
+
+    // v4 dispatch — if the token carries accepted_risks (v4 mint) AND we
+    // have the v4 plumbing configured (catalogs + classifiers), route to
+    // the v4 path. Tokens without accepted_risks fall through to v1.
+    if (
+      shouldUseV4Path({ accepted_risks: ctx.accepted_risks ?? [] }) &&
+      this.cfg.v4ClassifierByProvider
+    ) {
+      return await this.callToolV4(ctx, id, toolName, rawArgs);
+    }
 
     // Determine provider from tool prefix.
     const provider = this.providerFor(toolName);
@@ -443,6 +479,265 @@ export class McpGateway {
       const message = e instanceof Error ? e.message : String(e);
       await this.audit(ctx, toolName, args, 'allowed', capabilityMatched, null, latency);
       return rpcError(id, -32603, `Upstream call failed: ${message}`);
+    }
+  }
+
+  /**
+   * v4 risk-based call path — used when the token has non-empty
+   * `accepted_risks`. Mirrors `callTool` (provider lookup, scope-injection,
+   * single-use consume, executeCall, audit) but replaces the authorization
+   * step with `evaluateCallForToken` (slices × catalog × accepted_risks).
+   *
+   * The audit row enriches `slices_executed`, `risks_touched`, and
+   * `token_accepted_risks_snapshot` per spec v4 §12.
+   *
+   * Self-contained adapters (ssh / bash) are NOT supported on the v4 path
+   * yet — the ssh classifier emits slices but the gateway routing for the
+   * self-contained branch lives in the v1 callTool. Phase 4 follow-up.
+   */
+  private async callToolV4(
+    ctx: AccessTokenContext,
+    id: string | number | null,
+    toolName: string,
+    rawArgs: Record<string, unknown>,
+  ): Promise<JsonRpcResponse> {
+    const provider = this.providerFor(toolName);
+    if (!provider) {
+      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__/railway__/bash__).`;
+      await this.auditV4(ctx, toolName, rawArgs, 'denied', null, [], reason, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+    }
+
+    const adapter = this.cfg.upstreamByProvider[provider];
+    if (!adapter) {
+      const reason = `provider '${provider}' is not enabled on this gateway.`;
+      await this.auditV4(ctx, toolName, rawArgs, 'denied', null, [], reason, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+    }
+    const v4Adapter = this.cfg.v4ClassifierByProvider?.[provider];
+    if (!v4Adapter) {
+      const reason = `v4 classifier not registered for provider '${provider}' — gateway misconfigured.`;
+      await this.auditV4(ctx, toolName, rawArgs, 'denied', null, [], reason, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+    }
+    const catalog = this.cfg.v4CatalogByProvider?.[provider];
+
+    // Pre-compute args with scope injection so the classifier sees the same
+    // values upstream will receive (mirrors v1 behaviour).
+    const adminEntry = ctx.provider_admins.find((p) => p.provider === provider);
+    const plan = adapter.selfContained
+      ? null
+      : injectionPlanFor(provider, {
+          bindings: ctx.bindings,
+          vercelTeamId: adminEntry?.team_id ?? null,
+        });
+    const args = plan ? mergeInjectedArgs(rawArgs, plan) : rawArgs;
+
+    const verdict = evaluateCallForToken({
+      tool: toolName,
+      args,
+      bindings: ctx.bindings,
+      token: {
+        id: ctx.access_token.id,
+        accepted_risks: ctx.accepted_risks ?? [],
+        denied_risks: ctx.denied_risks ?? [],
+      },
+      adapter: v4Adapter,
+      catalog,
+    });
+
+    if (verdict.kind === 'no-catalog') {
+      const reason = `risk catalog for '${provider}' is not loaded — refusing call (fail-closed).`;
+      await this.auditV4(ctx, toolName, args, 'denied', null, [], reason, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+    }
+    if (verdict.kind === 'classify-denied') {
+      await this.auditV4(ctx, toolName, args, 'denied', null, [], verdict.reason, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${verdict.reason}`);
+    }
+    if (verdict.kind === 'deny') {
+      const body = denyResponseBody(verdict);
+      await this.auditV4(
+        ctx,
+        toolName,
+        args,
+        'denied',
+        verdict.executed_slices,
+        verdict.missing_risks,
+        body.hint,
+        null,
+      );
+      return rpcError(id, -32603, `Vaubaan risk-not-accepted`, body);
+    }
+
+    // verdict.kind === 'allow'
+    const risksMatched = verdict.risks_touched.join(',');
+
+    // Self-contained adapters (e.g. ssh) execute differently. We delegate
+    // to executeCallSelfContained without provider-admin loading.
+    if (adapter.selfContained) {
+      if (ctx.access_token.single_use && this.cfg.contextLoader.consumeAccessToken) {
+        const won = await this.cfg.contextLoader.consumeAccessToken(ctx.access_token.id);
+        if (!won) {
+          const reason = 'access token has already been consumed (single-use).';
+          await this.auditV4(
+            ctx,
+            toolName,
+            args,
+            'denied',
+            verdict.executed_slices,
+            [],
+            reason,
+            null,
+          );
+          return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+        }
+        await this.cfg.cache.del(`vaubaan:ctx:${ctx.access_token.api_key_prefix}`);
+      }
+      const t0 = Date.now();
+      try {
+        const execFn = adapter.executeCallSelfContained?.bind(adapter);
+        if (!execFn) {
+          throw new Error(
+            `self-contained adapter for '${provider}' has no executeCallSelfContained`,
+          );
+        }
+        const result = await execFn(ctx, toolName, rawArgs);
+        const latency = Date.now() - t0;
+        await this.auditV4(
+          ctx,
+          toolName,
+          args,
+          'allowed',
+          verdict.executed_slices,
+          verdict.risks_touched,
+          risksMatched,
+          latency,
+        );
+        return rpcSuccess(id, this.shapeMcpResult(result));
+      } catch (e) {
+        const latency = Date.now() - t0;
+        const message = e instanceof Error ? e.message : String(e);
+        await this.auditV4(
+          ctx,
+          toolName,
+          args,
+          'allowed',
+          verdict.executed_slices,
+          verdict.risks_touched,
+          risksMatched,
+          latency,
+        );
+        return rpcError(id, -32603, `Upstream call failed: ${message}`);
+      }
+    }
+
+    // Regular (provider-admin-backed) adapter.
+    if (!adminEntry || adminEntry.status !== 'connected') {
+      const reason = `provider '${provider}' is not connected for organization '${ctx.organization.slug}'.`;
+      await this.auditV4(ctx, toolName, args, 'denied', verdict.executed_slices, [], reason, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+    }
+    const admin = await adapter.loadProviderAdmin(ctx.organization.id, provider);
+    if (!admin) {
+      const reason = `provider_admin for '${provider}' could not be loaded — re-connect required.`;
+      await this.auditV4(ctx, toolName, args, 'denied', verdict.executed_slices, [], reason, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+    }
+
+    if (ctx.access_token.single_use && this.cfg.contextLoader.consumeAccessToken) {
+      const won = await this.cfg.contextLoader.consumeAccessToken(ctx.access_token.id);
+      if (!won) {
+        const reason = 'access token has already been consumed (single-use).';
+        await this.auditV4(
+          ctx,
+          toolName,
+          args,
+          'denied',
+          verdict.executed_slices,
+          [],
+          reason,
+          null,
+        );
+        return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+      }
+      await this.cfg.cache.del(`vaubaan:ctx:${ctx.access_token.api_key_prefix}`);
+    }
+
+    const binding = ctx.bindings.find((b) => b.provider === provider);
+    const t0 = Date.now();
+    try {
+      const result = await adapter.executeCall(
+        admin,
+        binding ?? {
+          id: '',
+          project_id: ctx.project.id,
+          provider,
+          resource_ref: '',
+          display_name: null,
+          created_at: '',
+        },
+        toolName,
+        args,
+      );
+      const latency = Date.now() - t0;
+      await this.auditV4(
+        ctx,
+        toolName,
+        args,
+        'allowed',
+        verdict.executed_slices,
+        verdict.risks_touched,
+        risksMatched,
+        latency,
+      );
+      return rpcSuccess(id, this.shapeMcpResult(result));
+    } catch (e) {
+      const latency = Date.now() - t0;
+      const message = e instanceof Error ? e.message : String(e);
+      await this.auditV4(
+        ctx,
+        toolName,
+        args,
+        'allowed',
+        verdict.executed_slices,
+        verdict.risks_touched,
+        risksMatched,
+        latency,
+      );
+      return rpcError(id, -32603, `Upstream call failed: ${message}`);
+    }
+  }
+
+  private async auditV4(
+    ctx: AccessTokenContext,
+    tool: string,
+    args: Record<string, unknown>,
+    decision: 'allowed' | 'denied',
+    executedSlices: readonly Slice[] | null,
+    risksTouched: readonly RiskId[],
+    denialOrMatched: string | null,
+    latency: number | null,
+  ): Promise<void> {
+    try {
+      await this.cfg.audit.write({
+        organization_id: ctx.organization.id,
+        project_id: ctx.project.id,
+        access_token_id: ctx.access_token.id,
+        tool_name: tool,
+        arguments_hash: hashArguments(args),
+        capability_matched: null,
+        decision,
+        denial_reason: decision === 'denied' ? denialOrMatched : null,
+        upstream_latency_ms: latency,
+        client_ip: this.cfg.clientIp ?? null,
+        client_user_agent: this.cfg.clientUserAgent ?? null,
+        slices_executed: executedSlices ? [...executedSlices] : null,
+        risks_touched: [...risksTouched],
+        token_accepted_risks_snapshot: ctx.accepted_risks ? [...ctx.accepted_risks] : null,
+      });
+    } catch (e) {
+      console.error('[gateway] v4 audit write failed', e);
     }
   }
 
