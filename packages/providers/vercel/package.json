@@ -11,5 +11,10 @@
   },
   "dependencies": {
     "@vaubaan/shared": "*"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@vaubaan/policy-engine": "^0.0.0",
+    "js-yaml": "^4.2.0"
   }
 }

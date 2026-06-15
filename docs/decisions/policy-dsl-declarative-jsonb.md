@@ -1,10 +1,17 @@
 ---
 title: Policy DSL — JSON déclaratif stocké en jsonb, 7 opérateurs
-status: accepted
+status: superseded
 date: 2026-05-22
+superseded-by: pivot-to-risk-based-model
+superseded-date: 2026-06-15
 ---
 
 # Policy DSL — JSON déclaratif stocké en jsonb, 7 opérateurs
+
+> **⚠️ SUPERSEDED 2026-06-15** — Le DSL JSON 7-opérateurs est remplacé
+> par un **catalogue de risques YAML versionné par provider** + une
+> table `project_risk_policies (risk_id, env_scope, gate)` légère.
+> Plus de DSL. Cf. [[gateway-risk-model]] §4 et §6.
 
 ## Contexte
 

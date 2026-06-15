@@ -2,6 +2,23 @@
 
 > **Statut :** spec greenfield.
 >
+> **⚠️ Note 2026-06-15 — Capabilities → Risk-based (3ème évolution) :**
+> Le modèle **capabilities** introduit en 2026-06-08 (tuple `(provider,
+> plane, level, action, env?)`) est **remplacé** par le **modèle
+> risk-based**. Le token ne porte plus une liste de capabilities ; il
+> porte une liste de **risques acceptés** (`accepted_risks: RiskId[]`)
+> qualifiée par binding. Chaque provider déclare désormais : (a) un
+> **data-model** (graphe d'entités + cardinalités), (b) un **catalogue
+> de risques** versionné (YAML), (c) un classifieur qui émet la
+> **slice** touchée au call. La policy projet devient une table légère
+> d'override (`project_risk_policies : risk_id → gate`). Le gate
+> vocabulaire (`allow|confirm|deny`) et l'approval flow (Telegram +
+> Manual + nouveau Email) sont conservés. Source de vérité du nouveau
+> modèle : [[gateway-risk-model]] (DRAFT v4). Audit de cohérence
+> et plan de migration : `/.vaubaan/reports/v4-coherence-audit.md` +
+> `/.vaubaan/reports/v4-migration-plan.md`. ADR
+> `pivot-to-risk-based-model` à drafter au réveil.
+>
 > **⚠️ Note 2026-06-08 — Roles → Capabilities :** le modèle **roles +
 > policy-DSL déclaratif** (§0, §2.2, tables `roles`/`access_token_roles` en §3,
 > §5 roles builtin, §6 DSL) est **remplacé** par le **modèle de capabilities**.

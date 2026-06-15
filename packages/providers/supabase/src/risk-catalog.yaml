@@ -82,7 +82,7 @@ risks:
     default_gate: confirm
     acceptable_in_envs: [preview, staging]
 
-  - id: supabase.migration.W
+  - id: supabase.migration-write
     label: Apply migration (DDL)
     reason: >-
       CREATE/DROP/ALTER TABLE/INDEX. Costly à reverter (down-migration
@@ -99,7 +99,7 @@ risks:
       persistence: posture
     default_gate: confirm
 
-  - id: supabase.policy.W
+  - id: supabase.policy-write
     label: Modifier la RLS (CREATE/ALTER POLICY)
     reason: >-
       Posture-shift critique : ouvre/ferme l'accès aux données pour tous
@@ -114,7 +114,7 @@ risks:
       persistence: posture
     default_gate: deny
 
-  - id: supabase.db-role.W
+  - id: supabase.db-role-write
     label: Créer/modifier des rôles Postgres
     reason: >-
       Posture credentials. CREATE ROLE / GRANT / REVOKE. Pas de tool MCP
@@ -129,7 +129,7 @@ risks:
       persistence: posture
     default_gate: deny
 
-  - id: supabase.extension.W
+  - id: supabase.extension-write
     label: Activer/désactiver une extension Postgres
     reason: >-
       Posture-shift de la surface SQL disponible. Certaines extensions
@@ -149,7 +149,7 @@ risks:
   # Plane `storage`
   # ───────────────────────────────────────────────────────────────────────
 
-  - id: supabase.storage.object.R
+  - id: supabase.storage.object-read
     label: Lister / télécharger des objets storage
     reason: >-
       Lectures de fichiers users (peut être PII : pièces d'ID, photos,
@@ -196,7 +196,7 @@ risks:
     default_gate: confirm
     acceptable_in_envs: [preview, staging]
 
-  - id: supabase.storage.signed-url.R
+  - id: supabase.storage.signed-url-read
     label: Générer une URL signée
     reason: >-
       READ sur le bucket MAIS exfiltre potentiellement la data vers un
@@ -212,7 +212,7 @@ risks:
       persistence: session
     default_gate: confirm
 
-  - id: supabase.bucket.W
+  - id: supabase.bucket-write
     label: Créer/modifier/supprimer un bucket
     reason: >-
       Posture-shift : un bucket public peut leaker des objets privés mal
@@ -228,7 +228,7 @@ risks:
       persistence: posture
     default_gate: confirm
 
-  - id: supabase.storage-config.W
+  - id: supabase.storage-config-write
     label: Modifier la storage config globale
     reason: >-
       Quotas, transformations, CDN. Affecte tout le projet et toutes les
@@ -309,7 +309,7 @@ risks:
       persistence: session
     default_gate: confirm
 
-  - id: supabase.sso-provider.W
+  - id: supabase.sso-provider-write
     label: Configurer un IdP SAML / OIDC
     reason: >-
       Posture identité fédérée. Une mauvaise config = toute personne avec
@@ -324,7 +324,7 @@ risks:
       persistence: posture
     default_gate: deny
 
-  - id: supabase.third-party-auth.W
+  - id: supabase.third-party-auth-write
     label: Configurer un provider tiers (Firebase, Auth0, …)
     reason: >-
       Idem SSO : posture identité, accepte de fédérer un IdP externe pour
@@ -339,7 +339,7 @@ risks:
       persistence: posture
     default_gate: deny
 
-  - id: supabase.auth-config.W
+  - id: supabase.auth-config-write
     label: Modifier la config auth globale
     reason: >-
       JWT secret, expirations, allowed redirect URLs, signup policy. La
@@ -373,7 +373,7 @@ risks:
       persistence: stateless
     default_gate: allow
 
-  - id: supabase.functions.body.W
+  - id: supabase.functions.body-write
     label: Créer/modifier/supprimer le code d'une Edge Function
     reason: >-
       Modifier le code = injecter un comportement custom à chaque
@@ -406,7 +406,7 @@ risks:
     default_gate: confirm
     acceptable_in_envs: [preview, staging, prod]
 
-  - id: supabase.function-secret.W
+  - id: supabase.function-secret-write
     label: Créer/modifier/supprimer un function-secret
     reason: >-
       Secret prod consommé par les Edge Functions à runtime. Delete = peut

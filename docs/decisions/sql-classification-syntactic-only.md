@@ -1,10 +1,19 @@
 ---
 title: Classification SQL d'execute_sql — syntaxique uniquement (semantic escalation hors scope MVP)
-status: accepted
+status: superseded
 date: 2026-06-11
+superseded-by: pivot-to-risk-based-model
+superseded-date: 2026-06-15
 ---
 
 # Classification SQL d'`execute_sql` — syntaxique uniquement
+
+> **⚠️ SUPERSEDED 2026-06-15** — En v4, `supabase__execute_sql`
+> devient **strict read-only** géré par Postgres lui-même
+> (`SET TRANSACTION READ ONLY` ou role `pg_read_all_data`). Toutes les
+> mutations passent par les tools API granulaires (13 tools data-plane
+> déjà shipped). La classification SQL parser disparait. Cf.
+> [[gateway-risk-model]] §7.2 #2.
 
 ## Contexte
 

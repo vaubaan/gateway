@@ -6,6 +6,16 @@ date: 2026-05-22
 
 # Dispatch upstream — Option A (synthèse REST), pas de sidecar Docker MVP
 
+> **Note 2026-06-15** — L'option A reste valide pour le mécanisme de
+> dispatch upstream. **Mais** v4 (pivot risk-based) retire les tools
+> `github__dispatch_workflow`, `github__cancel_workflow_run`,
+> `github__rerun_workflow_run` du périmètre exposé à l'agent (cf.
+> [[gateway-risk-model]] §7.2 #1). Justification : un agent qui a
+> `vercel.deploy-*` ou `supabase.migration.W` n'a pas besoin de hook
+> GitHub pour déclencher un déploiement. Retirer ces tools ferme
+> une classe entière d'escalation par confused deputy via workflow
+> secret.
+
 ## Contexte
 
 Quand le policy engine `allow` un MCP call, le gateway doit exécuter

@@ -87,7 +87,7 @@ describe('risk-catalog.yaml — parse + schema', () => {
       expect(typeof e.id).toBe('string');
       expect(typeof e.label).toBe('string');
       expect(typeof e.reason).toBe('string');
-      expect(typeof e.matches).toBe('string');
+      expect(typeof e.matches === 'string' || Array.isArray(e.matches)).toBe(true);
       expect(['allow', 'confirm', 'deny']).toContain(e.default_gate);
       // 6-dim vector
       expect(e.vector).toBeDefined();
@@ -113,14 +113,19 @@ describe('risk-catalog.yaml — parse + schema', () => {
     // indexCatalog already parses every entry — but assert explicitly
     // so a regression surfaces clearly.
     for (const e of CATALOG.risks) {
-      expect(() => parseSlice(e.matches)).not.toThrow();
+      const patterns: readonly string[] = typeof e.matches === 'string' ? [e.matches] : e.matches;
+      for (const p of patterns) {
+        expect(() => parseSlice(p)).not.toThrow();
+      }
     }
   });
 
   test('every parsed pattern is rooted on provider `supabase` and ends in R or W', () => {
-    for (const { entry, pattern } of INDEXED.entries) {
-      expect(pattern.provider).toBe('supabase');
-      expect(['R', 'W']).toContain(pattern.action);
+    for (const { entry, patterns } of INDEXED.entries) {
+      for (const pattern of patterns) {
+        expect(pattern.provider).toBe('supabase');
+        expect(['R', 'W']).toContain(pattern.action);
+      }
       expect(entry).toBeDefined();
     }
   });
@@ -132,15 +137,15 @@ describe('risk-catalog.yaml — parse + schema', () => {
 
 describe('risk-catalog.yaml — posture-deny invariants', () => {
   const MUST_BE_DENY = [
-    'supabase.policy.W',
-    'supabase.auth-config.W',
-    'supabase.function-secret.W',
-    'supabase.sso-provider.W',
-    'supabase.third-party-auth.W',
-    'supabase.storage-config.W',
+    'supabase.policy-write',
+    'supabase.auth-config-write',
+    'supabase.function-secret-write',
+    'supabase.sso-provider-write',
+    'supabase.third-party-auth-write',
+    'supabase.storage-config-write',
     'supabase.auth.bulk-user-write',
-    'supabase.db-role.W',
-    'supabase.extension.W',
+    'supabase.db-role-write',
+    'supabase.extension-write',
   ];
   for (const id of MUST_BE_DENY) {
     test(`${id} → default_gate = deny`, () => {
@@ -331,8 +336,8 @@ describe('risk-catalog.yaml — decision-level spot checks', () => {
       project_ref: STAGING_REF,
       config: {},
     });
-    expect(touched).toContain('supabase.auth-config.W');
-    const entry = CATALOG.risks.find((r: RiskEntry) => r.id === 'supabase.auth-config.W');
+    expect(touched).toContain('supabase.auth-config-write');
+    const entry = CATALOG.risks.find((r: RiskEntry) => r.id === 'supabase.auth-config-write');
     expect(entry?.default_gate).toBe('deny');
   });
 
@@ -341,7 +346,7 @@ describe('risk-catalog.yaml — decision-level spot checks', () => {
       project_ref: STAGING_REF,
       secrets: [{ name: 'STRIPE_KEY', value: 'sk_…' }],
     });
-    expect(touched).toContain('supabase.function-secret.W');
+    expect(touched).toContain('supabase.function-secret-write');
   });
 
   test('apply_migration with CREATE POLICY fires policy.W (deny posture)', () => {
@@ -350,8 +355,8 @@ describe('risk-catalog.yaml — decision-level spot checks', () => {
       name: 'rls',
       query: 'CREATE POLICY p ON users FOR ALL USING (true);',
     });
-    expect(touched).toContain('supabase.policy.W');
-    expect(touched).toContain('supabase.migration.W');
+    expect(touched).toContain('supabase.policy-write');
+    expect(touched).toContain('supabase.migration-write');
   });
 
   test('execute_sql with mutating-looking SQL still only fires read-data', () => {
@@ -373,19 +378,22 @@ describe('risk-catalog.yaml — decision-level spot checks', () => {
       bucket: 'avatars',
       path: 'u/123.png',
     });
-    expect(touched).toContain('supabase.storage.signed-url.R');
-    expect(touched).toContain('supabase.storage.object.R'); // co-fire
+    expect(touched).toContain('supabase.storage.signed-url-read');
+    expect(touched).toContain('supabase.storage.object-read'); // co-fire
     expect(touched).toContain('supabase.read-data'); // broad pattern co-fire
   });
 
   // smoke check : we can re-serialize and re-parse every pattern
   test('parse → serialize → parse is stable for every pattern', () => {
     for (const e of CATALOG.risks) {
-      const a = parseSlice(e.matches);
-      const reparsed = parseSlice(serializeSlice(a));
-      expect(reparsed.provider).toBe(a.provider);
-      expect(reparsed.action).toBe(a.action);
-      expect(reparsed.path.length).toBe(a.path.length);
+      const patterns: readonly string[] = typeof e.matches === 'string' ? [e.matches] : e.matches;
+      for (const p of patterns) {
+        const a = parseSlice(p);
+        const reparsed = parseSlice(serializeSlice(a));
+        expect(reparsed.provider).toBe(a.provider);
+        expect(reparsed.action).toBe(a.action);
+        expect(reparsed.path.length).toBe(a.path.length);
+      }
     }
   });
 });

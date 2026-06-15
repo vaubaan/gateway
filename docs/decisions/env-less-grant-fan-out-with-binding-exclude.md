@@ -1,10 +1,22 @@
 ---
 title: env-less grant = fan-out, narrowable per-binding (github exclude)
-status: accepted
+status: partially-superseded
 date: 2026-06-13
+superseded-by: pivot-to-risk-based-model
+superseded-date: 2026-06-15
 ---
 
 # env-less grant = fan-out, narrowable per-binding (github exclude)
+
+> **⚠️ PARTIALLY SUPERSEDED 2026-06-15** — Le concept de "grant env-less"
+> disparait en v4 : chaque risk est qualifié par binding
+> (`provider[env].risk-name`). L'exclude per-binding (GitHub
+> `env_less_exclude_protected`) reste **techniquement** utile pour
+> borner la résolution d'env au niveau du classifieur quand la slice
+> émise est ambigüe. La sémantique de protection des branches
+> protégées est désormais portée par les risks
+> `github.merge-protected` (catalogue v4) et leur `default_gate`.
+> Cf. [[gateway-risk-model]] §3 et §4.
 
 ## Contexte
 

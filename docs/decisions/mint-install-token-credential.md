@@ -6,6 +6,13 @@ date: 2026-05-30
 
 # `github__mint_install_token` — kill host-side git credentials on session hosts
 
+> **Note 2026-06-15** — Le tool reste exposé. En v4 (risk-based) il est
+> catégorisé par le risk `github.mint-install-token` (vecteur
+> `data: secret, persistence: posture, blast: account`), **deny par
+> défaut** dans le catalogue. Un manager doit explicitement l'accepter
+> pour qu'un Coding Agent puisse minter — escalation typique au humain
+> via approval channel. Cf. [[gateway-risk-model]] §4.3.
+
 ## Contexte
 
 Vaubaan exécute des sessions de coding sur des hôtes d'exécution (VPS, CI

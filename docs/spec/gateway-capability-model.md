@@ -1,5 +1,15 @@
-# Gateway — modèle de capabilities (DRAFT modélisation)
+# Gateway — modèle de capabilities (DRAFT — SUPERSEDED)
 
+> **⚠️ 2026-06-15 — Ce document est SUPERSEDED par
+> [`gateway-risk-model.md`](./gateway-risk-model.md) (v4 risk-based).**
+> Le tuple `(provider, plane, level, action, env?)` qu'il décrit a été
+> abandonné au profit de `accepted_risks: RiskId[]` qualifié par binding.
+> Conservé pour archive et pour visualiser l'historique du raisonnement
+> (rings v1 → capabilities v2 → slices v3 → risk-based v4).
+> Audit de cohérence : `/.vaubaan/reports/v4-coherence-audit.md`.
+>
+> ---
+>
 > Brouillon de modélisation, pas encore une spec scellée ni un ADR. Sert à
 > visualiser la frontière runner ↔ gateway et la grammaire de capabilities qui la
 > traverse.

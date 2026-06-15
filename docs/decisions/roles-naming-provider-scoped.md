@@ -1,10 +1,18 @@
 ---
 title: Roles — naming `<provider>:<role-name>`, provider-scoped, builtin v1
-status: accepted
+status: superseded
 date: 2026-05-22
+superseded-by: pivot-to-risk-based-model
+superseded-date: 2026-06-15
 ---
 
 # Roles — naming `<provider>:<role-name>`, provider-scoped, builtin v1
+
+> **⚠️ SUPERSEDED 2026-06-15** — Le concept de Roles a déjà été retiré
+> à l'étape v2 (capabilities flat). Le pivot v4 risk-based supersede
+> à nouveau : pas de roles, pas de capabilities — juste
+> `accepted_risks: RiskId[]` qualifié par binding. Cf.
+> [[gateway-risk-model]].
 
 ## Contexte
 
