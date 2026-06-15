@@ -1,332 +1,367 @@
 ---
 title: Policy engine
 status: current
-date: 2026-06-11
+date: 2026-06-15
 tracks:
-  - packages/policy-engine/src/
+  - packages/policy-engine/src/slice-dsl.ts
+  - packages/policy-engine/src/slice-matcher.ts
+  - packages/policy-engine/src/risk-evaluator.ts
+  - packages/policy-engine/src/risk-policy.ts
+  - packages/policy-engine/src/risk-runtime.ts
+  - packages/policy-engine/src/scope-injection.ts
   - packages/policy-engine/tests/unit/
-  - supabase/migrations/0016_policy_rules.sql
-  - supabase/migrations/0018_gate_allow_confirm_deny.sql
+  - packages/web/src/lib/risk-catalog/
 ---
 
 # Policy engine — `@vaubaan/policy-engine`
 
-> **2026-06-15 — risk-based engine.** The package now exports only the v4
-> risk-based primitives + the provider-agnostic scope-injection helper.
-> The v1 capability modules (`policy.ts`, `evaluate.ts`, `tools-filter.ts`)
-> are deleted.
->
-> - `slice-dsl.ts` : parseSlice / serializeSlice (DSL §3 of spec v4).
-> - `slice-matcher.ts` : matches / covers / intersects.
-> - `risk-evaluator.ts` : indexCatalog, risksTouchedBy(All), findRiskEntry.
-> - `risk-policy.ts` : resolveEffectiveGate, checkAcceptableInEnv,
->   requiresAdminToOverrideDenyAllow, seedDefaultGate, prepareCatalog.
-> - `risk-runtime.ts` : evaluateCall — pure decision function.
-> - `scope-injection.ts` : (unchanged) computes the injection plan that
->   strips and auto-fills resource args.
->
-> See [[gateway-risk-model]] §1, §3, §4, §6 for the conceptual model and
-> the catalog format.
-
-Modules purs autour des slices/risks Vaubaan (cf. spec
-`docs/spec/gateway-risk-model.md` §3, §6, §8).
+Modules purs autour des **slices** et des **risk catalogs** Vaubaan
+(cf. spec [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §3,
+§4, §6, §8). Le paquet a été entièrement réécrit lors du pivot v4
+(`chore(v1-drop)`, 2026-06-15) : les modules v1 capability-based
+(`policy.ts`, `evaluate.ts`, `tools-filter.ts`) ont été supprimés. Ce
+qui survit : la totalité du runtime risk-based + le module
+`scope-injection.ts` (inchangé, indépendant du modèle d'autorisation).
 
 ## Vue d'ensemble
 
-Le paquet expose **quatre responsabilités étanches** — chacune sa
-fonction pure, chacune son point d'appel :
+Six modules purs, étanches, sans état ni IO :
 
-| Module               | Concerne…                  | Appelé depuis                            |
-| -------------------- | -------------------------- | ---------------------------------------- |
-| `policy.ts`          | **mint-time** : gate       | `POST /api/v1/{mgmt,}/tokens`            |
-| `evaluate.ts`        | **call-time** : authz      | `McpGateway.handle()` (tools/call)       |
-| `tools-filter.ts`    | **discovery** : tools/list | `McpGateway.handle()` (tools/list)       |
-| `scope-injection.ts` | hide/auto-fill args        | `tools/list` + `tools/call` pre-dispatch |
+| Module               | Responsabilité                                                                                                                | Appelé depuis                                   |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| `slice-dsl.ts`       | Parser / sérialiser la grammaire des slices (chemin sur le data-model + action `R`/`W`).                                      | catalog YAML loader, audit log, tests           |
+| `slice-matcher.ts`   | Prédicats `matches` / `covers` / `intersects` entre patterns de slices.                                                       | `risk-evaluator`, lints                         |
+| `risk-evaluator.ts`  | Indexer un catalogue (parse les `matches`) + calculer `risks_touched` pour une slice exécutée.                                | `risk-runtime`, `mcp-gateway` (au boot)         |
+| `risk-policy.ts`     | Résoudre `effective_gate` (catalogue × overrides projet × env), seed `default_gate` du vecteur 6D.                            | routes mint (`POST /tokens/preview`, `/tokens`) |
+| `risk-runtime.ts`    | Décision pure `evaluateCall` au hot-path `/mcp` : strict-fail si `risks_touched ⊄ accepted`.                                  | `mcp-gateway` (`callTool`)                      |
+| `scope-injection.ts` | Hide / auto-fill des arguments déterminés par les `provider_bindings` du projet (owner/repo, projectId, project_ref, teamId). | `mcp-gateway` (`tools/list` + `tools/call`)     |
 
-Aucun module n'a d'état. Aucun ne touche au DB — les routes / le
-gateway les nourrissent avec des `Capability[]`, `PolicyRule[]`,
-`ProviderBinding[]`. Le seul barrel est `index.ts` qui re-exporte
-les 4 modules.
+Le barrel `src/index.ts` re-exporte les 6 modules. Aucun module ne touche
+au DB — la couche route ou le gateway les nourrit avec des objets
+parsés (`RiskCatalog`, `RiskPolicyOverride[]`, `ProviderBinding[]`).
 
-## Comment ça marche
-
-### Layout
+## Layout
 
 ```
 packages/policy-engine/
   src/
-    policy.ts            # mint-time gate (allow|confirm|deny per cap)
-    evaluate.ts          # call-time authz (granted ⊇ required ?)
-    tools-filter.ts      # static tools/list filter (env-less surface match)
-    scope-injection.ts   # owner/repo/projectId auto-injection
-    index.ts             # barrel
+    slice-dsl.ts          # parseSlice / serializeSlice — DSL §3 spec
+    slice-matcher.ts      # matches / covers / intersects (path-segment)
+    risk-evaluator.ts     # indexCatalog / risksTouchedBy(All) / findRiskEntry
+    risk-policy.ts        # resolveEffectiveGate / checkAcceptableInEnv /
+                          #   requiresAdminToOverrideDenyAllow /
+                          #   seedDefaultGate / prepareCatalog
+    risk-runtime.ts       # evaluateCall — pure decision function
+    scope-injection.ts    # injectionPlanFor / stripInjectedArgs / mergeInjectedArgs
+    index.ts              # barrel
   tests/unit/
-    policy.test.ts          (12 tests)
-    evaluate.test.ts        (8  tests)
-    tools-filter.test.ts    (4  tests)
-    scope-injection.test.ts (12 tests)
+    slice-dsl.test.ts        (23 tests)
+    slice-matcher.test.ts    (26 tests)
+    risk-evaluator.test.ts   (10 tests)
+    risk-policy.test.ts      (25 tests)
+    risk-runtime.test.ts     (9  tests)
+    scope-injection.test.ts  (12 tests)
 ```
 
-### `policy.ts` — mint-time gate
+## Décision flow
 
-Consulté **au mint** (jamais sur le hot-path `/mcp`). Pour chaque
-capability demandée sur le token, retourne le `gate` que le DB
-`policy_rules` produit :
+Le hot-path `/mcp` consume `risk-runtime` ; les routes mint consument
+`risk-policy`. Schéma simplifié :
 
-```ts
-evaluatePolicy(
-  caps: readonly Capability[],
-  rules: readonly PolicyRule[],
-): PolicyDecisionPerCap[]
+```mermaid
+flowchart TD
+  call["call (tool, args)"] --> classify["plugin.classifyV4(tool, args, bindings)"]
+  classify --> slices["slices: Slice[]"]
+  slices --> risks_touched["risksTouchedByAll(slices, catalog)"]
+  risks_touched --> check{"risks_touched ⊆ token.accepted_risks ?"}
+  check -->|"oui"| allow["ALLOW → executeCall + audit"]
+  check -->|"non"| deny["DENY 403 (missing_risks + executed_slices + hint)"]
 ```
 
-`PolicyDecisionPerCap = { capability, gate: 'allow'|'confirm'|'deny', matchedRule }`.
+Le runtime est **stateless** : la résolution `effective_gate` /
+`project_risk_policies` n'a lieu qu'au mint. Au call, on intersect
+slices ↔ catalogue, on check appartenance, c'est tout.
 
-Algorithme (`policy.ts:60-73`) — par capability :
+## Modules
 
-1. Filtre les rules qui matchent (`matchesRule`, ligne 92) — wildcard
-   `*` ou égalité sur chaque champ ; env-less cap ne matche que
-   `env_pattern='*'`.
-2. Aucune rule → `{ gate: 'deny', matchedRule: null }` (default-deny).
-3. Sinon trie par `specificity desc, priority desc` (ligne 69) et
-   prend le winner. La specificity (`specificity`, ligne 108) = nombre
-   de champs ≠ `*` parmi `(provider, plane, level, action, env_pattern)`.
+### `slice-dsl.ts` — parser/serializer
 
-Helpers de filtrage utilisés par les routes mint :
-
-- `allCapsAllowed(decisions)` (ligne 76) — vrai si tous les gates =
-  `allow` → mint immédiat 201.
-- `confirmDecisions(decisions)` (ligne 81) — sous-ensemble qui requiert
-  un human-confirm → ouvre une `approval_requests` et renvoie 202.
-- `denyDecisions(decisions)` (ligne 88) — sous-ensemble explicitement
-  refusé → 403 final.
-
-Schéma `policy_rules` (migration `0016_policy_rules.sql` + rename gate
-en 3-states par `0018_gate_allow_confirm_deny.sql`) :
-
-```sql
-policy_rules (
-  id, project_id,
-  provider, plane, level,    -- exact slug or '*'
-  action,                     -- 'read' | 'write' | '*'
-  env_pattern,                -- exact slug or '*'
-  gate,                       -- 'allow' | 'confirm' | 'deny'
-  priority                    -- tie-breaker desc
-)
-```
-
-Anti-pattern SQL CHECK : refuse `(action='write' ∧ env_pattern='*' ∧
-gate='allow')` — un blanket allow sur les writes auto-autoriserait
-prod. Cf. [`capability-policy-and-approvals.md`](./capability-policy-and-approvals.md)
-pour le seed per-project + le mint flow complet.
-
-### `evaluate.ts` — call-time authorization
-
-Appelé sur le hot-path `/mcp` à `tools/call`, après que le plugin du
-provider a classifié `(tool, args)` en `Capability` requise.
-
-```ts
-evaluateCapability(
-  granted: readonly Capability[],
-  required: Capability,
-): PolicyDecision
-```
-
-`PolicyDecision = { decision: 'allowed' | 'denied', capabilityMatched?, reason? }`.
-
-Pure set-membership via `isGranted` (de `@vaubaan/shared`) — exact-tuple
-match. **Pas de ladder implicite, pas de wildcard sur env** : un
-`@prod` requis exige un grant `@prod` (filtre défensif env). Si denied,
-`reason` (`evaluate.ts:32-38`) liste les caps granted, la cap manquante,
-et une suggestion de mint :
+`parseSlice(input) → Slice` parse la grammaire spec §3 :
 
 ```
-this access token is not granted 'github:repo/code:write@main'.
-Granted capabilities: github:repo/code:write@feature/*. Mint a token
-carrying 'github:repo/code:write@main' to perform this call.
+slice    ::= provider '.' segment ('.' segment)* '.' action
+segment  ::= ident | '[' inner ']' | '*' | '**'
+inner    ::= ident | ident (',' ident)* | '*' | '**'
+ident    ::= [a-zA-Z0-9_/-]+  (avec `*` glob autorisé en bracket)
+action   ::= 'R' | 'W'
 ```
 
-L'agent (Claude Code, Cursor) lit ce message et corrige son appel —
-c'est le _trainer not wall_ qui survit du modèle précédent.
+Exemples acceptés :
 
-### `tools-filter.ts` — discovery filter
+- `github.repo[sbw-vaubaan/gateway].branch[main].W`
+- `supabase.project[**].schema[public].table[users].row[*].R`
+- `github.repo[**].branch[feature/*,fix/*].file[**].W`
+- `github.**.W` (fallback catalog pattern)
 
-Appelé sur `tools/list` pour ne lister que les tools qu'au moins
-**une cap granted couvre _à env près_** :
+`serializeSlice(slice) → string` produit la forme canonique : un
+`name` segment suivi d'un bracket segment n'a **pas** de `.` entre les
+deux (`repo[main]` pas `repo.[main]`). Bare `**`/`*` sont normalisés en
+`[**]`/`[*]` à la sortie.
 
-```ts
-filterAvailableTools(
-  granted: readonly Capability[],
-  provider: ToolSurfaceProvider,
-): McpToolDeclaration[]
+`SliceParseError` porte `input`, `position`, et un message court — les
+catalogues YAML sont validés au boot et l'erreur remonte vers l'opérateur.
+
+Tests : `slice-dsl.test.ts` (23) — happy path, errors (missing action,
+unterminated bracket, empty bracket, invalid ident chars, double dot,
+wrong provider chars), round-trip serialize.
+
+### `slice-matcher.ts` — predicates
+
+Trois prédicats, sémantiques distinctes :
+
+- **`matches(pattern, concrete)`** — `pattern` peut contenir wildcards,
+  `concrete` n'en contient pas. Vrai ssi le pattern accepte la slice.
+  Utilisé au runtime quand le plugin émet une slice concrète.
+- **`covers(a, b)`** — `a.covers(b)` ssi tout `concrete` matché par
+  `b` est aussi matché par `a`. Partial order sur les patterns ;
+  utilisé pour les lints (catalog vs catalog).
+- **`intersects(a, b)`** — symétrique, vrai ssi `∃ concrete` matché par
+  les deux. Utilisé par `risksTouchedBy` : le plugin peut émettre une
+  slice avec wildcards (`service-var[*].W`) et on veut savoir si elle
+  recoupe une entrée catalogue (qui contient aussi des wildcards).
+
+Algorithme : matching path-segment par path-segment, avec
+`wild-rec` (`[**]`) qui consomme 0+ segments via backtracking. Glob
+inside-bracket : `*` matche `[a-zA-Z0-9_/-]+` (pas de regex utilisateur).
+
+Tests : `slice-matcher.test.ts` (26) — matches simple/wild/list/glob,
+covers `**` vs `*`, intersects glob×glob, intersects asymétriques.
+
+### `risk-evaluator.ts` — touch detection
+
+`indexCatalog(catalog: RiskCatalog) → IndexedRiskCatalog` parse chaque
+`matches` du YAML une seule fois (gain hot-path). Une entrée peut
+déclarer un pattern unique OU un tableau (OR-semantics — la slice
+touche le risk si ≥1 pattern intersecte).
+
+`risksTouchedBy(slice, catalog) → RiskId[]` retourne en ordre catalogue
+toutes les entrées qui intersectent la slice. Vide ⇒ catalogue
+incomplet (pas de fallback) → le runtime traite en `deny` (no silent
+passthrough).
+
+`risksTouchedByAll(slices[], catalog)` même chose pour un call
+multi-slice (ex : `supabase__apply_migration` qui touche DDL+DML).
+Dédupliqué, ordre stable.
+
+`findRiskEntry(catalog, riskId)` lookup O(N), N petit (~10-20).
+
+Tests : `risk-evaluator.test.ts` (10) — index une catalog YAML, touched
+single/multi, fallback unique, deprecated entries préservés, multi-pattern
+OR-semantics, empty catalog.
+
+### `risk-policy.ts` — effective gate
+
+`resolveEffectiveGate(riskId, env, catalog, overrides[]) → EffectiveGateDecision`
+applique l'ordre spec §6.1 :
+
+1. Override `(risk_id, env_scope = env)` — wins si trouvé.
+2. Override `(risk_id, env_scope = null)` — global au projet.
+3. `catalog[riskId].default_gate` — fallback.
+4. Risk inconnu (token post-deprecation) → `'deny'`.
+
+`origin` est porté dans la décision (`'catalog-default'` /
+`'project-policy-env-scoped'` / `'project-policy-global'`) pour
+explicabilité UI.
+
+`checkAcceptableInEnv(entry, env)` — D5 : refuse au mint si le catalogue
+déclare `acceptable_in_envs: ['preview', 'staging']` et que l'env binding
+n'y figure pas. Renvoie un message ou `null`.
+
+`requiresAdminToOverrideDenyAllow(entry)` — D1 : un risk dont le vecteur
+a `persistence: 'posture'` OU (`data ∈ {secret, pii}` avec une pattern
+`.W`) ne peut être bascule `deny → allow` que par un admin org.
+
+`seedDefaultGate(vector, action) → 'allow'|'confirm'|'deny'` — applique
+la formule spec §4.2 pour pré-remplir un `default_gate` à partir d'un
+6D vector. Utilisé par les lints et par l'auto-seed des catalogues.
+
+`prepareCatalog(catalog)` — wrapper `indexCatalog` + sanity checks
+(ids uniques, regex `<provider>[<env>].<name>` ou `<provider>.<name>`,
+fallback `<provider>.uncategorized-*` présent). Throw si IDs en doublon ;
+warn si fallback absent.
+
+Tests : `risk-policy.test.ts` (25) — gate resolution (env-scoped wins,
+global, catalog default, unknown), `checkAcceptableInEnv` (no-env,
+env-not-in-list, ok), `requiresAdminToOverrideDenyAllow` (posture,
+secret-W, pii-W, plain), `seedDefaultGate` (chaque branche), `prepareCatalog`
+(dup, regex fail, fallback warn).
+
+### `risk-runtime.ts` — call-time decision
+
+`evaluateCall({ executed_slices, token_accepted_risks, token_denied_risks,
+catalog }) → RiskDecision` est la fonction de décision pure du runtime.
+Strict-fail au MVP (spec §8) :
+
+```
+if executed_slices empty                        → DENY (classifier gap)
+risks_touched = risksTouchedByAll(slices, catalog)
+if risks_touched empty                          → DENY (catalog gap)
+if any risk ∈ token_denied_risks                → DENY (explicit deny)
+if risks_touched ⊄ token_accepted_risks         → DENY (missing_risks)
+sinon                                            → ALLOW (risks_touched)
 ```
 
-`ToolSurfaceProvider` = sous-ensemble du provider adapter (`tools-filter.ts:16`) :
-`availableTools` + `toolCapabilities(toolName) → Capability[]` (la
-_surface_ env-less du tool).
+Pas de step-up runtime au MVP — le client doit re-minter avec les
+`risks_touched` manquants accepted. Reporté en Phase 2 (cf. spec §8).
 
-Logique (`tools-filter.ts:30-38`) : un tool est listé si l'une de ses
-caps surface est couverte par une cap granted via
-`coversIgnoringEnv` (ligne 21) — match sur `(provider, plane, level,
-action)`, env ignorée. L'env dépend des args runtime et sera vérifiée
-au `tools/call` par `evaluateCapability`.
+`evaluateCallSimple(catalog, slices, acceptedRisks)` est un convenience
+pour les tests (pas pour le hot-path — pré-indexer au boot).
 
-### `scope-injection.ts` — hide & auto-fill args
+Tests : `risk-runtime.test.ts` (9) — allow happy, deny missing, deny
+empty-slices, deny no-catalog-match, denied_risks override, multi-slice
+union, hint message shape.
 
-3 fonctions qui collaborent pour cacher à l'agent les arguments
-entièrement déterminés par les `provider_bindings` du projet.
+### `scope-injection.ts` — args hide & fill
 
-Prémisse (cf. `scope-injection.ts:7-14`) : si l'access token a
-exactement **1 binding** d'un provider donné, alors les args qui
-identifient cette ressource (`owner+repo` pour GitHub, `projectId`
-pour Vercel/Railway, `project_ref` pour Supabase, plus `teamId`
-Vercel) sont déjà connus. Les exposer à l'agent est pire qu'inutile :
-risque de mauvaise valeur, leak d'identifiants inutiles.
+Inchangé depuis v1 — indépendant du modèle d'autorisation. 3 fonctions :
 
-```ts
-injectionPlanFor(provider, scope: ScopeContext): InjectionPlan | null
-stripInjectedArgs(tool, plan): McpToolDeclaration       // tools/list
-mergeInjectedArgs(args, plan): Record<string, unknown>  // tools/call
-```
-
-- `injectionPlanFor` (`:49-71`) — retourne `null` si 0 ou 2+ bindings
-  pour le provider (agent doit continuer de fournir). Sinon construit
-  le plan : `owner/repo` parsé de `binding.resource_ref` pour GitHub,
-  `projectId` direct pour Vercel/Railway, `project_ref` pour
-  Supabase. `teamId` Vercel vient de `provider_admins.team_id` via
-  `ScopeContext.vercelTeamId`.
-- `stripInjectedArgs` (`:78-100`) — retire les clés injectées de
-  `inputSchema.properties` ET de `required[]` (sinon le tool picker
-  de l'agent croit qu'elles manquent). Ne mute pas le tool d'origine.
-- `mergeInjectedArgs` (`:107-119`) — auto-fill côté serveur avant
-  dispatch upstream. **Caller-provided wins** : un admin peut
+- `injectionPlanFor(provider, scope) → InjectionPlan | null` — null si 0
+  ou 2+ bindings (l'agent doit fournir). Sinon construit le plan : `owner`
+  - `repo` (parse `resource_ref` `^[^/]+/[^/]+$` pour GitHub), `projectId`
+    (Vercel/Railway), `project_ref` (Supabase), `teamId` (Vercel via
+    `provider_admins.team_id`).
+- `stripInjectedArgs(tool, plan) → McpToolDeclaration` — retire les keys
+  injectées de `inputSchema.properties` ET de `required[]`. Pure, no-mutate.
+- `mergeInjectedArgs(args, plan) → Record<string, unknown>` — auto-fill
+  côté serveur avant dispatch. **Caller-provided wins** (un admin peut
   override en MCP Inspector ; l'auto-fill ne s'applique que sur
-  undefined / null / '' (string vide traitée comme missing).
+  undefined/null/'').
 
-Le mapping `provider → arg-name` est centralisé ici (single source of
-truth) plutôt que dispersé dans chaque adapter.
+Mapping `provider → arg-name` centralisé ici — single source of truth.
 
-## Comment l'utiliser
+Tests : `scope-injection.test.ts` (12) — chaque provider, null si 0/2+
+bindings, null si malformed resource_ref, strip retire properties+required,
+merge fill missing, caller-override wins, empty string treated as missing.
 
-### Mint d'access token (côté route)
+## Wiring côté gateway
 
-```ts
-import { evaluatePolicy, denyDecisions, confirmDecisions, allCapsAllowed }
-  from '@vaubaan/policy-engine';
-
-const decisions = evaluatePolicy(capabilities, rules);
-
-if (denyDecisions(decisions).length) {
-  return NextResponse.json({ error: 'policy deny', denied: ... }, { status: 403 });
-}
-const gated = confirmDecisions(decisions);
-if (gated.length) {
-  // open approval flow → 202
-}
-// all allow → mint 201
-```
-
-Pattern réel dans `packages/web/src/app/api/v1/tokens/route.ts` et
-`packages/web/src/app/api/v1/mgmt/tokens/route.ts`.
-
-### Dispatch `/mcp` (côté gateway)
+Le gateway charge les catalogues au boot via
+`packages/web/src/lib/risk-catalog/loader.ts` :
 
 ```ts
-import { evaluateCapability, filterAvailableTools } from '@vaubaan/policy-engine';
+import { indexCatalog } from '@vaubaan/policy-engine';
+import { githubRiskCatalog, vercelRiskCatalog, ... } from '@vaubaan/providers-*';
 
-// tools/list
-const tools = filterAvailableTools(ctx.granted, providerAdapter);
-
-// tools/call
-const required = providerAdapter.classify(toolName, args, bindings);
-const decision = evaluateCapability(ctx.granted, required.capability);
-if (decision.decision === 'denied') return rpcDeny(decision.reason);
+// Une fois par runtime — TS imports, pas de YAML au runtime.
+const catalogs: Record<Provider, IndexedRiskCatalog> = {
+  github: indexCatalog(githubRiskCatalog),
+  vercel: indexCatalog(vercelRiskCatalog),
+  supabase: indexCatalog(supabaseRiskCatalog),
+  railway: indexCatalog(railwayRiskCatalog),
+  bash: indexCatalog(sshRiskCatalog),  // historic naming, bash = ssh package
+};
 ```
 
-### Scope injection autour de `tools/list` + `tools/call`
+Le YAML sibling (`packages/providers/<vendor>/src/risk-catalog.yaml`)
+reste la forme canonique reviewable ; un test
+`risk-catalog-sync.test.ts` lints que les deux restent en sync.
+
+Au hot-path :
 
 ```ts
-import { injectionPlanFor, stripInjectedArgs, mergeInjectedArgs } from '@vaubaan/policy-engine';
-
-const plan = injectionPlanFor(provider, { bindings, vercelTeamId });
-
-// tools/list
-const visible = filterAvailableTools(ctx.granted, providerAdapter).map((t) =>
-  plan ? stripInjectedArgs(t, plan) : t,
-);
-
-// tools/call
-const callArgs = plan ? mergeInjectedArgs(rawArgs, plan) : rawArgs;
+import { evaluateCall } from '@vaubaan/policy-engine';
+const decision = evaluateCall({
+  executed_slices: adapter.classifyV4(tool, args, bindings).slices,
+  token_accepted_risks: new Set(token.accepted_risks),
+  token_denied_risks: new Set(token.denied_risks),
+  catalog: catalogs[provider],
+});
+if (decision.outcome === 'allowed') executeCall(...);
+else return rpcDeny(decision);
 ```
+
+Cf. [`mcp-gateway.md`](./mcp-gateway.md) §Decision flow pour le hot-path
+intégral et [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §8.
 
 ## Comment debug
 
-- **Mint renvoie 403 "policy deny" alors que la cap semble innocente**
-  → no rule matche, default-deny. Inspecter `policy_rules` du projet :
-  `select * from policy_rules where project_id = '...' order by specificity desc`.
-  Soit ajouter une rule, soit le caller a un typo dans la notation
-  (provider/plane/level mal orthographié).
-- **Mint renvoie 202 sur du `read`** → seul un seed `*:*:*:read:* → allow`
-  rate ; vérifier que le trigger de seed (`0016_policy_rules.sql`)
-  s'est bien exécuté pour ce projet, ou qu'aucune rule plus spécifique
-  `:read:` ne force `confirm`.
-- **`tools/list` ne montre pas un tool attendu** → vérifier la surface :
-  `providerAdapter.toolCapabilities('<tool>')`. Si la cap granted ne
-  matche pas la surface à env près, `tools-filter` exclura. La cause la
-  plus fréquente : grant trop spécifique sur env (env est ignoré en
-  filter, mais la surface peut être env-less alors que le grant est
-  `@prod` — match OK ; si la surface est `read` et le grant `write`,
-  pas de match).
-- **`tools/call` denied "not granted '…@prod'" alors qu'on a un
-  grant `@*` sur le DB** — impossible : `evaluateCapability` exige un
-  match exact via `isGranted`. Soit la cap stockée n'a pas le bon
-  `env`, soit la cap requise classifiée a un env inattendu. Inspecter
-  `select capabilities from access_tokens where id = '<id>'` + ajouter
-  un log avant `evaluateCapability` côté gateway.
-- **`tools/call` reçoit `owner=undefined`** alors qu'il y a une seule
-  binding GitHub → `mergeInjectedArgs` n'a pas trouvé son plan.
-  Vérifier `binding.resource_ref` matche `^[^/]+/[^/]+$` ; sinon
-  `injectionPlanFor` renvoie `null` (cf. `scope-injection.ts:55-57`).
+- **Mint `400` `risks_touched empty`** → le catalogue du provider n'a
+  pas de fallback ou la slice émise est hors-périmètre. Inspecter
+  `packages/providers/<vendor>/src/risk-catalog.yaml` — il faut un
+  `<provider>.uncategorized-*` qui matche `**.W` ou `**.R`.
+- **`/mcp` renvoie 403 `risk-not-accepted` alors qu'on a le grant** →
+  vérifier que le `RiskId` est qualifié de la même façon des deux côtés.
+  Le token stocke `supabase[staging].bulk-row-write` ; le runtime
+  qualifie via `qualifyRiskId(baseId, binding.environment, entry)`. Si
+  l'entry n'a pas `acceptable_in_envs` non-vide, la qualification est
+  no-op et le grant doit être non-qualifié.
+- **`indexCatalog` throw au boot** → un pattern `matches` du YAML est
+  malformé. Le message inclut le `risk.id` + position. Pas de hot-fix,
+  ça remonte au commit qui a introduit le YAML.
+- **`tools/call` denied `classify-denied`** → c'est le plugin (provider
+  adapter) qui a refusé avant même d'arriver à la policy. Souvent un
+  `projectId` non bindé ou un tool inconnu. Inspecter le message.
+- **Empty `risks_touched` mais slice claire** → la pattern catalogue
+  n'inclut pas la slice. Soit ajouter une entrée fine, soit étendre le
+  fallback `**.W`. Lint au CI : `risk-catalog-sync.test.ts` vérifie que
+  chaque tool MCP émet une slice qui matche ≥1 entrée.
+- **`scope-injection` ne fill pas `owner`** → le binding GitHub a un
+  `resource_ref` qui ne matche pas `^[^/]+/[^/]+$`. Re-créer le binding
+  proprement.
 
 ## Extension
 
-### Ajouter un nouveau provider au plan d'injection
+### Ajouter un risque au catalogue d'un provider
 
-Étendre `injectionPlanFor` (`scope-injection.ts:49-71`) avec une
-branche `if (provider === '<new>')`. Définir quelles propriétés de
-`InjectionPlan` (étendre l'interface si nécessaire) sont déterminées
-par la binding ; mapper depuis `resource_ref` (ou un champ
-`provider_admins.*` via `ScopeContext`).
+Toucher `packages/providers/<vendor>/src/risk-catalog.{yaml,ts}` :
 
-### Ajouter une rule de plus haut niveau
+```yaml
+- id: <provider>.<name> # OU <provider>[<env>].<name> si env-scoped
+  label: 'Libellé court (UI)'
+  reason: "Pourquoi c'est un risque (≤ 2 phrases)"
+  matches: '<slice-pattern>' # ou liste de patterns
+  vector:
+    reversibility: reversible|costly|irreversible
+    blast: single|env|account|bulk
+    data: metadata|data|secret|pii
+    cost: free|moderate|unbounded
+    visibility: internal|team|public
+    persistence: stateless|session|posture
+  default_gate: allow|confirm|deny
+  acceptable_in_envs: [preview, staging] # optionnel (D5)
+```
 
-Le seed per-project (cf.
-[`capability-policy-and-approvals.md`](./capability-policy-and-approvals.md))
-pose 2 rules priority=0. Les operators ajoutent leurs overrides
-plus spécifiques. **Pas de modification du moteur** — le tri par
-specificity puis priority gère tout. Si une nouvelle dimension est
-ajoutée à `Capability` (e.g. un 6ᵉ field), il faut étendre
-`matchesRule` + `specificity` ensemble.
+Le test `risk-catalog-sync.test.ts` du provider check :
+
+- YAML ↔ TS export sync.
+- Chaque tool MCP du provider émet au moins une slice qui intersect ≥1 entry.
+- IDs uniques + matchent `RISK_ID_REGEX`.
+- Fallback `<provider>.uncategorized-*` présent.
 
 ### Ajouter un nouvel opérateur de matching
 
-Le moteur actuel ne supporte que `exact | *` sur chaque champ. Pour
-introduire des patterns (e.g. glob sur env), modifier `matchesRule`
-puis ajuster `specificity` (un pattern non-`*` reste plus spécifique
-que `*` mais moins qu'un exact). Penser au CHECK SQL (`0016_policy_rules.sql`)
-qui restreint actuellement la grammaire d'`env_pattern` aux slugs ou
-`*` — relâcher la regex en parallèle.
+Le matcher actuel supporte `name`, `ident exact`, `ident glob` (avec
+`*`), `list`, `wild-one` (`*`), `wild-rec` (`**`). Pour ajouter un
+opérateur (ex : negation, range), étendre :
+
+- `slice-dsl.ts` (lexer + parser).
+- `SliceSegment` dans `@vaubaan/shared/src/types.ts` (nouveau `kind`).
+- Toutes les `*Segments` / `*One` de `slice-matcher.ts`.
+- Couvrir par tests dans `slice-matcher.test.ts`.
+
+### Ajouter un provider au plan d'injection
+
+Étendre `scope-injection.ts:injectionPlanFor` avec une branche
+`if (provider === '<new>')`. Définir quelles propriétés de
+`InjectionPlan` (étendre l'interface si nécessaire) sont déterminées
+par la binding ; mapper depuis `resource_ref` (ou via `ScopeContext`).
 
 ## Références
 
-- Spec : [`docs/spec/gateway-capability-model.md`](../spec/gateway-capability-model.md)
-  §3 (grammaire), §5/§5.1 (policy), §7 (engine).
-- Migrations : `0015_capabilities_replace_roles.sql` (drop roles),
-  `0016_policy_rules.sql` (table), `0018_gate_allow_confirm_deny.sql`
-  (gate enum 3-states).
-- ADRs : [[policy-dsl-declarative-jsonb]] (historique — DSL Roles
-  remplacé), [[mcp-only-mvp-scope]].
-- Handbooks voisins : [[capability-policy-and-approvals]] (mint flow
-  - approval lifecycle côté DB/UI), [[mcp-gateway]] (orchestration
-    hot-path).
-- Tests : `npx vitest run packages/policy-engine` — 36 tests, ~30ms.
+- Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md)
+  §3 (DSL), §4 (catalog), §6 (project policy), §8 (runtime).
+- Handbooks voisins : [[mcp-gateway]] (hot-path orchestration),
+  [[approvals]] (mint flow amont avec EmailChannel + long-poll),
+  [`providers/README.md`](./providers/README.md) (5 risk catalogs par
+  provider).
+- Tests : `npx vitest run packages/policy-engine` — 105 tests, ~50ms.
