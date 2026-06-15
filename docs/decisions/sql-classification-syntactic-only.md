@@ -177,6 +177,6 @@ role data-plane par projet. À explorer après MVP — cf. handbook
   `packages/providers/supabase/tests/unit/sql-classify.test.ts` (42 tests).
 - Spec : `docs/spec/gateway-capability-model.md` §3 (capability tuple), §5
   (policy layer + human gate).
-- ADRs voisins : [[capability-policy-and-approvals]],
+- ADRs voisins : [[approvals]],
   [[vercel-augment-with-rest-tools]] (pattern de wrapping REST custom),
   [[mcp-only-mvp-scope.md]].

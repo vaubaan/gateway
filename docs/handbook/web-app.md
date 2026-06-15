@@ -46,16 +46,15 @@ packages/web/
             members/page.tsx                            # Members + owner badge + transfer
             audit/page.tsx                              # Org audit log
             providers/page.tsx                          # Org-wide providers catalogue
-            providers/[provider]/page.tsx               # Per-provider connect/state
+            providers/[provider]/page.tsx               # Provider info — data-model mermaid + risk catalog + tools
             settings/{page,management-keys/page}.tsx    # Org settings + mgmt key vault
             projects/
               new/page.tsx                              # Create project
               [project]/
                 page.tsx                                # Project overview (bindings + bash + tokens cards)
                 audit/page.tsx                          # Project audit log
-                tokens/page.tsx                         # Access tokens list + create
-                rings/page.tsx                          # Capability rings reference
-                policy/page.tsx                         # Policy rules editor
+                tokens/page.tsx                         # Access tokens list
+                tokens/new/{page.tsx,mint-form.tsx}     # v4 risk-checklist mint flow
                 approvals/page.tsx                      # Pending approval requests
                 settings/page.tsx                       # Project settings
                 bash/page.tsx                           # Redirect → bindings/new
@@ -64,12 +63,12 @@ packages/web/
         integrations/{github,vercel,supabase,railway}/{connect,callback}/route.ts
         v1/
           tokens/{route, [tokenId]/route, [tokenId]/rotate-key/route}.ts
-          mgmt/tokens/{route, [tokenId]/route, pending/[id]/route}.ts
+          mgmt/tokens/{route, [tokenId]/route, preview/route, pending/[id]/route}.ts
           mgmt/approvals/[id]/route.ts                  # operator decide (allow/deny)
           mgmt/projects/route.ts
           orgs/[slug]/{route, transfer-ownership/route}.ts
           orgs/[slug]/management-keys/{route, [keyId]/route}.ts
-          projects/[projectId]/{route, policy/route, policy/[ruleId]/route}.ts
+          projects/[projectId]/{route, mint/route, mint/preview/route}.ts
           projects/[projectId]/approvals/{route, [approvalId]/route}.ts
           providers/[provider]/route.ts                 # disconnect
           bindings/[bindingId]/route.ts                 # remove a provider binding
@@ -77,7 +76,9 @@ packages/web/
           bash-bindings/[bindingId]/hosts/{route, [hostId]/route, [hostId]/test/route}.ts
           bash-bindings/[bindingId]/run-tool/route.ts
           members/{route, [userId]/route}.ts
-          integrations/telegram/webhook/route.ts        # Bot approval callbacks
+          integrations/telegram/webhook/route.ts        # Telegram approval callbacks
+          integrations/email/decide/route.ts            # Email approval (signed link)
+          catalog/route.ts                              # Risk catalog dump (per-provider)
       mcp/route.ts                                      # MCP gateway POST
       auth/callback/route.ts                            # Supabase auth callback
       agent-bootstrap.md/route.ts                       # served bootstrap doc
@@ -91,10 +92,15 @@ packages/web/
       auth/{require-org-member, require-management-key}.ts
       oauth/{state, railway}.ts                         # nonce + PKCE helpers
       providers/{state, bytea}.ts                       # provider_admins helpers
-      gateway/build.ts                                  # wire McpGateway with adapters
-      approvals/{channel, manual, telegram, mint, decide, index}.ts
-      capabilities/{ring-catalog, ring-grid}.tsx        # UI cap composer
-      bash/{parse, exec}.ts                             # annotated-bash provider — cf. bash-provider handbook
+      gateway/build.ts                                  # wire McpGateway with adapters + catalogs
+      risk-catalog/loader.ts                            # boot-time provider catalog index (v4)
+      mint/preview.ts                                   # gate-resolution helper used by both user + mgmt mint routes
+      approvals/{channel, manual, telegram, email, email-token, mint, decide, index}.ts
+      bash/{parse, exec, args, exec-host}.ts           # annotated-bash provider — cf. bash-provider handbook
+    components/providers/
+      provider-info.ts                                  # static per-provider strings (label, planes, mint mode)
+      MermaidDiagram.tsx                                # client component rendering data-model mermaid
+      data-model-to-mermaid.ts                          # DataModel → mermaid source
   next.config.ts
   tsconfig.json
   .env.local.example
@@ -144,12 +150,16 @@ selon l'URL :
   `Audit log` / `Access tokens` + dropdown project switcher.
 - **Resources** : `Documentation` / `Support`.
 
-Les sous-pages projet `rings/`, `policy/`, `approvals/`, `settings/`,
+Les sous-pages projet `tokens/new/`, `approvals/`, `settings/`,
 `bash-bindings/[bindingId]/` ne figurent **pas** dans la sidebar — elles
 sont atteintes via les cards de l'Overview (`projects/[project]/page.tsx`)
-ou par lien direct. Le modèle Roles n'est plus représenté : les
-capabilities portées directement par l'access token l'ont remplacé
-(migration `0015_capabilities_replace_roles.sql`).
+ou par lien direct. Le modèle Roles + le modèle Capabilities v1 ont
+été remplacés en bloc par le modèle v4 **risk-based** : l'access token
+porte directement `accepted_risks: RiskId[]` (cf. spec
+[`gateway-risk-model.md`](../spec/gateway-risk-model.md)). La page
+`/orgs/[slug]/providers/[provider]/` rend pour chaque provider le
+data-model en mermaid + le risk catalog YAML + la liste des tools MCP,
+en s'appuyant sur `components/providers/` et `lib/risk-catalog/`.
 
 Les listes orgs + projects sont fetched server-side dans
 `packages/web/src/app/(app)/layout.tsx` et passées en prop. La sidebar
@@ -174,59 +184,57 @@ configuré). Le slug est ré-encodé dans le `state` nonce.
 Les autres providers OAuth (Vercel, Supabase, Railway) suivent le même
 shape : `/api/integrations/<provider>/{connect,callback}/route.ts`.
 
-## Access token creation (api_key visible 1×)
+## Access token creation (api_key visible 1×, v4 risk-based)
 
-Hot path utilisateur :
+Hot path utilisateur (cf. spec
+[`gateway-risk-model.md`](../spec/gateway-risk-model.md) §9) :
 
 ```
-POST /api/v1/tokens {orgSlug, projectSlug, name, capabilities, context?}
-  ├─ capabilities[]: shorthand strings → parseCapability() (400 on malformed)
+POST /api/v1/projects/:projectId/mint
+  { orgSlug, bindings[], accepted_risks[], denied_risks?,
+    name?, ttlSeconds?, singleUse?, context? }
+  │
   ├─ requireOrgMember(orgSlug)
-  ├─ load policy_rules eq project_id
-  ├─ evaluatePolicy(caps, rules)
-  │     ├─ any 'deny' → 403 (no override)
-  │     ├─ any 'confirm' → open approval flow → 202 { approval_id, ... }
-  │     └─ all 'allow'  → mint immediately:
-  │         ├─ generateApiKey('live') → {apiKey, apiKeyPrefix}
-  │         ├─ hashApiKey(apiKey) → apiKeyHash (argon2id)
-  │         ├─ INSERT access_tokens (api_key_prefix, api_key_hash,
-  │         │                         capabilities jsonb, ...)
-  │         └─ → 201 { access_token, api_key }  ← visible only here
+  ├─ computeMintPreview(catalogs × project_risk_policies × bindings)
+  │     → per-risk effective_gate (allow | confirm | deny)
+  │
+  ├─ any deny → 403 { error, denied_risks, risks }
+  ├─ all allow → mint immediately :
+  │     ├─ generateApiKey('live') → {apiKey, apiKeyPrefix}
+  │     ├─ hashApiKey(apiKey) → apiKeyHash (argon2id)
+  │     ├─ INSERT access_tokens (api_key_prefix, api_key_hash,
+  │     │                         accepted_risks jsonb, denied_risks jsonb, ...)
+  │     └─ → 201 { access_token, api_key, accepted_risks }  ← visible only here
+  │
+  └─ any confirm → INSERT approval_requests + pickChannel + notify
+                → 202 { approval_id, status:'pending', channel, poll_url,
+                        gated_risks, risks }
 ```
 
-`capabilities` is an array of notation strings (`'github:repo/code:read'`,
-`'vercel:runtime/deployment:write@prod'`, `'supabase:db/rows:read@staging'`,
-`'bash:logs:read@vps-rp'`, …) parsed via `parseCapability` from
-`@vaubaan/shared` and stored inline as the full
-`(provider, plane, level, action, env?)` tuples on the
-`access_tokens.capabilities` jsonb column. There is no more `roles` /
-`access_token_roles` join — the old role model was dropped in migration
-`0015_capabilities_replace_roles.sql`. Same swap applies to
-`POST /api/v1/mgmt/tokens` and the optional `capabilities` field of
-`PATCH /api/v1/tokens/[tokenId]`.
+Le wire format est porté par `RiskId[]` plutôt que par des tuples
+capability `(provider, plane, level, action, env?)`. Le catalog
+canonique de chaque provider vit dans
+`packages/providers/<vendor>/src/risk-catalog.{yaml,ts}` et est chargé
+au boot par `lib/risk-catalog/loader.ts` (cf.
+[`policy-engine.md`](./policy-engine.md) §Wiring côté gateway).
+L'helper `computeMintPreview` (`lib/mint/preview.ts`) résout les
+`effective_gate` à partir du catalog catalogue × `project_risk_policies`
+× env binding et est partagé entre la route user `POST /projects/:id/mint`
+et la route mgmt `POST /mgmt/tokens`.
 
-**Policy + approval flow** (migrations `0013_approvals.sql`,
-`0014_single_use_tokens.sql`, `0016_policy_rules.sql`,
-`0018_gate_allow_confirm_deny.sql`). At mint, both the mgmt and user
-routes consult `policy_rules` for the project. The decision per capability
-is `allow | confirm | deny` (`evaluatePolicy`). Any `deny` → 403 final.
-Any `confirm` → insert an `approval_requests` row dispatched via the
-project's `ApprovalChannel` (manual or telegram, cf.
-`packages/web/src/lib/approvals/`) and return **HTTP 202** with
-`{ approval_id, status: 'pending', poll_url, channel, gated }`. Once the
-operator clicks ✅ (Telegram callback or
-`POST /api/v1/mgmt/approvals/:id`), the pending row is consumed by the
-poll endpoint which mints the access_token and returns the `api_key`
-once. `POST /api/v1/tokens` returns 201 immediately on the all-ai fast
-path. `POST /api/v1/mgmt/tokens` also accepts `singleUse?: bool` (the
-gateway consumes the token on the first call that matches a capability —
-spec §8) and `ttlSeconds?: number` (capped at 3600s) for short-lived
-single-use tokens. Full details in
-[`capability-policy-and-approvals.md`](./capability-policy-and-approvals.md).
+`POST /mgmt/tokens` accepte également `singleUse?: bool` (le gateway
+consume le token sur le premier call — spec §8) et `ttlSeconds?: number`
+(capé à 3600s pour single-use). Full details in
+[`approvals.md`](./approvals.md).
 
-UI : after create, a modal displays the full api_key with a Copy button
-and a warning `won't be shown again`. The modal also shows the snippet to
-drop in `~/.config/claude/mcp.json` :
+L'endpoint preview (`POST /api/v1/projects/:id/mint/preview` + son
+équivalent mgmt) calcule la même résolution sans persister — utilisé
+par le composant `mint-form.tsx` pour afficher la checklist des risques
+en temps réel.
+
+UI : après create, un modal affiche la `api_key` complète avec bouton
+Copy et un warning `won't be shown again`. Le modal montre aussi le
+snippet à coller dans `~/.config/claude/mcp.json` :
 
 ```jsonc
 {
@@ -243,30 +251,27 @@ The vocabulary is intentionally neutral — an access token can be consumed
 by an LLM agent, a CI job, a script, or a human curl. The UI placeholder
 is `ci-deploy` rather than `claude-dev` to avoid presuming agent usage.
 
-### Capability picker (create + edit)
+### Risk checklist picker (mint form)
 
-`packages/web/src/lib/capabilities/ring-catalog.ts` est la source de vérité
-UI : un catalogue statique des planes × levels (rings) × archetypes par
-provider, utilisé par `ring-grid.tsx` (le composer visuel sur la page
-`tokens/new` et la card `Capabilities` de `tokens/[tokenId]`).
+`tokens/new/mint-form.tsx` est le composer v4 :
 
-- Une grille concentrique (ring 1 = innermost → ring N = outermost) avec
-  une action `read` / `write` par cellule.
-- Un sélecteur d'env quand `LevelDescriptor.envScoped === true` ; sinon
-  le tuple est env-less.
-- Un free-text field pour une notation arbitraire, validée par
-  `parseCapability` côté client avant ajout.
-- Le body soumis est `capabilities: string[]` (shorthands). Sur la detail
-  page, les tuples stockés sont rendus en shorthand via
-  `formatCapability`.
+- Pour chaque provider × binding, fetch le catalog via
+  `GET /api/v1/catalog?provider=<p>` (cf.
+  `app/api/v1/catalog/route.ts`) — liste de risques avec
+  `effective_gate` (dérivé côté serveur via `computeMintPreview`).
+- Render en checklist groupée par bucket de sévérité : `allow`
+  (cochable freely) / `confirm` (cochable, mais le mint passera en 202)
+  / `deny` (greyed-out — blocked par project policy + tooltip avec la
+  raison).
+- Soumet `accepted_risks: RiskId[]` + `denied_risks?: RiskId[]` à la
+  route mint user-session.
 
-> Note runtime : le catalog est **descriptif**, pas enforcing. Le
-> classifier d'un provider accepte des slugs arbitraires ; un cap typé
-> dans le free-text passe même si absent du catalog (cf. `ring-catalog.ts:10-15`).
+`lib/mint/preview.ts` est la **single source of truth** pour la
+résolution de gate ; identique côté user + mgmt + UI preview.
 
-La table d'audit (`audit_log`) stocke `capability_matched` (la notation
-de la capability qui a autorisé l'appel, ou la denial reason) — renommé
-depuis `role_matched` par `0015_capabilities_replace_roles.sql`.
+La table d'audit (`audit_log`) stocke désormais `slices_executed`,
+`risks_touched`, et `token_accepted_risks_snapshot` (cf.
+[`mcp-gateway.md`](./mcp-gateway.md) §Audit).
 
 ## Ownership transfer
 
