@@ -4,6 +4,11 @@
  *
  *   GET /api/v1/mgmt/tokens/pending/:approvalId
  *     Authorization: Bearer vbn_mgmt_…
+ *     Query (optional) :
+ *       ?wait=<seconds>     long-poll, server blocks up to <seconds> (capped
+ *                           at 25 to stay under Vercel Edge / Cloudflare
+ *                           proxy timeouts — cf. spec v4 §11). Default 0 =
+ *                           legacy single-shot.
  *
  *   Responses
  *     - 202 { status: 'pending', expires_at }                       still waiting
@@ -14,7 +19,12 @@
  * The api_key is shown ONCE — after the first successful poll, the row's
  * status flips to 'consumed' and `pending_api_key` is cleared.
  *
- * Spec : docs/spec/gateway-capability-model.md §8.
+ * Spec : docs/spec/gateway-risk-model.md §11.
+ *
+ * Implementation : Node runtime + maxDuration: 30 (headroom above the 25s
+ * cap). Inside the wait loop we poll the DB every 500ms — coarse but
+ * sufficient at MVP scale. A Postgres LISTEN/NOTIFY upgrade is sketched
+ * in the spec but deferred.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -23,6 +33,19 @@ import { requireManagementKey } from '@/lib/auth/require-management-key';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+/** Headroom above the 25s wait cap so the platform timeout doesn't preempt
+ *  the response. Vercel Pro/Ent allow up to 800s — 30 is comfortable. */
+export const maxDuration = 30;
+
+/** Maximum wait the server will honor (seconds). Stays under :
+ *   - Vercel Edge runtime cap (25s before first byte) ; we're on Node so
+ *     this is informative, not enforced.
+ *   - Cloudflare proxy origin idle (100s non-Ent).
+ *   - Many enterprise proxies/VPNs (60s default).
+ *  The SDK re-polls until its wall-clock budget. */
+const MAX_WAIT_SECONDS = 25;
+/** Internal poll cadence — coarse but DB-friendly. */
+const POLL_INTERVAL_MS = 500;
 
 interface ApprovalRow {
   id: string;
@@ -42,14 +65,30 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   const { id } = await ctx.params;
   const svc = getSupabaseServiceClient();
 
-  const { data: row } = await svc
-    .from('approval_requests')
-    .select(
-      'id, project_id, status, decided_at, expires_at, access_token_id, pending_api_key, projects!inner(organization_id)',
-    )
-    .eq('id', id)
-    .maybeSingle<ApprovalRow>();
-  if (!row || row.projects.organization_id !== guard.orgId) {
+  const waitRaw = req.nextUrl.searchParams.get('wait');
+  const waitSeconds = Math.max(0, Math.min(MAX_WAIT_SECONDS, Number(waitRaw) || 0));
+  const deadlineMs = waitSeconds > 0 ? Date.now() + waitSeconds * 1000 : 0;
+
+  // First load — authoritative ownership check.
+  let row = await loadApprovalRow(svc, id, guard.orgId);
+  if (!row) {
+    return NextResponse.json({ error: 'approval not found in this org' }, { status: 404 });
+  }
+
+  // Long-poll loop : if the caller asked us to wait AND we're still pending
+  // AND the approval has not expired, keep re-reading the row at
+  // POLL_INTERVAL_MS until status flips or our deadline elapses.
+  while (
+    waitSeconds > 0 &&
+    row !== null &&
+    row.status === 'pending' &&
+    Date.parse(row.expires_at) > Date.now() &&
+    Date.now() < deadlineMs
+  ) {
+    await sleep(POLL_INTERVAL_MS);
+    row = await loadApprovalRow(svc, id, guard.orgId);
+  }
+  if (!row) {
     return NextResponse.json({ error: 'approval not found in this org' }, { status: 404 });
   }
 
@@ -113,4 +152,24 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
     { access_token: token, api_key: apiKey, expires_at: token?.expires_at ?? null },
     { status: 201 },
   );
+}
+
+async function loadApprovalRow(
+  svc: ReturnType<typeof getSupabaseServiceClient>,
+  id: string,
+  orgId: string,
+): Promise<ApprovalRow | null> {
+  const { data: row } = await svc
+    .from('approval_requests')
+    .select(
+      'id, project_id, status, decided_at, expires_at, access_token_id, pending_api_key, projects!inner(organization_id)',
+    )
+    .eq('id', id)
+    .maybeSingle<ApprovalRow>();
+  if (!row || row.projects.organization_id !== orgId) return null;
+  return row;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
