@@ -11,22 +11,19 @@
  *     - 404             not found in this org
  *
  * On approve : mints the access token *now* with the originally-requested
- * caps/ttl/name and stashes the api_key on the approval row. The caller (the
+ * risks/ttl/name and stashes the api_key on the approval row. The caller (the
  * original requester, polling /pending/:id) picks it up on its next poll and
  * clears it.
  *
- * Telegram webhook handler reuses the same internal logic through
- * `decideApproval` — see /api/v1/integrations/telegram/webhook.
- *
- * Spec : docs/spec/gateway-capability-model.md §8.
+ * Spec : docs/spec/gateway-risk-model.md §9.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import type { Capability } from '@vaubaan/shared';
+import type { RiskId } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireManagementKey } from '@/lib/auth/require-management-key';
-import { decideApproval } from '@/lib/approvals/decide';
+import { decideApproval } from '@/lib/approvals/mint';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -40,7 +37,7 @@ interface ApprovalRow {
   id: string;
   project_id: string;
   status: string;
-  requested_capabilities: Capability[];
+  requested_risks: RiskId[] | null;
   requested_token_name: string;
   requested_ttl_hours: number;
   requested_single_use: boolean;
@@ -68,7 +65,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
   const { data: row } = await svc
     .from('approval_requests')
     .select(
-      'id, project_id, status, requested_capabilities, requested_token_name, requested_ttl_hours, requested_single_use, projects!inner(organization_id)',
+      'id, project_id, status, requested_risks, requested_token_name, requested_ttl_hours, requested_single_use, projects!inner(organization_id)',
     )
     .eq('id', id)
     .maybeSingle<ApprovalRow>();
@@ -87,7 +84,8 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ id: string
     decision: body.decision,
     decidedBy: body.decidedBy ?? `mgmt:${guard.managementKeyId}`,
     projectId: row.project_id,
-    capabilities: row.requested_capabilities,
+    acceptedRisks: row.requested_risks ?? [],
+    deniedRisks: [],
     tokenName: row.requested_token_name,
     ttlHours: row.requested_ttl_hours,
     singleUse: row.requested_single_use,

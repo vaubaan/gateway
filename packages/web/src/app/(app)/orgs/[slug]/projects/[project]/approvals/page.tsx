@@ -1,7 +1,6 @@
 import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { type Capability, formatCapability, isValidCapability } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { Badge, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import { ApprovalControls } from './approval-controls';
@@ -12,7 +11,7 @@ interface ApprovalRow {
   id: string;
   status: string;
   channel: string;
-  requested_capabilities: unknown;
+  requested_risks: unknown;
   requested_token_name: string;
   requested_ttl_hours: number;
   requested_single_use: boolean;
@@ -51,7 +50,7 @@ export default async function ApprovalsPage({
   const { data: pending } = await supabase
     .from('approval_requests')
     .select(
-      'id, status, channel, requested_capabilities, requested_token_name, requested_ttl_hours, requested_single_use, context, created_at, expires_at, decided_at, decided_by',
+      'id, status, channel, requested_risks, requested_token_name, requested_ttl_hours, requested_single_use, context, created_at, expires_at, decided_at, decided_by',
     )
     .eq('project_id', proj.id)
     .eq('status', 'pending')
@@ -60,7 +59,7 @@ export default async function ApprovalsPage({
   const { data: recent } = await supabase
     .from('approval_requests')
     .select(
-      'id, status, channel, requested_capabilities, requested_token_name, requested_ttl_hours, requested_single_use, context, created_at, expires_at, decided_at, decided_by',
+      'id, status, channel, requested_risks, requested_token_name, requested_ttl_hours, requested_single_use, context, created_at, expires_at, decided_at, decided_by',
     )
     .eq('project_id', proj.id)
     .neq('status', 'pending')
@@ -149,9 +148,9 @@ export default async function ApprovalsPage({
                         fontSize: 13,
                       }}
                     >
-                      {capArray(a.requested_capabilities).map((c) => (
-                        <li key={formatCapability(c)} style={{ color: 'var(--text-muted)' }}>
-                          • <Code>{formatCapability(c)}</Code>
+                      {riskArray(a.requested_risks).map((r) => (
+                        <li key={r} style={{ color: 'var(--text-muted)' }}>
+                          • <Code>{r}</Code>
                         </li>
                       ))}
                     </ul>
@@ -231,10 +230,7 @@ export default async function ApprovalsPage({
   );
 }
 
-function capArray(input: unknown): Capability[] {
+function riskArray(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
-  return (input as unknown[]).filter(
-    (c): c is Capability =>
-      typeof c === 'object' && c !== null && isValidCapability(c as Capability),
-  );
+  return (input as unknown[]).filter((r): r is string => typeof r === 'string');
 }

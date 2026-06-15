@@ -60,10 +60,13 @@ export async function pickChannel(
 
   if (row.channel === 'email') {
     if (!row.email_address) return new ManualChannel();
-    const apiKey = process.env.RESEND_API_KEY ?? '';
-    const from = process.env.EMAIL_FROM_ADDRESS ?? '';
+    // Email sending uses the Resend REST API. The api key is sourced from
+    // RESEND_API_KEY (preferred) or SMTP_PASS (when an SMTP-style env is
+    // already configured for Resend — `re_*` key as the SMTP "password").
+    const apiKey = process.env.RESEND_API_KEY ?? process.env.SMTP_PASS ?? '';
+    const from = process.env.EMAIL_FROM_ADDRESS ?? process.env.SMTP_FROM ?? '';
     const signingSecret = process.env.EMAIL_SIGNING_SECRET ?? '';
-    const baseUrl = process.env.APPROVAL_LINK_BASE_URL ?? '';
+    const baseUrl = process.env.APPROVAL_LINK_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? '';
     if (!apiKey || !from || !signingSecret || !baseUrl) {
       console.warn(
         `[approvals] project ${projectId} configured for email but env vars are incomplete — falling back to manual`,

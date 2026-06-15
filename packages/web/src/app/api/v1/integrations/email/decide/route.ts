@@ -7,8 +7,8 @@
  *
  * The token is HMAC-signed with `EMAIL_SIGNING_SECRET` and embeds the
  * approval id + intended decision (`approve` | `deny`) + expiry. We verify,
- * load the approval row, branch on its v1/v4 shape, and call
- * `decideApproval`. Then we redirect to a public confirmation page.
+ * load the approval row, and call `decideApproval`. Then we redirect to a
+ * public confirmation page.
  *
  * The endpoint is GET (rather than POST) so the email client can hit it
  * with a click. CSRF is mitigated by the HMAC signature : an attacker who
@@ -16,10 +16,9 @@
  */
 
 import { type NextRequest } from 'next/server';
-import type { Capability, RiskId } from '@vaubaan/shared';
+import type { RiskId } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { decideApproval } from '@/lib/approvals/decide';
-import { decideApprovalV4 } from '@/lib/approvals/risk-mint';
+import { decideApproval } from '@/lib/approvals/mint';
 import { verifyEmailToken, EmailTokenError } from '@/lib/approvals/email-token';
 
 export const runtime = 'nodejs';
@@ -29,7 +28,6 @@ interface ApprovalRow {
   id: string;
   project_id: string;
   status: string;
-  requested_capabilities: Capability[] | null;
   requested_risks: RiskId[] | null;
   denied_risks: RiskId[] | null;
   requested_token_name: string;
@@ -63,7 +61,7 @@ export async function GET(req: NextRequest) {
   const { data: row } = await svc
     .from('approval_requests')
     .select(
-      'id, project_id, status, requested_capabilities, requested_risks, denied_risks, requested_token_name, requested_ttl_hours, requested_single_use, channel',
+      'id, project_id, status, requested_risks, denied_risks, requested_token_name, requested_ttl_hours, requested_single_use, channel',
     )
     .eq('id', payload.approvalId)
     .maybeSingle<ApprovalRow>();
@@ -74,33 +72,19 @@ export async function GET(req: NextRequest) {
   }
 
   const decidedBy = `email:${maskEmailFromHeaders(req)}`;
-  const isV4 = (row.requested_risks?.length ?? 0) > 0;
 
   try {
-    if (isV4) {
-      await decideApprovalV4(svc, {
-        approvalId: payload.approvalId,
-        decision: payload.decision,
-        decidedBy,
-        projectId: row.project_id,
-        acceptedRisks: row.requested_risks ?? [],
-        deniedRisks: row.denied_risks ?? [],
-        tokenName: row.requested_token_name,
-        ttlHours: row.requested_ttl_hours,
-        singleUse: row.requested_single_use,
-      });
-    } else {
-      await decideApproval(svc, {
-        approvalId: payload.approvalId,
-        decision: payload.decision,
-        decidedBy,
-        projectId: row.project_id,
-        capabilities: row.requested_capabilities ?? [],
-        tokenName: row.requested_token_name,
-        ttlHours: row.requested_ttl_hours,
-        singleUse: row.requested_single_use,
-      });
-    }
+    await decideApproval(svc, {
+      approvalId: payload.approvalId,
+      decision: payload.decision,
+      decidedBy,
+      projectId: row.project_id,
+      acceptedRisks: row.requested_risks ?? [],
+      deniedRisks: row.denied_risks ?? [],
+      tokenName: row.requested_token_name,
+      ttlHours: row.requested_ttl_hours,
+      singleUse: row.requested_single_use,
+    });
   } catch (e) {
     console.error('[email-decide] decideApproval failed', e);
     return errorPage('Failed to record the decision — try again', 500);

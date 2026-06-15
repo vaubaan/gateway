@@ -1,3 +1,14 @@
+/**
+ * SSH read-vs-write classification — a small regex whitelist of "this
+ * command shape is benign". Anything else is treated as a write. Used by
+ * the v4 classifier (`risk-classifier.ts`) to decide which slice (`R`
+ * or `W`) to emit on `ssh__exec`.
+ *
+ * The whitelist is intentionally narrow ; growing it adds R-side surface
+ * the runtime catalog will then have to gate. New entries should be
+ * paired with a review in the SSH risk catalog.
+ */
+
 const READ_PATTERNS = [
   /^sudo\s+journalctl\b.*/,
   /^journalctl\b.*/,

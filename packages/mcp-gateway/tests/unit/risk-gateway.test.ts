@@ -12,7 +12,6 @@ import { indexCatalog } from '@vaubaan/policy-engine';
 import {
   denyResponseBody,
   evaluateCallForToken,
-  shouldUseV4Path,
   type CallVerdict,
   type V4ClassifierAdapter,
   type V4TokenSnapshot,
@@ -121,18 +120,6 @@ function makeAdapter(outcome: 'read' | 'bulk' | 'deny'): V4ClassifierAdapter {
     },
   };
 }
-
-describe('shouldUseV4Path', () => {
-  test('true when accepted_risks non-empty', () => {
-    expect(shouldUseV4Path({ accepted_risks: ['supabase.read-data'] })).toBe(true);
-  });
-
-  test('false when accepted_risks empty / null / undefined', () => {
-    expect(shouldUseV4Path({ accepted_risks: [] })).toBe(false);
-    expect(shouldUseV4Path({ accepted_risks: null })).toBe(false);
-    expect(shouldUseV4Path({})).toBe(false);
-  });
-});
 
 describe('evaluateCallForToken', () => {
   const token: V4TokenSnapshot = {

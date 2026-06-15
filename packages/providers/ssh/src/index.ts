@@ -2,12 +2,6 @@ export { availableTools as sshAvailableTools } from './tools.ts';
 export { isReadAllowed } from './policy.ts';
 export { sshExec } from './execute.ts';
 export type { VpsSshBinding, ExecResult } from './execute.ts';
-export {
-  classifySsh,
-  sshToolCapabilities,
-  sshToolEnvResolution,
-  type ClassifyResult,
-} from './classify.ts';
 
 // ─── v4 risk-based authorization ───────────────────────────────────────────
 export { sshDataModel } from './data-model.ts';

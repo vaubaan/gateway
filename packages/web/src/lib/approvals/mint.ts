@@ -1,26 +1,25 @@
 /**
- * Shared approval-lifecycle helpers used by both the user `/api/v1/tokens`
- * route and the programmatic `/api/v1/mgmt/tokens` route.
+ * Risk-based mint helper — used by `/api/v1/mgmt/tokens` POST and the
+ * approve-decision paths. Writes `accepted_risks` / `denied_risks` on
+ * `access_tokens`.
  *
- * Spec : docs/spec/gateway-capability-model.md §8.
+ * Spec : docs/spec/gateway-risk-model.md §5 (wire), §9 (mint flow).
  */
 
-import { type Capability, generateApiKey, hashApiKey } from '@vaubaan/shared';
+import { generateApiKey, hashApiKey, type RiskId } from '@vaubaan/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-export interface PendingMintInput {
+export interface RiskMintInput {
   projectId: string;
-  capabilities: Capability[];
   tokenName: string;
-  ttlHours: number;
-  channel: 'manual' | 'telegram';
-  channelRef: string | null;
-  context?: Record<string, unknown>;
-  requestedByManagementKeyId?: string | null;
-  requestedByUserId?: string | null;
+  /** TTL in milliseconds. */
+  ttlMs: number;
+  accepted_risks: readonly RiskId[];
+  denied_risks?: readonly RiskId[];
+  singleUse?: boolean;
 }
 
-export interface ApprovedMintResult {
+export interface RiskMintResult {
   accessTokenId: string;
   apiKey: string;
   apiKeyPrefix: string;
@@ -28,35 +27,30 @@ export interface ApprovedMintResult {
 }
 
 /**
- * Mint an access token *now* for a previously-approved request, then mark
- * the approval as consumed in the same transaction-ish flow.
- *
- * Returns the api_key (plaintext, visible ONCE).
+ * Mint an access_token NOW (no approval flow), returning the plaintext
+ * api_key once. The caller is responsible for ensuring the request is
+ * authorized (all effective gates are `allow`).
  */
-export async function mintForApproval(
+export async function mintRiskAccessToken(
   svc: SupabaseClient,
-  approvalId: string,
-  ttlHours: number,
-  tokenName: string,
-  projectId: string,
-  capabilities: Capability[],
-  singleUse = false,
-): Promise<ApprovedMintResult> {
-  const expiresAt = new Date(Date.now() + ttlHours * 3600 * 1000).toISOString();
+  input: RiskMintInput,
+): Promise<RiskMintResult> {
+  const expiresAt = new Date(Date.now() + input.ttlMs).toISOString();
   const { apiKey, apiKeyPrefix } = generateApiKey('live');
   const apiKeyHash = await hashApiKey(apiKey);
 
   const { data: inserted, error: insertErr } = await svc
     .from('access_tokens')
     .insert({
-      project_id: projectId,
-      name: tokenName,
+      project_id: input.projectId,
+      name: input.tokenName,
       api_key_prefix: apiKeyPrefix,
       api_key_hash: apiKeyHash,
       status: 'active',
       expires_at: expiresAt,
-      capabilities,
-      single_use: singleUse,
+      accepted_risks: input.accepted_risks,
+      denied_risks: input.denied_risks ?? [],
+      single_use: input.singleUse ?? false,
     })
     .select('id')
     .single<{ id: string }>();
@@ -64,15 +58,80 @@ export async function mintForApproval(
     throw new Error(insertErr?.message ?? 'failed to insert access token');
   }
 
-  // Stash the api_key on the approval row for the caller's first poll, then
-  // clear it. RLS is service-role-only on approval_requests.
+  return { accessTokenId: inserted.id, apiKey, apiKeyPrefix, expiresAt };
+}
+
+/**
+ * Mint for a previously-approved request, then stash the plaintext api_key
+ * on the approval row so the caller's next poll picks it up.
+ */
+export async function mintForApproval(
+  svc: SupabaseClient,
+  approvalId: string,
+  input: RiskMintInput,
+): Promise<RiskMintResult> {
+  const minted = await mintRiskAccessToken(svc, input);
   await svc
     .from('approval_requests')
     .update({
-      access_token_id: inserted.id,
-      pending_api_key: apiKey,
+      access_token_id: minted.accessTokenId,
+      pending_api_key: minted.apiKey,
     })
     .eq('id', approvalId);
+  return minted;
+}
 
-  return { accessTokenId: inserted.id, apiKey, apiKeyPrefix, expiresAt };
+// ─────────────────────────────────────────────────────────────────────────────
+// Risk-based approval decision (used by the operator decide endpoint and the
+// Telegram / email decide routes).
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DecideApprovalInput {
+  approvalId: string;
+  decision: 'approve' | 'deny';
+  decidedBy: string;
+  projectId: string;
+  acceptedRisks: readonly RiskId[];
+  deniedRisks: readonly RiskId[];
+  tokenName: string;
+  ttlHours: number;
+  singleUse?: boolean;
+}
+
+export interface DecideApprovalResult {
+  status: 'approved' | 'denied';
+  accessTokenId?: string;
+}
+
+export async function decideApproval(
+  svc: SupabaseClient,
+  input: DecideApprovalInput,
+): Promise<DecideApprovalResult> {
+  const now = new Date().toISOString();
+
+  if (input.decision === 'deny') {
+    await svc
+      .from('approval_requests')
+      .update({ status: 'denied', decided_by: input.decidedBy, decided_at: now })
+      .eq('id', input.approvalId)
+      .eq('status', 'pending');
+    return { status: 'denied' };
+  }
+
+  const minted = await mintForApproval(svc, input.approvalId, {
+    projectId: input.projectId,
+    tokenName: input.tokenName,
+    ttlMs: input.ttlHours * 3600_000,
+    accepted_risks: input.acceptedRisks,
+    denied_risks: input.deniedRisks,
+    singleUse: input.singleUse,
+  });
+
+  await svc
+    .from('approval_requests')
+    .update({ status: 'approved', decided_by: input.decidedBy, decided_at: now })
+    .eq('id', input.approvalId)
+    .eq('status', 'pending');
+
+  return { status: 'approved', accessTokenId: minted.accessTokenId };
 }

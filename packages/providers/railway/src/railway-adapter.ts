@@ -15,21 +15,10 @@
  * https://mcp.railway.com/ (cf. execute.ts).
  */
 
-import type {
-  Capability,
-  EnvResolution,
-  McpToolDeclaration,
-  ProviderAdmin,
-  ProviderBinding,
-} from '@vaubaan/shared';
+import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
 import { executeCall, type FetchImpl } from './execute.ts';
-import {
-  classifyRailway,
-  railwayToolCapabilities,
-  railwayToolEnvResolution,
-  type ClassifyResult,
-} from './classify.ts';
+import { classifyRailwayV4, type RailwayClassifyResult } from './risk-classifier.ts';
 
 const TOKEN_ENDPOINT = 'https://backboard.railway.com/oauth/token';
 /** RFC 8707 resource indicator binding the token to the MCP audience. */
@@ -170,20 +159,16 @@ export class RailwayAdapter {
     return executeCall(this.fetchImpl, token, tool, args);
   }
 
-  toolCapabilities(tool: string): readonly Capability[] {
-    return railwayToolCapabilities(tool);
-  }
-
-  toolEnvResolution(tool: string): EnvResolution {
-    return railwayToolEnvResolution(tool);
-  }
-
-  classify(
+  /**
+   * v4 classifier — emit the slice(s) the call touches. The provider plugin's
+   * sole authorization responsibility.
+   */
+  classifyV4(
     tool: string,
     args: Record<string, unknown>,
     bindings: ReadonlyArray<ProviderBinding>,
-  ): ClassifyResult {
-    return classifyRailway(tool, args, bindings);
+  ): RailwayClassifyResult {
+    return classifyRailwayV4(tool, args, bindings);
   }
 }
 

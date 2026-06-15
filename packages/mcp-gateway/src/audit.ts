@@ -16,19 +16,17 @@ export interface AuditRow {
   access_token_id: string | null;
   tool_name: string;
   arguments_hash: string;
-  /** Shorthand of the matched capability (allow) ; null if denied.
-   *  v1 column — migration 0015. */
-  capability_matched: string | null;
   decision: AuditDecision;
   denial_reason: string | null;
   upstream_latency_ms: number | null;
   client_ip: string | null;
   client_user_agent: string | null;
-  /** v4 columns (migration 0028). Optional so v1 call paths don't have to
-   *  write them. */
-  slices_executed?: Slice[] | null;
-  risks_touched?: RiskId[] | null;
-  token_accepted_risks_snapshot?: RiskId[] | null;
+  /** Slices the call touched (matcher input). */
+  slices_executed: Slice[] | null;
+  /** Risks the slices intersected with in the provider catalog. */
+  risks_touched: RiskId[] | null;
+  /** Snapshot of the token's accepted_risks at call time (for reproducibility). */
+  token_accepted_risks_snapshot: RiskId[] | null;
 }
 
 export interface AuditWriter {

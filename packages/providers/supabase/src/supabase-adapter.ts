@@ -6,21 +6,10 @@
  *        Supabase OAuth app. v0 uses paste-token (`sbp_...`) directly.
  */
 
-import type {
-  Capability,
-  EnvResolution,
-  McpToolDeclaration,
-  ProviderAdmin,
-  ProviderBinding,
-} from '@vaubaan/shared';
+import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
 import { executeCall, type FetchImpl } from './execute.ts';
-import {
-  classifySupabase,
-  supabaseToolCapabilities,
-  supabaseToolEnvResolution,
-  type ClassifyResult,
-} from './classify.ts';
+import { classifySupabaseV4, type ClassifyV4Result } from './risk-classifier.ts';
 
 export interface SupabaseAdapterConfig {
   /** Override fetch in tests. */
@@ -86,19 +75,15 @@ export class SupabaseAdapter {
     return executeCall(this.fetchImpl, token, tool, args);
   }
 
-  toolCapabilities(tool: string): readonly Capability[] {
-    return supabaseToolCapabilities(tool);
-  }
-
-  toolEnvResolution(tool: string): EnvResolution {
-    return supabaseToolEnvResolution(tool);
-  }
-
-  classify(
+  /**
+   * v4 classifier — emit the slice(s) the call touches. The provider plugin's
+   * sole authorization responsibility.
+   */
+  classifyV4(
     tool: string,
     args: Record<string, unknown>,
     bindings: ReadonlyArray<ProviderBinding>,
-  ): ClassifyResult {
-    return classifySupabase(tool, args, bindings);
+  ): ClassifyV4Result {
+    return classifySupabaseV4(tool, args, bindings);
   }
 }

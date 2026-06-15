@@ -1,23 +1,19 @@
 /**
- * GitHubAdapter — implements ProviderAdapter for GitHub via GitHub App install.
+ * GitHubAdapter — wraps Octokit + GitHub App install minting.
  *
- * Spec  : docs/spec/vaubaan-gateway.md §5.1, §5.2.
- * ADRs  : docs/decisions/oauth-app-install-per-provider.md,
- *         docs/decisions/dispatch-upstream-option-a-synthese.md.
+ * Spec : docs/spec/vaubaan-gateway.md §5.1, §5.2.
+ * Risk : docs/spec/gateway-risk-model.md §7 (classifier emits slices).
+ *
+ * The gateway calls `classifyV4(tool, args, bindings)` to obtain the
+ * slices touched by a call (used to intersect with the risk catalog), then
+ * calls `executeCall` to actually run it.
  */
 
 import { Octokit } from '@octokit/rest';
-import type {
-  Capability,
-  EnvResolution,
-  McpToolDeclaration,
-  ProviderAdmin,
-  ProviderBinding,
-} from '@vaubaan/shared';
-import type { ProviderAdapter, ValidateResult, MintedToken, ClassifyResult } from './adapter.ts';
+import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import { mintInstallationToken } from './app-install.ts';
 import { availableTools } from './tools.ts';
-import { classifyGithub, githubToolCapabilities, githubToolEnvResolution } from './classify.ts';
+import { classifyGithubV4, type ClassifyV4Result } from './risk-classifier.ts';
 import { executeCall, type OctokitFactory } from './execute.ts';
 
 export interface GitHubAdapterConfig {
@@ -39,6 +35,17 @@ export interface GitHubAdapterConfig {
   loadGithubBindings?: (projectId: string) => Promise<ProviderBinding[]>;
 }
 
+export interface ValidateResult {
+  ok: boolean;
+  displayName?: string;
+  error?: string;
+}
+
+export interface MintedToken {
+  token: string;
+  expiresAt: Date;
+}
+
 const MINT_TOOL = 'github__mint_install_token';
 const MINT_PERMISSIONS: Record<'clone' | 'push', Record<string, string>> = {
   clone: { contents: 'read' },
@@ -56,23 +63,11 @@ const MINT_PERMISSIONS: Record<'clone' | 'push', Record<string, string>> = {
 
 const defaultOctokitFactory: OctokitFactory = (token) => new Octokit({ auth: token });
 
-/** Cache TTL for the per-repo protected-branches list. Short — operators can
- *  toggle a branch's protected flag on github.com and reasonably expect Vaubaan
- *  to pick up the change within a minute. The cache reduces the per-call
- *  pressure on GitHub's REST API for hot repos. */
-const PROTECTED_BRANCHES_TTL_MS = 60_000;
-
-interface ProtectedBranchesEntry {
-  branches: readonly string[];
-  expiresAt: number;
-}
-
-export class GitHubAdapter implements ProviderAdapter {
+export class GitHubAdapter {
   readonly provider = 'github' as const;
   readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
 
   private readonly config: GitHubAdapterConfig;
-  private readonly protectedBranchesCache = new Map<string, ProtectedBranchesEntry>();
 
   constructor(config: GitHubAdapterConfig) {
     this.config = config;
@@ -162,69 +157,15 @@ export class GitHubAdapter implements ProviderAdapter {
   }
 
   /**
-   * Build the runtime exclude set for an env-less grant on this binding
-   * (spec gateway-capability-model.md §5.1 #4) :
-   *
-   *  - `env_less_exclude_branch` : single static slug ; copied as-is.
-   *  - `env_less_exclude_protected` : we call GitHub's
-   *    `repos.listBranches({protected:true})` and exclude every returned
-   *    branch. The result is cached per-repo with a short TTL so the hot path
-   *    pays at most one API call per minute per repo (operators can flip
-   *    protection on github.com and see it picked up within the TTL).
-   *
-   * Returns an empty array when no knob is set — the gateway treats that as
-   * "no exclusion" (true fan-out).
+   * v4 classifier — emit the slice(s) the call touches. The provider plugin's
+   * sole authorization responsibility.
    */
-  async resolveExcludeEnvs(
-    admin: ProviderAdmin,
-    binding: ProviderBinding,
-  ): Promise<readonly string[]> {
-    const out: string[] = [];
-    if (binding.env_less_exclude_branch) out.push(binding.env_less_exclude_branch);
-    if (binding.env_less_exclude_protected) {
-      const protectedBranches = await this.listProtectedBranches(admin, binding.resource_ref);
-      for (const b of protectedBranches) {
-        if (!out.includes(b)) out.push(b);
-      }
-    }
-    return out;
-  }
-
-  private async listProtectedBranches(
-    admin: ProviderAdmin,
-    resourceRef: string,
-  ): Promise<readonly string[]> {
-    const now = Date.now();
-    const cached = this.protectedBranchesCache.get(resourceRef);
-    if (cached && cached.expiresAt > now) return cached.branches;
-
-    const m = resourceRef.match(/^([^/]+)\/([^/]+)$/);
-    if (!m) return [];
-    const [, owner, repo] = m;
-
-    const { token } = await this.mintUpstreamToken(admin);
-    const octokit = (this.config.octokitFactory ?? defaultOctokitFactory)(token);
-    // listBranches with `protected: true` returns the protected ones only.
-    // Paginate defensively even though most repos have only a handful.
-    const branches: string[] = [];
-    let page = 1;
-    while (true) {
-      const { data } = await octokit.rest.repos.listBranches({
-        owner: owner!,
-        repo: repo!,
-        protected: true,
-        per_page: 100,
-        page,
-      });
-      for (const b of data) branches.push(b.name);
-      if (data.length < 100) break;
-      page += 1;
-    }
-    this.protectedBranchesCache.set(resourceRef, {
-      branches,
-      expiresAt: now + PROTECTED_BRANCHES_TTL_MS,
-    });
-    return branches;
+  classifyV4(
+    tool: string,
+    args: Record<string, unknown>,
+    bindings: ReadonlyArray<ProviderBinding>,
+  ): ClassifyV4Result {
+    return classifyGithubV4(tool, args, bindings);
   }
 
   /**
@@ -288,21 +229,5 @@ export class GitHubAdapter implements ProviderAdapter {
       repositories: minted.repositories,
       permissions: minted.permissions,
     };
-  }
-
-  toolCapabilities(tool: string): readonly Capability[] {
-    return githubToolCapabilities(tool);
-  }
-
-  toolEnvResolution(tool: string): EnvResolution {
-    return githubToolEnvResolution(tool);
-  }
-
-  classify(
-    tool: string,
-    args: Record<string, unknown>,
-    bindings: ReadonlyArray<ProviderBinding>,
-  ): ClassifyResult {
-    return classifyGithub(tool, args, bindings);
   }
 }

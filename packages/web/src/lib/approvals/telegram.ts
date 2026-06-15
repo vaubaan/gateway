@@ -17,7 +17,6 @@
  * `vbn:<approvalId>:<approve|deny>`. The webhook handler routes from there.
  */
 
-import { formatCapability } from '@vaubaan/shared';
 import type { ApprovalChannel, ApprovalChannelDispatched, ApprovalRequestPayload } from './channel';
 
 export interface TelegramChannelConfig {
@@ -52,7 +51,11 @@ export class TelegramChannel implements ApprovalChannel {
   }
 
   async open(req: ApprovalRequestPayload): Promise<ApprovalChannelDispatched> {
-    const caps = req.capabilities.map((c) => `• \`${formatCapability(c)}\``).join('\n');
+    const needsApproval = req.needsApproval.map((r) => `• \`${escapeMd(r)}\``).join('\n');
+    const otherAccepted = req.acceptedRisks
+      .filter((r) => !req.needsApproval.includes(r))
+      .map((r) => `• ${escapeMd(r)}`)
+      .join('\n');
     const contextStr = req.context
       ? Object.entries(req.context)
           .map(([k, v]) => `*${escapeMd(k)}*: ${escapeMd(String(v))}`)
@@ -65,8 +68,11 @@ export class TelegramChannel implements ApprovalChannel {
       `*Project*: ${escapeMd(req.projectName ?? req.projectId)}`,
       `*Token*: \`${escapeMd(req.tokenName)}\` _(ttl ${req.ttlHours}h)_`,
       '',
-      '*Capabilities*:',
-      caps,
+      '*Risks pending your confirmation*:',
+      needsApproval || '_none_',
+      '',
+      '*Other risks already accepted*:',
+      otherAccepted || '_none_',
       '',
       '*Context*:',
       contextStr,

@@ -1,48 +1,27 @@
 /**
- * Risk-based call path (v4) for the MCP gateway.
+ * Risk-based authorization helpers (pure functions).
  *
  * Spec : docs/spec/gateway-risk-model.md §8 (strict-fail runtime).
  *
- * This module is the v4 sibling of `gateway.ts`. It is a **pure function**
- * (`evaluateCallForToken`) plus a small dispatcher (`shouldUseV4Path`)
- * that the wrapping route uses to decide whether a given access token is
- * v4-shaped (non-empty `accepted_risks`) or v1-shaped (uses `capabilities`).
- *
- * The orchestration (provider lookup, scope-injection, executeCall, audit)
- * stays in the wrapping route — risk-gateway.ts intentionally does NOT
- * call `executeCall` itself. This keeps the v4 module testable in pure
- * units, and lets the v1 gateway.ts handle the lifecycle plumbing
- * unchanged until Phase 3 cutover.
- *
- *  callToolV4 high-level shape (pseudocode) :
- *
- *    const v4Adapter = v4AdaptersByProvider[provider]
- *    const classified = v4Adapter.classifyV4(tool, args, bindings)
- *    if ('denied' in classified) → return 'denied'
- *    const decision = evaluateCall({
- *      executed_slices: classified.slices,
- *      token_accepted_risks: new Set(token.accepted_risks),
- *      token_denied_risks:   new Set(token.denied_risks),
- *      catalog: providerCatalogs[provider],
- *    })
- *    if decision.outcome === 'denied' → return decision  (403 risk-not-accepted)
- *    else → caller proceeds to executeCall + audit (slices, risks_touched)
+ * `evaluateCallForToken` classifies a call into slices, intersects them with
+ * the provider catalog, and produces an allow/deny verdict. The wrapping
+ * gateway (`gateway.ts`) is responsible for the orchestration (provider
+ * lookup, scope-injection, executeCall, audit) — keeping this module pure
+ * makes it trivially unit-testable.
  */
 
 import type { ProviderBinding, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
 
 import { evaluateCall, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
 
-/** A v4 access-token snapshot — the fields we read in the runtime. */
+/** Access-token snapshot — the fields the runtime reads. */
 export interface V4TokenSnapshot {
   readonly id: string;
   readonly accepted_risks: readonly RiskId[];
   readonly denied_risks: readonly RiskId[];
 }
 
-/** Verdict that v1 token paths recognize. Distinct from `RiskDecision` so
- *  the wrapping route can decide whether to delegate to the v1 gateway
- *  (capability path) or to refuse on a v4 ground. */
+/** Verdict returned by `evaluateCallForToken`. */
 export type CallVerdict =
   | { kind: 'allow'; risks_touched: readonly RiskId[]; executed_slices: readonly Slice[] }
   | {
@@ -54,26 +33,6 @@ export type CallVerdict =
   | { kind: 'classify-denied'; reason: string }
   | { kind: 'no-catalog'; provider: string };
 
-/**
- * Inspect a token snapshot and decide which path applies.
- *
- * Returns `true` iff the token is v4-shaped (accepted_risks non-empty).
- * Tokens with both shapes empty fall through to the v1 path (legacy
- * default-deny behavior preserved). Mixed-shape tokens (both v1 and v4
- * fields set) are forbidden by the mint flow — defensively we treat them
- * as v4 here since the mint flow refuses to create them.
- */
-export function shouldUseV4Path(token: { accepted_risks?: readonly RiskId[] | null }): boolean {
-  const ar = token.accepted_risks;
-  if (!ar) return false;
-  return ar.length > 0;
-}
-
-/**
- * Minimal v4 adapter shape — what `evaluateCallForToken` needs from the
- * provider plugin. Each provider exports `classifyV4` (see e.g.
- * `@vaubaan/providers-supabase/risk-classifier.ts`).
- */
 export interface V4ClassifyResult {
   /** The slice(s) the call touches. */
   slices: Slice[];

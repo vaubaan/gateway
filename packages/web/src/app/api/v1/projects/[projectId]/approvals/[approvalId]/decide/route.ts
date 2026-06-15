@@ -11,10 +11,10 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import type { Capability } from '@vaubaan/shared';
+import type { RiskId } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
-import { decideApproval } from '@/lib/approvals/decide';
+import { decideApproval } from '@/lib/approvals/mint';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -28,7 +28,7 @@ interface ApprovalRow {
   id: string;
   project_id: string;
   status: string;
-  requested_capabilities: Capability[];
+  requested_risks: RiskId[] | null;
   requested_token_name: string;
   requested_ttl_hours: number;
   requested_single_use: boolean;
@@ -57,7 +57,7 @@ export async function POST(
   const { data: row } = await svc
     .from('approval_requests')
     .select(
-      'id, project_id, status, requested_capabilities, requested_token_name, requested_ttl_hours, requested_single_use, projects!inner(organization_id)',
+      'id, project_id, status, requested_risks, requested_token_name, requested_ttl_hours, requested_single_use, projects!inner(organization_id)',
     )
     .eq('id', approvalId)
     .eq('project_id', projectId)
@@ -77,7 +77,8 @@ export async function POST(
     decision: body.decision,
     decidedBy: `user:${guard.userId}`,
     projectId: row.project_id,
-    capabilities: row.requested_capabilities,
+    acceptedRisks: row.requested_risks ?? [],
+    deniedRisks: [],
     tokenName: row.requested_token_name,
     ttlHours: row.requested_ttl_hours,
     singleUse: row.requested_single_use,

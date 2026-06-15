@@ -81,9 +81,9 @@ function renderRisks(req: ApprovalRequestPayload): {
   needsApprovalLine: string;
   acceptedLine: string;
 } {
-  const accepted = (req.acceptedRisks ?? []).filter((r) => !(req.needsApproval ?? []).includes(r));
+  const accepted = req.acceptedRisks.filter((r) => !req.needsApproval.includes(r));
   return {
-    needsApprovalLine: (req.needsApproval ?? []).join(', ') || '(none)',
+    needsApprovalLine: req.needsApproval.join(', ') || '(none)',
     acceptedLine: accepted.join(', ') || '(none)',
   };
 }

@@ -5,28 +5,17 @@
  * ADRs : docs/decisions/redis-cache-upstash-with-memory-fallback.md.
  */
 
-import { GitHubAdapter, githubAvailableTools, classifyGithubV4 } from '@vaubaan/providers-github';
-import { VercelAdapter, vercelAvailableTools, classifyVercelV4 } from '@vaubaan/providers-vercel';
-import {
-  SupabaseAdapter,
-  supabaseAvailableTools,
-  classifySupabaseV4,
-} from '@vaubaan/providers-supabase';
-import {
-  RailwayAdapter,
-  railwayAvailableTools,
-  classifyRailwayV4,
-} from '@vaubaan/providers-railway';
-import { classifySshV4 } from '@vaubaan/providers-ssh';
+import { GitHubAdapter, githubAvailableTools } from '@vaubaan/providers-github';
+import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
+import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
+import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
 import type {
   AccessTokenContext,
-  Capability,
   Provider,
   ProviderAdmin,
   ProviderBinding,
   RiskId,
 } from '@vaubaan/shared';
-import { isValidCapability } from '@vaubaan/shared';
 import type { IndexedRiskCatalog } from '@vaubaan/policy-engine';
 import {
   McpGateway,
@@ -35,7 +24,6 @@ import {
   type ContextLoader,
   type SupabaseLike,
   type UpstreamAdapter,
-  type V4ClassifierAdapter,
 } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeBytea, encodeByteaHex } from '@/lib/providers/bytea';
@@ -66,8 +54,6 @@ interface AccessTokenRow {
   expires_at: string | null;
   single_use: boolean;
   consumed_at: string | null;
-  capabilities: unknown;
-  /** v4 columns (migration 0025). Default `[]` when migration applied. */
   accepted_risks: unknown;
   denied_risks: unknown;
 }
@@ -103,7 +89,7 @@ export function buildGateway(opts: {
       const { data: tk } = await supabase
         .from('access_tokens')
         .select(
-          'id, name, project_id, status, api_key_prefix, expires_at, single_use, consumed_at, capabilities, accepted_risks, denied_risks',
+          'id, name, project_id, status, api_key_prefix, expires_at, single_use, consumed_at, accepted_risks, denied_risks',
         )
         .eq('id', accessTokenId)
         .maybeSingle<AccessTokenRow>();
@@ -120,12 +106,6 @@ export function buildGateway(opts: {
         .eq('id', project.organization_id)
         .maybeSingle<OrgRow>();
       if (!org) return null;
-      const capabilities: Capability[] = Array.isArray(tk.capabilities)
-        ? (tk.capabilities as unknown[]).filter(
-            (c): c is Capability =>
-              typeof c === 'object' && c !== null && isValidCapability(c as Capability),
-          )
-        : [];
       const accepted_risks: RiskId[] = Array.isArray(tk.accepted_risks)
         ? (tk.accepted_risks as unknown[]).filter((r): r is RiskId => typeof r === 'string')
         : [];
@@ -146,7 +126,6 @@ export function buildGateway(opts: {
         access_token: tk,
         project,
         organization: org,
-        capabilities,
         accepted_risks,
         denied_risks,
         bindings: bindings as AccessTokenContext['bindings'],
@@ -217,11 +196,8 @@ export function buildGateway(opts: {
   upstreamByProvider.github = {
     provider: 'github',
     availableTools: githubAvailableTools,
-    toolCapabilities: (tool) => ghAdapter.toolCapabilities(tool),
-    toolEnvResolution: (tool) => ghAdapter.toolEnvResolution(tool),
-    classify: (tool, args, bindings) => ghAdapter.classify(tool, args, bindings),
+    classifyV4: (tool, args, bindings) => ghAdapter.classifyV4(tool, args, bindings),
     executeCall: (admin, binding, tool, args) => ghAdapter.executeCall(admin, binding, tool, args),
-    resolveExcludeEnvs: (admin, binding) => ghAdapter.resolveExcludeEnvs(admin, binding),
     loadProviderAdmin,
   };
 
@@ -230,9 +206,7 @@ export function buildGateway(opts: {
   upstreamByProvider.vercel = {
     provider: 'vercel',
     availableTools: vercelAvailableTools,
-    toolCapabilities: (tool) => vercelAdapter.toolCapabilities(tool),
-    toolEnvResolution: (tool) => vercelAdapter.toolEnvResolution(tool),
-    classify: (tool, args, bindings) => vercelAdapter.classify(tool, args, bindings),
+    classifyV4: (tool, args, bindings) => vercelAdapter.classifyV4(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       vercelAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
@@ -243,9 +217,7 @@ export function buildGateway(opts: {
   upstreamByProvider.supabase = {
     provider: 'supabase',
     availableTools: supabaseAvailableTools,
-    toolCapabilities: (tool) => supabaseAdapter.toolCapabilities(tool),
-    toolEnvResolution: (tool) => supabaseAdapter.toolEnvResolution(tool),
-    classify: (tool, args, bindings) => supabaseAdapter.classify(tool, args, bindings),
+    classifyV4: (tool, args, bindings) => supabaseAdapter.classifyV4(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       supabaseAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
@@ -269,9 +241,7 @@ export function buildGateway(opts: {
   upstreamByProvider.railway = {
     provider: 'railway',
     availableTools: railwayAvailableTools,
-    toolCapabilities: (tool) => railwayAdapter.toolCapabilities(tool),
-    toolEnvResolution: (tool) => railwayAdapter.toolEnvResolution(tool),
-    classify: (tool, args, bindings) => railwayAdapter.classify(tool, args, bindings),
+    classifyV4: (tool, args, bindings) => railwayAdapter.classifyV4(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       railwayAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
@@ -282,24 +252,11 @@ export function buildGateway(opts: {
   // (/api/v1/bash-bindings/:id/run-tool) drives invocations through a
   // session-authenticated path.
 
-  // ── v4 plumbing ──────────────────────────────────────────────────────────
-  // All 5 providers wired. v4 tokens dispatch through the right plugin's
-  // classifyV4 ; the YAML catalogs are loaded lazily by `getCatalog(provider)`.
-  const v4ClassifierByProvider: Partial<Record<Provider, V4ClassifierAdapter>> = {
-    github: { classifyV4: (tool, args, bindings) => classifyGithubV4(tool, args, bindings) },
-    vercel: { classifyV4: (tool, args, bindings) => classifyVercelV4(tool, args, bindings) },
-    supabase: {
-      classifyV4: (tool, args, bindings) => classifySupabaseV4(tool, args, bindings),
-    },
-    railway: {
-      classifyV4: (tool, args, bindings) => classifyRailwayV4(tool, args, bindings),
-    },
-    bash: { classifyV4: (tool, args, bindings) => classifySshV4(tool, args, bindings) },
-  };
-  const v4CatalogByProvider: Partial<Record<Provider, IndexedRiskCatalog>> = {};
+  // Load per-provider risk catalogs at boot (lazy / cached in the loader).
+  const catalogByProvider: Partial<Record<Provider, IndexedRiskCatalog>> = {};
   for (const provider of ['github', 'vercel', 'supabase', 'railway', 'bash'] as Provider[]) {
     const c = getCatalog(provider);
-    if (c) v4CatalogByProvider[provider] = c;
+    if (c) catalogByProvider[provider] = c;
   }
 
   return new McpGateway({
@@ -307,9 +264,8 @@ export function buildGateway(opts: {
     audit: new SupabaseAuditWriter(supabase as SupabaseLike),
     contextLoader,
     upstreamByProvider: upstreamByProvider as Record<Provider, UpstreamAdapter>,
+    catalogByProvider,
     clientIp: opts.clientIp,
     clientUserAgent: opts.clientUserAgent,
-    v4ClassifierByProvider,
-    v4CatalogByProvider,
   });
 }

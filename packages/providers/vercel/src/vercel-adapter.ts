@@ -11,21 +11,10 @@
  * to surface a real "Vaubaan Gateway" install button is Phase 5+.
  */
 
-import type {
-  Capability,
-  EnvResolution,
-  McpToolDeclaration,
-  ProviderAdmin,
-  ProviderBinding,
-} from '@vaubaan/shared';
+import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
 import { executeCall, type FetchImpl } from './execute.ts';
-import {
-  classifyVercel,
-  vercelToolCapabilities,
-  vercelToolEnvResolution,
-  type ClassifyResult,
-} from './classify.ts';
+import { classifyVercelV4, type ClassifyResult } from './risk-classifier.ts';
 
 export interface VercelAdapterConfig {
   /** Override fetch in tests. */
@@ -105,19 +94,15 @@ export class VercelAdapter {
     return executeCall(this.fetchImpl, token, admin.team_id, tool, args);
   }
 
-  toolCapabilities(tool: string): readonly Capability[] {
-    return vercelToolCapabilities(tool);
-  }
-
-  toolEnvResolution(tool: string): EnvResolution {
-    return vercelToolEnvResolution(tool);
-  }
-
-  classify(
+  /**
+   * v4 classifier — emit the slice(s) the call touches. The provider plugin's
+   * sole authorization responsibility.
+   */
+  classifyV4(
     tool: string,
     args: Record<string, unknown>,
     bindings: ReadonlyArray<ProviderBinding>,
   ): ClassifyResult {
-    return classifyVercel(tool, args, bindings);
+    return classifyVercelV4(tool, args, bindings);
   }
 }

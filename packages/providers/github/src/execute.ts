@@ -233,30 +233,6 @@ export async function executeCall(
       });
       return data;
     }
-    case 'github__dispatch_workflow': {
-      // Octokit returns 204 No Content → empty data object.
-      await octokit.rest.actions.createWorkflowDispatch({
-        ...githubArgs(args),
-        workflow_id: args.workflow_id as string | number,
-        ref: args.ref as string,
-        inputs: args.inputs as Record<string, string> | undefined,
-      });
-      return { dispatched: true, workflow_id: args.workflow_id, ref: args.ref };
-    }
-    case 'github__cancel_workflow_run': {
-      await octokit.rest.actions.cancelWorkflowRun({
-        ...githubArgs(args),
-        run_id: args.run_id as number,
-      });
-      return { cancelled: true, run_id: args.run_id };
-    }
-    case 'github__rerun_workflow_run': {
-      await octokit.rest.actions.reRunWorkflow({
-        ...githubArgs(args),
-        run_id: args.run_id as number,
-      });
-      return { rerun: true, run_id: args.run_id };
-    }
     case 'github__update_branch_protection': {
       const { data } = await octokit.rest.repos.updateBranchProtection({
         ...githubArgs(args),

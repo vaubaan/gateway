@@ -8,7 +8,7 @@
 import { describe, expect, test, vi } from 'vitest';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import { mintForApprovalV4, mintRiskAccessToken } from '@/lib/approvals/risk-mint';
+import { mintForApproval, mintRiskAccessToken } from '@/lib/approvals/mint';
 
 interface CapturedInsert {
   table: string;
@@ -78,8 +78,9 @@ describe('mintRiskAccessToken', () => {
     expect(row.project_id).toBe('p1');
     expect(row.accepted_risks).toEqual(['supabase.read-data', 'supabase[staging].bulk-row-write']);
     expect(row.denied_risks).toEqual(['supabase.policy.W']);
-    // v1 capabilities[] kept as empty for dual-mode FK
-    expect(row.capabilities).toEqual([]);
+    // v1 capabilities[] column was dropped by migration 0031 — we no
+    // longer write it.
+    expect(row.capabilities).toBeUndefined();
     expect(row.status).toBe('active');
     expect(row.single_use).toBe(false);
   });
@@ -97,10 +98,10 @@ describe('mintRiskAccessToken', () => {
   });
 });
 
-describe('mintForApprovalV4', () => {
+describe('mintForApproval', () => {
   test('mints + stashes api_key on the approval row', async () => {
     const { client, inserts, updates } = makeMockSupabase();
-    const result = await mintForApprovalV4(client, 'appr_xyz', {
+    const result = await mintForApproval(client, 'appr_xyz', {
       projectId: 'p1',
       tokenName: 'mgmt-y',
       ttlMs: 60_000,

@@ -1,6 +1,5 @@
 export { SupabaseAdapter } from './supabase-adapter.ts';
 export { availableTools as supabaseAvailableTools } from './tools.ts';
-export { supabaseToolCapabilities, supabaseToolEnvResolution } from './classify.ts';
 
 // v4 risk-based exports
 export { supabaseDataModel } from './data-model.ts';

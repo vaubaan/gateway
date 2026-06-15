@@ -5,7 +5,6 @@
  * Spec : docs/spec/vaubaan-gateway.md §3.
  */
 
-import type { Capability } from './capability.ts';
 import type { RiskId } from './risk.ts';
 
 export type Provider = 'github' | 'vercel' | 'supabase' | 'railway' | 'bash';
@@ -70,23 +69,12 @@ export interface ProviderBinding {
   /**
    * The named canonical environment this binding targets (e.g. 'staging',
    * 'prod'), or null when the bound resource has no parallel instances.
-   * Backs the `env` of a Capability for providers where env = a distinct
+   * Backs the env segment of a slice for providers where env = a distinct
    * resource (Supabase: one project_ref per env). Mirrors the nullable
-   * `provider_bindings.environment` column (migration 0011). Optional on the
-   * TS shape so legacy binding literals stay valid; absent ≡ null.
+   * `provider_bindings.environment` column. Optional on the TS shape so legacy
+   * binding literals stay valid; absent ≡ null.
    */
   environment?: string | null;
-  /**
-   * GitHub-only knobs that narrow an env-less grant's fan-out (spec §5.1 #4).
-   * A grant `github:repo/code:write` (env-less) covers any branch by default ;
-   * these fields subtract from that fan-out at runtime.
-   *  - `env_less_exclude_branch`    : a single branch name to deny.
-   *  - `env_less_exclude_protected` : when true, deny the repo's protected
-   *    branches (resolved at call time, cached short-TTL).
-   * Mutually exclusive (DB CHECK XOR). Always null/false outside github.
-   */
-  env_less_exclude_branch?: string | null;
-  env_less_exclude_protected?: boolean | null;
   created_at: string;
 }
 
@@ -135,14 +123,16 @@ export interface AuditLogRow {
   ts: string;
   tool_name: string;
   arguments_hash: string;
-  /** Shorthand of the capability that authorized the call ; null if denied.
-   *  Cf. capability.ts formatCapability(). */
-  capability_matched: string | null;
   decision: AuditDecision;
   denial_reason: string | null;
   upstream_latency_ms: number | null;
   client_ip: string | null;
   client_user_agent: string | null;
+  /** v4 risk-based audit columns (migration 0028). Slices touched + risks
+   *  matched + snapshot of the token's accepted risks at call time. */
+  slices_executed: unknown[] | null;
+  risks_touched: string[] | null;
+  token_accepted_risks_snapshot: string[] | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -163,15 +153,11 @@ export interface AccessTokenContext {
   >;
   project: Pick<Project, 'id' | 'slug' | 'organization_id'>;
   organization: Pick<Organization, 'id' | 'slug' | 'name'>;
-  /** The capability set granted to this access token (the full tuples).
-   *  Empty array on v4 tokens that grant via `accepted_risks` only. */
-  capabilities: Capability[];
-  /** v4 risk-based grants. Non-empty marks the token as v4-shaped — the
-   *  runtime dispatches via `risk-gateway.ts` instead of the v1 capability
-   *  path. */
-  accepted_risks?: RiskId[];
-  /** v4 explicit opt-outs (defaults to []). */
-  denied_risks?: RiskId[];
+  /** v4 risk-based grants. The runtime intersects each call's slices with the
+   *  provider catalog and checks the touched risks are all in this set. */
+  accepted_risks: RiskId[];
+  /** v4 explicit opt-outs. */
+  denied_risks: RiskId[];
   bindings: ProviderBinding[];
   provider_admins: Array<
     Pick<ProviderAdmin, 'provider' | 'status' | 'installation_id' | 'team_id'>
@@ -191,29 +177,6 @@ export interface McpToolDeclaration {
     required?: string[];
   };
 }
-
-/**
- * How a tool's `env` is determined at `tools/call` time. Drives the lockstep
- * between the catalog's `callable` flag, `tools/list` filtering, and the
- * runtime `covers()` 5-tuple match (spec §3, §7).
- *
- *  - `'static'`  : the required capability is **env-less** regardless of
- *                  args. The runtime enforces an exact 5-tuple match
- *                  (env-less ↔ env-less). Therefore the static filter must
- *                  also require an env-less grant — an `@prod` grant does NOT
- *                  make this tool callable. Examples : `vercel__list_deployments`,
- *                  most GitHub reads.
- *  - `'runtime'` : the required capability's `env` is resolved from args
- *                  (or from the matched binding) at call time, ranging over
- *                  a per-provider env vocabulary. The static filter ignores
- *                  env (any env-qualified grant on the same 4-tuple is a
- *                  potential match) — the actual env defensive check then
- *                  happens at `tools/call`. Examples : `vercel__upsert_env_var`
- *                  (env from `args.target`), every Supabase tool (env from
- *                  the binding), `github__create_branch` (env from
- *                  `args.branch`).
- */
-export type EnvResolution = 'static' | 'runtime';
 
 export interface JsonRpcRequest {
   jsonrpc: '2.0';

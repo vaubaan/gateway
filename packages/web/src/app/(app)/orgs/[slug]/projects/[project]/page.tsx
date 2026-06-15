@@ -65,7 +65,6 @@ export default async function ProjectPage({
     { data: bashBindings },
     { data: tokens },
     { count: pendingApprovals },
-    { count: policyRulesCount },
   ] = await Promise.all([
     supabase
       .from('provider_bindings')
@@ -91,10 +90,6 @@ export default async function ProjectPage({
       .select('id', { count: 'exact', head: true })
       .eq('project_id', proj.id)
       .eq('status', 'pending'),
-    supabase
-      .from('policy_rules')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', proj.id),
   ]);
 
   return (
@@ -121,30 +116,17 @@ export default async function ProjectPage({
       <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
         <Card>
           <CardHeader>
-            <CardTitle>Policy &amp; approvals</CardTitle>
-            <span style={{ display: 'flex', gap: 'var(--space-2)' }}>
-              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/rings`}>
-                <Button size="sm" variant="secondary">
-                  Capability rings
-                </Button>
-              </Link>
-              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/policy`}>
-                <Button size="sm" variant="secondary">
-                  Policy rules ({policyRulesCount ?? 0})
-                </Button>
-              </Link>
-              <Link href={`/orgs/${org.slug}/projects/${proj.slug}/approvals`}>
-                <Button size="sm" variant={pendingApprovals ? 'primary' : 'secondary'}>
-                  Approvals ({pendingApprovals ?? 0} pending)
-                </Button>
-              </Link>
-            </span>
+            <CardTitle>Approvals</CardTitle>
+            <Link href={`/orgs/${org.slug}/projects/${proj.slug}/approvals`}>
+              <Button size="sm" variant={pendingApprovals ? 'primary' : 'secondary'}>
+                Approvals ({pendingApprovals ?? 0} pending)
+              </Button>
+            </Link>
           </CardHeader>
           <CardBody>
             <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 'var(--text-sm)' }}>
-              Mint requests with human-gated capabilities (per the project&apos;s policy_rules) are
-              held until a human approves via Telegram or here. Tighten the policy in{' '}
-              <em>Policy rules</em> ; clear the queue in <em>Approvals</em>.
+              Mint requests touching risks gated <Code>confirm</Code> by the project&apos;s risk
+              policy are held until a human approves via Telegram, email, or here.
             </p>
           </CardBody>
         </Card>
@@ -246,11 +228,9 @@ export default async function ProjectPage({
         <Card>
           <CardHeader>
             <CardTitle>Access tokens</CardTitle>
-            <Link href={`/orgs/${org.slug}/projects/${proj.slug}/tokens/new`}>
-              <Button size="sm" variant="primary">
-                + New access token
-              </Button>
-            </Link>
+            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
+              Mint via <Code>POST /api/v1/mgmt/tokens</Code>
+            </span>
           </CardHeader>
           <CardBody>
             {(tokens ?? []).length === 0 ? (
@@ -268,12 +248,9 @@ export default async function ProjectPage({
                       borderBottom: '1px solid var(--border-subtle)',
                     }}
                   >
-                    <Link
-                      href={`/orgs/${org.slug}/projects/${proj.slug}/tokens/${t.id}`}
-                      style={{ textDecoration: 'none', color: 'inherit' }}
-                    >
+                    <span>
                       <strong>{t.name}</strong> <Code>vbn_live_{t.api_key_prefix}…</Code>
-                    </Link>
+                    </span>
                     <span
                       style={{
                         color: 'var(--text-subtle)',

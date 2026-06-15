@@ -3,10 +3,8 @@ import { notFound, redirect } from 'next/navigation';
 import { type Provider } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState, type ProviderState } from '@/lib/providers/state';
-import Link from 'next/link';
 import { ProviderDisconnectButton } from '../provider-disconnect';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code, Row } from '@/components/ui';
-import { InfoIcon } from '@/components/icons';
 
 export const dynamic = 'force-dynamic';
 
@@ -75,18 +73,6 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
               <CardTitle>Bash</CardTitle>
               <Badge tone="neutral">per-project</Badge>
             </Row>
-            <Link
-              href={`/orgs/${org.slug}/providers/bash`}
-              style={{ textDecoration: 'none' }}
-              title="Show provider rings & capabilities"
-            >
-              <Button size="sm" variant="secondary">
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                  <InfoIcon />
-                  Info
-                </span>
-              </Button>
-            </Link>
           </CardHeader>
           <CardBody>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>
@@ -117,18 +103,6 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
           )}
         </Row>
         <Row gap="var(--space-2)">
-          <Link
-            href={`/orgs/${orgSlug}/providers/${state.provider}`}
-            style={{ textDecoration: 'none' }}
-            title="Show provider rings & capabilities"
-          >
-            <Button size="sm" variant="secondary">
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                <InfoIcon />
-                Info
-              </span>
-            </Button>
-          </Link>
           {connected && (
             <ProviderDisconnectButton
               orgSlug={orgSlug}

@@ -267,45 +267,6 @@ export const availableTools: readonly McpToolDeclaration[] = [
       required: ['owner', 'repo', 'path', 'message', 'branch', 'sha'],
     },
   },
-  // Write - ci (workflow dispatch, cancel, rerun)
-  {
-    name: 'github__dispatch_workflow',
-    description:
-      'Trigger a `workflow_dispatch` run on a workflow. Backed by POST /repos/{owner}/{repo}/actions/workflows/{workflow_id}/dispatches.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        ...repoArgs,
-        workflow_id: {
-          type: ['string', 'number'],
-          description: 'Workflow filename slug (e.g. `ci.yml`) or numeric id.',
-        },
-        ref: { type: 'string', description: 'Git ref (branch or tag) to dispatch on.' },
-        inputs: { type: 'object', description: 'Optional input map for the workflow.' },
-      },
-      required: ['owner', 'repo', 'workflow_id', 'ref'],
-    },
-  },
-  {
-    name: 'github__cancel_workflow_run',
-    description:
-      'Cancel an in-flight workflow run. Backed by POST /repos/{owner}/{repo}/actions/runs/{run_id}/cancel.',
-    inputSchema: {
-      type: 'object',
-      properties: { ...repoArgs, run_id: { type: 'number', description: 'Workflow run id.' } },
-      required: ['owner', 'repo', 'run_id'],
-    },
-  },
-  {
-    name: 'github__rerun_workflow_run',
-    description:
-      'Re-run a previously completed workflow run. Backed by POST /repos/{owner}/{repo}/actions/runs/{run_id}/rerun.',
-    inputSchema: {
-      type: 'object',
-      properties: { ...repoArgs, run_id: { type: 'number', description: 'Workflow run id.' } },
-      required: ['owner', 'repo', 'run_id'],
-    },
-  },
   // Write - rules (branch protection)
   {
     name: 'github__update_branch_protection',
