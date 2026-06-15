@@ -11,5 +11,8 @@
   },
   "dependencies": {
     "@vaubaan/shared": "*"
+  },
+  "devDependencies": {
+    "@vaubaan/policy-engine": "*"
   }
 }

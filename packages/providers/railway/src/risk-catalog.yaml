@@ -1,0 +1,223 @@
+# Railway — risk catalog (v4 risk-based model)
+#
+# Source of truth : .vaubaan/research/providers/railway-ssh.md §1.4.
+# Spec           : docs/spec/gateway-risk-model.md §4.
+#
+# This YAML is the human-readable canonical form for catalog review. The
+# runtime imports `risk-catalog.ts` (1:1 with this file). When editing,
+# update BOTH. A CI lint (Phase 2) will diff the two.
+#
+# 11 risks + 1 fallback. Coverage matrix : research §1.5.
+
+railway:
+  risks:
+    # ───── Reads ────────────────────────────────────────────────────────────
+    - id: railway.read-account
+      label: 'Lire compte & liste de projets'
+      reason: >-
+        Lecture metadata account. Aucun secret.
+      matches: 'railway.account[**].R'
+      vector:
+        {
+          reversibility: reversible,
+          blast: account,
+          data: metadata,
+          cost: free,
+          visibility: internal,
+          persistence: stateless,
+        }
+      default_gate: allow
+
+    - id: railway.read-runtime
+      label: 'Lire services, déploiements, statuts'
+      reason: >-
+        Lecture metadata runtime — pas de payload secret.
+      matches: 'railway.project[**].R'
+      vector:
+        {
+          reversibility: reversible,
+          blast: env,
+          data: metadata,
+          cost: free,
+          visibility: internal,
+          persistence: stateless,
+        }
+      default_gate: allow
+
+    - id: railway.read-logs
+      label: "Lire les logs d'un déploiement"
+      reason: >-
+        Logs peuvent contenir des secrets imprimés par l'app (DSN, JWT
+        loggés, stack-traces). À traiter comme `data` sensible côté audit.
+      matches: 'railway.project[**].environment[**].service[**].deployment[**].logs.R'
+      vector:
+        {
+          reversibility: reversible,
+          blast: env,
+          data: data,
+          cost: free,
+          visibility: internal,
+          persistence: stateless,
+        }
+      default_gate: allow
+
+    - id: railway.read-variables
+      label: 'Lire les env vars (incluant secrets)'
+      reason: >-
+        Retourne les valeurs en clair par défaut. C'est la principale
+        surface d'exfiltration des credentials prod.
+      matches: 'railway.project[**].environment[**].service-var[**].R'
+      vector:
+        {
+          reversibility: reversible,
+          blast: env,
+          data: secret,
+          cost: free,
+          visibility: internal,
+          persistence: stateless,
+        }
+      default_gate: confirm # qualifié par env → deny en prod via policy
+
+    # ───── Deploys ──────────────────────────────────────────────────────────
+    - id: railway.deploy-staging
+      label: 'Redeploy / accept-deploy sur un env non-prod'
+      reason: >-
+        Reversible : un nouveau deploy peut tout corriger. Pas de
+        communication aval. Coût Railway facturé à l'usage.
+      matches: 'railway.project[**].environment[**].service[**].deployment.W'
+      vector:
+        {
+          reversibility: reversible,
+          blast: env,
+          data: data,
+          cost: moderate,
+          visibility: internal,
+          persistence: session,
+        }
+      default_gate: allow
+      acceptable_in_envs: [staging, preview, dev]
+
+    - id: railway.deploy-prod
+      label: 'Redeploy / accept-deploy sur production'
+      reason: >-
+        Trigger un déploiement public, traffic switch immédiat, potentiel
+        downtime + propagation aval. Costly à rollback (re-deploy précédent
+        peut prendre quelques minutes).
+      matches: 'railway.project[**].environment[**].service[**].deployment.W'
+      vector:
+        {
+          reversibility: costly,
+          blast: env,
+          data: data,
+          cost: moderate,
+          visibility: public,
+          persistence: session,
+        }
+      default_gate: confirm # qualifié par env=prod uniquement
+
+    # ───── Variables ────────────────────────────────────────────────────────
+    - id: railway.upsert-variable-staging
+      label: 'Modifier une env var (non-prod)'
+      reason: >-
+        Modif scalaire d'une var. Trigge un redeploy implicite sauf
+        skipDeploys=true. Reversible (réécrire l'ancienne valeur).
+      matches: 'railway.project[**].environment[**].service-var[**].W'
+      vector:
+        {
+          reversibility: reversible,
+          blast: env,
+          data: secret,
+          cost: moderate,
+          visibility: internal,
+          persistence: posture,
+        }
+      default_gate: confirm
+      acceptable_in_envs: [staging, preview, dev]
+
+    - id: railway.upsert-variable-prod
+      label: 'Modifier une env var en production'
+      reason: >-
+        Posture-shift sur prod. Une valeur erronée peut briser
+        immédiatement le service (Stripe, DB, OAuth).
+      matches: 'railway.project[**].environment[**].service-var[**].W'
+      vector:
+        {
+          reversibility: costly,
+          blast: env,
+          data: secret,
+          cost: moderate,
+          visibility: internal,
+          persistence: posture,
+        }
+      default_gate: deny
+
+    - id: railway.bulk-variables-replace
+      label: 'Remplacer en bulk toutes les env vars (replace=true)'
+      reason: >-
+        DESTRUCTIF : toute var absente du payload est supprimée. Détecté via
+        `replace:true` côté upsert-variables. Tout env, prod ou pas.
+      matches: 'railway.project[**].environment[**].service-var[*].W'
+      vector:
+        {
+          reversibility: irreversible,
+          blast: env,
+          data: secret,
+          cost: moderate,
+          visibility: internal,
+          persistence: posture,
+        }
+      default_gate: deny
+
+    # ───── Account ──────────────────────────────────────────────────────────
+    - id: railway.create-project
+      label: 'Créer un nouveau projet Railway'
+      reason: >-
+        Account-level write. Pas réversible automatiquement (delete-project
+        requiert UI). Peut générer du coût.
+      matches: 'railway.account[**].project.W'
+      vector:
+        {
+          reversibility: costly,
+          blast: account,
+          data: metadata,
+          cost: unbounded,
+          visibility: internal,
+          persistence: posture,
+        }
+      default_gate: confirm
+
+    # ───── Agent (méta-tool) ────────────────────────────────────────────────
+    - id: railway.agent-action
+      label: 'Invocation railway-agent (méta-tool conversationnel)'
+      reason: >-
+        L'agent upstream peut décider seul quoi muter — pas de
+        classification fine possible. Catch-all `confirm` par construction.
+        Tout usage doit être audité humain.
+      matches: 'railway.account[**].agent-session.W'
+      vector:
+        {
+          reversibility: costly,
+          blast: account,
+          data: secret,
+          cost: unbounded,
+          visibility: internal,
+          persistence: posture,
+        }
+      default_gate: confirm
+
+    # ───── Fallback ─────────────────────────────────────────────────────────
+    - id: railway.uncategorized-write
+      label: 'Écriture Railway non catégorisée'
+      reason: >-
+        Catch-all. Si vu en prod, signale qu'une entrée manque au catalogue.
+      matches: 'railway.**.W'
+      vector:
+        {
+          reversibility: costly,
+          blast: env,
+          data: data,
+          cost: moderate,
+          visibility: internal,
+          persistence: session,
+        }
+      default_gate: confirm
