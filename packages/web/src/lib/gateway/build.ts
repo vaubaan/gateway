@@ -120,6 +120,10 @@ export function buildGateway(opts: {
         .from('provider_admins')
         .select('provider, status, installation_id, team_id')
         .eq('organization_id', org.id);
+      // TODO(W9, clean-code-report) : replace these `as unknown` boundary
+      // casts with a zod parse so a DB schema drift (renamed column, new
+      // nullability) fails loudly at runtime instead of silently producing
+      // half-typed AccessTokenContext rows. See report W9.
       const bindings = (bindingsResp.data ?? []) as unknown;
       const providerAdmins = (providerAdminsResp.data ?? []) as unknown;
       const ctx: AccessTokenContext = {

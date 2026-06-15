@@ -76,9 +76,9 @@ async function main() {
   // ── Step 3: actually mint ─────────────────────────────────────────────
   const mintBody = {
     ...previewBody,
-    name: 'e2e-mint-test-token',
+    name: `e2e-mint-test-token-${Date.now()}`,
     ttlSeconds: 600,
-    singleUse: false,
+    singleUse: true,
   };
   res = await fetch(`${BASE}/api/v1/mgmt/tokens`, {
     method: 'POST',

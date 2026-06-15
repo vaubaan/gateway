@@ -43,23 +43,40 @@ export async function pickChannel(
   if (row.channel === 'telegram') {
     if (!row.telegram_chat_id) {
       // Coherence ensured by the SQL check, but be defensive.
+      console.warn('[approvals] channel-fallback', {
+        project_id: projectId,
+        configured: 'telegram',
+        fallback: 'manual',
+        reason: 'telegram_chat_id missing on project_approval_channels row',
+      });
       return new ManualChannel();
     }
     const botToken = row.telegram_bot_token_encrypted
       ? new TextDecoder().decode(row.telegram_bot_token_encrypted)
       : (process.env.TELEGRAM_BOT_TOKEN ?? '');
     if (!botToken) {
-      // No bot token configured anywhere → silently fall back.
-      console.warn(
-        `[approvals] project ${projectId} configured for telegram but no bot token available — falling back to manual`,
-      );
+      // W3 — emit a structured warning so operators can spot config drift.
+      console.warn('[approvals] channel-fallback', {
+        project_id: projectId,
+        configured: 'telegram',
+        fallback: 'manual',
+        reason: 'TELEGRAM_BOT_TOKEN env var missing and no per-row token',
+      });
       return new ManualChannel();
     }
     return new TelegramChannel({ chatId: row.telegram_chat_id, botToken });
   }
 
   if (row.channel === 'email') {
-    if (!row.email_address) return new ManualChannel();
+    if (!row.email_address) {
+      console.warn('[approvals] channel-fallback', {
+        project_id: projectId,
+        configured: 'email',
+        fallback: 'manual',
+        reason: 'email_address missing on project_approval_channels row',
+      });
+      return new ManualChannel();
+    }
     // Email sending uses the Resend REST API. The api key is sourced from
     // RESEND_API_KEY (preferred) or SMTP_PASS (when an SMTP-style env is
     // already configured for Resend — `re_*` key as the SMTP "password").
@@ -68,9 +85,18 @@ export async function pickChannel(
     const signingSecret = process.env.EMAIL_SIGNING_SECRET ?? '';
     const baseUrl = process.env.APPROVAL_LINK_BASE_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? '';
     if (!apiKey || !from || !signingSecret || !baseUrl) {
-      console.warn(
-        `[approvals] project ${projectId} configured for email but env vars are incomplete — falling back to manual`,
-      );
+      const missing = [
+        !apiKey && 'RESEND_API_KEY|SMTP_PASS',
+        !from && 'EMAIL_FROM_ADDRESS|SMTP_FROM',
+        !signingSecret && 'EMAIL_SIGNING_SECRET',
+        !baseUrl && 'APPROVAL_LINK_BASE_URL|NEXT_PUBLIC_APP_URL',
+      ].filter(Boolean);
+      console.warn('[approvals] channel-fallback', {
+        project_id: projectId,
+        configured: 'email',
+        fallback: 'manual',
+        reason: `missing env vars: ${missing.join(', ')}`,
+      });
       return new ManualChannel();
     }
     return new EmailChannel({

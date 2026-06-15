@@ -18,13 +18,13 @@
 
 export interface EmailApprovalToken {
   /** approval_requests.id this token is signed for. */
-  approvalId: string;
+  readonly approvalId: string;
   /** Which decision the click maps to. The link is distinct per decision so
    *  the operator sees explicit "Approve" / "Deny" buttons in the email. */
-  decision: 'approve' | 'deny';
+  readonly decision: 'approve' | 'deny';
   /** Unix seconds. The token is rejected past `exp`. Typically set to the
    *  approval's `expires_at`. */
-  exp: number;
+  readonly exp: number;
 }
 
 const enc = new TextEncoder();

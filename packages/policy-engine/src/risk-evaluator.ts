@@ -50,9 +50,21 @@ export interface IndexedRiskCatalog {
 }
 
 /** Parse every `matches` pattern in the catalog. Throws on malformed
- *  patterns — catalog YAMLs are reviewed in PRs, this is a CI gate. */
+ *  patterns — catalog YAMLs are reviewed in PRs, this is a CI gate.
+ *
+ *  W8 from the v4 clean-code report : also enforce id uniqueness here.
+ *  `prepareCatalog` (risk-policy.ts) checked it but the web loader bypasses
+ *  `prepareCatalog` (RISK_ID_REGEX is too strict for some legacy ids), so
+ *  duplicate ids would slip through and `findRiskEntry` would return the
+ *  first match silently. Uniqueness is cheap and belongs to the only call
+ *  site that every consumer goes through. */
 export function indexCatalog(catalog: RiskCatalog): IndexedRiskCatalog {
+  const seen = new Set<string>();
   const entries = catalog.risks.map((entry) => {
+    if (seen.has(entry.id)) {
+      throw new Error(`Duplicate risk id '${entry.id}' in catalog '${catalog.provider}'`);
+    }
+    seen.add(entry.id);
     const rawPatterns: readonly string[] =
       typeof entry.matches === 'string' ? [entry.matches] : entry.matches;
     const patterns = rawPatterns.map((raw) => {

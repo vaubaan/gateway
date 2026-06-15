@@ -53,3 +53,30 @@ export interface DataModelEntity {
 }
 
 export type DataModelCardinality = 'one' | 'bounded' | 'unbounded';
+
+/**
+ * Validate that every entity's `parent` either is null or references an
+ * existing entity in the same plane. Returns the list of errors (empty
+ * array when the data-model is internally consistent). Pure — no IO.
+ *
+ * W7 from the v4 clean-code report : the TS type `parent: string | null`
+ * does not enforce referential integrity. A typo silently turns the
+ * mermaid renderer into a graph with orphan nodes. This function lets the
+ * provider unit tests assert the invariant in CI.
+ */
+export function validateDataModel(model: DataModel): readonly string[] {
+  const errors: string[] = [];
+  for (const plane of model.planes) {
+    const names = new Set(plane.entities.map((e) => e.name));
+    for (const entity of plane.entities) {
+      if (entity.parent === null) continue;
+      if (!names.has(entity.parent)) {
+        errors.push(
+          `provider '${model.provider}' plane '${plane.slug}': entity '${entity.name}' ` +
+            `has parent '${entity.parent}' which is not declared in this plane.`,
+        );
+      }
+    }
+  }
+  return errors;
+}

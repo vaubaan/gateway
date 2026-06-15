@@ -187,6 +187,47 @@ describe('indexCatalog', () => {
     };
     expect(() => indexCatalog(bogus)).toThrow(/Invalid 'matches'/);
   });
+
+  test('rejects duplicate risk ids', () => {
+    // W8 — two entries with the same id silently lost `findRiskEntry`
+    // lookups to "first match wins". Reject up front.
+    const dup: RiskCatalog = {
+      provider: 'github',
+      risks: [
+        {
+          id: 'github.dup',
+          label: 'a',
+          reason: '',
+          matches: 'github.repo[*].W',
+          vector: {
+            reversibility: 'reversible',
+            blast: 'single',
+            data: 'data',
+            cost: 'free',
+            visibility: 'internal',
+            persistence: 'stateless',
+          },
+          default_gate: 'allow',
+        },
+        {
+          id: 'github.dup',
+          label: 'b',
+          reason: '',
+          matches: 'github.repo[*].R',
+          vector: {
+            reversibility: 'reversible',
+            blast: 'single',
+            data: 'data',
+            cost: 'free',
+            visibility: 'internal',
+            persistence: 'stateless',
+          },
+          default_gate: 'allow',
+        },
+      ],
+    };
+    expect(() => indexCatalog(dup)).toThrow(/Duplicate risk id/);
+  });
 });
 
 describe('findRiskEntry', () => {

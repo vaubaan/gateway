@@ -78,14 +78,18 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ id: string 
   // Long-poll loop : if the caller asked us to wait AND we're still pending
   // AND the approval has not expired, keep re-reading the row at
   // POLL_INTERVAL_MS until status flips or our deadline elapses.
+  // W5 — respect client AbortSignal : if the caller disconnects, bail out
+  // immediately so we don't waste DB queries on a vanished connection.
   while (
     waitSeconds > 0 &&
     row !== null &&
     row.status === 'pending' &&
     Date.parse(row.expires_at) > Date.now() &&
-    Date.now() < deadlineMs
+    Date.now() < deadlineMs &&
+    !req.signal.aborted
   ) {
-    await sleep(POLL_INTERVAL_MS);
+    await sleep(POLL_INTERVAL_MS, req.signal);
+    if (req.signal.aborted) break;
     row = await loadApprovalRow(svc, id, guard.orgId);
   }
   if (!row) {
@@ -170,6 +174,21 @@ async function loadApprovalRow(
   return row;
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/**
+ * Sleep that resolves early when the provided AbortSignal fires. Lets the
+ * long-poll loop short-circuit instead of waiting out a 500ms cadence after
+ * the client has already disconnected.
+ */
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    const handle = setTimeout(resolve, ms);
+    if (signal) {
+      const onAbort = () => {
+        clearTimeout(handle);
+        resolve();
+      };
+      if (signal.aborted) onAbort();
+      else signal.addEventListener('abort', onAbort, { once: true });
+    }
+  });
 }

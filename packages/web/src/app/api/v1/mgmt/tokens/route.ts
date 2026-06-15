@@ -18,6 +18,13 @@
  *   - 403 with denied list when at least one gate is `deny`.
  *
  * Spec : docs/spec/gateway-risk-model.md §9.
+ *
+ * TODO(W1, clean-code-report) : the body of this handler is ≈90 % identical
+ * to the user-session sibling `/api/v1/projects/[projectId]/mint/route.ts`.
+ * Once a third caller (e.g. an admin API) emerges, factor the common path
+ * into `lib/mint/orchestrate.ts:executeRiskMintFlow()` so both routes
+ * become thin HTTP adapters. Rule of three not yet met — leaving the
+ * duplication explicit for now.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -46,20 +53,29 @@ const BindingSchema = z.object({
   env: z.string().min(1).optional().nullable(),
 });
 
-const BodySchema = z.object({
-  projectSlug: z.string().min(1),
-  name: z
-    .string()
-    .regex(/^[a-z0-9](-?[a-z0-9])*$/)
-    .optional(),
-  ttlHours: z.number().int().positive().max(MAX_TTL_HOURS).optional(),
-  ttlSeconds: z.number().int().positive().max(MAX_TTL_SECONDS).optional(),
-  singleUse: z.boolean().optional(),
-  context: z.record(z.unknown()).optional(),
-  bindings: z.array(BindingSchema).min(1),
-  accepted_risks: z.array(z.string().min(1)),
-  denied_risks: z.array(z.string().min(1)).optional(),
-});
+const BodySchema = z
+  .object({
+    projectSlug: z.string().min(1),
+    name: z
+      .string()
+      .regex(/^[a-z0-9](-?[a-z0-9])*$/)
+      .optional(),
+    ttlHours: z.number().int().positive().max(MAX_TTL_HOURS).optional(),
+    ttlSeconds: z.number().int().positive().max(MAX_TTL_SECONDS).optional(),
+    singleUse: z.boolean().optional(),
+    context: z.record(z.unknown()).optional(),
+    bindings: z.array(BindingSchema).min(1),
+    accepted_risks: z.array(z.string().min(1)),
+    denied_risks: z.array(z.string().min(1)).optional(),
+  })
+  // W2 — the MAX_TTL_SECONDS = 3600 cap is intentionally "single-use
+  // territory" : a 1h short-lived non-single-use credential is a category
+  // mistake (either you want a session token via ttlHours, or you want a
+  // one-shot ephemeral). Enforce the invariant the comment promised.
+  .refine((b) => b.ttlSeconds === undefined || b.singleUse === true, {
+    message: '`ttlSeconds` requires `singleUse: true` (use `ttlHours` for session tokens).',
+    path: ['singleUse'],
+  });
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
