@@ -87,3 +87,59 @@ export async function mintForApprovalV4(
     .eq('id', approvalId);
   return minted;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// V4 approval decision (mirror of decideApproval in decide.ts but reading
+// `requested_risks` / `denied_risks` and minting via mintForApprovalV4).
+// Used by both the operator decide endpoint and the email decide route.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface DecideApprovalV4Input {
+  approvalId: string;
+  decision: 'approve' | 'deny';
+  decidedBy: string;
+  projectId: string;
+  acceptedRisks: readonly RiskId[];
+  deniedRisks: readonly RiskId[];
+  tokenName: string;
+  ttlHours: number;
+  singleUse?: boolean;
+}
+
+export interface DecideApprovalV4Result {
+  status: 'approved' | 'denied';
+  accessTokenId?: string;
+}
+
+export async function decideApprovalV4(
+  svc: SupabaseClient,
+  input: DecideApprovalV4Input,
+): Promise<DecideApprovalV4Result> {
+  const now = new Date().toISOString();
+
+  if (input.decision === 'deny') {
+    await svc
+      .from('approval_requests')
+      .update({ status: 'denied', decided_by: input.decidedBy, decided_at: now })
+      .eq('id', input.approvalId)
+      .eq('status', 'pending');
+    return { status: 'denied' };
+  }
+
+  const minted = await mintForApprovalV4(svc, input.approvalId, {
+    projectId: input.projectId,
+    tokenName: input.tokenName,
+    ttlMs: input.ttlHours * 3600_000,
+    accepted_risks: input.acceptedRisks,
+    denied_risks: input.deniedRisks,
+    singleUse: input.singleUse,
+  });
+
+  await svc
+    .from('approval_requests')
+    .update({ status: 'approved', decided_by: input.decidedBy, decided_at: now })
+    .eq('id', input.approvalId)
+    .eq('status', 'pending');
+
+  return { status: 'approved', accessTokenId: minted.accessTokenId };
+}

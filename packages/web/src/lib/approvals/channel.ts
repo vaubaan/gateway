@@ -1,8 +1,8 @@
 /**
  * ApprovalChannel — the abstraction the mint endpoints use to ask a human
- * "may I grant this capability ?".
+ * "may I grant this capability / risk ?".
  *
- * Spec : docs/spec/gateway-capability-model.md §8.
+ * Spec : docs/spec/gateway-risk-model.md §10.
  *
  * Implementations
  *   - `ManualChannel`     : no notification. Operator approves via the
@@ -10,18 +10,25 @@
  *   - `TelegramChannel`   : sends a message with inline ✅/❌ buttons to a
  *                           project-bound Telegram chat. The webhook handler
  *                           reads the callback_query and resolves the row.
- *
- * New channels (Slack, e-mail, webhook) plug in by implementing this
- * interface and adding a branch in `pickChannel()`.
+ *   - `EmailChannel`      : sends an email with two signed approve/deny
+ *                           links. The /approve route verifies the JWT-like
+ *                           HMAC token and resolves the row.
  */
 
-import type { Capability } from '@vaubaan/shared';
+import type { Capability, RiskId } from '@vaubaan/shared';
 
 export interface ApprovalRequestPayload {
   approvalId: string;
   projectId: string;
   projectName?: string;
+  /** v1 — capability-based ; left for compatibility with existing mints. */
   capabilities: Capability[];
+  /** v4 — risk-based. Present when the mint went through the
+   *  `accepted_risks` path. Channels SHOULD prefer this over `capabilities`
+   *  when rendering the approver notification. */
+  acceptedRisks?: readonly RiskId[];
+  /** Risks gated as `confirm` — the actual reason the approval was opened. */
+  needsApproval?: readonly RiskId[];
   tokenName: string;
   ttlHours: number;
   /** Free-form context the caller wants to surface to the approver. */
@@ -29,15 +36,15 @@ export interface ApprovalRequestPayload {
 }
 
 export interface ApprovalChannelDispatched {
-  /** Channel-native ref (e.g. Telegram message id) — stored on the
-   *  approval_requests row so the channel can edit/update its UI when the
-   *  decision lands. Null when the channel has no ref. */
+  /** Channel-native ref (e.g. Telegram message id, email recipient address)
+   *  — stored on the approval_requests row so the channel can edit/update
+   *  its UI when the decision lands. Null when the channel has no ref. */
   channelRef: string | null;
 }
 
 export interface ApprovalChannel {
   /** Channel identifier, persisted on approval_requests.channel. */
-  readonly id: 'manual' | 'telegram';
+  readonly id: 'manual' | 'telegram' | 'email';
 
   /**
    * Dispatch the approval request. The row has already been inserted with

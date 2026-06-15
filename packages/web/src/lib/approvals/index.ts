@@ -9,16 +9,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { ManualChannel } from './manual';
 import { TelegramChannel } from './telegram';
+import { EmailChannel } from './email';
 import type { ApprovalChannel } from './channel';
 
 export type { ApprovalChannel, ApprovalRequestPayload } from './channel';
 export { ManualChannel } from './manual';
 export { TelegramChannel } from './telegram';
+export { EmailChannel } from './email';
 
 interface ChannelRow {
-  channel: 'manual' | 'telegram';
+  channel: 'manual' | 'telegram' | 'email';
   telegram_chat_id: string | null;
   telegram_bot_token_encrypted: Uint8Array | null;
+  email_address: string | null;
 }
 
 /**
@@ -31,7 +34,7 @@ export async function pickChannel(
 ): Promise<ApprovalChannel> {
   const { data: row } = await svc
     .from('project_approval_channels')
-    .select('channel, telegram_chat_id, telegram_bot_token_encrypted')
+    .select('channel, telegram_chat_id, telegram_bot_token_encrypted, email_address')
     .eq('project_id', projectId)
     .maybeSingle<ChannelRow>();
 
@@ -53,6 +56,27 @@ export async function pickChannel(
       return new ManualChannel();
     }
     return new TelegramChannel({ chatId: row.telegram_chat_id, botToken });
+  }
+
+  if (row.channel === 'email') {
+    if (!row.email_address) return new ManualChannel();
+    const apiKey = process.env.RESEND_API_KEY ?? '';
+    const from = process.env.EMAIL_FROM_ADDRESS ?? '';
+    const signingSecret = process.env.EMAIL_SIGNING_SECRET ?? '';
+    const baseUrl = process.env.APPROVAL_LINK_BASE_URL ?? '';
+    if (!apiKey || !from || !signingSecret || !baseUrl) {
+      console.warn(
+        `[approvals] project ${projectId} configured for email but env vars are incomplete — falling back to manual`,
+      );
+      return new ManualChannel();
+    }
+    return new EmailChannel({
+      apiKey,
+      from,
+      baseUrl,
+      signingSecret,
+      recipient: row.email_address,
+    });
   }
 
   return new ManualChannel();
