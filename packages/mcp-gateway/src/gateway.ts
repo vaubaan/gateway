@@ -359,14 +359,18 @@ export class McpGateway {
       } catch (e) {
         const latency = Date.now() - t0;
         const message = e instanceof Error ? e.message : String(e);
+        // B1 — the upstream threw AFTER we consumed the single-use token, so
+        // the business consequence did NOT happen. Audit as 'denied' with the
+        // upstream error as denial_reason. Without this, an operator querying
+        // audit_log sees 'allowed' rows with no business effect.
         await this.audit(
           ctx,
           toolName,
           args,
-          'allowed',
+          'denied',
           verdict.executed_slices,
           verdict.risks_touched,
-          null,
+          `upstream-error: ${message}`,
           latency,
         );
         return rpcError(id, -32603, `Upstream call failed: ${message}`);
@@ -396,22 +400,20 @@ export class McpGateway {
       await this.cfg.cache.del(`vaubaan:ctx:${ctx.access_token.api_key_prefix}`);
     }
 
+    // B2 — if the classifier accepted the slice, a binding for this provider
+    // MUST exist (the classifier consults `ctx.bindings` to validate args).
+    // A missing binding here means a wiring inconsistency upstream — refuse
+    // hard rather than fabricate an empty binding that the adapter may
+    // mishandle.
     const binding = ctx.bindings.find((b) => b.provider === provider);
+    if (!binding) {
+      const reason = `binding-missing: no '${provider}' binding on this access token despite classifier acceptance.`;
+      await this.audit(ctx, toolName, args, 'denied', verdict.executed_slices, [], reason, null);
+      return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
+    }
     const t0 = Date.now();
     try {
-      const result = await adapter.executeCall(
-        admin,
-        binding ?? {
-          id: '',
-          project_id: ctx.project.id,
-          provider,
-          resource_ref: '',
-          display_name: null,
-          created_at: '',
-        },
-        toolName,
-        args,
-      );
+      const result = await adapter.executeCall(admin, binding, toolName, args);
       const latency = Date.now() - t0;
       await this.audit(
         ctx,
@@ -427,14 +429,17 @@ export class McpGateway {
     } catch (e) {
       const latency = Date.now() - t0;
       const message = e instanceof Error ? e.message : String(e);
+      // B1 — see comment above in the self-contained branch. The business
+      // consequence did not occur on upstream error, so we audit `denied`
+      // with `upstream-error:` denial_reason.
       await this.audit(
         ctx,
         toolName,
         args,
-        'allowed',
+        'denied',
         verdict.executed_slices,
         verdict.risks_touched,
-        null,
+        `upstream-error: ${message}`,
         latency,
       );
       return rpcError(id, -32603, `Upstream call failed: ${message}`);
