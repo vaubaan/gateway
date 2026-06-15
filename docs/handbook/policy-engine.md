@@ -38,7 +38,7 @@ Sept modules purs, étanches, sans état ni IO :
 | `risk-runtime.ts`    | Décision pure `evaluateCall` au hot-path `/mcp` : strict-fail si `risks_touched ⊄ accepted`.                                   | `mcp-gateway` (`callTool`)                      |
 | `scope-injection.ts` | Hide / auto-fill des arguments déterminés par les `provider_bindings` du projet (owner/repo, projectId, project_ref, teamId).  | `mcp-gateway` (`tools/list` + `tools/call`)     |
 
-Le barrel `src/index.ts` re-exporte les 6 modules. Aucun module ne touche
+Le barrel `src/index.ts` re-exporte les 7 modules. Aucun module ne touche
 au DB — la couche route ou le gateway les nourrit avec des objets
 parsés (`RiskCatalog`, `RiskPolicyOverride[]`, `ProviderBinding[]`).
 
