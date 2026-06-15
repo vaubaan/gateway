@@ -11,25 +11,25 @@ tracks:
 
 # Policy engine — `@vaubaan/policy-engine`
 
-> **⚠️ 2026-06-15 — v4 risk-based modules added.** The 4 v1 modules
-> below (`policy.ts`, `evaluate.ts`, `scope-injection.ts`,
-> `tools-filter.ts`) are **kept** for the dual-mode boot ; the package
-> now also exports the v4 risk-based engine :
+> **2026-06-15 — risk-based engine.** The package now exports only the v4
+> risk-based primitives + the provider-agnostic scope-injection helper.
+> The v1 capability modules (`policy.ts`, `evaluate.ts`, `tools-filter.ts`)
+> are deleted.
 >
 > - `slice-dsl.ts` : parseSlice / serializeSlice (DSL §3 of spec v4).
 > - `slice-matcher.ts` : matches / covers / intersects.
 > - `risk-evaluator.ts` : indexCatalog, risksTouchedBy(All), findRiskEntry.
 > - `risk-policy.ts` : resolveEffectiveGate, checkAcceptableInEnv,
->   requiresAdminToOverrideDenyAllow, seedDefaultGate,
->   prepareCatalog.
+>   requiresAdminToOverrideDenyAllow, seedDefaultGate, prepareCatalog.
 > - `risk-runtime.ts` : evaluateCall — pure decision function.
->   See [[gateway-risk-model]] §1, §3, §4, §6 for the conceptual model and
->   the catalog format.
+> - `scope-injection.ts` : (unchanged) computes the injection plan that
+>   strips and auto-fills resource args.
+>
+> See [[gateway-risk-model]] §1, §3, §4, §6 for the conceptual model and
+> the catalog format.
 
-Quatre modules purs autour des _capabilities_ Vaubaan (cf. spec
-`docs/spec/gateway-capability-model.md` §3, §5, §7).
-Le pré-migration `0015_capabilities_replace_roles.sql` (DSL Roles
-nested-rules) est mort ; ce handbook documente le modèle actuel.
+Modules purs autour des slices/risks Vaubaan (cf. spec
+`docs/spec/gateway-risk-model.md` §3, §6, §8).
 
 ## Vue d'ensemble
 

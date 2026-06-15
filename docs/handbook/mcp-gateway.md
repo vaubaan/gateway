@@ -11,18 +11,19 @@ tracks:
 
 # MCP gateway — `@vaubaan/mcp-gateway` + `/mcp` route
 
-> **⚠️ 2026-06-15 — v4 risk-based path active in dual-mode.** Tokens
-> carrying `accepted_risks: RiskId[]` route through `callToolV4`
-> (`risk-gateway.ts` + `risk-runtime.evaluateCall`) ; tokens carrying
-> `capabilities[]` keep the v1 path described below. `tools/list` is
-> v4-aware : a v4 token sees the full tool list of every provider for
-> which it accepted at least one risk. Audit rows gain optional
-> `slices_executed`, `risks_touched`, `token_accepted_risks_snapshot`
-> columns. See [[gateway-risk-model]] §8 for the decision flow and §12
-> for the audit shape.
+> **2026-06-15 — risk-based runtime.** The gateway is now risk-based only.
+> Each token carries `accepted_risks: RiskId[]`. The hot path classifies
+> the call into slices, intersects them with the provider's risk catalog,
+> and allows iff every risk touched is accepted (strict-fail otherwise,
+> with a `risk-not-accepted` body listing the missing risks). `tools/list`
+> is coarse : a token sees the full tool list of every provider for which
+> it accepted at least one risk. Audit rows carry `slices_executed`,
+> `risks_touched`, `token_accepted_risks_snapshot`. See
+> [[gateway-risk-model]] §8 (decision flow) and §12 (audit shape).
 
-Le hot-path produit. Auth → context load (cached) → classify call → evaluate
-capability → mint upstream JIT → executeCall → audit → JSON-RPC response.
+Le hot-path produit. Auth → context load (cached) → classify call (slices) →
+intersect with risk catalog → allow/deny → mint upstream JIT → executeCall →
+audit → JSON-RPC response.
 
 Le moteur d'évaluation lui-même vit dans `@vaubaan/policy-engine` (cf.
 [`policy-engine.md`](./policy-engine.md)) — ce handbook documente
