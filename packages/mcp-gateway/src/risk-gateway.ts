@@ -83,6 +83,10 @@ export function evaluateCallForToken(input: {
     token_accepted_risks: new Set(token.accepted_risks),
     token_denied_risks: new Set(token.denied_risks),
     catalog,
+    // Bindings enable env-qualification of touched risks at the runtime, so a
+    // token that accepted `supabase[staging].bulk-row-write` matches an
+    // executed `supabase.bulk-row-write` on the staging binding. Cf. spec §4.4.
+    bindings,
   });
 
   if (decision.outcome === 'allowed') {

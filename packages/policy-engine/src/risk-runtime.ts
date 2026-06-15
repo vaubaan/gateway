@@ -15,9 +15,15 @@
  * only intersect the slice with the catalog and check set membership.
  */
 
-import type { RiskCatalog, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
+import type { ProviderBinding, RiskCatalog, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
 
-import { indexCatalog, risksTouchedByAll, type IndexedRiskCatalog } from './risk-evaluator.ts';
+import {
+  findRiskEntry,
+  indexCatalog,
+  risksTouchedBy,
+  type IndexedRiskCatalog,
+} from './risk-evaluator.ts';
+import { qualifyRiskId, resolveSliceBindingEnv } from './qualify.ts';
 import { serializeSlice } from './slice-dsl.ts';
 
 export interface EvaluateCallInput {
@@ -29,6 +35,13 @@ export interface EvaluateCallInput {
   readonly token_denied_risks?: ReadonlySet<RiskId>;
   /** The indexed catalog of the provider in question. */
   readonly catalog: IndexedRiskCatalog;
+  /** Bindings on the access token. Used to resolve each slice's env so the
+   *  runtime can env-qualify the touched risks (e.g.
+   *  `supabase.bulk-row-write` → `supabase[staging].bulk-row-write`) before
+   *  the subset check against `token_accepted_risks` (which are stored
+   *  qualified per the mint UX, cf. spec §4.4). When omitted, risks_touched
+   *  are returned non-qualified — useful for tests that don't model envs. */
+  readonly bindings?: ReadonlyArray<ProviderBinding>;
 }
 
 /**
@@ -46,7 +59,7 @@ export interface EvaluateCallInput {
  *   if (decision.outcome === 'allowed') { ... } else { return 403 ... }
  */
 export function evaluateCall(input: EvaluateCallInput): RiskDecision {
-  const { executed_slices, token_accepted_risks, token_denied_risks, catalog } = input;
+  const { executed_slices, token_accepted_risks, token_denied_risks, catalog, bindings } = input;
 
   if (executed_slices.length === 0) {
     return {
@@ -58,7 +71,23 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
     };
   }
 
-  const risks_touched = risksTouchedByAll(executed_slices, catalog);
+  // Compute risks_touched per slice and qualify with the binding env when
+  // available. Without env qualification, a token granted
+  // `supabase[staging].bulk-row-write` would NEVER match a runtime
+  // `supabase.bulk-row-write` from the catalog → silent deny.
+  const seen = new Set<RiskId>();
+  const risks_touched: RiskId[] = [];
+  for (const slice of executed_slices) {
+    const env = bindings ? resolveSliceBindingEnv(slice, bindings) : null;
+    for (const baseId of risksTouchedBy(slice, catalog)) {
+      const entry = findRiskEntry(catalog, baseId);
+      const qualified = qualifyRiskId(baseId, env, entry);
+      if (!seen.has(qualified)) {
+        seen.add(qualified);
+        risks_touched.push(qualified);
+      }
+    }
+  }
 
   if (risks_touched.length === 0) {
     return {

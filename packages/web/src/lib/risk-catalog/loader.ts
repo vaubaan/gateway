@@ -27,8 +27,13 @@ import { vercelRiskCatalog } from '@vaubaan/providers-vercel';
 import { supabaseRiskCatalog } from '@vaubaan/providers-supabase';
 import { railwayRiskCatalog } from '@vaubaan/providers-railway';
 import { sshRiskCatalog } from '@vaubaan/providers-ssh';
-import { indexCatalog, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
-import type { Provider, RiskCatalog, RiskEntry, RiskId } from '@vaubaan/shared';
+import {
+  indexCatalog,
+  qualifyRiskId as engineQualifyRiskId,
+  unqualifyRiskId as engineUnqualifyRiskId,
+  type IndexedRiskCatalog,
+} from '@vaubaan/policy-engine';
+import type { Provider, RiskCatalog } from '@vaubaan/shared';
 
 /** All providers we know about. Keep in sync with `Provider` in shared. */
 const PROVIDERS: readonly Provider[] = ['github', 'vercel', 'supabase', 'railway', 'bash'];
@@ -105,50 +110,14 @@ export function __resetForTests(): void {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Risk-id qualification helpers (spec §4.4)
+//
+// The implementations live in `@vaubaan/policy-engine` (centralised so the
+// mint-form client and the runtime use the same code). We re-export here
+// for backward compatibility with existing call sites in `web/`.
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Turn a non-env-qualified `RiskId` (e.g. `supabase.bulk-row-write`) into
- *  its env-qualified form (`supabase[staging].bulk-row-write`) when the
- *  catalog declares the risk as env-scoped (i.e. has `acceptable_in_envs`
- *  set OR the caller asks for a specific env binding). The non-qualified
- *  form is returned unchanged when the env is null or when the entry is
- *  not env-scoped.
- *
- *  Rule (cf. ADR §D2) :
- *   - `<provider>[<env>].<name>`  : env-scoped, env is a slug
- *   - `<provider>.<name>`         : account-scope / not env-bound
- *
- *  Note: the catalog stores the **non-qualified** id ; qualification is a
- *  presentation/wire concern, computed per binding at mint time. */
-export function qualifyRiskId(
-  baseId: RiskId,
-  env: string | null,
-  entry: RiskEntry | undefined,
-): RiskId {
-  if (env === null || env.length === 0) return baseId;
-  // Only inject env when the catalog entry says this risk is env-scoped.
-  // Convention : `acceptable_in_envs` non-empty ⇒ env-scoped. Account-scope
-  // entries (e.g. `github.mint-install-token`) leave it absent and stay
-  // non-qualified across bindings.
-  if (!entry || !entry.acceptable_in_envs || entry.acceptable_in_envs.length === 0) {
-    return baseId;
-  }
-  // Already qualified ? Leave alone (defensive).
-  if (/\[[a-z][a-z0-9-]*\]/.test(baseId)) return baseId;
-  // Insert `[env]` between provider and the first dot.
-  const dot = baseId.indexOf('.');
-  if (dot < 0) return baseId; // shouldn't happen per regex
-  const provider = baseId.slice(0, dot);
-  const rest = baseId.slice(dot);
-  return `${provider}[${env}]${rest}`;
-}
-
-/** Inverse of `qualifyRiskId` — strip the `[env]` qualifier to recover the
- *  base id used as the lookup key in the catalog. Returns the input
- *  unchanged if it has no env qualifier. */
-export function unqualifyRiskId(qualifiedId: RiskId): RiskId {
-  return qualifiedId.replace(/\[[a-z][a-z0-9-]*\]/, '');
-}
+export const qualifyRiskId = engineQualifyRiskId;
+export const unqualifyRiskId = engineUnqualifyRiskId;
 
 /** Public API : compute the IndexedRiskCatalog for all providers. Useful
  *  for endpoints that want to walk every catalog (e.g. a /api/v1/catalog

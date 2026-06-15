@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import type { RiskCatalog } from '@vaubaan/shared';
+import type { ProviderBinding, RiskCatalog } from '@vaubaan/shared';
 
 import { indexCatalog } from '../../src/risk-evaluator.ts';
 import { evaluateCall, evaluateCallSimple } from '../../src/risk-runtime.ts';
@@ -190,6 +190,95 @@ describe('evaluateCallSimple — convenience wrapper', () => {
       [parseSlice('github.repo[foo].file[a.ts].R')],
       ['github.read-code'],
     );
+    expect(d.outcome).toBe('allowed');
+  });
+});
+
+// ─── env-scoped subset check (spec §4.4) ─────────────────────────────────────
+
+describe('evaluateCall — env-qualified subset check', () => {
+  const supabaseCatalog: RiskCatalog = {
+    provider: 'supabase',
+    risks: [
+      {
+        id: 'supabase.bulk-row-write',
+        label: 'bulk',
+        reason: 'bulk row write',
+        matches: 'supabase.project[**].schema[**].table[**].row[bulk].W',
+        vector: {
+          reversibility: 'costly',
+          blast: 'bulk',
+          data: 'data',
+          cost: 'moderate',
+          visibility: 'internal',
+          persistence: 'session',
+        },
+        default_gate: 'confirm',
+        acceptable_in_envs: ['staging', 'prod'],
+      },
+    ],
+  };
+  const supabaseIdx = indexCatalog(supabaseCatalog);
+
+  const stagingBinding: ProviderBinding = {
+    id: 'b1',
+    project_id: 'p1',
+    provider: 'supabase',
+    resource_ref: 'staging-ref',
+    display_name: null,
+    environment: 'staging',
+    created_at: '2026-01-01',
+  };
+  const prodBinding: ProviderBinding = {
+    id: 'b2',
+    project_id: 'p1',
+    provider: 'supabase',
+    resource_ref: 'prod-ref',
+    display_name: null,
+    environment: 'prod',
+    created_at: '2026-01-01',
+  };
+
+  const stagingBulkSlice = parseSlice(
+    'supabase.project[staging-ref].schema[any].table[any].row[bulk].W',
+  );
+  const prodBulkSlice = parseSlice('supabase.project[prod-ref].schema[any].table[any].row[bulk].W');
+
+  test('token accepted `supabase[staging].bulk-row-write` allows staging binding call', () => {
+    const d = evaluateCall({
+      executed_slices: [stagingBulkSlice],
+      token_accepted_risks: new Set(['supabase[staging].bulk-row-write']),
+      catalog: supabaseIdx,
+      bindings: [stagingBinding, prodBinding],
+    });
+    expect(d.outcome).toBe('allowed');
+    if (d.outcome === 'allowed') {
+      expect(d.risks_touched).toEqual(['supabase[staging].bulk-row-write']);
+    }
+  });
+
+  test('token accepted `supabase[staging].bulk-row-write` denies prod binding call', () => {
+    const d = evaluateCall({
+      executed_slices: [prodBulkSlice],
+      token_accepted_risks: new Set(['supabase[staging].bulk-row-write']),
+      catalog: supabaseIdx,
+      bindings: [stagingBinding, prodBinding],
+    });
+    expect(d.outcome).toBe('denied');
+    if (d.outcome === 'denied') {
+      // The missing risk is the qualified one for the prod env.
+      expect(d.missing_risks).toContain('supabase[prod].bulk-row-write');
+    }
+  });
+
+  test('no bindings provided → risks_touched returned non-qualified (legacy/test mode)', () => {
+    const d = evaluateCall({
+      executed_slices: [stagingBulkSlice],
+      // The token would have to use the non-qualified id when bindings are
+      // absent (this is the legacy/test entrypoint).
+      token_accepted_risks: new Set(['supabase.bulk-row-write']),
+      catalog: supabaseIdx,
+    });
     expect(d.outcome).toBe('allowed');
   });
 });

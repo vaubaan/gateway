@@ -30,7 +30,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
-import type { Provider, RiskGate, RiskId, RiskVector } from '@vaubaan/shared';
+import type { Provider, RiskEntry, RiskGate, RiskId, RiskVector } from '@vaubaan/shared';
+import { qualifyRiskId } from '@vaubaan/policy-engine';
 
 import {
   Badge,
@@ -162,14 +163,20 @@ function groupBindings(bindings: readonly MintFormBinding[]): Map<Provider, Mint
   return groups;
 }
 
-/** The qualified id surfaced to the wire — must match the server's
- *  qualifyRiskId logic. Mirrors the rule in lib/risk-catalog/loader.ts. */
-function qualify(baseId: RiskId, env: string | null, envScoped: boolean): RiskId {
-  if (!env || !envScoped) return baseId;
-  if (/\[[a-z][a-z0-9-]*\]/.test(baseId)) return baseId;
-  const dot = baseId.indexOf('.');
-  if (dot < 0) return baseId;
-  return `${baseId.slice(0, dot)}[${env}]${baseId.slice(dot)}`;
+/** Cast the local catalog entry (shaped for the page contract) into the
+ *  policy-engine `RiskEntry` shape consumed by `qualifyRiskId`. The shapes
+ *  align on the `acceptable_in_envs` field, which is the only one
+ *  `qualifyRiskId` reads. */
+function asRiskEntry(entry: MintFormCatalogEntry): RiskEntry {
+  return {
+    id: entry.id,
+    label: entry.label,
+    reason: entry.reason,
+    matches: '',
+    vector: entry.vector,
+    default_gate: entry.default_gate,
+    acceptable_in_envs: entry.acceptable_in_envs ?? undefined,
+  };
 }
 
 // ─── Component ─────────────────────────────────────────────────────────────
@@ -595,8 +602,7 @@ function BindingRisksSection({
   // we fall back to `default_gate`.
   const rows = applicableEntries
     .map((entry) => {
-      const envScoped = Boolean(entry.acceptable_in_envs && entry.acceptable_in_envs.length > 0);
-      const qualifiedId = qualify(entry.id, binding.env, envScoped);
+      const qualifiedId = qualifyRiskId(entry.id, binding.env, asRiskEntry(entry));
       const isAccepted = accepted.has(qualifiedId);
       const previewRow = effectiveGates.get(qualifiedId);
       const effective: RiskGate = previewRow?.effective_gate ?? entry.default_gate;
