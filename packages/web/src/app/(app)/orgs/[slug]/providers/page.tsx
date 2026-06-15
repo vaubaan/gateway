@@ -1,4 +1,5 @@
 import { LocalDate } from '@/components/LocalDate';
+import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { type Provider } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
@@ -73,6 +74,13 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
               <CardTitle>Bash</CardTitle>
               <Badge tone="neutral">per-project</Badge>
             </Row>
+            <Row gap="var(--space-2)">
+              <Link href={`/orgs/${org.slug}/providers/bash`} style={{ textDecoration: 'none' }}>
+                <Button size="sm" variant="secondary">
+                  Info
+                </Button>
+              </Link>
+            </Row>
           </CardHeader>
           <CardBody>
             <p style={{ margin: 0, color: 'var(--text-muted)' }}>
@@ -103,6 +111,14 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
           )}
         </Row>
         <Row gap="var(--space-2)">
+          <Link
+            href={`/orgs/${orgSlug}/providers/${state.provider}`}
+            style={{ textDecoration: 'none' }}
+          >
+            <Button size="sm" variant="secondary">
+              Info
+            </Button>
+          </Link>
           {connected && (
             <ProviderDisconnectButton
               orgSlug={orgSlug}
