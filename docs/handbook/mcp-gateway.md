@@ -40,10 +40,7 @@ packages/mcp-gateway/
     risk-gateway.ts   # evaluateCallForToken + denyResponseBody (helpers purs)
     index.ts          # barrel
   tests/
-    unit/gateway.test.ts             (14 tests)
-    unit/risk-gateway.test.ts        (6  tests)
-    integration/lifecycle.test.ts    (7  tests)
-    integration/scope-injection.test.ts (3 tests)
+    unit/risk-gateway.test.ts        (6 tests)
 ```
 
 Et côté Next.js :
@@ -325,19 +322,18 @@ des bearers" et retombe sur le header statique.
 
 ## Tests
 
-- Unit (`packages/mcp-gateway/tests/unit/`) :
-  - `gateway.test.ts` (14) — auth flow (Bearer parsing, cache hit/miss,
-    expired/consumed), tools/list filter coarse (un provider apparaît
-    iff un accepted_risk cible), allow/deny dispatch, audit row shape
-    (slices_executed, risks_touched, snapshot), self-contained branch.
-  - `risk-gateway.test.ts` (6) — `evaluateCallForToken` pure : allow,
-    deny missing risks, classify-denied, no-catalog, multi-slice union,
-    denied_risks shadow.
-- Integration (`packages/mcp-gateway/tests/integration/`) :
-  - `lifecycle.test.ts` (7) — access token lifecycle, rotation,
-    revocation, provider disconnect, single-use consume.
-  - `scope-injection.test.ts` (3) — `tools/list` strip + `tools/call`
-    merge avec injection plan résolu depuis les bindings.
+- Unit (`packages/mcp-gateway/tests/unit/risk-gateway.test.ts`, 6 tests) —
+  `evaluateCallForToken` pure : allow, deny missing risks,
+  classify-denied (plugin rejet), no-catalog (fail-closed), multi-slice
+  union, denied_risks shadow.
+- Le code de `gateway.ts` (auth, single-use consume, audit row, scope
+  injection wiring) est couvert indirectement via les tests d'intégration
+  E2E `scripts/e2e-mint-flow.mjs` + les tests unitaires des helpers purs
+  (`risk-gateway.test.ts`, `policy-engine/tests/unit/`). Le pivot v4 a
+  supprimé l'ancienne suite `gateway.test.ts` (14 tests) + intégration
+  (`lifecycle`, `scope-injection`) qui pré-supposaient le wire v1. À
+  ré-écrire pour le wire v4 (TODO, cf. `docs/tests/integration-tests.md`
+  §Trous connus).
 
 ## Références
 
