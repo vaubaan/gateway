@@ -1,0 +1,133 @@
+# SSH risk catalog — provider `ssh`.
+#
+# Spec    : docs/spec/gateway-risk-model.md §4.
+# Source  : .vaubaan/research/providers/railway-ssh.md §2.4.
+#
+# Five risks + one fallback :
+#   - ssh.exec-read                    → allow   (whitelisted reads)
+#   - ssh.exec-write-staging           → confirm (writes on non-prod hosts)
+#   - ssh.exec-write-prod              → deny    (writes on prod hosts)
+#   - ssh.exec-read-secret-files       → confirm (co-touched on cat /etc/..., etc.)
+#   - ssh.uncategorized-write          → confirm (fallback catch-all)
+#
+# CONVENTION — `acceptable_in_envs`
+# ---------------------------------
+# SSH's "env" segment is the `host_slug` of the binding (one host = one env).
+# Hosts named `staging-vps`, `dev-vps` are non-prod ; anything else is
+# considered prod-shaped. The list below is the canonical set of slugs
+# acceptable for the `exec-write-staging` risk — extend per-project via the
+# project policy if you add more non-prod host slugs.
+#
+# MATCH PATTERN ambiguity
+# ------------------------
+# `ssh.exec-write-staging` and `ssh.exec-write-prod` both declare
+# `matches: "ssh.host[**].command.W"` — they target the same slice
+# space. The runtime distinguishes them at MINT time via
+# `acceptable_in_envs` (cf. §4.4 of the spec) : the manager can only
+# accept `exec-write-staging` for bindings whose host_slug is in
+# {staging-vps, dev-vps} ; the manager must accept `exec-write-prod`
+# (which is DENY-by-default) to operate on any other host. This is the
+# intentional risk-based asymmetry — opt-in to prod writes is loud.
+#
+# MULTI-SLICE — secret-file co-touch
+# -----------------------------------
+# The classifier (`risk-classifier.ts`) emits TWO slices when the cmd
+# matches "looks like reading a secret file" heuristics
+# (`cat /etc/...`, `cat ~/.ssh/...`, `stat /root/...`, ...) :
+#   1. `ssh.host[<slug>].command.R`              (touches `ssh.exec-read`)
+#   2. `ssh.host[<slug>].command.R`              (also touches `ssh.exec-read-secret-files`)
+# Both risks must be accepted for the call to pass — forcing the manager
+# to explicitly consent to potential credential-file exfiltration via the
+# `cat` whitelist hole.
+
+ssh:
+  risks:
+    - id: ssh.exec-read
+      label: 'Exécuter une commande shell read-only whitelist'
+      reason: >
+        Commandes en lecture seule reconnues par la whitelist regex
+        (`journalctl`, `cat`, `ls`, `tail`, `head`, `grep`, `ps`,
+        `docker ps/inspect/logs`, `systemctl status`, `df`, `free`,
+        `uptime`, `ss -tlnp`, `md5sum`, `stat`). Pas de mutation.
+      matches: 'ssh.host[**].command.R'
+      vector:
+        reversibility: reversible
+        blast: env
+        data: data
+        cost: free
+        visibility: internal
+        persistence: stateless
+      default_gate: allow
+
+    - id: ssh.exec-write-staging
+      label: 'Exécuter une commande shell arbitraire (host non-prod)'
+      reason: >
+        Toute commande hors-whitelist read → traitée W. Inclut sudo,
+        install, rm, systemctl restart, docker run, etc. Sur un host
+        non-prod (`staging-vps`, `dev-vps`) c'est acceptable avec
+        confirmation explicite du manager.
+      matches: 'ssh.host[**].command.W'
+      vector:
+        reversibility: costly
+        blast: env
+        data: data
+        cost: moderate
+        visibility: internal
+        persistence: posture
+      default_gate: confirm
+      acceptable_in_envs:
+        - staging-vps
+        - dev-vps
+
+    - id: ssh.exec-write-prod
+      label: 'Exécuter une commande shell arbitraire (host prod)'
+      reason: >
+        Mêmes commandes que ci-dessus mais sur un host de production.
+        Posture-shift potentiel, downtime possible, surface d'attaque
+        maximale. Deny par défaut ; doit être escaladé humain pour être
+        accepté.
+      matches: 'ssh.host[**].command.W'
+      vector:
+        reversibility: irreversible
+        blast: env
+        data: secret
+        cost: unbounded
+        visibility: internal
+        persistence: posture
+      default_gate: deny
+
+    - id: ssh.exec-read-secret-files
+      label: 'Lire un fichier potentiellement sensible (cat /etc/..., stat key)'
+      reason: >
+        La whitelist autorise `cat <path>` sans filtrer le path — donc
+        `cat /etc/shadow`, `cat ~/.ssh/id_rsa`, `cat /root/.env` passent
+        en R. Risque d'exfiltration des credentials hôte. Co-touché par
+        le classifier en plus de `ssh.exec-read` quand le cmd ressemble
+        à un read sensible — force le manager à consentir explicitement.
+      matches: 'ssh.host[**].command.R'
+      vector:
+        reversibility: reversible
+        blast: env
+        data: secret
+        cost: free
+        visibility: internal
+        persistence: stateless
+      default_gate: confirm
+
+    - id: ssh.uncategorized-write
+      label: 'Écriture SSH non catégorisée'
+      reason: >
+        Catch-all pour les writes qui n'ont pas été explicitement
+        catégorisés (toute slice W non couverte par exec-write-staging
+        ni exec-write-prod). Sert de filet pour les futurs tools (ex.
+        `ssh__sftp_put`) — en pratique jamais touché tant que `ssh__exec`
+        est le seul tool exposé.
+      matches: 'ssh.**.W'
+      vector:
+        reversibility: costly
+        blast: env
+        data: data
+        cost: moderate
+        visibility: internal
+        persistence: session
+      default_gate: confirm

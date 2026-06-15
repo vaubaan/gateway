@@ -8,3 +8,12 @@ export {
   sshToolEnvResolution,
   type ClassifyResult,
 } from './classify.ts';
+
+// ─── v4 risk-based authorization ───────────────────────────────────────────
+export { sshDataModel } from './data-model.ts';
+export { sshRiskCatalog } from './risk-catalog.ts';
+export {
+  classifySshV4,
+  looksLikeSecretFileRead,
+  type ClassifyV4Result,
+} from './risk-classifier.ts';
