@@ -12,8 +12,13 @@
   "dependencies": {
     "@octokit/auth-app": "^7.1.0",
     "@octokit/rest": "^21.0.2",
+    "@vaubaan/policy-engine": "*",
     "@vaubaan/shared": "*",
     "jose": "^5.9.6",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "js-yaml": "^4.1.0"
   }
 }
