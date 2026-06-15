@@ -1,106 +1,68 @@
 /**
- * Risk-catalog loader — boots once per Next.js runtime, reads every
- * `packages/providers/<vendor>/src/risk-catalog.yaml`, validates them via
- * `indexCatalog` (`@vaubaan/policy-engine`), and caches the
- * `IndexedRiskCatalog` per provider in module scope.
+ * Risk-catalog loader — boots once per Next.js runtime, imports every
+ * provider's `risk-catalog.ts` (a static TS export — no YAML at runtime),
+ * validates them via `indexCatalog` (`@vaubaan/policy-engine`), and caches
+ * the `IndexedRiskCatalog` per provider in module scope.
  *
  * Spec : docs/spec/gateway-risk-model.md §1, §4, ADR D8.
  *
  * Design notes
- *  - The catalog is **statically loaded at module init** (top-level
- *    `try/catch` per provider). A missing or malformed YAML emits a
- *    `console.warn` and the provider's catalog stays `undefined` — the
- *    preview/mint endpoints check `getCatalog(provider)` and refuse the
- *    request with a clear 4xx if absent. The five provider worktrees are
- *    expected to ship the catalogs in parallel.
- *  - We resolve the YAML path **once** per call to `loadAllCatalogs` (the
- *    initializer) using `fileURLToPath(import.meta.url)` as the anchor —
- *    works in both the Node.js runtime and the Vercel Node Lambda.
+ *  - The catalog is statically loaded at module init. We import the TS
+ *    exports directly from each provider package : Vercel's Next.js
+ *    bundler does NOT include `.yaml` files in the Lambda bundle, so the
+ *    earlier `readFileSync`-based loader broke at runtime in production
+ *    (all mints returned `risk catalog for provider 'X' is not loaded`).
+ *    The TS exports are bundled like any other code path.
+ *  - The YAML siblings (`packages/providers/<vendor>/src/risk-catalog.yaml`)
+ *    remain the canonical reviewable form ; a per-provider unit test
+ *    (`tests/unit/risk-catalog-sync.test.ts`) lints that the two stay in
+ *    sync.
  *  - This module is intentionally NOT exported from a shared package : it
- *    is a web-side concern (next.js runtime, filesystem reads, jsonb
- *    boundary). Other runtimes can build their own loader.
+ *    is a web-side concern (next.js runtime, jsonb boundary). Other
+ *    runtimes can build their own loader.
  */
 
-import { readFileSync } from 'node:fs';
-import { dirname, resolve as resolvePath } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import yaml from 'js-yaml';
+import { githubRiskCatalog } from '@vaubaan/providers-github';
+import { vercelRiskCatalog } from '@vaubaan/providers-vercel';
+import { supabaseRiskCatalog } from '@vaubaan/providers-supabase';
+import { railwayRiskCatalog } from '@vaubaan/providers-railway';
+import { sshRiskCatalog } from '@vaubaan/providers-ssh';
 import { indexCatalog, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
 import type { Provider, RiskCatalog, RiskEntry, RiskId } from '@vaubaan/shared';
-
-/** Vendor → YAML path relative to repo root. The five provider worktrees
- *  ship these files in parallel. Keep in sync with
- *  `packages/providers/<vendor>/src/risk-catalog.yaml`. */
-const CATALOG_RELATIVE_PATHS: Record<Provider, string> = {
-  github: 'packages/providers/github/src/risk-catalog.yaml',
-  vercel: 'packages/providers/vercel/src/risk-catalog.yaml',
-  supabase: 'packages/providers/supabase/src/risk-catalog.yaml',
-  railway: 'packages/providers/railway/src/risk-catalog.yaml',
-  bash: 'packages/providers/ssh/src/risk-catalog.yaml',
-};
 
 /** All providers we know about. Keep in sync with `Provider` in shared. */
 const PROVIDERS: readonly Provider[] = ['github', 'vercel', 'supabase', 'railway', 'bash'];
 
-/** Compute the repo root from this module's location. We're at
- *  `packages/web/src/lib/risk-catalog/loader.ts` — five levels deep. */
-function repoRoot(): string {
-  const here = dirname(fileURLToPath(import.meta.url));
-  // .../packages/web/src/lib/risk-catalog → up 5 to repo root
-  return resolvePath(here, '..', '..', '..', '..', '..');
-}
+/** Provider → its TS-exported risk catalog. The `bash` provider key maps
+ *  to the SSH provider package (cf. shared/src/types.ts — historic naming). */
+const PROVIDER_CATALOGS: Record<Provider, RiskCatalog> = {
+  github: githubRiskCatalog,
+  vercel: vercelRiskCatalog,
+  supabase: supabaseRiskCatalog,
+  railway: railwayRiskCatalog,
+  bash: sshRiskCatalog,
+};
 
 /** Per-provider cache, built once on first call to `getCatalog`. `undefined`
- *  means the YAML is missing or invalid — the provider's runtime path will
+ *  means the catalog failed validation — the provider's runtime path will
  *  refuse the call with a typed error. */
 const CACHE: Map<Provider, IndexedRiskCatalog | undefined> = new Map();
 let initialised = false;
 
-/** Try to load + validate one provider's YAML catalog. Returns `undefined`
- *  on any error and logs a warning. Errors are non-fatal so the web app
- *  keeps booting even if a provider worktree hasn't shipped its catalog. */
-function tryLoadCatalog(provider: Provider, absolutePath: string): IndexedRiskCatalog | undefined {
-  let raw: string;
-  try {
-    raw = readFileSync(absolutePath, 'utf8');
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    console.warn(
-      `[risk-catalog-loader] could not read catalog for provider '${provider}' at '${absolutePath}': ${message}. ` +
-        `Risk-based mint flow will reject calls for this provider until the file is committed.`,
-    );
-    return undefined;
-  }
-  let parsed: unknown;
-  try {
-    parsed = yaml.load(raw);
-  } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
-    console.warn(`[risk-catalog-loader] YAML parse failed for provider '${provider}': ${message}.`);
-    return undefined;
-  }
-  if (
-    typeof parsed !== 'object' ||
-    parsed === null ||
-    !('provider' in parsed) ||
-    !('risks' in parsed)
-  ) {
-    console.warn(
-      `[risk-catalog-loader] catalog for '${provider}' does not have the {provider,risks} shape.`,
-    );
-    return undefined;
-  }
+/** Validate one provider's static TS catalog. Returns `undefined` on any
+ *  error and logs a warning. Errors are non-fatal so the web app keeps
+ *  booting even if a provider's catalog is malformed. */
+function tryIndexCatalog(provider: Provider, catalog: RiskCatalog): IndexedRiskCatalog | undefined {
   try {
     // We use `indexCatalog` (not `prepareCatalog`) on purpose : the latter
-    // enforces the RISK_ID_REGEX which today is stricter than the YAML
-    // catalogs we ship (the cardinality-marker `.W` / `.R` suffix is upper
-    // case while the regex requires `[a-z][a-z0-9-]+` per segment). The
-    // strict regex check belongs to the catalog-author lint (a CI gate),
-    // not to the boot-time loader — fail-soft here so the gateway keeps
-    // serving the well-formed catalogs even if one author shipped a
-    // legacy-segment id.
-    return indexCatalog(parsed as RiskCatalog);
+    // enforces the RISK_ID_REGEX which today is stricter than the catalogs
+    // we ship (the cardinality-marker `.W` / `.R` suffix is upper case
+    // while the regex requires `[a-z][a-z0-9-]+` per segment). The strict
+    // regex check belongs to the catalog-author lint (a CI gate), not to
+    // the boot-time loader — fail-soft here so the gateway keeps serving
+    // the well-formed catalogs even if one author shipped a legacy-segment
+    // id.
+    return indexCatalog(catalog);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);
     console.warn(`[risk-catalog-loader] catalog for '${provider}' failed validation: ${message}.`);
@@ -111,24 +73,22 @@ function tryLoadCatalog(provider: Provider, absolutePath: string): IndexedRiskCa
 function ensureInitialised(): void {
   if (initialised) return;
   initialised = true;
-  const root = repoRoot();
   for (const provider of PROVIDERS) {
-    const rel = CATALOG_RELATIVE_PATHS[provider];
-    const abs = resolvePath(root, rel);
-    CACHE.set(provider, tryLoadCatalog(provider, abs));
+    const catalog = PROVIDER_CATALOGS[provider];
+    CACHE.set(provider, tryIndexCatalog(provider, catalog));
   }
 }
 
 /** Public API : fetch the indexed catalog for a provider. Returns
- *  `undefined` if the YAML failed to load — caller should reject the
+ *  `undefined` if the catalog failed to load — caller should reject the
  *  request with a 4xx. */
 export function getCatalog(provider: Provider): IndexedRiskCatalog | undefined {
   ensureInitialised();
   return CACHE.get(provider);
 }
 
-/** Public API : test-only seam to inject a pre-built catalog (skips disk
- *  read). Useful for unit tests so we don't need real YAML on the filesystem. */
+/** Public API : test-only seam to inject a pre-built catalog (skips static
+ *  import). Useful for unit tests so we can exercise a minimal catalog. */
 export function __setCatalogForTests(
   provider: Provider,
   indexed: IndexedRiskCatalog | undefined,
@@ -158,7 +118,7 @@ export function __resetForTests(): void {
  *   - `<provider>[<env>].<name>`  : env-scoped, env is a slug
  *   - `<provider>.<name>`         : account-scope / not env-bound
  *
- *  Note: the YAML stores the **non-qualified** id ; qualification is a
+ *  Note: the catalog stores the **non-qualified** id ; qualification is a
  *  presentation/wire concern, computed per binding at mint time. */
 export function qualifyRiskId(
   baseId: RiskId,
@@ -184,7 +144,7 @@ export function qualifyRiskId(
 }
 
 /** Inverse of `qualifyRiskId` — strip the `[env]` qualifier to recover the
- *  base id used as the lookup key in the YAML catalog. Returns the input
+ *  base id used as the lookup key in the catalog. Returns the input
  *  unchanged if it has no env qualifier. */
 export function unqualifyRiskId(qualifiedId: RiskId): RiskId {
   return qualifiedId.replace(/\[[a-z][a-z0-9-]*\]/, '');
@@ -192,7 +152,7 @@ export function unqualifyRiskId(qualifiedId: RiskId): RiskId {
 
 /** Public API : compute the IndexedRiskCatalog for all providers. Useful
  *  for endpoints that want to walk every catalog (e.g. a /api/v1/catalog
- *  refresh). Returns only providers whose YAML loaded successfully. */
+ *  refresh). Returns only providers whose catalog loaded successfully. */
 export function getAllCatalogs(): Partial<Record<Provider, IndexedRiskCatalog>> {
   ensureInitialised();
   const out: Partial<Record<Provider, IndexedRiskCatalog>> = {};
