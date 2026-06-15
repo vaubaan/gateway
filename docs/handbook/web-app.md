@@ -54,7 +54,11 @@ packages/web/
                 page.tsx                                # Project overview (bindings + bash + tokens cards)
                 audit/page.tsx                          # Project audit log
                 tokens/page.tsx                         # Access tokens list
-                tokens/new/{page.tsx,mint-form.tsx}     # v4 risk-checklist mint flow
+                tokens/new/*.{ts,tsx}                   # v4 risk-checklist mint flow (9 files)
+                                                        # page.tsx (server) + mint-form.tsx (orchestrator)
+                                                        # + binding-risks-section / provider-risks-card
+                                                        # + risk-row / vector-row / preview-footer
+                                                        # + mint-result-dialog + mint-types + qualify-helpers
                 approvals/page.tsx                      # Pending approval requests
                 settings/page.tsx                       # Project settings
                 bash/page.tsx                           # Redirect → bindings/new

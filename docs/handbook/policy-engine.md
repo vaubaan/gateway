@@ -8,6 +8,7 @@ tracks:
   - packages/policy-engine/src/risk-evaluator.ts
   - packages/policy-engine/src/risk-policy.ts
   - packages/policy-engine/src/risk-runtime.ts
+  - packages/policy-engine/src/qualify.ts
   - packages/policy-engine/src/scope-injection.ts
   - packages/policy-engine/tests/unit/
   - packages/web/src/lib/risk-catalog/
@@ -25,16 +26,17 @@ qui survit : la totalité du runtime risk-based + le module
 
 ## Vue d'ensemble
 
-Six modules purs, étanches, sans état ni IO :
+Sept modules purs, étanches, sans état ni IO :
 
-| Module               | Responsabilité                                                                                                                | Appelé depuis                                   |
-| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
-| `slice-dsl.ts`       | Parser / sérialiser la grammaire des slices (chemin sur le data-model + action `R`/`W`).                                      | catalog YAML loader, audit log, tests           |
-| `slice-matcher.ts`   | Prédicats `matches` / `covers` / `intersects` entre patterns de slices.                                                       | `risk-evaluator`, lints                         |
-| `risk-evaluator.ts`  | Indexer un catalogue (parse les `matches`) + calculer `risks_touched` pour une slice exécutée.                                | `risk-runtime`, `mcp-gateway` (au boot)         |
-| `risk-policy.ts`     | Résoudre `effective_gate` (catalogue × overrides projet × env), seed `default_gate` du vecteur 6D.                            | routes mint (`POST /tokens/preview`, `/tokens`) |
-| `risk-runtime.ts`    | Décision pure `evaluateCall` au hot-path `/mcp` : strict-fail si `risks_touched ⊄ accepted`.                                  | `mcp-gateway` (`callTool`)                      |
-| `scope-injection.ts` | Hide / auto-fill des arguments déterminés par les `provider_bindings` du projet (owner/repo, projectId, project_ref, teamId). | `mcp-gateway` (`tools/list` + `tools/call`)     |
+| Module               | Responsabilité                                                                                                                 | Appelé depuis                                   |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------- |
+| `slice-dsl.ts`       | Parser / sérialiser la grammaire des slices (chemin sur le data-model + action `R`/`W`).                                       | catalog YAML loader, audit log, tests           |
+| `slice-matcher.ts`   | Prédicats `matches` / `covers` / `intersects` entre patterns de slices.                                                        | `risk-evaluator`, lints                         |
+| `risk-evaluator.ts`  | Indexer un catalogue (parse les `matches`, vérifie l'unicité des ids) + calculer `risks_touched` pour une slice exécutée.      | `risk-runtime`, `mcp-gateway` (au boot)         |
+| `risk-policy.ts`     | Résoudre `effective_gate` (catalogue × overrides projet × env), seed `default_gate` du vecteur 6D.                             | routes mint (`POST /tokens/preview`, `/tokens`) |
+| `qualify.ts`         | Env-qualifier un `RiskId` (`base.name` → `provider[env].name`) et son inverse. Helper de cohérence mint ↔ runtime (spec §4.4). | `risk-runtime`, mint preview, UI mint-form      |
+| `risk-runtime.ts`    | Décision pure `evaluateCall` au hot-path `/mcp` : strict-fail si `risks_touched ⊄ accepted`.                                   | `mcp-gateway` (`callTool`)                      |
+| `scope-injection.ts` | Hide / auto-fill des arguments déterminés par les `provider_bindings` du projet (owner/repo, projectId, project_ref, teamId).  | `mcp-gateway` (`tools/list` + `tools/call`)     |
 
 Le barrel `src/index.ts` re-exporte les 6 modules. Aucun module ne touche
 au DB — la couche route ou le gateway les nourrit avec des objets
