@@ -51,6 +51,10 @@ plan d'exécution suivant).
 
 ### Front-matter (obligatoire)
 
+Le frontmatter prescrit ci-dessous est destiné aux **handbooks générés à
+partir de ce template** — pas à cette ADR elle-même (les ADRs ne déclarent
+jamais de `tracks:`).
+
 ```yaml
 ---
 title: <Provider> provider adapter

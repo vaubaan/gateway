@@ -5,8 +5,10 @@ date: 2026-06-11
 tracks:
   - packages/web/src/app/
   - packages/web/src/components/sidebar/Sidebar.tsx
+  - packages/web/src/components/providers/
   - packages/web/src/lib/approvals/
-  - packages/web/src/lib/capabilities/
+  - packages/web/src/lib/mint/
+  - packages/web/src/lib/risk-catalog/
   - packages/web/src/lib/auth/
   - packages/web/src/lib/oauth/
   - packages/web/src/lib/providers/
