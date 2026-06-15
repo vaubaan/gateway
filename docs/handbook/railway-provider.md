@@ -1,7 +1,7 @@
 ---
 title: Railway provider adapter
 status: current
-date: 2026-06-13
+date: 2026-06-15
 tracks:
   - packages/providers/railway/src/
   - packages/web/src/app/api/integrations/railway/
@@ -10,17 +10,19 @@ tracks:
 
 # Railway provider — `@vaubaan/providers-railway`
 
-> **⚠️ 2026-06-15 — v4 risk-based catalog added.** Files added to
-> `packages/providers/railway/src/` : `data-model.ts` (8 entities of
-> the `runtime` plane), `risk-catalog.{yaml,ts}` (11 risks + fallback),
-> `risk-classifier.ts` (classifyRailwayV4). The v4 classifier fixes
-> the v1 TODO on `upsert-variables` : it now reads `args.replace` and
-> emits a distinct slice (`service-var[*].W` wildcard for the
-> destructive `replace=true` branch) that triggers the
-> `bulk-variables-replace` deny risk. The `railway-agent` meta-tool
-> emits THREE parallel slices (account+deployment+service-var) so the
-> token must accept the full union. See
-> `.vaubaan/research/providers/railway-ssh.md` §1.
+> **v4 risk-based catalog added — 2026-06-15.** Le pivot
+> `chore(v1-drop)` a supprimé le classifier capability-based + le
+> ladder `runtime/account/deployment`. Le code expose désormais
+> `data-model.ts` (8 entités du plane `runtime`),
+> `risk-catalog.{yaml,ts}` (11 risks + fallback) et `risk-classifier.ts`
+> (classifyRailwayV4). Corrections au passage : `upsert-variables` lit
+> `args.replace` et émet un slice distinct (`service-var[*].W` wildcard
+> pour `replace=true`) qui trigge le `bulk-variables-replace` deny risk ;
+> `railway-agent` émet trois parallel slices (account+deployment+service-var)
+> et le token doit accepter l'union. Pour le data-model + risk catalog +
+> tool → slice, lire le handbook v4 dédié :
+> [`docs/handbook/providers/railway-ssh.md`](./providers/railway-ssh.md)
+> §1.
 
 Rewrap du MCP remote officiel `mcp.railway.com`. OAuth Auth app
 (`authorization_code` + PKCE), token 1h refreshé sur le hot-path, 10 MCP tools
@@ -33,13 +35,18 @@ ADR : `docs/decisions/railway-rewrap-remote-mcp.md`.
 ```
 packages/providers/railway/
   src/
-    railway-adapter.ts   # RailwayAdapter — mint (+ refresh), executeCall, classify, toolCapabilities
-    classify.ts          # classifyRailway + railwayToolCapabilities (capability model)
-    execute.ts           # JSON-RPC forward → mcp.railway.com, parse SSE frame
-    tools.ts             # availableTools[] + toUpstreamName (strip railway__)
-    upstream-tools.json  # 10 tools frozen from upstream
-    index.ts             # barrel
-  tests/unit/adapter.test.ts (15 tests)
+    railway-adapter.ts       # RailwayAdapter — mint (+ refresh), executeCall, classifyV4
+    risk-classifier.ts       # classifyRailwayV4 → Slice[] (cf. providers/railway-ssh.md §1)
+    risk-catalog.{yaml,ts}   # 11 risks + fallback
+    data-model.ts            # 8 entités du plane `runtime`
+    execute.ts               # JSON-RPC forward → mcp.railway.com, parse SSE frame
+    tools.ts                 # availableTools[] + toUpstreamName (strip railway__)
+    upstream-tools.json      # 10 tools frozen from upstream
+    index.ts                 # barrel
+  tests/unit/
+    adapter.test.ts            (15 tests)
+    risk-catalog.test.ts       (16 tests)
+    risk-classifier.test.ts    (20 tests)
 ```
 
 ## Setup opérateur (une fois)
@@ -82,10 +89,9 @@ packages/providers/railway/
      `redirect_uri`, `code_verifier`, `resource=https://mcp.railway.com`.
    - upserts `provider_admins` (provider=`railway`) avec `access_token` (1h) +
      `refresh_token` + `expires_at` (bytea, clear-at-rest v0).
-5. UI : `/orgs/<slug>/providers` montre Railway connected ✓ + la liste des
-   projets visibles.
+5. UI : `/orgs/<slug>/providers` montre Railway connected ✓.
 
-## Token refresh (hot-path)
+## Token mint / hot-path (refresh JIT)
 
 À chaque MCP call autorisé qui vise Railway, `RailwayAdapter.mintUpstreamToken` :
 
@@ -103,72 +109,28 @@ packages/providers/railway/
 viennent des env vars. Contrairement à Vercel (token long-lived) Railway
 **doit** refresher car le token est toujours court (1h).
 
-## Tools exposés (10)
+## executeCall — dispatch côté provider
 
-Rewrap intégral de `mcp.railway.com`, préfixe `railway__` (les noms upstream
-sont en kebab-case) :
+`execute.ts` forward chaque `tools/call` à `https://mcp.railway.com/`
+en JSON-RPC, avec strip du préfixe `railway__` côté upstream. Le SSE
+frame de réponse est parsé et le `result` retourné au gateway.
 
-- **Read** : `railway__whoami`, `railway__list-projects`,
-  `railway__list-services`, `railway__list-deployments`, `railway__get-status`,
-  `railway__get-logs`.
-- **Write deployment** (`railway:runtime/deployment:write`) : `railway__redeploy`,
-  `railway__accept-deploy` (commit les changements staged + déclenche un
-  deploy), `railway__railway-agent`.
-- **Write account** (`railway:runtime/account:write`) : `railway__create-project`.
-
-Refresh de la liste : `POST tools/list` à `mcp.railway.com` avec un Bearer
-scopé `resource=https://mcp.railway.com`, recopier chaque tool avec le préfixe
-dans `src/upstream-tools.json`.
-
-## Classification (capability model)
-
-`src/classify.ts` remplace l'ancien modèle « roles + policy DSL »
-(`resolveTarget` supprimé). Une capability est un tuple
-`{ provider, plane, level, action, env? }` (cf.
-`docs/spec/gateway-capability-model.md`). Pour Railway le `provider` est
-`railway`, le `plane` est `runtime` (ladder : `deployment` → `config` →
-`project-settings` → `account` ; le MVP n'expose que les niveaux `deployment`
-et `account`).
-
-`classifyRailway(tool, args, bindings)` mappe un call concret vers la
-capability requise (ou un `{ denied }` structurel) :
-
-| Tools                                                         | Capability                         |
-| ------------------------------------------------------------- | ---------------------------------- |
-| `whoami`, `list-projects`                                     | `railway:runtime/account:read`     |
-| `list-services`, `list-deployments`, `get-status`, `get-logs` | `railway:runtime/deployment:read`  |
-| `redeploy`, `accept-deploy`, `railway-agent`                  | `railway:runtime/deployment:write` |
-| `create-project`                                              | `railway:runtime/account:write`    |
-
-`railwayToolCapabilities(tool)` renvoie la surface env-less d'un tool (pour le
-filtrage statique `tools/list`) : un tableau d'une seule capability, ou `[]`
-pour un tool inconnu.
-
-**ENV depuis la binding.** Même modèle que Supabase : un Railway project = un
-env. Le slug est porté par `binding.environment` (kebab-case, persisté à la
-création ou via la PATCH `/api/v1/bindings/:id`). Pour les tools project-scoped
-(`list-services`, `list-deployments`, `get-status`, `get-logs`, `redeploy`,
-`accept-deploy`), `classifyRailway` résout la binding via `projectId` (arg
-explicite ou rempli par scope-injection en mono-binding) et stamp
-`binding.environment` sur la capability. Les tools account-level (`whoami`,
-`list-projects`, `create-project`, `railway-agent`) ne portent pas de
-`projectId` — leur capability reste env-less.
-
-`railwayToolEnvResolution(tool)` renvoie `'runtime'` pour la liste env-from-binding
-ci-dessus et `'static'` pour le reste, en accord avec le filtre catalog/tools-list.
-
-**Binding check.** La binding Railway a pour `resource_ref` le `projectId`. Le
-call le porte sous `args.projectId` ou `args.project_id`. Sur un tool
-project-scoped sans `projectId` ET sans binding unique →
-`{ denied: "ambiguous railway target: specify projectId." }`. Sur un
-`projectId` non bindé →
-`{ denied: "railway project '<id>' is not bound to this project." }`. Un tool
-inconnu → `{ denied: "unknown railway tool '<tool>'." }`.
+10 tools rewrapped, préfixe `railway__`. La liste + leurs
+classifications v4 vit dans
+[`providers/railway-ssh.md`](./providers/railway-ssh.md) §1.
 
 ## Tests
 
-`npx vitest run packages/providers/railway` — 18 tests, ~10ms (dont 9 pour
-`classify` : reads → `runtime/account|deployment:read` (avec env), redeploy →
-`runtime/deployment:write@<env>`, fallback env-less si `binding.environment=null`,
-`railway-agent` env-less (account-level), create-project → `runtime/account:write`,
-deny unbound, deny ambiguous multi-binding, deny unknown).
+`npx vitest run packages/providers/railway` — 51 tests (~50ms). Voir
+[`providers/railway-ssh.md`](./providers/railway-ssh.md) §1 §Tests pour
+le détail des scénarios catalog/classifier.
+
+## Références
+
+- Handbook v4 (data-model + risk catalog + tool → slice) :
+  [`docs/handbook/providers/railway-ssh.md`](./providers/railway-ssh.md) §1.
+- Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md).
+- ADR : [[railway-rewrap-remote-mcp]].
+- Handbooks voisins : [[github-provider]] (pattern de référence),
+  [[mcp-gateway]] (hot-path dispatch), [[approvals]] (mint flow amont),
+  [[policy-engine]] (`evaluateCall` + scope injection).

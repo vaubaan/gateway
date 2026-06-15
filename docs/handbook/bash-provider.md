@@ -1,7 +1,7 @@
 ---
 title: Bash provider — annotated-script dispatcher over SSH
 status: current
-date: 2026-06-11
+date: 2026-06-15
 tracks:
   - packages/providers/ssh/src/
   - packages/web/src/lib/bash/
@@ -11,24 +11,28 @@ tracks:
   - supabase/migrations/0021_bash_bindings.sql
 ---
 
-# Bash provider — `bash:<ring>:<action>@<host>`
+# Bash provider — adapter setup & invocation
 
-> **⚠️ 2026-06-15 — v4 risk-based notes.** A v4 catalog + classifier
-> are added under `packages/providers/ssh/src/` (the package is named
-> `ssh` but the provider slug remains `bash` for back-compat). The v4
-> path emits slices like `ssh.host[X].command.R|W` and the catalog has
-> 5 risks + 1 fallback. The `isReadAllowed` regex described below stays
-> in use — the v4 classifier wraps it. See [[gateway-risk-model]] §3
-> and `.vaubaan/research/providers/railway-ssh.md` §2.
+> **v4 risk-based catalog added — 2026-06-15.** Le pivot
+> `chore(v1-drop)` a supprimé le classifier capability-based + le
+> tool legacy `ssh__exec` (avec sa regex whitelist `isReadAllowed`).
+> Le code expose désormais `risk-classifier.ts` (classifySshV4 → slices
+> `ssh.host[X].command.R|W`), `risk-catalog.{yaml,ts}` (5 risks +
+> fallback) et `data-model.ts`. Pour le data-model + risk catalog +
+> tool → slice, lire le handbook v4 dédié :
+> [`docs/handbook/providers/railway-ssh.md`](./providers/railway-ssh.md)
+> §2.
 
 Le provider `bash` expose un dispatcher générique : chaque _binding_ porte un
 script bash annoté, et N hôtes SSH s'y rattachent comme _envs_. Le script
-déclare lui-même sa surface de capabilities via des commentaires
-`# @vaubaan:` ; le parser en dérive les tools MCP, le runner les exécute par
-SSH. SSH n'est plus qu'un transport — c'est le binding qui définit l'identité
-applicative.
+déclare lui-même sa surface MCP via des commentaires `# @vaubaan:` ; le
+parser en dérive les tools MCP, le runner les exécute par SSH. SSH n'est
+qu'un transport — c'est le binding qui définit l'identité applicative.
 
-Spec : `docs/spec/gateway-capability-model.md` §6 (classify, plugin layer).
+Le package `@vaubaan/providers-ssh` n'a pas été renommé (continuité storage —
+migration `0020_bash_provider.sql:39-46`) mais le provider slug exposé
+côté MCP reste `bash` (`bash__*`).
+
 ADR template : `docs/decisions/provider-onboarding-handbook-template.md`.
 
 ## Vue d'ensemble
@@ -36,11 +40,13 @@ ADR template : `docs/decisions/provider-onboarding-handbook-template.md`.
 Trois choix d'architecture déterminent la forme actuelle :
 
 1. **Le binding = le script.** Une seule notion `bash_bindings` au lieu d'un
-   triplet `provider/service/binding`. Le slug du binding est l'identité ; la
-   notation est `bash:<ring>:<action>@<host_slug>`.
+   triplet `provider/service/binding`. Le slug du binding est l'identité.
+   Au runtime, `classifySshV4` émet des slices de forme
+   `ssh.host[<host_slug>].command.R|W` (cf. spec
+   [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §3).
 2. **Les hôtes sont des envs.** N rows `ssh_bindings` peuvent pointer vers un
    même `bash_binding_id` via FK (migration `0021`). Chaque `host_slug` devient
-   un env dans la notation — i.e. même contrat, plusieurs cibles.
+   un env dans la slice — i.e. même contrat, plusieurs cibles.
 3. **Annotations dans le code.** Le contrat est porté par le bash lui-même
    (commentaires `# @vaubaan: ring=… action=…`) — pas par une config JSON
    séparée. Une seule source de vérité, versionnée avec le binding.
@@ -52,10 +58,9 @@ par défaut est `host` ; les rings sont libres (déclarés par le script).
 > **Status `/mcp`** : à ce jour le dispatcher `/mcp` n'est pas encore wiré
 > pour `bash__*`. Les invocations passent par l'endpoint UI authentifié
 > session (`/api/v1/bash-bindings/:id/run-tool`). Cf.
-> `packages/web/src/lib/gateway/build.ts:251-254`. La classification SSH
-> _legacy_ (`ssh__exec` + regex whitelist) reste présente sous
-> `packages/providers/ssh/src/classify.ts` mais n'est plus exposée par le
-> gateway.
+> `packages/web/src/lib/gateway/build.ts:251-254` pour le wiring en
+> attente, et [`mcp-gateway.md`](./mcp-gateway.md) §Self-contained
+> adapters pour le pattern cible.
 
 ## Comment ça marche
 
@@ -163,8 +168,8 @@ Deux helpers complémentaires partagent la logique entre routes REST :
 
 ### SSH transport — `packages/providers/ssh/src/`
 
-Le package `@vaubaan/providers-ssh` n'a pas été renommé (continuité storage —
-migration `0020_bash_provider.sql:39-46`). Il fournit le client SSH brut :
+Le package `@vaubaan/providers-ssh` fournit le client SSH brut + le
+risk classifier v4 :
 
 - `sshExec(binding, cmd, timeout_s)` → `ExecResult` (stdout / stderr /
   exit_code / duration_ms / truncated). Implémenté sur `ssh2` (lib npm).
@@ -172,10 +177,11 @@ migration `0020_bash_provider.sql:39-46`). Il fournit le client SSH brut :
   (`execute.ts:18-19`).
 - `humanizeConnError(err)` (`execute.ts:21-33`) reformule
   `ECONNREFUSED`/`Authentication`/`ETIMEDOUT` en messages opérateur lisibles.
-- Le classifier _legacy_ `classifySsh` + le tool `ssh__exec` +
-  `isReadAllowed` (regex whitelist, `policy.ts`) restent pour mémoire mais
-  ne sont plus exposés au gateway. Ils seront retirés quand le wiring `/mcp`
-  bash sera en place.
+- `classifySshV4(tool, args, bindings)` (`risk-classifier.ts`) émet des
+  slices `ssh.host[X].command.R|W` consommées par
+  `@vaubaan/policy-engine`. Voir
+  [`providers/railway-ssh.md`](./providers/railway-ssh.md) §2 pour le
+  data-model + risk catalog + mapping tool → slice.
 
 ### API REST — `/api/v1/bash-bindings/...`
 
@@ -219,14 +225,12 @@ POST /api/v1/bash-bindings/:bindingId/run-tool
 
 L'endpoint **bypass le moteur policy** mais **écrit un audit_log** :
 chaque appel produit une row `decision='allowed'`,
-`tool_name='bash__rest__<fn>'`,
-`capability_matched='bash:<ring>:<action>@<host>'`, et
-`denial_reason='rest-bypass'` (marker grep-able pour identifier les rows
-qui n'ont pas traversé la pipeline `/mcp` policy). Implémenté par
-`writeRestBypassAudit` (route ligne 64). Helper temporaire — drop quand
-le dispatch `/mcp` per-binding lande (TODO marker
-`TODO(bash-mcp-wiring)` ligne 47). Cf. `build.ts:251-254` pour le wiring
-gateway en attente.
+`tool_name='bash__rest__<fn>'`, et `denial_reason='rest-bypass'`
+(marker grep-able pour identifier les rows qui n'ont pas traversé la
+pipeline `/mcp` policy). Implémenté par `writeRestBypassAudit` (route
+ligne 64). Helper temporaire — drop quand le dispatch `/mcp` per-binding
+lande (TODO marker `TODO(bash-mcp-wiring)` ligne 47). Cf.
+`build.ts:251-254` pour le wiring gateway en attente.
 
 ### UI — `bash-bindings/[bindingId]/`
 
@@ -272,13 +276,15 @@ my_restart() {
 }
 ```
 
-Surface capability générée (à attacher 1+ host_slug — disons `prod-1`) :
+Tools MCP générés (attachés à 1+ host_slug — disons `prod-1`) :
 
-```
-bash:process:read@prod-1
-bash:logs:read@prod-1
-bash:process:write@prod-1
-```
+- `bash__<binding_slug>__my_status` → ring `process`, action `R`
+- `bash__<binding_slug>__my_logs` → ring `logs`, action `R`
+- `bash__<binding_slug>__my_restart` → ring `process`, action `W`
+
+Au call, `classifySshV4` émet une slice par invocation (forme
+`ssh.host[prod-1].command.R|W`) et le runtime intersecte avec le risk
+catalog SSH (cf. [`providers/railway-ssh.md`](./providers/railway-ssh.md) §2).
 
 ### Créer un binding + host via API
 
@@ -363,18 +369,20 @@ détecte automatiquement les nouvelles fonctions au prochain PATCH.
 L'`UpstreamAdapter` pour `bash` n'est pas encore implémenté
 (`build.ts:251-254`). Pour le câbler il faudra :
 
-1. Une `classifyBash(tool, args, bindings)` qui inverse la convention
-   d'appel : tool MCP `bash__<binding_slug>__<function_name>` → resolve le
-   binding via slug, lookup le ring du tool, retourner
-   `{ provider: 'bash', plane, level: ring, action, env: host_slug }`.
-2. Un `executeCall(admin, binding, tool, args)` qui réutilise
+1. Plumber `classifySshV4(tool, args, bindings)` (déjà existant dans
+   `packages/providers/ssh/src/risk-classifier.ts`) : tool MCP
+   `bash__<binding_slug>__<function_name>` → resolve le binding via slug,
+   lookup le ring du tool, émettre un `Slice` v4
+   (`ssh.host[X].command.R|W`).
+2. Un `executeCallSelfContained(ctx, tool, args)` qui réutilise
    `materializeArgs` (`lib/bash/args.ts`) + `buildToolInvocation`
    (`lib/bash/exec.ts`) + `execOnHost` (`lib/bash/exec-host.ts`) — toute
    la logique est déjà factorisée pour ce wiring.
-3. Le `loadProviderAdmin` est sans objet pour bash (pas de provider*admins ;
-   l'auth se fait par-host via clé SSH stockée sur `ssh_bindings`). Le
-   commentaire `gateway.ts:90` et `:209` documentent déjà ce pattern
-   \_self-contained*.
+3. Le `loadProviderAdmin` est sans objet pour bash (pas de
+   `provider_admins` ; l'auth se fait par-host via clé SSH stockée sur
+   `ssh_bindings`). Le commentaire `gateway.ts:86-105` documente déjà
+   ce pattern _self-contained_ ; cf. [`mcp-gateway.md`](./mcp-gateway.md)
+   §Self-contained adapters.
 4. Quand le dispatch atterrit, drop `writeRestBypassAudit` côté route REST :
    l'audit row sera produite par le gateway normal path (cf. TODO marker
    `TODO(bash-mcp-wiring)` dans `run-tool/route.ts`).
@@ -391,7 +399,13 @@ Pour ajouter `boolean` ou `enum`, étendre :
 
 ## Références
 
-- Spec : [`docs/spec/gateway-capability-model.md`](../spec/gateway-capability-model.md) §6
-- Migrations : `supabase/migrations/0011_add_vps_ssh.sql` (init), `0012_rename_vps_ssh_to_ssh.sql`, `0020_bash_provider.sql` (pivot), `0021_bash_bindings.sql` (split)
-- ADR template providers : [`docs/decisions/provider-onboarding-handbook-template.md`](../decisions/provider-onboarding-handbook-template.md)
+- Handbook v4 (data-model + risk catalog + tool → slice) :
+  [`docs/handbook/providers/railway-ssh.md`](./providers/railway-ssh.md) §2.
+- Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md)
+  §3 (DSL), §4 (catalog), §7 (plugin).
+- Migrations : `supabase/migrations/0011_add_vps_ssh.sql` (init),
+  `0012_rename_vps_ssh_to_ssh.sql`, `0020_bash_provider.sql` (pivot),
+  `0021_bash_bindings.sql` (split).
+- ADR template providers : [`docs/decisions/provider-onboarding-handbook-template.md`](../decisions/provider-onboarding-handbook-template.md).
 - Tests : `packages/web/src/lib/bash/{parse,exec,args,exec-host}.test.ts`
+  - `packages/providers/ssh/tests/unit/risk-{catalog,classifier}.test.ts`.
