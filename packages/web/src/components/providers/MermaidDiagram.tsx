@@ -6,6 +6,12 @@
  * hydrates and the `mermaid` lib has loaded (dynamic import — keeps the
  * server bundle slim).
  *
+ * Theme : the rest of the app runs in `data-theme="light"` (white surface,
+ * dark text). The previous `theme: 'dark'` produced a black box inside a
+ * white card — visually broken. We switch to `'neutral'` and override the
+ * three colors that matter (background, text, line) with the gray-* tokens
+ * already used by `tokens.css`.
+ *
  * Why dynamic + client-only :
  *  - `mermaid` registers DOM globals during init ; importing it server-side
  *    crashes Next's RSC build with `document is not defined`.
@@ -15,7 +21,11 @@
 
 import { useEffect, useId, useState } from 'react';
 
-export function MermaidDiagram({ source }: { source: string }) {
+export interface MermaidDiagramProps {
+  readonly source: string;
+}
+
+export function MermaidDiagram({ source }: MermaidDiagramProps) {
   const id = useId().replace(/[^A-Za-z0-9_-]/g, '_');
   const [error, setError] = useState<string | null>(null);
   const [svg, setSvg] = useState<string | null>(null);
@@ -28,9 +38,25 @@ export function MermaidDiagram({ source }: { source: string }) {
         const mermaid = mod.default;
         mermaid.initialize({
           startOnLoad: false,
-          theme: 'dark',
+          theme: 'neutral',
           securityLevel: 'strict',
           fontFamily: 'inherit',
+          themeVariables: {
+            // Background of nodes & containers — match the app's raised
+            // surface so the diagram sits inside the card without a contrast
+            // hop.
+            primaryColor: '#f9fafb',
+            primaryTextColor: '#111827',
+            primaryBorderColor: '#d1d5db',
+            lineColor: '#6b7280',
+            secondaryColor: '#e5e7eb',
+            tertiaryColor: '#ffffff',
+            // ER-diagram specific — keep relationships readable on a
+            // light card.
+            background: '#ffffff',
+            mainBkg: '#f9fafb',
+            textColor: '#111827',
+          },
         });
         const result = await mermaid.render(`mmd-${id}`, source);
         if (!cancelled) setSvg(result.svg);
@@ -95,7 +121,7 @@ export function MermaidDiagram({ source }: { source: string }) {
         padding: 'var(--space-3)',
         border: '1px solid var(--border-subtle)',
         borderRadius: 'var(--radius-md)',
-        background: 'var(--bg-subtle, transparent)',
+        background: '#ffffff',
       }}
       // mermaid output is sanitized server-side by mermaid itself (securityLevel:'strict')
       dangerouslySetInnerHTML={{ __html: svg }}
