@@ -21,7 +21,14 @@ const SAMPLE_MODEL: DataModel = {
       slug: 'repo',
       entities: [
         { name: 'repo', parent: null, cardinalities: ['one'], description: 'r' },
-        { name: 'branch', parent: 'repo', cardinalities: ['bounded'], description: 'b' },
+        {
+          name: 'branch',
+          parent: 'repo',
+          cardinalities: ['bounded'],
+          envScopable: true,
+          description: 'b',
+        },
+        { name: 'branch-protection', parent: 'repo', cardinalities: ['one'], description: 'p' },
         { name: 'file', parent: 'branch', cardinalities: ['unbounded'], description: 'f' },
       ],
     },
@@ -41,25 +48,32 @@ describe('data-model-to-mermaid (ER)', () => {
     expect(src.startsWith('erDiagram')).toBe(true);
   });
 
-  it('declares every entity with an attribute block', () => {
+  it('declares every entity with a kebab-case id, raw-name alias, and attribute block', () => {
     const src = dataModelToMermaid(SAMPLE_MODEL);
-    expect(src).toContain(`${entityNodeId('repo', 'repo')} { }`);
-    expect(src).toContain(`${entityNodeId('repo', 'branch')} { }`);
-    expect(src).toContain(`${entityNodeId('repo', 'file')} { }`);
+    expect(src).toContain(`${entityNodeId('repo', 'repo')}["repo"] { }`);
+    expect(src).toContain(`${entityNodeId('repo', 'file')}["file"] { }`);
+    // Kebab-case entity name survives — no UPPERCASE_SNAKE transform anymore.
+    expect(src).toContain(`${entityNodeId('repo', 'branch-protection')}["branch-protection"] { }`);
   });
 
-  it('emits a one-to-many edge for bounded child cardinality', () => {
+  it('renders an env-scopable entity with a ` · env` suffix in its alias', () => {
+    const src = dataModelToMermaid(SAMPLE_MODEL);
+    expect(src).toContain(`${entityNodeId('repo', 'branch')}["branch · env"] { }`);
+  });
+
+  it('emits a one-to-many edge for bounded child cardinality with no "has" label', () => {
     const src = dataModelToMermaid(SAMPLE_MODEL);
     const repo = entityNodeId('repo', 'repo');
     const branch = entityNodeId('repo', 'branch');
-    expect(src).toContain(`${repo} ||--o{ ${branch} : "has"`);
+    expect(src).toContain(`${repo} ||--o{ ${branch} : " "`);
+    expect(src).not.toMatch(/: "has"/);
   });
 
   it('emits a one-to-many edge for unbounded child cardinality', () => {
     const src = dataModelToMermaid(SAMPLE_MODEL);
     const branch = entityNodeId('repo', 'branch');
     const file = entityNodeId('repo', 'file');
-    expect(src).toContain(`${branch} ||--o{ ${file} : "has"`);
+    expect(src).toContain(`${branch} ||--o{ ${file} : " "`);
   });
 
   it('filters to a single plane via planeSlug', () => {

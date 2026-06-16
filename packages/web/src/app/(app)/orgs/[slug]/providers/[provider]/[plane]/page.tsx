@@ -8,8 +8,9 @@
  * For single-plane providers (github, vercel, railway, bash), the parent
  * `[provider]/page.tsx` redirects here with `plane === info.planes[0].slug`.
  * For Supabase (4 planes), users land on a chooser at the parent route and
- * navigate here — they can also switch planes via the sticky tab strip at
- * the top of this page.
+ * navigate here — they can also jump between providers / planes via the
+ * `<ProviderPlaneSwitcher>` dropdowns in the page header (no more "back to
+ * …" links, the sidebar + browser back already cover that intent).
  *
  * Plane scoping :
  *  - data-model diagram : `dataModelToMermaid(model, { planeSlug })`.
@@ -19,19 +20,18 @@
  */
 
 import { notFound, redirect } from 'next/navigation';
-import Link from 'next/link';
 
 import type { RiskEntry } from '@vaubaan/shared';
 
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { getCatalog } from '@/lib/risk-catalog/loader';
-import { Badge, Button, Code, Row } from '@/components/ui';
+import { Badge, Row } from '@/components/ui';
 import {
   PROVIDER_INFO,
+  PROVIDER_SLUGS,
   isProviderSlug,
   risksForPlane,
   toolsForPlane,
-  type ProviderInfo,
 } from '@/components/providers/provider-info';
 import {
   DataModelCard,
@@ -39,6 +39,7 @@ import {
   SetupCard,
   ToolsMappingCard,
 } from '@/components/providers/ProviderInfoSections';
+import { ProviderPlaneSwitcher } from '@/components/providers/ProviderNavDropdowns';
 
 export const dynamic = 'force-dynamic';
 
@@ -118,34 +119,14 @@ export default async function ProviderPlanePage({
             {plane.pitch}
           </p>
         </div>
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'flex-end',
-            gap: 'var(--space-1)',
-          }}
-        >
-          <Link href={`/orgs/${org.slug}/providers`} style={{ color: 'var(--text-muted)' }}>
-            ← all providers
-          </Link>
-          {info.planes.length > 1 && (
-            <Link
-              href={`/orgs/${org.slug}/providers/${info.slug}`}
-              style={{
-                color: 'var(--text-muted)',
-                fontSize: 'var(--text-xs)',
-              }}
-            >
-              ← all {info.label} planes
-            </Link>
-          )}
-        </div>
+        <ProviderPlaneSwitcher
+          currentProviderSlug={info.slug}
+          providers={PROVIDER_SLUGS.map((s) => ({ slug: s, label: PROVIDER_INFO[s].label }))}
+          currentPlaneSlug={plane.slug}
+          planes={info.planes.map((p) => ({ slug: p.slug, label: p.label }))}
+          orgSlug={org.slug}
+        />
       </header>
-
-      {info.planes.length > 1 && (
-        <PlaneTabs info={info} currentPlaneSlug={plane.slug} orgSlug={org.slug} />
-      )}
 
       <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
         <DataModelCard info={info} plane={plane} />
@@ -162,53 +143,5 @@ export default async function ProviderPlanePage({
         />
       </div>
     </main>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// PlaneTabs — sticky tab strip for switching planes within a provider.
-// ─────────────────────────────────────────────────────────────────────────────
-
-function PlaneTabs({
-  info,
-  currentPlaneSlug,
-  orgSlug,
-}: {
-  info: ProviderInfo;
-  currentPlaneSlug: string;
-  orgSlug: string;
-}) {
-  return (
-    <nav
-      style={{
-        display: 'flex',
-        gap: 'var(--space-2)',
-        position: 'sticky',
-        top: 0,
-        zIndex: 5,
-        background: 'var(--surface-base)',
-        padding: 'var(--space-2) 0',
-        marginBottom: 'var(--space-3)',
-        borderBottom: '1px solid var(--border-subtle)',
-        flexWrap: 'wrap',
-      }}
-      aria-label="Plane navigation"
-    >
-      {info.planes.map((p) => {
-        const active = p.slug === currentPlaneSlug;
-        return (
-          <Link
-            key={p.slug}
-            href={`/orgs/${orgSlug}/providers/${info.slug}/${p.slug}`}
-            style={{ textDecoration: 'none' }}
-            aria-current={active ? 'page' : undefined}
-          >
-            <Button size="sm" variant={active ? 'primary' : 'secondary'}>
-              {p.label} <Code>{p.slug}</Code>
-            </Button>
-          </Link>
-        );
-      })}
-    </nav>
   );
 }

@@ -31,10 +31,7 @@ import {
   Tr,
 } from '@/components/ui';
 import { MermaidDiagram } from '@/components/providers/MermaidDiagram';
-import {
-  renderDataModelMermaid,
-  type EntityBindingKind,
-} from '@/components/providers/data-model-to-mermaid';
+import { renderDataModelMermaid } from '@/components/providers/data-model-to-mermaid';
 import type { ProviderInfo, PlaneInfo } from '@/components/providers/provider-info';
 
 const GATE_TONE: Record<RiskGate, BadgeTone> = {
@@ -48,8 +45,26 @@ function toMatchesArray(matches: string | readonly string[]): readonly string[] 
   return typeof matches === 'string' ? [matches] : matches;
 }
 
+/**
+ * Provider-specific phrasing of "what is the env layer here ?". Spec §2.1 +
+ * §4 : env is a *calque par-data*, not an orthogonal axis. Each provider
+ * picks which entity carries the env bit (matches `entity.envScopable` in
+ * the data-model declarations).
+ */
+const ENV_CONVENTION_BY_PROVIDER: Record<string, string> = {
+  github:
+    'For GitHub, env is carried by `branch` — `main` is one env, `feature/*` is another, etc.',
+  vercel:
+    'For Vercel, env is the `env` entity itself (the closed triad `{prod, preview, development}`).',
+  supabase:
+    'For Supabase, env is carried by `project` (one `project_ref` per env — staging and prod are distinct projects).',
+  railway:
+    'For Railway, env is the `environment` entity (Railway-native node like `production` / `staging`), aliased on the Vaubaan side by `binding.environment`.',
+  bash: 'For Bash / SSH, env is carried by `host` (one binding = one host = one env, the host_slug encodes it).',
+};
+
 // ─────────────────────────────────────────────────────────────────────────────
-// Section 2 — data-model diagram
+// Section 2 — data-model diagram (+ plane descriptions + env model explainer)
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function DataModelCard({
@@ -60,10 +75,15 @@ export function DataModelCard({
   /** When provided, render only this plane ; otherwise render all planes. */
   plane?: PlaneInfo;
 }) {
-  const { source, highlights } = renderDataModelMermaid(info.dataModel, {
+  const { source } = renderDataModelMermaid(info.dataModel, {
     planeSlug: plane?.slug,
   });
   const planeCount = plane ? 1 : info.dataModel.planes.length;
+  const planesToShow = plane
+    ? info.dataModel.planes.filter((p) => p.slug === plane.slug)
+    : info.dataModel.planes;
+  const envConvention = ENV_CONVENTION_BY_PROVIDER[info.slug];
+
   return (
     <Card>
       <CardHeader>
@@ -82,130 +102,107 @@ export function DataModelCard({
         >
           Declarative entity graph used by the policy engine — every catalog pattern targets
           entities declared here. Cardinalities sit on the relationship edges (
-          <Code>||--o&#123;</Code> = one-to-many, <Code>||--||</Code> = one-to-one).
+          <Code>||--o&#123;</Code> = one-to-many, <Code>||--||</Code> = one-to-one). Entities marked{' '}
+          <code>· env</code> are env-scopable — they carry the provider's env layer (see below).
         </p>
-        <BindingLegend highlights={highlights} />
         <MermaidDiagram source={source} />
-        <details style={{ marginTop: 'var(--space-3)' }}>
-          <summary
+
+        {/* Env model — first-class section (spec §2.1 + §4). */}
+        <section style={{ marginTop: 'var(--space-4)' }}>
+          <h3 style={{ margin: '0 0 var(--space-2)', fontSize: 'var(--text-base)' }}>Env model</h3>
+          <p
             style={{
-              cursor: 'pointer',
-              fontSize: 'var(--text-sm)',
+              margin: '0 0 var(--space-2)',
               color: 'var(--text-muted)',
+              fontSize: 'var(--text-sm)',
             }}
           >
-            Plane descriptions ({planeCount})
-          </summary>
+            An env (<Code>prod</Code>, <Code>staging</Code>, <Code>preview</Code>, …) is a{' '}
+            <em>calque par-data</em> — not an orthogonal axis of the model. Each entity is either
+            env-scopable (the provider has a native way to carry an env layer on it) or env-free (a
+            singleton resource).
+          </p>
+          {envConvention && (
+            <p
+              style={{
+                margin: '0 0 var(--space-2)',
+                color: 'var(--text-muted)',
+                fontSize: 'var(--text-sm)',
+              }}
+            >
+              {envConvention}
+            </p>
+          )}
+          <p
+            style={{
+              margin: 0,
+              color: 'var(--text-subtle)',
+              fontSize: 'var(--text-xs)',
+            }}
+          >
+            Spec reference : <Code>docs/spec/gateway-risk-model.md §2.1 (cardinalities)</Code> &amp;{' '}
+            <Code>§4 (qualification par binding)</Code>.
+          </p>
+        </section>
+
+        {/* Plane descriptions — always visible (no <details>). */}
+        <section style={{ marginTop: 'var(--space-4)' }}>
+          <h3 style={{ margin: '0 0 var(--space-2)', fontSize: 'var(--text-base)' }}>
+            Plane description{planeCount === 1 ? '' : 's'} ({planeCount})
+          </h3>
           <ul
             style={{
               listStyle: 'none',
               padding: 0,
-              margin: 'var(--space-3) 0 0',
+              margin: 0,
               display: 'grid',
               gap: 'var(--space-3)',
             }}
           >
-            {info.dataModel.planes
-              .filter((p) => !plane || p.slug === plane.slug)
-              .map((p) => (
-                <li key={p.slug}>
-                  <Row gap="var(--space-2)">
-                    <strong>plane:</strong>
-                    <Code>{p.slug}</Code>
-                  </Row>
-                  {p.description && (
-                    <p
-                      style={{
-                        margin: 'var(--space-1) 0 0',
-                        color: 'var(--text-muted)',
-                        fontSize: 'var(--text-sm)',
-                      }}
-                    >
-                      {p.description}
-                    </p>
-                  )}
-                  <ul
+            {planesToShow.map((p) => (
+              <li key={p.slug}>
+                <Row gap="var(--space-2)">
+                  <strong>plane:</strong>
+                  <Code>{p.slug}</Code>
+                </Row>
+                {p.description && (
+                  <p
                     style={{
-                      listStyle: 'none',
-                      padding: 0,
-                      margin: 'var(--space-2) 0 0 var(--space-3)',
-                      fontSize: 'var(--text-sm)',
+                      margin: 'var(--space-1) 0 0',
                       color: 'var(--text-muted)',
+                      fontSize: 'var(--text-sm)',
                     }}
                   >
-                    {p.entities.map((entity) => (
-                      <li key={`${p.slug}-${entity.name}`} style={{ marginBottom: 4 }}>
-                        <Code>{entity.name}</Code>
-                        <span style={{ color: 'var(--text-subtle)' }}> — {entity.description}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </li>
-              ))}
+                    {p.description}
+                  </p>
+                )}
+                <ul
+                  style={{
+                    listStyle: 'none',
+                    padding: 0,
+                    margin: 'var(--space-2) 0 0 var(--space-3)',
+                    fontSize: 'var(--text-sm)',
+                    color: 'var(--text-muted)',
+                  }}
+                >
+                  {p.entities.map((entity) => (
+                    <li key={`${p.slug}-${entity.name}`} style={{ marginBottom: 4 }}>
+                      <Code>{entity.name}</Code>
+                      {entity.envScopable && (
+                        <Badge tone="info" style={{ marginLeft: 6 }}>
+                          env
+                        </Badge>
+                      )}
+                      <span style={{ color: 'var(--text-subtle)' }}> — {entity.description}</span>
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
           </ul>
-        </details>
+        </section>
       </CardBody>
     </Card>
-  );
-}
-
-/**
- * Render a small legend explaining the two binding-anchor highlights
- * (ORG / PROJECT). Shown as an OUT-OF-BAND legend — mermaid's ER `classDef`
- * support is patchy across themes, so the legend is the canonical visual
- * cue (the diagram styling is just a bonus).
- */
-function BindingLegend({ highlights }: { highlights: ReadonlyMap<string, EntityBindingKind> }) {
-  const hasOrg = Array.from(highlights.values()).includes('org');
-  const hasProject = Array.from(highlights.values()).includes('project');
-  if (!hasOrg && !hasProject) return null;
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 'var(--space-3)',
-        marginBottom: 'var(--space-3)',
-        padding: 'var(--space-2) var(--space-3)',
-        background: '#f9fafb',
-        border: '1px solid var(--border-subtle)',
-        borderRadius: 'var(--radius-md)',
-        fontSize: 'var(--text-xs)',
-      }}
-    >
-      {hasOrg && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 14,
-              height: 14,
-              background: '#fef3c7',
-              border: '2px solid #d97706',
-              borderRadius: 3,
-            }}
-          />
-          <strong>Vaubaan ORG binding</strong>
-          <span style={{ color: 'var(--text-muted)' }}>(provider_admins)</span>
-        </span>
-      )}
-      {hasProject && (
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-          <span
-            style={{
-              display: 'inline-block',
-              width: 14,
-              height: 14,
-              background: '#dbeafe',
-              border: '2px solid #2563eb',
-              borderRadius: 3,
-            }}
-          />
-          <strong>Vaubaan PROJECT binding</strong>
-          <span style={{ color: 'var(--text-muted)' }}>(provider_bindings)</span>
-        </span>
-      )}
-    </div>
   );
 }
 
@@ -282,6 +279,24 @@ export function RiskCatalogCard({
                         >
                           {entry.label}
                         </div>
+                        {/* Slice patterns — always visible (no <details>). */}
+                        <ul
+                          style={{
+                            listStyle: 'none',
+                            padding: 0,
+                            margin: '6px 0 0',
+                            fontSize: 'var(--text-xs)',
+                            color: 'var(--text-subtle)',
+                            display: 'grid',
+                            gap: 2,
+                          }}
+                        >
+                          {toMatchesArray(entry.matches).map((m) => (
+                            <li key={m}>
+                              <Code>{m}</Code>
+                            </li>
+                          ))}
+                        </ul>
                         {entry.deprecated && (
                           <div style={{ marginTop: 4 }}>
                             <Badge tone="danger">deprecated</Badge>
@@ -314,33 +329,7 @@ export function RiskCatalogCard({
                         {entry.reason}
                       </Td>
                       <Td style={{ verticalAlign: 'top' }}>
-                        <VectorBadges vector={entry.vector} />
-                        <details style={{ marginTop: 6 }}>
-                          <summary
-                            style={{
-                              cursor: 'pointer',
-                              fontSize: 'var(--text-xs)',
-                              color: 'var(--text-subtle)',
-                            }}
-                          >
-                            slice patterns
-                          </summary>
-                          <ul
-                            style={{
-                              listStyle: 'none',
-                              padding: 0,
-                              margin: '4px 0 0',
-                              fontSize: 'var(--text-xs)',
-                              color: 'var(--text-muted)',
-                            }}
-                          >
-                            {toMatchesArray(entry.matches).map((m) => (
-                              <li key={m} style={{ marginBottom: 2 }}>
-                                <Code>{m}</Code>
-                              </li>
-                            ))}
-                          </ul>
-                        </details>
+                        <VectorGrid vector={entry.vector} />
                       </Td>
                       <Td style={{ verticalAlign: 'top', fontSize: 'var(--text-xs)' }}>
                         {entry.acceptable_in_envs && entry.acceptable_in_envs.length > 0 ? (
@@ -367,8 +356,12 @@ export function RiskCatalogCard({
   );
 }
 
-// 6D vector → mini-badges row.
-function VectorBadges({ vector }: { vector: RiskVector }) {
+/**
+ * 6D vector → compact 6-column grid (one cell per axis). Each cell shows
+ * the axis short-code on a faded line, the value below, color-coded by
+ * severity. Fixed-column grid keeps every risk row comparable at a glance.
+ */
+function VectorGrid({ vector }: { vector: RiskVector }) {
   const axes: Array<{ key: string; value: string; tone: BadgeTone }> = [
     { key: 'rev', value: vector.reversibility, tone: reversibilityTone(vector.reversibility) },
     { key: 'blast', value: vector.blast, tone: blastTone(vector.blast) },
@@ -378,13 +371,40 @@ function VectorBadges({ vector }: { vector: RiskVector }) {
     { key: 'pers', value: vector.persistence, tone: persistenceTone(vector.persistence) },
   ];
   return (
-    <Row gap="4px">
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(6, minmax(60px, 1fr))',
+        gap: 4,
+        minWidth: 380,
+      }}
+    >
       {axes.map((axis) => (
-        <Badge key={axis.key} tone={axis.tone}>
-          <span style={{ opacity: 0.6, fontSize: '0.85em' }}>{axis.key}:</span> {axis.value}
-        </Badge>
+        <div
+          key={axis.key}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 2,
+          }}
+        >
+          <span
+            style={{
+              fontSize: 'var(--text-xs)',
+              color: 'var(--text-subtle)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.04em',
+            }}
+          >
+            {axis.key}
+          </span>
+          <Badge tone={axis.tone} style={{ justifyContent: 'center', textAlign: 'center' }}>
+            {axis.value}
+          </Badge>
+        </div>
       ))}
-    </Row>
+    </div>
   );
 }
 

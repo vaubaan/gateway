@@ -63,6 +63,7 @@ export const railwayDataModel: DataModel = {
           name: 'environment',
           parent: 'project',
           cardinalities: ['one'],
+          envScopable: true,
           description:
             'A Railway-native environment (production, staging…). Distinct ' +
             'from the Vaubaan env slug : Railway names may differ (e.g. ' +

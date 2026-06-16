@@ -39,6 +39,7 @@ export const sshDataModel: DataModel = {
           name: 'host',
           parent: null,
           cardinalities: ['one'],
+          envScopable: true,
           description:
             'A registered SSH endpoint identified by `host_slug`. One host per binding; the slug carries the env semantics (e.g. `staging-vps`, `prod-host`).',
         },

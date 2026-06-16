@@ -34,6 +34,7 @@ export const supabaseDataModel: DataModel = {
           name: 'project',
           parent: null,
           cardinalities: ['one'],
+          envScopable: true,
           description:
             'A Supabase project (project_ref). Root of every plane — one ' +
             'project_ref per env (staging vs prod are distinct projects).',
@@ -142,6 +143,7 @@ export const supabaseDataModel: DataModel = {
           name: 'project',
           parent: null,
           cardinalities: ['one'],
+          envScopable: true,
           description: 'A Supabase project (root of this plane).',
         },
         {
@@ -192,6 +194,7 @@ export const supabaseDataModel: DataModel = {
           name: 'project',
           parent: null,
           cardinalities: ['one'],
+          envScopable: true,
           description: 'A Supabase project (root of this plane).',
         },
         {
@@ -257,6 +260,7 @@ export const supabaseDataModel: DataModel = {
           name: 'project',
           parent: null,
           cardinalities: ['one'],
+          envScopable: true,
           description: 'A Supabase project (root of this plane).',
         },
         {

@@ -44,12 +44,25 @@ export interface DataModelPlane {
  *                         (at least one). `one` = identifier ; `bounded` =
  *                         finite list / glob ; `unbounded` = wildcard.
  *   - `description`     : one-liner shown in tooltips / handbook diagrams.
+ *   - `envScopable`     : when true, this entity is the carrier of the
+ *                         provider's "env" layer (spec §2.1 + §4 : env is a
+ *                         calque par-data, not an orthogonal axis). The exact
+ *                         convention is provider-specific :
+ *                           - github : `branch` carries the env layer ;
+ *                           - vercel : `env` entity ({prod, preview, dev}) ;
+ *                           - supabase : `project` (one project_ref per env) ;
+ *                           - railway : `environment` (Railway-native node) +
+ *                                       `project` (binding-level slug) ;
+ *                           - ssh : `host` (one binding = one host = one env).
+ *                         Rendered as a small `env` tag next to the entity
+ *                         name in the data-model diagram & per-plane lists.
  */
 export interface DataModelEntity {
   readonly name: string;
   readonly parent: string | null;
   readonly cardinalities: readonly DataModelCardinality[];
   readonly description: string;
+  readonly envScopable?: boolean;
 }
 
 export type DataModelCardinality = 'one' | 'bounded' | 'unbounded';

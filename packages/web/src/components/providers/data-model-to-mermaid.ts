@@ -11,13 +11,30 @@
  *   - mixed (`one`+`bounded`) → `||--o{` (the multi case wins — the entity
  *                                          accepts a list at slice time)
  *
+ * Identifier conventions (mermaid v11 ER) :
+ *   - Entity ID  = `<plane>--<name>` in kebab-case (e.g. `repo--branch-protection`).
+ *                   Mermaid's `UNICODE_TEXT` token accepts `[\w\-\*\.]+` plus
+ *                   non-ASCII — kebab-case is parsed as a single identifier.
+ *                   Prefixing by plane keeps IDs unique when multiple planes
+ *                   are concatenated in one diagram (`project` appears in
+ *                   every Supabase plane).
+ *   - Display alias = the raw entity name (e.g. `branch-protection`), set
+ *                     via the mermaid alias syntax `ID["alias text"]`. This
+ *                     is what the user sees on the node — no more shouty
+ *                     UPPERCASE_SNAKE_CASE.
+ *   - Env-scopable entities get a discrete suffix `· env` appended to the
+ *     alias (provider-specific convention — cf. `DataModelEntity.envScopable`
+ *     in @vaubaan/shared).
+ *
+ * Edges :
+ *   - The ER grammar makes `: <label>` mandatory after a `relSpec`. Since
+ *     every edge means the same thing (containment), the label is just
+ *     visual noise. We render it as a single space inside quotes (`" "`)
+ *     so the SVG shows nothing on the edge.
+ *
  * Root entities (parent === null) are rendered as solo nodes : ER requires
  * relationships to declare entities, so we use an attribute-less entity
- * declaration (`ROOT { }`) to make them visible.
- *
- * Used by :
- *  - the provider info page (`/orgs/:slug/providers/:provider[/:plane]`),
- *  - eventually the markdown handbook (kept stable for downstream scripts).
+ * declaration (`ROOT["root"] { }`) to make them visible.
  *
  * Highlights (`opts.highlights`) :
  *  - the first entity (root of the plane) is the **ORG binding** anchor
@@ -27,9 +44,7 @@
  *    (mapped via Vaubaan's `provider_bindings`).
  * The caller can override the heuristic via `opts.highlights`. The function
  * emits both a `class` directive AND returns the resolved tag map so the
- * caller can render an external legend (mermaid's ER classDef styling is
- * sometimes ignored on certain themes — having an out-of-band legend means
- * the user always sees what's highlighted).
+ * caller can use it (e.g. to drive an out-of-band legend if needed).
  */
 
 import type { DataModel, DataModelEntity, DataModelPlane } from '@vaubaan/shared';
@@ -60,14 +75,19 @@ export interface MermaidRenderResult {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Convert an entity name into the ER-uppercase node id mermaid expects.
- * We prefix with the plane slug to guarantee uniqueness across planes
- * (e.g. `project` appears in every Supabase plane) and ensure ASCII-safe
- * identifiers (replace anything outside [A-Za-z0-9_]).
+ * Compute the mermaid ER node ID for an entity. The ID is kebab-case
+ * (`<plane>--<name>`) so the diagram displays human-readable identifiers
+ * without uppercase-snake noise. Plane-prefixed to keep IDs unique across
+ * planes that share an entity name (e.g. `project` in every Supabase plane).
+ *
+ * Mermaid's ER `UNICODE_TEXT` lexer rule allows `[\w\-\*\.]+` plus non-ASCII,
+ * so hyphens / dots / non-ASCII are all valid in an unquoted ID. We still
+ * strip anything outside `[A-Za-z0-9_\-]` defensively in case a future
+ * entity slug grows odd characters.
  */
 export function entityNodeId(planeSlug: string, entityName: string): string {
-  const safe = `${planeSlug}__${entityName}`.replace(/[^A-Za-z0-9_]/g, '_');
-  return safe.toUpperCase();
+  const safe = `${planeSlug}--${entityName}`.replace(/[^A-Za-z0-9_-]/g, '_');
+  return safe;
 }
 
 /** ER cardinality glyph for a child entity. Parent side is always `||` (one). */
@@ -81,14 +101,29 @@ function childCardinalityGlyph(card: DataModelEntity['cardinalities']): string {
   return '||';
 }
 
-/** ER edge — the parent is the LEFT side (`||`), the child is the RIGHT side. */
+/**
+ * ER edge — the parent is the LEFT side (`||`), the child is the RIGHT side.
+ *
+ * Mermaid ER grammar : `entityName relSpec entityName COLON role` — the
+ * `: role` part is MANDATORY. We never want a visible label on these edges
+ * (every relation is containment, the cardinality glyph already says
+ * everything), so we emit a quoted single space — mermaid happily parses
+ * it as an empty-looking role and the SVG renders no text.
+ */
 function edge(parent: string, child: string, childCard: DataModelEntity['cardinalities']): string {
   const childGlyph = childCardinalityGlyph(childCard);
-  // Mermaid ER syntax : LEFT_GLYPH--RIGHT_GLYPH ENTITY : "label"
-  //   ||--o{  =  one-to-many (parent 1, child 0..N)
-  //   ||--||  =  one-to-one
-  // We are emitting parent (one) → child (many|one) so the LEFT is ||.
-  return `    ${parent} ||--${childGlyph} ${child} : "has"`;
+  return `    ${parent} ||--${childGlyph} ${child} : " "`;
+}
+
+/**
+ * Build the alias text shown on the node — the entity's raw name, plus a
+ * discrete `· env` suffix when the entity carries the provider's env layer.
+ * Wrapped in double quotes (mermaid `ENTITY_NAME` token) — accepts every
+ * char except `"%\r\n\v\b\\`.
+ */
+function entityAlias(entity: DataModelEntity): string {
+  const suffix = entity.envScopable ? ' · env' : '';
+  return `"${entity.name}${suffix}"`;
 }
 
 /** Sanitise an entity for ER block — strip risky characters. */
@@ -97,7 +132,8 @@ function safeEntityLine(planeSlug: string, entity: DataModelEntity): string {
   // ER entities accept an attribute block ; we keep it empty (the data-model
   // doesn't carry typed columns). The block ensures the entity is rendered
   // even when it has no relationships (root entities of a 1-entity plane).
-  return `    ${id} { }`;
+  // The `[alias]` between id and block sets the user-visible display name.
+  return `    ${id}[${entityAlias(entity)}] { }`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -109,7 +145,7 @@ function safeEntityLine(planeSlug: string, entity: DataModelEntity): string {
  *   - ORG       : the root entity (`parent === null`).
  *   - PROJECT   : a direct child of the root whose name matches
  *                 PROJECT_LIKE_ENTITY_NAMES (`repo` / `project` / `service`).
- * Returns a map keyed by ER node id (uppercase, plane-prefixed).
+ * Returns a map keyed by ER node id.
  */
 function defaultHighlights(plane: DataModelPlane): Map<string, EntityBindingKind> {
   const out = new Map<string, EntityBindingKind>();
@@ -178,8 +214,9 @@ export function renderDataModelMermaid(
   erLines.push(...planeLines);
 
   // ClassDef-style highlights — mermaid v11 ER supports `classDef` + `class
-  // ID classname`. If a future version drops this, the legend in the UI is
-  // still shown as a fallback.
+  // ID classname`. The binding-anchor highlights still ship as the only
+  // visual cue (the out-of-band BindingLegend was removed — the diagram
+  // colors are enough).
   if (highlights.size > 0) {
     erLines.push(
       '    classDef orgBinding fill:#fef3c7,stroke:#d97706,stroke-width:3px,color:#92400e',

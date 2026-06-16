@@ -25,10 +25,12 @@ import { getSupabaseServer } from '@/lib/supabase/server';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code, Row } from '@/components/ui';
 import {
   PROVIDER_INFO,
+  PROVIDER_SLUGS,
   isProviderSlug,
   type PlaneInfo,
   type ProviderInfo,
 } from '@/components/providers/provider-info';
+import { ProviderSwitcher } from '@/components/providers/ProviderNavDropdowns';
 
 export const dynamic = 'force-dynamic';
 
@@ -86,9 +88,11 @@ export default async function ProviderInfoLandingPage({
             {info.pitch}
           </p>
         </div>
-        <Link href={`/orgs/${org.slug}/providers`} style={{ color: 'var(--text-muted)' }}>
-          ← all providers
-        </Link>
+        <ProviderSwitcher
+          currentProviderSlug={info.slug}
+          providers={PROVIDER_SLUGS.map((s) => ({ slug: s, label: PROVIDER_INFO[s].label }))}
+          orgSlug={org.slug}
+        />
       </header>
 
       <div style={{ display: 'grid', gap: 'var(--space-4)' }}>

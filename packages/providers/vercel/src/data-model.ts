@@ -85,6 +85,7 @@ export const dataModel: DataModel = {
           name: 'env',
           parent: 'project',
           cardinalities: ['bounded'],
+          envScopable: true,
           description:
             'The triad of Vercel environments `{prod, preview, development}`. Closed set — ' +
             'Vercel does not accept custom env slugs at this layer.',
