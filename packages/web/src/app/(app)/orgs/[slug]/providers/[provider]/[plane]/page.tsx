@@ -45,12 +45,26 @@ export const dynamic = 'force-dynamic';
 
 const GITHUB_BLOB_BASE = 'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/';
 
-/** Sort key for risks : deny > confirm > allow > (fallbacks last by id). */
-const GATE_ORDER: Record<'allow' | 'confirm' | 'deny', number> = {
-  deny: 0,
-  confirm: 1,
-  allow: 2,
+/** Severity ordering derived from the 6D vector — irreversible /
+ *  posture-shift / secret-write rank highest. Used to sort the catalog
+ *  display so the heaviest risks bubble to the top. */
+const PERSISTENCE_ORDER: Record<RiskEntry['vector']['persistence'], number> = {
+  posture: 0,
+  session: 1,
+  stateless: 2,
 };
+const REVERSIBILITY_ORDER: Record<RiskEntry['vector']['reversibility'], number> = {
+  irreversible: 0,
+  costly: 1,
+  reversible: 2,
+};
+
+function severityKey(entry: RiskEntry): number {
+  return (
+    PERSISTENCE_ORDER[entry.vector.persistence] * 10 +
+    REVERSIBILITY_ORDER[entry.vector.reversibility]
+  );
+}
 
 export default async function ProviderPlanePage({
   params,
@@ -79,10 +93,10 @@ export default async function ProviderPlanePage({
   const allEntries: RiskEntry[] = catalog ? catalog.entries.map((e) => e.entry) : [];
   const planeEntries = risksForPlane(allEntries, info.dataModel, plane.slug);
 
-  // Sort entries by gate severity (deny first), then by id.
+  // Sort entries by vector severity (heaviest first), then by id.
   const sortedEntries = [...planeEntries].sort((a, b) => {
-    const gateDiff = GATE_ORDER[a.default_gate] - GATE_ORDER[b.default_gate];
-    if (gateDiff !== 0) return gateDiff;
+    const sevDiff = severityKey(a) - severityKey(b);
+    if (sevDiff !== 0) return sevDiff;
     return a.id.localeCompare(b.id);
   });
 

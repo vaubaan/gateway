@@ -3,38 +3,23 @@
 /**
  * Token-mint form — risk-checklist UI.
  *
- * Spec : docs/spec/gateway-risk-model.md §9 + annexe A.
+ * Post drop-confirm : single flat checklist per binding, each row carries
+ * `{ acceptable, inherited }`. A row is mintable iff both are true ;
+ * disabled otherwise with a tooltip explaining why.
+ *
+ * Spec : docs/spec/gateway-risk-model.md §9.
+ * ADR  : docs/decisions/unified-gates-drop-confirm.md.
  *
  * Responsibilities :
  *  - render one card per (provider × env) binding, with the applicable
- *    risks below as a checklist. Per spec §4.4, a risk whose
- *    `acceptable_in_envs` doesn't contain the binding env is hidden ;
- *    risks `default_gate === 'deny'` are shown greyed-out + disabled
- *    (cf. ADR D6).
+ *    risks below as a checklist;
  *  - call POST /api/v1/projects/:projectId/mint/preview on every change
- *    (300 ms debounce) so the manager sees the live effective gate
- *    (which can be tighter than `default_gate` if a project policy
- *    override exists). The footer surfaces the count of allow / confirm
- *    / deny + a primary action button.
+ *    (300 ms debounce) so the manager sees which rows are acceptable /
+ *    inherited;
  *  - on click, call POST /api/v1/projects/:projectId/mint and surface :
  *      201 → modal with the plaintext api_key (one-time);
- *      202 → message + link to /approvals;
- *      403 → list of denied risks;
+ *      403 → list of not-acceptable / not-inherited risks;
  *      5xx → message + the response detail when available.
- *
- * The form orchestrates state ; the row-level UI is decomposed across
- * sibling files in this folder :
- *   - mint-types.ts          : shared interfaces + tone tables
- *   - vector-row.tsx         : 6D vector badges
- *   - risk-row.tsx           : one checkbox + collapsible row
- *   - binding-risks-section.tsx : risks for one binding
- *   - provider-risks-card.tsx   : Card grouping bindings of one provider
- *   - preview-footer.tsx     : sticky live counts + action button
- *   - mint-result-dialog.tsx : post-mint modal
- *   - qualify-helpers.ts     : adapt local entry shape to policy-engine
- *
- * Style is intentionally inline + `var(--…)` to match the project's
- * existing pages (no shadcn-style component layer is in use here).
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -55,9 +40,7 @@ import { MintResultDialog } from './mint-result-dialog';
 import { PreviewFooter } from './preview-footer';
 import { ProviderRisksCard } from './provider-risks-card';
 
-// Re-export public shapes consumed by page.tsx — preserves the existing
-// `import { MintForm, type MintFormBinding, type MintFormCatalog } from './mint-form'`
-// contract.
+// Re-export public shapes consumed by page.tsx.
 export type { MintFormBinding, MintFormCatalog, MintFormCatalogEntry } from './mint-types';
 
 /** TTL presets — matches the spec's "short / session / long" buckets. */
@@ -83,8 +66,6 @@ function groupBindings(bindings: readonly MintFormBinding[]): Map<Provider, Mint
   return groups;
 }
 
-// ─── Component ─────────────────────────────────────────────────────────────
-
 export function MintForm({
   orgSlug,
   projectSlug,
@@ -102,9 +83,6 @@ export function MintForm({
   const [tokenName, setTokenName] = useState('');
   const [ttl, setTtl] = useState<TtlValue>('3600');
   const [singleUse, setSingleUse] = useState(false);
-  /** Set of qualified RiskId the manager wants to ACCEPT. We track the
-   *  qualified form (e.g. `supabase[staging].bulk-row-write`) so the same
-   *  base risk can be selected for one env and not another. */
   const [accepted, setAccepted] = useState<Set<RiskId>>(new Set());
   const [previewState, setPreviewState] = useState<'idle' | 'computing' | 'ready' | 'error'>(
     'idle',
@@ -126,10 +104,6 @@ export function MintForm({
     [bindings],
   );
 
-  // Build the wire `accepted_risks` array. Each item is the QUALIFIED
-  // RiskId — the server unqualifies internally to look up the catalog
-  // entry. We dedupe to handle the rare case of two bindings sharing
-  // the same env.
   const wireAcceptedRisks = useMemo(() => Array.from(new Set(acceptedArray)), [acceptedArray]);
 
   // ── Debounced preview fetch ─────────────────────────────────────────────
@@ -177,8 +151,7 @@ export function MintForm({
     return () => window.clearTimeout(handle);
   }, [projectId, orgSlug, bindingsBody, wireAcceptedRisks]);
 
-  // Effective gate by QUALIFIED id (from latest preview) → drives row badges +
-  // the "blocked by policy" UX for entries the project policy denies.
+  // Index preview rows by qualified id for the per-row RiskRow lookup.
   const effectiveGates = useMemo(() => {
     const map = new Map<RiskId, PreviewRiskRow>();
     if (preview) {
@@ -187,7 +160,6 @@ export function MintForm({
     return map;
   }, [preview]);
 
-  // ── Toggle handler ──────────────────────────────────────────────────────
   const toggleRisk = useCallback((qualifiedId: RiskId) => {
     setAccepted((prev) => {
       const next = new Set(prev);
@@ -198,7 +170,6 @@ export function MintForm({
     setMintResult(null);
   }, []);
 
-  // ── Mint action ─────────────────────────────────────────────────────────
   const onMint = useCallback(() => {
     setMintResult(null);
     startMint(async () => {
@@ -226,19 +197,12 @@ export function MintForm({
           });
           return;
         }
-        if (res.status === 202) {
-          setMintResult({
-            kind: 'pending',
-            approvalId: String(json.approval_id),
-            channel: String(json.channel ?? ''),
-            expiresAt: String(json.expires_at ?? ''),
-          });
-          return;
-        }
         if (res.status === 403) {
           setMintResult({
             kind: 'denied',
             risks: (json.risks as PreviewRiskRow[]) ?? [],
+            notAcceptable: (json.not_acceptable as RiskId[]) ?? [],
+            notInherited: (json.not_inherited as RiskId[]) ?? [],
           });
           return;
         }
@@ -258,16 +222,11 @@ export function MintForm({
     });
   }, [projectId, orgSlug, bindingsBody, wireAcceptedRisks, ttl, singleUse, tokenName]);
 
-  // ── Render ──────────────────────────────────────────────────────────────
-  const allowCount = preview?.risks.filter((r) => r.effective_gate === 'allow').length ?? 0;
-  const confirmCount = preview?.needs_approval.length ?? 0;
-  const denyCount = preview?.denied.length ?? 0;
+  const acceptableCount = preview?.risks.filter((r) => r.acceptable && r.inherited).length ?? 0;
+  const notAcceptableCount = preview?.not_acceptable.length ?? 0;
+  const notInheritedCount = preview?.not_inherited.length ?? 0;
   const canMint =
-    accepted.size > 0 &&
-    previewState === 'ready' &&
-    preview !== null &&
-    denyCount === 0 &&
-    !isMinting;
+    accepted.size > 0 && previewState === 'ready' && preview !== null && preview.ok && !isMinting;
 
   return (
     <div style={{ display: 'grid', gap: 'var(--space-4)', paddingBottom: 'var(--space-8)' }}>
@@ -397,9 +356,9 @@ export function MintForm({
       })}
 
       <PreviewFooter
-        allowCount={allowCount}
-        confirmCount={confirmCount}
-        denyCount={denyCount}
+        acceptableCount={acceptableCount}
+        notAcceptableCount={notAcceptableCount}
+        notInheritedCount={notInheritedCount}
         previewState={previewState}
         previewError={previewError}
         acceptedCount={accepted.size}
@@ -413,12 +372,8 @@ export function MintForm({
           result={mintResult}
           onClose={() => {
             setMintResult(null);
-            if (mintResult.kind === 'minted' || mintResult.kind === 'pending') {
-              router.push(
-                mintResult.kind === 'pending'
-                  ? `/orgs/${orgSlug}/projects/${projectSlug}/approvals`
-                  : `/orgs/${orgSlug}/projects/${projectSlug}/tokens`,
-              );
+            if (mintResult.kind === 'minted') {
+              router.push(`/orgs/${orgSlug}/projects/${projectSlug}/tokens`);
             }
           }}
         />

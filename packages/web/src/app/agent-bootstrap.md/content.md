@@ -1,21 +1,25 @@
 # Vaubaan Agent Bootstrap
 
 > Self-contained reference for an LLM (or any MCP client) that has been
-> handed a `vbn_live_*` access token and needs to do useful work through the
+> handed a `vbn_live_*` token and needs to do useful work through the
 > Vaubaan gateway.
 
 ---
 
 ## 1. What you have
 
-A **`vbn_live_*` access token**. It is:
+A **`vbn_live_*` token**. It carries:
 
-- Scoped to **one Project** in a Vaubaan organization.
-- Bound to a set of **roles** attached at mint time.
-- Honest about its TTL — once `expires_at` passes, calls return `401`.
+- `accepted_risks: RiskId[]` — the set of risks your token-issuer agreed
+  you may touch. Any call that touches a risk **not** in this set is
+  refused at runtime with a structured error you can act on.
+- `context.escalation_channel` (optional) — when present, an HTTP
+  endpoint your parent owns to elevate your scope at runtime when you
+  hit a missing risk. Absent on root tokens (humans).
+- `expires_at` — once past, the gateway returns `401`.
 
-Treat it like a password: never log it, never commit it. The bootstrap client
-that spawned you keeps it in memory only.
+Treat it like a password : never log it, never commit it. The bootstrap
+client that spawned you keeps it in memory only.
 
 ## 2. Endpoint and auth
 
@@ -26,13 +30,13 @@ that spawned you keeps it in memory only.
 | Auth         | `Authorization: Bearer <vbn_live_…>` |
 | Content-Type | `application/json`                   |
 
-The gateway is **stateless per Bearer**: every request authenticates
-independently, there is no `Mcp-Session-Id` to manage, and an `initialize`
-handshake is not required before `tools/call`.
+The gateway is **stateless per Bearer** : every request authenticates
+independently, there is no `Mcp-Session-Id` to manage, and an
+`initialize` handshake is not required before `tools/call`.
 
-## 3. Minimal probes
+## 3. Discovery
 
-### 3.1 Who am I (what can I do) ?
+### 3.1 `tools/list` (your callable surface)
 
 ```bash
 curl -sS https://vaubaan.com/mcp \
@@ -41,149 +45,51 @@ curl -sS https://vaubaan.com/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
 ```
 
-The response only includes the tools your token's **granted capabilities**
-could potentially call (static filter, env-less). If a tool you expect is
-missing, the cause is one of:
+The response is statically filtered to tools whose **declared risks
+intersect** with your token's `accepted_risks` (an env-less, plane-level
+pre-filter — sharper denials happen at the call-site). A missing tool
+usually means your token doesn't carry a relevant risk ; see §6.
 
-- your token's capabilities don't cover that tool — **re-mint** a token that
-  carries the required capability (e.g. `vercel:config:write@prod` to expose
-  `vercel__upsert_env_var`). `POST /api/v1/mgmt/tokens` with
-  `{ "projectSlug": "<slug>", "capabilities": ["<cap>"] }` using your
-  management key ; the mint may return 202 + `approval_id` when the
-  capability requires a human gate (default seed gates all writes through
-  `confirm`).
-- the corresponding provider isn't connected on the organization yet — tell
-  the operator, you cannot self-serve.
-
-When you _do_ try to call a tool that isn't listed, the gateway responds
-with `Vaubaan policy denied: this access token is not granted '<cap>'. …`
-which names the exact capability slug you need to add at re-mint.
-
-### 3.2 Catalog discovery (what exists vs what you can call)
-
-`tools/list` is filtered — it hides every tool you can't call. To see the
-**full surface** with the required capability per tool (and, for your
-token, a `callable` flag + the `missingCapabilities` you'd need to mint to
-unlock each), hit the catalog endpoint :
+### 3.2 `GET /api/v1/catalog` (the full risk catalog of a provider)
 
 ```bash
-curl -sS https://vaubaan.com/api/v1/catalog \
+curl -sS "https://vaubaan.com/api/v1/catalog?provider=github" \
   -H "Authorization: Bearer $VBN"
 ```
 
-Response shape :
+Returns the array of `RiskEntry` objects for that provider :
+`{ id, label, reason, matches, vector, acceptable_in_envs? }`. Use this
+to understand which risks the gateway tracks and what each one means.
 
-```json
-{
-  "auth": {
-    "kind": "live",
-    "organization": { "id": "...", "slug": "...", "name": "..." },
-    "project": { "id": "...", "slug": "..." },
-    "granted": ["vercel:runtime/deployment:read@prod", ...],
-    "bindings": {
-      "vercel":   [{ "resourceRef": "prj_xxx", "environment": null,     "displayName": "Web" }],
-      "supabase": [{ "resourceRef": "abcd1234", "environment": "prod",  "displayName": "Prod DB" }],
-      "github":   [{ "resourceRef": "acme/app", "environment": null,    "displayName": null }]
-    }
-  },
-  "providers": [
-    {
-      "slug": "vercel",
-      "displayName": "Vercel",
-      "tools": [
-        {
-          "name": "vercel__list_deployments",
-          "description": "...",
-          "inputSchema": {...},
-          "requiredCapabilities": ["vercel:deployment:read"],
-          "callable": true
-        },
-        {
-          "name": "vercel__upsert_env_var",
-          "description": "...",
-          "inputSchema": {...},
-          "requiredCapabilities": ["vercel:config:write"],
-          "callable": false,
-          "missingCapabilities": ["vercel:config:write"]
-        }
-      ]
-    },
-    ...
-  ],
-  "mintHint": {
-    "endpoint": "/api/v1/mgmt/tokens",
-    "method": "POST",
-    "bodyShape": "{ \"projectSlug\": \"<slug>\", \"capabilities\": [\"<cap>\", ...] }",
-    "note": "Requires a Bearer vbn_mgmt_* key. The mint may return 202 + approval_id …"
-  }
-}
-```
+## 4. Call shape
 
-`auth.bindings` lists, per provider, the upstream resource refs the project
-is bound to — the `resourceRef` is what you'll pass at `tools/call` time
-(`projectId` for Vercel, `project_ref` for Supabase, `owner/repo` for
-GitHub…). The gateway already validates the ref server-side ; the catalog
-is the single source of truth that lets you discover it without guessing.
-
-The endpoint also accepts `Bearer vbn_mgmt_*` (org-wide catalog, no
-`callable` info — a mgmt key can mint anything modulo policy gates ; and
-no `auth.bindings` — a mgmt key isn't scoped to one project). The
-`callable` predicate matches `tools/list` filtering exactly — same
-`isToolPotentiallyCallable` from the policy engine — so what you see here
-is the ground truth for what `tools/list` will return.
-
-**Env-resolution caveat.** A tool's required capability either stays
-env-less (e.g. `vercel__list_deployments` → `vercel:deployment:read`) or
-gets an `@<env>` resolved from args/binding at call time (e.g.
-`vercel__upsert_env_var` resolves env from `args.target`). Because of
-that, a grant like `vercel:deployment:read@prod` does NOT satisfy the
-env-less `vercel:deployment:read` requirement of `list_deployments` — and
-the catalog now correctly reports `callable: false` for that mismatch
-(pre-fix it lied with `callable: true` and the call 403'd). If you see
-`callable: false` with the surface cap you "thought you had", check
-whether your grant carries an `@env` qualifier the tool doesn't need.
-
-### 3.3 Initialize (optional, for clients that need it)
-
-```bash
-curl -sS https://vaubaan.com/mcp \
-  -H "Authorization: Bearer $VBN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"my-agent","version":"0.1.0"}}}'
-```
-
-## 4. The call shape
-
-Every action is a `tools/call`:
-
-```json
+```jsonc
 {
   "jsonrpc": "2.0",
   "id": 42,
   "method": "tools/call",
   "params": {
-    "name": "<provider>__<verb>_<noun>",
+    "name": "github__create_or_update_file",
     "arguments": {
-      /* …per inputSchema in tools/list… */
-    }
-  }
+      "owner": "sbw-vaubaan",
+      "repo": "gateway",
+      "branch": "feature/auth-bug-789",
+      "path": "src/auth.ts",
+      "content": "…",
+      "message": "fix(auth): expire cookies on logout",
+    },
+  },
 }
 ```
 
-Successful response (`result.content[0].text` is JSON-encoded payload):
+On success the gateway forwards to the provider's upstream MCP server
+and returns its response verbatim. The response shape matches that
+upstream — Vaubaan does not rewrite it.
 
-```json
-{
-  "jsonrpc": "2.0",
-  "id": 42,
-  "result": {
-    "content": [{ "type": "text", "text": "{...JSON payload...}" }],
-    "isError": false
-  }
-}
-```
+## 5. Error model — `risk-not-accepted`
 
-Denied response (JSON-RPC error):
+When a call touches a risk that is **not** in your
+`accepted_risks`, you get a JSON-RPC error :
 
 ```json
 {
@@ -191,213 +97,122 @@ Denied response (JSON-RPC error):
   "id": 42,
   "error": {
     "code": -32603,
-    "message": "Vaubaan policy denied: <reason>"
+    "message": "Vaubaan policy denied: risk-not-accepted",
+    "data": {
+      "missing_risks": ["github.merge-protected"],
+      "executed_slices": ["github.repo[sbw-vaubaan/gateway].branch[main].file[src/auth.ts].W"],
+      "hint": "Request escalation via your token's context.escalation_channel"
+    }
   }
 }
 ```
 
-## 5. Tool catalog
+Read it like this :
 
-Tool names follow `<provider>__<verb>_<noun>` (double underscore between
-provider and verb). The exhaustive list lives in `tools/list` — below is the
-high-level map.
+- `missing_risks` — the `RiskId[]` you'd need accepted to make this
+  call succeed.
+- `executed_slices` — the slice(s) the plugin emitted, useful for
+  debugging or surfacing to the operator.
+- `hint` — a one-liner pointing to the next action (escalate, or stop).
 
-### 5.1 GitHub (`github__…`)
+## 6. Escalation flow (`context.escalation_channel`)
 
-| Tool                                                                 | Purpose                                                                                   |
-| -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `github__list_branches` / `_commits` / `_pull_requests` / `_issues`  | Read lists.                                                                               |
-| `github__get_file_contents` / `_pull_request` / `_issue` / `_commit` | Read singles.                                                                             |
-| `github__search_code` / `_search_issues`                             | Search.                                                                                   |
-| `github__create_branch`                                              | Create a branch (constrained to `feature/*`, `fix/*`, `claude/*` for `github:developer`). |
-| `github__create_or_update_file` / `_push_files`                      | Write files on an allowed branch.                                                         |
-| `github__create_pull_request`                                        | Open a PR (must target `main` for `github:developer`).                                    |
-| `github__add_issue_comment`                                          | Comment on issues/PRs.                                                                    |
-| `github__mint_install_token`                                         | **Mint a short-lived `ghs_*` install token** scoped to the Project repos — see §6.1.      |
-| `github__merge_pull_request` / `_delete_file`                        | Dangerous — not granted by builtin roles (default-deny). Requires a custom role to allow. |
+If you got a `risk-not-accepted` and your token carries
+`context.escalation_channel`, you can ask your parent to re-mint you
+with a wider scope. The channel is an HTTP endpoint your parent owns —
+Vaubaan does not proxy it.
 
-### 5.2 Vercel (`vercel__…`)
-
-Rewrap of `mcp.vercel.com` (18 upstream tools) plus 4 custom REST-backed
-tools layered on top. Common ones :
-
-- `vercel__list_projects`, `vercel__get_project`, `vercel__list_deployments`
-- `vercel__get_deployment`, `vercel__get_deployment_build_logs`,
-  `vercel__get_runtime_logs`
-- `vercel__deploy_to_vercel` (write, env-targeted via `target`)
-- Custom (REST-backed, not in upstream MCP) :
-  `vercel__list_env_vars` (`config:read`),
-  `vercel__upsert_env_var` (`config:write@<target>`),
-  `vercel__delete_env_var` (`config:write@<target>`),
-  `vercel__update_project_settings` (`project-settings:write`)
-
-The gateway auto-fills `teamId` from the connected admin and `projectId`
-from the project's Vercel binding — you usually don't need to pass them.
-
-### 5.3 Supabase (`supabase__…`)
-
-Synthesis over the Management API (`api.supabase.com/v1`). Common ones :
-
-- `supabase__list_projects`, `supabase__get_project`
-- `supabase__list_tables`, `supabase__get_table`
-- `supabase__list_migrations`, `supabase__list_advisors`
-- `supabase__execute_sql` (SELECT-style for read roles)
-
-`project_ref` is auto-filled from the project's Supabase binding.
-
-### 5.4 Railway (`railway__…`)
-
-Rewrap of `mcp.railway.com` — 10 tools. Tool names use kebab-case after the
-prefix (`railway__list-projects`, not `railway__list_projects`).
-
-| Tool                                                    | Purpose                                                                                                                                                   |
-| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `railway__whoami`                                       | Identity check.                                                                                                                                           |
-| `railway__list-projects` / `-services` / `-deployments` | Read.                                                                                                                                                     |
-| `railway__get-status` / `-logs`                         | Read deploy + runtime data.                                                                                                                               |
-| `railway__create-project`                               | Provision a new project.                                                                                                                                  |
-| `railway__redeploy`                                     | Re-deploy a service.                                                                                                                                      |
-| `railway__railway-agent`                                | Hand a multi-step infra task to Railway's own agent.                                                                                                      |
-| `railway__accept-deploy`                                | **DESTRUCTIVE** — granted only by `railway:deployer` (commits staged env patches + deploys). Composable with `railway:member` (multi-role unions allows). |
-
-`projectId` is auto-filled from the project's Railway binding when there is
-exactly one.
-
-## 6. Recipes
-
-### 6.1 Bootstrap a coding session (bootstrap + agent split)
-
-The Vaubaan model is: **no git credentials on the session host**. Both `clone`
-and `push` ask the gateway for a short-lived (1h) GitHub App install token.
-
-#### Bootstrap — at session boot (role `github:provisioner`)
-
-```bash
-RES=$(curl -sS https://vaubaan.com/mcp \
-  -H "Authorization: Bearer $VBN_PROVISIONER" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
-       "params":{"name":"github__mint_install_token",
-                 "arguments":{"purpose":"clone","repoFullName":"acme/website"}}}')
-
-TOKEN=$(echo "$RES" | jq -r '.result.content[0].text | fromjson | .token')
-git clone "https://x-access-token:${TOKEN}@github.com/acme/website.git"
+```jsonc
+// On your token at mint :
+"context": {
+  "escalation_channel": {
+    "transport": "http",
+    "endpoint_url": "https://parent.example.com/escalations",
+    "auth_token": "ek_…"   // bearer YOU send when posting
+  }
+}
 ```
 
-`purpose: "clone"` → the minted token only has `contents: read`. After clone
-discard it; the next push uses a fresh token.
-
-#### Agent — when ready to push (role `github:developer`)
+POST to that endpoint :
 
 ```bash
-RES=$(curl -sS https://vaubaan.com/mcp \
-  -H "Authorization: Bearer $VBN_DEV" \
+curl -sS -X POST "$ESC_URL" \
+  -H "Authorization: Bearer $ESC_AUTH" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
-       "params":{"name":"github__mint_install_token",
-                 "arguments":{"purpose":"push","repoFullName":"acme/website"}}}')
-
-TOKEN=$(echo "$RES" | jq -r '.result.content[0].text | fromjson | .token')
-git -c credential.helper= -c "http.https://github.com/.extraheader=AUTHORIZATION: bearer $TOKEN" \
-    push origin claude/my-feature
+  -d '{
+    "child_token_id": "tok_abc123",
+    "risks_needed": ["github.merge-protected"],
+    "justification": "Re-merge feature/auth-bug-789 after upstream review.",
+    "executed_slice": "github.repo[sbw-vaubaan/gateway].branch[main].file[src/auth.ts].W"
+  }'
 ```
 
-`purpose: "push"` → the minted token gets `contents: write` +
-`pull_requests: write` + `metadata: read` + `workflows: write`. Enough for
-`git push` (even when the diff touches `.github/workflows/*.yml`) and to open
-a PR via `github__create_pull_request` afterwards.
+The parent decides. On **cede**, the parent re-mints a new token for
+you (via a side-channel — out of Vaubaan's scope ; this is the parent's
+responsibility). When you receive that new token, **retry the call**
+with the new Bearer.
 
-#### Open the PR through MCP (no extra credential needed)
+**Roots have no parent.** If your token has no `escalation_channel`,
+escalation isn't possible from your side — surface the error to the
+human operator and stop.
 
-```bash
-curl -sS https://vaubaan.com/mcp \
-  -H "Authorization: Bearer $VBN_DEV" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":2,"method":"tools/call",
-       "params":{"name":"github__create_pull_request",
-                 "arguments":{"owner":"acme","repo":"website",
-                              "title":"Feature: …",
-                              "head":"claude/my-feature",
-                              "base":"main"}}}'
-```
+## 7. Mint a child for delegation
 
-### 6.2 Check the latest deploy of a Vercel project
+You can mint child tokens of your own (e.g. to delegate a narrower
+scope to a sub-agent) :
 
 ```bash
-curl -sS https://vaubaan.com/mcp \
+curl -sS -X POST https://vaubaan.com/api/v1/tokens/mint \
   -H "Authorization: Bearer $VBN" \
   -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
-       "params":{"name":"vercel__list_deployments","arguments":{}}}'
+  -d '{
+    "name": "feature-x-helper",
+    "scope": "project",
+    "projectSlug": "gateway",
+    "accepted_risks": ["github.feature-branch-write", "github.create-pr"],
+    "bindings": [
+      { "provider": "github", "resource_ref": "sbw-vaubaan/gateway", "env": "feature" }
+    ],
+    "context": {
+      "escalation_channel": {
+        "transport": "http",
+        "endpoint_url": "https://your-agent.example.com/escalations",
+        "auth_token": "ek_…"
+      }
+    },
+    "ttlHours": 1,
+    "singleUse": false
+  }'
 ```
 
-`projectId` and `teamId` are auto-injected from the binding ; no need to
-pass them.
+Responses :
 
-### 6.3 Trigger a Railway redeploy
+- `201` → the child token. The `api_key` is shown **once** — copy it
+  immediately. `accepted_risks` is echoed back for confirmation.
+- `403` → at least one risk in `accepted_risks` is either not in
+  **your** `accepted_risks` (subset rule) or not acceptable in the
+  binding env (catalog `acceptable_in_envs`). Body includes
+  `not_acceptable` and `not_inherited` arrays.
+- `400` → schema / TTL / max-depth (=5) violation.
 
-```bash
-curl -sS https://vaubaan.com/mcp \
-  -H "Authorization: Bearer $VBN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
-       "params":{"name":"railway__redeploy",
-                 "arguments":{"environmentId":"<env-uuid>","serviceId":"<svc-uuid>"}}}'
-```
+## 8. Audit and forensics
 
-`projectId` is auto-injected. `environmentId` and `serviceId` come from a
-previous `railway__list-services` call.
+Every `tools/call` writes to `audit_log` with the token snapshot, the
+executed slices, the risks touched, and the **delegation_chain** — the
+ancestry of your token back to the root. Operators can reconstruct
+"who minted whom under what conditions" from this chain. You do not
+read this log yourself ; it's the trace your operator inspects when
+something goes wrong.
 
-### 6.4 Run a read-only SQL query on a Supabase project
+## 9. Conventions
 
-```bash
-curl -sS https://vaubaan.com/mcp \
-  -H "Authorization: Bearer $VBN" \
-  -H "Content-Type: application/json" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call",
-       "params":{"name":"supabase__execute_sql",
-                 "arguments":{"query":"select count(*) from orders;"}}}'
-```
-
-`project_ref` is auto-injected. Roles like `supabase:reader` only allow
-SELECT-style queries — DDL will be denied with a clear policy message.
-
-## 7. Error model — read the messages
-
-The gateway is intentionally verbose on failures. Common ones :
-
-| Error message starts with                            | What it means                                                                                     | What to do                                                                                         |
-| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
-| `Vaubaan policy denied: …`                           | Your roles don't allow this tool or the constraints failed (e.g. wrong branch name, missing arg). | Read the rest of the message — it names the matched rule. Adjust args or ask for a different role. |
-| `tool '…' does not match any supported provider …`   | Typo in the tool name.                                                                            | Hit `tools/list` to re-check the exact name.                                                       |
-| `provider 'X' is not connected for organization '…'` | The operator hasn't connected provider X to the org yet.                                          | Tell the operator. You cannot self-serve.                                                          |
-| `access token has expired.`                          | Your `vbn_live_*` is past its TTL.                                                                | Ask for a fresh one. The bootstrap client usually rotates automatically.                           |
-| `Upstream call failed: …`                            | Provider API rejected the call (network, scope, repo not found…).                                 | Read the upstream payload echoed in the message ; usually it tells you exactly what's wrong.       |
-
-## 8. Conventions and gotchas
-
-- **Resource refs** : `<owner>/<repo>` for github, `prj_…` for vercel,
-  20-char project ref for supabase, UUID for railway. These are stored as
-  bindings on the Project.
-- **Scope auto-injection** : when the Project has exactly one binding for a
-  given provider, the gateway strips the resource identifier from the
-  `tools/list` schema **and** auto-fills it at call time. Caller-provided
-  values win, so an admin can still override.
-- **Audit** : every call you make produces an `audit_log` row
-  (org, project, access_token, tool, args hash, decision, role matched,
-  latency). Operators can replay it.
-- **Idempotency** : MCP `tools/call` is **not** automatically idempotent.
-  If your retry pushes a commit twice, you get two commits. Use
-  `github__list_commits` to check state before retrying writes.
-- **`accept-deploy` is DESTRUCTIVE** : on Railway, the upstream itself flags
-  it. Builtin roles deny it by default. Do not call it without an explicit
-  human confirmation.
-
-## 9. Asking for more
-
-- Need a tool that isn't here ? Ask the operator. They can extend roles or
-  bind new resources, but the **set of provider tools is fixed** by what the
-  upstreams expose.
-- Need to know which Project / Organization your token is bound to ? It's
-  encoded in your access_token's context — the gateway returns it implicitly
-  via the bindings it auto-fills. The operator UI shows it explicitly.
+- **Resource refs.** When bindings carry `resource_ref` :
+  - GitHub : `owner/repo` (e.g. `sbw-vaubaan/gateway`).
+  - Vercel : `prj_<id>`.
+  - Supabase : project ref (the short id, not the slug).
+  - Railway : project id.
+  - Bash / SSH : the host slug.
+- **Single-use tokens.** When `singleUse: true`, the first successful
+  `tools/call` revokes the token. Use for short, scripted operations.
+- **Depth cap = 5.** Your token has a `depth` ; child tokens you mint
+  carry `depth + 1`. Mint refuses past depth 5.

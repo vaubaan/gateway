@@ -2,11 +2,13 @@
  * Shared types + small constants for the token-mint form. Extracted from
  * `mint-form.tsx` so the sub-components don't drag the orchestrator file as
  * a dependency.
+ *
+ * Post drop-confirm : risks are a flat single-checklist with two flags per
+ * row — `acceptable` (catalog env restriction) and `inherited` (parent
+ * subset). A row is mintable iff both are true.
  */
 
-import type { Provider, RiskGate, RiskId, RiskVector } from '@vaubaan/shared';
-
-import type { BadgeTone } from '@/components/ui';
+import type { Provider, RiskId, RiskVector } from '@vaubaan/shared';
 
 // ─── Public shapes (consumed by page.tsx) ───────────────────────────────────
 
@@ -24,7 +26,6 @@ export interface MintFormCatalogEntry {
   label: string;
   reason: string;
   vector: RiskVector;
-  default_gate: RiskGate;
   acceptable_in_envs: readonly string[] | null;
   deprecated: boolean;
 }
@@ -35,9 +36,8 @@ export interface MintFormCatalog {
   entries: MintFormCatalogEntry[];
 }
 
-// ─── Internal types ─────────────────────────────────────────────────────────
+// ─── Preview wire shape (mirrors `PreviewRiskRow` from lib/mint/risk-preview.ts) ───
 
-/** Server-side preview row (mirrors `PreviewRiskRow` on the wire). */
 export interface PreviewRiskRow {
   id: RiskId;
   base_id: RiskId;
@@ -46,29 +46,17 @@ export interface PreviewRiskRow {
   label: string;
   reason: string;
   vector: RiskVector | null;
-  effective_gate: RiskGate;
-  origin: 'catalog-default' | 'project-policy-env-scoped' | 'project-policy-global';
+  acceptable: boolean;
+  inherited: boolean;
   blocked_reason?: string;
 }
 
 export interface PreviewResponse {
   risks: PreviewRiskRow[];
-  all_allowed: boolean;
-  needs_approval: RiskId[];
-  denied: RiskId[];
+  not_acceptable: RiskId[];
+  not_inherited: RiskId[];
+  ok: boolean;
 }
-
-// ─── Tone tables ────────────────────────────────────────────────────────────
-
-export const GATE_TONE: Record<RiskGate, BadgeTone> = {
-  allow: 'success',
-  confirm: 'warning',
-  deny: 'danger',
-};
-
-/** Sort risks within a binding card : allow > confirm > deny so the deniable
- *  rows sink to the bottom. */
-export const GATE_ORDER: Record<RiskGate, number> = { allow: 0, confirm: 1, deny: 2 };
 
 // ─── Mint result discriminated union ────────────────────────────────────────
 
@@ -79,16 +67,11 @@ export interface MintSuccessResult {
   expiresAt: string;
 }
 
-export interface MintPendingResult {
-  kind: 'pending';
-  approvalId: string;
-  channel: string;
-  expiresAt: string;
-}
-
 export interface MintDeniedResult {
   kind: 'denied';
   risks: PreviewRiskRow[];
+  notAcceptable: RiskId[];
+  notInherited: RiskId[];
 }
 
 export interface MintErrorResult {
@@ -96,4 +79,4 @@ export interface MintErrorResult {
   message: string;
 }
 
-export type MintResult = MintSuccessResult | MintPendingResult | MintDeniedResult | MintErrorResult;
+export type MintResult = MintSuccessResult | MintDeniedResult | MintErrorResult;

@@ -11,7 +11,7 @@
  * hydration.
  */
 
-import type { McpToolDeclaration, RiskEntry, RiskGate, RiskVector } from '@vaubaan/shared';
+import type { McpToolDeclaration, RiskEntry, RiskVector } from '@vaubaan/shared';
 
 import {
   Badge,
@@ -33,12 +33,6 @@ import {
 import { MermaidDiagram } from '@/components/providers/MermaidDiagram';
 import { renderDataModelMermaid } from '@/components/providers/data-model-to-mermaid';
 import type { ProviderInfo, PlaneInfo } from '@/components/providers/provider-info';
-
-const GATE_TONE: Record<RiskGate, BadgeTone> = {
-  allow: 'success',
-  confirm: 'warning',
-  deny: 'danger',
-};
 
 /** Narrow `string | readonly string[]` to a concrete string[] for rendering. */
 function toMatchesArray(matches: string | readonly string[]): readonly string[] {
@@ -247,17 +241,16 @@ export function RiskCatalogCard({
                 fontSize: 'var(--text-sm)',
               }}
             >
-              Each entry maps a slice pattern (= a path on the data model + an action) to a default
-              gate (<Badge tone="success">allow</Badge> <Badge tone="warning">confirm</Badge>{' '}
-              <Badge tone="danger">deny</Badge>) and a 6D vector (reversibility · blast · data ·
-              cost · visibility · persistence).
+              Each entry maps a slice pattern (= a path on the data model + an action) to a 6D
+              vector (reversibility · blast · data · cost · visibility · persistence). Operators opt
+              into the risks they accept at mint time ; touching an unaccepted risk yields a runtime
+              403.
             </p>
             <ScrollableTable>
               <Table style={{ minWidth: 880 }}>
                 <Thead>
                   <Tr>
                     <Th>Risk</Th>
-                    <Th>Gate</Th>
                     <Th>Why</Th>
                     <Th>Vector</Th>
                     <Th>Env scope</Th>
@@ -313,9 +306,6 @@ export function RiskCatalogCard({
                             )}
                           </div>
                         )}
-                      </Td>
-                      <Td style={{ verticalAlign: 'top' }}>
-                        <Badge tone={GATE_TONE[entry.default_gate]}>{entry.default_gate}</Badge>
                       </Td>
                       <Td
                         style={{
@@ -455,7 +445,9 @@ export function ToolsMappingCard({
   tools: ReadonlyArray<McpToolDeclaration>;
   entries: readonly RiskEntry[];
 }) {
-  const writeRisks = entries.filter((e) => e.default_gate !== 'allow').length;
+  const postureRisks = entries.filter(
+    (e) => e.vector.persistence === 'posture' || e.vector.data === 'secret',
+  ).length;
   return (
     <Card className="vbn-card-flush">
       <CardHeader>
@@ -472,7 +464,7 @@ export function ToolsMappingCard({
         >
           Tools the gateway exposes for this provider. At call time, the classifier emits one or
           more slices ; the catalog intersects those slices with the {entries.length} entries above
-          ({writeRisks} require confirmation or are denied by default). For <Code>{info.slug}</Code>
+          ({postureRisks} carry a posture-shift or secret-data marker). For <Code>{info.slug}</Code>
           , the R/W distinction lives at{' '}
           {info.slug === 'bash' ? (
             <>

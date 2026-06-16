@@ -1,43 +1,46 @@
 'use client';
 
 /**
- * One row in the risk-checklist : checkbox + qualified id + effective gate
- * badge + collapsible details (reason + 6D vector + blocked reason).
+ * One row in the risk-checklist : checkbox + qualified id + status badge
+ * + collapsible details (reason + 6D vector + blocked reason).
  *
- * Pure presentational : state about whether the risk is currently accepted
- * is owned by the parent (the form root). The row only owns the local
- * `expanded` flag.
+ * Post drop-confirm : the checkbox is disabled iff `!acceptable || !inherited`.
+ * The tooltip explains which side blocks.
  */
 
 import { useState } from 'react';
-import type { RiskGate, RiskId } from '@vaubaan/shared';
+import type { RiskId } from '@vaubaan/shared';
 
 import { Badge, Code } from '@/components/ui';
 
-import { GATE_TONE, type MintFormCatalogEntry } from './mint-types';
+import { type MintFormCatalogEntry } from './mint-types';
 import { VectorRow } from './vector-row';
 
 export function RiskRow({
   entry,
   qualifiedId,
   isAccepted,
-  effective,
+  acceptable,
+  inherited,
   blocked,
-  lockedByPolicy,
   onToggle,
 }: {
   entry: MintFormCatalogEntry;
   qualifiedId: RiskId;
   isAccepted: boolean;
-  effective: RiskGate;
+  acceptable: boolean;
+  inherited: boolean;
   blocked: string | null;
-  lockedByPolicy: boolean;
   onToggle: (qualifiedId: RiskId) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const disabled = lockedByPolicy;
+  const disabled = !acceptable || !inherited;
   const opacity = disabled ? 0.45 : 1;
-  const tooltip = disabled ? (blocked ?? 'Blocked by project policy') : entry.reason;
+  const tooltip = !acceptable
+    ? (blocked ?? `Not acceptable in this env (catalog restriction)`)
+    : !inherited
+      ? (blocked ?? `Your token doesn't carry this risk — request escalation`)
+      : entry.reason;
 
   return (
     <li
@@ -69,12 +72,17 @@ export function RiskRow({
             }}
           >
             <Code>{qualifiedId}</Code>
-            <Badge tone={GATE_TONE[effective]}>{effective}</Badge>
-            {lockedByPolicy && (
+            {!acceptable && (
               <span title={tooltip}>
-                <Badge tone="neutral">blocked by policy</Badge>
+                <Badge tone="danger">not acceptable</Badge>
               </span>
             )}
+            {acceptable && !inherited && (
+              <span title={tooltip}>
+                <Badge tone="warning">not inherited</Badge>
+              </span>
+            )}
+            {acceptable && inherited && isAccepted && <Badge tone="success">accepted</Badge>}
             <button
               type="button"
               onClick={() => setExpanded((v) => !v)}

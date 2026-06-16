@@ -60,12 +60,7 @@ export default async function ProjectPage({
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!proj) notFound();
 
-  const [
-    { data: bindings },
-    { data: bashBindings },
-    { data: tokens },
-    { count: pendingApprovals },
-  ] = await Promise.all([
+  const [{ data: bindings }, { data: bashBindings }, { data: tokens }] = await Promise.all([
     supabase
       .from('provider_bindings')
       .select('id, provider, resource_ref, display_name, environment')
@@ -85,11 +80,6 @@ export default async function ProjectPage({
       .eq('project_id', proj.id)
       .order('created_at', { ascending: false })
       .returns<TokenRow[]>(),
-    supabase
-      .from('approval_requests')
-      .select('id', { count: 'exact', head: true })
-      .eq('project_id', proj.id)
-      .eq('status', 'pending'),
   ]);
 
   return (
@@ -114,23 +104,6 @@ export default async function ProjectPage({
       </header>
 
       <div style={{ display: 'grid', gap: 'var(--space-4)' }}>
-        <Card>
-          <CardHeader>
-            <CardTitle>Approvals</CardTitle>
-            <Link href={`/orgs/${org.slug}/projects/${proj.slug}/approvals`}>
-              <Button size="sm" variant={pendingApprovals ? 'primary' : 'secondary'}>
-                Approvals ({pendingApprovals ?? 0} pending)
-              </Button>
-            </Link>
-          </CardHeader>
-          <CardBody>
-            <p style={{ color: 'var(--text-muted)', margin: 0, fontSize: 'var(--text-sm)' }}>
-              Mint requests touching risks gated <Code>confirm</Code> by the project&apos;s risk
-              policy are held until a human approves via Telegram, email, or here.
-            </p>
-          </CardBody>
-        </Card>
-
         <Card>
           <CardHeader>
             <CardTitle>Provider bindings</CardTitle>

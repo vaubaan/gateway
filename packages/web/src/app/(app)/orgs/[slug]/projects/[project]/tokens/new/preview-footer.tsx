@@ -1,17 +1,16 @@
 'use client';
 
 /**
- * Sticky bottom footer : live allow / confirm / deny counts + primary
- * action button. The button label depends on whether a confirm-gated risk
- * was selected ("Request approval" vs "Mint token").
+ * Sticky bottom footer : live counts of acceptable / not-acceptable /
+ * not-inherited rows + primary mint action.
  */
 
 import { Badge, Button } from '@/components/ui';
 
 export function PreviewFooter({
-  allowCount,
-  confirmCount,
-  denyCount,
+  acceptableCount,
+  notAcceptableCount,
+  notInheritedCount,
   previewState,
   previewError,
   acceptedCount,
@@ -19,9 +18,9 @@ export function PreviewFooter({
   isMinting,
   onMint,
 }: {
-  allowCount: number;
-  confirmCount: number;
-  denyCount: number;
+  acceptableCount: number;
+  notAcceptableCount: number;
+  notInheritedCount: number;
   previewState: 'idle' | 'computing' | 'ready' | 'error';
   previewError: string | null;
   acceptedCount: number;
@@ -29,11 +28,7 @@ export function PreviewFooter({
   isMinting: boolean;
   onMint: () => void;
 }) {
-  const buttonLabel = isMinting
-    ? 'Minting…'
-    : confirmCount > 0
-      ? `Request approval (${confirmCount} confirm)`
-      : 'Mint token';
+  const buttonLabel = isMinting ? 'Minting…' : 'Mint token';
 
   return (
     <div
@@ -73,14 +68,18 @@ export function PreviewFooter({
         {previewState === 'ready' && (
           <>
             <span>
-              <Badge tone="success">{allowCount} allow</Badge>
+              <Badge tone="success">{acceptableCount} ok</Badge>
             </span>
-            <span>
-              <Badge tone="warning">{confirmCount} confirm</Badge>
-            </span>
-            <span>
-              <Badge tone="danger">{denyCount} deny</Badge>
-            </span>
+            {notAcceptableCount > 0 && (
+              <span>
+                <Badge tone="danger">{notAcceptableCount} not acceptable</Badge>
+              </span>
+            )}
+            {notInheritedCount > 0 && (
+              <span>
+                <Badge tone="warning">{notInheritedCount} not inherited</Badge>
+              </span>
+            )}
           </>
         )}
       </div>

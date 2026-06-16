@@ -1,14 +1,11 @@
 'use client';
 
 /**
- * Post-mint modal. One of 4 shapes :
- *   - 'minted'  → the plaintext api_key (one-time, shown until user closes) ;
- *   - 'pending' → an approval was opened, link to the approvals page ;
- *   - 'denied'  → list of risks rejected by catalog / policy ;
- *   - 'error'   → arbitrary error message.
+ * Post-mint modal. One of 3 shapes :
+ *   - 'minted' → the plaintext api_key (one-time, shown until user closes);
+ *   - 'denied' → list of risks rejected (not acceptable / not inherited);
+ *   - 'error'  → arbitrary error message.
  */
-
-import Link from 'next/link';
 
 import { Button, Code } from '@/components/ui';
 
@@ -69,42 +66,29 @@ export function MintResultDialog({ result, onClose }: { result: MintResult; onCl
             </Button>
           </>
         )}
-        {result.kind === 'pending' && (
-          <>
-            <h2 style={{ margin: 0 }}>Approval requested</h2>
-            <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              Some risks need a human approval. A notification was dispatched via{' '}
-              <Code>{result.channel}</Code>. Once approved, the api_key will be available to whoever
-              polls the approval. Expires : <Code>{result.expiresAt}</Code>.
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <Link href="approvals">
-                <Button variant="primary" onClick={onClose}>
-                  See pending approvals
-                </Button>
-              </Link>
-              <Button variant="secondary" onClick={onClose}>
-                Close
-              </Button>
-            </div>
-          </>
-        )}
         {result.kind === 'denied' && (
           <>
-            <h2 style={{ margin: 0 }}>Mint denied</h2>
+            <h2 style={{ margin: 0 }}>Mint refused</h2>
             <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)' }}>
-              At least one accepted risk is denied by the project policy or the catalog. Untick the
-              rows below and retry, or ask the project owner to relax the policy.
+              At least one risk is either not acceptable for the binding env (catalog restriction)
+              or not inherited from your parent token. Untick the rows below and retry — or request
+              escalation via your token&apos;s escalation_channel.
             </p>
             <ul style={{ paddingLeft: 18, fontSize: 13 }}>
-              {result.risks.map((r) => (
-                <li key={r.id}>
-                  <Code>{r.id}</Code>{' '}
-                  <span style={{ color: 'var(--text-muted)' }}>
-                    — {r.blocked_reason ?? 'denied by policy'}
-                  </span>
-                </li>
-              ))}
+              {result.risks
+                .filter((r) => !r.acceptable || !r.inherited)
+                .map((r) => (
+                  <li key={r.id}>
+                    <Code>{r.id}</Code>{' '}
+                    <span style={{ color: 'var(--text-muted)' }}>
+                      —{' '}
+                      {r.blocked_reason ??
+                        (!r.acceptable
+                          ? 'not acceptable in this env'
+                          : 'not inherited from parent')}
+                    </span>
+                  </li>
+                ))}
             </ul>
             <Button variant="primary" onClick={onClose}>
               Close

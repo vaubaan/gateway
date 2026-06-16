@@ -169,8 +169,9 @@ export default async function TokenMintPage({
             }}
           >
             Pick the risks you accept on this session. The token can do anything that maps to an
-            accepted risk ; everything else is denied at runtime. The preview below shows the gate
-            effective on your project (allow / confirm / deny by policy).
+            accepted risk ; everything else is denied at runtime. Greyed-out rows are either not
+            acceptable in the binding env (catalog restriction) or not inherited from your token
+            (you don&apos;t carry that risk).
           </p>
         </div>
         <Link href={`/orgs/${org.slug}/projects/${proj.slug}/tokens`}>
@@ -216,7 +217,6 @@ function entryToClient(entry: RiskEntry): MintFormCatalog['entries'][number] {
     label: entry.label,
     reason: entry.reason,
     vector: entry.vector,
-    default_gate: entry.default_gate,
     acceptable_in_envs: entry.acceptable_in_envs ?? null,
     deprecated: entry.deprecated ?? false,
   };

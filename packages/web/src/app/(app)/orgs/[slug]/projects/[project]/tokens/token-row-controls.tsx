@@ -10,10 +10,38 @@ interface Props {
   status: 'active' | 'revoked';
 }
 
+const NAME_REGEX = /^[a-z0-9](-?[a-z0-9])*$/;
+
 export function TokenRowControls({ tokenId, tokenName, orgSlug, status }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+
+  async function rename() {
+    const next = window.prompt(
+      `Rename "${tokenName}" — kebab-case, e.g. "feature-auth-123" :`,
+      tokenName,
+    );
+    if (next === null) return;
+    const trimmed = next.trim();
+    if (trimmed.length === 0 || trimmed === tokenName) return;
+    if (!NAME_REGEX.test(trimmed)) {
+      setError(`Invalid name : must match ${NAME_REGEX.source}`);
+      return;
+    }
+    setError(null);
+    const res = await fetch(`/api/v1/tokens/${tokenId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orgSlug, name: trimmed }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      setError(body.error ?? `HTTP ${res.status}`);
+      return;
+    }
+    startTransition(() => router.refresh());
+  }
 
   async function revoke() {
     if (!window.confirm(`Revoke "${tokenName}" ? The api_key will stop working immediately.`)) {
@@ -56,6 +84,24 @@ export function TokenRowControls({ tokenId, tokenName, orgSlug, status }: Props)
 
   return (
     <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+      <button
+        type="button"
+        onClick={rename}
+        disabled={pending}
+        style={{
+          padding: '4px 10px',
+          background: 'transparent',
+          color: 'var(--text-primary, #444)',
+          border: '1px solid var(--border-subtle)',
+          borderRadius: 4,
+          fontSize: 12,
+          cursor: pending ? 'wait' : 'pointer',
+          opacity: pending ? 0.5 : 1,
+        }}
+        title="Rename the token (kebab-case)."
+      >
+        Rename
+      </button>
       {status === 'active' && (
         <button
           type="button"

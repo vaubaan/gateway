@@ -30,7 +30,6 @@ export function asRiskEntry(entry: MintFormCatalogEntry): RiskEntry {
     reason: entry.reason,
     matches: '',
     vector: entry.vector,
-    default_gate: entry.default_gate,
     acceptable_in_envs: entry.acceptable_in_envs ?? undefined,
   };
 }
