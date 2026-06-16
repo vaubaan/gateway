@@ -1,12 +1,13 @@
 ---
 title: MCP gateway
 status: current
-date: 2026-06-15
+date: 2026-06-16
 tracks:
   - packages/mcp-gateway/src/
   - packages/web/src/app/mcp/route.ts
   - packages/web/src/app/.well-known/oauth-protected-resource/route.ts
   - packages/web/src/lib/gateway/build.ts
+  - supabase/migrations/0034_audit_log_delegation_chain.sql
 ---
 
 # MCP gateway — `@vaubaan/mcp-gateway` + `/mcp` route
@@ -89,7 +90,10 @@ POST /mcp
   │
   ├─[McpGateway.authenticate(authHeader)]                  (gateway.ts:128)
   │     ├─ parse `Bearer vbn_live_<prefix>_<secret>`
-  │     ├─ reject vbn_mgmt_* (admin credential, wrong audience)
+  │     ├─ (post-unified-tokens) tous les Bearers sont `vbn_live_*` ;
+  │     │   les rows org-scoped sont rejetées par loadAccessTokenContext
+  │     │   (tk.project_id IS NULL → null ctx → AuthError) — l'endpoint
+  │     │   `/mcp` n'accepte que les tokens project-scoped.
   │     ├─ cache GET vaubaan:ctx:<prefix>
   │     │     ├─ hit  → re-vérifie argon2id verify(hash, raw) + status
   │     │     │        + assertNotExpired + assertNotConsumed → ctx
@@ -223,6 +227,11 @@ Colonnes v4 :
 - `decision: 'allowed' | 'denied'`, `denial_reason`
 - `upstream_latency_ms` (ms entre admin loaded et executeCall return)
 - `client_ip`, `client_user_agent`
+- `delegation_chain: DelegationChainEntry[] | null` — snapshot de la
+  chaîne de délégation du token au moment du call (migration 0034 +
+  ADR unified-tokens §D2). Immutable au call : un parent renommé /
+  révoqué après coup ne mute pas ce snapshot. Permet le filtrage
+  forensique `WHERE delegation_chain @> '[{"id":"<root_id>"}]'`.
 
 > Les trois champs `slices_executed`, `risks_touched`,
 > `token_accepted_risks_snapshot` sont les **nouveautés v4** par rapport
@@ -259,7 +268,7 @@ row passent par le même chemin que les non-self-contained
 
 ## Long-poll mint (`?wait=25`)
 
-L'endpoint `GET /api/v1/mgmt/tokens/pending/:approval_id?wait=25` bloque
+L'endpoint `GET /api/v1/tokens/pending/:approval_id?wait=25` bloque
 côté serveur jusqu'à décision OU 25 s (spec v4 §11). Permet à l'agent
 d'attendre une approval channel (manual / telegram / email) sans
 busy-loop. Détails :
@@ -270,15 +279,20 @@ busy-loop. Détails :
   `pg_notify` / Postgres LISTEN à terme si les métriques le justifient).
 - Le SDK agent encapsule le re-poll jusqu'au wall-clock global (par
   défaut 15 min = TTL de l'approval).
-- Réponses : 200 (decided, retourne `api_key` une fois si approved) ;
-  202 (still pending au timeout) ; 404 (approval inconnue) ; 410 (expired).
+- Réponses : 201 (decided, retourne `token` + `api_key` une fois si
+  approved) ; 202 (still pending au timeout) ; 404 (approval inconnue)
+  ; 410 (denied / expired / cancelled / consumed).
 
 L'implémentation vit côté Next.js
-(`packages/web/src/app/api/v1/mgmt/tokens/pending/[id]/route.ts`),
+(`packages/web/src/app/api/v1/tokens/pending/[id]/route.ts`),
 **hors du `McpGateway` core** — c'est un endpoint d'approval, pas de
 dispatch MCP. Documenté pour cohérence : c'est le contre-poids amont au
 `tools/call` strict-fail (au lieu de tenter un step-up runtime, l'agent
 re-mint via cet endpoint).
+
+> Le path historique était `/api/v1/mgmt/tokens/pending/:id` ; déplacé
+> à la racine `/api/v1/tokens/` par la refacto unified-tokens
+> (ADR [[unified-tokens-delegation-chain-and-escalation-channel]]).
 
 Cf. [`approvals.md`](./approvals.md) §Long-poll pour le détail des
 transitions d'état.

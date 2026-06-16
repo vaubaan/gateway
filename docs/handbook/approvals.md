@@ -1,79 +1,128 @@
 ---
 title: Approvals — mint flow, channels, long-poll
 status: current
-date: 2026-06-15
+date: 2026-06-16
 tracks:
   - packages/web/src/lib/approvals/
   - packages/web/src/lib/mint/
-  - packages/web/src/app/api/v1/tokens/route.ts
-  - packages/web/src/app/api/v1/mgmt/tokens/route.ts
-  - packages/web/src/app/api/v1/mgmt/tokens/preview/route.ts
-  - packages/web/src/app/api/v1/mgmt/tokens/pending/[id]/route.ts
+  - packages/web/src/lib/auth/require-token.ts
+  - packages/web/src/app/api/v1/tokens/mint/route.ts
+  - packages/web/src/app/api/v1/tokens/preview/route.ts
+  - packages/web/src/app/api/v1/tokens/pending/[id]/route.ts
   - packages/web/src/app/api/v1/mgmt/approvals/[id]/route.ts
-  - packages/web/src/app/api/v1/projects/[projectId]/mint/route.ts
-  - packages/web/src/app/api/v1/projects/[projectId]/mint/preview/route.ts
   - packages/web/src/app/api/v1/projects/[projectId]/approvals/[approvalId]/decide/route.ts
   - packages/web/src/app/api/v1/integrations/telegram/webhook/route.ts
   - packages/web/src/app/api/v1/integrations/email/decide/route.ts
   - supabase/migrations/0013_approvals.sql
   - supabase/migrations/0014_single_use_tokens.sql
   - supabase/migrations/0017_approval_sweeper_cron.sql
+  - supabase/migrations/0032_unified_tokens_table.sql
+  - supabase/migrations/0033_data_migration_to_tokens.sql
+  - supabase/migrations/0034_audit_log_delegation_chain.sql
+  - supabase/migrations/0035_drop_legacy_token_tables.sql
 ---
 
 # Approvals — mint flow, channels, long-poll
 
-> **Historique.** Ce handbook s'appelait
-> `capability-policy-and-approvals.md` jusqu'au 2026-06-15. Le pivot
-> v4 `chore(v1-drop)` a supprimé l'ensemble `policy_rules` /
-> `Capability[]` / `evaluatePolicy` ; seul le pan **approval** reste
-> valide (lifecycle, channels, long-poll). Le handbook a été renommé
-> et nettoyé en conséquence. Pour le runtime (slice/risk catalog/gate),
-> voir [`gateway-risk-model.md`](../spec/gateway-risk-model.md) et
-> [`policy-engine.md`](./policy-engine.md).
+> **Historique.**
+>
+> - Ce handbook s'appelait `capability-policy-and-approvals.md` jusqu'au
+>   2026-06-15. Le pivot v4 `chore(v1-drop)` a supprimé l'ensemble
+>   `policy_rules` / `Capability[]` / `evaluatePolicy`. Seul le pan
+>   **approval** reste valide (lifecycle, channels, long-poll).
+> - 2026-06-16, refacto unified-tokens (ADR
+>   [[unified-tokens-delegation-chain-and-escalation-channel]]) :
+>   `org_management_keys` + `access_tokens` fusionnent dans la table
+>   unique `tokens` (`scope='org'|'project', parent_id, delegation_chain`).
+>   Les endpoints `/api/v1/mgmt/tokens*` et `/api/v1/projects/[id]/mint*`
+>   sont retirés au profit d'un endpoint unique `POST /api/v1/tokens/mint`.
+>   Le préfixe `vbn_mgmt_*` disparaît ; tous les Bearers sont `vbn_live_*`.
 
-Le mint d'un access_token v4 résout les `effective_gate` par risk_id
+Le mint d'un token résout les `effective_gate` par risk_id
 (catalog × project policy × env binding). Si tous les gates valent
-`allow`, le token est minté immédiatement. Si au moins un vaut `confirm`,
+`allow`, le token est minté immédiatement comme child du Bearer
+appelant (`parent_id = caller.id`). Si au moins un vaut `confirm`,
 une `approval_request` est créée et notifiée via un channel
 (manual / telegram / email). Si au moins un vaut `deny`, refus 403 final.
 
 L'agent (SDK) peut attendre la décision via un **long-poll borné 25 s**
-sur `GET /api/v1/mgmt/tokens/pending/:id?wait=25`.
+sur `GET /api/v1/tokens/pending/:id?wait=25`.
 
 ## Mint flow
 
 ```
-POST /api/v1/mgmt/tokens
-  { projectSlug, bindings[], accepted_risks[], denied_risks?,
-    name?, ttlSeconds?, singleUse?, context? }
+POST /api/v1/tokens/mint
+  Authorization: Bearer vbn_live_…
+  { scope: 'org' | 'project',
+    projectId? | projectSlug?,                  // requis si scope='project'
+    bindings[], accepted_risks[], denied_risks?,
+    name?, ttlHours?, ttlSeconds?, singleUse?, context? }
   │
-  ├─ requireManagementKey  (vbn_mgmt_… → orgId, managementKeyId)
+  ├─ requireToken  (vbn_live_* → guard.token = MintParent)
+  ├─ resolve project (scope='project') ; org-scoped skip
   ├─ load catalogs (per-provider) + project_risk_policies (eq project_id)
-  ├─ computeMintPreview(bindings × accepted_risks × catalogs × policies)
+  ├─ computePreview(bindings × accepted_risks × catalogs × policies)
   │     → per-risk { gate: allow|confirm|deny, origin }
   │
   ├─ any deny  → 403 { error, denied_risks, risks }
-  ├─ all allow → INSERT access_tokens(..., accepted_risks jsonb, denied_risks jsonb,
-  │                                   single_use)
-  │              → 201 { access_token, api_key, expires_at, accepted_risks }
+  ├─ all allow → mintChildToken(svc, { parent: guard.token, ... })
+  │              → checkMintInvariants (subset, depth, expires, denied)
+  │              → INSERT tokens (api_key_prefix, api_key_hash,
+  │                               parent_id, depth, delegation_chain, …)
+  │              → 201 { token, api_key, expires_at, accepted_risks }
   │
-  └─ any confirm → INSERT approval_requests(status='pending',
-                                            requested_risks, requested_single_use, ...)
+  └─ any confirm → INSERT approval_requests(status='pending', …)
                  → pickChannel(svc, projectId) → manual | telegram | email
                  → channel.open(payload)        → ✉️ side-effect
                  → 202 { approval_id, channel, poll_url, expires_at,
-                         gated_risks, risks }
+                         needs_approval, risks }
 ```
 
-La route user-session jumelle `POST /api/v1/projects/:projectId/mint`
-suit le même flow mais authentifie via session cookie
-(`requireOrgMember`) et logge `requested_by_user_id` au lieu du
-`management_key_id`. L'helper `computeMintPreview` (`lib/mint/preview.ts`)
-est partagé — single source of truth.
+Le caller authentifié peut être :
 
-L'endpoint preview (`POST /mgmt/tokens/preview` + `POST /projects/:id/mint/preview`)
-calcule la même résolution sans persister — consommé par le composant
-`mint-form.tsx` pour afficher la checklist des risques en temps réel.
+- un **`vbn_live_*` project-scoped** (un Coding Agent qui re-mint un
+  sub-token) — invariants subset/depth strict appliqués.
+- un **`vbn_live_*` org-scoped root** (`scope='org', depth=0,
+accepted_risks=[]`) — bénéficie du **carte-blanche bypass**
+  (cf. `isCarteBlancheParent` dans `mint.ts`). Ces tokens correspondent
+  aux anciens `org_management_keys` migrés. Bypass justifié : un mgmt
+  key historique n'avait pas de risk grant, l'autorisation venait de
+  l'appartenance org.
+
+L'endpoint preview (`POST /api/v1/tokens/preview`) calcule la même
+résolution sans persister — consommé par le composant `mint-form.tsx`
+pour afficher la checklist des risques en temps réel. L'helper pur
+`computePreview` (`lib/mint/risk-preview.ts`) est partagé entre les
+deux routes — single source of truth.
+
+## Carte-blanche shim (external-channel decisions)
+
+Les décisions externes (Telegram callback, Email click, UI session
+org-member click) **n'ont pas de parent Bearer authentifié** à
+decide-time. Pour passer le check subset de `mintChildToken`, elles
+synthétisent un **parent root carte-blanche** via le helper
+`externalApprovalParent` (`lib/approvals/external-mint.ts`) :
+
+```ts
+externalApprovalParent({
+  approvalId,
+  organizationId,
+  channel: 'email' | 'telegram' | 'user-session',
+  createdBy, // user id when known, null otherwise
+});
+// → MintParent { scope: 'org', depth: 0, accepted_risks: [], … }
+// → isCarteBlancheParent(parent) === true → subset check skipped
+```
+
+Le `name` du parent synthétique (`email-approval` / `telegram-approval`
+/ `user-session-approval`) est propagé dans le `delegation_chain` du
+child minté — l'audit row remembers which channel authorized the
+bypass.
+
+**Dette** : à terme, `approval_requests` portera un
+`requester_token_id` qui pointera vers le bearer original, et le
+parent synthétique sera remplacé par un load du vrai parent. Cf.
+W3 dans `.vaubaan/reports/clean-code-report.md`.
 
 ## Approval lifecycle
 
@@ -103,10 +152,14 @@ redondance).
 ### `ManualChannel`
 
 Approbation sans notification. L'opérateur appelle directement
-`POST /api/v1/mgmt/approvals/:id` (PAT mgmt) ou
+`POST /api/v1/mgmt/approvals/:id` (Bearer `vbn_live_*`) ou
 `POST /api/v1/projects/:projectId/approvals/:id/decide` (session
 org-member) avec `{ decision: 'approve' | 'deny' }`. Utile pour dev / CI
 / clients sans intégration chat.
+
+> Le préfixe `vbn_mgmt_*` n'existe plus ; la route `mgmt/approvals/[id]`
+> reste sous ce path pour compat URL côté SDK, mais accepte n'importe
+> quel `vbn_live_*` de la même org.
 
 ### `TelegramChannel`
 
@@ -181,22 +234,24 @@ atomique qui tourne une fois par token + l'invalidation cache qui suit.
 ## Long-poll (`?wait=25`)
 
 ```
-GET /api/v1/mgmt/tokens/pending/:approval_id?wait=25
-  ├─ requireManagementKey
+GET /api/v1/tokens/pending/:approval_id?wait=25
+  Authorization: Bearer vbn_live_…
+  ├─ requireToken
   ├─ wait_seconds = min(query.wait, MAX_WAIT_SECONDS=25)
-  ├─ loop until deadline :
+  ├─ loop until deadline (or req.signal.aborted) :
   │     row = svc.from('approval_requests').select(...).eq(id, ...)
   │     switch row.status :
-  │       'approved' → 200 { status: 'approved', api_key, expires_at, ... }
-  │                    (and CLEAR pending_api_key after read)
-  │       'denied'   → 410 { status: 'denied' }
-  │       'expired'  → 410 { status: 'expired' }
-  │       'pending'  → sleep 500ms → re-loop (jusqu'à deadline)
+  │       'approved' → 201 { token, api_key, expires_at }
+  │                    (and CLEAR pending_api_key after read,
+  │                     mark approval_requests.status='consumed')
+  │       'denied' | 'expired' | 'cancelled' | 'consumed'
+  │                  → 410 { status, decided_at }
+  │       'pending'  → sleep 500ms (AbortSignal-aware) → re-loop
   │
   └─ at deadline still pending → 202 { status: 'pending', expires_at }
 ```
 
-L'endpoint vit dans `app/api/v1/mgmt/tokens/pending/[id]/route.ts`. Le
+L'endpoint vit dans `app/api/v1/tokens/pending/[id]/route.ts`. Le
 cap de 25 s reste sous le mur Vercel Edge (30 s avant 1er byte) et
 Cloudflare (100 s origin idle). Le SDK agent encapsule le re-poll
 jusqu'au wall-clock global (par défaut 15 min = TTL de l'approval).
@@ -233,8 +288,11 @@ Cf. spec [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §11 et
   mintés ici), [[policy-engine]] (résolution `effective_gate` =
   `risk-policy.ts`), [[web-app]] (UI mint form + sidebar).
 - Migrations : `0013_approvals.sql`, `0014_single_use_tokens.sql`,
-  `0017_approval_sweeper_cron.sql`.
-- ADRs : [[mcp-only-mvp-scope]], [[programmatic-access-token-minting]].
-- Tests : `packages/web/tests/unit/lib/approvals/*.test.ts` (email-token,
-  mint, decide), `packages/web/tests/unit/api/mgmt-tokens-preview.test.ts`
+  `0017_approval_sweeper_cron.sql`, `0032`-`0035` (unified-tokens).
+- ADRs : [[mcp-only-mvp-scope]],
+  [[unified-tokens-delegation-chain-and-escalation-channel]] (current),
+  [[programmatic-access-token-minting]] (superseded).
+- Tests : `packages/web/tests/unit/lib/approvals/*.test.ts`
+  (email-token, mint, external-mint, decide),
+  `packages/web/tests/unit/api/tokens-preview.test.ts`
   (12 tests gate-resolution scénarios).
