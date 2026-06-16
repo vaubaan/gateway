@@ -3,15 +3,14 @@
  *
  * Vercel Integration callback. Exchanges the install `code` for a long-lived
  * `access_token`, then upserts the provider_admins row with `team_id` and
- * the encrypted token (v0 trust model: bytea but no real crypto yet — see
- * docs/decisions/trust-model-clear-at-rest-idp-style.md).
+ * the encrypted token via the `upsert_provider_admin_encrypted` SQL RPC
+ * (per-org pgsodium AEAD — see docs/decisions/per-org-encryption-pgsodium.md).
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getSupabaseServer, getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeStateOrgId } from '@/lib/oauth/state';
-import { encodeByteaHex } from '@/lib/providers/state';
 
 export const dynamic = 'force-dynamic';
 
@@ -83,18 +82,13 @@ export async function GET(req: NextRequest) {
   }
   const redirect = new URL(`/orgs/${org.slug}/providers`, req.url);
 
-  const { error: insertErr } = await svc.from('provider_admins').upsert(
-    {
-      organization_id: orgId,
-      provider: 'vercel',
-      status: 'connected',
-      team_id: teamId ?? tokenJson.team_id ?? null,
-      access_token_encrypted: encodeByteaHex(tokenJson.access_token),
-      connected_by_user_id: userData.user.id,
-      connected_at: new Date().toISOString(),
-    },
-    { onConflict: 'organization_id,provider' },
-  );
+  const { error: insertErr } = await svc.rpc('upsert_provider_admin_encrypted', {
+    p_org_id: orgId,
+    p_provider: 'vercel',
+    p_team_id: teamId ?? tokenJson.team_id ?? null,
+    p_access_token: tokenJson.access_token,
+    p_connected_by: userData.user.id,
+  });
   if (insertErr) {
     redirect.searchParams.set('error', `persist failed: ${insertErr.message}`);
     return NextResponse.redirect(redirect);

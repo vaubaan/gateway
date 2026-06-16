@@ -191,10 +191,18 @@ configuré). Le slug est ré-encodé dans le `state` nonce.
 3. GitHub callback → `GET /api/integrations/github/callback?installation_id=...&state=...&setup_action=install`.
 4. Le handler vérifie le cookie state, décode `orgId`, puis upserte
    `provider_admins` via le service_role client (RLS-bypass — le caller
-   est un membre d'org authentifié).
+   est un membre d'org authentifié). GitHub ne stocke pas de token
+   (App Install mode), donc l'upsert est direct.
 
 Les autres providers OAuth (Vercel, Supabase, Railway) suivent le même
 shape : `/api/integrations/<provider>/{connect,callback}/route.ts`.
+Les callbacks qui stockent des tokens (Vercel, Supabase, Railway)
+appellent le RPC `upsert_provider_admin_encrypted` qui chiffre le
+token avec la clé pgsodium de l'org avant INSERT (cf. ADR
+[[per-org-encryption-pgsodium]], migration `0037`). Les refresh flows
+(Supabase, Railway) utilisent `update_provider_admin_tokens`. Les
+lectures de tokens passent par la vue `provider_admins_decrypted` qui
+décrypte transparently.
 
 ## Token creation (api_key visible 1×, unified-tokens + drop-confirm)
 

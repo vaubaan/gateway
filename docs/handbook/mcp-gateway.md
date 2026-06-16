@@ -8,6 +8,7 @@ tracks:
   - packages/web/src/app/.well-known/oauth-protected-resource/route.ts
   - packages/web/src/lib/gateway/build.ts
   - supabase/migrations/0034_audit_log_delegation_chain.sql
+  - supabase/migrations/0037_per_org_encryption.sql
 ---
 
 # MCP gateway — `@vaubaan/mcp-gateway` + `/mcp` route
@@ -269,6 +270,13 @@ row passent par le même chemin que les non-self-contained
 
 ## Sécurité
 
+- **Encryption at rest** : provider tokens sont chiffrés par org via
+  pgsodium AEAD (migration `0037_per_org_encryption`, ADR
+  [[per-org-encryption-pgsodium]]). `loadProviderAdmin()` lit la view
+  `provider_admins_decrypted` (décryptage transparent). Les écritures
+  passent par les RPC SQL `upsert_provider_admin_encrypted` (callbacks
+  OAuth) et `update_provider_admin_tokens` (Railway refresh). L'app ne
+  touche jamais le matériel de clé.
 - L'`api_key_hash` n'est lu QUE par le gateway via service_role client. La RLS
   côté app web ne l'expose à personne.
 - Cache Redis ne contient PAS de token upstream en clair. Seul l'AccessTokenContext

@@ -18,9 +18,7 @@ import type {
   ProviderBinding,
 } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { decodeBytea, encodeByteaHex } from './bytea';
-
-export { encodeByteaHex } from './bytea';
+import { decodeBytea } from './bytea';
 
 export interface ProviderResource {
   ref: string;
@@ -325,14 +323,12 @@ async function refreshSupabaseToken(admin: AdminRow): Promise<string | null> {
   };
   const expiresAt = new Date(Date.now() + json.expires_in * 1000).toISOString();
   const svc = getSupabaseServiceClient();
-  await svc
-    .from('provider_admins')
-    .update({
-      access_token_encrypted: encodeByteaHex(json.access_token),
-      refresh_token_encrypted: encodeByteaHex(json.refresh_token),
-      expires_at: expiresAt,
-    })
-    .eq('id', admin.id);
+  await svc.rpc('update_provider_admin_tokens', {
+    p_admin_id: admin.id,
+    p_access_token: json.access_token,
+    p_refresh_token: json.refresh_token,
+    p_expires_at: expiresAt,
+  });
   return json.access_token;
 }
 
@@ -490,14 +486,12 @@ async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
     clientSecret: process.env.RAILWAY_CLIENT_SECRET,
     persistRefresh: async (_a, tokens) => {
       const svc = getSupabaseServiceClient();
-      await svc
-        .from('provider_admins')
-        .update({
-          access_token_encrypted: encodeByteaHex(tokens.accessToken),
-          refresh_token_encrypted: encodeByteaHex(tokens.refreshToken),
-          expires_at: tokens.expiresAt.toISOString(),
-        })
-        .eq('id', admin.id);
+      await svc.rpc('update_provider_admin_tokens', {
+        p_admin_id: admin.id,
+        p_access_token: tokens.accessToken,
+        p_refresh_token: tokens.refreshToken,
+        p_expires_at: tokens.expiresAt.toISOString(),
+      });
     },
   });
 
@@ -565,7 +559,7 @@ async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
 export async function loadProviderState(orgId: string, provider: Provider): Promise<ProviderState> {
   const svc = getSupabaseServiceClient();
   const { data: admin } = await svc
-    .from('provider_admins')
+    .from('provider_admins_decrypted')
     .select(
       'id, organization_id, provider, status, installation_id, team_id, access_token_encrypted, refresh_token_encrypted, expires_at, connected_by_user_id, connected_at',
     )

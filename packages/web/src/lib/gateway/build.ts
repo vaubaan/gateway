@@ -26,7 +26,7 @@ import {
   type UpstreamAdapter,
 } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { decodeBytea, encodeByteaHex } from '@/lib/providers/bytea';
+import { decodeBytea } from '@/lib/providers/bytea';
 import { getCatalog } from '@/lib/risk-catalog/loader';
 
 function getGitHubAppCredentials() {
@@ -188,7 +188,7 @@ export function buildGateway(opts: {
     provider: Provider,
   ): Promise<ProviderAdmin | null> => {
     const { data } = await supabase
-      .from('provider_admins')
+      .from('provider_admins_decrypted')
       .select('*')
       .eq('organization_id', orgId)
       .eq('provider', provider)
@@ -252,14 +252,12 @@ export function buildGateway(opts: {
     clientId: process.env.RAILWAY_CLIENT_ID,
     clientSecret: process.env.RAILWAY_CLIENT_SECRET,
     persistRefresh: async (admin, tokens) => {
-      await supabase
-        .from('provider_admins')
-        .update({
-          access_token_encrypted: encodeByteaHex(tokens.accessToken),
-          refresh_token_encrypted: encodeByteaHex(tokens.refreshToken),
-          expires_at: tokens.expiresAt.toISOString(),
-        })
-        .eq('id', admin.id);
+      await supabase.rpc('update_provider_admin_tokens', {
+        p_admin_id: admin.id,
+        p_access_token: tokens.accessToken,
+        p_refresh_token: tokens.refreshToken,
+        p_expires_at: tokens.expiresAt.toISOString(),
+      });
     },
   });
   upstreamByProvider.railway = {

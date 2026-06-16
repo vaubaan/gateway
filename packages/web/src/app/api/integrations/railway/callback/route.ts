@@ -4,8 +4,8 @@
  * Railway OAuth callback. Exchanges the `code` (with the PKCE verifier from the
  * single-use cookie and `resource=https://mcp.railway.com` audience binding)
  * for an access_token (1h) + refresh_token, then upserts the provider_admins
- * row. Tokens are stored bytea (clear-at-rest v0 — see
- * docs/decisions/trust-model-clear-at-rest-idp-style.md).
+ * row. Tokens are encrypted via `upsert_provider_admin_encrypted` SQL RPC
+ * (per-org pgsodium AEAD — see docs/decisions/per-org-encryption-pgsodium.md).
  *
  * ADR : docs/decisions/railway-rewrap-remote-mcp.md.
  */
@@ -14,7 +14,6 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getSupabaseServer, getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeStateOrgId } from '@/lib/oauth/state';
-import { encodeByteaHex } from '@/lib/providers/state';
 import { RAILWAY_MCP_RESOURCE, RAILWAY_TOKEN_URL, railwayRedirectUri } from '@/lib/oauth/railway';
 
 export const dynamic = 'force-dynamic';
@@ -103,21 +102,14 @@ export async function GET(req: NextRequest) {
     ? new Date(Date.now() + tokenJson.expires_in * 1000).toISOString()
     : null;
 
-  const { error: insertErr } = await svc.from('provider_admins').upsert(
-    {
-      organization_id: orgId,
-      provider: 'railway',
-      status: 'connected',
-      access_token_encrypted: encodeByteaHex(tokenJson.access_token),
-      refresh_token_encrypted: tokenJson.refresh_token
-        ? encodeByteaHex(tokenJson.refresh_token)
-        : null,
-      expires_at: expiresAt,
-      connected_by_user_id: userData.user.id,
-      connected_at: new Date().toISOString(),
-    },
-    { onConflict: 'organization_id,provider' },
-  );
+  const { error: insertErr } = await svc.rpc('upsert_provider_admin_encrypted', {
+    p_org_id: orgId,
+    p_provider: 'railway',
+    p_access_token: tokenJson.access_token,
+    p_refresh_token: tokenJson.refresh_token ?? null,
+    p_expires_at: expiresAt,
+    p_connected_by: userData.user.id,
+  });
   if (insertErr) {
     redirect.searchParams.set('error', `persist failed: ${insertErr.message}`);
     return NextResponse.redirect(redirect);
