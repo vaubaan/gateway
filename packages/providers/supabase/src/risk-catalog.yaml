@@ -9,7 +9,7 @@
 # (`supabase[<env>].<name>`) is injected at mint time by the engine, not
 # in this file (the catalog stays env-agnostic). The `acceptable_in_envs`
 # field is the structural restrictor that prevents accepting a risk for
-# an unintended env even if project policy allows it.
+# an unintended env.
 #
 # Cardinality convention (research §1.1, §2.4) :
 #   row[one]    = bounded write on a single identified row.
@@ -48,7 +48,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: allow
 
   - id: supabase.row-write-one
     label: Écrire row par row (cible bornée)
@@ -63,7 +62,6 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: allow
     acceptable_in_envs: [preview, staging, prod]
 
   - id: supabase.bulk-row-write
@@ -79,7 +77,6 @@ risks:
       cost: moderate
       visibility: internal
       persistence: session
-    default_gate: confirm
     acceptable_in_envs: [preview, staging]
 
   - id: supabase.migration-write
@@ -97,7 +94,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: confirm
 
   - id: supabase.policy-write
     label: Modifier la RLS (CREATE/ALTER POLICY)
@@ -112,7 +108,6 @@ risks:
       cost: free
       visibility: public
       persistence: posture
-    default_gate: deny
 
   - id: supabase.db-role-write
     label: Créer/modifier des rôles Postgres
@@ -127,7 +122,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   - id: supabase.extension-write
     label: Activer/désactiver une extension Postgres
@@ -143,7 +137,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   # ───────────────────────────────────────────────────────────────────────
   # Plane `storage`
@@ -162,7 +155,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: allow
 
   - id: supabase.storage.object-write-one
     label: Upload/delete d'un objet ciblé
@@ -177,7 +169,6 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: allow
     acceptable_in_envs: [preview, staging, prod]
 
   - id: supabase.storage.bulk-object-write
@@ -193,7 +184,6 @@ risks:
       cost: moderate
       visibility: internal
       persistence: session
-    default_gate: confirm
     acceptable_in_envs: [preview, staging]
 
   - id: supabase.storage.signed-url-read
@@ -210,7 +200,6 @@ risks:
       cost: free
       visibility: public
       persistence: session
-    default_gate: confirm
 
   - id: supabase.bucket-write
     label: Créer/modifier/supprimer un bucket
@@ -226,7 +215,6 @@ risks:
       cost: free
       visibility: public
       persistence: posture
-    default_gate: confirm
 
   - id: supabase.storage-config-write
     label: Modifier la storage config globale
@@ -241,7 +229,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   # ───────────────────────────────────────────────────────────────────────
   # Plane `auth`
@@ -261,7 +248,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: confirm
     acceptable_in_envs: [preview, staging, prod]
 
   - id: supabase.auth.user-write-one
@@ -277,7 +263,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: confirm
 
   - id: supabase.auth.bulk-user-write
     label: Manipulation bulk d'utilisateurs
@@ -292,7 +277,6 @@ risks:
       cost: moderate
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   - id: supabase.auth.generate-link
     label: Générer un magic-link / recovery / invite
@@ -307,7 +291,6 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: confirm
 
   - id: supabase.sso-provider-write
     label: Configurer un IdP SAML / OIDC
@@ -322,7 +305,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   - id: supabase.third-party-auth-write
     label: Configurer un provider tiers (Firebase, Auth0, …)
@@ -337,7 +319,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   - id: supabase.auth-config-write
     label: Modifier la config auth globale
@@ -352,7 +333,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   # ───────────────────────────────────────────────────────────────────────
   # Plane `functions`
@@ -371,7 +351,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: allow
 
   - id: supabase.functions.body-write
     label: Créer/modifier/supprimer le code d'une Edge Function
@@ -388,7 +367,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: confirm
 
   - id: supabase.functions.deploy
     label: Déployer une nouvelle version d'Edge Function
@@ -403,7 +381,6 @@ risks:
       cost: moderate
       visibility: public
       persistence: posture
-    default_gate: confirm
     acceptable_in_envs: [preview, staging, prod]
 
   - id: supabase.function-secret-write
@@ -419,7 +396,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   # ───────────────────────────────────────────────────────────────────────
   # Fallback — catch-all pour les writes non catégorisés.
@@ -439,4 +415,3 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: confirm

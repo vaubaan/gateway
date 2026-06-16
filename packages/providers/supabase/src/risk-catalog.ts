@@ -59,7 +59,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'supabase.row-write-one',
@@ -76,7 +75,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'allow',
       acceptable_in_envs: ['preview', 'staging', 'prod'],
     },
     {
@@ -94,7 +92,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
       acceptable_in_envs: ['preview', 'staging'],
     },
     {
@@ -114,7 +111,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'supabase.policy-write',
@@ -131,7 +127,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     {
       id: 'supabase.db-role-write',
@@ -148,7 +143,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     {
       id: 'supabase.extension-write',
@@ -166,7 +160,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
 
     // ─── Plane `storage` ───────────────────────────────────────────────────
@@ -185,7 +178,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'supabase.storage.object-write-one',
@@ -201,7 +193,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'allow',
       acceptable_in_envs: ['preview', 'staging', 'prod'],
     },
     {
@@ -219,7 +210,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
       acceptable_in_envs: ['preview', 'staging'],
     },
     {
@@ -238,7 +228,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'supabase.bucket-write',
@@ -256,7 +245,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'supabase.storage-config-write',
@@ -273,7 +261,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
 
     // ─── Plane `auth` ──────────────────────────────────────────────────────
@@ -293,7 +280,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'confirm',
       acceptable_in_envs: ['preview', 'staging', 'prod'],
     },
     {
@@ -311,7 +297,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'supabase.auth.bulk-user-write',
@@ -328,7 +313,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     {
       id: 'supabase.auth.generate-link',
@@ -345,7 +329,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'supabase.sso-provider-write',
@@ -362,7 +345,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     {
       id: 'supabase.third-party-auth-write',
@@ -377,7 +359,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     {
       id: 'supabase.auth-config-write',
@@ -394,7 +375,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
 
     // ─── Plane `functions` ─────────────────────────────────────────────────
@@ -413,7 +393,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'supabase.functions.body-write',
@@ -432,7 +411,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'supabase.functions.deploy',
@@ -449,7 +427,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
       acceptable_in_envs: ['preview', 'staging', 'prod'],
     },
     {
@@ -467,7 +444,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
 
     // ─── Fallback — catch-all pour les writes non catégorisés. ─────────────
@@ -487,7 +463,6 @@ export const supabaseRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };

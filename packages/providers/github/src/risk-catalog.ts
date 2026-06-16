@@ -12,9 +12,6 @@
  * 14 fine-grained risks + 1 fallback `github.uncategorized-write` = 15 total.
  * Bracket lists may mix exact names and globs (`[main,master,release-*]`)
  * — the slice-dsl parser accepts them.
- *
- * `default_gate` is seeded by spec §4.2 formula on the 6D vector ; deviations
- * are documented in the source research §3.1 ("Override manuel ?" column).
  */
 
 import type { RiskCatalog } from '@vaubaan/shared';
@@ -45,7 +42,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'github.read-meta',
@@ -72,7 +68,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'github.search-global',
@@ -91,7 +86,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
 
     // ─── WRITES — branches feature/* (low-risk, the coding-agent hot loop) ─
@@ -114,7 +108,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'allow',
     },
 
     // ─── WRITES — protected branches (main / master / release-* / prod) ────
@@ -140,7 +133,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
 
     // ─── WRITES — workflow YAML files (privilege escalation vector) ────────
@@ -161,7 +153,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
       // Acceptable only on feature/fix/chore branches, never directly on
       // main (the merge path forces a PR + human review).
       acceptable_in_envs: ['feature', 'fix', 'chore'],
@@ -186,7 +177,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'allow',
     },
 
     // ─── WRITES — pull requests & comments ─────────────────────────────────
@@ -208,7 +198,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'session',
       },
-      default_gate: 'allow',
     },
     {
       id: 'github.comment-write',
@@ -228,7 +217,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'session',
       },
-      default_gate: 'allow',
     },
 
     // ─── WRITES — releases (potentially public publication) ────────────────
@@ -249,7 +237,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'github.delete-release',
@@ -266,18 +253,16 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
 
-    // ─── WRITES — branch protection (posture-shift, ALWAYS deny by default) ─
+    // ─── WRITES — branch protection (posture-shift) ────────────────────────
     {
       id: 'github.branch-protection-write',
       label: 'Modify branch protection',
       reason:
         'Posture-shift : opens the branch to out-of-process writes (e.g. disabling ' +
         "required reviews). Persists after the token's lifetime. Even when " +
-        '*tightening* (adding a required check), the change outlives the session — ' +
-        'confirm minimum, deny by default.',
+        '*tightening* (adding a required check), the change outlives the session.',
       matches: ['github.repo[**].branch-protection[**].W'],
       vector: {
         reversibility: 'costly',
@@ -287,7 +272,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
 
     // ─── WRITES — credential mint (install token, two purposes) ────────────
@@ -307,7 +291,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'github.mint-install-token-push',
@@ -325,7 +308,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
 
     // ─── FALLBACK — catch-all (mandatory per spec §4) ──────────────────────
@@ -335,8 +317,7 @@ export const githubRiskCatalog: RiskCatalog = {
       reason:
         'Catch-all for writes not explicitly categorized above. If observed in ' +
         'production, it signals a missing catalog entry — add the specific risk before ' +
-        'the next release. Default-gate confirm forces a managerial decision rather ' +
-        'than silent allow.',
+        'the next release. Operators must opt in explicitly (no implicit accept).',
       matches: ['github.repo[**].W'],
       vector: {
         reversibility: 'costly',
@@ -346,7 +327,6 @@ export const githubRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };

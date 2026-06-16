@@ -80,7 +80,7 @@ const MINT_HINT = {
   method: 'POST',
   bodyShape:
     '{ "name": "<child-name>", "scope": "project", "projectId": "<id>", "bindings": [{ "provider": "github", "resource_ref": "owner/repo" }], "accepted_risks": ["<risk-id>", ...] }',
-  note: 'Requires a Bearer vbn_live_* token. The mint may return 202 + approval_id when at least one accepted risk has effective_gate=confirm under the project policy.',
+  note: 'Requires a Bearer vbn_live_* token. The mint returns 201 on success or 403 with { not_acceptable, not_inherited, risks } when a requested risk violates acceptable_in_envs or the parent-subset rule.',
 };
 
 function providersPayload(): CatalogResponse['providers'] {

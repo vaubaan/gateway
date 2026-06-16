@@ -4,30 +4,29 @@
 # Source  : .vaubaan/research/providers/railway-ssh.md §2.4.
 #
 # Five risks + one fallback :
-#   - ssh.exec-read                    → allow   (whitelisted reads)
-#   - ssh.exec-write-staging           → confirm (writes on non-prod hosts)
-#   - ssh.exec-write-prod              → deny    (writes on prod hosts)
-#   - ssh.exec-read-secret-files       → confirm (co-touched on cat /etc/..., etc.)
-#   - ssh.uncategorized-write          → confirm (fallback catch-all)
+#   - ssh.exec-read                    — whitelisted reads
+#   - ssh.exec-write-staging           — writes on non-prod hosts
+#   - ssh.exec-write-prod              — writes on prod hosts
+#   - ssh.exec-read-secret-files       — co-touched on cat /etc/..., etc.
+#   - ssh.uncategorized-write          — fallback catch-all
 #
 # CONVENTION — `acceptable_in_envs`
 # ---------------------------------
 # SSH's "env" segment is the `host_slug` of the binding (one host = one env).
 # Hosts named `staging-vps`, `dev-vps` are non-prod ; anything else is
 # considered prod-shaped. The list below is the canonical set of slugs
-# acceptable for the `exec-write-staging` risk — extend per-project via the
-# project policy if you add more non-prod host slugs.
+# acceptable for the `exec-write-staging` risk.
 #
 # MATCH PATTERN ambiguity
 # ------------------------
 # `ssh.exec-write-staging` and `ssh.exec-write-prod` both declare
 # `matches: "ssh.host[**].command.W"` — they target the same slice
 # space. The runtime distinguishes them at MINT time via
-# `acceptable_in_envs` (cf. §4.4 of the spec) : the manager can only
-# accept `exec-write-staging` for bindings whose host_slug is in
-# {staging-vps, dev-vps} ; the manager must accept `exec-write-prod`
-# (which is DENY-by-default) to operate on any other host. This is the
-# intentional risk-based asymmetry — opt-in to prod writes is loud.
+# `acceptable_in_envs` : the manager can only accept `exec-write-staging`
+# for bindings whose host_slug is in {staging-vps, dev-vps} ; for any
+# other host the manager must accept `exec-write-prod` explicitly. Opt-in
+# to prod writes is loud (no structural restriction = must be explicitly
+# checked at mint).
 #
 # MULTI-SLICE — secret-file co-touch
 # -----------------------------------
@@ -57,7 +56,6 @@ ssh:
         cost: free
         visibility: internal
         persistence: stateless
-      default_gate: allow
 
     - id: ssh.exec-write-staging
       label: 'Exécuter une commande shell arbitraire (host non-prod)'
@@ -74,7 +72,6 @@ ssh:
         cost: moderate
         visibility: internal
         persistence: posture
-      default_gate: confirm
       acceptable_in_envs:
         - staging-vps
         - dev-vps
@@ -84,8 +81,8 @@ ssh:
       reason: >
         Mêmes commandes que ci-dessus mais sur un host de production.
         Posture-shift potentiel, downtime possible, surface d'attaque
-        maximale. Deny par défaut ; doit être escaladé humain pour être
-        accepté.
+        maximale. Opt-in explicite obligatoire ; toute escalation passe
+        par le runtime escalation_channel hors-gateway.
       matches: 'ssh.host[**].command.W'
       vector:
         reversibility: irreversible
@@ -94,7 +91,6 @@ ssh:
         cost: unbounded
         visibility: internal
         persistence: posture
-      default_gate: deny
 
     - id: ssh.exec-read-secret-files
       label: 'Lire un fichier potentiellement sensible (cat /etc/..., stat key)'
@@ -112,7 +108,6 @@ ssh:
         cost: free
         visibility: internal
         persistence: stateless
-      default_gate: confirm
 
     - id: ssh.uncategorized-write
       label: 'Écriture SSH non catégorisée'
@@ -130,4 +125,3 @@ ssh:
         cost: moderate
         visibility: internal
         persistence: session
-      default_gate: confirm

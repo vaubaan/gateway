@@ -26,7 +26,6 @@ railway:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: railway.read-runtime
       label: 'Lire services, déploiements, statuts'
@@ -42,7 +41,6 @@ railway:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: railway.read-logs
       label: "Lire les logs d'un déploiement"
@@ -59,7 +57,6 @@ railway:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: railway.read-variables
       label: 'Lire les env vars (incluant secrets)'
@@ -76,7 +73,6 @@ railway:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: confirm # qualifié par env → deny en prod via policy
 
     # ───── Deploys ──────────────────────────────────────────────────────────
     - id: railway.deploy-staging
@@ -94,7 +90,6 @@ railway:
           visibility: internal,
           persistence: session,
         }
-      default_gate: allow
       acceptable_in_envs: [staging, preview, dev]
 
     - id: railway.deploy-prod
@@ -113,7 +108,6 @@ railway:
           visibility: public,
           persistence: session,
         }
-      default_gate: confirm # qualifié par env=prod uniquement
 
     # ───── Variables ────────────────────────────────────────────────────────
     - id: railway.upsert-variable-staging
@@ -131,7 +125,6 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
       acceptable_in_envs: [staging, preview, dev]
 
     - id: railway.upsert-variable-prod
@@ -149,7 +142,6 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     - id: railway.bulk-variables-replace
       label: 'Remplacer en bulk toutes les env vars (replace=true)'
@@ -166,7 +158,6 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     # ───── Account ──────────────────────────────────────────────────────────
     - id: railway.create-project
@@ -184,15 +175,14 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
 
     # ───── Agent (méta-tool) ────────────────────────────────────────────────
     - id: railway.agent-action
       label: 'Invocation railway-agent (méta-tool conversationnel)'
       reason: >-
         L'agent upstream peut décider seul quoi muter — pas de
-        classification fine possible. Catch-all `confirm` par construction.
-        Tout usage doit être audité humain.
+        classification fine possible. Catch-all par construction. Tout
+        usage doit être audité humain (opt-in explicite obligatoire).
       matches: 'railway.account[**].agent-session.W'
       vector:
         {
@@ -203,7 +193,6 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
 
     # ───── Fallback ─────────────────────────────────────────────────────────
     - id: railway.uncategorized-write
@@ -220,4 +209,3 @@ railway:
           visibility: internal,
           persistence: session,
         }
-      default_gate: confirm

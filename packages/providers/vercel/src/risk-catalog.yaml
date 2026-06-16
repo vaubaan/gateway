@@ -34,7 +34,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: allow
 
   - id: vercel.read-deployment
     label: 'Read deployments + build/runtime logs'
@@ -51,14 +50,13 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: allow
 
   - id: vercel.read-env-var
     label: 'Read env vars (encrypted values only)'
     reason: >-
       Listing of env-var keys with values returned encrypted by Vercel.
       No direct secret exfiltration possible. Discriminates from the
-      plaintext variant which is `deny` by default.
+      plaintext variant which is the higher-severity write.
     matches: 'vercel.project[**].env-var[*].R'
     vector:
       reversibility: reversible
@@ -67,7 +65,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: allow
 
   - id: vercel.read-env-var-plaintext
     label: 'Read env vars in plaintext (`decrypt=true`)'
@@ -84,7 +81,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: deny
 
   - id: vercel.fetch-deployment-url
     label: 'HTTP fetch to a Vercel deployment URL'
@@ -101,7 +97,6 @@ risks:
       cost: free
       visibility: public
       persistence: stateless
-    default_gate: allow
 
   # ─── WRITES — DEPLOYMENT-PROTECTION BYPASS (credential mint) ───────────
 
@@ -119,7 +114,6 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: confirm
 
   # ─── WRITES — DEPLOYMENT ───────────────────────────────────────────────
 
@@ -137,7 +131,6 @@ risks:
       cost: moderate
       visibility: team
       persistence: session
-    default_gate: allow
 
   - id: vercel.deploy-prod
     label: 'Trigger a production deploy'
@@ -153,7 +146,6 @@ risks:
       cost: moderate
       visibility: public
       persistence: session
-    default_gate: confirm
 
   # ─── WRITES — TOOLBAR (low-risk feedback comments) ─────────────────────
 
@@ -171,7 +163,6 @@ risks:
       cost: free
       visibility: team
       persistence: session
-    default_gate: allow
 
   # ─── WRITES — ENV VARS (secrets) ───────────────────────────────────────
 
@@ -189,7 +180,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: confirm
 
   - id: vercel.env-var-write-prod
     label: 'Write env var on prod'
@@ -205,7 +195,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   - id: vercel.env-var-fan-out
     label: 'Write env var on every env in one call (prod included)'
@@ -214,8 +203,8 @@ risks:
       target omitted = all 3 by Vercel default), and `delete_env_var`
       (whose upstream API removes the var from every env it lives in
       regardless of the Vaubaan hint), touch all 3 envs in a single tool
-      call. Force a confirm step even when the agent already has
-      `env-var-write-preview` accepted — guard against silent prod escalation.
+      call. Treated as its own risk so the agent who only has
+      `env-var-write-preview` accepted does NOT silently escalate to prod.
     matches: 'vercel.project[**].env-var-fan-out.W'
     vector:
       reversibility: costly
@@ -224,7 +213,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: confirm
 
   # ─── WRITES — PROJECT SETTINGS (build pipeline) ────────────────────────
 
@@ -242,7 +230,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: confirm
 
   # ─── WRITES — DEPLOYMENT-PROTECTION (governance) ───────────────────────
 
@@ -260,7 +247,6 @@ risks:
       cost: free
       visibility: team
       persistence: posture
-    default_gate: deny
 
   # ─── WRITES — DOMAINS (DNS posture-shift externe) ──────────────────────
 
@@ -279,7 +265,6 @@ risks:
       cost: free
       visibility: public
       persistence: posture
-    default_gate: deny
 
   # ─── FALLBACK (required) ───────────────────────────────────────────────
 
@@ -288,8 +273,8 @@ risks:
     reason: >-
       Catch-all for writes that have not been explicitly categorised. If
       observed in production, signals that a tool was added without a
-      matching catalog entry. Default `confirm` to fail-loud rather than
-      silently allow.
+      matching catalog entry — operators must opt in explicitly (no
+      implicit accept).
     matches: 'vercel.[**].W'
     vector:
       reversibility: costly
@@ -298,4 +283,3 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: confirm

@@ -1,16 +1,16 @@
 /**
  * Shared mint-preview computation — used by the unified
- * `/api/v1/tokens/preview` route and the user-session preview route.
+ * `/api/v1/tokens/preview` route and the mint endpoint.
  *
- * Wraps the pure `computePreview` (lib/mint/risk-preview.ts) with the DB
- * plumbing : load project policy overrides + per-provider catalogs.
+ * Wraps the pure `computePreview` (lib/mint/risk-preview.ts) with the
+ * provider-catalog plumbing. No DB read post drop-confirm — project-level
+ * overrides have been removed (see ADR unified-gates-drop-confirm).
  *
  * Spec : docs/spec/gateway-risk-model.md §9.
  */
 
-import type { SupabaseClient } from '@supabase/supabase-js';
 import type { IndexedRiskCatalog } from '@vaubaan/policy-engine';
-import type { Provider, RiskPolicyOverride } from '@vaubaan/shared';
+import type { Provider, RiskId } from '@vaubaan/shared';
 
 import { getCatalog } from '@/lib/risk-catalog/loader';
 import { computePreview, type PreviewBinding, type PreviewResponse } from '@/lib/mint/risk-preview';
@@ -18,32 +18,22 @@ import { computePreview, type PreviewBinding, type PreviewResponse } from '@/lib
 export interface MintPreviewBody {
   readonly bindings: readonly PreviewBinding[];
   readonly accepted_risks: readonly string[];
-  readonly denied_risks?: readonly string[];
 }
 
-export async function computeMintPreview(
-  svc: SupabaseClient,
-  projectId: string,
+export function computeMintPreview(
   body: MintPreviewBody,
-): Promise<PreviewResponse> {
-  const { data: rulesRaw } = await svc
-    .from('project_risk_policies')
-    .select('id, project_id, risk_id, env_scope, gate, created_at')
-    .eq('project_id', projectId);
-  const overrides: RiskPolicyOverride[] = rulesRaw ?? [];
-
+  parentAcceptedRisks: readonly RiskId[] | null,
+): PreviewResponse {
   const providers = new Set<Provider>(body.bindings.map((b) => b.provider));
   const catalogs: Partial<Record<Provider, IndexedRiskCatalog>> = {};
   for (const p of providers) {
     const c = getCatalog(p);
     if (c) catalogs[p] = c;
   }
-
   return computePreview({
     bindings: body.bindings,
     accepted_risks: body.accepted_risks,
-    denied_risks: body.denied_risks ?? [],
     catalogs,
-    overrides,
+    parent_accepted_risks: parentAcceptedRisks,
   });
 }

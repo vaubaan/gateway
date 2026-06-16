@@ -17,12 +17,12 @@
  *    (`-staging`, `-prod`) — matches the research literal. We do not use
  *    the `<provider>[<env>].<name>` bracket form here (which is reserved
  *    for risks that share a single matches pattern qualified at mint).
- *  - Bulk-variables-replace deny-by-default catches the destructive
- *    `replace:true` codepath via a wildcard slice emitted by the
- *    classifier (cf. `risk-classifier.ts`).
- *  - `railway.agent-action` confirm-by-default covers the meta-tool
- *    `railway__railway-agent` ; pessimistic catch-all slices are emitted
- *    alongside so write-risks remain mandatory (cf. research §1.6).
+ *  - Bulk-variables-replace catches the destructive `replace:true`
+ *    codepath via a wildcard slice emitted by the classifier (cf.
+ *    `risk-classifier.ts`) ; severity comes from the 6D vector.
+ *  - `railway.agent-action` covers the meta-tool `railway__railway-agent` ;
+ *    pessimistic catch-all slices are emitted alongside so write-risks
+ *    remain mandatory (cf. research §1.6).
  */
 
 import type { RiskCatalog } from '@vaubaan/shared';
@@ -44,7 +44,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'railway.read-runtime',
@@ -59,7 +58,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'railway.read-logs',
@@ -76,7 +74,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'railway.read-variables',
@@ -93,7 +90,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'confirm',
     },
 
     // ─── Deploys ───────────────────────────────────────────────────────────
@@ -112,7 +108,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'allow',
       acceptable_in_envs: ['staging', 'preview', 'dev'],
     },
     {
@@ -131,7 +126,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
 
     // ─── Variables ─────────────────────────────────────────────────────────
@@ -150,7 +144,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
       acceptable_in_envs: ['staging', 'preview', 'dev'],
     },
     {
@@ -168,7 +161,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     {
       id: 'railway.bulk-variables-replace',
@@ -185,7 +177,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
 
     // ─── Account ───────────────────────────────────────────────────────────
@@ -204,7 +195,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
     },
 
     // ─── Agent (méta-tool) ─────────────────────────────────────────────────
@@ -213,8 +203,8 @@ export const railwayRiskCatalog: RiskCatalog = {
       label: 'Invocation railway-agent (méta-tool conversationnel)',
       reason:
         "L'agent upstream peut décider seul quoi muter — pas de classification " +
-        'fine possible. Catch-all `confirm` par construction. Tout usage doit ' +
-        'être audité humain.',
+        'fine possible. Catch-all par construction. Tout usage doit être audité ' +
+        'humain (opt-in explicite obligatoire).',
       matches: 'railway.account[**].agent-session.W',
       vector: {
         reversibility: 'costly',
@@ -224,7 +214,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
     },
 
     // ─── Fallback ──────────────────────────────────────────────────────────
@@ -241,7 +230,6 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };

@@ -11,9 +11,6 @@
 # Bracket lists may mix exact names and globs (`[main,master,release-*]`)
 # — the slice-dsl parser accepts them. We use that to keep individual
 # `matches` lines compact.
-#
-# `default_gate` is seeded by spec §4.2 formula on the 6D vector ; deviations
-# are documented in the source research §3.1 ("Override manuel ?" column).
 
 provider: github
 catalog_version: 1
@@ -43,7 +40,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: allow
 
   - id: github.read-meta
     label: 'Read PRs, issues, releases, workflows, branch-protection'
@@ -67,7 +63,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: allow
 
   - id: github.search-global
     label: 'Global GitHub search (code / issues, out of bindings)'
@@ -86,7 +81,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    default_gate: allow
 
   # ---------------------------------------------------------------
   # WRITES — branches feature/* (low-risk, the coding-agent hot loop)
@@ -107,7 +101,6 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: allow
 
   # ---------------------------------------------------------------
   # WRITES — protected branches (main / master / release-* / prod)
@@ -131,7 +124,6 @@ risks:
       cost: moderate
       visibility: team
       persistence: session
-    default_gate: confirm
 
   # ---------------------------------------------------------------
   # WRITES — workflow YAML files (privilege escalation vector)
@@ -153,7 +145,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
     # Acceptable only on feature/fix/chore branches, never directly on
     # main (the merge path forces a PR + human review).
     acceptable_in_envs:
@@ -181,7 +172,6 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: allow
 
   # ---------------------------------------------------------------
   # WRITES — pull requests & comments
@@ -201,7 +191,6 @@ risks:
       cost: free
       visibility: team
       persistence: session
-    default_gate: allow
 
   - id: github.comment-write
     label: 'Comment on an issue or PR'
@@ -218,7 +207,6 @@ risks:
       cost: free
       visibility: team
       persistence: session
-    default_gate: allow
 
   # ---------------------------------------------------------------
   # WRITES — releases (potentially public publication)
@@ -240,7 +228,6 @@ risks:
       cost: free
       visibility: public
       persistence: session
-    default_gate: confirm
 
   - id: github.delete-release
     label: 'Delete a release'
@@ -257,10 +244,9 @@ risks:
       cost: free
       visibility: public
       persistence: session
-    default_gate: confirm
 
   # ---------------------------------------------------------------
-  # WRITES — branch protection (posture-shift, ALWAYS deny by default)
+  # WRITES — branch protection (posture-shift)
   # ---------------------------------------------------------------
   - id: github.branch-protection-write
     label: 'Modify branch protection'
@@ -268,7 +254,7 @@ risks:
       Posture-shift : opens the branch to out-of-process writes (e.g.
       disabling required reviews). Persists after the token's lifetime.
       Even when *tightening* (adding a required check), the change
-      outlives the session — confirm minimum, deny by default.
+      outlives the session.
     matches:
       - 'github.repo[**].branch-protection[**].W'
     vector:
@@ -278,7 +264,6 @@ risks:
       cost: free
       visibility: team
       persistence: posture
-    default_gate: deny
 
   # ---------------------------------------------------------------
   # WRITES — credential mint (install token, two purposes)
@@ -298,7 +283,6 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: confirm
 
   - id: github.mint-install-token-push
     label: 'Mint an install token (purpose=push, write)'
@@ -316,7 +300,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    default_gate: deny
 
   # ---------------------------------------------------------------
   # FALLBACK — catch-all (mandatory per spec §4)
@@ -326,8 +309,8 @@ risks:
     reason: >-
       Catch-all for writes not explicitly categorized above. If observed
       in production, it signals a missing catalog entry — add the
-      specific risk before the next release. Default-gate confirm forces
-      a managerial decision rather than silent allow.
+      specific risk before the next release. Operators must opt in
+      explicitly (no implicit accept).
     matches:
       - 'github.repo[**].W'
     vector:
@@ -337,4 +320,3 @@ risks:
       cost: free
       visibility: internal
       persistence: session
-    default_gate: confirm

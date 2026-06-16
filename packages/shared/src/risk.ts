@@ -1,16 +1,20 @@
 /**
- * Risk-based authorization types — v4.
+ * Risk-based authorization types — v4 (post drop-confirm).
  *
  * Spec : docs/spec/gateway-risk-model.md.
+ * ADR  : docs/decisions/unified-gates-drop-confirm.md.
  *
- * In v4 the token does not carry a list of capabilities ; it carries a
- * list of *accepted risks* (`RiskId[]`) qualified by binding. The plugin's
- * `classify(tool, args)` returns one or more `Slice` values (the slice
- * touched at the call). The provider's risk catalog (statically loaded
- * YAML) maps slice patterns to `RiskEntry` entries — each with a
- * `default_gate` and a 6D `RiskVector`. The runtime intersects the
- * executed slice with the catalog, derives the touched `RiskId[]`, and
- * authorizes iff that set is a subset of the token's `accepted_risks`.
+ * In the post-drop-confirm model the token does not carry a list of
+ * capabilities ; it carries a list of *accepted risks* (`RiskId[]`)
+ * qualified by binding. The plugin's `classify(tool, args)` returns one
+ * or more `Slice` values (the slice touched at the call). The provider's
+ * risk catalog (statically loaded YAML) maps slice patterns to
+ * `RiskEntry` entries — each carrying a 6D `RiskVector` plus optional
+ * structural restrictions (`acceptable_in_envs`). The runtime intersects
+ * the executed slice with the catalog, derives the touched `RiskId[]`,
+ * and authorizes iff that set is a subset of the token's
+ * `accepted_risks`. There is **no** intermediate gate — a risk is either
+ * accepted (in the list) or not.
  *
  * This module is the **type-only** contract. Logic lives in
  * `@vaubaan/policy-engine` (`slice-dsl.ts`, `slice-matcher.ts`,
@@ -85,9 +89,10 @@ export type SliceSegment =
  * Used to :
  *  - explain a risk in the UI / audit / docs (`reason` field is the
  *    natural-language version of the vector).
- *  - seed the catalog's `default_gate` via a deterministic formula
- *    (`@vaubaan/policy-engine` `seedDefaultGate(vector)`).
- *  - inform decisions when an operator considers an override.
+ *  - inform a human operator's decision when they consider checking a
+ *    risk in the mint UI.
+ *  - drive a visual ordering by severity in the mint UI (the only
+ *    derived signal — no functional gate is computed from this).
  */
 export interface RiskVector {
   readonly reversibility: 'reversible' | 'costly' | 'irreversible';
@@ -111,15 +116,10 @@ export interface RiskVector {
  *   - Non-env-scoped : `<provider>.<name>`
  *     ex: `github.mint-install-token`, `vercel.deploy-preview` (fan-out)
  *
- * Slug regex (validated at catalog load + DB CHECK on `project_risk_policies`) :
+ * Slug regex (validated at catalog load) :
  *   `^[a-z][a-z0-9]*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$`
  */
 export type RiskId = string;
-
-/** The default gate vocabulary, unchanged from v1. */
-export type RiskGate = 'allow' | 'confirm' | 'deny';
-
-export const RISK_GATES = ['allow', 'confirm', 'deny'] as const satisfies readonly RiskGate[];
 
 /**
  * One entry in a provider's risk catalog (statically declared in
@@ -132,26 +132,26 @@ export const RISK_GATES = ['allow', 'confirm', 'deny'] as const satisfies readon
  * pattern, the entry is added to `risks_touched`.
  *
  * `acceptable_in_envs` (optional) is a *catalog-level* restriction (cf.
- * ADR D5) : a risk declared `acceptable_in_envs: ['staging']` cannot be
- * accepted for a binding with `env: 'prod'`, **even if** the project
- * policy allows it. Structural guardrail.
+ * ADR D5 of pivot-to-risk-based-model) : a risk declared
+ * `acceptable_in_envs: ['staging']` cannot be accepted for a binding with
+ * `env: 'prod'`. This is the **only** structural guardrail post
+ * drop-confirm — it cannot be overridden by the operator at mint.
  */
 export interface RiskEntry {
   /** Stable, version-controlled identifier. See {@link RiskId}. */
   readonly id: RiskId;
   /** Short human-readable label (UI). */
   readonly label: string;
-  /** ≤ 2 sentences explaining why this is a risk. Goes in the approval
-   *  notification and tooltips. */
+  /** ≤ 2 sentences explaining why this is a risk. Goes in tooltips and
+   *  audit displays. */
   readonly reason: string;
   /** Slice pattern(s) — single string or array of disjoint patterns
    *  (a risk can have multiple patterns when no single pattern can
    *  capture its surface). All patterns are parsed at catalog load. */
   readonly matches: string | readonly string[];
-  /** 6D vector explaining the risk's profile and seeding `default_gate`. */
+  /** 6D vector explaining the risk's profile. Drives UI ordering and
+   *  audit explainability only — no gate is derived from it. */
   readonly vector: RiskVector;
-  /** Default gate (allow|confirm|deny) for projects that do not override. */
-  readonly default_gate: RiskGate;
   /** When present, restricts which env scopes can ever accept this risk.
    *  E.g. ['preview', 'staging'] = never acceptable on env 'prod'. Enforced
    *  applicatively at mint (the env comes from the binding). */
@@ -170,41 +170,23 @@ export interface RiskCatalog {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Project-level policy override
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * One row in `project_risk_policies` — the project-level override of a
- * catalog `default_gate`.
- *
- *  - `env_scope = null` overrides the gate for every binding env.
- *  - `env_scope = 'prod'` overrides only when the binding env is 'prod'.
- */
-export interface RiskPolicyOverride {
-  readonly id: string;
-  readonly project_id: string;
-  readonly risk_id: RiskId;
-  readonly env_scope: string | null;
-  readonly gate: RiskGate;
-  readonly created_at: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Token-level acceptance
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * The v4 token-side authorization shape. Replaces `Capability[]` from v1.
+ * The token-side authorization shape.
  *
  *  - `accepted_risks` : the set of `RiskId` the token-issuer accepted as
  *    consequence of letting the agent operate. The runtime authorizes a
  *    call iff `risks_touched ⊆ accepted_risks`.
- *  - `denied_risks`  : explicit opt-out (useful when deriving from a preset
- *    and removing a single risk).
+ *  - `denied_risks`  : explicit opt-out, kept for forensic traceability
+ *    (cf. drop-confirm ADR §D5 "Alternatives rejected → A3"). Runtime
+ *    ignores this field ; the UI / audit can distinguish "non coché par
+ *    oubli" from "non coché par décision".
  *
  * Note : `RiskId` already encodes the binding env (cf. ADR D2). The
  * bindings array (provider × resource × env) lives outside this type, on
- * the access_token row.
+ * the token row.
  */
 export interface RiskAcceptance {
   readonly accepted_risks: readonly RiskId[];

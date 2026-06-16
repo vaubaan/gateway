@@ -44,7 +44,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'vercel.read-deployment',
@@ -62,7 +61,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'vercel.read-env-var',
@@ -70,7 +68,7 @@ export const vercelRiskCatalog: RiskCatalog = {
       reason:
         'Listing of env-var keys with values returned encrypted by Vercel. No direct ' +
         'secret exfiltration possible. Discriminates from the plaintext variant which ' +
-        'is `deny` by default.',
+        'is the higher-severity write.',
       matches: 'vercel.project[**].env-var[*].R',
       vector: {
         reversibility: 'reversible',
@@ -80,7 +78,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'vercel.read-env-var-plaintext',
@@ -98,7 +95,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'deny',
     },
     {
       id: 'vercel.fetch-deployment-url',
@@ -116,7 +112,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
 
     // ─── WRITES — DEPLOYMENT-PROTECTION BYPASS (credential mint) ───────────
@@ -136,7 +131,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
 
     // ─── WRITES — DEPLOYMENT ───────────────────────────────────────────────
@@ -156,7 +150,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'session',
       },
-      default_gate: 'allow',
     },
     {
       id: 'vercel.deploy-prod',
@@ -173,7 +166,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
 
     // ─── WRITES — TOOLBAR (low-risk feedback comments) ─────────────────────
@@ -193,7 +185,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'session',
       },
-      default_gate: 'allow',
     },
 
     // ─── WRITES — ENV VARS (secrets) ───────────────────────────────────────
@@ -213,7 +204,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'vercel.env-var-write-prod',
@@ -231,7 +221,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     {
       id: 'vercel.env-var-fan-out',
@@ -240,9 +229,9 @@ export const vercelRiskCatalog: RiskCatalog = {
         "`upsert_env_var target=['production','preview','development']` (or target " +
         'omitted = all 3 by Vercel default), and `delete_env_var` (whose upstream API ' +
         'removes the var from every env it lives in regardless of the Vaubaan hint), ' +
-        'touch all 3 envs in a single tool call. Force a confirm step even when the ' +
-        'agent already has `env-var-write-preview` accepted — guard against silent ' +
-        'prod escalation.',
+        'touch all 3 envs in a single tool call. Treated as its own risk so the ' +
+        'agent who only has `env-var-write-preview` accepted does NOT silently ' +
+        'escalate to prod.',
       matches: 'vercel.project[**].env-var-fan-out.W',
       vector: {
         reversibility: 'costly',
@@ -252,7 +241,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
     },
 
     // ─── WRITES — PROJECT SETTINGS (build pipeline) ────────────────────────
@@ -272,7 +260,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
     },
 
     // ─── WRITES — DEPLOYMENT-PROTECTION (governance) ───────────────────────
@@ -292,7 +279,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
 
     // ─── WRITES — DOMAINS (DNS posture-shift externe) ──────────────────────
@@ -312,7 +298,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
 
     // ─── FALLBACK (required) ───────────────────────────────────────────────
@@ -322,7 +307,7 @@ export const vercelRiskCatalog: RiskCatalog = {
       reason:
         'Catch-all for writes that have not been explicitly categorised. If observed ' +
         'in production, signals that a tool was added without a matching catalog ' +
-        'entry. Default `confirm` to fail-loud rather than silently allow.',
+        'entry — operators must opt in explicitly (no implicit accept).',
       matches: 'vercel.[**].W',
       vector: {
         reversibility: 'costly',
@@ -332,7 +317,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };

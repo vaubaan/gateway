@@ -1,12 +1,14 @@
 /**
- * Token-mint helpers (unified-tokens edition).
+ * Token-mint helpers (post drop-confirm).
  *
  * Spec : docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md.
+ * ADR  : docs/decisions/unified-gates-drop-confirm.md.
  *
  * Mints a child token from a known parent token, enforcing the subset /
- * depth / expires_at invariants. The legacy `mintRiskAccessToken` shape
- * (project + risks, no parent) is gone — every mint now goes through the
- * parent token and produces a row in the unified `tokens` table.
+ * depth / expires_at invariants. The mint-time approval flow is gone —
+ * every successful preview leads directly to an INSERT into `tokens`.
+ * Escalation happens at runtime, outside the gateway, via the parent's
+ * `context.escalation_channel`.
  */
 
 import {
@@ -69,10 +71,10 @@ export class MintInvariantError extends Error {
   }
 }
 
-const MAX_DEPTH = 5;
+export const MAX_DEPTH = 5;
 
 /**
- * Carte-blanche bypass rule (ADR §3 "data-migration shim").
+ * Carte-blanche bypass rule (unified-tokens ADR §3 "data-migration shim").
  *
  * A root org-scoped token with NO accepted_risks is treated as having
  * implicit grant on every risk — the subset check is skipped at mint
@@ -80,12 +82,6 @@ const MAX_DEPTH = 5;
  * rows continue to mint child tokens (they have `accepted_risks=[]` by
  * design — the legacy mgmt-key authorised by org membership, not by a
  * risk grant).
- *
- * Same shim is reused by `externalApprovalParent` (Telegram/Email/UI
- * session approvals — no parent Bearer at decide-time).
- *
- * Returns `true` when the parent qualifies for the bypass. Centralised
- * here so the rule has a name (cf. clean-code-report W2).
  */
 export function isCarteBlancheParent(parent: MintParent): boolean {
   return parent.scope === 'org' && parent.depth === 0 && (parent.accepted_risks?.length ?? 0) === 0;
@@ -110,7 +106,7 @@ export function computeChildChain(parent: MintParent): DelegationChainEntry[] {
  * Verify the mint invariants against the parent and throw
  * `MintInvariantError` (caller maps to 403) on violation.
  *
- * Invariants (ADR D1) :
+ * Invariants (unified-tokens ADR D1) :
  *  - child.depth = parent.depth + 1 ≤ 5
  *  - child.expires_at ≤ parent.expires_at (when parent has expiry)
  *  - child.accepted_risks ⊆ parent.accepted_risks
@@ -176,8 +172,8 @@ export function checkMintInvariants(input: ChildMintInput, childExpiresAt: strin
 }
 
 /**
- * Mint a child token NOW (no approval flow). Caller is responsible for
- * ensuring all risk gates are `allow` and the parent is valid.
+ * Mint a child token now. Caller is responsible for ensuring the
+ * `accepted_risks` are acceptable for their bindings (cf. preview).
  *
  * Throws `MintInvariantError` (→ 403) on subset/depth/expires_at violation,
  * or generic `Error` (→ 500) on DB failure.
@@ -221,87 +217,4 @@ export async function mintChildToken(
   }
 
   return { tokenId: inserted.id, apiKey, apiKeyPrefix, expiresAt, delegationChain };
-}
-
-/**
- * Mint a child token for an approved approval-request and stash the
- * plaintext api_key on the approval row so the caller's next poll picks it up.
- */
-export async function mintChildForApproval(
-  svc: SupabaseClient,
-  approvalId: string,
-  input: ChildMintInput,
-): Promise<ChildMintResult> {
-  const minted = await mintChildToken(svc, input);
-  await svc
-    .from('approval_requests')
-    .update({
-      access_token_id: minted.tokenId,
-      pending_api_key: minted.apiKey,
-    })
-    .eq('id', approvalId);
-  return minted;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Approval decision — applies a pending approval and mints the child if
-// approved.
-// ─────────────────────────────────────────────────────────────────────────────
-
-export interface DecideApprovalInput {
-  approvalId: string;
-  decision: 'approve' | 'deny';
-  decidedBy: string;
-  parent: MintParent;
-  scope: TokenScope;
-  projectId?: string | null;
-  acceptedRisks: readonly RiskId[];
-  deniedRisks: readonly RiskId[];
-  tokenName: string;
-  ttlHours: number;
-  singleUse?: boolean;
-  context?: Record<string, unknown> | null;
-  createdBy?: string | null;
-}
-
-export interface DecideApprovalResult {
-  status: 'approved' | 'denied';
-  tokenId?: string;
-}
-
-export async function decideApproval(
-  svc: SupabaseClient,
-  input: DecideApprovalInput,
-): Promise<DecideApprovalResult> {
-  const now = new Date().toISOString();
-
-  if (input.decision === 'deny') {
-    await svc
-      .from('approval_requests')
-      .update({ status: 'denied', decided_by: input.decidedBy, decided_at: now })
-      .eq('id', input.approvalId)
-      .eq('status', 'pending');
-    return { status: 'denied' };
-  }
-
-  const minted = await mintChildForApproval(svc, input.approvalId, {
-    parent: input.parent,
-    tokenName: input.tokenName,
-    scope: input.scope,
-    projectId: input.projectId ?? null,
-    ttlMs: input.ttlHours * 3600_000,
-    accepted_risks: input.acceptedRisks,
-    denied_risks: input.deniedRisks,
-    singleUse: input.singleUse,
-    context: input.context ?? null,
-    createdBy: input.createdBy ?? null,
-  });
-
-  await svc
-    .from('approval_requests')
-    .update({ status: 'approved', decided_by: input.decidedBy, decided_at: now })
-    .eq('id', input.approvalId)
-    .eq('status', 'pending');
-
-  return { status: 'approved', tokenId: minted.tokenId };
 }

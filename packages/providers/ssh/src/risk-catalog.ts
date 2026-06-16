@@ -8,27 +8,26 @@
  * what the runtime imports (no YAML dep at runtime). Keep both in sync —
  * a CI lint in Phase 2 will diff the two structures.
  *
- * 5 risks + 1 fallback. Per the research doc :
- *   - `ssh.exec-read`              allow   — whitelisted reads
- *   - `ssh.exec-write-staging`     confirm — writes on non-prod hosts
- *                                            (acceptable_in_envs gates which
- *                                             host_slug can accept this risk)
- *   - `ssh.exec-write-prod`        deny    — writes on any other host
- *   - `ssh.exec-read-secret-files` confirm — co-touched on cat /etc/...,
- *                                            forces explicit consent
- *   - `ssh.uncategorized-write`    confirm — catch-all fallback
+ * 5 risks + 1 fallback :
+ *   - `ssh.exec-read`              — whitelisted reads
+ *   - `ssh.exec-write-staging`     — writes on non-prod hosts
+ *                                    (acceptable_in_envs gates which
+ *                                     host_slug can accept this risk)
+ *   - `ssh.exec-write-prod`        — writes on any other host
+ *   - `ssh.exec-read-secret-files` — co-touched on cat /etc/..., requires
+ *                                    explicit acceptance
+ *   - `ssh.uncategorized-write`    — catch-all fallback
  *
  * Conventions :
  *  - `acceptable_in_envs` is matched against the binding's `host_slug`
  *    (SSH's convention : one host = one env). The canonical non-prod
- *    slugs are `staging-vps` and `dev-vps` ; projects with other naming
- *    must extend either this list or the project policy.
+ *    slugs are `staging-vps` and `dev-vps`.
  *  - `ssh.exec-write-staging` and `ssh.exec-write-prod` share the same
  *    `matches` pattern (`ssh.host[**].command.W`) on purpose — every
  *    write call touches BOTH catalog entries at runtime. Discrimination
  *    happens at mint time : the manager can only accept `-staging` for
  *    bindings whose host_slug ∈ `acceptable_in_envs`, and must accept
- *    `-prod` (deny-by-default) for anything else.
+ *    `-prod` (no structural restriction) for anything else.
  *  - The classifier emits an EXTRA slice (identical, R-shaped) when the
  *    cmd matches a "cat /etc/...", "cat /root/...", "stat ~/.ssh/..."
  *    style heuristic — this is the explicit co-touch with
@@ -58,7 +57,6 @@ export const sshRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'ssh.exec-read-secret-files',
@@ -77,7 +75,6 @@ export const sshRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'confirm',
     },
     // ─── Writes ────────────────────────────────────────────────────────────
     {
@@ -96,7 +93,6 @@ export const sshRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'confirm',
       acceptable_in_envs: ['staging-vps', 'dev-vps'],
     },
     {
@@ -104,8 +100,9 @@ export const sshRiskCatalog: RiskCatalog = {
       label: 'Exécuter une commande shell arbitraire (host prod)',
       reason:
         'Mêmes commandes que ci-dessus mais sur un host de production. Posture-shift ' +
-        "potentiel, downtime possible, surface d'attaque maximale. Deny par défaut ; " +
-        'doit être escaladé humain pour être accepté.',
+        "potentiel, downtime possible, surface d'attaque maximale. Opt-in explicite " +
+        'obligatoire ; toute escalation passe par le runtime escalation_channel ' +
+        'hors-gateway.',
       matches: 'ssh.host[**].command.W',
       vector: {
         reversibility: 'irreversible',
@@ -115,7 +112,6 @@ export const sshRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     // ─── Fallback ──────────────────────────────────────────────────────────
     {
@@ -134,7 +130,6 @@ export const sshRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };

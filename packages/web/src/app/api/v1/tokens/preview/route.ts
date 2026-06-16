@@ -1,25 +1,22 @@
 /**
- * Mint-time gate preview — compute the effective gate for each accepted_risk
- * + binding, WITHOUT minting anything.
+ * Mint-time risk preview — compute `acceptable` / `inherited` per
+ * requested `accepted_risk` × binding, WITHOUT minting anything.
  *
  *   POST /api/v1/tokens/preview
  *     Authorization: Bearer vbn_live_…
- *     body: { projectSlug | projectId, bindings[], accepted_risks[], denied_risks? }
+ *     body: { projectSlug | projectId, bindings[], accepted_risks[] }
  *
- *   200 PreviewResponse
+ *   200 PreviewResponse  (lib/mint/risk-preview.ts)
  *
- * Replaces the legacy `/api/v1/mgmt/tokens/preview` (ADR
- * unified-tokens-delegation-chain-and-escalation-channel.md §D3).
+ * Spec : docs/spec/gateway-risk-model.md §9.
+ * ADR  : docs/decisions/unified-gates-drop-confirm.md.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import type { Provider, RiskPolicyOverride } from '@vaubaan/shared';
-import type { IndexedRiskCatalog } from '@vaubaan/policy-engine';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireToken } from '@/lib/auth/require-token';
-import { getCatalog } from '@/lib/risk-catalog/loader';
-import { computePreview } from '@/lib/mint/risk-preview';
+import { computeMintPreview } from '@/lib/mint/preview';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -35,7 +32,6 @@ const BodySchema = z.object({
   projectSlug: z.string().min(1).optional(),
   bindings: z.array(BindingSchema).min(1),
   accepted_risks: z.array(z.string().min(1)),
-  denied_risks: z.array(z.string().min(1)).optional(),
 });
 
 interface ProjectRow {
@@ -81,26 +77,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'project not found in this org' }, { status: 404 });
   }
 
-  const { data: rulesRaw } = await svc
-    .from('project_risk_policies')
-    .select('id, project_id, risk_id, env_scope, gate, created_at')
-    .eq('project_id', project.id);
-  const overrides: RiskPolicyOverride[] = rulesRaw ?? [];
-
-  const providers = new Set<Provider>(body.bindings.map((b) => b.provider));
-  const catalogs: Partial<Record<Provider, IndexedRiskCatalog>> = {};
-  for (const p of providers) {
-    const c = getCatalog(p);
-    if (c) catalogs[p] = c;
-  }
-
-  const preview = computePreview({
-    bindings: body.bindings,
-    accepted_risks: body.accepted_risks,
-    denied_risks: body.denied_risks ?? [],
-    catalogs,
-    overrides,
-  });
+  const preview = computeMintPreview(
+    { bindings: body.bindings, accepted_risks: body.accepted_risks },
+    guard.token.accepted_risks,
+  );
 
   return NextResponse.json(preview, { status: 200 });
 }
