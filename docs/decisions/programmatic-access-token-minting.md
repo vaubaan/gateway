@@ -1,9 +1,18 @@
 ---
 title: Programmatic AccessToken minting — neutral namespace, DELETE, expired purge
-status: accepted
+status: superseded
 date: 2026-06-01
 supersedes: org-management-keys-for-runner
+superseded-by: unified-tokens-delegation-chain-and-escalation-channel
 ---
+
+> **Superseded 2026-06-16.** Le couple `org_management_keys` /
+> `vbn_mgmt_*` introduit par cet ADR a été drop dans la migration
+> unified-tokens (table unique `tokens`, scope sur le row, préfixe
+> `vbn_live_*` partout). Le endpoint `POST /api/v1/mgmt/tokens` est
+> remplacé par `POST /api/v1/tokens/mint`. Voir
+> [[unified-tokens-delegation-chain-and-escalation-channel]] pour le
+> nouveau modèle.
 
 # Programmatic AccessToken minting — neutral namespace, DELETE, expired purge
 

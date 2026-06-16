@@ -1,10 +1,18 @@
 ---
 title: github__mint_install_token — kill host-side git credentials on session hosts
-status: accepted
+status: superseded
 date: 2026-05-30
+superseded-by: unified-tokens-delegation-chain-and-escalation-channel
 ---
 
 # `github__mint_install_token` — kill host-side git credentials on session hosts
+
+> **Superseded 2026-06-16.** Le tool reste exposé sous le même nom et
+> la même catégorisation risque, mais le credential `vbn_mgmt_*` qui
+> était requis pour l'invoquer disparaît : tout `vbn_live_*` qui
+> détient le risk `github.mint-install-token` peut le déclencher. Cf.
+> [[unified-tokens-delegation-chain-and-escalation-channel]] pour le
+> nouveau modèle de credentials unifiés.
 
 > **Note 2026-06-15** — Le tool reste exposé. En v4 (risk-based) il est
 > catégorisé par le risk `github.mint-install-token` (vecteur
