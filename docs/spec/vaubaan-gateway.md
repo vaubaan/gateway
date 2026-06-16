@@ -2,6 +2,22 @@
 
 > **Statut :** spec greenfield.
 >
+> **⚠️ Note 2026-06-16 — Unified tokens (4ème évolution) :**
+> Le couple `org_management_keys` (`vbn_mgmt_*`) + `access_tokens`
+> (`vbn_live_*`) est **fusionné** dans une table unique `tokens` avec
+> `parent_id` + `delegation_chain` pré-calculé (cf. ADR
+> [[unified-tokens-delegation-chain-and-escalation-channel]]). Le
+> préfixe `vbn_mgmt_*` disparaît ; tous les Bearers sont `vbn_live_*`
+> et le scope (`org` / `project`) vit sur le row. Les endpoints
+> `POST /api/v1/mgmt/tokens*` + `POST /api/v1/projects/[id]/mint*`
+> sont retirés au profit du seul `POST /api/v1/tokens/mint` (qui
+> accepte n'importe quel `vbn_live_*` et produit un child avec
+> `parent_id = caller.id`). L'audit_log carry désormais
+> `delegation_chain` (snapshot frozen-in-time). Les sections §0, §3
+> (DDL), §7 (REST surface) sont **historiques** jusqu'à réécriture —
+> source de vérité du nouveau modèle : ADR unified-tokens. Pour le
+> handbook applicatif, voir [[approvals]] §Mint flow.
+>
 > **⚠️ Note 2026-06-15 — Capabilities → Risk-based (3ème évolution) :**
 > Le modèle **capabilities** introduit en 2026-06-08 (tuple `(provider,
 > plane, level, action, env?)`) est **remplacé** par le **modèle
