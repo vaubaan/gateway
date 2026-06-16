@@ -8,7 +8,7 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { AuditDecision, RiskId, Slice } from '@vaubaan/shared';
+import type { AuditDecision, DelegationChainEntry, RiskId, Slice } from '@vaubaan/shared';
 
 export interface AuditRow {
   organization_id: string;
@@ -27,6 +27,9 @@ export interface AuditRow {
   risks_touched: RiskId[] | null;
   /** Snapshot of the token's accepted_risks at call time (for reproducibility). */
   token_accepted_risks_snapshot: RiskId[] | null;
+  /** Snapshot of the token's delegation_chain at call time. Forensic-grade
+   *  immutable record — survives renames/revokes of ancestor tokens. */
+  delegation_chain: DelegationChainEntry[] | null;
 }
 
 export interface AuditWriter {

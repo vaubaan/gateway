@@ -490,6 +490,7 @@ export class McpGateway {
         slices_executed: executedSlices ? [...executedSlices] : null,
         risks_touched: [...risksTouched],
         token_accepted_risks_snapshot: [...ctx.accepted_risks],
+        delegation_chain: [...ctx.access_token.delegation_chain],
       });
     } catch (e) {
       console.error('[gateway] audit write failed', e);
