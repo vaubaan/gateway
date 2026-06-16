@@ -21,6 +21,17 @@
 -- =============================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────────
+-- 0. Elevate to supabase_admin
+--
+-- On Supabase hosted, `postgres` (the migration runner) is a member of
+-- `supabase_admin` with NOINHERIT. SET ROLE makes the rest of this migration
+-- run with full privileges, including pgsodium_keyholder (required for
+-- crypto_aead_det_encrypt/decrypt) and the ability to ALTER FUNCTION OWNER.
+-- This requires a DIRECT database connection (not the session pooler).
+-- ─────────────────────────────────────────────────────────────────────────────
+SET ROLE supabase_admin;
+
+-- ─────────────────────────────────────────────────────────────────────────────
 -- 1. Enable pgsodium
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE EXTENSION IF NOT EXISTS pgsodium;
@@ -239,3 +250,8 @@ UPDATE provider_admins pa SET
   END
 WHERE pa.access_token_encrypted IS NOT NULL
    OR pa.refresh_token_encrypted IS NOT NULL;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 10. Drop back to the original role
+-- ─────────────────────────────────────────────────────────────────────────────
+RESET ROLE;

@@ -23,7 +23,6 @@ jobs:
     env:
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
-      SUPABASE_POOLER_HOST: ${{ secrets.SUPABASE_POOLER_HOST }}
     steps:
       - uses: actions/checkout@v4
 
@@ -35,14 +34,15 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ -z "$SUPABASE_DB_PASSWORD" ] || [ -z "$SUPABASE_PROJECT_REF" ] || [ -z "$SUPABASE_POOLER_HOST" ]; then
-            echo "SUPABASE_DB_PASSWORD, SUPABASE_PROJECT_REF, and SUPABASE_POOLER_HOST secrets are required for automatic migrations." >&2
+          if [ -z "$SUPABASE_DB_PASSWORD" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
+            echo "SUPABASE_DB_PASSWORD and SUPABASE_PROJECT_REF secrets are required for automatic migrations." >&2
             exit 1
           fi
 
-          # Session pooler (port 5432, IPv4). Direct db.<ref>.supabase.co is
-          # IPv6-only on some Supabase tiers, which GitHub runners cannot reach.
-          CONN="postgresql://postgres.${SUPABASE_PROJECT_REF}@${SUPABASE_POOLER_HOST}:5432/postgres"
+          # Direct connection (port 5432). Migrations may need elevated
+          # privileges (SET ROLE supabase_admin) that the session pooler
+          # does not support. GitHub runners support IPv6.
+          CONN="postgresql://postgres@db.${SUPABASE_PROJECT_REF}.supabase.co:5432/postgres?sslmode=require"
           export PGPASSWORD="$SUPABASE_DB_PASSWORD"
 
           # Keep using the standard Supabase CLI migration ledger so switching
