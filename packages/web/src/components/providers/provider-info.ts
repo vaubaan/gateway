@@ -5,16 +5,43 @@
  * tools list, presentation copy).
  *
  * Spec : docs/spec/gateway-risk-model.md §1, §2.
- * Used by : `/orgs/[slug]/providers/[provider]/page.tsx`.
+ * Used by : `/orgs/[slug]/providers/[provider]/page.tsx` and the per-plane
+ *           variant `[provider]/[plane]/page.tsx`.
+ *
+ * Multi-plane note (Supabase) :
+ *  - When a provider exposes more than one plane (Supabase has 4 : db /
+ *    storage / auth / functions), the info page redirects to a `[plane]`
+ *    sub-route so each plane gets its own 5-section page (data-model,
+ *    risks, tools, setup — all filtered to that plane).
+ *  - Per-plane metadata (label, pitch, optional setup override) lives in
+ *    `planes[].info`. Tools and risks are filtered at render time via
+ *    helper functions exported from this module.
  */
 
-import type { DataModel, McpToolDeclaration, Provider } from '@vaubaan/shared';
+import type { DataModel, McpToolDeclaration, Provider, RiskEntry } from '@vaubaan/shared';
 
 import { githubAvailableTools, githubDataModel } from '@vaubaan/providers-github';
 import { vercelAvailableTools, vercelDataModel } from '@vaubaan/providers-vercel';
-import { supabaseAvailableTools, supabaseDataModel } from '@vaubaan/providers-supabase';
+import {
+  supabaseAvailableTools,
+  supabaseDataModel,
+  supabaseToolPlanes,
+} from '@vaubaan/providers-supabase';
 import { railwayAvailableTools, railwayDataModel } from '@vaubaan/providers-railway';
 import { sshAvailableTools, sshDataModel } from '@vaubaan/providers-ssh';
+
+/** Per-plane presentation copy. */
+export interface PlaneInfo {
+  /** Plane slug as it appears in the URL — must match a slug in `dataModel.planes`. */
+  readonly slug: string;
+  /** Display label for the tab / header. */
+  readonly label: string;
+  /** Short pitch for the plane (1 line). */
+  readonly pitch: string;
+  /** When the provider has a plane-specific connection nuance, the setup
+   *  string is overridden here. Falls back to `ProviderInfo.setup`. */
+  readonly setup?: string;
+}
 
 export interface ProviderInfo {
   /** URL slug (`bash` for the SSH provider). */
@@ -29,6 +56,10 @@ export interface ProviderInfo {
   readonly dataModel: DataModel;
   /** Tools the gateway exposes for this provider. */
   readonly tools: ReadonlyArray<McpToolDeclaration>;
+  /** Tool-name → plane slug map (only required when `dataModel.planes.length > 1`). */
+  readonly toolPlanes?: Readonly<Record<string, string>>;
+  /** Per-plane copy (one entry per plane slug). */
+  readonly planes: ReadonlyArray<PlaneInfo>;
   /** Short connection / setup paragraph for the page. */
   readonly setup: string;
   /** Path of the canonical risk-catalog source on GitHub (for "View source"). */
@@ -46,6 +77,14 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     kind: 'cloud',
     dataModel: githubDataModel,
     tools: githubAvailableTools,
+    planes: [
+      {
+        slug: 'repo',
+        label: 'Repo',
+        pitch:
+          'Repository plane — branches, files, PRs, issues, workflows, branch-protection, releases, tags.',
+      },
+    ],
     setup:
       'Install the Vaubaan Gateway GitHub App on the org or user account that owns the repos you want to expose. Vaubaan mints short-lived installation tokens at runtime — no long-lived PAT is stored.',
     catalogPath: 'packages/providers/github/src/risk-catalog.yaml',
@@ -59,6 +98,14 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     kind: 'cloud',
     dataModel: vercelDataModel,
     tools: vercelAvailableTools,
+    planes: [
+      {
+        slug: 'runtime',
+        label: 'Runtime',
+        pitch:
+          'Runtime hosting — projects, deployments, env vars, domains, deployment-protection, toolbar comments.',
+      },
+    ],
     setup:
       'Install the Vaubaan Marketplace Integration on the team that owns the projects you want to expose. Vaubaan stores the integration access token (refreshable) and proxies tool calls.',
     catalogPath: 'packages/providers/vercel/src/risk-catalog.yaml',
@@ -72,6 +119,29 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     kind: 'cloud',
     dataModel: supabaseDataModel,
     tools: supabaseAvailableTools,
+    toolPlanes: supabaseToolPlanes,
+    planes: [
+      {
+        slug: 'db',
+        label: 'Database',
+        pitch: 'Postgres — schemas, tables, rows, indexes, RLS policies, migrations ledger.',
+      },
+      {
+        slug: 'storage',
+        label: 'Storage',
+        pitch: 'S3-like buckets and objects, with signed-URL distribution.',
+      },
+      {
+        slug: 'auth',
+        label: 'Auth (GoTrue)',
+        pitch: 'Users, SSO/SAML providers, third-party JWT issuers, auth config.',
+      },
+      {
+        slug: 'functions',
+        label: 'Edge Functions',
+        pitch: 'Deno edge functions, deployments, and project-wide function secrets.',
+      },
+    ],
     setup:
       'Paste a Supabase Management API personal access token (PAT, `sbp_…`) — Vaubaan never sees the service_role key. Each project_ref the binding pins is reachable; everything else is denied at the runtime layer.',
     catalogPath: 'packages/providers/supabase/src/risk-catalog.yaml',
@@ -85,6 +155,13 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     kind: 'cloud',
     dataModel: railwayDataModel,
     tools: railwayAvailableTools,
+    planes: [
+      {
+        slug: 'runtime',
+        label: 'Runtime',
+        pitch: 'Projects, environments, services, deployments, env vars, the meta-agent tool.',
+      },
+    ],
     setup:
       'Authorize the Vaubaan Gateway Railway app to manage the projects in your workspace. Vaubaan stores the OAuth refresh token and rotates the access token at each call.',
     catalogPath: 'packages/providers/railway/src/risk-catalog.yaml',
@@ -98,6 +175,14 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     kind: 'host',
     dataModel: sshDataModel,
     tools: sshAvailableTools,
+    planes: [
+      {
+        slug: 'host',
+        label: 'Host',
+        pitch:
+          'A single SSH host with a per-binding annotated bash script — each function = one MCP tool.',
+      },
+    ],
     setup:
       'Bash bindings live per-project (not org-level). Each binding pairs an annotated bash script with one or more SSH hosts. Hosts are registered via the `ssh_binding` form; commands are dispatched through `ssh__exec`.',
     catalogPath: 'packages/providers/ssh/src/risk-catalog.yaml',
@@ -110,4 +195,130 @@ export const PROVIDER_SLUGS = Object.keys(PROVIDER_INFO) as readonly Provider[];
 
 export function isProviderSlug(value: string): value is Provider {
   return (PROVIDER_SLUGS as readonly string[]).includes(value);
+}
+
+/**
+ * Compute the set of plane slugs a risk entry touches, by intersecting each
+ * `matches` pattern's entity names with each plane's entity set. Returns
+ * the deduplicated list of plane slugs (one risk can span multiple planes
+ * via a fallback pattern like `supabase.**.W` — those risks appear in
+ * every plane page, which is correct).
+ *
+ * The algorithm is intentionally simple : tokenise the pattern on `.`,
+ * strip the cardinality marker `[...]`, drop `R`/`W` trailing actions and
+ * wildcards (`*` / `**`). Whatever remains and matches a declared entity
+ * name in a plane → that plane is touched.
+ */
+export function risksForPlane(
+  entries: readonly RiskEntry[],
+  model: DataModel,
+  planeSlug: string,
+): readonly RiskEntry[] {
+  const plane = model.planes.find((p) => p.slug === planeSlug);
+  if (!plane) return [];
+  const planeEntityNames = new Set(plane.entities.map((e) => e.name));
+
+  // Entities that are UNIQUE to this plane (not shared with another plane).
+  // A risk that mentions a unique entity definitively touches this plane.
+  const uniqueToThisPlane = new Set<string>();
+  // Entities unique to OTHER planes — a risk mentioning one of these is
+  // definitively *not* this plane (it's a sibling plane's risk).
+  const uniqueToOtherPlane = new Set<string>();
+  const occurrences = new Map<string, number>();
+  for (const p of model.planes) {
+    for (const e of p.entities) {
+      occurrences.set(e.name, (occurrences.get(e.name) ?? 0) + 1);
+    }
+  }
+  for (const [name, count] of occurrences) {
+    if (count !== 1) continue;
+    if (planeEntityNames.has(name)) uniqueToThisPlane.add(name);
+    else uniqueToOtherPlane.add(name);
+  }
+
+  return entries.filter((entry) =>
+    riskTouchesPlane(entry, planeEntityNames, uniqueToThisPlane, uniqueToOtherPlane),
+  );
+}
+
+function riskTouchesPlane(
+  entry: RiskEntry,
+  planeEntityNames: ReadonlySet<string>,
+  uniqueToThisPlane: ReadonlySet<string>,
+  uniqueToOtherPlane: ReadonlySet<string>,
+): boolean {
+  const patterns = typeof entry.matches === 'string' ? [entry.matches] : entry.matches;
+  let anyPatternMatches = false;
+  for (const pattern of patterns) {
+    const tokens = extractEntityTokens(pattern);
+    if (tokens.length === 0) {
+      // Wildcard-only pattern (e.g. `supabase.**.R` / `.W`) — touches EVERY
+      // plane (it's a fallback that catches anything not handled by a more
+      // specific risk).
+      return true;
+    }
+    const hasUniqueToThis = tokens.some((t) => uniqueToThisPlane.has(t));
+    const hasUniqueToOther = tokens.some((t) => uniqueToOtherPlane.has(t));
+    if (hasUniqueToThis) {
+      anyPatternMatches = true;
+      continue;
+    }
+    if (hasUniqueToOther) {
+      // This pattern definitively belongs to another plane — skip.
+      continue;
+    }
+    // Pattern only uses shared entities (e.g. `project.W` / `project-settings`)
+    // — it touches every plane that contains those shared entities. Count as
+    // a match when at least one shared token is in this plane.
+    if (tokens.some((t) => planeEntityNames.has(t))) {
+      anyPatternMatches = true;
+    }
+  }
+  return anyPatternMatches;
+}
+
+/**
+ * Extract the entity name tokens from a slice pattern. Strips the leading
+ * provider segment, cardinality markers (`[…]`), action suffixes
+ * (`.R` / `.W`), and wildcards.
+ *
+ * Examples :
+ *   `supabase.project[**].bucket[**].object[**].W`
+ *     → ['project', 'bucket', 'object']
+ *   `supabase.**.W`
+ *     → []
+ *   `supabase.**.R`
+ *     → []
+ */
+function extractEntityTokens(pattern: string): string[] {
+  const out: string[] = [];
+  for (const segment of pattern.split('.')) {
+    const stripped = segment.replace(/\[.*?\]/g, '').trim();
+    if (!stripped) continue;
+    if (stripped === '*' || stripped === '**') continue;
+    if (stripped === 'R' || stripped === 'W') continue;
+    // Provider-name leading segment (`supabase`, `github`, …) — heuristic :
+    // it is the first non-wildcard token AND matches no known cardinality.
+    // We just push everything past that ; it gets filtered later when the
+    // caller intersects with declared entity names.
+    out.push(stripped);
+  }
+  // The first token is always the provider name (per the DSL grammar).
+  if (out.length > 0) out.shift();
+  return out;
+}
+
+/**
+ * Filter tools to only those that target a specific plane. Requires
+ * `toolPlanes` to be declared on the ProviderInfo — for single-plane
+ * providers, all tools are returned regardless.
+ */
+export function toolsForPlane(
+  info: ProviderInfo,
+  planeSlug: string,
+): ReadonlyArray<McpToolDeclaration> {
+  if (info.planes.length <= 1) return info.tools;
+  const map = info.toolPlanes;
+  if (!map) return info.tools;
+  return info.tools.filter((t) => map[t.name] === planeSlug);
 }

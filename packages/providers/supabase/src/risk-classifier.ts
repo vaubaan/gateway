@@ -511,6 +511,15 @@ const TOOLS: Record<string, ToolDescriptor> = {
 /** All MCP tool names this classifier covers (used for lint coverage). */
 export const SUPPORTED_TOOLS: ReadonlyArray<string> = Object.keys(TOOLS);
 
+/**
+ * Tool → plane lookup. Exposed for the UI : the provider info page filters
+ * tools/risks per plane when the provider has > 1 plane. Mirrors what's
+ * declared on each `ToolDescriptor.plane` above — the cast is safe because
+ * `TOOLS` is the single source of truth for the supported set.
+ */
+export const TOOL_PLANES: Readonly<Record<string, 'db' | 'storage' | 'auth' | 'functions'>> =
+  Object.fromEntries(Object.entries(TOOLS).map(([name, desc]) => [name, desc.plane]));
+
 /** Resolve which project_ref the call targets. Mirrors classifySupabase v1
  *  semantics : explicit `project_ref` (or `projectRef`) arg wins ; falls back
  *  to the single Supabase binding when unambiguous. Returns `null` on

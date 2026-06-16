@@ -7,5 +7,6 @@ export { supabaseRiskCatalog } from './risk-catalog.ts';
 export {
   classifySupabaseV4,
   SUPPORTED_TOOLS as supabaseSupportedTools,
+  TOOL_PLANES as supabaseToolPlanes,
 } from './risk-classifier.ts';
 export type { ClassifyV4Result as SupabaseClassifyV4Result } from './risk-classifier.ts';
