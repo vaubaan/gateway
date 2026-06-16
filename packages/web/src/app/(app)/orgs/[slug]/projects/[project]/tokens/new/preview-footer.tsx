@@ -35,7 +35,7 @@ export function PreviewFooter({
       style={{
         position: 'sticky',
         bottom: 0,
-        background: 'var(--surface-elevated)',
+        background: 'var(--surface-raised)',
         border: '1px solid var(--border-subtle)',
         borderRadius: 'var(--radius-md)',
         padding: 'var(--space-3) var(--space-4)',

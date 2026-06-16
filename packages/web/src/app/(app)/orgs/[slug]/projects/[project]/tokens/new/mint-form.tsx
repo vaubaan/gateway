@@ -386,7 +386,7 @@ export function MintForm({
                   padding: '4px 8px',
                   border: '1px solid var(--border-subtle)',
                   borderRadius: 'var(--radius-md)',
-                  background: 'var(--surface-elevated)',
+                  background: 'var(--surface-raised)',
                   fontSize: 'var(--text-sm)',
                 }}
               >

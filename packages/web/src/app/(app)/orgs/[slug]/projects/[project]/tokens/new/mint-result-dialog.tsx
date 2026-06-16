@@ -29,7 +29,7 @@ export function MintResultDialog({ result, onClose }: { result: MintResult; onCl
     >
       <div
         style={{
-          background: 'var(--surface-elevated)',
+          background: 'var(--surface-overlay)',
           border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--radius-md)',
           padding: 'var(--space-5)',
