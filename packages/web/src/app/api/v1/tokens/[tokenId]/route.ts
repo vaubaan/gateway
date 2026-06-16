@@ -55,7 +55,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ tokenId: 
   const svc = getSupabaseServiceClient();
 
   const { data: token } = await svc
-    .from('access_tokens')
+    .from('tokens')
     .select('id, project_id, api_key_prefix, projects!inner(organization_id)')
     .eq('id', tokenId)
     .maybeSingle<{
@@ -72,7 +72,7 @@ export async function PATCH(req: NextRequest, ctx: { params: Promise<{ tokenId: 
   if (body.name) updates.name = body.name;
   if (body.status) updates.status = body.status;
   if (Object.keys(updates).length > 0) {
-    const { error } = await svc.from('access_tokens').update(updates).eq('id', tokenId);
+    const { error } = await svc.from('tokens').update(updates).eq('id', tokenId);
     if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
@@ -91,7 +91,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ tokenId:
 
   const svc = getSupabaseServiceClient();
   const { data: token } = await svc
-    .from('access_tokens')
+    .from('tokens')
     .select('id, api_key_prefix, projects!inner(organization_id)')
     .eq('id', tokenId)
     .maybeSingle<{
@@ -103,7 +103,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ tokenId:
     return NextResponse.json({ error: 'access token not found in this org' }, { status: 404 });
   }
 
-  const { error } = await svc.from('access_tokens').delete().eq('id', tokenId);
+  const { error } = await svc.from('tokens').delete().eq('id', tokenId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
   await invalidateCache(token.api_key_prefix);

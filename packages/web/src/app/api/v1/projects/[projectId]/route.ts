@@ -34,7 +34,7 @@ const PatchSchema = z
 async function invalidateProject(projectId: string): Promise<void> {
   const svc = getSupabaseServiceClient();
   const { data: bots } = await svc
-    .from('access_tokens')
+    .from('tokens')
     .select('api_key_prefix')
     .eq('project_id', projectId);
   const cache = buildCacheClient();

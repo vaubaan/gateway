@@ -40,7 +40,7 @@ export default async function TokensIndex({
   if (!proj) notFound();
 
   const { data: tokens } = await supabase
-    .from('access_tokens')
+    .from('tokens')
     .select('id, name, api_key_prefix, status, last_used_at, created_at')
     .eq('project_id', proj.id)
     .order('created_at', { ascending: false })

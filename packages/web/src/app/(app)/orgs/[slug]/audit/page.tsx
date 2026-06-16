@@ -64,7 +64,7 @@ export default async function AuditPage({
 
   // Access tokens for the filter dropdown.
   const { data: tokens } = await supabase
-    .from('access_tokens')
+    .from('tokens')
     .select('id, name, projects!inner(slug, organization_id)')
     .eq('projects.organization_id', org.id);
   const tokenOpts: TokenOpt[] = (

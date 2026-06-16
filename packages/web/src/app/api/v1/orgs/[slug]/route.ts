@@ -33,7 +33,7 @@ const PatchSchema = z
 async function invalidateOrg(orgId: string) {
   const svc = getSupabaseServiceClient();
   const { data: tokens } = await svc
-    .from('access_tokens')
+    .from('tokens')
     .select('api_key_prefix, projects!inner(organization_id)')
     .eq('projects.organization_id', orgId);
   const cache = buildCacheClient();

@@ -30,10 +30,14 @@ export default async function ManagementKeysPage({
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!org) notFound();
 
+  // Org-scoped root tokens live in the unified `tokens` table (scope='org'
+  // AND parent_id IS NULL ; cf. unified-tokens ADR).
   const { data: keys } = await supabase
-    .from('org_management_keys')
+    .from('tokens')
     .select('id, name, api_key_prefix, status, last_used_at, created_at')
     .eq('organization_id', org.id)
+    .eq('scope', 'org')
+    .is('parent_id', null)
     .order('created_at', { ascending: false })
     .returns<ManagementKeyRow[]>();
 

@@ -52,7 +52,7 @@ export async function DELETE(req: NextRequest, ctx: { params: Promise<{ provider
 
   // Best-effort cache invalidation for the org's access tokens.
   const { data: tokens } = await svc
-    .from('access_tokens')
+    .from('tokens')
     .select('api_key_prefix, projects!inner(organization_id)')
     .eq('projects.organization_id', guard.orgId);
   const cache = buildCacheClient();

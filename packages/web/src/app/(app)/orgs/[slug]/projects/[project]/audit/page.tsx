@@ -71,7 +71,7 @@ export default async function ProjectAuditPage({
   if (!proj) notFound();
 
   const { data: tokens } = await supabase
-    .from('access_tokens')
+    .from('tokens')
     .select('id, name')
     .eq('project_id', proj.id);
   const tokenOpts: TokenOpt[] = tokens ?? [];

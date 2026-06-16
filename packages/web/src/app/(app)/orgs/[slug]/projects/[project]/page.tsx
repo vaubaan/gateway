@@ -80,7 +80,7 @@ export default async function ProjectPage({
       .order('created_at', { ascending: true })
       .returns<BashBindingRow[]>(),
     supabase
-      .from('access_tokens')
+      .from('tokens')
       .select('id, name, api_key_prefix, status, last_used_at')
       .eq('project_id', proj.id)
       .order('created_at', { ascending: false })

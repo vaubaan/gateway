@@ -40,7 +40,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ tokenId: s
 
   const svc = getSupabaseServiceClient();
   const { data: token } = await svc
-    .from('access_tokens')
+    .from('tokens')
     .select('id, api_key_prefix, projects!inner(organization_id)')
     .eq('id', tokenId)
     .maybeSingle<{
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ tokenId: s
   const apiKeyHash = await hashApiKey(apiKey);
 
   const { error } = await svc
-    .from('access_tokens')
+    .from('tokens')
     .update({ api_key_prefix: apiKeyPrefix, api_key_hash: apiKeyHash, status: 'active' })
     .eq('id', tokenId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
