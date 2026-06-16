@@ -150,7 +150,7 @@ async function main() {
       await client.query(
         `insert into provider_bindings (project_id, provider, resource_ref, display_name)
          values ($1, $2, $3, $4)
-         on conflict (project_id, provider) do update set
+         on conflict (project_id, provider, environment) do update set
            resource_ref = excluded.resource_ref,
            display_name = excluded.display_name`,
         [projectId, provider, resourceRef, displayName],
@@ -165,42 +165,30 @@ async function main() {
     await insertBinding('vercel', PROJECT_REF_VERCEL, 'project-i4ddj');
     await insertBinding('supabase', env.SUPABASE_PROJECT_REF, 'playground');
 
-    // 6) Access token — rotate api_key on each run.
-    const builtinRoles = await client.query(
-      `select id, name from roles
-       where is_builtin = true
-         and name in ('github:developer','vercel:viewer','supabase:reader')
-       order by name`,
-    );
-    const roleIds = (builtinRoles.rows as { id: string; name: string }[]).map((r) => r.id);
-    console.log(
-      'roles found:',
-      (builtinRoles.rows as { name: string }[]).map((r) => r.name).join(', '),
-    );
-
+    // 6) Token (unified tokens table) — rotate api_key on each run.
     const { apiKey, apiKeyPrefix } = generateApiKey('test');
     const apiKeyHash = await hashApiKey(apiKey);
+    const acceptedRisks = JSON.stringify([
+      'github.read-code',
+      'github.read-meta',
+      'github.create-pr',
+      'vercel.read-account',
+      'vercel.read-deployment',
+      'supabase.read-data',
+    ]);
     const tokenRes = await client.query(
-      `insert into access_tokens (project_id, name, api_key_prefix, api_key_hash, status, created_by)
-       values ($1, 'demo-token', $2, $3, 'active', $4)
-       on conflict (project_id, name) do update set
+      `insert into tokens (organization_id, scope, project_id, name, api_key_prefix, api_key_hash, status, accepted_risks, created_by)
+       values ($1, 'project', $2, 'demo-token', $3, $4, 'active', $5::jsonb, $6)
+       on conflict (organization_id, name) do update set
          api_key_prefix = excluded.api_key_prefix,
          api_key_hash = excluded.api_key_hash,
-         status = 'active'
+         status = 'active',
+         accepted_risks = excluded.accepted_risks
        returning id`,
-      [projectId, apiKeyPrefix, apiKeyHash, CUSTOMER_USER_ID],
+      [orgId, projectId, apiKeyPrefix, apiKeyHash, acceptedRisks, CUSTOMER_USER_ID],
     );
     const tokenId = (tokenRes.rows[0] as { id: string }).id;
-    // Wipe old role assignments and re-attach.
-    await client.query(`delete from access_token_roles where access_token_id = $1`, [tokenId]);
-    for (const roleId of roleIds) {
-      await client.query(
-        `insert into access_token_roles (access_token_id, role_id) values ($1, $2)
-         on conflict do nothing`,
-        [tokenId, roleId],
-      );
-    }
-    console.log('access_token:', tokenId, 'demo-token with', roleIds.length, 'roles');
+    console.log('token:', tokenId, 'demo-token');
 
     console.log('\n========================================');
     console.log('TEST CUSTOMER SEEDED — copy the api_key:');
@@ -208,7 +196,6 @@ async function main() {
     console.log('Org slug   :', orgSlug);
     console.log('Project    : playground');
     console.log('Token name : demo-token');
-    console.log('Roles      : github:developer, vercel:viewer, supabase:reader');
     console.log('API key    :', apiKey);
     console.log('========================================\n');
   } finally {
