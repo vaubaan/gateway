@@ -26,7 +26,8 @@ function getMasterKey(): Uint8Array {
 
 function orgSubkeyIndex(orgId: string): number {
   const hash = createHash('sha256').update(orgId).digest();
-  return hash.readUInt32BE(0);
+  // libsodium-wrappers rejects values > 2^31-1 despite documenting "unsigned int"
+  return hash.readUInt32BE(0) & 0x7fffffff;
 }
 
 function deriveOrgKey(orgId: string): Uint8Array {
