@@ -48,6 +48,8 @@ BEGIN
 END;
 $$;
 
+ALTER FUNCTION create_org_encryption_key() OWNER TO supabase_admin;
+
 CREATE TRIGGER trg_org_create_encryption_key
   BEFORE INSERT ON organizations
   FOR EACH ROW
@@ -79,6 +81,12 @@ ALTER TABLE organizations ALTER COLUMN encryption_key_id SET NOT NULL;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 5. Encrypt / decrypt helper functions
+--
+-- On Supabase hosted, the `postgres` role (used by the pooler) does not have
+-- `pgsodium_keyholder`, which is required for crypto_aead_det_encrypt/decrypt.
+-- The `supabase_admin` role DOES have it. We create the functions as postgres
+-- (the migration runner) then ALTER OWNER to supabase_admin so the SECURITY
+-- DEFINER context runs with the right privileges.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION encrypt_provider_secret(p_org_id uuid, p_plaintext text)
 RETURNS bytea LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pgsodium, public AS $$
@@ -101,9 +109,15 @@ RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pgsodium, pu
   );
 $$;
 
+ALTER FUNCTION encrypt_provider_secret(uuid, text) OWNER TO supabase_admin;
+ALTER FUNCTION decrypt_provider_secret(uuid, bytea) OWNER TO supabase_admin;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 6. Decrypted view for reads
 -- ─────────────────────────────────────────────────────────────────────────────
+-- The view uses our SECURITY DEFINER wrapper functions (not direct pgsodium
+-- calls) so that any caller (including the service_role / postgres pooler
+-- user that lacks pgsodium_keyholder) can read decrypted values.
 CREATE VIEW provider_admins_decrypted
 WITH (security_invoker = true)
 AS
@@ -111,24 +125,21 @@ SELECT
   pa.id, pa.organization_id, pa.provider, pa.status,
   pa.installation_id, pa.team_id,
   CASE WHEN pa.access_token_encrypted IS NOT NULL
-    THEN pgsodium.crypto_aead_det_decrypt(
-      pa.access_token_encrypted,
-      convert_to(pa.organization_id::text, 'utf8'),
-      o.encryption_key_id
+    THEN convert_to(
+      decrypt_provider_secret(pa.organization_id, pa.access_token_encrypted),
+      'utf8'
     )
   END AS access_token_encrypted,
   CASE WHEN pa.refresh_token_encrypted IS NOT NULL
-    THEN pgsodium.crypto_aead_det_decrypt(
-      pa.refresh_token_encrypted,
-      convert_to(pa.organization_id::text, 'utf8'),
-      o.encryption_key_id
+    THEN convert_to(
+      decrypt_provider_secret(pa.organization_id, pa.refresh_token_encrypted),
+      'utf8'
     )
   END AS refresh_token_encrypted,
   pa.expires_at,
   pa.connected_by_user_id,
   pa.connected_at
-FROM provider_admins pa
-JOIN organizations o ON o.id = pa.organization_id;
+FROM provider_admins pa;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 7. Write RPC: upsert with encryption (used by OAuth callbacks)
@@ -172,6 +183,8 @@ BEGIN
 END;
 $$;
 
+ALTER FUNCTION upsert_provider_admin_encrypted(uuid, text, text, text, text, text, text, timestamptz, uuid) OWNER TO supabase_admin;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 8. Write RPC: update tokens only (used by refresh flows)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -199,24 +212,29 @@ BEGIN
 END;
 $$;
 
+ALTER FUNCTION update_provider_admin_tokens(uuid, text, text, timestamptz) OWNER TO supabase_admin;
+
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 9. Data migration: re-encrypt existing plaintext bytea data
+--
+-- Uses our SECURITY DEFINER wrapper (owned by supabase_admin) to avoid the
+-- pgsodium_keyholder permission issue on the pooler postgres role.
+-- Existing bytea holds raw UTF-8 of the plaintext token — convert_from
+-- extracts the text, then encrypt_provider_secret encrypts it.
 -- ─────────────────────────────────────────────────────────────────────────────
 UPDATE provider_admins pa SET
   access_token_encrypted = CASE
     WHEN pa.access_token_encrypted IS NOT NULL THEN
-      pgsodium.crypto_aead_det_encrypt(
-        pa.access_token_encrypted,
-        convert_to(pa.organization_id::text, 'utf8'),
-        (SELECT encryption_key_id FROM organizations WHERE id = pa.organization_id)
+      encrypt_provider_secret(
+        pa.organization_id,
+        convert_from(pa.access_token_encrypted, 'utf8')
       )
   END,
   refresh_token_encrypted = CASE
     WHEN pa.refresh_token_encrypted IS NOT NULL THEN
-      pgsodium.crypto_aead_det_encrypt(
-        pa.refresh_token_encrypted,
-        convert_to(pa.organization_id::text, 'utf8'),
-        (SELECT encryption_key_id FROM organizations WHERE id = pa.organization_id)
+      encrypt_provider_secret(
+        pa.organization_id,
+        convert_from(pa.refresh_token_encrypted, 'utf8')
       )
   END
 WHERE pa.access_token_encrypted IS NOT NULL
