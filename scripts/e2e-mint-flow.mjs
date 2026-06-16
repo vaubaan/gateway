@@ -1,10 +1,10 @@
 /* eslint-disable */
-// E2E mint flow test against prod.
-// 1. Create a fresh management key in DB (org=sbw-vaubaan, name=e2e-mint-test).
-// 2. POST /api/v1/mgmt/tokens/preview to verify catalog loads + gate resolution.
-// 3. POST /api/v1/mgmt/tokens to actually mint a token (accepting an allow-by-default risk).
-// 4. Call /mcp tools/list with the live api_key.
-// 5. Cleanup: revoke the management key.
+// E2E mint flow test against prod — unified-tokens edition.
+// 1. Create a fresh root token (scope='org') in DB for the test org.
+// 2. POST /api/v1/tokens/preview to verify catalog loads + gate resolution.
+// 3. POST /api/v1/tokens/mint to actually mint a child token.
+// 4. Call /mcp tools/list with the child api_key.
+// 5. Cleanup: cascade-delete root token (children dropped via FK).
 
 import { createClient } from '@supabase/supabase-js';
 import { generateApiKey, hashApiKey } from '@vaubaan/shared';
@@ -20,11 +20,12 @@ const svc = createClient(SUPABASE_URL, SERVICE_ROLE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-let mgmtKeyId = null;
+let rootTokenId = null;
 async function cleanup() {
-  if (mgmtKeyId) {
-    await svc.from('org_management_keys').update({ status: 'revoked' }).eq('id', mgmtKeyId);
-    console.log(`[cleanup] revoked mgmt key ${mgmtKeyId}`);
+  if (rootTokenId) {
+    // Cascade-deletes any minted children via the parent_id FK.
+    await svc.from('tokens').delete().eq('id', rootTokenId);
+    console.log(`[cleanup] deleted root token ${rootTokenId} (cascade)`);
   }
 }
 process.on('exit', cleanup);
@@ -33,33 +34,38 @@ process.on('SIGINT', () => {
 });
 
 async function main() {
-  // ── Step 1: create a fresh management key ────────────────────────────
-  const { apiKey, apiKeyPrefix } = generateApiKey('mgmt');
+  // ── Step 1: create a fresh root token (scope='org', parent_id=NULL) ──
+  const { apiKey, apiKeyPrefix } = generateApiKey('live');
   const apiKeyHash = await hashApiKey(apiKey);
-  const { data: mgmtRow, error: mgmtErr } = await svc
-    .from('org_management_keys')
+  const { data: rootRow, error: rootErr } = await svc
+    .from('tokens')
     .insert({
       organization_id: ORG_ID,
-      name: 'e2e-mint-test',
+      parent_id: null,
+      scope: 'org',
+      project_id: null,
+      name: `e2e-root-${Date.now()}`,
       api_key_prefix: apiKeyPrefix,
       api_key_hash: apiKeyHash,
       status: 'active',
+      accepted_risks: [],
+      denied_risks: [],
+      depth: 0,
+      delegation_chain: [],
     })
     .select('id')
     .single();
-  if (mgmtErr) throw new Error(`mgmt key insert failed: ${mgmtErr.message}`);
-  mgmtKeyId = mgmtRow.id;
-  console.log(`[step 1] mgmt key created — id=${mgmtKeyId} prefix=${apiKeyPrefix}`);
+  if (rootErr) throw new Error(`root token insert failed: ${rootErr.message}`);
+  rootTokenId = rootRow.id;
+  console.log(`[step 1] root token created — id=${rootTokenId} prefix=${apiKeyPrefix}`);
 
   // ── Step 2: preview a small mint ──────────────────────────────────────
   const previewBody = {
     projectSlug: PROJECT_SLUG,
-    bindings: [
-      { provider: 'github', resource_ref: 'sbw-vaubaan-test/playground', environment: null },
-    ],
+    bindings: [{ provider: 'github', resource_ref: 'sbw-vaubaan-test/playground', env: null }],
     accepted_risks: ['github.read-code', 'github.read-meta'],
   };
-  let res = await fetch(`${BASE}/api/v1/mgmt/tokens/preview`, {
+  let res = await fetch(`${BASE}/api/v1/tokens/preview`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(previewBody),
@@ -73,33 +79,39 @@ async function main() {
     `         all_allowed=${preview.all_allowed} needs_approval=${JSON.stringify(preview.needs_approval ?? [])}`,
   );
 
-  // ── Step 3: actually mint ─────────────────────────────────────────────
+  // ── Step 3: actually mint a child ─────────────────────────────────────
   const mintBody = {
-    ...previewBody,
-    name: `e2e-mint-test-token-${Date.now()}`,
+    name: `e2e-child-${Date.now()}`,
+    scope: 'project',
+    projectSlug: PROJECT_SLUG,
+    bindings: previewBody.bindings,
+    accepted_risks: previewBody.accepted_risks,
     ttlSeconds: 600,
     singleUse: true,
   };
-  res = await fetch(`${BASE}/api/v1/mgmt/tokens`, {
+  res = await fetch(`${BASE}/api/v1/tokens/mint`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify(mintBody),
   });
   const mintText = await res.text();
   console.log(`[step 3] mint HTTP ${res.status}`);
-  console.log(`         body: ${mintText.slice(0, 500)}`);
+  console.log(`         body: ${mintText.slice(0, 600)}`);
   if (res.status !== 201) {
     throw new Error(`mint did not return 201`);
   }
   const mint = JSON.parse(mintText);
-  const liveApiKey = mint.api_key;
-  if (!liveApiKey) throw new Error('mint did not return api_key');
-  console.log(`         minted api_key prefix=${liveApiKey.slice(0, 16)}...`);
+  const childApiKey = mint.api_key;
+  if (!childApiKey) throw new Error('mint did not return api_key');
+  console.log(`         minted child api_key prefix=${childApiKey.slice(0, 16)}...`);
+  console.log(
+    `         delegation_chain length=${(mint.token?.delegation_chain ?? []).length} depth=${mint.token?.depth}`,
+  );
 
-  // ── Step 4: tools/list with the live key ─────────────────────────────
+  // ── Step 4: tools/list with the child key ────────────────────────────
   res = await fetch(`${BASE}/mcp`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${liveApiKey}`, 'Content-Type': 'application/json' },
+    headers: { Authorization: `Bearer ${childApiKey}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
   });
   const listText = await res.text();
@@ -117,7 +129,7 @@ async function main() {
     console.log(`         body: ${listText.slice(0, 300)}`);
   }
 
-  console.log('\n✅ E2E mint flow OK');
+  console.log('\n✅ E2E unified-tokens mint flow OK');
 }
 
 main().catch((e) => {
