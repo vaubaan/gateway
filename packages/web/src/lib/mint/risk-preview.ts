@@ -22,7 +22,7 @@ import {
   findRiskEntry,
   type IndexedRiskCatalog,
 } from '@vaubaan/policy-engine';
-import type { Provider, RiskId } from '@vaubaan/shared';
+import type { Provider, RiskId, RiskVector } from '@vaubaan/shared';
 import { qualifyRiskId, unqualifyRiskId } from '@/lib/risk-catalog/loader';
 import { z } from 'zod';
 
@@ -41,7 +41,9 @@ export interface PreviewRiskRow {
   env: string | null;
   label: string;
   reason: string;
-  vector: unknown;
+  /** Catalog vector when the entry was resolved ; `null` when the entry is
+   *  missing (catalog unloaded, unknown risk id, no binding for provider). */
+  vector: RiskVector | null;
   /** Structural restriction : catalog `acceptable_in_envs` is satisfied. */
   acceptable: boolean;
   /** Caller has this risk in `parent.accepted_risks` (subset check at mint). */
@@ -79,7 +81,7 @@ export function resolveRiskRow(
       env,
       label: '',
       reason: '',
-      vector: undefined,
+      vector: null,
       acceptable: false,
       inherited: parentAcceptedRisks === null ? true : parentAcceptedRisks.has(riskId),
       blocked_reason:
@@ -97,7 +99,7 @@ export function resolveRiskRow(
       env,
       label: '',
       reason: '',
-      vector: undefined,
+      vector: null,
       acceptable: false,
       inherited: parentAcceptedRisks === null ? true : parentAcceptedRisks.has(riskId),
       blocked_reason: `unknown risk '${baseId}' in provider '${binding.provider}' catalog`,
@@ -161,7 +163,7 @@ export function computePreview(input: ComputePreviewInput): PreviewResponse {
         env: null,
         label: '',
         reason: '',
-        vector: undefined,
+        vector: null,
         acceptable: false,
         inherited: parentSet === null ? true : parentSet.has(riskId),
         blocked_reason: `no binding for provider '${provider}' — cannot accept '${riskId}'`,

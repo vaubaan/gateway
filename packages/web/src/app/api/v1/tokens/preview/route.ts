@@ -16,6 +16,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireToken } from '@/lib/auth/require-token';
+import { isCarteBlancheParent } from '@/lib/mint/child-mint';
 import { computeMintPreview } from '@/lib/mint/preview';
 
 export const runtime = 'nodejs';
@@ -34,14 +35,7 @@ const BodySchema = z.object({
   accepted_risks: z.array(z.string().min(1)),
 });
 
-interface ProjectRow {
-  id: string;
-}
-
 export async function POST(req: NextRequest) {
-  const guard = await requireToken(req.headers.get('authorization'));
-  if (!guard.ok) return guard.response;
-
   let body: z.infer<typeof BodySchema>;
   try {
     body = BodySchema.parse(await req.json());
@@ -53,33 +47,79 @@ export async function POST(req: NextRequest) {
   }
 
   const svc = getSupabaseServiceClient();
-  let project: ProjectRow | null = null;
+
+  // Resolve the org of the target project so the session-fallback can
+  // enforce membership. The auth boundary then re-verifies the project
+  // belongs to that org via the same lookup below.
+  let projectOrgId: string | null = null;
   if (body.projectId) {
     const { data } = await svc
       .from('projects')
-      .select('id')
-      .eq('organization_id', guard.orgId)
+      .select('organization_id')
       .eq('id', body.projectId)
-      .maybeSingle<ProjectRow>();
-    project = data ?? null;
+      .maybeSingle<{ organization_id: string }>();
+    projectOrgId = data?.organization_id ?? null;
   } else if (body.projectSlug) {
     const { data } = await svc
       .from('projects')
-      .select('id')
-      .eq('organization_id', guard.orgId)
+      .select('organization_id')
       .eq('slug', body.projectSlug)
-      .maybeSingle<ProjectRow>();
-    project = data ?? null;
+      .maybeSingle<{ organization_id: string }>();
+    projectOrgId = data?.organization_id ?? null;
   } else {
     return NextResponse.json({ error: 'projectId or projectSlug required' }, { status: 400 });
   }
-  if (!project) {
+
+  const guard = await requireToken(req.headers.get('authorization'), {
+    allowSessionFallback: projectOrgId ? { orgId: projectOrgId } : undefined,
+  });
+  if (!guard.ok) return guard.response;
+
+  // Re-verify the project exists in the caller's org. The select(head:true)
+  // serves only as an existence + auth guard ; the preview is binding-driven
+  // (no project id needed downstream).
+  let exists = false;
+  if (body.projectId) {
+    const { count } = await svc
+      .from('projects')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', guard.orgId)
+      .eq('id', body.projectId);
+    exists = (count ?? 0) > 0;
+  } else if (body.projectSlug) {
+    const { count } = await svc
+      .from('projects')
+      .select('id', { count: 'exact', head: true })
+      .eq('organization_id', guard.orgId)
+      .eq('slug', body.projectSlug);
+    exists = (count ?? 0) > 0;
+  }
+  if (!exists) {
     return NextResponse.json({ error: 'project not found in this org' }, { status: 404 });
   }
 
+  // Carte-blanche parents (root org tokens) bypass the inherited check.
+  // Pass `null` so every risk row is reported as inherited at preview time.
+  const parentRisksForPreview = isCarteBlancheParent({
+    id: guard.token.id,
+    name: guard.token.name,
+    organization_id: guard.token.organization_id,
+    scope: guard.token.scope,
+    project_id: guard.token.project_id,
+    accepted_risks: guard.token.accepted_risks,
+    denied_risks: guard.token.denied_risks,
+    depth: guard.token.depth,
+    delegation_chain: guard.token.delegation_chain,
+    expires_at: guard.token.expires_at,
+    created_at: guard.token.created_at,
+    created_by: guard.token.created_by,
+  })
+    ? null
+    : guard.token.accepted_risks;
+
   const preview = computeMintPreview(
     { bindings: body.bindings, accepted_risks: body.accepted_risks },
-    guard.token.accepted_risks,
+    parentRisksForPreview,
   );
 
   return NextResponse.json(preview, { status: 200 });

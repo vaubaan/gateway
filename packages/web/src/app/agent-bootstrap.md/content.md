@@ -97,10 +97,24 @@ When a call touches a risk that is **not** in your
   "id": 42,
   "error": {
     "code": -32603,
-    "message": "Vaubaan policy denied: risk-not-accepted",
+    "message": "Vaubaan risk-not-accepted",
     "data": {
+      "error": "risk-not-accepted",
       "missing_risks": ["github.merge-protected"],
-      "executed_slices": ["github.repo[sbw-vaubaan/gateway].branch[main].file[src/auth.ts].W"],
+      "executed_slices": [
+        {
+          "provider": "github",
+          "path": [
+            { "kind": "name", "value": "repo" },
+            { "kind": "ident", "value": "sbw-vaubaan/gateway" },
+            { "kind": "name", "value": "branch" },
+            { "kind": "ident", "value": "main" },
+            { "kind": "name", "value": "file" },
+            { "kind": "ident", "value": "src/auth.ts" }
+          ],
+          "action": "W"
+        }
+      ],
       "hint": "Request escalation via your token's context.escalation_channel"
     }
   }
@@ -109,10 +123,14 @@ When a call touches a risk that is **not** in your
 
 Read it like this :
 
+- `error` — the discriminator (`"risk-not-accepted"`). Duplicated at the
+  top of `data` so clients can dispatch without parsing `message`.
 - `missing_risks` — the `RiskId[]` you'd need accepted to make this
   call succeed.
-- `executed_slices` — the slice(s) the plugin emitted, useful for
-  debugging or surfacing to the operator.
+- `executed_slices` — `Slice[]` objects (see `packages/shared/src/risk.ts`),
+  each a structured `{ provider, path, action }` triple. The path is a
+  list of typed segments (`name` | `ident` | `list` | `wild-one` |
+  `wild-rec`). Useful for debugging or surfacing to the operator.
 - `hint` — a one-liner pointing to the next action (escalate, or stop).
 
 ## 6. Escalation flow (`context.escalation_channel`)
@@ -189,11 +207,13 @@ Responses :
 
 - `201` → the child token. The `api_key` is shown **once** — copy it
   immediately. `accepted_risks` is echoed back for confirmation.
-- `403` → at least one risk in `accepted_risks` is either not in
-  **your** `accepted_risks` (subset rule) or not acceptable in the
-  binding env (catalog `acceptable_in_envs`). Body includes
-  `not_acceptable` and `not_inherited` arrays.
-- `400` → schema / TTL / max-depth (=5) violation.
+- `403` → either the request violates an invariant (max-depth, depth
+  cap of 5 reached, child `expires_at` exceeds parent's, scope
+  mismatch, denial-propagation), or at least one risk in
+  `accepted_risks` is not in **your** `accepted_risks` (subset rule)
+  or not acceptable in the binding env (catalog `acceptable_in_envs`).
+  Body includes `not_acceptable` and `not_inherited` arrays.
+- `400` → schema (Zod) failure or TTL out of bounds.
 
 ## 8. Audit and forensics
 

@@ -16,6 +16,7 @@ import { z } from 'zod';
 import { buildCacheClient } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
+import { TOKEN_NAME_REGEX } from '@/lib/mint/token-name';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -23,10 +24,7 @@ export const dynamic = 'force-dynamic';
 const PatchSchema = z
   .object({
     orgSlug: z.string().min(1),
-    name: z
-      .string()
-      .regex(/^[a-z0-9](-?[a-z0-9])*$/)
-      .optional(),
+    name: z.string().regex(TOKEN_NAME_REGEX).optional(),
     status: z.enum(['active', 'revoked']).optional(),
   })
   .refine((b) => b.name || b.status, {

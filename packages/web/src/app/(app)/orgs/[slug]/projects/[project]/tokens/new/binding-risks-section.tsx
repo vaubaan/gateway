@@ -5,8 +5,9 @@
  * entries applicable to the binding env, then renders one `RiskRow` per
  * row (sorted by id for stable rendering).
  *
- * Post drop-confirm : no bucket grouping. The `effectiveGates` map carries
- * the preview-derived `{ acceptable, inherited, blocked_reason }` triple.
+ * Post drop-confirm : no bucket grouping. The `previewByRiskId` map carries
+ * the preview-derived `{ acceptable, inherited, blocked_reason }` triple per
+ * qualified RiskId.
  */
 
 import type { RiskId } from '@vaubaan/shared';
@@ -21,19 +22,19 @@ import {
   type PreviewRiskRow,
 } from './mint-types';
 import { RiskRow } from './risk-row';
-import { asRiskEntry, entryAppliesToBinding } from './qualify-helpers';
+import { entryAppliesToBinding } from './qualify-helpers';
 
 export function BindingRisksSection({
   binding,
   catalog,
   accepted,
-  effectiveGates,
+  previewByRiskId,
   onToggle,
 }: {
   binding: MintFormBinding;
   catalog: MintFormCatalog;
   accepted: Set<RiskId>;
-  effectiveGates: Map<RiskId, PreviewRiskRow>;
+  previewByRiskId: Map<RiskId, PreviewRiskRow>;
   onToggle: (qualifiedId: RiskId) => void;
 }) {
   const applicableEntries = catalog.entries.filter((e: MintFormCatalogEntry) =>
@@ -42,9 +43,9 @@ export function BindingRisksSection({
 
   const rows = applicableEntries
     .map((entry) => {
-      const qualifiedId = qualifyRiskId(entry.id, binding.env, asRiskEntry(entry));
+      const qualifiedId = qualifyRiskId(entry.id, binding.env, entry);
       const isAccepted = accepted.has(qualifiedId);
-      const previewRow = effectiveGates.get(qualifiedId);
+      const previewRow = previewByRiskId.get(qualifiedId);
       // Default: structural acceptable derived from catalog; inherited
       // optimistic until the preview lands.
       const acceptable =

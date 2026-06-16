@@ -97,6 +97,83 @@ export interface ProviderBinding {
 }
 
 /**
+ * Runtime escalation channel — opaque-to-gateway HTTP endpoint a child token
+ * carries to ask its parent for a re-mint with wider scope when it hits a
+ * `risk-not-accepted` 403.
+ *
+ * The gateway does NOT validate `endpoint_url`, does NOT sign or rotate
+ * `auth_token`, and does NOT proxy the escalation. The shape is published
+ * here so SDKs and the dashboard can typecheck the field they pull out of
+ * `token.context.escalation_channel`. The runtime contract is documented in
+ * `docs/handbook/escalation.md` and ADR
+ * `unified-tokens-delegation-chain-and-escalation-channel.md` §D4.
+ */
+export interface EscalationChannel {
+  /** Only `'http'` in MVP. Kept as a discriminator so future transports
+   *  (`'mcp'`, …) can be added without breaking the type. */
+  transport: 'http';
+  /** Absolute URL the child posts to (POST {endpoint_url}). */
+  endpoint_url: string;
+  /** Bearer secret the child sends to the parent (Authorization header).
+   *  Shared-secret model — out of Vaubaan's scope to rotate. */
+  auth_token: string;
+}
+
+/**
+ * Type-aid for the free-form context attached to a token at mint time
+ * (the value stored in `tokens.context jsonb`). The gateway only persists
+ * / surfaces it ; nothing here is interpreted at runtime *by the gateway*.
+ * SDKs are expected to read what they wrote (e.g. an agent SDK reads
+ * `escalation_channel`, an orchestrator reads `agent_id`).
+ *
+ * The shape is loose by design (any extra key is allowed) ; this interface
+ * just documents the well-known fields so downstream readers don't have to
+ * narrow `unknown` themselves. The stored DB shape stays
+ * `Record<string, unknown> | null` — use {@link narrowTokenContext} to lift
+ * a raw jsonb value into `TokenContextPayload`.
+ *
+ * NOTE : distinct from {@link TokenContext}, which is the hot-path snapshot
+ * loaded by the gateway for `/mcp` calls. The naming overlap is historical
+ * and is documented in handbook escalation.md §2.
+ */
+export interface TokenContextPayload {
+  /** Short human label naming the task this token serves (e.g. "feature-auth"). */
+  task?: string;
+  /** Free-form caller agent id (orchestrator-defined). */
+  agent_id?: string;
+  /** Optional runtime escalation channel ; absent on root tokens. */
+  escalation_channel?: EscalationChannel;
+}
+
+/**
+ * Lift a raw jsonb value (typed `Record<string, unknown>` post-DB-load) into
+ * the readable {@link TokenContextPayload} shape. Returns an empty payload
+ * when the input is null/undefined. Pure ; does no validation of the inner
+ * EscalationChannel — readers stay responsible for that when they actually
+ * use the field.
+ */
+export function narrowTokenContext(
+  raw: Record<string, unknown> | null | undefined,
+): TokenContextPayload {
+  if (!raw) return {};
+  const out: TokenContextPayload = {};
+  if (typeof raw.task === 'string') out.task = raw.task;
+  if (typeof raw.agent_id === 'string') out.agent_id = raw.agent_id;
+  const ec = raw.escalation_channel;
+  if (
+    ec &&
+    typeof ec === 'object' &&
+    !Array.isArray(ec) &&
+    (ec as Record<string, unknown>).transport === 'http' &&
+    typeof (ec as Record<string, unknown>).endpoint_url === 'string' &&
+    typeof (ec as Record<string, unknown>).auth_token === 'string'
+  ) {
+    out.escalation_channel = ec as EscalationChannel;
+  }
+  return out;
+}
+
+/**
  * Token row (table `tokens`).
  *
  * Unified replacement for the legacy (org_management_keys, access_tokens)
@@ -123,7 +200,9 @@ export interface Token {
   depth: number;
   delegation_chain: DelegationChainEntry[];
   /** Free-form caller-supplied context (task, agent_id,
-   *  escalation_channel, …). */
+   *  escalation_channel, …). Stored as jsonb ; consumers can lift this into
+   *  the documented {@link TokenContextPayload} shape via
+   *  {@link narrowTokenContext}. */
   context: Record<string, unknown> | null;
   /** ISO timestamp ; null = no TTL. When non-null and `now > expires_at`
    *  the gateway rejects the token with AuthError('token has expired'). */

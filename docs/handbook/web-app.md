@@ -53,11 +53,13 @@ packages/web/
                 page.tsx                                # Project overview (bindings + bash + tokens cards)
                 audit/page.tsx                          # Project audit log
                 tokens/page.tsx                         # Access tokens list
-                tokens/new/*.{ts,tsx}                   # Risk-checklist mint flow (9 files)
+                tokens/new/*.{ts,tsx}                   # Risk-checklist mint flow (10 files)
                                                         # page.tsx (server) + mint-form.tsx (orchestrator)
                                                         # + binding-risks-section / provider-risks-card
                                                         # + risk-row / vector-row / preview-footer
                                                         # + mint-result-dialog + mint-types + qualify-helpers
+                bindings/new/{page,binding-form}.tsx    # Generic binding creation (any provider — provider/bash)
+                bindings/[bindingId]/edit/page.tsx      # Edit an existing binding
                 settings/page.tsx                       # Project settings
                 bash/page.tsx                           # Redirect → bindings/new
                 bash-bindings/[bindingId]/page.tsx      # Script + hosts + runner cards
@@ -133,10 +135,19 @@ Guards REST (`packages/web/src/lib/auth/`) :
 
 - `requireOrgMember(orgSlug)` — utilisé par toutes les mutations org-scoped.
 - `requireOrgOwner(orgSlug)` — utilisé uniquement par le transfert d'ownership.
-- `requireToken(authHeader)` — pour les routes `/api/v1/tokens/*` qui
-  consomment un Bearer `vbn_live_*`. Remplace l'ancien
-  `requireManagementKey` (`vbn_mgmt_*` n'existe plus post-unified-tokens,
-  cf. ADR [[unified-tokens-delegation-chain-and-escalation-channel]]).
+- `requireToken(authHeader, options?)` — pour les routes
+  `/api/v1/tokens/*` qui consomment un Bearer `vbn_live_*`. Remplace
+  l'ancien `requireManagementKey` (`vbn_mgmt_*` n'existe plus
+  post-unified-tokens, cf. ADR
+  [[unified-tokens-delegation-chain-and-escalation-channel]]).
+  Avec `options.allowSessionFallback: { orgId | orgSlug }`, le guard
+  bascule en mode cookie-auth quand le Bearer est absent : il résout
+  la session Supabase, vérifie la membership de l'org cible, et utilise
+  le premier carte-blanche root token (`scope='org', parent_id IS NULL,
+accepted_risks=[]`) comme parent virtuel pour le mint. C'est ce qui
+  permet à la UI mint `/tokens/new` de fonctionner sans demander à
+  l'humain de coller un Bearer — la session est traduite en root token
+  côté serveur.
 
 ## Sidebar contextuelle
 

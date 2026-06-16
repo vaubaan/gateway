@@ -13,13 +13,16 @@
  * Responsibilities :
  *  - render one card per (provider × env) binding, with the applicable
  *    risks below as a checklist;
- *  - call POST /api/v1/projects/:projectId/mint/preview on every change
- *    (300 ms debounce) so the manager sees which rows are acceptable /
- *    inherited;
- *  - on click, call POST /api/v1/projects/:projectId/mint and surface :
+ *  - call POST /api/v1/tokens/preview on every change (300 ms debounce)
+ *    so the manager sees which rows are acceptable / inherited;
+ *  - on click, call POST /api/v1/tokens/mint and surface :
  *      201 → modal with the plaintext api_key (one-time);
  *      403 → list of not-acceptable / not-inherited risks;
- *      5xx → message + the response detail when available.
+ *      5xx → response `error` message verbatim.
+ *
+ * Auth : both endpoints accept the user's Supabase session via the
+ * `allowSessionFallback` opt-in on `requireToken` (cf.
+ * lib/auth/require-token.ts). No Bearer is sent from the browser.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
@@ -28,6 +31,7 @@ import { useRouter } from 'next/navigation';
 import type { Provider, RiskId } from '@vaubaan/shared';
 
 import { Badge, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
+import { TOKEN_NAME_REGEX } from '@/lib/mint/token-name';
 
 import {
   type MintFormBinding,
@@ -43,14 +47,40 @@ import { ProviderRisksCard } from './provider-risks-card';
 // Re-export public shapes consumed by page.tsx.
 export type { MintFormBinding, MintFormCatalog, MintFormCatalogEntry } from './mint-types';
 
-/** TTL presets — matches the spec's "short / session / long" buckets. */
+/**
+ * TTL presets — matches the spec's "short / session / long" buckets.
+ *
+ * The mint route accepts either `ttlHours` (any TTL up to a week) OR
+ * `ttlSeconds` paired with `singleUse: true` (cf. tokens/mint/route.ts §65 :
+ * sub-hour TTLs are constrained to single-use to avoid leaving sticky-state
+ * dust on the gateway). We map each preset to the right body fields.
+ */
 const TTL_OPTIONS = [
-  { value: '600', label: 'short (10 min)' },
+  { value: '600', label: 'short (10 min, single-use)' },
   { value: '3600', label: 'session (1 h)' },
   { value: '86400', label: 'long (24 h)' },
 ] as const;
 
 type TtlValue = (typeof TTL_OPTIONS)[number]['value'];
+
+interface TtlBodyFields {
+  ttlHours?: number;
+  ttlSeconds?: number;
+  singleUse?: boolean;
+}
+
+/** Convert a TTL preset into the body fields the mint route expects. The
+ *  "short" preset enforces single-use (the route rejects ttlSeconds without
+ *  it) ; longer buckets are free to be single-use or reusable. */
+function ttlPresetToBody(ttl: TtlValue, singleUseExplicit: boolean): TtlBodyFields {
+  const seconds = Number(ttl);
+  if (seconds < 3600) {
+    // Sub-hour bucket : the route refuses ttlSeconds unless singleUse=true.
+    return { ttlSeconds: seconds, singleUse: true };
+  }
+  // 1h+ buckets : convert to ttlHours so the body stays singleUse-agnostic.
+  return { ttlHours: Math.round(seconds / 3600), singleUse: singleUseExplicit };
+}
 
 /** Group bindings by provider — preserves the in-array order for stable rendering. */
 function groupBindings(bindings: readonly MintFormBinding[]): Map<Provider, MintFormBinding[]> {
@@ -118,11 +148,11 @@ export function MintForm({
     setPreviewState('computing');
     const runPreview = async () => {
       try {
-        const res = await fetch(`/api/v1/projects/${projectId}/mint/preview`, {
+        const res = await fetch(`/api/v1/tokens/preview`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            orgSlug,
+            projectId,
             bindings: bindingsBody,
             accepted_risks: wireAcceptedRisks,
           }),
@@ -149,16 +179,20 @@ export function MintForm({
       void runPreview();
     }, 300);
     return () => window.clearTimeout(handle);
-  }, [projectId, orgSlug, bindingsBody, wireAcceptedRisks]);
+  }, [projectId, bindingsBody, wireAcceptedRisks]);
 
   // Index preview rows by qualified id for the per-row RiskRow lookup.
-  const effectiveGates = useMemo(() => {
+  const previewByRiskId = useMemo(() => {
     const map = new Map<RiskId, PreviewRiskRow>();
     if (preview) {
       for (const row of preview.risks) map.set(row.id, row);
     }
     return map;
   }, [preview]);
+
+  // Client-side validation of the optional token name — the mint route
+  // enforces `TOKEN_NAME_REGEX` and 400s on mismatch. Catch it before posting.
+  const tokenNameInvalid = tokenName.length > 0 && !TOKEN_NAME_REGEX.test(tokenName);
 
   const toggleRisk = useCallback((qualifiedId: RiskId) => {
     setAccepted((prev) => {
@@ -174,15 +208,20 @@ export function MintForm({
     setMintResult(null);
     startMint(async () => {
       try {
-        const res = await fetch(`/api/v1/projects/${projectId}/mint`, {
+        // The unified mint route (cf. tokens/mint/route.ts) requires
+        // `scope` + `projectId|projectSlug`. TTL goes via `ttlSeconds` (the
+        // route accepts it only when `singleUse: true` ; we mirror that
+        // pairing here — the UI session bucket is "short single-use" by
+        // construction).
+        const res = await fetch(`/api/v1/tokens/mint`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            orgSlug,
+            scope: 'project',
+            projectId,
             bindings: bindingsBody,
             accepted_risks: wireAcceptedRisks,
-            ttlSeconds: Number(ttl),
-            singleUse,
+            ...ttlPresetToBody(ttl, singleUse),
             ...(tokenName.length > 0 ? { name: tokenName } : {}),
           }),
         });
@@ -191,8 +230,7 @@ export function MintForm({
           setMintResult({
             kind: 'minted',
             apiKey: String(json.api_key),
-            tokenName:
-              (json.access_token as { name?: string } | undefined)?.name ?? tokenName ?? '',
+            tokenName: (json.token as { name?: string } | undefined)?.name ?? tokenName ?? '',
             expiresAt: String(json.expires_at ?? ''),
           });
           return;
@@ -208,10 +246,7 @@ export function MintForm({
         }
         setMintResult({
           kind: 'error',
-          message:
-            (json.error as string | undefined) ??
-            (json.detail as string | undefined) ??
-            `HTTP ${res.status}`,
+          message: (json.error as string | undefined) ?? `HTTP ${res.status}`,
         });
       } catch (e) {
         setMintResult({
@@ -220,13 +255,18 @@ export function MintForm({
         });
       }
     });
-  }, [projectId, orgSlug, bindingsBody, wireAcceptedRisks, ttl, singleUse, tokenName]);
+  }, [projectId, bindingsBody, wireAcceptedRisks, ttl, singleUse, tokenName]);
 
   const acceptableCount = preview?.risks.filter((r) => r.acceptable && r.inherited).length ?? 0;
   const notAcceptableCount = preview?.not_acceptable.length ?? 0;
   const notInheritedCount = preview?.not_inherited.length ?? 0;
   const canMint =
-    accepted.size > 0 && previewState === 'ready' && preview !== null && preview.ok && !isMinting;
+    accepted.size > 0 &&
+    previewState === 'ready' &&
+    preview !== null &&
+    preview.ok &&
+    !isMinting &&
+    !tokenNameInvalid;
 
   return (
     <div style={{ display: 'grid', gap: 'var(--space-4)', paddingBottom: 'var(--space-8)' }}>
@@ -254,13 +294,20 @@ export function MintForm({
                 placeholder={'e.g. "feature-x-coding-session"'}
                 style={{
                   padding: '6px 10px',
-                  border: '1px solid var(--border-subtle)',
+                  border: `1px solid ${
+                    tokenNameInvalid ? 'var(--accent-danger-fg)' : 'var(--border-subtle)'
+                  }`,
                   borderRadius: 'var(--radius-md)',
                   background: 'var(--surface-base)',
                   color: 'var(--text-primary)',
                   fontSize: 'var(--text-sm)',
                 }}
               />
+              {tokenNameInvalid && (
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--accent-danger-fg)' }}>
+                  must match {TOKEN_NAME_REGEX.source} (lowercase kebab-case)
+                </span>
+              )}
             </label>
             <label style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>TTL</span>
@@ -349,7 +396,7 @@ export function MintForm({
             providerBindings={providerBindings}
             catalog={cat}
             accepted={accepted}
-            effectiveGates={effectiveGates}
+            previewByRiskId={previewByRiskId}
             onToggle={toggleRisk}
           />
         );

@@ -3,14 +3,14 @@
 import { useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 
+import { TOKEN_NAME_REGEX } from '@/lib/mint/token-name';
+
 interface Props {
   tokenId: string;
   tokenName: string;
   orgSlug: string;
   status: 'active' | 'revoked';
 }
-
-const NAME_REGEX = /^[a-z0-9](-?[a-z0-9])*$/;
 
 export function TokenRowControls({ tokenId, tokenName, orgSlug, status }: Props) {
   const router = useRouter();
@@ -25,8 +25,8 @@ export function TokenRowControls({ tokenId, tokenName, orgSlug, status }: Props)
     if (next === null) return;
     const trimmed = next.trim();
     if (trimmed.length === 0 || trimmed === tokenName) return;
-    if (!NAME_REGEX.test(trimmed)) {
-      setError(`Invalid name : must match ${NAME_REGEX.source}`);
+    if (!TOKEN_NAME_REGEX.test(trimmed)) {
+      setError(`Invalid name : must match ${TOKEN_NAME_REGEX.source}`);
       return;
     }
     setError(null);

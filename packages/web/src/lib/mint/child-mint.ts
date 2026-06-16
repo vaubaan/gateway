@@ -5,10 +5,10 @@
  * ADR  : docs/decisions/unified-gates-drop-confirm.md.
  *
  * Mints a child token from a known parent token, enforcing the subset /
- * depth / expires_at invariants. The mint-time approval flow is gone —
- * every successful preview leads directly to an INSERT into `tokens`.
- * Escalation happens at runtime, outside the gateway, via the parent's
- * `context.escalation_channel`.
+ * depth / expires_at invariants. Post drop-confirm the mint-time approval
+ * loop is gone — every successful preview leads directly to an INSERT
+ * into `tokens`. Escalation happens at runtime, outside the gateway, via
+ * the parent's `context.escalation_channel`.
  */
 
 import {
@@ -51,6 +51,9 @@ export interface ChildMintInput {
   accepted_risks: readonly RiskId[];
   denied_risks?: readonly RiskId[];
   singleUse?: boolean;
+  /** Free-form context payload — at mint time this is the unparsed body
+   *  from the HTTP caller. Stored verbatim ; readers narrow to {@link TokenContext}
+   *  when they need `escalation_channel` etc. */
   context?: Record<string, unknown> | null;
   createdBy?: string | null;
 }

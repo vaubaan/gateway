@@ -18,14 +18,16 @@ export function ProviderRisksCard({
   providerBindings,
   catalog,
   accepted,
-  effectiveGates,
+  previewByRiskId,
   onToggle,
 }: {
   provider: Provider;
   providerBindings: MintFormBinding[];
   catalog: MintFormCatalog | undefined;
   accepted: Set<RiskId>;
-  effectiveGates: Map<RiskId, PreviewRiskRow>;
+  /** Preview rows indexed by qualified RiskId — drives per-row enable/disable
+   *  + tooltip text in {@link BindingRisksSection}. */
+  previewByRiskId: Map<RiskId, PreviewRiskRow>;
   onToggle: (qualifiedId: RiskId) => void;
 }) {
   if (!catalog || !catalog.loaded) {
@@ -60,7 +62,7 @@ export function ProviderRisksCard({
               binding={binding}
               catalog={catalog}
               accepted={accepted}
-              effectiveGates={effectiveGates}
+              previewByRiskId={previewByRiskId}
               onToggle={onToggle}
             />
           ))}

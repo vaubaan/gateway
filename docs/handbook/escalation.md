@@ -4,6 +4,7 @@ status: current
 tracks:
   - packages/web/src/lib/mint/child-mint.ts
   - packages/shared/src/risk.ts
+  - packages/shared/src/types.ts
   - packages/web/src/app/api/v1/tokens/mint/route.ts
   - packages/web/src/app/api/v1/tokens/preview/route.ts
   - docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
@@ -32,22 +33,39 @@ last_synced: 2026-06-16
 ## §2. Anatomie du `escalation_channel`
 
 ```ts
-// packages/shared/src/types.ts (extrait)
-type EscalationChannel = {
+// packages/shared/src/types.ts (extrait — exporté)
+export interface EscalationChannel {
   transport: 'http'; // seul transport en MVP
   endpoint_url: string; // url HTTP du parent
   auth_token: string; // Bearer envoyé par le child
-};
+}
+
+/** Type-aid documentant les clés bien connues sous `token.context`. */
+export interface TokenContextPayload {
+  task?: string;
+  agent_id?: string;
+  escalation_channel?: EscalationChannel;
+}
+
+/** Lift le jsonb brut en `TokenContextPayload` ; valide la shape interne
+ *  de `escalation_channel` (drop si non conforme). */
+export function narrowTokenContext(
+  raw: Record<string, unknown> | null | undefined,
+): TokenContextPayload;
 ```
 
-Le champ vit dans `tokens.context.escalation_channel` (jsonb sur la
-table `tokens`). Le parent qui mint le child le pose au mint. Le child
-**le lit** à la résolution de son context — il ne l'écrit pas.
+Le champ vit dans `tokens.context` (jsonb sur la table `tokens`). À la
+lecture, on est typé `Record<string, unknown> | null` ; on appelle
+`narrowTokenContext(token.context)` pour obtenir le `TokenContextPayload`
+typé. Le parent qui mint le child pose le `escalation_channel` au mint.
+Le child **le lit** à la résolution de son context — il ne l'écrit pas.
+Les deux interfaces + le helper sont exportés depuis `@vaubaan/shared`.
 
 ## §3. Quand l'agent l'utilise
 
 Le runtime renvoie l'erreur structurée suivante quand un call touche un
-risk pas dans `accepted_risks` :
+risk pas dans `accepted_risks` (cf. `packages/mcp-gateway/src/gateway.ts:309`
+et `denyResponseBody` dans `risk-gateway.ts:111`) :
 
 ```json
 {
@@ -55,15 +73,19 @@ risk pas dans `accepted_risks` :
   "id": 42,
   "error": {
     "code": -32603,
-    "message": "Vaubaan policy denied: risk-not-accepted",
+    "message": "Vaubaan risk-not-accepted",
     "data": {
+      "error": "risk-not-accepted",
       "missing_risks": ["github.merge-protected"],
-      "executed_slices": ["github.repo[owner/repo].branch[main].file[…].W"],
+      "executed_slices": [{ "provider": "github", "path": [...], "action": "W" }],
       "hint": "Request escalation via your token's context.escalation_channel"
     }
   }
 }
 ```
+
+`executed_slices` est typé `Slice[]` (cf. `packages/shared/src/risk.ts`),
+pas une string — chaque slice est un objet structuré.
 
 L'agent (côté SDK / client) doit :
 

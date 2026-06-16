@@ -26,8 +26,14 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireToken } from '@/lib/auth/require-token';
-import { mintChildToken, MintInvariantError, type MintParent } from '@/lib/mint/child-mint';
+import {
+  isCarteBlancheParent,
+  mintChildToken,
+  MintInvariantError,
+  type MintParent,
+} from '@/lib/mint/child-mint';
 import { computeMintPreview } from '@/lib/mint/preview';
+import { TOKEN_NAME_REGEX } from '@/lib/mint/token-name';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,10 +50,7 @@ const BindingSchema = z.object({
 
 const BodySchema = z
   .object({
-    name: z
-      .string()
-      .regex(/^[a-z0-9](-?[a-z0-9])*$/)
-      .optional(),
+    name: z.string().regex(TOKEN_NAME_REGEX).optional(),
     scope: z.enum(['org', 'project']),
     projectId: z.string().uuid().optional(),
     projectSlug: z.string().min(1).optional(),
@@ -85,12 +88,12 @@ interface ProjectRow {
   id: string;
   slug: string;
   name: string | null;
+  organization_id: string;
 }
 
 export async function POST(req: NextRequest) {
-  const guard = await requireToken(req.headers.get('authorization'));
-  if (!guard.ok) return guard.response;
-
+  // Parse the body first so the session-fallback can hint org context from
+  // `projectId|projectSlug` (the UI ships no Bearer but is logged in).
   let body: z.infer<typeof BodySchema>;
   try {
     body = BodySchema.parse(await req.json());
@@ -103,22 +106,24 @@ export async function POST(req: NextRequest) {
 
   const svc = getSupabaseServiceClient();
 
-  // Resolve the target project (if scope='project').
+  // Resolve the target project (if scope='project'). We look it up org-
+  // agnostically first so the session-fallback can pick up the org id from
+  // the project itself ; the org-membership check is done by the guard, and
+  // an extra equality on `organization_id === guard.orgId` re-locks scope
+  // below (defense-in-depth against project-id leak across orgs).
   let projectRow: ProjectRow | null = null;
   if (body.scope === 'project') {
     if (body.projectId) {
       const { data } = await svc
         .from('projects')
-        .select('id, slug, name')
-        .eq('organization_id', guard.orgId)
+        .select('id, slug, name, organization_id')
         .eq('id', body.projectId)
         .maybeSingle<ProjectRow>();
       projectRow = data ?? null;
     } else if (body.projectSlug) {
       const { data } = await svc
         .from('projects')
-        .select('id, slug, name')
-        .eq('organization_id', guard.orgId)
+        .select('id, slug, name, organization_id')
         .eq('slug', body.projectSlug)
         .maybeSingle<ProjectRow>();
       projectRow = data ?? null;
@@ -128,7 +133,16 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    if (!projectRow) {
+  }
+  const projectOrgId = projectRow?.organization_id;
+
+  const guard = await requireToken(req.headers.get('authorization'), {
+    allowSessionFallback: projectOrgId ? { orgId: projectOrgId } : undefined,
+  });
+  if (!guard.ok) return guard.response;
+
+  if (body.scope === 'project') {
+    if (!projectRow || projectOrgId !== guard.orgId) {
       return NextResponse.json({ error: 'project not found in this org' }, { status: 404 });
     }
   }
@@ -140,10 +154,30 @@ export async function POST(req: NextRequest) {
   // Compute the preview when bindings are provided. Org-scoped mints
   // without bindings skip this — the subset check is enforced by
   // mintChildToken's invariants regardless.
+  // Carte-blanche parents (migrated mgmt-keys, dashboard root tokens) bypass
+  // the inherited check : pass `null` so resolveRiskRow treats every risk as
+  // implicitly held. The subset rule is bypassed in `mintChildToken` too via
+  // `isCarteBlancheParent`.
   if (body.scope === 'project' && projectRow && body.bindings && body.bindings.length > 0) {
+    const parentRisksForPreview = isCarteBlancheParent({
+      id: guard.token.id,
+      name: guard.token.name,
+      organization_id: guard.token.organization_id,
+      scope: guard.token.scope,
+      project_id: guard.token.project_id,
+      accepted_risks: guard.token.accepted_risks,
+      denied_risks: guard.token.denied_risks,
+      depth: guard.token.depth,
+      delegation_chain: guard.token.delegation_chain,
+      expires_at: guard.token.expires_at,
+      created_at: guard.token.created_at,
+      created_by: guard.token.created_by,
+    })
+      ? null
+      : guard.token.accepted_risks;
     const preview = computeMintPreview(
       { bindings: body.bindings, accepted_risks: body.accepted_risks },
-      guard.token.accepted_risks,
+      parentRisksForPreview,
     );
     if (!preview.ok) {
       return NextResponse.json(

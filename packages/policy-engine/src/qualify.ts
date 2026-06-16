@@ -25,10 +25,17 @@
  * drift-by-copy hazard flagged in the v4 clean-code report (B3).
  */
 
-import type { ProviderBinding, RiskEntry, RiskId, Slice } from '@vaubaan/shared';
+import type { ProviderBinding, RiskId, Slice } from '@vaubaan/shared';
 
 /** Regex for an env qualifier embedded in a RiskId : `[<env-slug>]`. */
 const ENV_QUALIFIER_RE = /\[[a-z][a-z0-9-]*\]/;
+
+/** The narrow shape `qualifyRiskId` actually consumes — just the env list.
+ *  Accepts `null` as well as `undefined` so UI projections (which use
+ *  `readonly string[] | null`) can pass through without an adapter. */
+export interface QualifiableRiskEntry {
+  readonly acceptable_in_envs?: readonly string[] | null;
+}
 
 /**
  * Predicate : is this catalog entry env-scoped ? We use the presence of a
@@ -36,7 +43,7 @@ const ENV_QUALIFIER_RE = /\[[a-z][a-z0-9-]*\]/;
  * (e.g. `github.mint-install-token`) leave the field absent and stay
  * non-qualified across bindings.
  */
-export function isEnvScopedEntry(entry: RiskEntry | undefined): boolean {
+export function isEnvScopedEntry(entry: QualifiableRiskEntry | undefined): boolean {
   if (!entry) return false;
   if (!entry.acceptable_in_envs || entry.acceptable_in_envs.length === 0) return false;
   return true;
@@ -50,11 +57,16 @@ export function isEnvScopedEntry(entry: RiskEntry | undefined): boolean {
  *
  * Already-qualified ids are returned unchanged (defensive — callers should
  * not double-qualify, but we don't want to corrupt them either).
+ *
+ * Note : the entry parameter is `QualifiableRiskEntry`, NOT the full
+ * `RiskEntry`. Callers in the UI carry slimmed-down catalog projections
+ * (cf. `MintFormCatalogEntry`) — they can pass them in directly without
+ * fabricating a fake `matches` field.
  */
 export function qualifyRiskId(
   baseId: RiskId,
   env: string | null | undefined,
-  entry: RiskEntry | undefined,
+  entry: QualifiableRiskEntry | undefined,
 ): RiskId {
   if (env === null || env === undefined || env.length === 0) return baseId;
   if (!isEnvScopedEntry(entry)) return baseId;
