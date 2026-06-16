@@ -37,6 +37,18 @@ alter table audit_log
 
 -- ─── 3. Copy org_management_keys → tokens.
 --       scope='org', project_id=NULL, depth=0, delegation_chain='[]'.
+--
+--       CONFLICT HANDLING : `tokens` has two UNIQUE constraints —
+--         (a) `api_key_prefix` UNIQUE
+--         (b) `(organization_id, name)` UNIQUE
+--       A bare `on conflict (api_key_prefix)` would NOT cover (b), and
+--       pre-prod fixtures often share the same `name` between a mgmt key
+--       and an access token in the same org (e.g. both named 'ci').
+--       We use the bare form `on conflict do nothing` which catches ANY
+--       uniqueness conflict ; rows that would collide are silently skipped.
+--       Acceptable for pre-prod (no production data) ; the operator can
+--       hand-rebuild any dropped row from the legacy tables before 0035
+--       drops them. Cf. clean-code-report ❌-2.
 insert into tokens (
   id, organization_id, parent_id, scope, project_id, name,
   api_key_prefix, api_key_hash, status,
@@ -66,11 +78,12 @@ select
   created_by,
   created_at
 from org_management_keys
-on conflict (api_key_prefix) do nothing;
+on conflict do nothing;
 
 -- ─── 4. Copy access_tokens → tokens.
 --       scope='project', project_id preserved, depth=0, parent_id=NULL.
 --       Resolve organization_id via projects join.
+--       Same `on conflict do nothing` rationale as step 3.
 insert into tokens (
   id, organization_id, parent_id, scope, project_id, name,
   api_key_prefix, api_key_hash, status,
@@ -101,7 +114,7 @@ select
   at.created_at
 from access_tokens at
 join projects p on p.id = at.project_id
-on conflict (api_key_prefix) do nothing;
+on conflict do nothing;
 
 -- ─── 5. Re-point approval_requests.access_token_id FK to tokens(id).
 --       IDs are preserved by the copy, so existing values are still valid.
