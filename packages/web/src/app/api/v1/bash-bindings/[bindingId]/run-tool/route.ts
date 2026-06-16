@@ -55,7 +55,6 @@ interface AuditCallSummary {
   organizationId: string;
   projectId: string;
   toolName: string;
-  capabilityShorthand: string;
   argumentsHash: string;
   upstreamLatencyMs: number | null;
   clientIp: string | null;
@@ -69,7 +68,6 @@ async function writeRestBypassAudit(svc: SupabaseClient, call: AuditCallSummary)
     access_token_id: null,
     tool_name: call.toolName,
     arguments_hash: call.argumentsHash,
-    capability_matched: call.capabilityShorthand,
     decision: 'allowed',
     denial_reason: REST_BYPASS_MARKER,
     upstream_latency_ms: call.upstreamLatencyMs,
@@ -148,7 +146,6 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ bindingId:
     organizationId: guard.orgId,
     projectId: binding.project_id,
     toolName: `bash__rest__${tool.functionName}`,
-    capabilityShorthand: `bash:${tool.ring}:${tool.action}@${body.host_slug}`,
     argumentsHash: hashArguments(body.args),
     clientIp: req.headers.get('x-forwarded-for') ?? null,
     clientUserAgent: req.headers.get('user-agent') ?? null,
