@@ -91,7 +91,7 @@ export default async function ProviderPlanePage({
   const setupText = plane.setup ?? info.setup;
 
   return (
-    <main>
+    <main className="vbn-page-wide">
       <header
         style={{
           display: 'flex',

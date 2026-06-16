@@ -223,7 +223,7 @@ export function RiskCatalogCard({
   catalogLoaded: boolean;
 }) {
   return (
-    <Card>
+    <Card className="vbn-card-flush">
       <CardHeader>
         <CardTitle>Risk catalog</CardTitle>
         <Row gap="var(--space-2)">
@@ -255,108 +255,111 @@ export function RiskCatalogCard({
               <Badge tone="danger">deny</Badge>) and a 6D vector (reversibility · blast · data ·
               cost · visibility · persistence).
             </p>
-            <Table>
-              <Thead>
-                <Tr>
-                  <Th>Risk</Th>
-                  <Th>Gate</Th>
-                  <Th>Why</Th>
-                  <Th>Vector</Th>
-                  <Th>Env scope</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {entries.map((entry) => (
-                  <Tr key={entry.id}>
-                    <Td style={{ verticalAlign: 'top' }}>
-                      <div>
-                        <Code>{entry.id}</Code>
-                      </div>
-                      <div
-                        style={{
-                          marginTop: 2,
-                          fontSize: 'var(--text-xs)',
-                          color: 'var(--text-muted)',
-                        }}
-                      >
-                        {entry.label}
-                      </div>
-                      {entry.deprecated && (
-                        <div style={{ marginTop: 4 }}>
-                          <Badge tone="danger">deprecated</Badge>
-                          {entry.replaced_by && (
-                            <span
-                              style={{
-                                marginLeft: 6,
-                                fontSize: 'var(--text-xs)',
-                                color: 'var(--text-muted)',
-                              }}
-                            >
-                              → <Code>{entry.replaced_by}</Code>
-                            </span>
-                          )}
+            <ScrollableTable>
+              <Table style={{ minWidth: 880 }}>
+                <Thead>
+                  <Tr>
+                    <Th>Risk</Th>
+                    <Th>Gate</Th>
+                    <Th>Why</Th>
+                    <Th>Vector</Th>
+                    <Th>Env scope</Th>
+                  </Tr>
+                </Thead>
+                <Tbody>
+                  {entries.map((entry) => (
+                    <Tr key={entry.id}>
+                      <Td style={{ verticalAlign: 'top' }}>
+                        <div>
+                          <Code>{entry.id}</Code>
                         </div>
-                      )}
-                    </Td>
-                    <Td style={{ verticalAlign: 'top' }}>
-                      <Badge tone={GATE_TONE[entry.default_gate]}>{entry.default_gate}</Badge>
-                    </Td>
-                    <Td
-                      style={{
-                        verticalAlign: 'top',
-                        fontSize: 'var(--text-sm)',
-                        color: 'var(--text-muted)',
-                        maxWidth: 360,
-                      }}
-                    >
-                      {entry.reason}
-                    </Td>
-                    <Td style={{ verticalAlign: 'top' }}>
-                      <VectorBadges vector={entry.vector} />
-                      <details style={{ marginTop: 6 }}>
-                        <summary
+                        <div
                           style={{
-                            cursor: 'pointer',
-                            fontSize: 'var(--text-xs)',
-                            color: 'var(--text-subtle)',
-                          }}
-                        >
-                          slice patterns
-                        </summary>
-                        <ul
-                          style={{
-                            listStyle: 'none',
-                            padding: 0,
-                            margin: '4px 0 0',
+                            marginTop: 2,
                             fontSize: 'var(--text-xs)',
                             color: 'var(--text-muted)',
                           }}
                         >
-                          {toMatchesArray(entry.matches).map((m) => (
-                            <li key={m} style={{ marginBottom: 2 }}>
-                              <Code>{m}</Code>
-                            </li>
-                          ))}
-                        </ul>
-                      </details>
-                    </Td>
-                    <Td style={{ verticalAlign: 'top', fontSize: 'var(--text-xs)' }}>
-                      {entry.acceptable_in_envs && entry.acceptable_in_envs.length > 0 ? (
-                        <Row gap="4px">
-                          {entry.acceptable_in_envs.map((e) => (
-                            <Badge key={e} tone="info">
-                              {e}
-                            </Badge>
-                          ))}
-                        </Row>
-                      ) : (
-                        <span style={{ color: 'var(--text-subtle)' }}>any</span>
-                      )}
-                    </Td>
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
+                          {entry.label}
+                        </div>
+                        {entry.deprecated && (
+                          <div style={{ marginTop: 4 }}>
+                            <Badge tone="danger">deprecated</Badge>
+                            {entry.replaced_by && (
+                              <span
+                                style={{
+                                  marginLeft: 6,
+                                  fontSize: 'var(--text-xs)',
+                                  color: 'var(--text-muted)',
+                                }}
+                              >
+                                → <Code>{entry.replaced_by}</Code>
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </Td>
+                      <Td style={{ verticalAlign: 'top' }}>
+                        <Badge tone={GATE_TONE[entry.default_gate]}>{entry.default_gate}</Badge>
+                      </Td>
+                      <Td
+                        style={{
+                          verticalAlign: 'top',
+                          fontSize: 'var(--text-sm)',
+                          color: 'var(--text-muted)',
+                          minWidth: 280,
+                          maxWidth: 420,
+                        }}
+                      >
+                        {entry.reason}
+                      </Td>
+                      <Td style={{ verticalAlign: 'top' }}>
+                        <VectorBadges vector={entry.vector} />
+                        <details style={{ marginTop: 6 }}>
+                          <summary
+                            style={{
+                              cursor: 'pointer',
+                              fontSize: 'var(--text-xs)',
+                              color: 'var(--text-subtle)',
+                            }}
+                          >
+                            slice patterns
+                          </summary>
+                          <ul
+                            style={{
+                              listStyle: 'none',
+                              padding: 0,
+                              margin: '4px 0 0',
+                              fontSize: 'var(--text-xs)',
+                              color: 'var(--text-muted)',
+                            }}
+                          >
+                            {toMatchesArray(entry.matches).map((m) => (
+                              <li key={m} style={{ marginBottom: 2 }}>
+                                <Code>{m}</Code>
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      </Td>
+                      <Td style={{ verticalAlign: 'top', fontSize: 'var(--text-xs)' }}>
+                        {entry.acceptable_in_envs && entry.acceptable_in_envs.length > 0 ? (
+                          <Row gap="4px">
+                            {entry.acceptable_in_envs.map((e) => (
+                              <Badge key={e} tone="info">
+                                {e}
+                              </Badge>
+                            ))}
+                          </Row>
+                        ) : (
+                          <span style={{ color: 'var(--text-subtle)' }}>any</span>
+                        )}
+                      </Td>
+                    </Tr>
+                  ))}
+                </Tbody>
+              </Table>
+            </ScrollableTable>
           </>
         )}
       </CardBody>
@@ -434,7 +437,7 @@ export function ToolsMappingCard({
 }) {
   const writeRisks = entries.filter((e) => e.default_gate !== 'allow').length;
   return (
-    <Card>
+    <Card className="vbn-card-flush">
       <CardHeader>
         <CardTitle>MCP tools</CardTitle>
         <Badge tone="neutral">{tools.length}</Badge>
@@ -462,50 +465,52 @@ export function ToolsMappingCard({
             </>
           )}
         </p>
-        <Table>
-          <Thead>
-            <Tr>
-              <Th>Tool</Th>
-              <Th>Required args</Th>
-              <Th>Description</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {tools.map((tool) => (
-              <Tr key={tool.name}>
-                <Td style={{ verticalAlign: 'top' }}>
-                  <Code>{tool.name}</Code>
-                </Td>
-                <Td
-                  style={{
-                    verticalAlign: 'top',
-                    fontSize: 'var(--text-xs)',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  {(tool.inputSchema.required ?? []).length === 0 ? (
-                    <span style={{ color: 'var(--text-subtle)' }}>—</span>
-                  ) : (
-                    <Row gap="4px">
-                      {(tool.inputSchema.required ?? []).map((arg) => (
-                        <Code key={arg}>{arg}</Code>
-                      ))}
-                    </Row>
-                  )}
-                </Td>
-                <Td
-                  style={{
-                    verticalAlign: 'top',
-                    fontSize: 'var(--text-sm)',
-                    color: 'var(--text-muted)',
-                  }}
-                >
-                  {tool.description}
-                </Td>
+        <ScrollableTable>
+          <Table style={{ minWidth: 700 }}>
+            <Thead>
+              <Tr>
+                <Th>Tool</Th>
+                <Th>Required args</Th>
+                <Th>Description</Th>
               </Tr>
-            ))}
-          </Tbody>
-        </Table>
+            </Thead>
+            <Tbody>
+              {tools.map((tool) => (
+                <Tr key={tool.name}>
+                  <Td style={{ verticalAlign: 'top' }}>
+                    <Code>{tool.name}</Code>
+                  </Td>
+                  <Td
+                    style={{
+                      verticalAlign: 'top',
+                      fontSize: 'var(--text-xs)',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    {(tool.inputSchema.required ?? []).length === 0 ? (
+                      <span style={{ color: 'var(--text-subtle)' }}>—</span>
+                    ) : (
+                      <Row gap="4px">
+                        {(tool.inputSchema.required ?? []).map((arg) => (
+                          <Code key={arg}>{arg}</Code>
+                        ))}
+                      </Row>
+                    )}
+                  </Td>
+                  <Td
+                    style={{
+                      verticalAlign: 'top',
+                      fontSize: 'var(--text-sm)',
+                      color: 'var(--text-muted)',
+                    }}
+                  >
+                    {tool.description}
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        </ScrollableTable>
       </CardBody>
     </Card>
   );
@@ -545,5 +550,26 @@ export function SetupCard({
         </Row>
       </CardBody>
     </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ScrollableTable — wrapper that lets a wide table scroll horizontally
+// WITHOUT clipping the last column. Wraps the table in a div with
+// `overflow-x: auto` and explicit `width: 100%`, so the scrollbar appears
+// only when the table outgrows the viewport.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ScrollableTable({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      style={{
+        width: '100%',
+        overflowX: 'auto',
+        WebkitOverflowScrolling: 'touch',
+      }}
+    >
+      {children}
+    </div>
   );
 }

@@ -59,7 +59,7 @@ export default async function ProviderInfoLandingPage({
 
   // Multi-plane → render a small landing.
   return (
-    <main>
+    <main className="vbn-page-wide">
       <header
         style={{
           display: 'flex',

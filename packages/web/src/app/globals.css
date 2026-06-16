@@ -143,3 +143,17 @@ hr {
   font-size: var(--text-sm);
   color: var(--text-muted);
 }
+
+/* Card variant used by sections that hold a wide table — we trim the body
+   padding so the table can use the full width before its scrollbar kicks
+   in (mostly for risk-catalog + tools-mapping tables on provider pages). */
+.vbn-card-flush > div:last-child {
+  padding: var(--space-3);
+}
+
+/* Provider pages get a slightly wider container so the wide risk tables
+   don't squeeze. Selector specificity matches the global `main` rule. */
+main.vbn-page-wide,
+.vbn-container.vbn-page-wide {
+  max-width: 1280px;
+}
