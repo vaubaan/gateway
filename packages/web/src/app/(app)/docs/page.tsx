@@ -5,7 +5,7 @@ import { ProseHeader, ProseWrap, Toc } from '@/components/public/Prose';
 export const metadata: Metadata = {
   title: 'Documentation — Vaubaan',
   description:
-    'One-page operator guide to Vaubaan: connect a cloud provider, bind resources, issue scoped access tokens, and audit every MCP call.',
+    'One-page operator guide to Vaubaan: connect a cloud provider, bind resources, mint risk-scoped tokens, delegate to sub-agents, and audit every MCP call.',
 };
 
 export default function DocsPage() {
@@ -14,64 +14,116 @@ export default function DocsPage() {
       <ProseHeader
         eyebrow="Documentation"
         title="Operator guide"
-        lead="Connect a provider, bind resources to a project, issue scoped access tokens for your agents, and audit every call. One page, the whole product."
+        lead="Connect a provider, bind resources to a project, mint a risk-scoped token for your agent, let it delegate to sub-agents under the same envelope, and audit every call. One page, the whole product."
       />
 
       <Toc
         items={[
           { id: 'mental-model', label: '1. Mental model' },
-          { id: 'connect-provider', label: '2. Connect a provider' },
-          { id: 'create-project', label: '3. Create a project' },
-          { id: 'bind-resources', label: '4. Bind resources' },
-          { id: 'access-tokens', label: '5. Access tokens' },
-          { id: 'capabilities', label: '6. Capabilities & policy' },
-          { id: 'agent-config', label: '7. Configure your agent' },
-          { id: 'audit', label: '8. Audit log' },
-          { id: 'billing', label: '9. Billing & plans' },
-          { id: 'security', label: '10. Security model' },
+          { id: 'how-it-works', label: '2. How it works (flow)' },
+          { id: 'connect-provider', label: '3. Connect a provider' },
+          { id: 'create-project', label: '4. Create a project' },
+          { id: 'bind-resources', label: '5. Bind resources' },
+          { id: 'tokens', label: '6. Tokens & delegation' },
+          { id: 'risk-catalog', label: '7. Risk catalog' },
+          { id: 'risks-policy', label: '8. Risks & policy' },
+          { id: 'tool-calls', label: '9. Tool calls' },
+          { id: 'audit', label: '10. Audit log' },
+          { id: 'billing', label: '11. Billing & plans' },
+          { id: 'security', label: '12. Security model' },
         ]}
       />
 
       <h2 id="mental-model">1. Mental model</h2>
       <p>
         Vaubaan is a multi-tenant MCP (Model Context Protocol) gateway. Your AI agents talk to one
-        URL — <code>https://vaubaan.com/mcp</code> — authenticate with a single access token, and we
-        broker every call to GitHub, Vercel, and Supabase under policies you control.
+        URL — <code>https://vaubaan.com/mcp</code> — authenticate with a single Bearer token, and we
+        broker every call to GitHub, Vercel, Supabase, Railway, and bash/SSH under a{' '}
+        <em>risk envelope</em> you accept up-front.
       </p>
-      <p>The objects you'll work with:</p>
+      <p>The cardinal concepts:</p>
       <ul>
         <li>
           <strong>Organization</strong> — your tenant. Has members, providers, projects, an audit
           log. Most teams have one.
         </li>
         <li>
-          <strong>Provider</strong> — GitHub, Vercel, or Supabase. Connected once per org, holds the
-          long-lived upstream token (App install for GitHub, OAuth for Vercel, PAT for Supabase).
+          <strong>Provider</strong> — GitHub, Vercel, Supabase, Railway, bash/SSH. Connected once
+          per org, holds the long-lived upstream credentials (App install for GitHub, OAuth for
+          Vercel, PAT for Supabase, host descriptors for bash/SSH).
         </li>
         <li>
           <strong>Project</strong> — a sub-scope inside the org (e.g. <code>website</code>,{' '}
-          <code>backoffice</code>). Holds bindings and access tokens.
+          <code>backoffice</code>). Holds bindings, tokens, and per-project risk policy overrides.
         </li>
         <li>
           <strong>Binding</strong> — a project-scoped pointer to one concrete upstream resource: a
-          GitHub repo, a Vercel project, or a Supabase project.
+          GitHub repo, a Vercel project, a Supabase project, a Railway service, an SSH host.
         </li>
         <li>
-          <strong>Access token</strong> — what your agent sends. Project-scoped, revocable, and
-          carries a set of <em>capabilities</em>.
+          <strong>Token</strong> — unified credential of the form{' '}
+          <code>vbn_live_&lt;prefix&gt;_&lt;secret&gt;</code>. Carries{' '}
+          <code>accepted_risks: RiskId[]</code>, <code>bindings: ProviderBinding[]</code>, an
+          optional <code>parent_id</code>, and a frozen <code>delegation_chain</code>. Every token —
+          whether minted by a human in the UI or by another agent programmatically — looks the same
+          on the wire.
         </li>
         <li>
-          <strong>Capability</strong> — a single grant in the form{' '}
-          <code>provider:plane/level:action[@env]</code> (e.g. <code>github:repo/code:read</code>,{' '}
-          <code>vercel:runtime/deployment:write@prod</code>). A token&apos;s capabilities are the
-          exact set of operations it may perform — deny-by-default.
+          <strong>Risk</strong> — a business-intention sentence (&ldquo;merge to a protected
+          branch&rdquo;, &ldquo;bulk-write rows on staging&rdquo;, &ldquo;deploy to prod&rdquo;)
+          that you accept on behalf of the agent. Risks live in a per-provider catalog, named{' '}
+          <code>&lt;provider&gt;[&lt;env&gt;].&lt;risk-name&gt;</code> (env qualifier optional when
+          the risk is account-level, e.g. <code>github.mint-install-token</code>).
+        </li>
+        <li>
+          <strong>Delegation</strong> — any token can mint a child token. The child&apos;s{' '}
+          <code>accepted_risks</code> must be a strict subset of the parent&apos;s; its{' '}
+          <code>expires_at</code> can&apos;t outlive the parent; max depth is 5.
+        </li>
+        <li>
+          <strong>Escalation</strong> (out-of-band) — when a child gets a{' '}
+          <code>403 risk-not-accepted</code>, it can POST to its parent via{' '}
+          <code>context.escalation_channel</code> to ask for a wider token. Vaubaan stays out of
+          this exchange — the parent decides, mints a new token, hands it back.
         </li>
       </ul>
 
-      <h2 id="connect-provider">2. Connect a provider</h2>
+      <h2 id="how-it-works">2. How it works (flow)</h2>
+      <p>The day-one path is three steps:</p>
+      <ol>
+        <li>
+          <strong>Human logs in</strong>, opens a project, clicks <em>New token</em> (route:{' '}
+          <code>/orgs/[slug]/projects/[project]/tokens/new</code>).
+        </li>
+        <li>
+          <strong>Mint UI shows a risk checklist</strong> — one row per applicable{' '}
+          <code>RiskId</code>, qualified by binding (e.g.{' '}
+          <code>supabase[staging].bulk-row-write</code> vs{' '}
+          <code>supabase[prod].bulk-row-write</code>
+          ). Each row carries its <code>effective_gate</code> (<code>allow</code> /{' '}
+          <code>confirm</code> / <code>deny</code>) derived from the catalog default + the project
+          policy override.
+        </li>
+        <li>
+          <strong>You tick the risks you accept</strong>. If every ticked risk resolves to{' '}
+          <code>allow</code>, the mint is immediate and the <code>api_key</code> is shown once. If
+          at least one ticks to <code>confirm</code>, an approval is opened on the configured
+          channel (Telegram / email / manual) and the call returns 202 with a <code>poll_url</code>;
+          you long-poll until the channel responds.
+        </li>
+      </ol>
       <p>
-        Go to <em>Cloud providers</em> in the sidebar and click <strong>Connect</strong> on the
-        provider you want.
+        Once the agent has its <code>api_key</code>, it can <strong>mint sub-agents</strong>{' '}
+        programmatically with a stricter envelope — e.g. a Story-Dev token covering &ldquo;coder +
+        supabase[staging] + vercel.deploy-preview&rdquo; can spin up a one-shot coding-agent token
+        narrowed down to just <code>github.feature-branch-write</code> for a single task. See{' '}
+        <Link href="/docs/mgmt">/docs/mgmt</Link> for the programmatic API.
+      </p>
+
+      <h2 id="connect-provider">3. Connect a provider</h2>
+      <p>
+        Go to <em>Cloud providers</em> in the sidebar (<code>/orgs/[slug]/providers</code>) and
+        click <strong>Connect</strong> on the provider you want.
       </p>
       <ul>
         <li>
@@ -85,30 +137,43 @@ export default function DocsPage() {
           install, Vercel returns an OAuth-issued team access token that we hold encrypted at rest.
         </li>
         <li>
-          <strong>Supabase</strong> — paste-token mode: paste a Supabase Management API PAT (the
-          long <code>sbp_…</code> string from your account &rarr; tokens page). The PAT inherits the
+          <strong>Supabase</strong> — paste a Supabase Management API PAT (the long{' '}
+          <code>sbp_…</code> string from your account &rarr; tokens page). The PAT inherits the
           permissions of the human who created it.
+        </li>
+        <li>
+          <strong>Railway</strong> — paste a Railway account/team token. Used by the GraphQL
+          Backboard for env-var management.
+        </li>
+        <li>
+          <strong>bash / SSH</strong> — declare hosts with their connection descriptors. Each
+          binding annotates which host the agent may operate on.
         </li>
       </ul>
       <p>
-        Once connected, the card on the <em>Cloud providers</em> page lists who granted access, the
-        account it's pointing at, the scope, and the concrete resources Vaubaan can see.
+        Once connected, the card on <em>Cloud providers</em> lists who granted access, the account
+        it&apos;s pointing at, the scope, and the concrete resources Vaubaan can see. Click into a
+        provider (<code>/orgs/[slug]/providers/[provider]</code>) to browse its data-model and the
+        full risk catalog (every <code>RiskId</code>, its <code>matches</code> pattern, its 6D
+        vector, and its <code>default_gate</code>).
       </p>
 
-      <h2 id="create-project">3. Create a project</h2>
+      <h2 id="create-project">4. Create a project</h2>
       <p>
         Open <em>Projects</em> in the sidebar and click <strong>+ New project</strong>. Pick a
-        machine-friendly slug — that's what appears in URLs and in the audit log. Projects are the
-        unit you'll typically partition agents by (one project per app, per environment, or per
-        customer).
+        machine-friendly slug — that&apos;s what appears in URLs and the audit log. Projects are the
+        unit you&apos;ll typically partition agents by (one project per app, per environment, or per
+        customer). Each project carries its own risk-policy overrides — see{' '}
+        <a href="#risks-policy">§8</a>.
       </p>
 
-      <h2 id="bind-resources">4. Bind resources</h2>
+      <h2 id="bind-resources">5. Bind resources</h2>
       <p>
-        Open a project and click <strong>+ Bind a resource</strong>. You'll see the connected
+        Open a project and click <strong>+ Bind a resource</strong>. You&apos;ll see the connected
         providers and the resources Vaubaan can actually reach. Pick one. The binding ties{' '}
-        <code>(project, provider, resource_ref)</code> into a triple — every MCP call from this
-        project will be dispatched against these bindings.
+        <code>(project, provider, resource_ref, env?)</code> into a tuple — every MCP call from this
+        project is dispatched against these bindings, and the runtime qualifies each{' '}
+        <code>RiskId</code> by binding before checking acceptance.
       </p>
       <p>
         Examples of <code>resource_ref</code> shapes:
@@ -121,83 +186,135 @@ export default function DocsPage() {
           Vercel: <code>prj_AbCd1234</code> (Vercel project id)
         </li>
         <li>
-          Supabase: <code>abcdefghij1234567890</code> (20-char project ref)
+          Supabase: <code>abcdefghij1234567890</code> (20-char project ref); set{' '}
+          <code>env: &quot;staging&quot;</code> or <code>&quot;prod&quot;</code> so the risk catalog
+          can disambiguate.
+        </li>
+        <li>
+          Railway: <code>&lt;service-id&gt;</code> with an env tag.
+        </li>
+        <li>
+          bash/SSH: a host descriptor (e.g. <code>ops-bastion-1</code>).
         </li>
       </ul>
 
-      <h2 id="access-tokens">5. Access tokens</h2>
+      <h2 id="tokens">6. Tokens &amp; delegation</h2>
       <p>
-        Inside a project, open <em>Access tokens</em> &rarr; <strong>+ New token</strong>. Name it
-        after the agent that'll carry it (e.g. <code>cursor-laptop</code>, <code>ci-bot</code>).
-        Tick the capabilities it needs from the checklist (or type an arbitrary capability
-        shorthand) — the token is granted exactly those.
+        Inside a project, open <em>Tokens</em> &rarr; <strong>+ New token</strong>. The form asks
+        for a name, an optional TTL, single-use, and shows a checklist of risks scoped to the
+        project&apos;s bindings. Tick what the agent needs. Submit.
       </p>
       <p>
         The token is shown <strong>once</strong> on creation — copy it into your agent config now.
         Format: <code>vbn_live_&lt;prefix&gt;_&lt;secret&gt;</code>. We store an argon2id hash, not
         the raw key — there is no recovery path. Revoke and re-issue if lost.
       </p>
-
-      <h2 id="capabilities">6. Capabilities & policy</h2>
       <p>
-        Policy is evaluated <em>deny-by-default</em>: an MCP call is allowed only if the token
-        carries a capability that covers it. A capability is a 5-tuple written as{' '}
-        <code>provider:plane/level:action[@env]</code>:
+        Every token is a row in a single <code>tokens</code> table. A <em>root token</em> has{' '}
+        <code>parent_id = NULL</code> and is created only via the UI (humans bootstrap the chain).
+        Once you have a root, you (or your agent) can mint children programmatically by POSTing to{' '}
+        <code>/api/v1/tokens/mint</code> with the parent token as Bearer. Each child:
       </p>
       <ul>
         <li>
-          <strong>provider</strong> — the vendor (<code>github</code>, <code>vercel</code>,{' '}
-          <code>supabase</code>, <code>railway</code>, …).
+          inherits a frozen <code>delegation_chain</code> snapshot — useful for forensics later even
+          if the parent is renamed or revoked;
         </li>
         <li>
-          <strong>plane</strong> — one concentric stack of levels declared by the provider (
-          <code>github→repo</code>, <code>vercel→runtime</code>, <code>supabase→db</code>; a
-          provider may expose several planes).
+          must request a strict subset of the parent&apos;s <code>accepted_risks</code>;
+        </li>
+        <li>must expire no later than the parent;</li>
+        <li>
+          cascade-deletes if the parent is deleted (<code>ON DELETE CASCADE</code>);
         </li>
         <li>
-          <strong>level</strong> — the slug of a ring inside that plane (<code>code</code>,{' '}
-          <code>rows</code>, <code>deployment</code>, <code>config</code>, …).
-        </li>
-        <li>
-          <strong>action</strong> — <code>read</code> or <code>write</code> (no <em>propose</em>, no{' '}
-          <em>apply</em>, no <em>provision</em> — those collapse into <code>write</code> at a given
-          env).
-        </li>
-        <li>
-          <strong>env</strong> — an instance/variant slug (<code>@main</code>, <code>@prod</code>,{' '}
-          <code>@feature/x</code>), dynamic — present only when the targeted data is overlaid on
-          that env.
+          counts against a depth cap of 5 (human &rarr; orchestrator &rarr; coder &rarr; sub-task is
+          plenty of room).
         </li>
       </ul>
-      <p>The token-creation checklist surfaces the common grants:</p>
+
+      <h2 id="risk-catalog">7. Risk catalog</h2>
+      <p>
+        Each provider ships a versioned <code>risk-catalog.yaml</code> in the repo. An entry
+        declares:
+      </p>
       <ul>
         <li>
-          <code>github:repo/code:read</code> — read code, diffs, PRs.
+          <code>id</code> — stable name, e.g. <code>github.merge-protected</code>,{' '}
+          <code>supabase.bulk-row-write</code>.
         </li>
         <li>
-          <code>github:repo/code:write@main</code> — merge / apply to main.
+          <code>label</code>, <code>reason</code> — what the manager sees in the checklist
+          (one-liner + 1-2 sentence rationale).
         </li>
         <li>
-          <code>vercel:runtime/deployment:write@preview</code> /{' '}
-          <code>vercel:runtime/deployment:write@prod</code> — deploy.
+          <code>matches</code> — a slice pattern (internal DSL) describing which concrete{' '}
+          <code>(tool, args)</code> calls fall under this risk.
         </li>
         <li>
-          <code>vercel:runtime/config:write@prod</code> — change prod env vars / secrets.
+          <code>vector</code> — the 6D risk vector (reversibility, blast, data, cost, visibility,
+          persistence). Used to explain the risk and to seed the <code>default_gate</code>.
         </li>
         <li>
-          <code>supabase:db/rows:read@staging</code> / <code>supabase:db/rows:read@prod</code> —
-          read data.
+          <code>default_gate</code> — <code>allow</code> / <code>confirm</code> / <code>deny</code>.
+        </li>
+        <li>
+          <code>acceptable_in_envs?</code> — optional whitelist (e.g.{' '}
+          <code>[&apos;preview&apos;, &apos;staging&apos;]</code>) that prevents accepting the risk
+          on prod even when policy allows it.
         </li>
       </ul>
       <p>
-        Need a capability that isn&apos;t on the checklist? Type the notation directly in the
-        free-text field on the token page — it&apos;s validated against the grammar before it&apos;s
-        accepted. The mapping from a concrete <code>(tool, args)</code> call to a required
-        capability is done in code by each provider plugin&apos;s <code>classify()</code>, so
-        there&apos;s no per-org rule DSL to maintain.
+        Browse each provider&apos;s full catalog at{' '}
+        <code>/orgs/[slug]/providers/[provider]/[plane]</code> — the page renders the
+        provider&apos;s data-model graph alongside the risk catalog and the list of MCP tools that
+        each risk covers.
       </p>
 
-      <h2 id="agent-config">7. Configure your agent</h2>
+      <h2 id="risks-policy">8. Risks &amp; policy</h2>
+      <p>
+        Policy is evaluated <em>deny-by-default</em>: an MCP call is allowed only if the risks it
+        touches are all in the token&apos;s <code>accepted_risks</code>. The acceptance contract is
+        risk-based — &ldquo;here are the consequences I accept on behalf of this agent&rdquo; —
+        rather than capability-based.
+      </p>
+      <p>The three gates that can apply to a risk at mint time:</p>
+      <ul>
+        <li>
+          <strong>allow</strong> — ticking the risk mints it immediately, no human in the loop.
+        </li>
+        <li>
+          <strong>confirm</strong> — ticking opens an approval on the project&apos;s channel
+          (Telegram / email / manual); the API returns 202 with a <code>poll_url</code>.
+        </li>
+        <li>
+          <strong>deny</strong> — the risk is structurally unacceptable for this project; the mint
+          fails with 403 listing the denied risks.
+        </li>
+      </ul>
+      <p>
+        The default <code>gate</code> comes from the catalog. A project can override per-risk (or
+        per-risk × env) via the <code>project_risk_policies</code> table:
+      </p>
+      <ul>
+        <li>
+          <em>Tightening</em> (catalog says <code>allow</code>, project says <code>confirm</code> or{' '}
+          <code>deny</code>) is unrestricted — operators can be paranoid.
+        </li>
+        <li>
+          <em>Loosening</em> (catalog says <code>deny</code>, project wants <code>allow</code>) is
+          gated for posture-shift risks (<code>persistence: posture</code>) and credential/PII
+          writes — only admin overrides allowed.
+        </li>
+      </ul>
+      <p>
+        At runtime, the gateway: (1) classifies the call into slices, (2) intersects each slice with
+        the provider catalog to get <code>risks_touched</code>, (3) checks{' '}
+        <code>risks_touched ⊆ token.accepted_risks</code>. No DB round-trip on the hot path beyond
+        the token resolution (which is cached).
+      </p>
+
+      <h2 id="tool-calls">9. Tool calls</h2>
       <p>Point your MCP-aware client (Claude Desktop, Cursor, custom SDK) at:</p>
       <pre>
         <code>{`{
@@ -210,43 +327,85 @@ export default function DocsPage() {
 }`}</code>
       </pre>
       <p>
-        The gateway advertises only the tools your capabilities allow. The agent sees a curated tool
-        list, not the union of every provider — that's the deny-by-default contract surfacing
-        through capability discovery.
+        The gateway advertises only the tools whose risks fit your token&apos;s envelope. The agent
+        sees a curated tool list, not the union of every provider — that&apos;s the deny-by-default
+        contract surfacing through tool discovery.
       </p>
       <p>
-        For agents that need a self-contained primer (auth, JSON-RPC shape, tool catalog, bootstrap
-        recipes with <code>git clone</code>/<code>push</code> via{' '}
-        <code>github__mint_install_token</code>, error model), point them at{' '}
+        When a tool call would touch a risk the token hasn&apos;t accepted, the gateway returns:
+      </p>
+      <pre>
+        <code>{`HTTP/1.1 403 Forbidden
+{
+  "error": "risk-not-accepted",
+  "missing_risks": ["supabase[prod].bulk-row-write"],
+  "executed_slice": "supabase.project[…].schema[public].table[users].row[*].W",
+  "hint": "Re-mint a token with this risk accepted, or restrict the operation."
+}`}</code>
+      </pre>
+      <p>
+        The response is actionable: the agent (or its orchestrator) can either narrow the operation,
+        mint a wider token if it has the authority, or — for a child agent — POST its{' '}
+        <code>context.escalation_channel</code> asking the parent to widen the envelope. Vaubaan
+        itself stays out of that escalation hop: it&apos;s a direct child &rarr; parent exchange.
+      </p>
+      <p>
+        For agents that need a self-contained primer (auth, JSON-RPC shape, tool catalog, error
+        model), point them at{' '}
         <a href="/agent-bootstrap.md">
           <code>https://vaubaan.com/agent-bootstrap.md</code>
         </a>{' '}
         — raw markdown, curl-friendly, single source of truth.
       </p>
 
-      <h2 id="audit">8. Audit log</h2>
+      <h2 id="audit">10. Audit log</h2>
+      <p>Every call — allowed or denied — is logged with:</p>
+      <ul>
+        <li>
+          <code>tool</code> + <code>args_hash</code> (sha256 of the args, never the raw values),
+        </li>
+        <li>
+          <code>slices_executed</code> — the technical slice path(s) the call hit,
+        </li>
+        <li>
+          <code>risks_touched</code> — the business-intention risks those slices resolved to,
+        </li>
+        <li>
+          <code>token_accepted_risks</code> — a snapshot of the token&apos;s envelope at call time
+          (so the decision stays reproducible even if the token is later edited),
+        </li>
+        <li>
+          <code>delegation_chain</code> — a frozen snapshot of the token&apos;s ancestry chain,
+        </li>
+        <li>
+          <code>decision</code>, <code>approval_id?</code>, <code>binding_used</code>.
+        </li>
+      </ul>
       <p>
-        Every call — allowed or denied — is logged. Org-level <em>Audit log</em> shows all calls
-        across projects; the per-project audit log scopes to one project. We keep 90 days. Filter by
-        access token, by decision, or by time. Denials surface the exact rule that fired so you can
-        triage policy.
+        Org-level <em>Audit log</em> shows all calls across projects; the per-project log scopes to
+        one project. We keep 90 days. Forensic filtering by root token is trivial:{' '}
+        <code>
+          WHERE delegation_chain @&gt;
+          &apos;[&#123;&quot;id&quot;:&quot;&lt;root_id&gt;&quot;&#125;]&apos;
+        </code>{' '}
+        surfaces every action that descends from a given root, even after children are revoked.
       </p>
 
-      <h2 id="billing">9. Billing &amp; plans</h2>
+      <h2 id="billing">11. Billing &amp; plans</h2>
       <p>
         Vaubaan is metered by <em>allowed</em> MCP calls per month, with included quotas per plan.
-        Denied calls are free — we don't want to disincentivize tight policies. Plan changes and
-        invoices appear on the <Link href="/pricing">pricing</Link> page; billing portal is
+        Denied calls are free — we don&apos;t want to disincentivize tight envelopes. Plan changes
+        and invoices appear on the <Link href="/pricing">pricing</Link> page; billing portal is
         reachable from your org settings (coming soon — until then, contact us).
       </p>
 
-      <h2 id="security">10. Security model</h2>
+      <h2 id="security">12. Security model</h2>
       <p>
         Upstream tokens are stored encrypted at rest (Supabase Vault). The gateway mints
-        installation tokens just-in-time for GitHub; for Vercel and Supabase the encrypted
-        long-lived token is decrypted in the request hot-path only. Access tokens are stored as
-        argon2id hashes. Row-level security on Supabase enforces per-org isolation at the database
-        layer. No data crosses tenant boundaries.
+        installation tokens just-in-time for GitHub; for Vercel, Supabase, and Railway the encrypted
+        long-lived token is decrypted in the request hot-path only. Vaubaan tokens are stored as
+        argon2id hashes — no recovery if lost. Row-level security on Supabase enforces per-org
+        isolation at the database layer. No data crosses tenant boundaries.
       </p>
       <p>
         Detailed threat model and sub-processor list: <Link href="/security">/security</Link>{' '}
@@ -255,7 +414,9 @@ export default function DocsPage() {
 
       <hr />
       <p>
-        Still stuck? <Link href="/support">Open a ticket</Link>.
+        Programmatic API (mint children, preview risks, revoke):{' '}
+        <Link href="/docs/mgmt">/docs/mgmt</Link>. Still stuck?{' '}
+        <Link href="/support">Open a ticket</Link>.
       </p>
     </ProseWrap>
   );

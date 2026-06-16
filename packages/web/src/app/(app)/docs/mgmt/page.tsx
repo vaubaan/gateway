@@ -3,9 +3,9 @@ import Link from 'next/link';
 import { ProseHeader, ProseWrap, Toc } from '@/components/public/Prose';
 
 export const metadata: Metadata = {
-  title: 'Management API — Vaubaan',
+  title: 'Programmatic API — Vaubaan',
   description:
-    'Use the Vaubaan Management API: create a management key, discover projects, mint and revoke ephemeral access tokens with the capabilities they need, from a programmatic client.',
+    'Drive Vaubaan from a programmatic client: any vbn_live_* token can preview, mint child tokens with a strict-subset risk envelope, long-poll a pending approval, rename, or revoke.',
 };
 
 export default function MgmtDocsPage() {
@@ -13,18 +13,19 @@ export default function MgmtDocsPage() {
     <ProseWrap>
       <ProseHeader
         eyebrow="Documentation"
-        title="Management API"
-        lead="Drive Vaubaan from a programmatic client (CI job, bootstrap script, automation). The caller authenticates with an org-scoped management key, discovers what's available, and mints (or revokes) short-lived access tokens."
+        title="Programmatic API"
+        lead="Drive Vaubaan from any client that holds a token: preview risks for a project, mint child tokens with a strict-subset envelope, long-poll approvals, rename, revoke. One Bearer credential — vbn_live_* — for every operation."
       />
 
       <Toc
         items={[
           { id: 'who-this-is-for', label: '1. Who this is for' },
-          { id: 'concepts', label: '2. Two credentials, not one' },
-          { id: 'setup', label: '3. Setup' },
-          { id: 'flow', label: '4. End-to-end flow' },
-          { id: 'reference', label: '5. API reference' },
-          { id: 'security', label: '6. Security & rotation' },
+          { id: 'concepts', label: '2. Concepts' },
+          { id: 'quickstart', label: '3. Quickstart' },
+          { id: 'endpoints', label: '4. Endpoints' },
+          { id: 'examples', label: '5. End-to-end example' },
+          { id: 'advanced', label: '6. Advanced concepts' },
+          { id: 'security', label: '7. Security & rotation' },
         ]}
       />
 
@@ -35,257 +36,422 @@ export default function MgmtDocsPage() {
         custom agent against a checked-out repo and lets it talk to the cloud through Vaubaan.
       </p>
       <p>
-        The caller is not a human and not an MCP consumer itself. It&apos;s an admin client — could
-        be a CI job, a daemon, a cron, whatever.
+        You may also be writing the orchestrator itself: an agent that holds its own token and needs
+        to delegate to one-shot sub-agents with a stricter envelope per task.
       </p>
 
-      <h2 id="concepts">2. Two credentials, not one</h2>
-      <p>Vaubaan deliberately separates two credential types:</p>
+      <h2 id="concepts">2. Concepts</h2>
+      <p>
+        There is <strong>one</strong> credential type in Vaubaan:
+      </p>
       <ul>
         <li>
-          <strong>Management key</strong> — <code>vbn_mgmt_…</code>, org-scoped, long-lived.
-          Authenticates the caller against <code>/api/v1/mgmt/*</code>. <strong>Cannot</strong> be
-          used on the MCP gateway. One per client (or per env: staging, prod).
-        </li>
-        <li>
-          <strong>Access token</strong> — <code>vbn_live_…</code>, project-scoped, ephemeral. What
-          the agent sends on every MCP call. Carries a set of <em>capabilities</em> = the exact
-          operations the gateway will allow. Mint a fresh one per session with a TTL.
+          <strong>Token</strong> — <code>vbn_live_&lt;prefix&gt;_&lt;secret&gt;</code>. Every token
+          row carries an <code>accepted_risks: RiskId[]</code> envelope, an optional{' '}
+          <code>parent_id</code>, and a frozen <code>delegation_chain</code>. The same token can be
+          used both as <em>Authorization</em> for <code>/mcp</code> tool calls and as Bearer on the{' '}
+          <code>/api/v1/tokens/*</code> endpoints below to mint children.
         </li>
       </ul>
+      <p>The key constraints on delegation:</p>
+      <ul>
+        <li>
+          A child&apos;s <code>accepted_risks</code> must be a strict subset of the parent&apos;s
+          (you can&apos;t escalate by minting).
+        </li>
+        <li>
+          A child&apos;s <code>expires_at</code> can&apos;t outlive the parent (you can&apos;t
+          extend by minting).
+        </li>
+        <li>
+          A <em>root</em> token (<code>parent_id IS NULL</code>) can only be created from the UI —
+          humans bootstrap the chain. From there, any agent can mint downward.
+        </li>
+        <li>Max delegation depth is 5.</li>
+      </ul>
       <p>
-        If the management key leaks, the attacker can mint access tokens in the bound org until you
-        revoke the key — but they can&apos;t consume MCP directly with it. If an access token leaks,
-        the blast radius is limited by its capabilities, its project scope, and its TTL.
+        If a token leaks, the blast radius is bounded by its <code>accepted_risks</code>, its
+        bindings, its TTL, and the project policy. Revoking a token cascade-revokes all its
+        descendants via the <code>parent_id</code> foreign key.
       </p>
 
-      <h2 id="setup">3. Setup</h2>
+      <h2 id="quickstart">3. Quickstart</h2>
       <ol>
         <li>
-          In Vaubaan, open <em>Settings → Management keys</em> on the target org, click{' '}
-          <strong>Create</strong>, copy the <code>vbn_mgmt_…</code> shown once.
+          <strong>Bootstrap a root token via the UI.</strong> Sign in, open your project, click{' '}
+          <em>Tokens &rarr; + New token</em>, tick the risks the orchestrator can ever grant
+          downstream, submit. Copy the <code>vbn_live_…</code> shown once.
         </li>
         <li>
-          Store it as <code>VAUBAAN_MCP_GATEWAY_MGMT_KEY</code>. Use whatever secret manager you
-          already have (Infisical, Vault, Doppler, AWS Secrets Manager, plain env in a single-tenant
-          VM). The client never logs the raw value.
+          <strong>
+            Store it as <code>VAUBAAN_TOKEN</code>
+          </strong>{' '}
+          (Infisical, Vault, Doppler, AWS Secrets Manager, plain env in a single-tenant VM —
+          whatever you already use). The client never logs the raw value.
         </li>
         <li>
-          Configure <code>VAUBAAN_MCP_GATEWAY_BASE_URL</code> — <code>https://vaubaan.com</code> in
-          prod,
-          <code>http://localhost:3000</code> in local dev.
+          <strong>
+            Set <code>VAUBAAN_BASE_URL</code>
+          </strong>{' '}
+          — <code>https://vaubaan.com</code> in prod, <code>http://localhost:3000</code> in local
+          dev.
+        </li>
+        <li>
+          On every session, your client POSTs to <code>/api/v1/tokens/mint</code> with that token as
+          Bearer to spin up an ephemeral child for the agent, hands the child <code>api_key</code>{' '}
+          to the agent, and revokes it (or lets the TTL expire) when done.
         </li>
       </ol>
 
-      <h2 id="flow">4. End-to-end flow</h2>
+      <h2 id="endpoints">4. Endpoints</h2>
       <p>
-        On every session, the client does three calls. Snippets below use <code>curl</code> for
-        clarity — port them to whatever HTTP client you use.
+        All endpoints below take <code>Authorization: Bearer vbn_live_…</code>. There is no separate
+        management-key world — any active token can call them, subject to the
+        subset/depth/expires_at invariants below. Endpoints go through the regular REST rate limit
+        (60 req/min per source IP).
       </p>
 
-      <h3>4.1 Know the capabilities you need</h3>
+      <h3>
+        <code>POST /api/v1/tokens/preview</code>
+      </h3>
       <p>
-        There&apos;s no catalog to fetch — capabilities are a fixed grammar, not org-scoped objects.
-        A capability is a notation string <code>provider:plane/level:action@env</code> where{' '}
-        <em>action</em> is <code>read</code> or <code>write</code>, and <em>env</em> is an instance
-        slug (a branch, an environment, a key mode — dynamic). Pick the set the session needs, for
-        example:
+        Compute the effective gate for each requested risk + binding without minting anything.
+        Useful for UIs (and for agents that want to know which risks will trigger an approval before
+        they POST <code>mint</code>).
       </p>
-      <ul>
-        <li>
-          <code>github:repo/code:read</code>, <code>github:repo/code:write@main</code> — read code,
-          merge.
-        </li>
-        <li>
-          <code>vercel:runtime/deployment:write@preview</code>,{' '}
-          <code>vercel:runtime/deployment:write@prod</code> — deploy.
-        </li>
-        <li>
-          <code>vercel:runtime/config:write@prod</code> — change prod env vars / secrets.
-        </li>
-        <li>
-          <code>supabase:db/rows:read@staging</code>, <code>supabase:db/rows:read@prod</code> — read
-          data.
-        </li>
-      </ul>
-      <p>
-        Pass them as the <code>capabilities</code> array in step 4.3. The gateway maps each MCP call
-        to a required capability in code (per-provider <code>classify()</code>) and allows it only
-        if the token carries that exact capability (exact tuple — env defensive).
-      </p>
-
-      <h3>4.2 Discover projects and bindings</h3>
-      <pre>
-        <code>{`curl -sS "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/projects" \\
-  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
-
-# Response (truncated):
-# {
-#   "projects": [
-#     {
-#       "id": "uuid",
-#       "slug": "website",
-#       "name": "Website",
-#       "created_at": "2026-05-22T...",
-#       "bindings": [
-#         { "provider": "github", "resource_ref": "acme/website", "display_name": "acme/website" }
-#       ]
-#     }
-#   ]
-# }`}</code>
-      </pre>
-      <p>
-        Use <code>slug</code> as the <code>projectSlug</code> in step 4.3. Inspect the{' '}
-        <code>bindings</code> array to know which providers (and environments) are wired up —
-        there&apos;s no point granting <code>runtime:apply@prod</code> to a session whose project
-        has no prod runtime binding.
-      </p>
-
-      <h3>4.3 Mint an ephemeral access token</h3>
-      <pre>
-        <code>{`curl -sS -X POST "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/tokens" \\
-  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY" \\
-  -H "Content-Type: application/json" \\
-  -d '{
-    "projectSlug": "website",
-    "capabilities": [
-      "github:repo/code:read",
-      "github:repo/code:write@feature/x",
-      "vercel:runtime/deployment:write@preview"
-    ],
-    "ttlHours": 24
-  }'
-
-# Response:
-# {
-#   "access_token": { "id": "...", "name": "mgmt-abc12345", "project_id": "...", "expires_at": "2026-05-28T15:00:00Z", ... },
-#   "api_key":     "vbn_live_AbCdEfGh_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-#   "expires_at":  "2026-05-28T15:00:00Z"
-# }`}</code>
-      </pre>
-      <p>
-        <code>ttlHours</code> defaults to <strong>24</strong>, hard-capped at <strong>168</strong>{' '}
-        (7 days). Past <code>expires_at</code> the gateway returns 401 with
-        <code>access token has expired</code> — renew before that.
-      </p>
-      <p>
-        The <code>api_key</code> is shown <strong>once</strong> (argon2id at rest, no recovery).
-        Pass it directly to the agent — don&apos;t persist it past the session.
-      </p>
-
-      <h3>4.4 Hand the access token to the agent</h3>
+      <p>Body:</p>
       <pre>
         <code>{`{
-  "mcpServers": {
-    "vaubaan": {
-      "url": "$VAUBAAN_MCP_GATEWAY_BASE_URL/mcp",
-      "headers": { "Authorization": "Bearer $ACCESS_TOKEN" }
-    }
-  }
+  "projectSlug": "website",          // or projectId
+  "bindings": [
+    { "provider": "github",   "resource_ref": "acme/website", "env": null },
+    { "provider": "supabase", "resource_ref": "abcdefghij1234567890", "env": "staging" },
+    { "provider": "vercel",   "resource_ref": "prj_AbCd1234", "env": "preview" }
+  ],
+  "accepted_risks": [
+    "github.read-code",
+    "github.feature-branch-write",
+    "supabase[staging].row-write-one",
+    "vercel.deploy-preview"
+  ],
+  "denied_risks": []                  // optional opt-outs (subtract from a preset)
 }`}</code>
       </pre>
       <p>
-        The agent calls <code>tools/list</code> and only sees the tools its capabilities allow.
-        Every call is policy-checked and audited under the org.
+        Returns <code>200</code> with:
       </p>
-
-      <h3>4.5 Revoke the access token after the session</h3>
       <pre>
-        <code>{`curl -sS -X DELETE "$VAUBAAN_MCP_GATEWAY_BASE_URL/api/v1/mgmt/tokens/$TOKEN_ID" \\
-  -H "Authorization: Bearer $VAUBAAN_MCP_GATEWAY_MGMT_KEY"
-
-# Response: 200 { "ok": true }`}</code>
+        <code>{`{
+  "risks": [
+    {
+      "id": "supabase[staging].row-write-one",
+      "label": "Write a single Supabase row on staging",
+      "reason": "…",
+      "vector": { /* 6D */ },
+      "effective_gate": "allow",
+      "origin": "catalog-default" | "project-policy-override"
+    },
+    …
+  ],
+  "all_allowed": true,
+  "needs_approval": [],               // RiskIds whose effective_gate === 'confirm'
+  "denied":         []                // RiskIds whose effective_gate === 'deny'
+}`}</code>
       </pre>
-      <p>
-        Use the <code>access_token.id</code> returned at mint time. Cleaning up explicitly avoids
-        accumulating expired-but-not-yet-purged rows in the DB. Forgotten tokens are still
-        eventually deleted server-side once they sit past their <code>expires_at</code> for 7 days.
-      </p>
-
-      <h2 id="reference">5. API reference</h2>
-      <p>
-        All endpoints below take <code>Authorization: Bearer vbn_mgmt_…</code>. They are{' '}
-        <strong>not</strong> rate-limited at the gateway tier — they go through the regular REST
-        rate limit (60 req/min per source IP).
-      </p>
 
       <h3>
-        <code>GET /api/v1/mgmt/projects</code>
+        <code>POST /api/v1/tokens/mint</code>
       </h3>
-      <p>
-        Returns{' '}
-        <code>
-          {`{ projects: [{ id, slug, name, created_at, bindings: [{ provider, resource_ref, display_name }] }] }`}
-        </code>
-        . Lists every project of the bound org and its provider bindings.
-      </p>
-
-      <h3>
-        <code>POST /api/v1/mgmt/tokens</code>
-      </h3>
-      <p>
-        Body:{' '}
-        <code>
-          {`{ projectSlug: string, capabilities: string[], name?: string, ttlHours?: number }`}
-        </code>
-        .
-      </p>
+      <p>Mint a child token under the caller&apos;s envelope. Body:</p>
+      <pre>
+        <code>{`{
+  "name": "coder-feature-x",          // optional, defaults to "<scope>-<random8>"
+  "scope": "project",                 // "org" | "project"
+  "projectSlug": "website",           // required when scope='project' (or projectId)
+  "bindings": [                       // required when scope='project'
+    { "provider": "github", "resource_ref": "acme/website", "env": null }
+  ],
+  "accepted_risks": [
+    "github.read-code",
+    "github.feature-branch-write"
+  ],
+  "denied_risks": [],                 // optional opt-outs
+  "context": {                        // optional
+    "task": "implement feature X",
+    "agent_id": "claude-coder-1",
+    "escalation_channel": {
+      "transport": "http",
+      "endpoint_url": "https://orchestrator.dev/escalations",
+      "auth_token": "<shared secret child→parent>"
+    }
+  },
+  "ttlHours": 24,                     // default 24, max 168 (7 days)
+  "ttlSeconds": 600,                  // alt — requires "singleUse": true, max 3600
+  "singleUse": false
+}`}</code>
+      </pre>
+      <p>Possible responses:</p>
       <ul>
         <li>
-          <code>name</code> defaults to <code>mgmt-&lt;random-8&gt;</code>.
+          <code>201</code> with <code>{`{ token, api_key, expires_at, accepted_risks }`}</code> when
+          every requested risk resolves to <code>allow</code>. The <code>api_key</code> is the only
+          place the raw secret is ever exposed.
         </li>
         <li>
-          <code>ttlHours</code> defaults to <strong>24</strong>, hard-capped at <strong>168</strong>{' '}
-          (7 days).
+          <code>202</code> with{' '}
+          <code>
+            {`{ approval_id, status: 'pending', channel, poll_url, expires_at, needs_approval, risks }`}
+          </code>{' '}
+          when at least one risk has <code>effective_gate: 'confirm'</code>. Long-poll{' '}
+          <code>poll_url</code> for the result.
         </li>
         <li>
-          <code>capabilities</code> is an array of capability notations (e.g.{' '}
-          <code>github:repo/code:read</code>, <code>vercel:runtime/deployment:write@prod</code>);
-          each is validated against the grammar and stored as its full tuple.
+          <code>403</code> with <code>{`{ error, denied_risks, risks }`}</code> when at least one
+          risk is denied by the catalog or by project policy, OR when the requested envelope
+          violates a subset / depth / <code>expires_at</code> invariant.
         </li>
       </ul>
       <p>
-        Returns 201 with <code>{`{ access_token, api_key, expires_at }`}</code>. The{' '}
-        <code>api_key</code> is the only place the raw secret is ever exposed.
+        Invariant errors carry the offending risks and a human-readable message, e.g.{' '}
+        <code>requested_risks not subset of parent: missing supabase[prod].bulk-row-write</code>.
       </p>
 
       <h3>
-        <code>DELETE /api/v1/mgmt/tokens/:tokenId</code>
+        <code>GET /api/v1/tokens/pending/:approvalId?wait=25</code>
       </h3>
       <p>
-        Revokes (hard-deletes) the access token if it belongs to a project of the bound org. Returns{' '}
-        <code>{`{ ok: true }`}</code> on success, 404 otherwise. Cache is invalidated so the next
-        MCP call rejects within one round-trip.
+        Long-poll a pending approval. The <code>wait</code> query (seconds, capped at 25) blocks
+        server-side until the approval is decided or the wait elapses.
       </p>
-
-      <h2 id="security">6. Security &amp; rotation</h2>
       <ul>
         <li>
-          <strong>Rotate the management key</strong> by creating a new one, deploying the new env
-          var, then deleting the old one from the Settings page. Old key is rejected immediately (no
-          grace period — the cache invalidates on next call).
+          <code>202 {`{ status: 'pending', expires_at }`}</code> — still waiting; re-poll.
         </li>
         <li>
-          <strong>Revoke a leaked access token</strong> from the project&apos;s{' '}
-          <em>Access tokens</em> page, or programmatically via{' '}
-          <code>DELETE /api/v1/mgmt/tokens/:tokenId</code>. The gateway picks up the revocation
-          within the cache TTL (60s) or instantly on cache miss.
+          <code>201 {`{ token, api_key, expires_at }`}</code> — approved; the <code>api_key</code>{' '}
+          is delivered exactly once.
         </li>
         <li>
-          <strong>Lost the management key?</strong> Argon2id at rest — no recovery. Create a new one
-          and rotate.
+          <code>
+            410 {`{ status: 'denied' | 'expired' | 'cancelled' | 'consumed', decided_at? }`}
+          </code>{' '}
+          — terminal non-success.
+        </li>
+      </ul>
+      <p>
+        Wrap repeated 25 s long-polls until the global wall-clock (default 15 min = approval TTL) in
+        your SDK. We don&apos;t hold the connection longer than 25 s server-side because of edge
+        proxy limits.
+      </p>
+
+      <h3>
+        <code>PATCH /api/v1/tokens/:tokenId</code>
+      </h3>
+      <p>Update a token&apos;s name or revoke it. Body:</p>
+      <pre>
+        <code>{`{
+  "orgSlug": "acme",
+  "name":   "new-name",       // optional
+  "status": "revoked"         // optional — "active" | "revoked"
+}`}</code>
+      </pre>
+      <p>
+        Revoking flushes the gateway cache so the next <code>/mcp</code> call rejects within ≤ 1
+        round-trip.
+      </p>
+
+      <h3>
+        <code>DELETE /api/v1/tokens/:tokenId?orgSlug=acme</code>
+      </h3>
+      <p>
+        Physically delete the token row. Children are cascade-deleted via the <code>parent_id</code>{' '}
+        foreign key. <code>audit_log</code> entries survive — their <code>delegation_chain</code>{' '}
+        snapshot keeps forensics working.
+      </p>
+
+      <h2 id="examples">5. End-to-end example</h2>
+      <p>
+        Reproduces the live <code>scripts/e2e-mint-flow.mjs</code> flow against{' '}
+        <code>$VAUBAAN_BASE_URL</code> with the parent token <code>$VAUBAAN_TOKEN</code>.
+      </p>
+      <pre>
+        <code>{`# 1. Preview — what gates apply?
+curl -sS -X POST "$VAUBAAN_BASE_URL/api/v1/tokens/preview" \\
+  -H "Authorization: Bearer $VAUBAAN_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "projectSlug": "website",
+    "bindings": [
+      { "provider": "github", "resource_ref": "acme/website", "env": null }
+    ],
+    "accepted_risks": ["github.read-code", "github.feature-branch-write"]
+  }'
+
+# Response (truncated):
+# {
+#   "risks": [{ "id": "github.read-code", "effective_gate": "allow", ... }, ...],
+#   "all_allowed": true,
+#   "needs_approval": [],
+#   "denied": []
+# }
+
+# 2. Mint a single-use, 10-minute child token.
+MINT=$(curl -sS -X POST "$VAUBAAN_BASE_URL/api/v1/tokens/mint" \\
+  -H "Authorization: Bearer $VAUBAAN_TOKEN" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "name": "coder-feature-x",
+    "scope": "project",
+    "projectSlug": "website",
+    "bindings": [
+      { "provider": "github", "resource_ref": "acme/website", "env": null }
+    ],
+    "accepted_risks": ["github.read-code", "github.feature-branch-write"],
+    "ttlSeconds": 600,
+    "singleUse": true
+  }')
+CHILD_API_KEY=$(echo "$MINT" | jq -r .api_key)
+CHILD_TOKEN_ID=$(echo "$MINT" | jq -r .token.id)
+
+# 3. Hand the child key to the agent. Discover tools.
+curl -sS -X POST "$VAUBAAN_BASE_URL/mcp" \\
+  -H "Authorization: Bearer $CHILD_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+
+# 4. Call a tool.
+curl -sS -X POST "$VAUBAAN_BASE_URL/mcp" \\
+  -H "Authorization: Bearer $CHILD_API_KEY" \\
+  -H "Content-Type: application/json" \\
+  -d '{
+    "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+    "params": {
+      "name": "github__get_file_contents",
+      "arguments": { "owner": "acme", "repo": "website", "path": "README.md" }
+    }
+  }'
+
+# 5. Revoke when done (or let the TTL expire).
+curl -sS -X DELETE \\
+  "$VAUBAAN_BASE_URL/api/v1/tokens/$CHILD_TOKEN_ID?orgSlug=acme" \\
+  -H "Authorization: Bearer $VAUBAAN_TOKEN"
+# → { "ok": true }`}</code>
+      </pre>
+      <p>
+        If step 2 returns <code>202</code> instead of <code>201</code>, long-poll{' '}
+        <code>poll_url</code> until you get <code>201</code> (api_key delivered), <code>410</code>{' '}
+        (denied/expired), or you decide to give up:
+      </p>
+      <pre>
+        <code>{`POLL_URL=$(echo "$MINT" | jq -r .poll_url)
+curl -sS "$VAUBAAN_BASE_URL$POLL_URL?wait=25" \\
+  -H "Authorization: Bearer $VAUBAAN_TOKEN"`}</code>
+      </pre>
+
+      <h2 id="advanced">6. Advanced concepts</h2>
+
+      <h3>
+        6.1 <code>delegation_chain</code>
+      </h3>
+      <p>Every token carries a frozen snapshot of its ancestry. Format:</p>
+      <pre>
+        <code>{`delegation_chain: Array<{
+  id: string;             // UUID of the ancestor token
+  name: string;
+  depth: number;          // 0 = root
+  scope: 'org' | 'project';
+  created_at: string;     // ISO
+  created_by: string | null;
+}>;`}</code>
+      </pre>
+      <p>
+        Order: root at <code>[0]</code>, parent at <code>[length-1]</code>. Root tokens carry an
+        empty array. The chain is snapshotted both on <code>tokens.delegation_chain</code> and on
+        each <code>audit_log</code> row at call time, so rename / revoke of an ancestor never
+        mutates historical audit. Forensic query: every action descending from a root is{' '}
+        <code>
+          WHERE delegation_chain @&gt;
+          &apos;[&#123;&quot;id&quot;:&quot;&lt;root_id&gt;&quot;&#125;]&apos;
+        </code>
+        .
+      </p>
+
+      <h3>
+        6.2 <code>escalation_channel</code>
+      </h3>
+      <p>
+        When a child agent gets a <code>403 risk-not-accepted</code>, it can ask its parent for a
+        wider token by reading <code>context.escalation_channel</code> from its own token context
+        and POSTing directly. Vaubaan stays out of this hop — it&apos;s a child &harr; parent
+        exchange. Convention:
+      </p>
+      <pre>
+        <code>{`POST <context.escalation_channel.endpoint_url>
+Authorization: Bearer <context.escalation_channel.auth_token>
+Content-Type: application/json
+
+{
+  "child_token_id": "tok_abc",
+  "risks_needed":   ["supabase[prod].bulk-row-write"],
+  "justification":  "Without this call the Stripe rotation is incomplete.",
+  "executed_slice": "supabase.project[…].row[*].W"
+}`}</code>
+      </pre>
+      <p>
+        The parent decides locally: cede (mint a new child with the wider envelope, hand it back),
+        refuse (return 403), or escalate to <em>its</em> own parent via the same mechanism. The SDK
+        side handles the re-call with the new <code>api_key</code>.
+      </p>
+
+      <h3>
+        6.3 <code>single_use</code>
+      </h3>
+      <p>
+        Set <code>singleUse: true</code> with a short <code>ttlSeconds</code> (≤ 3600) to mint a
+        token that&apos;s consumed by the first MCP call that matches its envelope. Use this for
+        one-off tasks where the agent shouldn&apos;t retain residual authority after the action
+        completes.
+      </p>
+
+      <h3>6.4 Catalog drift</h3>
+      <p>
+        Risk catalogs are versioned in the repo. Adding a new <code>RiskId</code> can leave existing
+        tokens that touched its <code>matches</code> pattern but never accepted it falling in{' '}
+        <code>deny</code> on the next call. The UI flags &ldquo;you have N active tokens that
+        don&apos;t cover the new <code>RiskId</code>&rdquo;. Renaming or removing a{' '}
+        <code>RiskId</code> is not allowed; entries are deprecated (<code>deprecated: true</code>)
+        and kept around so existing tokens keep working.
+      </p>
+
+      <h2 id="security">7. Security &amp; rotation</h2>
+      <ul>
+        <li>
+          <strong>Rotate your bootstrap token</strong> by minting a new root in the UI, deploying
+          the new env var, then revoking the old one (PATCH <code>status: &apos;revoked&apos;</code>
+          or DELETE). Children of the old root cascade-revoke; agents holding the old key get 401 on
+          the next call.
         </li>
         <li>
-          <strong>Audit</strong> — every MCP call carried by a mgmt-minted token shows up under the
-          project&apos;s audit log with the token name (<code>mgmt-&lt;hash&gt;</code>) so you can
-          attribute activity to a given session.
+          <strong>Revoke a leaked child</strong> via{' '}
+          <code>PATCH /api/v1/tokens/:tokenId {`{ status: 'revoked' }`}</code>. The gateway picks up
+          the revocation within the cache TTL (60 s) or instantly on cache miss.
+        </li>
+        <li>
+          <strong>Lost a token?</strong> Argon2id at rest — no recovery. Re-mint from the parent and
+          update the consumer.
+        </li>
+        <li>
+          <strong>Audit by chain</strong> — every MCP call carried by a child shows the full
+          delegation chain on its audit row. You can attribute activity to a given session, root, or
+          ancestor at any depth without recursive joins.
         </li>
       </ul>
 
       <hr />
       <p>
-        Operator-side reference: <Link href="/docs">/docs</Link>. ADR with the design rationale: see{' '}
-        <code>docs/decisions/programmatic-access-token-minting.md</code> in the repo.
+        Operator-side reference: <Link href="/docs">/docs</Link>. Design rationale: see{' '}
+        <code>docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md</code> and{' '}
+        <code>docs/spec/gateway-risk-model.md</code> in the repo.
       </p>
     </ProseWrap>
   );
