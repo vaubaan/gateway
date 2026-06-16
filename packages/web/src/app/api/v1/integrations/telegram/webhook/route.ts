@@ -22,6 +22,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import type { RiskId } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decideApproval } from '@/lib/approvals/mint';
+import { externalApprovalParent } from '@/lib/approvals/external-mint';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -105,33 +106,24 @@ export async function POST(req: NextRequest) {
       : `tg:id=${cb.from?.id ?? 'unknown'}`;
 
   // Telegram-click flow has no authenticated parent token ; synthesize a
-  // carte-blanche org-scoped root parent (subset check bypassed). Same
-  // pattern as the email-decide path.
+  // carte-blanche root parent (cf. lib/approvals/external-mint.ts).
   const { data: project } = await svc
     .from('projects')
     .select('organization_id')
     .eq('id', row.project_id)
     .maybeSingle<{ organization_id: string }>();
-  const carteBlancheParent = {
-    id: row.id,
-    name: 'telegram-approval',
-    organization_id: project?.organization_id ?? '',
-    scope: 'org' as const,
-    project_id: null,
-    accepted_risks: [],
-    denied_risks: [],
-    depth: 0,
-    delegation_chain: [],
-    expires_at: null,
-    created_at: new Date().toISOString(),
-    created_by: null,
-  };
+  const parent = externalApprovalParent({
+    approvalId: row.id,
+    organizationId: project?.organization_id ?? '',
+    channel: 'telegram',
+    createdBy: null,
+  });
 
   await decideApproval(svc, {
     approvalId,
     decision,
     decidedBy,
-    parent: carteBlancheParent,
+    parent,
     scope: 'project',
     projectId: row.project_id,
     acceptedRisks: row.requested_risks ?? [],

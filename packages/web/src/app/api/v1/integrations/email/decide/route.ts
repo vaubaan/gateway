@@ -19,6 +19,7 @@ import { type NextRequest } from 'next/server';
 import type { RiskId } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decideApproval } from '@/lib/approvals/mint';
+import { externalApprovalParent } from '@/lib/approvals/external-mint';
 import { verifyEmailToken, EmailTokenError } from '@/lib/approvals/email-token';
 
 export const runtime = 'nodejs';
@@ -75,36 +76,25 @@ export async function GET(req: NextRequest) {
   const decidedBy = `email:${maskEmailFromHeaders(req)}`;
 
   try {
-    // Email-click flow has no authenticated parent token ; we synthesize a
-    // root org-scoped carte-blanche parent so the mint goes through
-    // (subset bypass — cf. mintChildToken). Audit-wise we still tag
-    // decided_by with the IP fingerprint from the email header.
-    const carteBlancheParent = {
-      id: row.id, // placeholder — won't appear in delegation_chain visibly
-      name: 'email-approval',
-      organization_id: '',
-      scope: 'org' as const,
-      project_id: null,
-      accepted_risks: [],
-      denied_risks: [],
-      depth: 0,
-      delegation_chain: [],
-      expires_at: null,
-      created_at: new Date().toISOString(),
-      created_by: null,
-    };
+    // Email-click flow has no authenticated parent token ; synthesize a
+    // carte-blanche root parent (cf. lib/approvals/external-mint.ts).
     // Resolve the org via the project join (we have project_id on the row).
     const { data: project } = await svc
       .from('projects')
       .select('organization_id')
       .eq('id', row.project_id)
       .maybeSingle<{ organization_id: string }>();
-    carteBlancheParent.organization_id = project?.organization_id ?? '';
+    const parent = externalApprovalParent({
+      approvalId: row.id,
+      organizationId: project?.organization_id ?? '',
+      channel: 'email',
+      createdBy: null,
+    });
     await decideApproval(svc, {
       approvalId: payload.approvalId,
       decision: payload.decision,
       decidedBy,
-      parent: carteBlancheParent,
+      parent,
       scope: 'project',
       projectId: row.project_id,
       acceptedRisks: row.requested_risks ?? [],

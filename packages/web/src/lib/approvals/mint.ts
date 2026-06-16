@@ -71,6 +71,26 @@ export class MintInvariantError extends Error {
 
 const MAX_DEPTH = 5;
 
+/**
+ * Carte-blanche bypass rule (ADR §3 "data-migration shim").
+ *
+ * A root org-scoped token with NO accepted_risks is treated as having
+ * implicit grant on every risk — the subset check is skipped at mint
+ * time. This is the side-door that lets the migrated `org_management_keys`
+ * rows continue to mint child tokens (they have `accepted_risks=[]` by
+ * design — the legacy mgmt-key authorised by org membership, not by a
+ * risk grant).
+ *
+ * Same shim is reused by `externalApprovalParent` (Telegram/Email/UI
+ * session approvals — no parent Bearer at decide-time).
+ *
+ * Returns `true` when the parent qualifies for the bypass. Centralised
+ * here so the rule has a name (cf. clean-code-report W2).
+ */
+export function isCarteBlancheParent(parent: MintParent): boolean {
+  return parent.scope === 'org' && parent.depth === 0 && (parent.accepted_risks?.length ?? 0) === 0;
+}
+
 /** Build the child's delegation_chain from the parent. */
 export function computeChildChain(parent: MintParent): DelegationChainEntry[] {
   return [
@@ -136,13 +156,7 @@ export function checkMintInvariants(input: ChildMintInput, childExpiresAt: strin
     throw new MintInvariantError(`scope='org' must not carry a project_id.`);
   }
 
-  // Carte-blanche exception : a root org-scoped token with no accepted_risks
-  // is treated as "may mint anything" (migrated mgmt-key shim). We bypass the
-  // subset check in this case ; otherwise enforce strict subset.
-  const carteBlanche =
-    parent.scope === 'org' && parent.depth === 0 && (parent.accepted_risks?.length ?? 0) === 0;
-
-  if (!carteBlanche) {
+  if (!isCarteBlancheParent(parent)) {
     const parentRisks = new Set(parent.accepted_risks);
     const missing = input.accepted_risks.filter((r) => !parentRisks.has(r));
     if (missing.length > 0) {

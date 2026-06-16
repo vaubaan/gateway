@@ -15,6 +15,7 @@ import type { RiskId } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 import { decideApproval } from '@/lib/approvals/mint';
+import { externalApprovalParent } from '@/lib/approvals/external-mint';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -73,28 +74,20 @@ export async function POST(
     );
   }
 
-  // User-session approval flow : synthesize a carte-blanche root parent so
-  // the mint goes through (org member is authorized — subset check bypassed).
-  const carteBlancheParent = {
-    id: row.id,
-    name: 'user-session-approval',
-    organization_id: guard.orgId,
-    scope: 'org' as const,
-    project_id: null,
-    accepted_risks: [],
-    denied_risks: [],
-    depth: 0,
-    delegation_chain: [],
-    expires_at: null,
-    created_at: new Date().toISOString(),
-    created_by: guard.userId,
-  };
+  // User-session approval flow : synthesize a carte-blanche root parent
+  // (cf. lib/approvals/external-mint.ts).
+  const parent = externalApprovalParent({
+    approvalId: row.id,
+    organizationId: guard.orgId,
+    channel: 'user-session',
+    createdBy: guard.userId,
+  });
 
   const result = await decideApproval(svc, {
     approvalId: row.id,
     decision: body.decision,
     decidedBy: `user:${guard.userId}`,
-    parent: carteBlancheParent,
+    parent,
     scope: 'project',
     projectId: row.project_id,
     acceptedRisks: row.requested_risks ?? [],
