@@ -9,21 +9,6 @@ tracks:
   - packages/providers/vercel/src/risk-classifier.ts
 ---
 
----
-
-title: Vercel provider — modélisation v4 (risk-based)
-status: draft
-date: 2026-06-15
-spec: docs/spec/gateway-risk-model.md
-tracks:
-
-- packages/providers/vercel/src/classify.ts
-- packages/providers/vercel/src/custom-tools.ts
-- packages/providers/vercel/src/upstream-tools.json
-- docs/handbook/vercel-provider.md
-
----
-
 # Vercel provider — modélisation v4
 
 Document de travail pour la **bascule du provider Vercel** depuis le modèle
@@ -34,8 +19,8 @@ risk-based v4 (`accepted_risks[] + bindings[]`). Cible :
   pattern matching du catalogue).
 - Un **mapping tool → slice(s)** exhaustif (27 tools exposés : 18 upstream
   rewrap de `mcp.vercel.com` + 9 custom REST).
-- Un **catalogue de risks** (≈ 12 entrées + fallback) avec vecteur 6D et
-  `default_gate` raisonné.
+- Un **catalogue de risks** (≈ 12 entrées + fallback) avec vecteur 6D
+  raisonné et `acceptable_in_envs` quand pertinent.
 - Une **matrice de couverture** tool × risk garantissant qu'aucun tool ne
   tombe dans le vide.
 - Un point sur les **edge cases** structurels du provider (DNS posture-shift,
@@ -225,7 +210,6 @@ vercel:
         cost: free
         visibility: internal
         persistence: stateless
-      default_gate: allow
 
     - id: vercel.read-deployment
       label: 'Lire deployments + build/runtime logs'
@@ -241,7 +225,6 @@ vercel:
         cost: free
         visibility: internal
         persistence: stateless
-      default_gate: allow
 
     - id: vercel.read-env-var
       label: 'Lire les env vars (sans plaintext)'
@@ -255,7 +238,6 @@ vercel:
         cost: free
         visibility: internal
         persistence: stateless
-      default_gate: allow
 
     - id: vercel.read-env-var-plaintext
       label: 'Lire les env vars en clair (decrypt=true)'
@@ -270,7 +252,6 @@ vercel:
         cost: free
         visibility: internal
         persistence: stateless
-      default_gate: deny
 
     - id: vercel.fetch-deployment-url
       label: 'Fetch HTTP vers une deployment URL'
@@ -285,7 +266,6 @@ vercel:
         cost: free
         visibility: public
         persistence: stateless
-      default_gate: allow
 
     - id: vercel.mint-bypass-token
       label: 'Minter un token de bypass de deployment protection'
@@ -299,7 +279,6 @@ vercel:
         cost: free
         visibility: internal
         persistence: session
-      default_gate: confirm
 
     # ─── WRITES — DEPLOYMENT ───────────────────────────────────────────────
 
@@ -316,7 +295,6 @@ vercel:
         cost: moderate
         visibility: team
         persistence: session
-      default_gate: allow
 
     - id: vercel.deploy-prod
       label: 'Déclencher un deploy prod'
@@ -331,7 +309,6 @@ vercel:
         cost: moderate
         visibility: public
         persistence: session
-      default_gate: confirm
 
     # ─── WRITES — TOOLBAR (low-risk feedback comments) ─────────────────────
 
@@ -348,7 +325,6 @@ vercel:
         cost: free
         visibility: team
         persistence: session
-      default_gate: allow
 
     # ─── WRITES — ENV VARS (secrets) ───────────────────────────────────────
 
@@ -364,7 +340,6 @@ vercel:
         cost: free
         visibility: internal
         persistence: posture
-      default_gate: confirm
 
     - id: vercel.env-var-write-prod
       label: 'Écrire un env var prod'
@@ -380,14 +355,13 @@ vercel:
         cost: free
         visibility: internal
         persistence: posture
-      default_gate: deny
 
     - id: vercel.env-var-fan-out
       label: 'Écrire un env var sur tous les envs (prod inclus)'
       reason: "`upsert_env_var target=['production','preview','development']`
         ou target omis → écriture **simultanée** sur les 3 envs. Élève
-        une erreur preview-only à un incident prod. Force confirm
-        systématique même si l'agent a `env-var-write-preview` accepté."
+        une erreur preview-only à un incident prod. Risk distinct du
+        write env-par-env."
       matches: 'vercel.project[**].env[*,*,*].env-var[**].W'
       vector:
         reversibility: costly
@@ -396,7 +370,6 @@ vercel:
         cost: free
         visibility: internal
         persistence: posture
-      default_gate: confirm
 
     # ─── WRITES — PROJECT SETTINGS (build pipeline) ────────────────────────
 
@@ -414,7 +387,6 @@ vercel:
         cost: free
         visibility: internal
         persistence: posture
-      default_gate: confirm
 
     # ─── WRITES — DEPLOYMENT PROTECTION (governance) ───────────────────────
 
@@ -431,7 +403,6 @@ vercel:
         cost: free
         visibility: team
         persistence: posture
-      default_gate: deny
 
     # ─── WRITES — DOMAINS (DNS posture-shift externe) ──────────────────────
 
@@ -449,7 +420,6 @@ vercel:
         cost: free
         visibility: public
         persistence: posture
-      default_gate: deny
 
     # ─── FALLBACK générique (DOIT être présent) ────────────────────────────
 
@@ -466,25 +436,9 @@ vercel:
         cost: free
         visibility: internal
         persistence: session
-      default_gate: confirm
 ```
 
-### 3.1 Justifications des `default_gate` litigieux
-
-| Risk                                 | Gate          | Justification                                                                                                                                                                                                                                                                                    |
-| ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `vercel.env-var-write-prod`          | **`deny`**    | `data: secret` + `persistence: posture` côté W → formule §4.2 force `deny`. Aligne avec le seed UX Annexe A spec v4 (`☒ vercel[prod].env-var-write 🛑 deny`).                                                                                                                                    |
-| `vercel.env-var-write-preview`       | `confirm`     | `data: secret` + `persistence: posture` techniquement → `deny` aussi par formule, mais on relâche : preview est l'env explicitement "moins critique", et un coding agent qui modifie un env preview en posant lui-même la PR est attendu. À refermer en `deny` via project policy si l'org veut. |
-| `vercel.env-var-fan-out`             | **`confirm`** | Même si l'agent a `env-var-write-preview` (allow ou confirm), le fan-out **doit** re-déclencher confirm (escalade par stricte addition de risks_touched). Empêche le piège v1 §5.1 #3.                                                                                                           |
-| `vercel.deployment-protection-write` | **`deny`**    | Governance (SSO/password). `persistence: posture` + `data: secret` (le password EST stocké). Override `deny → allow` doit passer par la garde admin Q1 spec v4.                                                                                                                                  |
-| `vercel.domain-write`                | **`deny`**    | DNS posture-shift externe, `visibility: public`, `persistence: posture`. Same Q1 admin override.                                                                                                                                                                                                 |
-| `vercel.deploy-prod`                 | `confirm`     | Aligne sur le scenario 5 spec v4 (le bouton "Deploy prod" doit être grant explicite). Pas `deny` car c'est l'opération métier centrale d'un coding agent CI-grade.                                                                                                                               |
-| `vercel.read-env-var-plaintext`      | **`deny`**    | Equivalent compromission complète. Le tool `list_env_vars` accepte `decrypt=true`, ce qui crée une **classe de risque distincte** du read normal.                                                                                                                                                |
-| `vercel.mint-bypass-token`           | `confirm`     | Credential creation, mais TTL court et scope = une seule deployment URL. Plus faible que `mint-install-token` GitHub.                                                                                                                                                                            |
-| `vercel.toolbar-write`               | `allow`       | Vraiment inoffensif. Pas de raison d'imposer un step.                                                                                                                                                                                                                                            |
-| `vercel.project-settings-write`      | `confirm`     | Mauvaise commande de build casse les 3 envs au prochain push. Pas `deny` car c'est une opération normale d'un coding agent qui ajoute une dep ou change Node version.                                                                                                                            |
-
-### 3.2 `acceptable_in_envs` (spec v4 §4.1, §16 Q5)
+### 3.1 `acceptable_in_envs` (spec v4 §4.1, §16 Q5)
 
 Risques pour lesquels accepter en prod n'a structurellement pas de sens :
 
@@ -559,9 +513,8 @@ Trois tools émettent **plusieurs slices** ou **plusieurs risks_touched** :
 1. **`vercel__upsert_env_var` avec `target=['production','preview','development']`**
    (ou target omis) → émet 3 slices `vercel.project[P].env[E].env-var[KEY].W`
    (une par env), donc touche `env-var-write-preview` ET `env-var-write-prod`
-   ET `env-var-fan-out`. Le token doit accepter les 3 → la pratique : seul
-   `env-var-fan-out` confirm (acceptation manuelle bloc à chaque mint) sauffit
-   pour le cas commun, à confirmer en design.
+   ET `env-var-fan-out`. Le token doit avoir accepté les 3 risks pour
+   passer.
 
 2. **`vercel__get_access_to_vercel_url`** → émet `bypass-token.W` (risk
    `mint-bypass-token`). Vérifier que le classifier émet bien un `W` ici et
@@ -579,15 +532,13 @@ Trois tools émettent **plusieurs slices** ou **plusieurs risks_touched** :
 
 C'est **clairement governance** (control de l'accès aux deployments). En v4
 on n'a plus de macro `govern`, mais le risk dédié
-`vercel.deployment-protection-write` porte la sémantique :
+`vercel.deployment-protection-write` porte la sémantique via son vecteur :
 
 - `persistence: posture` (changement durable).
-- `default_gate: deny` (force escalade humaine).
-- Override `deny → allow` réservé aux admins org (spec §16 Q1).
+- `data: secret` (le password EST stocké).
 
-**Décision proposée** : risk distinct, `deny` par défaut, non-overridable
-par policy sans flag admin. Aligne le traitement avec `branch-protection-
-write` côté GitHub.
+**Décision proposée** : risk distinct. Aligne le traitement avec
+`branch-protection-write` côté GitHub.
 
 ### 5.2 `vercel__add_project_domain` — DNS = posture-shift externe
 
@@ -632,10 +583,9 @@ L'API est un GET mais **crée une ressource** (bypass-token) avec TTL court.
 Classifier actuel le marque `read-deployment` → **bug latent**, sous-classifié.
 
 **Décision proposée** : reclassifier `bypass-token.W`, matche
-`vercel.mint-bypass-token` (`default_gate: confirm`). Le coding agent qui
-veut juste "lire les logs" n'en a pas besoin ; celui qui veut "partager
-une preview avec un client en bypass de la SSO" en a besoin et c'est un
-acte distinct.
+`vercel.mint-bypass-token`. Le coding agent qui veut juste "lire les logs"
+n'en a pas besoin ; celui qui veut "partager une preview avec un client
+en bypass de la SSO" en a besoin et c'est un acte distinct.
 
 ### 5.5 `vercel__web_fetch_vercel_url` — risk dédié ?
 
@@ -644,8 +594,8 @@ log d'accès côté target + consommation bande passante. Pas un risque sécu
 majeur (l'agent peut faire la même chose via `fetch()` côté son sandbox),
 mais on a un risk dédié `vercel.fetch-deployment-url` pour la traçabilité.
 
-**Décision** : conserver le risk dédié, `default_gate: allow`. Permet à
-l'audit log de voir précisément quelles URLs ont été fetched par l'agent.
+**Décision** : conserver le risk dédié. Permet à l'audit log de voir
+précisément quelles URLs ont été fetched par l'agent.
 
 ### 5.6 Toolbar — `mutate` ou `inspect` ?
 
@@ -653,9 +603,9 @@ Les 4 tools toolbar (`reply`, `edit`, `react`, `resolve`) sont
 sémantiquement **mutate** (créent/modifient des commentaires) mais le risk
 est **très faible** (texte UI sur preview, pas d'incidence build/runtime).
 
-**Décision** : risk distinct `vercel.toolbar-write`, `default_gate: allow`.
-Permet à un coding agent d'interagir avec des reviewers humains sur les
-preview sans devoir grant un risk plus large.
+**Décision** : risk distinct `vercel.toolbar-write`. Permet à un coding
+agent d'interagir avec des reviewers humains sur les preview sans devoir
+grant un risk plus large.
 
 ### 5.7 `list_env_vars decrypt=true` — risk dédié ?
 
@@ -678,7 +628,8 @@ défini sur prod aussi, le delete supprime aussi sur prod sans déclencher
 
 **Décision proposée** : le classifier doit **émettre la slice sur les 3
 envs** (`env[*]`) au lieu de honorer `args.target`. Force le risk
-`env-var-fan-out` à se déclencher → confirm humain.
+`env-var-fan-out` à se déclencher — le token devra avoir accepté ce
+risk explicitement.
 
 ---
 
@@ -690,7 +641,7 @@ envs** (`env[*]`) au lieu de honorer `args.target`. Force le risk
 | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `firewall` (WAF rules)         | Vercel expose des Firewall rules depuis 2025 (rules par projet, IP blocking, custom challenges). Non couvert par le wrap actuel ni par le data-model. À ajouter si on expose ces tools en v2. |
 | `edge-config`                  | Volontairement hors-scope (handbook §Concepts non-supportés). Pas de risk catalogue dédié — si un jour exposé, risk `edge-config-write` à ajouter (posture).                                  |
-| `log-drain`                    | Hors-scope. Si exposé : risk `log-drain-write` (data flow externe, `data: data`, `visibility: public`, `persistence: posture` → `deny`).                                                      |
+| `log-drain`                    | Hors-scope. Si exposé : risk `log-drain-write` (data flow externe, `data: data`, `visibility: public`, `persistence: posture`).                                                               |
 | `webhook`                      | Hors-scope. Si exposé : risk `webhook-write` (data flow externe).                                                                                                                             |
 | `alias` (custom alias mapping) | Sous-cas de `deployment` côté Vercel (un alias re-mappe le DNS d'un domaine vers une deployment précise). Si exposé, à modéliser comme entité `alias` sous `domain`.                          |
 | `marketplace billing`          | Hors-scope (Vaubaan n'est pas une Marketplace listing).                                                                                                                                       |
@@ -715,16 +666,9 @@ write` au mapping actuel. Le fallback reste présent **pour le futur**.
 
 - **D1** — Adopter Option A (un seul risk `domain-write`) ou Option B
   (3 risks `add/verify/remove`) ? Proposition : A.
-- **D2** — `env-var-write-preview` à `confirm` (proposé) ou `deny` (strict) ?
-  Proposition : `confirm` au catalogue, override `deny` par projet sensible.
 - **D3** — `read-env-var-plaintext` : risk distinct (proposé) ou bloquer le
   `decrypt=true` à la source (retirer le param du tool) ? Proposition :
   garder le risk pour préserver le cas légitime "rotation manuelle assistée".
-- **D4** — `env-var-fan-out` `confirm` (proposé) ou `deny` ? Proposition :
-  `confirm`. `deny` casserait le cas commun "ajouter une nouvelle env var
-  partout".
-- **D5** — `deployment-protection-write` : `deny` (proposé) ou `confirm` ?
-  Proposition : `deny`. C'est governance.
 
 ---
 
@@ -735,15 +679,15 @@ write` au mapping actuel. Le fallback reste présent **pour le futur**.
 | Sortie                             | `{ capability: {plane, level, action, env?} }`            | `{ slices: Slice[] }` (multi-slice quand fan-out)                                       |
 | Niveaux                            | 4 (`account`, `project-settings`, `deployment`, `config`) | 13 entités (cf. §1.1) — plus expressif                                                  |
 | Env-resolution                     | `static` ou `runtime` selon kind                          | identique, étendu pour gérer `target: string[]` (fan-out)                               |
-| `upsert_env_var target=[3 envs]`   | 1 capability `config:write@prod` (perd preview+dev)       | 3 slices + 1 risk `env-var-fan-out` confirm                                             |
+| `upsert_env_var target=[3 envs]`   | 1 capability `config:write@prod` (perd preview+dev)       | 3 slices + risk `env-var-fan-out`                                                       |
 | `delete_env_var`                   | 1 capability `config:write@<hint>`                        | 3 slices (env[*]) + risks `env-var-write-prod` + `env-var-write-preview`                |
-| `get_access_to_vercel_url`         | `deployment:read`                                         | `bypass-token.W` → `mint-bypass-token` confirm                                          |
-| `list_env_vars decrypt=true`       | `config:read`                                             | 2 slices : `env-var[**].R` + `env-var[**].R[plaintext]` → `read-env-var-plaintext` deny |
-| `update_project_settings`          | `project-settings:write`                                  | `project-settings.W` → `project-settings-write` confirm                                 |
-| `update_deployment_protection`     | `project-settings:write` (mélangé avec settings normaux)  | risk distinct `deployment-protection-write` deny                                        |
-| `add/verify/remove_project_domain` | `project-settings:write`                                  | risk distinct `domain-write` deny                                                       |
-| `toolbar-*` writes                 | `deployment:write` (env-less, mélangé avec deploy)        | risk distinct `toolbar-write` allow                                                     |
-| Gates portés par                   | `policy_rules(plane,level,action,env,gate)`               | `risk_id → gate` (override par projet)                                                  |
+| `get_access_to_vercel_url`         | `deployment:read`                                         | `bypass-token.W` → risk `mint-bypass-token`                                             |
+| `list_env_vars decrypt=true`       | `config:read`                                             | 2 slices : `env-var[**].R` + `env-var[**].R[plaintext]` → risk `read-env-var-plaintext` |
+| `update_project_settings`          | `project-settings:write`                                  | `project-settings.W` → risk `project-settings-write`                                    |
+| `update_deployment_protection`     | `project-settings:write` (mélangé avec settings normaux)  | risk distinct `deployment-protection-write`                                             |
+| `add/verify/remove_project_domain` | `project-settings:write`                                  | risk distinct `domain-write`                                                            |
+| `toolbar-*` writes                 | `deployment:write` (env-less, mélangé avec deploy)        | risk distinct `toolbar-write`                                                           |
+| Décision binaire                   | gates `allow/confirm/deny` côté policy                    | `risk ∈ accepted_risks` (strict-fail au runtime, ADR unified-gates-drop-confirm)        |
 | Bypass impossible via              | `dispatch_workflow` retiré (côté GitHub, plus Vercel)     | identique                                                                               |
 
 ---
@@ -756,24 +700,24 @@ Profil-type proposé pour un coding agent autonome sur un projet
 ```
 Bindings : vercel(prj_xxx)
 
-Coder Vercel :
+Coder Vercel — risks à cocher au mint :
   ☑ vercel.read-account
   ☑ vercel.read-deployment
   ☑ vercel.read-env-var
   ☑ vercel.fetch-deployment-url
   ☑ vercel.deploy-preview
   ☑ vercel.toolbar-write
-  ☐ vercel.deploy-prod                  ⚠️ confirm
-  ☐ vercel.env-var-write-preview        ⚠️ confirm
-  ☐ vercel.mint-bypass-token            ⚠️ confirm
-  ☐ vercel.project-settings-write       ⚠️ confirm
-  ☐ vercel.env-var-fan-out              ⚠️ confirm
-  ☒ vercel.read-env-var-plaintext       🛑 deny
-  ☒ vercel.env-var-write-prod           🛑 deny
-  ☒ vercel.deployment-protection-write  🛑 deny
-  ☒ vercel.domain-write                 🛑 deny
+  ☐ vercel.deploy-prod
+  ☐ vercel.env-var-write-preview
+  ☐ vercel.mint-bypass-token
+  ☐ vercel.project-settings-write
+  ☐ vercel.env-var-fan-out
+  ☐ vercel.read-env-var-plaintext
+  ☐ vercel.env-var-write-prod
+  ☐ vercel.deployment-protection-write
+  ☐ vercel.domain-write
 ```
 
-5 risks `allow` + 5 risks `confirm` + 4 risks `deny`. Couvre 90 % d'une
-session "coder normalement, déployer preview, demander confirmation pour
-prod". Aligné avec l'UX cible spec §0.
+6 risks cochés par défaut + 9 explicites à ajouter selon la tâche. Post
+drop-confirm la décision est binaire : un risk est dans
+`accepted_risks` (allow) ou non (deny). Aligné avec l'UX cible spec §0.

@@ -153,9 +153,10 @@ réutilisable.
 }
 ```
 
-L'agent (Claude Code, Cursor, etc.) lit `missing_risks` et soit re-mint
-auprès de son orchestrateur (Story Dev), soit renvoie la balle au humain
-via le long-poll endpoint.
+L'agent (Claude Code, Cursor, etc.) lit `missing_risks` et re-mint
+auprès de son orchestrateur (Story Dev) ; si l'orchestrateur n'a pas
+l'autorité, il escalade via le `escalation_channel` configuré sur le
+token (cf. [[escalation]] — hors-gateway).
 
 ## `tools/list` — coarse filter
 
@@ -266,37 +267,6 @@ row passent par le même chemin que les non-self-contained
 > invocations passent par le REST shortcut `/api/v1/bash-bindings/:id/run-tool`.
 > Le pattern self-contained sera son chemin quand le dispatch arrive.
 
-## Long-poll mint (`?wait=25`)
-
-L'endpoint `GET /api/v1/tokens/pending/:approval_id?wait=25` bloque
-côté serveur jusqu'à décision OU 25 s (spec v4 §11). Permet à l'agent
-d'attendre une approval channel (manual / telegram / email) sans
-busy-loop. Détails :
-
-- Wait cap côté serveur : 25 s (sous le mur Vercel Edge 30 s et
-  Cloudflare 100 s origin idle).
-- Poll interne DB toutes les 500 ms (MVP — switch en
-  `pg_notify` / Postgres LISTEN à terme si les métriques le justifient).
-- Le SDK agent encapsule le re-poll jusqu'au wall-clock global (par
-  défaut 15 min = TTL de l'approval).
-- Réponses : 201 (decided, retourne `token` + `api_key` une fois si
-  approved) ; 202 (still pending au timeout) ; 404 (approval inconnue)
-  ; 410 (denied / expired / cancelled / consumed).
-
-L'implémentation vit côté Next.js
-(`packages/web/src/app/api/v1/tokens/pending/[id]/route.ts`),
-**hors du `McpGateway` core** — c'est un endpoint d'approval, pas de
-dispatch MCP. Documenté pour cohérence : c'est le contre-poids amont au
-`tools/call` strict-fail (au lieu de tenter un step-up runtime, l'agent
-re-mint via cet endpoint).
-
-> Le path historique était `/api/v1/mgmt/tokens/pending/:id` ; déplacé
-> à la racine `/api/v1/tokens/` par la refacto unified-tokens
-> (ADR [[unified-tokens-delegation-chain-and-escalation-channel]]).
-
-Cf. [`approvals.md`](./approvals.md) §Long-poll pour le détail des
-transitions d'état.
-
 ## Sécurité
 
 - L'`api_key_hash` n'est lu QUE par le gateway via service_role client. La RLS
@@ -352,10 +322,10 @@ des bearers" et retombe sur le header statique.
 ## Références
 
 - Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md)
-  §8 (decision flow), §11 (long-poll), §12 (audit shape).
+  §8 (decision flow), §12 (audit shape).
 - Handbooks voisins : [[policy-engine]] (6 modules purs cités ici),
   [[web-app]] (`/mcp` route wrapper + `buildGateway()`),
-  [[approvals]] (mint flow amont + channels + long-poll endpoint),
+  [[escalation]] (runtime escalation_channel out-of-gateway),
   [[bash-provider]] (self-contained pattern).
 - ADRs : [[redis-cache-upstash-with-memory-fallback]],
   [[mcp-only-mvp-scope]], [[programmatic-access-token-minting]].

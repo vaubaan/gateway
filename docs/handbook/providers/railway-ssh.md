@@ -131,7 +131,6 @@ railway:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: railway.read-runtime
       label: 'Lire services, déploiements, statuts'
@@ -146,7 +145,6 @@ railway:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: railway.read-logs
       label: "Lire les logs d'un déploiement"
@@ -163,7 +161,6 @@ railway:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: railway.read-variables
       label: 'Lire les env vars (incluant secrets)'
@@ -179,7 +176,6 @@ railway:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: confirm # qualifié par env → deny en prod via policy
 
     # ───── Deploys ───────────────────────────────────────────────────────
     - id: railway.deploy-staging
@@ -196,7 +192,6 @@ railway:
           visibility: internal,
           persistence: session,
         }
-      default_gate: allow
       acceptable_in_envs: [staging, preview, dev]
 
     - id: railway.deploy-prod
@@ -214,7 +209,6 @@ railway:
           visibility: public,
           persistence: session,
         }
-      default_gate: confirm # qualifié par env=prod uniquement
 
     # ───── Variables ─────────────────────────────────────────────────────
     - id: railway.upsert-variable-staging
@@ -231,7 +225,6 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
       acceptable_in_envs: [staging, preview, dev]
 
     - id: railway.upsert-variable-prod
@@ -248,7 +241,6 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     - id: railway.bulk-variables-replace
       label: 'Remplacer en bulk toutes les env vars (replace=true)'
@@ -265,7 +257,6 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     # ───── Account ───────────────────────────────────────────────────────
     - id: railway.create-project
@@ -282,13 +273,12 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
 
     # ───── Agent (méta-tool) ─────────────────────────────────────────────
     - id: railway.agent-action
       label: 'Invocation railway-agent (méta-tool conversationnel)'
       reason: "L'agent upstream peut décider seul quoi muter — pas de
-        classification fine possible. Catch-all `confirm` par
+        classification fine possible. Risk catch-all par
         construction. Tout usage doit être audité humain."
       matches: 'railway.account[**].agent-session.W'
       vector:
@@ -300,7 +290,6 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
 
     # ───── Fallback ──────────────────────────────────────────────────────
     - id: railway.uncategorized-write
@@ -316,7 +305,6 @@ railway:
           visibility: internal,
           persistence: session,
         }
-      default_gate: confirm
 ```
 
 ### 1.5 Lint coverage — matrice tool × risk
@@ -364,16 +352,16 @@ slice émise par l'agent upstream ne passe sans match.
      `agent-action` mais pas `deploy-prod`, et que l'agent décide de
      redeploy en prod, on intersect le wildcard → manque `deploy-prod`
      → 403. C'est la garantie de non-bypass.
-   - `default_gate: confirm` sur `agent-action` force l'approval humaine
-     systématique à l'usage du tool.
+   - Risk `railway.agent-action` (vector `data: secret`, `blast: account`)
+     → un manager le grant explicitement après avoir lu le label.
    - À évaluer en Phase 2 : **retirer purement** ce tool de la surface,
      même logique que `github__dispatch_workflow` (cf. spec v4 §7.2 #1).
 
 2. **`upsert-variables` avec `replace:true`.**
    Le classifier doit lire `args.replace` et émettre la slice wildcard
    `service-var[*].W` (cardinalité `unbounded`) qui matche
-   `railway.bulk-variables-replace` (deny par défaut). Sans cette logique,
-   un agent qui passe `replace:true` ressemble à un bulk-upsert anodin.
+   `railway.bulk-variables-replace`. Sans cette logique, un agent qui
+   passe `replace:true` ressemble à un bulk-upsert anodin.
    **TODO classifier : actuellement TOOL_KIND mappe juste à
    `write-config` — il manque la lecture de `replace` pour différencier.**
 
@@ -381,16 +369,13 @@ slice émise par l'agent upstream ne passe sans match.
    Les logs applicatifs imprimés contiennent souvent des DSN, tokens,
    stack-traces avec PII. `read-logs` est classé `data: data` (pas
    `secret`) parce que c'est la **convention** Railway ; un projet bien
-   géré ne logue pas ses secrets. Mais le risque réel est plus haut.
-   Recommandation : laisser `default_gate: allow` côté staging, mais
-   un opérateur paranoïaque peut overrider à `confirm` sur prod via
-   project policy.
+   géré ne logue pas ses secrets. Le manager qui veut être strict ne
+   coche tout simplement pas `railway.read-logs` au mint.
 
 4. **`list-variables` retourne les secrets en clair.**
-   C'est le tool le plus exfiltrable. Catalogué `data: secret`,
-   `default_gate: confirm` par défaut. En prod, devrait être overridé en
-   `deny` par project policy systématiquement (à documenter dans la UI
-   "Recommended hardening").
+   C'est le tool le plus exfiltrable. Catalogué `data: secret`. Un
+   manager strict ne le grant pas en prod — il suffit de ne pas le
+   cocher au mint pour le binding `env=prod`.
 
 5. **`environment` vs `binding.environment`.**
    Le slug Railway natif (`production`, `staging`) ne correspond pas
@@ -497,13 +482,12 @@ ssh:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: ssh.exec-write-staging
       label: 'Exécuter une commande shell arbitraire (non-prod host)'
-      reason: "Toute commande hors whitelist read → traitée W. Inclut
+      reason: 'Toute commande hors whitelist read → traitée W. Inclut
         sudo, install, rm, systemctl restart, docker run, etc.
-        Sur un host non-prod c'est acceptable avec confirm."
+        Risk distinct du write prod (acceptable_in_envs limite).'
       matches: 'ssh.host[**].command.W'
       vector:
         {
@@ -514,7 +498,6 @@ ssh:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
       acceptable_in_envs: [staging-vps, dev-vps]
 
     - id: ssh.exec-write-prod
@@ -532,7 +515,6 @@ ssh:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     - id: ssh.exec-read-secret-files
       label: 'Lire un fichier potentiellement sensible (cat /etc/..., stat key)'
@@ -549,7 +531,6 @@ ssh:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: confirm
 
     - id: ssh.uncategorized
       label: 'Exec SSH non catégorisé'
@@ -565,7 +546,6 @@ ssh:
           visibility: internal,
           persistence: session,
         }
-      default_gate: confirm
 ```
 
 > **Remarque importante** : `ssh.exec-read` et `ssh.exec-read-secret-files`
@@ -622,14 +602,15 @@ il sert de filet pour les futurs tools (ex. `ssh__sftp_put`).
    subshells, `eval`, here-docs, …). Le classifier est purement
    regex-on-prefix. **Faiblesse acceptée** car la sécurité ultime repose
    sur l'authz par host (clé SSH par binding, isolé par projet) + le
-   risk `exec-write-prod` deny-by-default.
+   fait que `ssh.exec-write-prod` doit être grant explicitement.
 
 4. **`host_slug` n'est pas un slug normalisé.**
    Chaque projet peut nommer ses hosts comme il veut (`vps-rp`,
    `prod-1`, `staging-vps`, `db-replica`). Le catalogue ne peut pas
    `acceptable_in_envs` sur des slugs arbitraires — il faut une
-   **convention** documentée (`prod*` ⇒ deny, `staging-*`/`dev-*` ⇒
-   confirm). À acter dans la project policy par défaut.
+   **convention** documentée (`prod*` ⇒ risk distinct, `staging-*` /
+   `dev-*` ⇒ risk staging). À acter dans la convention de naming des
+   hosts par projet.
 
 5. **`timeout_s` capé à 300s côté runtime.**
    Pas un risque mais un constraint utile. Documenté dans
@@ -691,18 +672,22 @@ systemctl restart` passera — toutes deux classées W. Pas d'effet
 - Le `host_slug` arg reste le qualifieur env.
 - Pas de changement de surface (1 tool, 1 entité).
 
-### 3.3 Pré-requis policy / UI
+### 3.3 Pré-requis UI mint
 
-- Default policy par projet : pour les bindings tagged `env=prod` ou
-  hosts tagged `prod*`, **forcer** :
-  - `railway.read-variables` → deny (prod)
-  - `railway.upsert-variable-prod` → deny
-  - `railway.bulk-variables-replace` → deny
-  - `ssh.exec-write-prod` → deny
-  - `ssh.exec-read-secret-files` → confirm
-- Recommended hardening pour staging :
-  - `railway.read-variables` → confirm
-  - `ssh.exec-write-staging` → confirm
+Post drop-confirm, plus de policy projet. La hardening passe par ce que
+le manager **ne coche pas** au mint. Recommandations à surfacer dans
+l'UI (presets / hint) :
+
+- Bindings `env=prod` ou hosts `prod*` : **ne pas grant** par défaut
+  `railway.read-variables`, `railway.upsert-variable-prod`,
+  `railway.bulk-variables-replace`, `ssh.exec-write-prod`,
+  `ssh.exec-read-secret-files`.
+- Bindings staging : `railway.read-variables` et `ssh.exec-write-staging`
+  sont à grant explicitement (pas un default).
+
+Le garde-fou structurel reste `acceptable_in_envs` au catalog : un
+risk `staging-only` ne peut **pas** être coché pour un binding prod,
+même par l'opérateur qui le voudrait.
 
 ### 3.4 Trous globaux
 

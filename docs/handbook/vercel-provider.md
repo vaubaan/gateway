@@ -183,5 +183,5 @@ détecter un drift entre `upstream-tools.json` et la version live :
   [[oauth-app-install-per-provider]], [[provider-onboarding-handbook-template]],
   [[use-context7-for-provider-docs]].
 - Handbooks voisins : [[github-provider]] (pattern de référence),
-  [[mcp-gateway]] (hot-path dispatch), [[approvals]] (mint flow amont),
+  [[mcp-gateway]] (hot-path dispatch), [[escalation]] (runtime escalation_channel),
   [[policy-engine]] (`evaluateCall` + scope injection).

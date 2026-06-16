@@ -142,5 +142,5 @@ scénarios catalog/classifier.
   §3 (DSL), §4 (catalog).
 - ADRs : [[mint-install-token-credential]], [[oauth-app-install-per-provider]].
 - Handbooks voisins : [[web-app]] (OAuth flow côté Next.js),
-  [[mcp-gateway]] (hot-path dispatch), [[approvals]] (mint flow amont),
+  [[mcp-gateway]] (hot-path dispatch), [[escalation]] (runtime escalation_channel),
   [[policy-engine]] (`evaluateCall` + scope injection).

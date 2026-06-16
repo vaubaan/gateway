@@ -206,25 +206,25 @@ ou binding unique). L'env est porté par le **binding**, pas par la slice
 
 ### 2.3 Plane `auth` — 14 tools
 
-| Tool                                | Slice                                          | Notes                              |
-| ----------------------------------- | ---------------------------------------------- | ---------------------------------- |
-| `supabase__get_auth_config`         | `supabase.project[X].auth-config.R`            |                                    |
-| `supabase__update_auth_config`      | `supabase.project[X].auth-config.W`            | **govern strict → deny**           |
-| `supabase__list_sso_providers`      | `supabase.project[X].sso-provider[*].R`        |                                    |
-| `supabase__get_sso_provider`        | `supabase.project[X].sso-provider[<id>].R`     |                                    |
-| `supabase__create_sso_provider`     | `supabase.project[X].sso-provider[<id>].W`     | **posture : ajoute un IdP fédéré** |
-| `supabase__update_sso_provider`     | `supabase.project[X].sso-provider[<id>].W`     |                                    |
-| `supabase__delete_sso_provider`     | `supabase.project[X].sso-provider[<id>].W`     |                                    |
-| `supabase__list_third_party_auth`   | `supabase.project[X].third-party-auth[*].R`    |                                    |
-| `supabase__get_third_party_auth`    | `supabase.project[X].third-party-auth[<id>].R` |                                    |
-| `supabase__create_third_party_auth` | `supabase.project[X].third-party-auth[<id>].W` | **posture**                        |
-| `supabase__delete_third_party_auth` | `supabase.project[X].third-party-auth[<id>].W` |                                    |
-| `supabase__list_users`              | `supabase.project[X].user[*].R`                | **data: pii**                      |
-| `supabase__get_user`                | `supabase.project[X].user[<id>].R`             | **data: pii**                      |
-| `supabase__create_user`             | `supabase.project[X].user[<id>].W`             | **cf. edge case §5.3**             |
-| `supabase__update_user`             | `supabase.project[X].user[<id>].W`             |                                    |
-| `supabase__delete_user`             | `supabase.project[X].user[<id>].W`             | **irréversible**                   |
-| `supabase__generate_link`           | `supabase.project[X].user[<id>].link[*].W`     | **cf. edge case §5.3 (= reset)**   |
+| Tool                                | Slice                                          | Notes                                      |
+| ----------------------------------- | ---------------------------------------------- | ------------------------------------------ |
+| `supabase__get_auth_config`         | `supabase.project[X].auth-config.R`            |                                            |
+| `supabase__update_auth_config`      | `supabase.project[X].auth-config.W`            | **govern strict** (vecteur posture+secret) |
+| `supabase__list_sso_providers`      | `supabase.project[X].sso-provider[*].R`        |                                            |
+| `supabase__get_sso_provider`        | `supabase.project[X].sso-provider[<id>].R`     |                                            |
+| `supabase__create_sso_provider`     | `supabase.project[X].sso-provider[<id>].W`     | **posture : ajoute un IdP fédéré**         |
+| `supabase__update_sso_provider`     | `supabase.project[X].sso-provider[<id>].W`     |                                            |
+| `supabase__delete_sso_provider`     | `supabase.project[X].sso-provider[<id>].W`     |                                            |
+| `supabase__list_third_party_auth`   | `supabase.project[X].third-party-auth[*].R`    |                                            |
+| `supabase__get_third_party_auth`    | `supabase.project[X].third-party-auth[<id>].R` |                                            |
+| `supabase__create_third_party_auth` | `supabase.project[X].third-party-auth[<id>].W` | **posture**                                |
+| `supabase__delete_third_party_auth` | `supabase.project[X].third-party-auth[<id>].W` |                                            |
+| `supabase__list_users`              | `supabase.project[X].user[*].R`                | **data: pii**                              |
+| `supabase__get_user`                | `supabase.project[X].user[<id>].R`             | **data: pii**                              |
+| `supabase__create_user`             | `supabase.project[X].user[<id>].W`             | **cf. edge case §5.3**                     |
+| `supabase__update_user`             | `supabase.project[X].user[<id>].W`             |                                            |
+| `supabase__delete_user`             | `supabase.project[X].user[<id>].W`             | **irréversible**                           |
+| `supabase__generate_link`           | `supabase.project[X].user[<id>].link[*].W`     | **cf. edge case §5.3 (= reset)**           |
 
 ### 2.4 Plane `functions` — 9 tools
 
@@ -294,8 +294,7 @@ wrapper) mais demande un seed côté DB de chaque projet.
 supabase.project[X].schema[*].row[*].R
 ```
 
-Le tool tombe sous le risk `supabase.read-data` (allow par défaut). On
-peut **supprimer** :
+Le tool tombe sous le risk `supabase.read-data`. On peut **supprimer** :
 
 - `sql-classify.ts` complet (300 lignes),
 - `supabaseToolCapabilities(tool)` branche `execute_sql` (lignes 108-117
@@ -339,7 +338,6 @@ supabase:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: supabase.row-write-one
       label: 'Écrire row par row (one or bounded)'
@@ -356,7 +354,6 @@ supabase:
           visibility: internal,
           persistence: session,
         }
-      default_gate: allow
       acceptable_in_envs: [preview, staging, prod]
 
     - id: supabase.bulk-row-write
@@ -373,10 +370,9 @@ supabase:
           visibility: internal,
           persistence: session,
         }
-      default_gate: confirm
       acceptable_in_envs: [preview, staging]
-      # → en prod, default_gate effective devient `deny` (via project policy
-      #   recommandée OU via le restrictor `acceptable_in_envs`).
+      # → structurellement non-grantable sur prod via le restrictor
+      #   `acceptable_in_envs`.
 
     - id: supabase.migration.W
       label: 'Apply migration (DDL)'
@@ -392,7 +388,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
 
     - id: supabase.policy.W
       label: 'Modifier la RLS (CREATE/ALTER POLICY)'
@@ -408,7 +403,6 @@ supabase:
           visibility: public,
           persistence: posture,
         }
-      default_gate: deny
 
     - id: supabase.db-role.W
       label: 'Créer/modifier des rôles Postgres'
@@ -423,7 +417,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     - id: supabase.extension.W
       label: 'Activer/désactiver une extension Postgres'
@@ -439,7 +432,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     # ──────────────────────────────────────────────────────────────────
     # Plane `storage`
@@ -459,7 +451,6 @@ supabase:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: supabase.storage.object-write-one
       label: "Upload/delete d'un objet ciblé"
@@ -475,7 +466,6 @@ supabase:
           visibility: internal,
           persistence: session,
         }
-      default_gate: allow
       acceptable_in_envs: [preview, staging, prod]
 
     - id: supabase.storage.bulk-object-write
@@ -492,7 +482,6 @@ supabase:
           visibility: internal,
           persistence: session,
         }
-      default_gate: confirm
       acceptable_in_envs: [preview, staging]
 
     - id: supabase.storage.signed-url.R
@@ -510,7 +499,6 @@ supabase:
           visibility: public,
           persistence: session,
         }
-      default_gate: confirm
       # → l'URL est signée, donc auditable, mais le destinataire est
       #   choisi par l'agent → on ne traite pas ça comme un simple R.
 
@@ -528,7 +516,6 @@ supabase:
           visibility: public,
           persistence: posture,
         }
-      default_gate: confirm
 
     - id: supabase.storage-config.W
       label: 'Modifier la storage config globale'
@@ -543,7 +530,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     # ──────────────────────────────────────────────────────────────────
     # Plane `auth`
@@ -563,7 +549,6 @@ supabase:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: confirm
       acceptable_in_envs: [preview, staging, prod]
 
     - id: supabase.auth.user-write-one
@@ -580,7 +565,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
 
     - id: supabase.auth.bulk-user-write
       label: "Manipulation bulk d'utilisateurs"
@@ -596,7 +580,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     - id: supabase.auth.generate-link
       label: 'Générer un magic-link / reset password'
@@ -612,7 +595,6 @@ supabase:
           visibility: internal,
           persistence: session,
         }
-      default_gate: confirm
 
     - id: supabase.sso-provider.W
       label: 'Configurer un IdP SAML / OIDC'
@@ -628,7 +610,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     - id: supabase.third-party-auth.W
       label: 'Configurer un provider tiers (Firebase, Auth0, etc.)'
@@ -644,7 +625,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     - id: supabase.auth-config.W
       label: 'Modifier la config auth globale'
@@ -660,7 +640,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     # ──────────────────────────────────────────────────────────────────
     # Plane `functions`
@@ -680,7 +659,6 @@ supabase:
           visibility: internal,
           persistence: stateless,
         }
-      default_gate: allow
 
     - id: supabase.functions.body.W
       label: "Créer/modifier/supprimer le code d'une Edge Function"
@@ -696,7 +674,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: confirm
 
     - id: supabase.functions.deploy
       label: "Deploy d'une nouvelle version d'Edge Function"
@@ -712,7 +689,6 @@ supabase:
           visibility: public,
           persistence: posture,
         }
-      default_gate: confirm
       acceptable_in_envs: [preview, staging, prod]
 
     - id: supabase.function-secret.W
@@ -729,7 +705,6 @@ supabase:
           visibility: internal,
           persistence: posture,
         }
-      default_gate: deny
 
     # ──────────────────────────────────────────────────────────────────
     # Fallback
@@ -750,7 +725,6 @@ supabase:
           visibility: internal,
           persistence: session,
         }
-      default_gate: confirm
 ```
 
 ### 4.1 Qualification par binding — exemples
@@ -759,49 +733,34 @@ Au mint, le moteur expose au manager **une entrée par binding** pour
 les risks env-sensibles. Pour un projet avec bindings
 `supabase(staging)` + `supabase(prod)` :
 
-| RiskId catalogue               | RiskId(s) exposé(s) au mint                                                                                 |
-| ------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| `supabase.row-write-one`       | `supabase[staging].row-write-one`, `supabase[prod].row-write-one`                                           |
-| `supabase.bulk-row-write`      | `supabase[staging].bulk-row-write` (allow), `supabase[prod].bulk-row-write` (deny via `acceptable_in_envs`) |
-| `supabase.policy.W`            | `supabase[staging].policy.W` (deny), `supabase[prod].policy.W` (deny)                                       |
-| `supabase.auth-config.W`       | `supabase[staging].auth-config.W` (deny), `supabase[prod].auth-config.W` (deny)                             |
-| `supabase.read-data`           | `supabase[staging].read-data` (allow), `supabase[prod].read-data` (allow)                                   |
-| `supabase.uncategorized-write` | `supabase[staging].uncategorized-write`, `supabase[prod].uncategorized-write`                               |
+| RiskId catalogue               | RiskId(s) exposé(s) au mint                                                                                              |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------ |
+| `supabase.row-write-one`       | `supabase[staging].row-write-one`, `supabase[prod].row-write-one`                                                        |
+| `supabase.bulk-row-write`      | `supabase[staging].bulk-row-write` (grantable), `supabase[prod].bulk-row-write` (non-grantable via `acceptable_in_envs`) |
+| `supabase.policy.W`            | `supabase[staging].policy.W`, `supabase[prod].policy.W`                                                                  |
+| `supabase.auth-config.W`       | `supabase[staging].auth-config.W`, `supabase[prod].auth-config.W`                                                        |
+| `supabase.read-data`           | `supabase[staging].read-data`, `supabase[prod].read-data`                                                                |
+| `supabase.uncategorized-write` | `supabase[staging].uncategorized-write`, `supabase[prod].uncategorized-write`                                            |
 
 > Pour les risks **account-scoped** (ex. modif d'un SSO provider qui
 > n'a de sens qu'à l'échelle de l'organisation Supabase), on peut
 > envisager une qualification `supabase[<org_ref>].sso-provider.W`
 > sans `env`. À trancher en Phase 1.
 
-### 4.2 Combinaisons gate × env (matrice de référence)
+### 4.2 Grantabilité structurelle (`acceptable_in_envs`)
 
-| Risk                                 | preview  | staging  | prod                          |
-| ------------------------------------ | -------- | -------- | ----------------------------- |
-| `supabase.read-data`                 | allow    | allow    | allow                         |
-| `supabase.row-write-one`             | allow    | allow    | allow                         |
-| `supabase.bulk-row-write`            | confirm  | confirm  | **deny** (acceptable_in_envs) |
-| `supabase.migration.W`               | confirm  | confirm  | confirm                       |
-| `supabase.policy.W`                  | **deny** | **deny** | **deny**                      |
-| `supabase.db-role.W`                 | **deny** | **deny** | **deny**                      |
-| `supabase.extension.W`               | **deny** | **deny** | **deny**                      |
-| `supabase.storage.object.R`          | allow    | allow    | allow                         |
-| `supabase.storage.object-write-one`  | allow    | allow    | allow                         |
-| `supabase.storage.bulk-object-write` | confirm  | confirm  | **deny**                      |
-| `supabase.storage.signed-url.R`      | confirm  | confirm  | confirm                       |
-| `supabase.bucket.W`                  | confirm  | confirm  | confirm                       |
-| `supabase.storage-config.W`          | **deny** | **deny** | **deny**                      |
-| `supabase.auth.read-users`           | confirm  | confirm  | confirm                       |
-| `supabase.auth.user-write-one`       | confirm  | confirm  | confirm                       |
-| `supabase.auth.bulk-user-write`      | **deny** | **deny** | **deny**                      |
-| `supabase.auth.generate-link`        | confirm  | confirm  | confirm                       |
-| `supabase.sso-provider.W`            | **deny** | **deny** | **deny**                      |
-| `supabase.third-party-auth.W`        | **deny** | **deny** | **deny**                      |
-| `supabase.auth-config.W`             | **deny** | **deny** | **deny**                      |
-| `supabase.functions.read`            | allow    | allow    | allow                         |
-| `supabase.functions.body.W`          | confirm  | confirm  | confirm                       |
-| `supabase.functions.deploy`          | allow    | confirm  | confirm                       |
-| `supabase.function-secret.W`         | **deny** | **deny** | **deny**                      |
-| `supabase.uncategorized-write`       | confirm  | confirm  | confirm                       |
+Post drop-confirm, la décision est binaire : un risk est dans
+`accepted_risks` (allow) ou non (deny). Le seul garde-fou structurel
+est `acceptable_in_envs`, qui empêche au mint de grant un risk sur
+un env où il n'a structurellement pas de sens.
+
+| Risk                                 | preview   | staging   | prod                                     |
+| ------------------------------------ | --------- | --------- | ---------------------------------------- |
+| `supabase.bulk-row-write`            | grantable | grantable | **non-grantable** (`acceptable_in_envs`) |
+| `supabase.storage.bulk-object-write` | grantable | grantable | **non-grantable**                        |
+
+Tous les autres risks sont grantables sur n'importe quel env — c'est
+au manager de cocher ou non au mint selon la session.
 
 > 22 risks utilisateurs + 1 fallback = 23 entrées au catalogue.
 
@@ -903,8 +862,8 @@ READ ONLY; <query>; COMMIT;`,
      `ERROR: cannot execute INSERT in a read-only transaction`. Le tool
      renvoie cette erreur au call.
 
-3. **Au catalog** : le risk `supabase.read-data` couvre cette slice
-   en `allow`. `execute_sql` devient gratuit (allow par défaut).
+3. **Au catalog** : le risk `supabase.read-data` couvre cette slice.
+   `execute_sql` tombe naturellement sous ce risk.
 
 **Garantie de sécurité** : si jamais le wrapper Postgres rate (bug code),
 le risk effectif resterait `supabase.read-data` même pour un statement
@@ -933,8 +892,7 @@ backfill). Comment classer ?
    le fait que beaucoup de migrations réelles font du backfill.
 3. **Migration agnostique** = on traite `migration.W` comme
    sur-ensemble (couvre forcément DDL + DML). Le risk `migration.W`
-   est donc plus fort que `bulk-row-write` (déjà `confirm`). Simple
-   mais moins fin pour le manager.
+   absorbe alors `bulk-row-write`. Simple mais moins fin pour le manager.
 
 **Recommandation** : option 2 — réutiliser un mini-parser (subset du
 ex-`sql-classify`) **uniquement** pour détecter la présence de DML
@@ -981,10 +939,9 @@ mais valide pendant la TTL signée. **C'est un risk d'exfiltration**.
 - Slice émise : `supabase.project[X].bucket[Y].object[Z].signed-url[*].R`
   (ajout d'un segment `signed-url[*]` pour le différencier d'un
   download direct).
-- Risk : `supabase.storage.signed-url.R`, default `confirm` même
-  en staging (parce que le destinataire de l'URL n'est pas dans
-  l'audit). `visibility: public` dans le vecteur (l'URL fonctionne
-  hors-session).
+- Risk : `supabase.storage.signed-url.R`, `visibility: public` dans le
+  vecteur (l'URL fonctionne hors-session — le destinataire n'est pas dans
+  l'audit).
 - Mitigations runtime : capper le TTL signé côté gateway (ex. max
   15 min) ; auditer le path exfiltré ; ne jamais signer un path glob
   (`*`) — toujours un path concret.
@@ -992,21 +949,22 @@ mais valide pendant la TTL signée. **C'est un risk d'exfiltration**.
 ### 6.5 `function-secret` — observer la couplée create + delete
 
 **Question** : `create_function_secrets` et `delete_function_secrets`
-sont marqués `function-secret.W` (deny). Mais un **rollover** légitime
-(rotation Stripe key) doit pouvoir s'exécuter.
+sont marqués `function-secret.W` (vecteur `data: secret` + `posture`).
+Mais un **rollover** légitime (rotation Stripe key) doit pouvoir
+s'exécuter.
 
-**Réponse** : risk en `deny` par défaut → escalade humaine systématique
-(scenario 4 de la spec). C'est le bon comportement pour MVP. À Phase 2,
-on pourrait introduire un risk `supabase.function-secret.rotate` plus
-fin (matché par un pattern `[create + delete consécutifs du même
-nom]`) mais c'est du context-aware classification, hors scope MVP.
+**Réponse** : un manager qui accepte `supabase.function-secret.W` au
+mint le sait — c'est un risk explicite. À Phase 2 on pourrait
+introduire un risk `supabase.function-secret.rotate` plus fin
+(matché par un pattern `[create + delete consécutifs du même nom]`)
+mais c'est du context-aware classification, hors scope MVP.
 
 ### 6.6 `apply_migration` créant une policy
 
-Si une migration contient `CREATE POLICY` (RLS), c'est à la fois `migration.W`
-et `policy.W`. Le plugin doit émettre les deux slices. Le risk `policy.W`
-étant `deny` strict, ça force l'escalation même si `migration.W` est
-accepté en `confirm`.
+Si une migration contient `CREATE POLICY` (RLS), c'est à la fois
+`migration.W` et `policy.W`. Le plugin doit émettre les deux slices.
+Si le token n'a pas accepté `supabase.policy.W` (risk distinct côté
+catalogue), le call est denied — même si `migration.W` est accepté.
 
 **Implémentation** : le mini-parser de §6.2 détecte aussi les mots-clés
 `POLICY`, `RLS`, `ROW LEVEL SECURITY` et déclenche `[migration.W,
@@ -1020,13 +978,12 @@ positif (ex. nom de colonne `policy_id`) sur-protège, ce qui est OK.
 - `supabase__get_anon_key` : aujourd'hui `read-data`. Mais c'est **un
   secret** (la clé anon est connue publiquement par construction, mais
   reste un identifiant exploitable pour rate-limiting / fingerprinting).
-  À considérer : risk dédié `supabase.read-credentials` (gating allow,
-  audit explicite). Phase 2.
+  À considérer : risk dédié `supabase.read-credentials` distinct
+  (audit explicite). Phase 2.
 - `supabase__list_function_secrets` : renvoie les **noms** mais pas les
   valeurs. Aujourd'hui `read-data`. Sémantiquement un peu plus sensible
   (révèle quelles intégrations le projet utilise → reco recon). Idem :
-  risk fin `supabase.function-secret.read` (allow par défaut, mais
-  distinct). Phase 2.
+  risk fin `supabase.function-secret.read` distinct. Phase 2.
 
 ### 7.2 Entités déclarées dans le data-model mais sans tool MCP
 
@@ -1075,24 +1032,24 @@ risk standalone matché par tool name ?**
 Reco : **extension du data-model**. Plus propre pour le lint et la
 slice est explicite.
 
-**Q3 — `read-data` (allow) vs `read-pii` (confirm) — split sur les
-tables auth.users / storage.objects qui contiennent de la PII ?**
-Aujourd'hui `read-data` est `allow` sur tout. On peut imaginer un split
-`auth.read-users` (confirm, déjà fait) vs `db.read-tables` (allow). À
+**Q3 — `read-data` vs `read-pii` — split sur les tables auth.users /
+storage.objects qui contiennent de la PII ?**
+Aujourd'hui `read-data` couvre tout. On peut imaginer un split
+`auth.read-users` (déjà fait, vector PII) vs `db.read-tables`. À
 trancher Phase 1 : le risk `auth.read-users` couvre déjà l'admin API
 des users ; un SELECT direct sur `auth.users` via `execute_sql` tombe
-sur `read-data` (allow) → **inconsistance**. Reco : Le risk `auth.read-users`
+sur `read-data` → **inconsistance**. Reco : Le risk `auth.read-users`
 doit aussi couvrir `supabase.project[**].schema[auth].table[users].row[**].R`.
 
 **Q4 — `apply_migration` sur prod : risk distinct
-`supabase.migration-prod.W` (deny) ou simplement override via project
-policy ?**
-Reco : **project policy**. Garde le catalogue compact ; les opérateurs
-qui veulent un seuil prod peuvent ajouter `project_risk_policies(risk_id:
-'supabase.migration.W', env_scope: 'prod', gate: 'deny')`.
+`supabase.migration-prod.W` ou simplement risk unique `migration.W` ?**
+Reco : risk unique. Le manager qui ne veut pas autoriser la migration
+prod ne coche pas `supabase[prod].migration.W` au mint. Post drop-confirm
+plus de project policy override — la sévérité vit dans le catalog
+(vecteur) et la décision au mint (cocher ou non).
 
 **Q5 — `acceptable_in_envs` sur `bulk-row-write` : `[preview, staging]`
-ou autoriser prod aussi avec gate `deny` ?**
+ou autoriser prod aussi ?**
 Reco : `[preview, staging]` strict. Si un opérateur veut accepter
 `bulk-row-write` en prod, il doit ouvrir un PR sur le catalogue (review
 humain). Évite le "j'ai cliqué accept sur prod, je ne savais pas".
@@ -1120,19 +1077,20 @@ juste pour `apply_migration` afin de détecter du DML embarqué (multi-slice
 `[migration.W, bulk-row-write]`). Le catalog YAML compte **23 risks**
 namespacés `supabase.<plane>.<name>` + 1 fallback `uncategorized-write` ;
 qualifiés par binding au mint (`supabase[staging].bulk-row-write` vs
-`supabase[prod].bulk-row-write`). Les risks `deny` strict couvrent la
-posture critique : `policy.W` (RLS), `auth-config.W`, `sso-provider.W`,
+`supabase[prod].bulk-row-write`). Les risks à vecteur critique
+(`persistence: posture` + `data: secret/pii`) couvrent la posture
+sensible : `policy.W` (RLS), `auth-config.W`, `sso-provider.W`,
 `third-party-auth.W`, `function-secret.W`, `db-role.W`, `extension.W`,
-`storage-config.W`, `auth.bulk-user-write`. Les risks env-restrictifs
+`storage-config.W`, `auth.bulk-user-write` — un manager ne les coche
+au mint qu'en connaissance de cause. Les risks env-restrictifs
 (`acceptable_in_envs: [preview, staging]`) empêchent
 structurellement d'accepter `bulk-row-write` ou `bulk-object-write` sur
 prod. Trois edge cases doc : (1) `apply_migration` peut émettre
 multi-slice si DDL+DML, (2) `create_signed_url` est un R mais avec
-canal d'exfiltration → risk dédié `signed-url.R` confirm, (3)
-`generate_link` est distinct de `create_user` (secret éphémère vs
-identité persistante). Trous identifiés : entités déclarées sans tool
-(`db-role`, `extension`, `mfa-factor`, `bucket-policy`), à wirer en Phase
-2 si besoin. Six décisions résiduelles à trancher avec les opérateurs
-(multi-slice migration, signed-url placement, read-pii split, prod
-migration gate, acceptable_in_envs strictness, generate_link split par
-type).
+canal d'exfiltration → risk dédié `signed-url.R`, (3) `generate_link`
+est distinct de `create_user` (secret éphémère vs identité persistante).
+Trous identifiés : entités déclarées sans tool (`db-role`, `extension`,
+`mfa-factor`, `bucket-policy`), à wirer en Phase 2 si besoin. Six
+décisions résiduelles à trancher avec les opérateurs (multi-slice
+migration, signed-url placement, read-pii split, prod migration scope,
+acceptable_in_envs strictness, generate_link split par type).

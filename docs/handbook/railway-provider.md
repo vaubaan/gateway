@@ -132,5 +132,5 @@ le détail des scénarios catalog/classifier.
 - Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md).
 - ADR : [[railway-rewrap-remote-mcp]].
 - Handbooks voisins : [[github-provider]] (pattern de référence),
-  [[mcp-gateway]] (hot-path dispatch), [[approvals]] (mint flow amont),
+  [[mcp-gateway]] (hot-path dispatch), [[escalation]] (runtime escalation_channel),
   [[policy-engine]] (`evaluateCall` + scope injection).

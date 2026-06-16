@@ -340,7 +340,7 @@ par la binding ; mapper depuis `resource_ref` (ou via `ScopeContext`).
 - Spec : [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md)
   §3 (DSL), §4 (catalog), §6 (project policy), §8 (runtime).
 - Handbooks voisins : [[mcp-gateway]] (hot-path orchestration),
-  [[approvals]] (mint flow amont avec EmailChannel + long-poll),
+  [[escalation]] (runtime escalation_channel out-of-gateway),
   [`providers/README.md`](./providers/README.md) (5 risk catalogs par
   provider).
 - Tests : `npx vitest run packages/policy-engine` — 105 tests, ~50ms.

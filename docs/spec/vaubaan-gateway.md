@@ -16,7 +16,7 @@
 > `delegation_chain` (snapshot frozen-in-time). Les sections §0, §3
 > (DDL), §7 (REST surface) sont **historiques** jusqu'à réécriture —
 > source de vérité du nouveau modèle : ADR unified-tokens. Pour le
-> handbook applicatif, voir [[approvals]] §Mint flow.
+> handbook applicatif, voir [[escalation]].
 >
 > **⚠️ Note 2026-06-15 — Capabilities → Risk-based (3ème évolution) :**
 > Le modèle **capabilities** introduit en 2026-06-08 (tuple `(provider,
@@ -115,11 +115,9 @@ Le MCP Gateway raisonne sur ces termes (modèle risk-based — cf.
   dans le wire utilisateur — purement plomberie entre plugin et runtime.
 - **RiskCatalog** — fichier YAML par provider (`packages/providers/<vendor>/
   src/risk-catalog.yaml`) listant les `RiskEntry` avec leur `matches` (slice
-  pattern), `vector` (6D), `default_gate` (`allow|confirm|deny`).
-- **ProjectRiskPolicy** — table `project_risk_policies` qui override le
-  `default_gate` du catalogue pour un projet donné (par `risk_id` ±
-  `env_scope`). Trois gates : `allow`, `confirm` (déclenche approval),
-  `deny`.
+  pattern), `vector` (6D), `acceptable_in_envs` (optionnel, garde-fou
+  structurel). Décision binaire `risk ∈ accepted_risks` au runtime (cf.
+  ADR [[unified-gates-drop-confirm]]).
 - **MCPGateway** — endpoint `/mcp` de Vaubaan Core. JSON-RPC. Auth par
   `Authorization: Bearer <api_key>`.
 - **AuditLog** — une row par call MCP, allow ou deny : (access_token, tool,

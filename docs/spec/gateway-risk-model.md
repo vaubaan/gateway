@@ -69,7 +69,6 @@ channels Telegram/Email/Manual, le long-poll 25s.
 │      vector (6D), acceptable_in_envs?: string[] }                        │
 │  ]                                                                       │
 │  + un risque fallback générique par provider qui catch tout le reste.    │
-│  (ADR unified-gates-drop-confirm : plus de default_gate.)                │
 └──────────────────────────────────────────────────────────────────────────┘
 
 ┌─ PROJECT POLICY ─ DROPPÉ (ADR unified-gates-drop-confirm) ───────────────┐
@@ -378,10 +377,12 @@ type TokenMintRequest = {
   singleUse?: boolean;
 };
 
+// Post drop-confirm : pas de status 'pending'. Soit le mint passe
+// (sous-ensemble strict de l'autorité parent + acceptable_in_envs OK),
+// soit il échoue avec 403 + liste explicite des risks bloquants.
 type TokenMintResponse =
   | { status: 'minted', api_key: string, expires_at: string }
-  | { status: 'pending', approval_id: string, poll_url: string, expires_at: string,
-      gated_risks: RiskId[] };
+  | { status: 'rejected', not_acceptable: RiskId[], not_inherited: RiskId[] };
 
 // Au runtime, le token résolu en cache contient :
 type ResolvedToken = {
@@ -540,10 +541,9 @@ que son token parent n'a pas, il escalade lui-même via
 ADR [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md) §D4.
 
 Les channels Telegram / Email / Manual ont été supprimés (migration
-0036 drop des tables `project_approval_channels` et `approval_requests`).
-Le routes `/api/v1/mgmt/approvals`, `/api/v1/projects/[id]/approvals`,
-`/api/v1/tokens/pending`, `/api/v1/integrations/{telegram,email}` ont
-toutes été retirées.
+0036 drop des tables `project_approval_channels` et `approval_requests`)
+ainsi que les routes d'approval associées. Détail des endpoints
+retirés : ADR [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md) §D4.
 
 L'élévation runtime se fait via `context.escalation_channel` du token
 (cf. §11) — c'est un endpoint HTTP libre que le parent qui mint
@@ -579,7 +579,6 @@ remonte à l'opérateur humain.
   "token_accepted_risks": [...],              // snapshot pour reproductibilité
   "decision": "allow",
   "decided_at": "2026-…",
-  "approval_id": null,                        // ou l'id si gate était 'confirm'
   "binding_used": { provider: "supabase", resource_ref: "tlqgxnezmthbpzhdwxgi", env: "staging" }
 }
 ```
@@ -615,17 +614,15 @@ Five Eyes (2026-05) + NIST AI RMF Agentic Profile exigent traçabilité
 
 6. **Phase 5 — UI risk-checklist par projet.**
    Page operator "Token mint" : checklist des risks du catalogue × bindings,
-   greyed-out pour les `deny` policy, tooltip avec `reason` + `vector`.
+   greyed-out pour ceux que `acceptable_in_envs` exclut, tooltip avec
+   `reason` + `vector`.
 
 7. **Phase 6 — Tools réduits.**
    Retirer `github__dispatch_workflow` & co (§7.2 #1).
    Migrer `supabase__execute_sql` vers read-only Postgres (§7.2 #2).
    Drop `classifySql` parsing.
 
-8. **Phase 7 — EmailChannel.**
-   Resend ou Postmark + JWT-signed approve links.
-
-Estimation : Phases 0-4 ~ 2 semaines focus full-time. Phases 5-7 ~
+Estimation : Phases 0-4 ~ 2 semaines focus full-time. Phases 5-6 ~
 1 semaine chacune.
 
 ## 14. Anti-patterns à éviter (mis à jour pour risk-based)
@@ -634,15 +631,12 @@ Estimation : Phases 0-4 ~ 2 semaines focus full-time. Phases 5-7 ~
 | ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | Catalogue avec trous (slice sans risk)               | Fallback générique par provider + lint au CI qui vérifie couverture des tools.     |
 | Risk trop large ("write-anything") accepté par UX rapide | Catalogue cible 10-15 risks fins. UI groupe par bucket de sévérité, pas un single "tout".|
-| Manager autorise tous les risks par défaut          | Pas de bouton "Accept All". Manager doit cocher chaque risk à risque ≥ confirm.    |
-| Slice attacker-controlled (branche `feature/exfil`)  | Les risks `feature/*` sont déjà `allow` mais bornés à `file.W` (pas `branch-protection`, pas `secret`). |
+| Manager autorise tous les risks par défaut          | Pas de bouton "Accept All". Manager doit cocher chaque risk à risque non-trivial.  |
+| Slice attacker-controlled (branche `feature/exfil`)  | Les risks `feature/*` sont grantable mais bornés à `file.W` (pas `branch-protection`, pas `secret`). |
 | Bulk silencieux                                      | Cardinalité émergente : `row[*].W` matche le risk `bulk-row-write` distinct de `row[id=…].W`. |
-| Approval fatigue                                     | Un mint = un approval (couvre tous les risks confirm-gatés en bloc).                |
 | Token sur-vit à un changement de catalogue           | Ajout d'un risk = fail-closed sur tokens existants. UI signale "X tokens à re-mint".|
 | State in-memory                                      | DB-only (déjà v1).                                                                  |
 | Logging insuffisant                                  | `slices_executed` + `risks_touched` + `token_accepted_risks` (snapshot).            |
-| Long-poll naïf                                       | `?wait=25` capé serveur (§11).                                                      |
-| Approval via canal non-authentifié                   | JWT signé pour email. Webhook secret pour Telegram.                                 |
 | `dispatch_workflow` comme bypass                     | Retiré du périmètre (§7.2 #1).                                                      |
 | Mauvaise classification SQL                          | Read-only Postgres-enforced (§7.2 #2). Pas de parser, pas de bug.                  |
 
@@ -657,23 +651,18 @@ Estimation : Phases 0-4 ~ 2 semaines focus full-time. Phases 5-7 ~
 | Macro-permission                | n/a (v2 only)                                            | abandonnée — manager raisonne en risk-id catalogue           | n/a     |
 | Slice (DSL)                     | n/a                                                      | introduit, **plomberie interne** seulement                   | OUI (new) |
 | Catalogue de risks par provider | n/a                                                      | **NEW** — versionné YAML dans le repo provider               | OUI (new) |
-| Project policy                  | matrice (plane,level,action,env,gate)                    | **table légère** (risk_id → gate-override)                   | OUI (simplifié) |
+| Project policy                  | matrice (plane,level,action,env,gate)                    | **DROPPÉ** (ADR unified-gates-drop-confirm) — `acceptable_in_envs` au catalog seul garde-fou | OUI |
 | Plugin contract                 | `classify(t,a) → CapabilityV1`                            | `classify(t,a) → Slice[]` + `dataModel`                       | OUI     |
-| Gates                           | `allow / confirm / deny`                                  | identique                                                     | non     |
+| Gates                           | `allow / confirm / deny`                                  | **DROPPÉ** — décision binaire `risk ∈ accepted_risks`         | OUI     |
 | Default-deny                    | oui                                                       | identique (catalogue-driven + fallback risk)                  | non     |
-| Approval channels               | Telegram + Manual                                         | + Email                                                       | non     |
-| Polling                         | 202 + GET court                                           | + `?wait=25` long-poll borné                                  | non     |
+| Approval channels               | Telegram + Manual                                         | **DROPPÉ** — `escalation_channel` runtime hors gateway        | OUI     |
+| Polling                         | 202 + GET court                                           | **DROPPÉ** (avec le mint-time approval)                       | OUI     |
 | Single-use token                | oui                                                       | identique                                                     | non     |
 | Audit log                       | `capability_matched`                                      | `slices_executed` + `risks_touched` + snapshot                | étendu  |
 | Tools `dispatch_workflow.W`     | exposés                                                   | **retirés**                                                   | OUI     |
 | Tools `execute_sql` write       | classifié via parser SQL                                  | **Postgres read-only forced** ; writes via API tools          | OUI     |
 
 ## 16. Décisions résiduelles à acter
-
-**Q1 — Anti-pattern d'override : un `deny` catalogue peut-il être passé en `allow` par policy ?**
-Proposition : interdit par défaut. Seul un membre `admin` de l'org peut écrire un
-override `deny → allow` sur un risk dont le vecteur a `persistence: posture`
-OU `data ∈ {secret, pii}` côté W. CHECK SQL + middleware app. Tu valides ?
 
 **Q2 — Préfixe RiskId : `<provider>[<binding>].<name>` ou autre forme ?**
 Proposition : `<provider>[<env>].<name>` pour les risks env-scoped,
@@ -691,14 +680,13 @@ Très utile à l'usage. Tu valides Phase 2 ?
 
 **Q5 — Catalogue de risks `acceptable_in_envs` strict ?**
 Proposition : `acceptable_in_envs: ['preview','staging']` sur un risk
-empêche le manager d'accepter ce risk pour un binding `env: prod`,
-même si la policy l'autorise. Garde-fou "ce risk n'a structurellement pas
-de sens sur prod". Tu valides ?
+empêche le manager d'accepter ce risk pour un binding `env: prod`.
+Garde-fou "ce risk n'a structurellement pas de sens sur prod". Tu valides ?
 
-**Q6 — UI : afficher les risks `deny` greyed-out ou les cacher ?**
-Proposition : greyed-out + tooltip "blocked by project policy". Meilleure
-découvrabilité pour l'opérateur ("ah on ne peut pas faire ça sur ce
-projet, pourquoi ?"). Tu valides ?
+**Q6 — UI : afficher les risks non-grantables greyed-out ou les cacher ?**
+Proposition : greyed-out + tooltip "non-grantable on this env via
+`acceptable_in_envs`" (ou "not inherited from parent token").
+Meilleure découvrabilité pour l'opérateur. Tu valides ?
 
 ---
 
@@ -714,26 +702,30 @@ Coder :
   ☑ github.read-code                      lire le code et les PR
   ☑ github.feature-branch-write           créer/modifier branches feature/*
   ☑ github.create-pr                      ouvrir une PR
-  ☐ github.merge-protected      ⚠️ confirm  merge vers main
-  ☐ github.delete-release       ⚠️ confirm  supprimer une release
-  ☒ github.branch-protection.W  🛑 deny     branch protection (blocked par policy)
-  ☒ github.mint-install-token   🛑 deny     mint install token (blocked par policy)
+  ☐ github.merge-protected                merge vers main
+  ☐ github.delete-release                 supprimer une release
+  ☐ github.branch-protection.W            branch protection (posture-shift)
+  ☐ github.mint-install-token             mint install token (credential)
 
 Supabase (staging) :
   ☑ supabase.read-rows                    lire schema & data
   ☑ supabase[staging].row-write-one       écrire row par row
-  ☐ supabase[staging].bulk-row-write ⚠️    écrire en bulk (pas de rollback auto)
-  ☐ supabase[staging].migration.W   ⚠️    DDL schéma (apply_migration)
-  ☒ supabase[staging].policy.W      🛑    modif RLS (blocked par policy)
+  ☐ supabase[staging].bulk-row-write      écrire en bulk (pas de rollback auto)
+  ☐ supabase[staging].migration.W         DDL schéma (apply_migration)
+  ☐ supabase[staging].policy.W            modif RLS (posture-shift)
 
 Vercel :
   ☑ vercel.deploy-preview                  deploy preview
-  ☐ vercel.deploy-prod              ⚠️     deploy prod (public, costly rollback)
-  ☒ vercel[prod].env-var-write      🛑     env var prod (blocked par policy)
-  ☒ vercel.domain.W                  🛑    modif domaine (blocked par policy)
+  ☐ vercel.deploy-prod                     deploy prod (public, costly rollback)
+  ☐ vercel[prod].env-var-write             env var prod (secret + posture)
+  ☐ vercel.domain.W                        modif domaine (DNS posture-shift)
 
 [ Preview risks ]   [ Mint token ]
 ```
+
+> Post drop-confirm la décision est binaire : ☑ (risk accepté) ou ☐
+> (non accepté). Les risks bloqués par `acceptable_in_envs` ne sont
+> simplement pas exposés pour le binding incompatible.
 
 ## Annexe B — Scenarios incarnés
 
@@ -878,107 +870,6 @@ cours de session** sans déranger le humain, tant que le Story Dev a
 l'autorité pour le faire. Strict-fail force la transparence (chaque
 élargissement est un mint distinct, donc une ligne d'audit).
 
-### Scenario 4 — Story Dev escalade au humain (out-of-budget)
-
-**Contexte différent** : nouvelle session "rotate les secrets de prod
-suite à un near-miss". Le Coding Agent au démarrage a un profil large
-(Story Dev a accepté pas mal de choses), mais quand il appelle
-`vercel__upsert_env_var target=prod name=STRIPE_SECRET_KEY` →
-
-```
-→ 403
-  { missing_risks: ["vercel[prod].env-var-write-secret"],
-    executed_slice: "vercel.project[gateway].env[prod].env-var[STRIPE_SECRET_KEY].W",
-    hint: "DENY by project policy." }
-```
-
-> Coding Agent : *« Blocked. Need `vercel[prod].env-var-write-secret`.
-> Context: je rotate STRIPE_SECRET_KEY suite au near-miss déclaré dans
-> l'issue #142. Sans ce call, la rotation est incomplète. »*
-
-Le Story Dev raisonne :
-
-> Story Dev : *« Mint MA propre policy n'autorise pas `vercel[prod].env-var-write-secret`
-> — c'est marqué `escalation: human-only` parce que c'est un secret prod
-> qui peut briser le service en cas d'erreur. Je dois escalader. »*
-
-```
-POST /api/v1/mgmt/tokens
-  { bindings: [...], accepted_risks: [
-      ... (le profil courant),
-      "vercel[prod].env-var-write-secret"
-    ],
-    context: {
-      task: "rotate Stripe secret post-incident",
-      agent_reason: "Sans ce call la rotation est incomplète, Stripe va
-                     refuser les webhooks à partir de demain 00:00 UTC.",
-      story_dev_recommendation: "Légitime selon issue #142. Recommande
-                                 approuver, mais je n'ai pas l'autorité
-                                 pour décider seul."
-    },
-    parent_token_id: "tok_session_xyz",
-    ttl: 600, singleUse: true }
-→ 202
-  { approval_id: "appr_abc",
-    channel: ["email", "telegram"],
-    poll_url: "/api/v1/mgmt/tokens/pending/appr_abc",
-    expires_at: "+15min" }
-```
-
-**Renaud reçoit le mail + Telegram** simultanément (multi-canal acté §10) :
-
-```
-[Vaubaan] Approval requested — rotate Stripe secret on PROD
-
-Requester : claude-coding-agent (session tok_session_xyz)
-Manager   : story-dev-orchestrator
-Task      : rotate Stripe secret post-incident
-
-Agent reason :
-  "Sans ce call la rotation est incomplète, Stripe va refuser les
-   webhooks à partir de demain 00:00 UTC."
-
-Manager recommendation :
-  "Légitime selon issue #142. Recommande approuver, mais je n'ai pas
-   l'autorité pour décider seul."
-
-Risk to approve :
-  ⚠️ vercel[prod].env-var-write-secret
-     Reason: "Écriture d'un secret prod. Posture shift, peut briser
-              le service si la valeur est erronée."
-     Vector: { reversibility: costly, data: secret, persistence: posture,
-               visibility: internal }
-
-Other risks already accepted (allow):
-  ✓ vercel.deploy-preview, github.read-code, …
-
-[ ✅ APPROVE ]   [ ❌ DENY ]
-```
-
-Renaud lit, ouvre l'issue #142, vérifie le contexte, clique APPROVE.
-
-```
-POST /api/v1/integrations/email/decide?token=<jwt>
-→ 200 (page de confirmation HTML)
-```
-
-Le Coding Agent **est en train de long-poll** sur `?wait=25` depuis le mint.
-Au moment où Renaud approuve, le record bascule à `approved`, le poll
-suivant renvoie 200 + api_key, le Story Dev passe le token, le Coding
-Agent retente, OK.
-
-**Audit log** capture toute la chaîne : mint Renaud-side (`approval_id`,
-`decided_by: renaud@…`, `decided_at`), `escalation_path: ["coding-agent
-→ story-dev (out-of-budget) → human-approver"]`.
-
-**Ce que le scenario montre** :
-1. L'escalade traverse la chaîne **explicitement**, chaque échelon ajoute
-   son contexte.
-2. Le humain reçoit l'info utile (raison agent + reco manager) pour
-   décider en 30 secondes.
-3. Le mécanisme long-poll permet à l'agent d'attendre sans busy-loop.
-4. Tout est tracé.
-
 ### Scenario 5 — Le pire-cas : agent qui essaie de contourner
 
 **Contexte** : session avec profil "Coder feature/*". Le Coding Agent
@@ -1026,13 +917,13 @@ tant que le catalogue couvre bien les surfaces.
 
 ### Patterns récurrents observés dans ces scenarios
 
-| Pattern                       | Quand il se déclenche                                  | Mécanisme                                                 |
-| ----------------------------- | ------------------------------------------------------ | --------------------------------------------------------- |
-| **Mint serein**               | Tâche bien cadrée, profil pré-établi suffit            | UI checklist + mint direct                                |
-| **Blocage propre**            | Agent dépasse le profil                                | 403 avec `missing_risks` + slice exécutée                 |
-| **Élargissement local**       | Story Dev a l'autorité pour ajouter le risk            | Re-mint avec `parent_token_id`, marqué `decided_locally`  |
-| **Escalation humaine**        | Story Dev n'a pas l'autorité, recommande au humain     | 202 + approval_request → channels → long-poll → 200       |
-| **Contournement impossible**  | Agent essaie via workflow ou backdoor                  | Tools critiques retirés + catalogue exhaustif + fallback  |
+| Pattern                       | Quand il se déclenche                                  | Mécanisme                                                                       |
+| ----------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
+| **Mint serein**               | Tâche bien cadrée, profil pré-établi suffit            | UI checklist + mint direct                                                      |
+| **Blocage propre**            | Agent dépasse le profil                                | 403 avec `missing_risks` + slice exécutée                                       |
+| **Élargissement local**       | Story Dev a l'autorité pour ajouter le risk            | Re-mint avec `parent_token_id`, marqué `decided_locally`                        |
+| **Escalation runtime**        | Story Dev n'a pas l'autorité, demande à son parent     | POST `escalation_channel.endpoint_url` → parent re-mint side-channel (cf. §11)  |
+| **Contournement impossible**  | Agent essaie via workflow ou backdoor                  | Tools critiques retirés + catalogue exhaustif + fallback                        |
 
 ## Annexe C — Pourquoi ne pas garder le modèle capability-based ?
 

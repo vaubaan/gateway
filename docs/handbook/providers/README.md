@@ -12,7 +12,7 @@ Chacun couvre la même structure (cf. spec
 
 1. **Data-model** — entités du plane + cardinalités + diagram mermaid
 2. **Mapping tool → slice** — pour chaque tool MCP, quelle slice est émise au call
-3. **Risk catalog** — YAML/TS canonique avec 6D vector + default_gate par risk
+3. **Risk catalog** — YAML/TS canonique avec 6D vector + `acceptable_in_envs` quand pertinent
 4. **Lint coverage** — matrice tool × risk (chaque tool couvert par ≥1 risk)
 5. **Edge cases** — décisions de classification non-évidentes argumentées
 6. **Trous identifiés** — choses à creuser avant de scaler le périmètre

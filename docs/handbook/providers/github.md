@@ -250,7 +250,7 @@ résoudre) ou `runtime` (le selecteur de branche/env vient d'un arg).
 
 > 14 risks fins + 1 catch-all (15 entrées) couvrant toutes les slices
 > émises par le mapping §2. Chaque entry conforme au schéma `RiskEntry`
-> de spec v4 §4.1. Vecteur 6D, `default_gate` seedé via formule §4.2.
+> de spec v4 §4.1. Vecteur 6D + `acceptable_in_envs` quand pertinent.
 
 ```yaml
 github:
@@ -279,7 +279,6 @@ github:
         cost: free
         visibility: internal
         persistence: stateless
-      default_gate: allow
 
     - id: github.read-meta
       label: 'Lire PR, issues, releases, workflows, branch-protection'
@@ -302,7 +301,6 @@ github:
         cost: free
         visibility: internal
         persistence: stateless
-      default_gate: allow
 
     - id: github.search-global
       label: 'Search global code/issues GitHub (hors bindings)'
@@ -321,7 +319,6 @@ github:
         cost: free
         visibility: internal
         persistence: stateless
-      default_gate: allow
 
     # ---------------------------------------------------------------
     # WRITES — branches feature/* (low-risk)
@@ -342,7 +339,6 @@ github:
         cost: free
         visibility: internal
         persistence: session
-      default_gate: allow
 
     # ---------------------------------------------------------------
     # WRITES — branches non-feature, non-protected (defaut, fallback)
@@ -363,7 +359,6 @@ github:
         cost: free
         visibility: internal
         persistence: session
-      default_gate: allow
 
     # ---------------------------------------------------------------
     # WRITES — branches protégées (main, master, release-*)
@@ -386,7 +381,6 @@ github:
         cost: moderate
         visibility: team
         persistence: session
-      default_gate: confirm
 
     # ---------------------------------------------------------------
     # WRITES — workflows YAML (via file)
@@ -409,7 +403,6 @@ github:
         cost: free
         visibility: internal
         persistence: posture
-      default_gate: deny
       # Acceptable seulement sur feature branches non-protected, JAMAIS
       # sur main directement (le merge passe par PR review humain).
       acceptable_in_envs:
@@ -435,7 +428,6 @@ github:
         cost: free
         visibility: internal
         persistence: session
-      default_gate: allow
 
     # ---------------------------------------------------------------
     # WRITES — PR + comments
@@ -455,7 +447,6 @@ github:
         cost: free
         visibility: team
         persistence: session
-      default_gate: allow
 
     - id: github.comment-write
       label: 'Commenter sur une issue ou une PR'
@@ -472,7 +463,6 @@ github:
         cost: free
         visibility: team
         persistence: session
-      default_gate: allow
 
     # ---------------------------------------------------------------
     # WRITES — releases (publication publique)
@@ -494,7 +484,6 @@ github:
         cost: free
         visibility: public
         persistence: session
-      default_gate: confirm
 
     - id: github.delete-release
       label: 'Supprimer une release'
@@ -511,7 +500,6 @@ github:
         cost: free
         visibility: public
         persistence: session
-      default_gate: confirm
 
     # ---------------------------------------------------------------
     # WRITES — branch protection (posture-shift)
@@ -522,7 +510,7 @@ github:
         Posture-shift : ouvre la branche aux écritures hors-process
         (ex: désactiver required reviews). Persistance après la session.
         Même quand on DURCIT (ajoute required check), c'est une décision
-        qui survit au token — donc confirm minimum.
+        qui survit au token — risk distinct à grant explicitement.
       matches:
         - 'github.repo[**].branch-protection[**].W'
       vector:
@@ -532,7 +520,6 @@ github:
         cost: free
         visibility: team
         persistence: posture
-      default_gate: deny
 
     # ---------------------------------------------------------------
     # WRITES — credential mint (install token)
@@ -552,7 +539,6 @@ github:
         cost: free
         visibility: internal
         persistence: session
-      default_gate: confirm
 
     - id: github.mint-install-token-push
       label: 'Minter un install token (purpose=push, écriture)'
@@ -570,7 +556,6 @@ github:
         cost: free
         visibility: internal
         persistence: posture
-      default_gate: deny
 
     # ---------------------------------------------------------------
     # FALLBACK — catch-all (obligatoire par spec §4)
@@ -592,33 +577,9 @@ github:
         cost: free
         visibility: internal
         persistence: session
-      default_gate: confirm
 ```
 
-### 3.1 Notes sur les seeds de `default_gate`
-
-Formule spec v4 §4.2 appliquée :
-
-| Risk                              | persistence | data     | reversibility / blast          | Seed calculé                                       | Override manuel ?         |
-| --------------------------------- | ----------- | -------- | ------------------------------ | -------------------------------------------------- | ------------------------- |
-| `github.read-code`                | stateless   | data     | reversible/single              | allow                                              | non                       |
-| `github.read-meta`                | stateless   | metadata | reversible/single              | allow                                              | non                       |
-| `github.search-global`            | stateless   | data     | reversible/account             | confirm (par blast=account) → relâché en **allow** | OUI (R-only, pas d'effet) |
-| `github.feature-branch-write`     | session     | data     | reversible/single              | allow                                              | non                       |
-| `github.arbitrary-branch-write`   | session     | data     | reversible/single              | allow                                              | non                       |
-| `github.merge-protected`          | session     | data     | costly/env                     | confirm                                            | non                       |
-| `github.workflow-write-via-file`  | posture     | secret   | costly/account                 | deny                                               | non                       |
-| `github.bulk-file-write`          | session     | data     | reversible/single              | allow                                              | non                       |
-| `github.create-pr`                | session     | data     | reversible/single              | allow                                              | non                       |
-| `github.comment-write`            | session     | data     | reversible/single              | allow                                              | non                       |
-| `github.create-release`           | session     | metadata | costly/env + visibility=public | confirm                                            | non                       |
-| `github.delete-release`           | session     | metadata | irreversible/env               | confirm                                            | non                       |
-| `github.branch-protection-write`  | posture     | metadata | costly/env                     | deny (posture)                                     | non                       |
-| `github.mint-install-token-clone` | session     | secret   | reversible/account             | deny (data=secret) → relâché en **confirm**        | OUI (read-only purpose)   |
-| `github.mint-install-token-push`  | posture     | secret   | reversible/account             | deny                                               | non                       |
-| `github.uncategorized-write`      | session     | data     | costly/env                     | confirm                                            | non                       |
-
-### 3.2 Notes sur `acceptable_in_envs`
+### 3.1 Notes sur `acceptable_in_envs`
 
 Le champ est utilisé pour **bloquer structurellement** qu'un risk soit
 accepté sur une branche/env qui n'a pas de sens (spec v4 §4.4, Q5).
@@ -730,7 +691,7 @@ describe('GitHub risk catalog coverage', () => {
 Les questions ouvertes qui n'ont pas de réponse triviale, classées par
 priorité de décision.
 
-### 5.1 `github__create_release` : confirm ou deny par défaut ?
+### 5.1 `github__create_release` — risk dédié
 
 **Faits** :
 
@@ -742,14 +703,9 @@ priorité de décision.
 
 **Vecteur** : `{ reversibility: costly, visibility: public, persistence: session }`.
 
-**Proposition catalogue** : `confirm` (formule §4.2 donnerait confirm via
-visibility=public + reversibility=costly — pas deny car aucun
-{secret,pii} ni posture).
-
-**Discussion** : un manager peut accepter ce risk pour une session "release
-v1.2.3" sans escalader humain — c'est légitime. Si on met `deny`, on
-force l'escalade pour chaque release → friction. **Décision suggérée :
-`confirm`.**
+**Décision** : risk distinct `github.create-release`. Un manager peut
+l'accepter explicitement pour une session "release v1.2.3" sans
+intervention humaine extra.
 
 ### 5.2 `github__create_or_update_file@main` sans PR : `merge-protected` ?
 
@@ -783,27 +739,27 @@ workflows:write`.
 
 **Proposition catalogue** : **2 risks distincts** :
 
-- `github.mint-install-token-clone` (default `confirm` — relâché du deny formel parce que c'est read-only)
-- `github.mint-install-token-push` (default `deny` — posture-shift, scope large)
+- `github.mint-install-token-clone` (read-only, vector léger)
+- `github.mint-install-token-push` (posture-shift, scope large, `data: secret`)
 
 **Pourquoi 2 et pas 1 ?** Un manager qui setup un CI clone-only veut
 accepter ce risk sans accepter le mint-push. Granularité utile.
 
-### 5.4 `github.workflow-write-via-file` : `deny` même sur feature/\* ?
+### 5.4 `github.workflow-write-via-file` — `acceptable_in_envs` étroit
 
 **Faits** :
 
 - Modifier un workflow YAML sur une branche `feature/X` est nécessaire
-  pour ajouter/changer un job CI. Bloquer ça en `deny` casse le flow
-  développeur.
+  pour ajouter/changer un job CI. Bloquer ça structurellement casse le
+  flow développeur.
 - Mais ce workflow ne s'exécute pas avec les secrets prod tant qu'il
   est sur une feature branch (sauf si l'attaquant met `pull_request_target`
   qui s'exécute avec les secrets du base repo — **piège majeur**).
 
-**Décision** : `default_gate: deny` au catalogue, AVEC
-`acceptable_in_envs: [feature, fix, chore]` — donc le manager **peut**
-accepter ce risk pour une session ciblée (ajout d'un job CI) sans
-ouvrir les vannes sur main.
+**Décision** : `acceptable_in_envs: [feature, fix, chore]` au catalogue —
+donc le manager **peut** accepter ce risk pour une session ciblée (ajout
+d'un job CI) sur ces branches, mais structurellement il ne pourra pas
+l'accepter pour `main` / `release-*`.
 
 **Sub-edge** : faut-il détecter `pull_request_target` dans le YAML
 parsé ? Trop coûteux côté plugin (parser YAML, analyser le workflow).
@@ -864,19 +820,19 @@ mais c'est OK : la sensibilité est identique (notification team).
 Si on regarde les intentions métier d'un coding agent typique vs le
 mapping §2, il y a des manques :
 
-| Intention métier                                 | Tool actuel ? | Proposition                                                                      |
-| ------------------------------------------------ | :-----------: | -------------------------------------------------------------------------------- |
-| Créer une issue (file a bug)                     |      NON      | Ajouter `github__create_issue` (write `issue[*].W` — bas risque, `allow`).       |
-| Updater une issue (close, label)                 |      NON      | Ajouter `github__update_issue` (close/reopen ; risk `issue-state-write`).        |
-| Ajouter une review sur une PR                    |      NON      | Ajouter `github__create_pull_request_review` (analogue à comment).               |
-| Demander des reviewers                           |      NON      | Ajouter `github__request_reviewers` (notif team).                                |
-| Lister/modifier les labels                       |      NON      | Ajouter `github__list_labels`, `add_labels` (metadata légère).                   |
-| Update PR title/body                             |      NON      | Ajouter `github__update_pull_request` (utile pour l'agent qui itère).            |
-| Close PR sans merge                              |      NON      | Ajouter `github__close_pull_request` (réversible — `feature-branch-write`).      |
-| Lire un workflow run log                         |      NON      | Ajouter `github__get_workflow_run_logs` (debug CI). Risk : `read-meta`.          |
-| Get repository info (default branch, visibility) |      NON      | Ajouter `github__get_repository` (utile pour `create_branch` from default).      |
-| Delete branch (cleanup post-merge)               |      NON      | Ajouter `github__delete_branch` (réversible si feature, `confirm` si protected). |
-| Delete tag                                       |      NON      | Ajouter `github__delete_tag` (mineur, `confirm`).                                |
+| Intention métier                                 | Tool actuel ? | Proposition                                                                          |
+| ------------------------------------------------ | :-----------: | ------------------------------------------------------------------------------------ |
+| Créer une issue (file a bug)                     |      NON      | Ajouter `github__create_issue` (write `issue[*].W` — bas risque, `allow`).           |
+| Updater une issue (close, label)                 |      NON      | Ajouter `github__update_issue` (close/reopen ; risk `issue-state-write`).            |
+| Ajouter une review sur une PR                    |      NON      | Ajouter `github__create_pull_request_review` (analogue à comment).                   |
+| Demander des reviewers                           |      NON      | Ajouter `github__request_reviewers` (notif team).                                    |
+| Lister/modifier les labels                       |      NON      | Ajouter `github__list_labels`, `add_labels` (metadata légère).                       |
+| Update PR title/body                             |      NON      | Ajouter `github__update_pull_request` (utile pour l'agent qui itère).                |
+| Close PR sans merge                              |      NON      | Ajouter `github__close_pull_request` (réversible — `feature-branch-write`).          |
+| Lire un workflow run log                         |      NON      | Ajouter `github__get_workflow_run_logs` (debug CI). Risk : `read-meta`.              |
+| Get repository info (default branch, visibility) |      NON      | Ajouter `github__get_repository` (utile pour `create_branch` from default).          |
+| Delete branch (cleanup post-merge)               |      NON      | Ajouter `github__delete_branch` (réversible si feature, risk distinct si protected). |
+| Delete tag                                       |      NON      | Ajouter `github__delete_tag` (mineur, risk dédié).                                   |
 
 → Tous ces tools rentreraient naturellement dans les risks existants
 (`read-meta`, `feature-branch-write`, `comment-write`, etc.) sans
@@ -985,19 +941,18 @@ Le refacto nécessaire :
 
 ### Questions ouvertes pour le humain
 
-1. **Q5.1** — `github.create-release` : `confirm` (suggestion) ou `deny` ?
-2. **Q5.4** — Garder `acceptable_in_envs: [feature, fix, chore]` strict
+1. **Q5.4** — Garder `acceptable_in_envs: [feature, fix, chore]` strict
    sur `github.workflow-write-via-file`, ou autoriser branches
    arbitraires ?
-3. **Q5.5** — Slice `merge-into` (Option A, suggérée) ou `file[**].W`
+2. **Q5.5** — Slice `merge-into` (Option A, suggérée) ou `file[**].W`
    uniforme (Option B) pour `merge_pull_request` ?
-4. **Q6.3** — Renommer `merge-protected` → `protected-branch-write` ?
-5. **Q6.4** — Filtrer le `q` de `search_code`/`search_issues` pour
+3. **Q6.3** — Renommer `merge-protected` → `protected-branch-write` ?
+4. **Q6.4** — Filtrer le `q` de `search_code`/`search_issues` pour
    forcer `repo:<bound>` (Phase 2) ?
-6. **Q6.5** — Qualifier les risks GitHub par owner (`github[org].name`)
+5. **Q6.5** — Qualifier les risks GitHub par owner (`github[org].name`)
    ou laisser plat (`github.name`) ?
-7. **Catalogue versioning** — quand on ajoute un risk (ex: nouveau tool
-   `create_issue`), les tokens existants tombent en `deny` au prochain
+6. **Catalogue versioning** — quand on ajoute un risk (ex: nouveau tool
+   `create_issue`), les tokens existants tombent en denied au prochain
    match. Confirmer ce comportement fail-closed (spec v4 §4.5) est OK
    pour GitHub.
 
