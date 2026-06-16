@@ -1,8 +1,11 @@
 /**
  * Domain types shared across packages.
- * Mirrors the SQL schema from supabase/migrations/0001_init.sql.
+ * Mirrors the SQL schema from supabase/migrations/0001_init.sql + 0032.
  *
  * Spec : docs/spec/vaubaan-gateway.md §3.
+ * ADR  : docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
+ *        (unified `tokens` table — drops the legacy AccessToken /
+ *        OrgManagementKey duality).
  */
 
 import type { RiskId } from './risk.ts';
@@ -19,9 +22,24 @@ export const PROVIDERS = [
 
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';
 
-export type AccessTokenStatus = 'active' | 'revoked';
+export type TokenStatus = 'active' | 'revoked';
+
+export type TokenScope = 'org' | 'project';
 
 export type AuditDecision = 'allowed' | 'denied';
+
+/** One entry in a token's `delegation_chain` jsonb array.
+ *  Convention : root in `[0]`, parent direct in `[length-1]`.
+ *  Root tokens (`parent_id IS NULL`) have `delegation_chain = []`.
+ *  Cf. ADR unified-tokens-delegation-chain-and-escalation-channel.md §D2. */
+export interface DelegationChainEntry {
+  id: string;
+  name: string;
+  depth: number;
+  scope: TokenScope;
+  created_at: string;
+  created_by: string | null;
+}
 
 export interface Organization {
   id: string;
@@ -78,38 +96,42 @@ export interface ProviderBinding {
   created_at: string;
 }
 
-export interface AccessToken {
-  id: string;
-  project_id: string;
-  name: string;
-  api_key_prefix: string;
-  api_key_hash: string;
-  status: AccessTokenStatus;
-  last_used_at: string | null;
-  created_by: string | null;
-  created_at: string;
-  /** ISO timestamp ; null = no TTL (UI-issued long-lived token).
-   *  When non-null and `now > expires_at` the gateway rejects the token
-   *  with AuthError('access token expired'). */
-  expires_at: string | null;
-  /** When true, the gateway consumes the token on the first /mcp call that
-   *  matches a granted capability — status flips to 'revoked', consumed_at
-   *  is set, and every subsequent call rejects (spec §8, single-use). */
-  single_use: boolean;
-  /** ISO timestamp of the consume event ; null until the first matching call
-   *  (or for non-single-use tokens). */
-  consumed_at: string | null;
-}
-
-export type ManagementKeyStatus = 'active' | 'revoked';
-
-export interface OrgManagementKey {
+/**
+ * Token row (table `tokens`).
+ *
+ * Unified replacement for the legacy (org_management_keys, access_tokens)
+ * pair — cf. ADR unified-tokens-delegation-chain-and-escalation-channel.md.
+ * A token is either org-scoped (`scope='org'`, no project) or project-scoped
+ * (`scope='project'`, project_id set). It carries `accepted_risks` /
+ * `denied_risks` directly + a `parent_id` self-FK + a pre-computed
+ * `delegation_chain` snapshot.
+ */
+export interface Token {
   id: string;
   organization_id: string;
+  parent_id: string | null;
+  scope: TokenScope;
+  /** Required when scope='project', null when scope='org'. */
+  project_id: string | null;
   name: string;
   api_key_prefix: string;
   api_key_hash: string;
-  status: ManagementKeyStatus;
+  status: TokenStatus;
+  accepted_risks: RiskId[];
+  denied_risks: RiskId[];
+  /** 0 = root ; cap at 5 enforced by the SQL CHECK constraint. */
+  depth: number;
+  delegation_chain: DelegationChainEntry[];
+  /** Free-form caller-supplied context (task, agent_id,
+   *  escalation_channel, …). */
+  context: Record<string, unknown> | null;
+  /** ISO timestamp ; null = no TTL. When non-null and `now > expires_at`
+   *  the gateway rejects the token with AuthError('token has expired'). */
+  expires_at: string | null;
+  /** When true the gateway consumes the token on the first matching /mcp
+   *  call — status flips to 'revoked', consumed_at is set. */
+  single_use: boolean;
+  consumed_at: string | null;
   last_used_at: string | null;
   created_by: string | null;
   created_at: string;
@@ -133,23 +155,34 @@ export interface AuditLogRow {
   slices_executed: unknown[] | null;
   risks_touched: string[] | null;
   token_accepted_risks_snapshot: string[] | null;
+  /** Snapshot of the token's delegation_chain at call time (migration 0034). */
+  delegation_chain: DelegationChainEntry[] | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Access-token context loaded at hot-path (cached 60s)
+// Token context loaded at hot-path (cached 60s)
 // ─────────────────────────────────────────────────────────────────────────────
 
-export interface AccessTokenContext {
-  access_token: Pick<
-    AccessToken,
+/** Hot-path snapshot for an authenticated `vbn_live_*` Bearer.
+ *
+ *  Only project-scoped tokens (`scope='project'`) reach the MCP gateway —
+ *  org-scoped tokens authenticate the /api/v1/tokens/* mint surface and
+ *  never call `tools/call`. The shape therefore assumes a concrete project. */
+export interface TokenContext {
+  token: Pick<
+    Token,
     | 'id'
     | 'name'
+    | 'parent_id'
+    | 'scope'
     | 'project_id'
     | 'status'
     | 'api_key_prefix'
     | 'expires_at'
     | 'single_use'
     | 'consumed_at'
+    | 'depth'
+    | 'delegation_chain'
   >;
   project: Pick<Project, 'id' | 'slug' | 'organization_id'>;
   organization: Pick<Organization, 'id' | 'slug' | 'name'>;
@@ -202,3 +235,28 @@ export interface JsonRpcError {
 }
 
 export type JsonRpcResponse = JsonRpcSuccess | JsonRpcError;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// LEGACY TYPE ALIASES — kept for in-flight migration to the unified `tokens`
+// table. New code should reference `Token`, `TokenContext`, etc. These will
+// be removed after the in-tree callers are migrated (cf. unified-tokens ADR).
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** @deprecated alias for `TokenStatus`. */
+export type AccessTokenStatus = TokenStatus;
+/** @deprecated alias for `TokenStatus`. */
+export type ManagementKeyStatus = TokenStatus;
+
+/** @deprecated alias for `Token` — project-scoped subset. */
+export type AccessToken = Token;
+
+/** @deprecated alias for `Token` — org-scoped subset. */
+export type OrgManagementKey = Token;
+
+/** @deprecated alias for `TokenContext`. The legacy shape exposed
+ *  `access_token`; the new shape uses `token`. We keep a structural
+ *  alias by mapping `access_token → token`. Code that still reads
+ *  `ctx.access_token` should be migrated to `ctx.token`. */
+export interface AccessTokenContext extends Omit<TokenContext, 'token'> {
+  access_token: TokenContext['token'];
+}

@@ -1,8 +1,8 @@
 /**
- * Projects + bindings discovery for ManagementKey-authenticated callers.
+ * Projects + bindings discovery for Bearer-authenticated callers.
  *
  *   GET /api/v1/mgmt/projects
- *     Authorization: Bearer vbn_mgmt_…
+ *     Authorization: Bearer vbn_live_…
  *
  *   returns 200 {
  *     projects: [
@@ -13,18 +13,18 @@
  *     ]
  *   }
  *
- * Lists every project of the org bound to the management key, along with
- * its provider bindings. The caller uses `slug` as `projectSlug` on the
- * subsequent POST /api/v1/mgmt/tokens.
+ * Lists every project of the org bound to the calling token. Used by the
+ * SDK / runner to discover where to mint child tokens.
  *
  * Spec : docs/spec/vaubaan-gateway.md §8.8.
- * ADR  : docs/decisions/programmatic-access-token-minting.md.
+ * ADR  : docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
+ *        (drops `vbn_mgmt_*` ; any vbn_live_* token can list its org's projects).
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
 import type { Provider } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { requireManagementKey } from '@/lib/auth/require-management-key';
+import { requireToken } from '@/lib/auth/require-token';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -44,7 +44,7 @@ interface BindingRow {
 }
 
 export async function GET(req: NextRequest) {
-  const guard = await requireManagementKey(req.headers.get('authorization'));
+  const guard = await requireToken(req.headers.get('authorization'));
   if (!guard.ok) return guard.response;
 
   const svc = getSupabaseServiceClient();

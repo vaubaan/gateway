@@ -39,16 +39,18 @@ function getGitHubAppCredentials() {
   return { appId, appSlug: slug, privateKeyPem: pem };
 }
 
-interface AccessTokenAuthRow {
+interface TokenAuthRow {
   id: string;
   api_key_hash: string;
   status: string;
 }
 
-interface AccessTokenRow {
+interface TokenRow {
   id: string;
   name: string;
-  project_id: string;
+  parent_id: string | null;
+  scope: 'org' | 'project';
+  project_id: string | null;
   status: 'active' | 'revoked';
   api_key_prefix: string;
   expires_at: string | null;
@@ -56,6 +58,8 @@ interface AccessTokenRow {
   consumed_at: string | null;
   accepted_risks: unknown;
   denied_risks: unknown;
+  depth: number;
+  delegation_chain: unknown;
 }
 
 interface ProjectRow {
@@ -79,21 +83,21 @@ export function buildGateway(opts: {
   const contextLoader: ContextLoader = {
     async loadAccessTokenForAuth(prefix) {
       const { data } = await supabase
-        .from('access_tokens')
+        .from('tokens')
         .select('id, api_key_hash, status')
         .eq('api_key_prefix', prefix)
-        .maybeSingle<AccessTokenAuthRow>();
+        .maybeSingle<TokenAuthRow>();
       return data;
     },
     async loadAccessTokenContext(accessTokenId) {
       const { data: tk } = await supabase
-        .from('access_tokens')
+        .from('tokens')
         .select(
-          'id, name, project_id, status, api_key_prefix, expires_at, single_use, consumed_at, accepted_risks, denied_risks',
+          'id, name, parent_id, scope, project_id, status, api_key_prefix, expires_at, single_use, consumed_at, accepted_risks, denied_risks, depth, delegation_chain',
         )
         .eq('id', accessTokenId)
-        .maybeSingle<AccessTokenRow>();
-      if (!tk) return null;
+        .maybeSingle<TokenRow>();
+      if (!tk || !tk.project_id) return null;
       const { data: project } = await supabase
         .from('projects')
         .select('id, slug, organization_id')
@@ -126,8 +130,24 @@ export function buildGateway(opts: {
       // half-typed AccessTokenContext rows. See report W9.
       const bindings = (bindingsResp.data ?? []) as unknown;
       const providerAdmins = (providerAdminsResp.data ?? []) as unknown;
+      const delegationChain = Array.isArray(tk.delegation_chain)
+        ? (tk.delegation_chain as AccessTokenContext['access_token']['delegation_chain'])
+        : [];
       const ctx: AccessTokenContext = {
-        access_token: tk,
+        access_token: {
+          id: tk.id,
+          name: tk.name,
+          parent_id: tk.parent_id,
+          scope: tk.scope,
+          project_id: tk.project_id,
+          status: tk.status,
+          api_key_prefix: tk.api_key_prefix,
+          expires_at: tk.expires_at,
+          single_use: tk.single_use,
+          consumed_at: tk.consumed_at,
+          depth: tk.depth,
+          delegation_chain: delegationChain,
+        },
         project,
         organization: org,
         accepted_risks,
@@ -139,14 +159,14 @@ export function buildGateway(opts: {
     },
     async touchLastUsed(accessTokenId) {
       await supabase
-        .from('access_tokens')
+        .from('tokens')
         .update({ last_used_at: new Date().toISOString() })
         .eq('id', accessTokenId);
     },
     async consumeAccessToken(accessTokenId) {
       // Atomic single-use burn : the WHERE clause guarantees we win the race.
       const { data, error } = await supabase
-        .from('access_tokens')
+        .from('tokens')
         .update({ status: 'revoked', consumed_at: new Date().toISOString() })
         .eq('id', accessTokenId)
         .eq('single_use', true)

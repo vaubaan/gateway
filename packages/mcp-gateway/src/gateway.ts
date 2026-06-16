@@ -131,13 +131,10 @@ export class McpGateway {
     const raw = authHeader.slice('bearer '.length).trim();
     const parsed = parseApiKey(raw);
     if (!parsed) throw new AuthError('api_key format invalid.');
-    // `vbn_mgmt_*` is an admin credential — it authenticates against
-    // /api/v1/mgmt/*, not the MCP gateway. Reject upfront.
-    if (parsed.kind === 'mgmt') {
-      throw new AuthError(
-        'management keys (vbn_mgmt_…) cannot consume the MCP gateway. Use an AccessToken (vbn_live_…).',
-      );
-    }
+    // All tokens are `vbn_live_*` since the unified-tokens migration ; scope
+    // distinction lives on the DB row (org vs project). The gateway hot-path
+    // only accepts project-scoped tokens (loadAccessTokenContext returns null
+    // for org-scoped rows — they only authenticate /api/v1/tokens/*).
 
     const cacheKey = `vaubaan:ctx:${parsed.prefix}`;
     const cached = await this.cfg.cache.get<AccessTokenContext>(cacheKey);

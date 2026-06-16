@@ -1,19 +1,20 @@
 /**
  * API key generation / hashing.
  *
- * Three flavours share the same shape `vbn_<kind>_<8-char prefix>_<32-char base62 secret>`:
- *   - `live` : AccessToken (project-scoped, consumed at the MCP gateway).
- *   - `test` : Test AccessToken (same role, separate prefix for safety in fixtures).
- *   - `mgmt` : Org Management Key (org-scoped, used to mint AccessTokens
- *              programmatically via POST /api/v1/mgmt/tokens — never accepted
- *              at the MCP gateway).
+ * Two flavours share the same shape `vbn_<kind>_<8-char prefix>_<32-char base62 secret>`:
+ *   - `live` : Token (issued via /api/v1/tokens/mint, consumed at the MCP
+ *              gateway when scope='project').
+ *   - `test` : Test token (same role, separate prefix for safety in
+ *              fixtures).
  *
  * Hash : argon2id with OWASP-2023 recommended params (19 MiB, 2 iters).
  *
  * Spec : docs/spec/vaubaan-gateway.md §3.1, §6.2.
  * ADRs :
  *   - docs/decisions/api-key-format-vbn-live-argon2id.md
- *   - docs/decisions/programmatic-access-token-minting.md
+ *   - docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
+ *     (drops `vbn_mgmt_*` — every token is `vbn_live_*`, scope lives on the
+ *     DB row).
  */
 
 import { randomBytes } from 'node:crypto';
@@ -21,7 +22,6 @@ import argon2 from 'argon2';
 
 const PREFIX_LIVE = 'vbn_live_';
 const PREFIX_TEST = 'vbn_test_';
-const PREFIX_MGMT = 'vbn_mgmt_';
 const PREFIX_LEN = 8;
 const SECRET_LEN = 32;
 const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -43,12 +43,11 @@ function randomBase62(len: number): string {
   return out;
 }
 
-export type ApiKeyKind = 'live' | 'test' | 'mgmt';
+export type ApiKeyKind = 'live' | 'test';
 
 const ENV_PREFIX: Record<ApiKeyKind, string> = {
   live: PREFIX_LIVE,
   test: PREFIX_TEST,
-  mgmt: PREFIX_MGMT,
 };
 
 export interface GeneratedApiKey {
@@ -79,9 +78,6 @@ export function parseApiKey(raw: string): ParsedApiKey | null {
   } else if (raw.startsWith(PREFIX_TEST)) {
     kind = 'test';
     body = raw.slice(PREFIX_TEST.length);
-  } else if (raw.startsWith(PREFIX_MGMT)) {
-    kind = 'mgmt';
-    body = raw.slice(PREFIX_MGMT.length);
   } else {
     return null;
   }

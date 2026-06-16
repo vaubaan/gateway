@@ -23,7 +23,7 @@ import { vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { railwayAvailableTools } from '@vaubaan/providers-railway';
 import { sshAvailableTools } from '@vaubaan/providers-ssh';
-import { requireManagementKey } from '@/lib/auth/require-management-key';
+import { requireToken } from '@/lib/auth/require-token';
 import { buildGateway } from '@/lib/gateway/build';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
@@ -52,6 +52,8 @@ interface BindingDescriptor {
 
 interface CatalogResponse {
   auth: {
+    /** 'live' = project-scoped (project context echoed back) ; 'mgmt' =
+     *  org-scoped root token (legacy label kept for SDK compat). */
     kind: 'live' | 'mgmt';
     organization: { id: string; slug: string; name?: string };
     project?: { id: string; slug: string };
@@ -74,11 +76,11 @@ interface CatalogResponse {
 }
 
 const MINT_HINT = {
-  endpoint: '/api/v1/mgmt/tokens',
+  endpoint: '/api/v1/tokens/mint',
   method: 'POST',
   bodyShape:
-    '{ "projectSlug": "<slug>", "bindings": [{ "provider": "github", "resource_ref": "owner/repo" }], "accepted_risks": ["<risk-id>", ...] }',
-  note: 'Requires a Bearer vbn_mgmt_* key. The mint may return 202 + approval_id when at least one accepted risk has effective_gate=confirm under the project policy.',
+    '{ "name": "<child-name>", "scope": "project", "projectId": "<id>", "bindings": [{ "provider": "github", "resource_ref": "owner/repo" }], "accepted_risks": ["<risk-id>", ...] }',
+  note: 'Requires a Bearer vbn_live_* token. The mint may return 202 + approval_id when at least one accepted risk has effective_gate=confirm under the project policy.',
 };
 
 function providersPayload(): CatalogResponse['providers'] {
@@ -115,8 +117,7 @@ export async function GET(req: NextRequest) {
   if (!auth || !auth.toLowerCase().startsWith('bearer ')) {
     return NextResponse.json(
       {
-        error:
-          'missing or malformed Authorization header (expected `Bearer vbn_live_…` or `Bearer vbn_mgmt_…`).',
+        error: 'missing or malformed Authorization header (expected `Bearer vbn_live_…`).',
       },
       { status: 401 },
     );
@@ -125,9 +126,13 @@ export async function GET(req: NextRequest) {
   const parsed = parseApiKey(raw);
   if (!parsed) return NextResponse.json({ error: 'api_key format invalid.' }, { status: 401 });
 
-  if (parsed.kind === 'mgmt') {
-    const guard = await requireManagementKey(auth);
-    if (!guard.ok) return guard.response;
+  // Org-scoped tokens (parent_id IS NULL AND scope='org') get the org-wide
+  // catalog ; project-scoped tokens get their project's view with the
+  // accepted_risks echoed back.
+  const guard = await requireToken(auth);
+  if (!guard.ok) return guard.response;
+
+  if (guard.token.scope === 'org') {
     const orgRow = await loadOrgById(guard.orgId);
     if (!orgRow) {
       return NextResponse.json({ error: 'organization not found.' }, { status: 404 });

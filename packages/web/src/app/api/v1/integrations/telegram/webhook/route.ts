@@ -49,6 +49,7 @@ interface ApprovalRow {
   requested_single_use: boolean;
   channel: string;
   channel_ref: string | null;
+  context: Record<string, unknown> | null;
 }
 
 const TELEGRAM_API = 'https://api.telegram.org';
@@ -84,7 +85,7 @@ export async function POST(req: NextRequest) {
   const { data: row } = await svc
     .from('approval_requests')
     .select(
-      'id, project_id, status, requested_risks, denied_risks, requested_token_name, requested_ttl_hours, requested_single_use, channel, channel_ref',
+      'id, project_id, status, requested_risks, denied_risks, requested_token_name, requested_ttl_hours, requested_single_use, channel, channel_ref, context',
     )
     .eq('id', approvalId)
     .maybeSingle<ApprovalRow>();
@@ -103,16 +104,42 @@ export async function POST(req: NextRequest) {
       ? `tg:${cb.from.first_name}`
       : `tg:id=${cb.from?.id ?? 'unknown'}`;
 
+  // Telegram-click flow has no authenticated parent token ; synthesize a
+  // carte-blanche org-scoped root parent (subset check bypassed). Same
+  // pattern as the email-decide path.
+  const { data: project } = await svc
+    .from('projects')
+    .select('organization_id')
+    .eq('id', row.project_id)
+    .maybeSingle<{ organization_id: string }>();
+  const carteBlancheParent = {
+    id: row.id,
+    name: 'telegram-approval',
+    organization_id: project?.organization_id ?? '',
+    scope: 'org' as const,
+    project_id: null,
+    accepted_risks: [],
+    denied_risks: [],
+    depth: 0,
+    delegation_chain: [],
+    expires_at: null,
+    created_at: new Date().toISOString(),
+    created_by: null,
+  };
+
   await decideApproval(svc, {
     approvalId,
     decision,
     decidedBy,
+    parent: carteBlancheParent,
+    scope: 'project',
     projectId: row.project_id,
     acceptedRisks: row.requested_risks ?? [],
     deniedRisks: row.denied_risks ?? [],
     tokenName: row.requested_token_name,
     ttlHours: row.requested_ttl_hours,
     singleUse: row.requested_single_use,
+    context: row.context,
   });
 
   await answerCallback(cb.id, decision === 'approve' ? '✅ approved' : '❌ denied');

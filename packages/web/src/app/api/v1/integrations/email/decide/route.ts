@@ -34,6 +34,7 @@ interface ApprovalRow {
   requested_ttl_hours: number;
   requested_single_use: boolean;
   channel: string;
+  context: Record<string, unknown> | null;
 }
 
 export async function GET(req: NextRequest) {
@@ -61,7 +62,7 @@ export async function GET(req: NextRequest) {
   const { data: row } = await svc
     .from('approval_requests')
     .select(
-      'id, project_id, status, requested_risks, denied_risks, requested_token_name, requested_ttl_hours, requested_single_use, channel',
+      'id, project_id, status, requested_risks, denied_risks, requested_token_name, requested_ttl_hours, requested_single_use, channel, context',
     )
     .eq('id', payload.approvalId)
     .maybeSingle<ApprovalRow>();
@@ -74,16 +75,44 @@ export async function GET(req: NextRequest) {
   const decidedBy = `email:${maskEmailFromHeaders(req)}`;
 
   try {
+    // Email-click flow has no authenticated parent token ; we synthesize a
+    // root org-scoped carte-blanche parent so the mint goes through
+    // (subset bypass — cf. mintChildToken). Audit-wise we still tag
+    // decided_by with the IP fingerprint from the email header.
+    const carteBlancheParent = {
+      id: row.id, // placeholder — won't appear in delegation_chain visibly
+      name: 'email-approval',
+      organization_id: '',
+      scope: 'org' as const,
+      project_id: null,
+      accepted_risks: [],
+      denied_risks: [],
+      depth: 0,
+      delegation_chain: [],
+      expires_at: null,
+      created_at: new Date().toISOString(),
+      created_by: null,
+    };
+    // Resolve the org via the project join (we have project_id on the row).
+    const { data: project } = await svc
+      .from('projects')
+      .select('organization_id')
+      .eq('id', row.project_id)
+      .maybeSingle<{ organization_id: string }>();
+    carteBlancheParent.organization_id = project?.organization_id ?? '';
     await decideApproval(svc, {
       approvalId: payload.approvalId,
       decision: payload.decision,
       decidedBy,
+      parent: carteBlancheParent,
+      scope: 'project',
       projectId: row.project_id,
       acceptedRisks: row.requested_risks ?? [],
       deniedRisks: row.denied_risks ?? [],
       tokenName: row.requested_token_name,
       ttlHours: row.requested_ttl_hours,
       singleUse: row.requested_single_use,
+      context: row.context,
     });
   } catch (e) {
     console.error('[email-decide] decideApproval failed', e);

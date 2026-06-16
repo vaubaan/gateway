@@ -32,6 +32,7 @@ interface ApprovalRow {
   requested_token_name: string;
   requested_ttl_hours: number;
   requested_single_use: boolean;
+  context: Record<string, unknown> | null;
   projects: { organization_id: string };
 }
 
@@ -57,7 +58,7 @@ export async function POST(
   const { data: row } = await svc
     .from('approval_requests')
     .select(
-      'id, project_id, status, requested_risks, requested_token_name, requested_ttl_hours, requested_single_use, projects!inner(organization_id)',
+      'id, project_id, status, requested_risks, requested_token_name, requested_ttl_hours, requested_single_use, context, projects!inner(organization_id)',
     )
     .eq('id', approvalId)
     .eq('project_id', projectId)
@@ -72,16 +73,37 @@ export async function POST(
     );
   }
 
+  // User-session approval flow : synthesize a carte-blanche root parent so
+  // the mint goes through (org member is authorized — subset check bypassed).
+  const carteBlancheParent = {
+    id: row.id,
+    name: 'user-session-approval',
+    organization_id: guard.orgId,
+    scope: 'org' as const,
+    project_id: null,
+    accepted_risks: [],
+    denied_risks: [],
+    depth: 0,
+    delegation_chain: [],
+    expires_at: null,
+    created_at: new Date().toISOString(),
+    created_by: guard.userId,
+  };
+
   const result = await decideApproval(svc, {
     approvalId: row.id,
     decision: body.decision,
     decidedBy: `user:${guard.userId}`,
+    parent: carteBlancheParent,
+    scope: 'project',
     projectId: row.project_id,
     acceptedRisks: row.requested_risks ?? [],
     deniedRisks: [],
     tokenName: row.requested_token_name,
     ttlHours: row.requested_ttl_hours,
     singleUse: row.requested_single_use,
+    context: row.context,
+    createdBy: guard.userId,
   });
 
   return NextResponse.json({ status: result.status }, { status: 200 });

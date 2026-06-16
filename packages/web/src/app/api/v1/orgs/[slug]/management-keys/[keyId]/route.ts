@@ -1,11 +1,10 @@
 /**
- * Org Management Key — revoke / delete.
+ * Org-scoped root token — revoke / delete.
  *
  *   DELETE /api/v1/orgs/:slug/management-keys/:keyId
  *
- * Hard delete (a management key only authenticates /api/v1/mgmt/* calls —
- * we don't keep tombstones for it like we do for AccessTokens, which are
- * referenced by audit_log rows).
+ * Hard-deletes the token row from the unified `tokens` table. Children
+ * tokens (parent_id = keyId) cascade-delete via the FK.
  *
  * Spec : docs/spec/vaubaan-gateway.md §3.1, §8.
  */
@@ -27,15 +26,25 @@ export async function DELETE(
 
   const svc = getSupabaseServiceClient();
   const { data: key } = await svc
-    .from('org_management_keys')
-    .select('id, organization_id')
+    .from('tokens')
+    .select('id, organization_id, scope, parent_id')
     .eq('id', keyId)
-    .maybeSingle<{ id: string; organization_id: string }>();
-  if (!key || key.organization_id !== guard.orgId) {
+    .maybeSingle<{
+      id: string;
+      organization_id: string;
+      scope: string;
+      parent_id: string | null;
+    }>();
+  if (
+    !key ||
+    key.organization_id !== guard.orgId ||
+    key.scope !== 'org' ||
+    key.parent_id !== null
+  ) {
     return NextResponse.json({ error: 'management key not found in this org' }, { status: 404 });
   }
 
-  const { error } = await svc.from('org_management_keys').delete().eq('id', keyId);
+  const { error } = await svc.from('tokens').delete().eq('id', keyId);
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
   return NextResponse.json({ ok: true });
 }

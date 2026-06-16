@@ -1,21 +1,15 @@
 /**
- * Unit tests for the `/api/v1/mgmt/tokens/preview` pure-compute layer.
+ * Unit tests for the pure-compute risk-preview layer.
  *
- * We don't spin up the Next.js route here ; we exercise `computePreview`
- * and `resolveRiskRow` which are exported from the same module. The full
- * happy-path is covered by integration tests against staging.
+ * Now lives at `lib/mint/risk-preview.ts` (extracted from the deleted mgmt
+ * route per the unified-tokens ADR).
  */
 import { describe, expect, test } from 'vitest';
 import type { Provider, RiskCatalog, RiskPolicyOverride } from '@vaubaan/shared';
 import { indexCatalog } from '@vaubaan/policy-engine';
 
-import {
-  computePreview,
-  resolveRiskRow,
-  type PreviewBinding,
-} from '@/app/api/v1/mgmt/tokens/preview/route';
+import { computePreview, resolveRiskRow, type PreviewBinding } from '@/lib/mint/risk-preview';
 
-// ─── A small in-memory catalog used by all tests ────────────────────────────
 const supabaseCatalog: RiskCatalog = {
   provider: 'supabase',
   risks: [
@@ -120,11 +114,9 @@ describe('resolveRiskRow', () => {
   });
 
   test('qualifies env-scoped ids and leaves account-scoped ones alone', () => {
-    // env-scoped (acceptable_in_envs set)
     const bulk = resolveRiskRow('supabase.bulk-row-write', stagingBinding, supabaseIndexed, []);
     expect(bulk.id).toBe('supabase[staging].bulk-row-write');
     expect(bulk.effective_gate).toBe('confirm');
-    // not env-scoped (no acceptable_in_envs)
     const read = resolveRiskRow('supabase.read-data', stagingBinding, supabaseIndexed, []);
     expect(read.id).toBe('supabase.read-data');
   });
@@ -164,11 +156,7 @@ describe('computePreview', () => {
   test('summarises all_allowed / needs_approval / denied lists', () => {
     const result = computePreview({
       bindings: [stagingBinding],
-      accepted_risks: [
-        'supabase.read-data', // allow
-        'supabase.bulk-row-write', // confirm on staging
-        'supabase.policy.W', // deny (posture-shift, deny by default)
-      ],
+      accepted_risks: ['supabase.read-data', 'supabase.bulk-row-write', 'supabase.policy.W'],
       denied_risks: [],
       catalogs,
       overrides: [],
@@ -195,7 +183,7 @@ describe('computePreview', () => {
   test('rejects a risk whose provider is not in the bindings list', () => {
     const result = computePreview({
       bindings: [stagingBinding],
-      accepted_risks: ['github.read-code'], // no github binding
+      accepted_risks: ['github.read-code'],
       denied_risks: [],
       catalogs,
       overrides: [],
