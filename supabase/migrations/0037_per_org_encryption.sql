@@ -5,12 +5,14 @@
 --
 -- Prerequisite (one-time, from Supabase Dashboard SQL Editor):
 --
+--   CREATE EXTENSION IF NOT EXISTS pgsodium;
 --   GRANT pgsodium_keyholder TO postgres;
 --
 -- The `postgres` role (used by both direct and pooler connections) needs
 -- pgsodium_keyholder so that SECURITY DEFINER functions it owns can call
 -- crypto_aead_det_encrypt / crypto_aead_det_decrypt. This GRANT must be
 -- done by supabase_admin (the Dashboard runs as supabase_admin).
+-- pgsodium must be enabled first because it creates the keyholder role.
 --
 -- Objects created :
 --   - extension pgsodium
@@ -25,7 +27,13 @@
 -- =============================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 0. Prerequisite check
+-- 0. Enable pgsodium (must come before the keyholder check — the extension
+--    creates the pgsodium_keyholder role)
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE EXTENSION IF NOT EXISTS pgsodium;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- 1. Prerequisite check
 -- ─────────────────────────────────────────────────────────────────────────────
 DO $$
 BEGIN
@@ -33,16 +41,12 @@ BEGIN
     RAISE EXCEPTION
       'Migration 0037 requires pgsodium_keyholder on %. '
       'Run from the Supabase Dashboard SQL Editor (as supabase_admin): '
+      'CREATE EXTENSION IF NOT EXISTS pgsodium; '
       'GRANT pgsodium_keyholder TO postgres;',
       current_user;
   END IF;
 END;
 $$;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 1. Enable pgsodium
--- ─────────────────────────────────────────────────────────────────────────────
-CREATE EXTENSION IF NOT EXISTS pgsodium;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. Add encryption_key_id to organizations
