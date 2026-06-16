@@ -13,26 +13,11 @@
  */
 
 import { Client } from 'pg';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import {
   encryptProviderSecret,
   decryptProviderSecret,
 } from '../packages/web/src/lib/crypto/provider-secrets.ts';
-
-function readCoreEnv(): { projectRef: string; dbPassword: string } {
-  const raw = readFileSync(resolve(import.meta.dirname, '../.env'), 'utf8');
-  const env: Record<string, string> = {};
-  for (const line of raw.split('\n')) {
-    const m = line.match(/^([A-Z_]+)=(.+?)(?:\s+#.*)?$/);
-    if (m) env[m[1]!] = m[2]!.trim();
-  }
-  const projectRef = env.SUPABASE_CORE_PROJECT_REF;
-  const dbPassword = env.VAUBAAN_CORE_DB_PASSWORD;
-  if (!projectRef) throw new Error('SUPABASE_CORE_PROJECT_REF missing in /.env');
-  if (!dbPassword) throw new Error('VAUBAAN_CORE_DB_PASSWORD missing in /.env');
-  return { projectRef, dbPassword };
-}
+import { readCoreEnv, SUPABASE_POOLER_HOST } from './lib/env.ts';
 
 interface Row {
   id: string;
@@ -48,7 +33,7 @@ async function main() {
 
   const core = readCoreEnv();
   const client = new Client({
-    host: 'aws-1-eu-west-3.pooler.supabase.com',
+    host: SUPABASE_POOLER_HOST,
     port: 5432,
     database: 'postgres',
     user: `postgres.${core.projectRef}`,
@@ -69,10 +54,10 @@ async function main() {
     let skipped = 0;
 
     for (const row of rows) {
-      // Check if already encrypted by trying to decrypt
-      if (row.access_token_encrypted) {
+      const probeColumn = row.access_token_encrypted ?? row.refresh_token_encrypted;
+      if (probeColumn) {
         try {
-          await decryptProviderSecret(row.organization_id, row.access_token_encrypted);
+          await decryptProviderSecret(row.organization_id, probeColumn);
           skipped++;
           console.log(`  skip ${row.id} (already encrypted)`);
           continue;

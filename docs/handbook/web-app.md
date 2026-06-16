@@ -11,6 +11,7 @@ tracks:
   - packages/web/src/lib/auth/
   - packages/web/src/lib/oauth/
   - packages/web/src/lib/providers/
+  - packages/web/src/lib/crypto/
   - packages/web/src/lib/supabase/
   - packages/web/src/lib/gateway/
   - packages/web/next.config.ts
@@ -197,12 +198,13 @@ configuré). Le slug est ré-encodé dans le `state` nonce.
 Les autres providers OAuth (Vercel, Supabase, Railway) suivent le même
 shape : `/api/integrations/<provider>/{connect,callback}/route.ts`.
 Les callbacks qui stockent des tokens (Vercel, Supabase, Railway)
-appellent le RPC `upsert_provider_admin_encrypted` qui chiffre le
-token avec la clé pgsodium de l'org avant INSERT (cf. ADR
-[[per-org-encryption-pgsodium]], migration `0037`). Les refresh flows
-(Supabase, Railway) utilisent `update_provider_admin_tokens`. Les
-lectures de tokens passent par la vue `provider_admins_decrypted` qui
-décrypte transparently.
+chiffrent côté app via `encryptProviderSecret(orgId, token)` puis
+upsertent avec `encodeByteaHexRaw(...)` dans `provider_admins` (cf.
+ADR [[per-org-encryption-app-level]], migration `0037`). Les refresh
+flows (Supabase, Railway) réécrivent via
+`.from('provider_admins').update()` avec le même pattern encrypt. Les
+lectures déchiffrent via `decodeBytea()` → `decryptProviderSecret()`
+(`lib/crypto/provider-secrets.ts`).
 
 ## Token creation (api_key visible 1×, unified-tokens + drop-confirm)
 

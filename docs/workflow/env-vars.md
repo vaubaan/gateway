@@ -74,7 +74,26 @@ mise sur Vercel mais pas en local". Si en doute → `vercel env pull` puis diff.
 | `GITHUB_APP_ID`/`SLUG`/`PRIVATE_KEY` | `packages/web/.env.local` |
 | `VERCEL_APP_CLIENT_ID`/`SECRET`      | `packages/web/.env.local` |
 | `SUPABASE_APP_CLIENT_ID`/`SECRET`    | `packages/web/.env.local` |
+| `ENCRYPTION_MASTER_KEY`              | `packages/web/.env.local` |
 | `UPSTASH_REDIS_*`                    | `packages/web/.env.local` |
+
+## Encryption — `ENCRYPTION_MASTER_KEY`
+
+Requis pour **tous les environnements** (production, preview, local dev).
+Le chiffrement at-rest des tokens providers (XChaCha20-Poly1305 AEAD,
+per-org key derivation) en dépend ; l'app crash si la var est absente
+lors d'un read/write de `provider_admins`.
+
+| Propriété  | Valeur                                                                        |
+| ---------- | ----------------------------------------------------------------------------- |
+| Type       | 32 bytes, base64-encoded                                                      |
+| Génération | `node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"` |
+| Fichier    | `packages/web/.env.local` (local), Vercel env vars (production/preview)       |
+| Consommé   | `packages/web/src/lib/crypto/provider-secrets.ts`                             |
+| ADR        | `docs/decisions/per-org-encryption-app-level.md`                              |
+
+> **Ne jamais rotater** sans re-chiffrer toutes les lignes `provider_admins`
+> existantes. Script de migration : `scripts/migrate-encrypt-tokens.ts`.
 
 ## Tests E2E
 

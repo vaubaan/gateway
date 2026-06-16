@@ -88,7 +88,8 @@ packages/providers/railway/
      `client_id:secret`, form `grant_type=authorization_code`, `code`,
      `redirect_uri`, `code_verifier`, `resource=https://mcp.railway.com`.
    - upserts `provider_admins` (provider=`railway`) avec `access_token` (1h) +
-     `refresh_token` + `expires_at` (bytea, clear-at-rest v0).
+     `refresh_token` + `expires_at` (bytea, chiffré at-rest via
+     app-level libsodium AEAD — cf. ADR [[per-org-encryption-app-level]]).
 5. UI : `/orgs/<slug>/providers` montre Railway connected ✓.
 
 ## Token mint / hot-path (refresh JIT)

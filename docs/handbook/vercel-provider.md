@@ -97,8 +97,11 @@ long-lived directement en DB :
    [https://vercel.com/account/tokens](https://vercel.com/account/tokens),
    **Create**, **Scope** = team cible, **Expiration** = long ou
    `No expiration`. Copier le token (préfixe `vcp_*`).
-2. INSERT manuel dans `provider_admins` : `provider='vercel'`,
-   `team_id='team_<...>'`, `access_token_encrypted=<bytea du token>`.
+2. INSERT dans `provider_admins` : `provider='vercel'`,
+   `team_id='team_<...>'`, `access_token_encrypted` = résultat de
+   `encryptProviderSecret(orgId, token)` encodé via `encodeByteaHexRaw()`.
+   Un INSERT en clair produira du garbage au read (le decrypt AEAD échouera).
+   Préférer le script `scripts/seed-test-customer.ts` qui gère ça.
 
 ### Côté Vaubaan (env vars)
 
@@ -116,7 +119,7 @@ Mode paste-token v0 : aucune env var requise (l'INSERT manuel suffit).
 `VercelAdapter.mintUpstreamToken` (`vercel-adapter.ts:54-60`) :
 
 ```ts
-// 1. lit admin.access_token_encrypted (bytea, Vault-encrypted v0)
+// 1. lit admin.access_token_encrypted (bytea, app-level libsodium AEAD)
 // 2. retourne { token, expiresAt: now + 365j } — placeholder, le token Vercel
 //    n'expire pas par défaut côté Integration (révoqué par uninstall ou
 //    rotation manuelle du secret).

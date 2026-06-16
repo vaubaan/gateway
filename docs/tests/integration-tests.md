@@ -13,6 +13,7 @@ tracks:
   - packages/mcp-gateway/tests/
   - packages/web/tests/
   - packages/web/src/lib/bash/
+  - packages/web/src/lib/crypto/
   - packages/shared/src/
 ---
 
@@ -79,8 +80,9 @@ en absence des creds env vars.
 | `packages/web/src/lib/bash/exec.test.ts`                           |                   4 |
 | `packages/web/src/lib/bash/args.test.ts`                           |                   9 |
 | `packages/web/src/lib/bash/exec-host.test.ts`                      |                   7 |
+| `packages/web/src/lib/crypto/provider-secrets.test.ts`             |                   9 |
 | `packages/shared/src/api-key.test.ts`                              |                   6 |
-| **TOTAL**                                                          | **655 (3 skipped)** |
+| **TOTAL**                                                          | **664 (3 skipped)** |
 
 ## Run
 
@@ -261,6 +263,19 @@ code) :
 
 - **`api-key.test.ts`** (6) — `generateApiKey` / `parseApiKey` /
   `hashApiKey` / `verifyApiKey` ; preserve le prefix.
+
+## Scénarios — Crypto (app-level encryption)
+
+> Couvre : `packages/web/src/lib/crypto/provider-secrets.ts`,
+> ADR [[per-org-encryption-app-level]].
+
+- **`packages/web/src/lib/crypto/provider-secrets.test.ts`** (9) —
+  round-trip encrypt/decrypt, nonce uniqueness (deux chiffrements du
+  même plaintext produisent des ciphertexts différents), cross-org AEAD
+  rejection (orgA chiffre, orgB ne peut pas déchiffrer), tamper
+  detection (flip un byte → échec), too-short ciphertext, missing
+  `ENCRYPTION_MASTER_KEY` → erreur explicite, wrong key length (16
+  bytes au lieu de 32), empty plaintext, unicode plaintext.
 
 ## Hors-scope ces tests
 

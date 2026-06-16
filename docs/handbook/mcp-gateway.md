@@ -7,6 +7,7 @@ tracks:
   - packages/web/src/app/mcp/route.ts
   - packages/web/src/app/.well-known/oauth-protected-resource/route.ts
   - packages/web/src/lib/gateway/build.ts
+  - packages/web/src/lib/crypto/
   - supabase/migrations/0034_audit_log_delegation_chain.sql
   - supabase/migrations/0037_per_org_encryption.sql
 ---
@@ -271,12 +272,16 @@ row passent par le même chemin que les non-self-contained
 ## Sécurité
 
 - **Encryption at rest** : provider tokens sont chiffrés par org via
-  pgsodium AEAD (migration `0037_per_org_encryption`, ADR
-  [[per-org-encryption-pgsodium]]). `loadProviderAdmin()` lit la view
-  `provider_admins_decrypted` (décryptage transparent). Les écritures
-  passent par les RPC SQL `upsert_provider_admin_encrypted` (callbacks
-  OAuth) et `update_provider_admin_tokens` (Railway refresh). L'app ne
-  touche jamais le matériel de clé.
+  libsodium-wrappers XChaCha20-Poly1305 AEAD côté app (ADR
+  [[per-org-encryption-app-level]], migration `0037` nettoie les
+  anciens artefacts pgsodium). Chaque org a une clé dérivée de
+  `ENCRYPTION_MASTER_KEY` via `crypto_kdf_derive_from_key`, avec l'UUID
+  org en AAD (anti-replay cross-org). `loadProviderAdmin()` lit la table
+  `provider_admins`, décode le bytea via `decodeBytea()`, puis déchiffre
+  via `decryptProviderSecret(orgId, bytes)`. Les callbacks OAuth
+  chiffrent en Node (`encryptProviderSecret` → `encodeByteaHexRaw` →
+  `.upsert()`). Railway `persistRefresh` réécrit les tokens rafraîchis
+  via `.update()` avec le même pattern encrypt.
 - L'`api_key_hash` n'est lu QUE par le gateway via service_role client. La RLS
   côté app web ne l'expose à personne.
 - Cache Redis ne contient PAS de token upstream en clair. Seul l'AccessTokenContext

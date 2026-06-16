@@ -104,7 +104,16 @@ export async function GET(req: NextRequest) {
     ? new Date(Date.now() + tokenJson.expires_in * 1000).toISOString()
     : null;
 
-  const upsertPayload: Record<string, unknown> = {
+  const upsertPayload: {
+    organization_id: string;
+    provider: 'railway';
+    status: 'connected';
+    access_token_encrypted: string;
+    connected_by_user_id: string;
+    connected_at: string;
+    refresh_token_encrypted?: string;
+    expires_at?: string;
+  } = {
     organization_id: orgId,
     provider: 'railway',
     status: 'connected',

@@ -16,54 +16,27 @@
  */
 
 import { Client } from 'pg';
-import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 import { generateApiKey, hashApiKey } from '../packages/shared/src/api-key.ts';
 import { encryptProviderSecret } from '../packages/web/src/lib/crypto/provider-secrets.ts';
+import { readCoreEnv, readEnvFile, requireKeys, SUPABASE_POOLER_HOST } from './lib/env.ts';
 
-interface EnvTest {
-  GITHUB_ORG: string;
-  GITHUB_ORG_ADMIN_TOKEN: string;
-  VERCEL_TEAM_ID: string;
-  VERCEL_TEAM_TOKEN: string;
-  SUPABASE_TOKEN: string;
-  SUPABASE_PROJECT_REF: string;
-}
-
-function readEnvTest(): EnvTest {
-  const raw = readFileSync(resolve(import.meta.dirname, '../.env.test'), 'utf8');
-  const env: Record<string, string> = {};
-  for (const line of raw.split('\n')) {
-    const m = line.match(/^([A-Z_]+)=(.+)$/);
-    if (m) env[m[1]!] = m[2]!.trim();
-  }
-  return env as unknown as EnvTest;
-}
+const ENV_TEST_KEYS = [
+  'GITHUB_ORG',
+  'GITHUB_ORG_ADMIN_TOKEN',
+  'VERCEL_TEAM_ID',
+  'VERCEL_TEAM_TOKEN',
+  'SUPABASE_TOKEN',
+  'SUPABASE_PROJECT_REF',
+] as const;
 
 const CUSTOMER_USER_EMAIL = 'test@vaubaan.com';
 const PROJECT_REF_VERCEL = 'prj_BFmSakD8ITliRqDgaIFChxZJFNZD';
 
-function readCoreEnv(): { projectRef: string; dbPassword: string } {
-  const raw = readFileSync(resolve(import.meta.dirname, '../.env'), 'utf8');
-  const env: Record<string, string> = {};
-  for (const line of raw.split('\n')) {
-    const m = line.match(/^([A-Z_]+)=(.+?)(?:\s+#.*)?$/);
-    if (m) env[m[1]!] = m[2]!.trim();
-  }
-  const projectRef = env.SUPABASE_CORE_PROJECT_REF;
-  const dbPassword = env.VAUBAAN_CORE_DB_PASSWORD;
-  if (!projectRef) throw new Error('SUPABASE_CORE_PROJECT_REF missing in /.env');
-  if (!dbPassword) throw new Error('VAUBAAN_CORE_DB_PASSWORD missing in /.env');
-  return { projectRef, dbPassword };
-}
-
 async function main() {
-  const env = readEnvTest();
+  const env = requireKeys(readEnvFile('.env.test'), ENV_TEST_KEYS, '.env.test');
   const core = readCoreEnv();
-  // Supabase pooler uses self-signed certs ; we trust on first connect since the
-  // host is hard-coded below.
   const client = new Client({
-    host: 'aws-1-eu-west-3.pooler.supabase.com',
+    host: SUPABASE_POOLER_HOST,
     port: 5432,
     database: 'postgres',
     user: `postgres.${core.projectRef}`,
