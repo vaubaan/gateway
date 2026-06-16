@@ -1,17 +1,11 @@
 /**
- * Unit tests for `computeMintPreview` — the DB-bound wrapper around the
- * pure `computePreview` from the mgmt route. We mock the supabase client
- * to return a fixed set of policy overrides and inject a minimal catalog
- * via the loader's test seam.
- *
- * The cardinal cases we want to lock in (cf. coding spec) :
- *   1. all-allow risks → preview.all_allowed = true, no approval needed
- *   2. mix of allow + confirm → all_allowed = false, needs_approval populated
- *   3. at least one deny → all_allowed = false, denied populated
+ * Unit tests for `computeMintPreview` — the catalog-bound wrapper around
+ * the pure `computePreview`. Post drop-confirm : no DB read, no policy
+ * overrides — only the catalog acceptable_in_envs guard and the parent
+ * accepted_risks subset check.
  */
 import { afterEach, describe, expect, test } from 'vitest';
-import type { SupabaseClient } from '@supabase/supabase-js';
-import type { RiskCatalog, RiskPolicyOverride } from '@vaubaan/shared';
+import type { RiskCatalog } from '@vaubaan/shared';
 import { indexCatalog } from '@vaubaan/policy-engine';
 
 import { __resetForTests, __setCatalogForTests } from '@/lib/risk-catalog/loader';
@@ -33,7 +27,6 @@ const supabaseCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'supabase.bulk-row-write',
@@ -48,7 +41,6 @@ const supabaseCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
       acceptable_in_envs: ['staging', 'preview'],
     },
     {
@@ -64,94 +56,70 @@ const supabaseCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
   ],
 };
-
-/** Make a stub Supabase client that returns the given policy overrides for
- *  `from('project_risk_policies').select(...).eq('project_id', X)`. We only
- *  implement the chain `computeMintPreview` actually uses. */
-function makeMockSvc(rules: RiskPolicyOverride[]): SupabaseClient {
-  return {
-    from(table: string) {
-      if (table !== 'project_risk_policies') {
-        throw new Error(`unexpected table ${table}`);
-      }
-      return {
-        select() {
-          return {
-            eq() {
-              return Promise.resolve({ data: rules, error: null });
-            },
-          };
-        },
-      };
-    },
-  } as unknown as SupabaseClient;
-}
 
 afterEach(() => {
   __resetForTests();
 });
 
 describe('computeMintPreview', () => {
-  test('all-allow scenario — ready to mint, no approval, no deny', async () => {
+  test('inherited + acceptable → ok = true', () => {
     __setCatalogForTests('supabase', indexCatalog(supabaseCatalog));
-    const svc = makeMockSvc([]);
-    const out = await computeMintPreview(svc, 'proj_1', {
-      bindings: [{ provider: 'supabase', resource_ref: 'prj_staging', env: 'staging' }],
-      accepted_risks: ['supabase.read-data'],
-    });
-    expect(out.all_allowed).toBe(true);
-    expect(out.needs_approval).toEqual([]);
-    expect(out.denied).toEqual([]);
-    expect(out.risks).toHaveLength(1);
-    expect(out.risks[0]!.effective_gate).toBe('allow');
-  });
-
-  test('mix of allow + confirm — not all_allowed, needs_approval set', async () => {
-    __setCatalogForTests('supabase', indexCatalog(supabaseCatalog));
-    const svc = makeMockSvc([]);
-    const out = await computeMintPreview(svc, 'proj_1', {
-      bindings: [{ provider: 'supabase', resource_ref: 'prj_staging', env: 'staging' }],
-      accepted_risks: ['supabase.read-data', 'supabase.bulk-row-write'],
-    });
-    expect(out.all_allowed).toBe(false);
-    // bulk-row-write is env-scoped → qualified id surfaces with [staging]
-    expect(out.needs_approval).toEqual(['supabase[staging].bulk-row-write']);
-    expect(out.denied).toEqual([]);
-  });
-
-  test('contains deny — blocked, denied list populated', async () => {
-    __setCatalogForTests('supabase', indexCatalog(supabaseCatalog));
-    const svc = makeMockSvc([]);
-    const out = await computeMintPreview(svc, 'proj_1', {
-      bindings: [{ provider: 'supabase', resource_ref: 'prj_staging', env: 'staging' }],
-      accepted_risks: ['supabase.read-data', 'supabase.policy.W'],
-    });
-    expect(out.all_allowed).toBe(false);
-    expect(out.denied).toEqual(['supabase.policy.W']);
-  });
-
-  test('honors project policy override (allow → deny)', async () => {
-    __setCatalogForTests('supabase', indexCatalog(supabaseCatalog));
-    const rules: RiskPolicyOverride[] = [
+    const out = computeMintPreview(
       {
-        id: 'r1',
-        project_id: 'proj_1',
-        risk_id: 'supabase.read-data',
-        env_scope: null,
-        gate: 'deny',
-        created_at: '2026-01-01',
+        bindings: [{ provider: 'supabase', resource_ref: 'prj_staging', env: 'staging' }],
+        accepted_risks: ['supabase.read-data'],
       },
-    ];
-    const svc = makeMockSvc(rules);
-    const out = await computeMintPreview(svc, 'proj_1', {
-      bindings: [{ provider: 'supabase', resource_ref: 'prj_staging', env: 'staging' }],
-      accepted_risks: ['supabase.read-data'],
-    });
-    expect(out.all_allowed).toBe(false);
-    expect(out.denied).toEqual(['supabase.read-data']);
+      ['supabase.read-data'],
+    );
+    expect(out.ok).toBe(true);
+    expect(out.not_acceptable).toEqual([]);
+    expect(out.not_inherited).toEqual([]);
+    expect(out.risks).toHaveLength(1);
+    expect(out.risks[0]!.acceptable).toBe(true);
+    expect(out.risks[0]!.inherited).toBe(true);
+  });
+
+  test('parent missing the risk → not_inherited', () => {
+    __setCatalogForTests('supabase', indexCatalog(supabaseCatalog));
+    const out = computeMintPreview(
+      {
+        bindings: [{ provider: 'supabase', resource_ref: 'prj_staging', env: 'staging' }],
+        accepted_risks: ['supabase.bulk-row-write'],
+      },
+      [], // parent has no risks
+    );
+    expect(out.ok).toBe(false);
+    // qualified id surfaces with [staging] (acceptable_in_envs declares env-scoping)
+    expect(out.not_inherited).toEqual(['supabase[staging].bulk-row-write']);
+    expect(out.not_acceptable).toEqual([]);
+  });
+
+  test('binding env not in acceptable_in_envs → not_acceptable', () => {
+    __setCatalogForTests('supabase', indexCatalog(supabaseCatalog));
+    const out = computeMintPreview(
+      {
+        bindings: [{ provider: 'supabase', resource_ref: 'prj_prod', env: 'prod' }],
+        accepted_risks: ['supabase.bulk-row-write'],
+      },
+      ['supabase[prod].bulk-row-write'], // even if parent had it
+    );
+    expect(out.ok).toBe(false);
+    expect(out.not_acceptable.length).toBeGreaterThan(0);
+  });
+
+  test('null parent → inherited optimistically true', () => {
+    __setCatalogForTests('supabase', indexCatalog(supabaseCatalog));
+    const out = computeMintPreview(
+      {
+        bindings: [{ provider: 'supabase', resource_ref: 'prj_staging', env: 'staging' }],
+        accepted_risks: ['supabase.read-data'],
+      },
+      null,
+    );
+    expect(out.ok).toBe(true);
+    expect(out.risks[0]!.inherited).toBe(true);
   });
 });

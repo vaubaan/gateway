@@ -98,18 +98,16 @@ export default function DocsPage() {
         <li>
           <strong>Mint UI shows a risk checklist</strong> — one row per applicable{' '}
           <code>RiskId</code>, qualified by binding (e.g.{' '}
-          <code>supabase[staging].bulk-row-write</code> vs{' '}
-          <code>supabase[prod].bulk-row-write</code>
-          ). Each row carries its <code>effective_gate</code> (<code>allow</code> /{' '}
-          <code>confirm</code> / <code>deny</code>) derived from the catalog default + the project
-          policy override.
+          <code>supabase[staging].bulk-row-write</code>). Each row carries <code>acceptable</code>{' '}
+          (the catalog allows it in this binding env) and <code>inherited</code> (your token already
+          carries it). A row is mintable iff both are true ; otherwise the checkbox is disabled with
+          a tooltip explaining why.
         </li>
         <li>
-          <strong>You tick the risks you accept</strong>. If every ticked risk resolves to{' '}
-          <code>allow</code>, the mint is immediate and the <code>api_key</code> is shown once. If
-          at least one ticks to <code>confirm</code>, an approval is opened on the configured
-          channel (Telegram / email / manual) and the call returns 202 with a <code>poll_url</code>;
-          you long-poll until the channel responds.
+          <strong>You tick the risks you accept and submit.</strong> If every ticked row is
+          acceptable + inherited, the mint succeeds and the <code>api_key</code> is shown once. If
+          not, the call returns 403 with <code>not_acceptable</code> / <code>not_inherited</code>{' '}
+          lists — untick those rows or request escalation through your token&apos;s parent.
         </li>
       </ol>
       <p>
@@ -155,7 +153,7 @@ export default function DocsPage() {
         it&apos;s pointing at, the scope, and the concrete resources Vaubaan can see. Click into a
         provider (<code>/orgs/[slug]/providers/[provider]</code>) to browse its data-model and the
         full risk catalog (every <code>RiskId</code>, its <code>matches</code> pattern, its 6D
-        vector, and its <code>default_gate</code>).
+        vector, and any <code>acceptable_in_envs</code> restriction).
       </p>
 
       <h2 id="create-project">4. Create a project</h2>
@@ -253,15 +251,12 @@ export default function DocsPage() {
         </li>
         <li>
           <code>vector</code> — the 6D risk vector (reversibility, blast, data, cost, visibility,
-          persistence). Used to explain the risk and to seed the <code>default_gate</code>.
-        </li>
-        <li>
-          <code>default_gate</code> — <code>allow</code> / <code>confirm</code> / <code>deny</code>.
+          persistence). Used to explain the risk and to sort the picker by severity.
         </li>
         <li>
           <code>acceptable_in_envs?</code> — optional whitelist (e.g.{' '}
-          <code>[&apos;preview&apos;, &apos;staging&apos;]</code>) that prevents accepting the risk
-          on prod even when policy allows it.
+          <code>[&apos;preview&apos;, &apos;staging&apos;]</code>) that structurally prevents
+          accepting the risk in a binding env outside the list (the only mint-time guardrail).
         </li>
       </ul>
       <p>
@@ -278,40 +273,30 @@ export default function DocsPage() {
         risk-based — &ldquo;here are the consequences I accept on behalf of this agent&rdquo; —
         rather than capability-based.
       </p>
-      <p>The three gates that can apply to a risk at mint time:</p>
-      <ul>
-        <li>
-          <strong>allow</strong> — ticking the risk mints it immediately, no human in the loop.
-        </li>
-        <li>
-          <strong>confirm</strong> — ticking opens an approval on the project&apos;s channel
-          (Telegram / email / manual); the API returns 202 with a <code>poll_url</code>.
-        </li>
-        <li>
-          <strong>deny</strong> — the risk is structurally unacceptable for this project; the mint
-          fails with 403 listing the denied risks.
-        </li>
-      </ul>
       <p>
-        The default <code>gate</code> comes from the catalog. A project can override per-risk (or
-        per-risk × env) via the <code>project_risk_policies</code> table:
+        The model is <strong>binary</strong>: a risk is either in <code>accepted_risks</code> (the
+        agent may touch it) or it isn&apos;t (touching it returns 403). There is no intermediate
+        &ldquo;approval pending&rdquo; state at mint — the operator decides which risks to grant at
+        mint time, and any later widening goes through the token&apos;s{' '}
+        <code>context.escalation_channel</code> (runtime, agent-driven).
       </p>
-      <ul>
-        <li>
-          <em>Tightening</em> (catalog says <code>allow</code>, project says <code>confirm</code> or{' '}
-          <code>deny</code>) is unrestricted — operators can be paranoid.
-        </li>
-        <li>
-          <em>Loosening</em> (catalog says <code>deny</code>, project wants <code>allow</code>) is
-          gated for posture-shift risks (<code>persistence: posture</code>) and credential/PII
-          writes — only admin overrides allowed.
-        </li>
-      </ul>
+      <p>
+        The only structural mint-time guardrail is <code>acceptable_in_envs</code> on the catalog
+        entry: if it&apos;s declared, the operator cannot accept the risk for a binding whose env
+        isn&apos;t in the list (no override).
+      </p>
       <p>
         At runtime, the gateway: (1) classifies the call into slices, (2) intersects each slice with
         the provider catalog to get <code>risks_touched</code>, (3) checks{' '}
         <code>risks_touched ⊆ token.accepted_risks</code>. No DB round-trip on the hot path beyond
         the token resolution (which is cached).
+      </p>
+      <p>
+        When the runtime denies a call, the child token can POST to its{' '}
+        <code>context.escalation_channel</code> (an HTTP endpoint configured by the parent at mint)
+        to ask for a re-mint with a wider scope. Vaubaan does not proxy this exchange — the parent
+        decides, mints a new token, hands it back. See the agent-bootstrap doc for the client-side
+        flow.
       </p>
 
       <h2 id="tool-calls">9. Tool calls</h2>
@@ -378,7 +363,7 @@ export default function DocsPage() {
           <code>delegation_chain</code> — a frozen snapshot of the token&apos;s ancestry chain,
         </li>
         <li>
-          <code>decision</code>, <code>approval_id?</code>, <code>binding_used</code>.
+          <code>decision</code>, <code>binding_used</code>.
         </li>
       </ul>
       <p>

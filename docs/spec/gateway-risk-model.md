@@ -8,6 +8,15 @@
 > **risk-based**, pas capability-based : le token ne porte pas une liste
 > d'autorisations, il porte une liste de **risques acceptés**.
 >
+> **Évolutions actées en aval** (à intégrer ici à la prochaine passe) :
+> - [ADR unified-tokens-delegation-chain-and-escalation-channel](../decisions/unified-tokens-delegation-chain-and-escalation-channel.md)
+>   — table `tokens` unifiée + `delegation_chain` + `escalation_channel`.
+> - [ADR unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md)
+>   — drop des 3 gates `allow/confirm/deny`, des `project_risk_policies`,
+>   du flow approval mint-time (Telegram/Email). Le binaire est
+>   `risk ∈ accepted_risks` (allow) sinon deny ; l'élévation passe par
+>   l'`escalation_channel` runtime.
+>
 > Recherche source : [`/.vaubaan/research/permission-threat-model-state-of-the-art.md`](../../.vaubaan/research/permission-threat-model-state-of-the-art.md).
 
 ## 0. Le shift conceptuel — "risque acceptable" plutôt que "droits demandés"
@@ -29,13 +38,15 @@ pas de comptes."*
 
 - **Plugin / policy étanches** (v1 §6 reste vrai).
 - **Default-deny** + anti-patterns SQL (v1 §5.1).
-- **3 gates `allow | confirm | deny`** (v1 §5).
 - **Single-use tokens + TTL court** (v1 §8).
 - **Env comme calque par-data** (v1 §4), désormais **un segment du data-model**.
 - **Vecteur de risque 6D** (v2 §1), **attaché aux entrées du catalogue de
-  risques**, pas au token.
-- **Channels Telegram/Email/Manual** (v3 §7).
-- **Long-poll borné 25 s + re-poll SDK** (v3 §8).
+  risques**, pas au token. Drive l'ordre d'affichage UI (severity-sorted)
+  et l'explicabilité audit — pas de gate dérivé.
+
+Supprimé par l'ADR unified-gates-drop-confirm (à reprendre dans une
+passe spec ultérieure) : les 3 gates `allow | confirm | deny`, les
+channels Telegram/Email/Manual, le long-poll 25s.
 
 ### Ce qui change
 
@@ -55,14 +66,14 @@ pas de comptes."*
 ┌─ CATALOG (par-provider, statique, versionné dans le repo) ───────────────┐
 │  risks: [                                                                │
 │    { id, label, reason, matches (slice pattern),                         │
-│      vector (6D), default_gate (allow|confirm|deny) }                    │
+│      vector (6D), acceptable_in_envs?: string[] }                        │
 │  ]                                                                       │
 │  + un risque fallback générique par provider qui catch tout le reste.    │
+│  (ADR unified-gates-drop-confirm : plus de default_gate.)                │
 └──────────────────────────────────────────────────────────────────────────┘
 
-┌─ PROJECT POLICY (DB, par-projet, géré par l'opérateur) ──────────────────┐
-│  risk_id → gate-override pour CE projet (peut serrer ou desserrer).      │
-│  Définit aussi : quels risk_id le manager peut accepter pour ce projet.  │
+┌─ PROJECT POLICY ─ DROPPÉ (ADR unified-gates-drop-confirm) ───────────────┐
+│  Le seul garde-fou structurel est `acceptable_in_envs` au catalog level. │
 └──────────────────────────────────────────────────────────────────────────┘
 
 ┌─ TOKEN MINT (par-session) ───────────────────────────────────────────────┐
@@ -232,16 +243,17 @@ type RiskEntry = {
   label: string;                      // libellé court (UI)
   reason: string;                     // pourquoi c'est un risque (≤ 2 phrases)
   matches: SlicePattern;              // pattern catalogue (peut être large : ex: '**.policy[**].W')
-  vector: RiskVector6D;               // pour expliquer + auto-seed la default_gate
-  default_gate: 'allow' | 'confirm' | 'deny';
+  vector: RiskVector6D;               // pour expliquer + ordonner la UI par sévérité
   acceptable_in_envs?: string[];      // ex: ['preview', 'staging'] — empêche d'accepter sur prod
 };
 ```
 
 ### 4.2 Vecteur 6D (rappel v2)
 
-Sert à **expliquer** et à **dériver `default_gate`** par formule, pas
-à faire de runtime decision. Six axes :
+Sert à **expliquer** dans la UI / l'audit, à **ordonner les entrées
+par sévérité décroissante** dans le picker mint, et à éclairer la
+décision humaine de cocher (ou pas) un risk. Aucun gate dérivé du
+vecteur (ADR unified-gates-drop-confirm §A1).
 
 ```ts
 type RiskVector6D = {
@@ -253,13 +265,6 @@ type RiskVector6D = {
   persistence:   'stateless' | 'session' | 'posture';
 };
 ```
-
-Formule de seed du `default_gate` (à raffiner) :
-- `persistence == 'posture'` OU `data ∈ {secret, pii}` côté W → **`deny`** par défaut.
-- `reversibility == 'irreversible'` OU `blast ∈ {account, bulk}` → **`confirm`**.
-- sinon → **`allow`**.
-
-Le `default_gate` peut être overridé manuellement par la `project policy`.
 
 ### 4.3 Exemple — extrait du catalogue GitHub
 
@@ -273,8 +278,6 @@ github:
       matches: "github.repo[**].file[**].R"
       vector: { reversibility: reversible, blast: single, data: data,
                 cost: free, visibility: internal, persistence: stateless }
-      default_gate: allow
-
     - id: github.feature-branch-write
       label: "Créer / modifier des branches feature/*"
       reason: "Réversible (git revert). Pas de side effect prod tant que
@@ -282,16 +285,12 @@ github:
       matches: "github.repo[**].branch[feature/*,fix/*].file[**].W"
       vector: { reversibility: reversible, blast: single, data: data,
                 cost: free, visibility: internal, persistence: session }
-      default_gate: allow
-
     - id: github.create-pr
       label: "Ouvrir une pull request"
       reason: "Pas de mutation prod. Notifie les reviewers."
       matches: "github.repo[**].pr[**].W"
       vector: { reversibility: reversible, blast: single, data: data,
                 cost: free, visibility: team, persistence: session }
-      default_gate: allow
-
     - id: github.merge-protected
       label: "Merger vers une branche protégée (main/master/prod)"
       reason: "Trigger CI/CD prod en aval. Costly à reverter (release notes,
@@ -299,8 +298,6 @@ github:
       matches: "github.repo[**].branch[main,master,prod*].W"
       vector: { reversibility: costly, blast: env, data: data,
                 cost: moderate, visibility: team, persistence: session }
-      default_gate: confirm
-
     - id: github.branch-protection-write
       label: "Modifier la branch protection"
       reason: "Posture-shift : ouvre la branche aux écritures hors-process.
@@ -308,8 +305,6 @@ github:
       matches: "github.repo[**].branch-protection[**].W"
       vector: { reversibility: costly, blast: env, data: metadata,
                 cost: free, visibility: team, persistence: posture }
-      default_gate: deny
-
     - id: github.mint-install-token
       label: "Minter un install token GitHub App"
       reason: "Credential creation. Le token a sa propre durée de vie et
@@ -317,16 +312,12 @@ github:
       matches: "github.repo[**].install-token[**].*"
       vector: { reversibility: reversible, blast: account, data: secret,
                 cost: free, visibility: internal, persistence: posture }
-      default_gate: deny
-
     - id: github.collaborator-write
       label: "Modifier la liste des collaborateurs"
       reason: "Posture-shift : donne durablement accès au repo."
       matches: "github.repo[**].collaborator[**].W"
       vector: { reversibility: reversible, blast: account, data: metadata,
                 cost: free, visibility: team, persistence: posture }
-      default_gate: deny
-
     # … etc
 
     # Fallback générique — DOIT être présent par provider
@@ -338,7 +329,6 @@ github:
       matches: "github.**.W"
       vector: { reversibility: costly, blast: env, data: data,
                 cost: free, visibility: internal, persistence: session }
-      default_gate: confirm
 ```
 
 ### 4.4 Qualification par binding (env / resource)
@@ -411,51 +401,20 @@ type ResolvedToken = {
 **Notation courte (UI/wire)** : on garde les `RiskId` tels quels —
 qualifiés (`supabase[staging].bulk-row-write`), lisibles, stables.
 
-## 6. Project policy — override par projet
+## 6. Project policy — DROPPÉ
 
-Table simplifiée par rapport à v1. Une seule responsabilité : **override
-des `default_gate` du catalogue pour CE projet**.
+ADR [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md) §D3.
 
-```sql
--- supersède supabase/migrations/0016_policy_rules.sql (v1)
-create table project_risk_policies (
-  id uuid primary key default gen_random_uuid(),
-  project_id uuid not null references projects(id) on delete cascade,
-  risk_id text not null,             -- ex: 'supabase.bulk-row-write' (non qualifié)
-                                     -- s'applique à toutes les qualifications par binding
-                                     -- — sauf override spécifique env
-  env_scope text,                    -- null = tous les bindings, sinon ex: 'prod', 'staging'
-  gate text not null check (gate in ('allow', 'confirm', 'deny')),
-  created_at timestamptz not null default now(),
-  unique(project_id, risk_id, env_scope)
-);
+La table `project_risk_policies` est supprimée (migration 0036). Aucun
+équivalent. La sévérité d'un risk est intrinsèquement provider-level
+(vit dans le catalog YAML), pas project-level. Si un projet veut serrer
+son scope, l'opérateur **ne coche tout simplement pas** les risks
+concernés au mint.
 
--- Anti-pattern guard : un risk dont le catalogue dit default_gate='deny'
--- ne peut PAS être overridé en 'allow' sans flag explicite (à designer).
--- Idée : seul un membre admin de l'org peut écrire un override
--- 'deny → allow' sur un risk vector { persistence: posture } OU
--- { data: secret|pii } côté W.
-```
-
-### 6.1 Résolution du gate au mint
-
-```
-pour chaque risk_id dans token.accepted_risks :
-  base = catalog[risk_id].default_gate
-  override = project_risk_policies[risk_id, env_scope or null] ?? base
-  effective_gate[risk_id] = override
-
-si tous les effective_gate ∈ {'allow'}            → mint direct (201)
-si au moins un est 'deny'                          → refus (403, message explicite)
-sinon (au moins un 'confirm', aucun 'deny')        → approval request (202)
-```
-
-### 6.2 Seed par défaut
-
-Au création de projet, **aucune** ligne dans `project_risk_policies`. Le
-projet hérite du `default_gate` du catalogue. L'opérateur n'écrit une
-ligne qu'en cas de besoin de relâcher (rare) ou de durcir (typique :
-"sur ce projet, `supabase.bulk-row-write` est `deny` même sur staging").
+Le seul garde-fou structurel restant est `acceptable_in_envs` (au
+catalog) — il bloque les acceptations impossibles-par-design (un risk
+`bulk-row-write` interdit en prod ne peut PAS être coché pour un
+binding `env=prod`, même par un opérateur qui le voudrait).
 
 ## 7. Le plugin — 2 responsabilités
 
@@ -545,92 +504,66 @@ Step-up runtime (option B, ajout d'un risk acceptépendant la session)
 est reporté en Phase 2 et nécessite un design dédié (token mutable
 atomic, idempotence du re-call, race conditions).
 
-## 9. Le mint flow
+## 9. Le mint flow (post drop-confirm)
 
 ```
-POST /api/v1/mgmt/tokens/preview { bindings, accepted_risks, denied_risks }
+POST /api/v1/tokens/preview { bindings, accepted_risks }
   │
-  ├─ catalog × project_risk_policies → effective_gate par risk_id
+  ├─ pour chaque (accepted_risk × matching binding) :
+  │    acceptable  = catalog.acceptable_in_envs absent OU binding.env ∈ liste
+  │    inherited   = risk_id ∈ parent_token.accepted_risks
   └─→ 200 {
         risks: [
-          { id: "supabase[staging].bulk-row-write",
-            label: "Écrire en bulk sur staging",
-            reason: "…",
-            vector: {…},
-            effective_gate: "confirm",
-            origin: "project-policy-override" | "catalog-default" }
+          { id, base_id, provider, env, label, reason, vector,
+            acceptable: bool, inherited: bool,
+            blocked_reason?: string }
         ],
-        all_allowed: bool,
-        needs_approval: RiskId[],
-        denied: RiskId[]      // refusés par policy, le mint sera 403
+        not_acceptable: RiskId[],   // acceptable=false
+        not_inherited:  RiskId[],   // acceptable=true && inherited=false
+        ok: not_acceptable.length === 0 && not_inherited.length === 0
       }
 
-POST /api/v1/mgmt/tokens { bindings, accepted_risks, denied_risks, context, ttl, singleUse }
+POST /api/v1/tokens/mint { bindings, accepted_risks, denied_risks?,
+                           context, ttl, singleUse }
   │
-  ├─ recompute effective_gates (sécurité)
-  ├─ si denied non-vide → 403 explicite (liste des risk_id refusés)
-  ├─ si needs_approval vide → mint direct (201 + api_key)
-  └─ sinon → approval_request créé, channel notifié, 202 + poll_url
-
-GET /api/v1/mgmt/tokens/pending/:approval_id?wait=25
-  │
-  └─ long-poll borné 25 s (cf. §10 et §11)
-     200 { status: approved | denied | expired | pending, api_key? }
+  ├─ recompute le preview côté serveur (sécurité)
+  ├─ si !preview.ok → 403 { error, not_acceptable, not_inherited, risks }
+  └─ sinon          → mint direct (201 + api_key)
 ```
 
-> Le `preview` endpoint est nouveau (par rapport à v1). Il sert à l'UI
-> pour montrer les risques + leur `effective_gate` au manager **avant**
-> mint réel. Permet le UX "checklist scannable" décrit en §0.
+Plus de réponse 202 / approval-pending. Si l'opérateur veut un risk
+que son token parent n'a pas, il escalade lui-même via
+`context.escalation_channel` (ADR unified-tokens §D4).
 
-## 10. Human-in-the-loop — channels
+## 10. Human-in-the-loop — DROPPÉ
 
-Inchangé par rapport à v3. Récap :
+ADR [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md) §D4.
 
-- **Channel `manual`** (déjà shipped) : POST `/api/v1/mgmt/approvals/:id`
-  avec `{decision: approve|deny}`.
-- **Channel `telegram`** (déjà shipped) : bot avec callback inline ✅/❌.
-- **Channel `email` (NEW)** : lien signé JWT dans le mail → page
-  d'approve. Détails §7.1 v3.
-- **`project_approval_channels` peut porter plusieurs canaux actifs**
-  simultanément (clé composite). Décidé pour fan-out / redondance.
+Les channels Telegram / Email / Manual ont été supprimés (migration
+0036 drop des tables `project_approval_channels` et `approval_requests`).
+Le routes `/api/v1/mgmt/approvals`, `/api/v1/projects/[id]/approvals`,
+`/api/v1/tokens/pending`, `/api/v1/integrations/{telegram,email}` ont
+toutes été retirées.
 
-### 10.1 Notification — payload risk-based
+L'élévation runtime se fait via `context.escalation_channel` du token
+(cf. §11) — c'est un endpoint HTTP libre que le parent qui mint
+configure, hors du gateway.
 
-Le message envoyé à l'opérateur est **lisible métier**, pas technique :
+## 11. Escalation
 
-```
-[Vaubaan] Approval requested for project "Vaubaan Gateway"
+Voir ADR [unified-tokens-delegation-chain-and-escalation-channel](../decisions/unified-tokens-delegation-chain-and-escalation-channel.md)
+§D4.
 
-Requester : claude-coding-agent, task "implement Email approval channel"
-Bindings  : github(sbw-vaubaan/gateway), supabase(staging), vercel(gateway)
+Quand un child token rencontre un 403 `risk-not-accepted` au runtime,
+il peut POSTer à son `context.escalation_channel.endpoint_url` avec
+`{ child_token_id, risks_needed, justification, executed_slice }` et
+`Authorization: Bearer ${escalation_channel.auth_token}`. Le parent
+décide ; sur cede, il re-minte le child avec un nouveau token au scope
+élargi (via une side-channel hors-gateway). Le child retry l'appel
+avec le nouveau Bearer.
 
-Risks pending your confirmation :
-  ⚠️ github.merge-protected (main)
-     "Merger vers une branche protégée — trigger CI/CD prod"
-  ⚠️ vercel.deploy-prod
-     "Deploy public, costly to rollback"
-
-Other risks accepted (allow):
-  ✓ github.read-code, github.feature-branch-write, github.create-pr,
-    supabase[staging].row-write-one, vercel.deploy-preview
-
-[ ✅ APPROVE ALL ]      [ ❌ DENY ALL ]
-```
-
-Les boutons couvrent **l'ensemble** des risks pending — pas de
-décision par-risk au MVP (sinon UX explosée pour 5+ risks). À ajouter
-en Phase 2 si demande.
-
-## 11. Long-poll — borné 25 s (rappel v3)
-
-Inchangé. La route `GET /api/v1/mgmt/tokens/pending/:id?wait=25` bloque
-côté serveur jusqu'à décision OU 25 s, sous le mur Vercel Edge (25 s
-avant 1er byte) et Cloudflare (100 s origin idle). Le SDK agent encapsule
-le re-poll jusqu'au wall-clock global (par défaut 15 min = TTL de
-l'approval).
-
-Détails impl en §8 v3 (Node runtime, `maxDuration: 30`, poll DB 500 ms
-au MVP, switch en Postgres LISTEN/NOTIFY si métriques le justifient).
+Les roots (sans parent) n'ont pas d'escalation possible — l'erreur
+remonte à l'opérateur humain.
 
 ## 12. Audit log
 

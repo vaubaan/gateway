@@ -76,7 +76,7 @@ async function main() {
   if (!res.ok) throw new Error(`preview failed: ${res.status}`);
   const preview = JSON.parse(previewText);
   console.log(
-    `         all_allowed=${preview.all_allowed} needs_approval=${JSON.stringify(preview.needs_approval ?? [])}`,
+    `         ok=${preview.ok} not_acceptable=${JSON.stringify(preview.not_acceptable ?? [])} not_inherited=${JSON.stringify(preview.not_inherited ?? [])}`,
   );
 
   // ── Step 3: actually mint a child ─────────────────────────────────────

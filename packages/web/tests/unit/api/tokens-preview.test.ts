@@ -1,11 +1,11 @@
 /**
- * Unit tests for the pure-compute risk-preview layer.
+ * Unit tests for the pure-compute risk-preview layer (post drop-confirm).
  *
- * Now lives at `lib/mint/risk-preview.ts` (extracted from the deleted mgmt
- * route per the unified-tokens ADR).
+ * Lives at `lib/mint/risk-preview.ts`. Replaces the old gate-resolution
+ * shape with `{ acceptable, inherited }` per row.
  */
 import { describe, expect, test } from 'vitest';
-import type { Provider, RiskCatalog, RiskPolicyOverride } from '@vaubaan/shared';
+import type { Provider, RiskCatalog } from '@vaubaan/shared';
 import { indexCatalog } from '@vaubaan/policy-engine';
 
 import { computePreview, resolveRiskRow, type PreviewBinding } from '@/lib/mint/risk-preview';
@@ -26,7 +26,6 @@ const supabaseCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'supabase.bulk-row-write',
@@ -41,7 +40,6 @@ const supabaseCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
       acceptable_in_envs: ['staging', 'preview'],
     },
     {
@@ -57,7 +55,6 @@ const supabaseCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     {
       id: 'supabase.uncategorized-write',
@@ -72,7 +69,6 @@ const supabaseCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };
@@ -93,103 +89,99 @@ const prodBinding: PreviewBinding = {
   env: 'prod',
 };
 
+const parentAll = new Set([
+  'supabase.read-data',
+  'supabase[staging].bulk-row-write',
+  'supabase[prod].bulk-row-write',
+  'supabase.policy.W',
+]);
+
 describe('resolveRiskRow', () => {
-  test('marks an unknown risk as denied with a clear reason', () => {
-    const row = resolveRiskRow('supabase.unknown-risk', stagingBinding, supabaseIndexed, []);
-    expect(row.effective_gate).toBe('deny');
+  test('marks an unknown risk as blocked with a clear reason', () => {
+    const row = resolveRiskRow('supabase.unknown-risk', stagingBinding, supabaseIndexed, parentAll);
+    expect(row.acceptable).toBe(false);
     expect(row.blocked_reason).toContain("unknown risk 'supabase.unknown-risk'");
   });
 
-  test('marks all risks denied when catalog is undefined', () => {
-    const row = resolveRiskRow('supabase.read-data', stagingBinding, undefined, []);
-    expect(row.effective_gate).toBe('deny');
+  test('marks risk as blocked when catalog is undefined', () => {
+    const row = resolveRiskRow('supabase.read-data', stagingBinding, undefined, parentAll);
+    expect(row.acceptable).toBe(false);
     expect(row.blocked_reason).toContain('not loaded');
   });
 
-  test('returns the catalog default_gate when no override exists', () => {
-    const row = resolveRiskRow('supabase.read-data', stagingBinding, supabaseIndexed, []);
-    expect(row.effective_gate).toBe('allow');
-    expect(row.origin).toBe('catalog-default');
+  test('acceptable + inherited when catalog OK and parent carries the risk', () => {
+    const row = resolveRiskRow('supabase.read-data', stagingBinding, supabaseIndexed, parentAll);
+    expect(row.acceptable).toBe(true);
+    expect(row.inherited).toBe(true);
     expect(row.label).toBe('Read');
   });
 
   test('qualifies env-scoped ids and leaves account-scoped ones alone', () => {
-    const bulk = resolveRiskRow('supabase.bulk-row-write', stagingBinding, supabaseIndexed, []);
+    const bulk = resolveRiskRow(
+      'supabase.bulk-row-write',
+      stagingBinding,
+      supabaseIndexed,
+      parentAll,
+    );
     expect(bulk.id).toBe('supabase[staging].bulk-row-write');
-    expect(bulk.effective_gate).toBe('confirm');
-    const read = resolveRiskRow('supabase.read-data', stagingBinding, supabaseIndexed, []);
+    expect(bulk.acceptable).toBe(true);
+    const read = resolveRiskRow('supabase.read-data', stagingBinding, supabaseIndexed, parentAll);
     expect(read.id).toBe('supabase.read-data');
   });
 
-  test('denies env-scoped risk on an env not in acceptable_in_envs', () => {
-    const row = resolveRiskRow('supabase.bulk-row-write', prodBinding, supabaseIndexed, []);
-    expect(row.effective_gate).toBe('deny');
+  test('not acceptable on env outside acceptable_in_envs', () => {
+    const row = resolveRiskRow('supabase.bulk-row-write', prodBinding, supabaseIndexed, parentAll);
+    expect(row.acceptable).toBe(false);
     expect(row.blocked_reason).toMatch(/not acceptable in env 'prod'/);
   });
 
-  test('honors env-scoped policy override over global override', () => {
-    const overrides: RiskPolicyOverride[] = [
-      {
-        id: 'o1',
-        project_id: 'p',
-        risk_id: 'supabase.read-data',
-        env_scope: null,
-        gate: 'confirm',
-        created_at: '2026-01-01',
-      },
-      {
-        id: 'o2',
-        project_id: 'p',
-        risk_id: 'supabase.read-data',
-        env_scope: 'staging',
-        gate: 'deny',
-        created_at: '2026-01-01',
-      },
-    ];
-    const row = resolveRiskRow('supabase.read-data', stagingBinding, supabaseIndexed, overrides);
-    expect(row.effective_gate).toBe('deny');
-    expect(row.origin).toBe('project-policy-env-scoped');
+  test('not inherited when parent does not carry the risk', () => {
+    const emptyParent = new Set<string>();
+    const row = resolveRiskRow('supabase.read-data', stagingBinding, supabaseIndexed, emptyParent);
+    expect(row.acceptable).toBe(true);
+    expect(row.inherited).toBe(false);
+    expect(row.blocked_reason).toMatch(/parent token's accepted_risks/);
+  });
+
+  test('null parent → inherited optimistic true', () => {
+    const row = resolveRiskRow('supabase.read-data', stagingBinding, supabaseIndexed, null);
+    expect(row.inherited).toBe(true);
   });
 });
 
 describe('computePreview', () => {
-  test('summarises all_allowed / needs_approval / denied lists', () => {
+  test('ok=false when at least one row is not acceptable', () => {
     const result = computePreview({
-      bindings: [stagingBinding],
-      accepted_risks: ['supabase.read-data', 'supabase.bulk-row-write', 'supabase.policy.W'],
-      denied_risks: [],
+      bindings: [stagingBinding, prodBinding],
+      accepted_risks: ['supabase.bulk-row-write'],
       catalogs,
-      overrides: [],
+      parent_accepted_risks: Array.from(parentAll),
     });
-    expect(result.all_allowed).toBe(false);
-    expect(result.needs_approval).toEqual(['supabase[staging].bulk-row-write']);
-    expect(result.denied).toEqual(['supabase.policy.W']);
-    expect(result.risks.length).toBe(3);
+    expect(result.ok).toBe(false);
+    expect(result.not_acceptable.length).toBeGreaterThan(0);
   });
 
-  test('all_allowed true when every effective_gate is allow', () => {
+  test('ok=true when every row is acceptable + inherited', () => {
     const result = computePreview({
       bindings: [stagingBinding],
       accepted_risks: ['supabase.read-data'],
-      denied_risks: [],
       catalogs,
-      overrides: [],
+      parent_accepted_risks: Array.from(parentAll),
     });
-    expect(result.all_allowed).toBe(true);
-    expect(result.needs_approval).toEqual([]);
-    expect(result.denied).toEqual([]);
+    expect(result.ok).toBe(true);
+    expect(result.not_acceptable).toEqual([]);
+    expect(result.not_inherited).toEqual([]);
   });
 
   test('rejects a risk whose provider is not in the bindings list', () => {
     const result = computePreview({
       bindings: [stagingBinding],
       accepted_risks: ['github.read-code'],
-      denied_risks: [],
       catalogs,
-      overrides: [],
+      parent_accepted_risks: Array.from(parentAll),
     });
-    expect(result.all_allowed).toBe(false);
-    expect(result.denied).toContain('github.read-code');
+    expect(result.ok).toBe(false);
+    expect(result.not_acceptable).toContain('github.read-code');
     expect(result.risks[0]!.blocked_reason).toContain("no binding for provider 'github'");
   });
 
@@ -197,36 +189,22 @@ describe('computePreview', () => {
     const result = computePreview({
       bindings: [stagingBinding, prodBinding],
       accepted_risks: ['supabase.bulk-row-write'],
-      denied_risks: [],
       catalogs,
-      overrides: [],
+      parent_accepted_risks: Array.from(parentAll),
     });
     expect(result.risks.length).toBe(2);
     const stagingRow = result.risks.find((r) => r.env === 'staging')!;
     const prodRow = result.risks.find((r) => r.env === 'prod')!;
-    expect(stagingRow.effective_gate).toBe('confirm');
-    expect(prodRow.effective_gate).toBe('deny');
-  });
-
-  test('denied_risks on wire short-circuits to deny', () => {
-    const result = computePreview({
-      bindings: [stagingBinding],
-      accepted_risks: ['supabase.read-data'],
-      denied_risks: ['supabase.read-data'],
-      catalogs,
-      overrides: [],
-    });
-    expect(result.risks[0]!.effective_gate).toBe('deny');
-    expect(result.denied).toContain('supabase.read-data');
+    expect(stagingRow.acceptable).toBe(true);
+    expect(prodRow.acceptable).toBe(false);
   });
 
   test('emits one row per (risk, binding) pair', () => {
     const result = computePreview({
       bindings: [stagingBinding, prodBinding],
       accepted_risks: ['supabase.read-data'],
-      denied_risks: [],
       catalogs,
-      overrides: [],
+      parent_accepted_risks: Array.from(parentAll),
     });
     expect(result.risks.length).toBe(2);
     expect(result.risks[0]!.id).toBe('supabase.read-data');

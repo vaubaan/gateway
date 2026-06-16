@@ -25,7 +25,6 @@ const githubCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'github.feature-branch-write',
@@ -40,7 +39,6 @@ const githubCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'allow',
     },
     {
       id: 'github.merge-protected',
@@ -55,7 +53,6 @@ const githubCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'github.branch-protection-write',
@@ -70,7 +67,6 @@ const githubCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'posture',
       },
-      default_gate: 'deny',
     },
     {
       id: 'github.uncategorized-write',
@@ -85,7 +81,6 @@ const githubCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };
@@ -157,7 +152,6 @@ describe('indexCatalog', () => {
             visibility: 'internal',
             persistence: 'stateless',
           },
-          default_gate: 'allow',
         },
       ],
     };
@@ -181,7 +175,6 @@ describe('indexCatalog', () => {
             visibility: 'internal',
             persistence: 'stateless',
           },
-          default_gate: 'allow',
         },
       ],
     };
@@ -207,7 +200,6 @@ describe('indexCatalog', () => {
             visibility: 'internal',
             persistence: 'stateless',
           },
-          default_gate: 'allow',
         },
         {
           id: 'github.dup',
@@ -222,7 +214,6 @@ describe('indexCatalog', () => {
             visibility: 'internal',
             persistence: 'stateless',
           },
-          default_gate: 'allow',
         },
       ],
     };

@@ -33,14 +33,14 @@ Sept modules purs, étanches, sans état ni IO :
 | `slice-dsl.ts`       | Parser / sérialiser la grammaire des slices (chemin sur le data-model + action `R`/`W`).                                       | catalog YAML loader, audit log, tests           |
 | `slice-matcher.ts`   | Prédicats `matches` / `covers` / `intersects` entre patterns de slices.                                                        | `risk-evaluator`, lints                         |
 | `risk-evaluator.ts`  | Indexer un catalogue (parse les `matches`, vérifie l'unicité des ids) + calculer `risks_touched` pour une slice exécutée.      | `risk-runtime`, `mcp-gateway` (au boot)         |
-| `risk-policy.ts`     | Résoudre `effective_gate` (catalogue × overrides projet × env), seed `default_gate` du vecteur 6D.                             | routes mint (`POST /tokens/preview`, `/tokens`) |
+| `risk-policy.ts`     | Helper mint-time `checkAcceptableInEnv` (structural restriction du catalog) + `prepareCatalog` (boot lint).                    | routes mint (`POST /tokens/preview`, `/tokens`) |
 | `qualify.ts`         | Env-qualifier un `RiskId` (`base.name` → `provider[env].name`) et son inverse. Helper de cohérence mint ↔ runtime (spec §4.4). | `risk-runtime`, mint preview, UI mint-form      |
 | `risk-runtime.ts`    | Décision pure `evaluateCall` au hot-path `/mcp` : strict-fail si `risks_touched ⊄ accepted`.                                   | `mcp-gateway` (`callTool`)                      |
 | `scope-injection.ts` | Hide / auto-fill des arguments déterminés par les `provider_bindings` du projet (owner/repo, projectId, project_ref, teamId).  | `mcp-gateway` (`tools/list` + `tools/call`)     |
 
 Le barrel `src/index.ts` re-exporte les 7 modules. Aucun module ne touche
 au DB — la couche route ou le gateway les nourrit avec des objets
-parsés (`RiskCatalog`, `RiskPolicyOverride[]`, `ProviderBinding[]`).
+parsés (`RiskCatalog`, `ProviderBinding[]`).
 
 ## Layout
 
@@ -50,9 +50,7 @@ packages/policy-engine/
     slice-dsl.ts          # parseSlice / serializeSlice — DSL §3 spec
     slice-matcher.ts      # matches / covers / intersects (path-segment)
     risk-evaluator.ts     # indexCatalog / risksTouchedBy(All) / findRiskEntry
-    risk-policy.ts        # resolveEffectiveGate / checkAcceptableInEnv /
-                          #   requiresAdminToOverrideDenyAllow /
-                          #   seedDefaultGate / prepareCatalog
+    risk-policy.ts        # checkAcceptableInEnv / prepareCatalog
     risk-runtime.ts       # evaluateCall — pure decision function
     scope-injection.ts    # injectionPlanFor / stripInjectedArgs / mergeInjectedArgs
     index.ts              # barrel
@@ -80,9 +78,9 @@ flowchart TD
   check -->|"non"| deny["DENY 403 (missing_risks + executed_slices + hint)"]
 ```
 
-Le runtime est **stateless** : la résolution `effective_gate` /
-`project_risk_policies` n'a lieu qu'au mint. Au call, on intersect
-slices ↔ catalogue, on check appartenance, c'est tout.
+Le runtime est **stateless** : aucune résolution mint-time n'a lieu
+hors du mint endpoint. Au call, on intersect slices ↔ catalogue, on
+check appartenance, c'est tout.
 
 ## Modules
 
@@ -161,42 +159,22 @@ Tests : `risk-evaluator.test.ts` (10) — index une catalog YAML, touched
 single/multi, fallback unique, deprecated entries préservés, multi-pattern
 OR-semantics, empty catalog.
 
-### `risk-policy.ts` — effective gate
+### `risk-policy.ts` — mint-time helpers
 
-`resolveEffectiveGate(riskId, env, catalog, overrides[]) → EffectiveGateDecision`
-applique l'ordre spec §6.1 :
+Post drop-confirm (ADR [[unified-gates-drop-confirm]]), ce module se
+réduit à deux helpers utilisés au mint :
 
-1. Override `(risk_id, env_scope = env)` — wins si trouvé.
-2. Override `(risk_id, env_scope = null)` — global au projet.
-3. `catalog[riskId].default_gate` — fallback.
-4. Risk inconnu (token post-deprecation) → `'deny'`.
-
-`origin` est porté dans la décision (`'catalog-default'` /
-`'project-policy-env-scoped'` / `'project-policy-global'`) pour
-explicabilité UI.
-
-`checkAcceptableInEnv(entry, env)` — D5 : refuse au mint si le catalogue
-déclare `acceptable_in_envs: ['preview', 'staging']` et que l'env binding
-n'y figure pas. Renvoie un message ou `null`.
-
-`requiresAdminToOverrideDenyAllow(entry)` — D1 : un risk dont le vecteur
-a `persistence: 'posture'` OU (`data ∈ {secret, pii}` avec une pattern
-`.W`) ne peut être bascule `deny → allow` que par un admin org.
-
-`seedDefaultGate(vector, action) → 'allow'|'confirm'|'deny'` — applique
-la formule spec §4.2 pour pré-remplir un `default_gate` à partir d'un
-6D vector. Utilisé par les lints et par l'auto-seed des catalogues.
+`checkAcceptableInEnv(entry, env)` — refuse au mint si le catalogue
+déclare `acceptable_in_envs: ['preview', 'staging']` et que l'env
+binding n'y figure pas. Renvoie un message ou `null`.
 
 `prepareCatalog(catalog)` — wrapper `indexCatalog` + sanity checks
 (ids uniques, regex `<provider>[<env>].<name>` ou `<provider>.<name>`,
 fallback `<provider>.uncategorized-*` présent). Throw si IDs en doublon ;
 warn si fallback absent.
 
-Tests : `risk-policy.test.ts` (25) — gate resolution (env-scoped wins,
-global, catalog default, unknown), `checkAcceptableInEnv` (no-env,
-env-not-in-list, ok), `requiresAdminToOverrideDenyAllow` (posture,
-secret-W, pii-W, plain), `seedDefaultGate` (chaque branche), `prepareCatalog`
-(dup, regex fail, fallback warn).
+Tests : `risk-policy.test.ts` — `checkAcceptableInEnv` (no-env,
+env-not-in-list, ok), `prepareCatalog` (dup, regex fail).
 
 ### `risk-runtime.ts` — call-time decision
 
@@ -329,8 +307,7 @@ Toucher `packages/providers/<vendor>/src/risk-catalog.{yaml,ts}` :
     cost: free|moderate|unbounded
     visibility: internal|team|public
     persistence: stateless|session|posture
-  default_gate: allow|confirm|deny
-  acceptable_in_envs: [preview, staging] # optionnel (D5)
+  acceptable_in_envs: [preview, staging] # optionnel — structural restriction
 ```
 
 Le test `risk-catalog-sync.test.ts` du provider check :

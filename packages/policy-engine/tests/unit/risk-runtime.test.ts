@@ -21,7 +21,6 @@ const catalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'github.feature-branch-write',
@@ -36,7 +35,6 @@ const catalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'allow',
     },
     {
       id: 'github.merge-protected',
@@ -51,7 +49,6 @@ const catalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'github.uncategorized-write',
@@ -66,7 +63,6 @@ const catalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };
@@ -213,7 +209,6 @@ describe('evaluateCall — env-qualified subset check', () => {
           visibility: 'internal',
           persistence: 'session',
         },
-        default_gate: 'confirm',
         acceptable_in_envs: ['staging', 'prod'],
       },
     ],

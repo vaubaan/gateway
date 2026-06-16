@@ -5,7 +5,7 @@ import { ProseHeader, ProseWrap, Toc } from '@/components/public/Prose';
 export const metadata: Metadata = {
   title: 'Programmatic API — Vaubaan',
   description:
-    'Drive Vaubaan from a programmatic client: any vbn_live_* token can preview, mint child tokens with a strict-subset risk envelope, long-poll a pending approval, rename, or revoke.',
+    'Drive Vaubaan from a programmatic client: any vbn_live_* token can preview, mint child tokens with a strict-subset risk envelope, rename, or revoke.',
 };
 
 export default function MgmtDocsPage() {
@@ -14,7 +14,7 @@ export default function MgmtDocsPage() {
       <ProseHeader
         eyebrow="Documentation"
         title="Programmatic API"
-        lead="Drive Vaubaan from any client that holds a token: preview risks for a project, mint child tokens with a strict-subset envelope, long-poll approvals, rename, revoke. One Bearer credential — vbn_live_* — for every operation."
+        lead="Drive Vaubaan from any client that holds a token: preview risks for a project, mint child tokens with a strict-subset envelope, rename, revoke. One Bearer credential — vbn_live_* — for every operation."
       />
 
       <Toc
@@ -71,8 +71,8 @@ export default function MgmtDocsPage() {
       </ul>
       <p>
         If a token leaks, the blast radius is bounded by its <code>accepted_risks</code>, its
-        bindings, its TTL, and the project policy. Revoking a token cascade-revokes all its
-        descendants via the <code>parent_id</code> foreign key.
+        bindings, and its TTL. Revoking a token cascade-revokes all its descendants via the{' '}
+        <code>parent_id</code> foreign key.
       </p>
 
       <h2 id="quickstart">3. Quickstart</h2>
@@ -115,9 +115,9 @@ export default function MgmtDocsPage() {
         <code>POST /api/v1/tokens/preview</code>
       </h3>
       <p>
-        Compute the effective gate for each requested risk + binding without minting anything.
-        Useful for UIs (and for agents that want to know which risks will trigger an approval before
-        they POST <code>mint</code>).
+        Compute <code>acceptable</code> / <code>inherited</code> for each requested risk × binding,
+        without minting anything. Useful for UIs and for agents that want to validate the envelope
+        before posting <code>mint</code>.
       </p>
       <p>Body:</p>
       <pre>
@@ -133,8 +133,7 @@ export default function MgmtDocsPage() {
     "github.feature-branch-write",
     "supabase[staging].row-write-one",
     "vercel.deploy-preview"
-  ],
-  "denied_risks": []                  // optional opt-outs (subtract from a preset)
+  ]
 }`}</code>
       </pre>
       <p>
@@ -148,14 +147,14 @@ export default function MgmtDocsPage() {
       "label": "Write a single Supabase row on staging",
       "reason": "…",
       "vector": { /* 6D */ },
-      "effective_gate": "allow",
-      "origin": "catalog-default" | "project-policy-override"
+      "acceptable": true,            // catalog acceptable_in_envs OK
+      "inherited":  true             // risk is in parent's accepted_risks
     },
     …
   ],
-  "all_allowed": true,
-  "needs_approval": [],               // RiskIds whose effective_gate === 'confirm'
-  "denied":         []                // RiskIds whose effective_gate === 'deny'
+  "not_acceptable": [],              // RiskIds where acceptable === false
+  "not_inherited":  [],              // RiskIds where inherited === false
+  "ok": true                         // both arrays empty
 }`}</code>
       </pre>
 
@@ -175,7 +174,7 @@ export default function MgmtDocsPage() {
     "github.read-code",
     "github.feature-branch-write"
   ],
-  "denied_risks": [],                 // optional opt-outs
+  "denied_risks": [],                 // optional opt-outs (forensic trace, runtime ignores)
   "context": {                        // optional
     "task": "implement feature X",
     "agent_id": "claude-coder-1",
@@ -193,56 +192,23 @@ export default function MgmtDocsPage() {
       <p>Possible responses:</p>
       <ul>
         <li>
-          <code>201</code> with <code>{`{ token, api_key, expires_at, accepted_risks }`}</code> when
-          every requested risk resolves to <code>allow</code>. The <code>api_key</code> is the only
-          place the raw secret is ever exposed.
+          <code>201</code> with <code>{`{ token, api_key, expires_at, accepted_risks }`}</code> on
+          success. The <code>api_key</code> is the only place the raw secret is ever exposed.
         </li>
         <li>
-          <code>202</code> with{' '}
-          <code>
-            {`{ approval_id, status: 'pending', channel, poll_url, expires_at, needs_approval, risks }`}
-          </code>{' '}
-          when at least one risk has <code>effective_gate: 'confirm'</code>. Long-poll{' '}
-          <code>poll_url</code> for the result.
+          <code>403</code> with <code>{`{ error, not_acceptable, not_inherited, risks }`}</code>{' '}
+          when at least one risk is not acceptable in the binding env (catalog{' '}
+          <code>acceptable_in_envs</code>) OR not in your token&apos;s <code>accepted_risks</code>{' '}
+          (subset rule).
         </li>
         <li>
-          <code>403</code> with <code>{`{ error, denied_risks, risks }`}</code> when at least one
-          risk is denied by the catalog or by project policy, OR when the requested envelope
-          violates a subset / depth / <code>expires_at</code> invariant.
+          <code>403</code> with <code>{`{ error }`}</code> on a subset / depth / expires_at
+          invariant violation (max-depth = 5, child can&apos;t outlive parent).
+        </li>
+        <li>
+          <code>400</code> on schema / TTL violation.
         </li>
       </ul>
-      <p>
-        Invariant errors carry the offending risks and a human-readable message, e.g.{' '}
-        <code>requested_risks not subset of parent: missing supabase[prod].bulk-row-write</code>.
-      </p>
-
-      <h3>
-        <code>GET /api/v1/tokens/pending/:approvalId?wait=25</code>
-      </h3>
-      <p>
-        Long-poll a pending approval. The <code>wait</code> query (seconds, capped at 25) blocks
-        server-side until the approval is decided or the wait elapses.
-      </p>
-      <ul>
-        <li>
-          <code>202 {`{ status: 'pending', expires_at }`}</code> — still waiting; re-poll.
-        </li>
-        <li>
-          <code>201 {`{ token, api_key, expires_at }`}</code> — approved; the <code>api_key</code>{' '}
-          is delivered exactly once.
-        </li>
-        <li>
-          <code>
-            410 {`{ status: 'denied' | 'expired' | 'cancelled' | 'consumed', decided_at? }`}
-          </code>{' '}
-          — terminal non-success.
-        </li>
-      </ul>
-      <p>
-        Wrap repeated 25 s long-polls until the global wall-clock (default 15 min = approval TTL) in
-        your SDK. We don&apos;t hold the connection longer than 25 s server-side because of edge
-        proxy limits.
-      </p>
 
       <h3>
         <code>PATCH /api/v1/tokens/:tokenId</code>
@@ -251,7 +217,7 @@ export default function MgmtDocsPage() {
       <pre>
         <code>{`{
   "orgSlug": "acme",
-  "name":   "new-name",       // optional
+  "name":   "new-name",       // optional — must match /^[a-z0-9](-?[a-z0-9])*$/
   "status": "revoked"         // optional — "active" | "revoked"
 }`}</code>
       </pre>
@@ -275,7 +241,7 @@ export default function MgmtDocsPage() {
         <code>$VAUBAAN_BASE_URL</code> with the parent token <code>$VAUBAAN_TOKEN</code>.
       </p>
       <pre>
-        <code>{`# 1. Preview — what gates apply?
+        <code>{`# 1. Preview — what's acceptable and inherited?
 curl -sS -X POST "$VAUBAAN_BASE_URL/api/v1/tokens/preview" \\
   -H "Authorization: Bearer $VAUBAAN_TOKEN" \\
   -H "Content-Type: application/json" \\
@@ -289,10 +255,10 @@ curl -sS -X POST "$VAUBAAN_BASE_URL/api/v1/tokens/preview" \\
 
 # Response (truncated):
 # {
-#   "risks": [{ "id": "github.read-code", "effective_gate": "allow", ... }, ...],
-#   "all_allowed": true,
-#   "needs_approval": [],
-#   "denied": []
+#   "risks": [{ "id": "github.read-code", "acceptable": true, "inherited": true, ... }, ...],
+#   "not_acceptable": [],
+#   "not_inherited": [],
+#   "ok": true
 # }
 
 # 2. Mint a single-use, 10-minute child token.
@@ -336,16 +302,6 @@ curl -sS -X DELETE \\
   "$VAUBAAN_BASE_URL/api/v1/tokens/$CHILD_TOKEN_ID?orgSlug=acme" \\
   -H "Authorization: Bearer $VAUBAAN_TOKEN"
 # → { "ok": true }`}</code>
-      </pre>
-      <p>
-        If step 2 returns <code>202</code> instead of <code>201</code>, long-poll{' '}
-        <code>poll_url</code> until you get <code>201</code> (api_key delivered), <code>410</code>{' '}
-        (denied/expired), or you decide to give up:
-      </p>
-      <pre>
-        <code>{`POLL_URL=$(echo "$MINT" | jq -r .poll_url)
-curl -sS "$VAUBAAN_BASE_URL$POLL_URL?wait=25" \\
-  -H "Authorization: Bearer $VAUBAAN_TOKEN"`}</code>
       </pre>
 
       <h2 id="advanced">6. Advanced concepts</h2>
@@ -416,11 +372,9 @@ Content-Type: application/json
       <h3>6.4 Catalog drift</h3>
       <p>
         Risk catalogs are versioned in the repo. Adding a new <code>RiskId</code> can leave existing
-        tokens that touched its <code>matches</code> pattern but never accepted it falling in{' '}
-        <code>deny</code> on the next call. The UI flags &ldquo;you have N active tokens that
-        don&apos;t cover the new <code>RiskId</code>&rdquo;. Renaming or removing a{' '}
-        <code>RiskId</code> is not allowed; entries are deprecated (<code>deprecated: true</code>)
-        and kept around so existing tokens keep working.
+        tokens that touched its <code>matches</code> pattern but never accepted it falling in deny
+        on the next call. Renaming or removing a <code>RiskId</code> is not allowed; entries are
+        deprecated (<code>deprecated: true</code>) and kept around so existing tokens keep working.
       </p>
 
       <h2 id="security">7. Security &amp; rotation</h2>
@@ -450,7 +404,8 @@ Content-Type: application/json
       <hr />
       <p>
         Operator-side reference: <Link href="/docs">/docs</Link>. Design rationale: see{' '}
-        <code>docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md</code> and{' '}
+        <code>docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md</code>,{' '}
+        <code>docs/decisions/unified-gates-drop-confirm.md</code>, and{' '}
         <code>docs/spec/gateway-risk-model.md</code> in the repo.
       </p>
     </ProseWrap>

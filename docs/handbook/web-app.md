@@ -6,7 +6,6 @@ tracks:
   - packages/web/src/app/
   - packages/web/src/components/sidebar/Sidebar.tsx
   - packages/web/src/components/providers/
-  - packages/web/src/lib/approvals/
   - packages/web/src/lib/mint/
   - packages/web/src/lib/risk-catalog/
   - packages/web/src/lib/auth/
@@ -54,37 +53,31 @@ packages/web/
                 page.tsx                                # Project overview (bindings + bash + tokens cards)
                 audit/page.tsx                          # Project audit log
                 tokens/page.tsx                         # Access tokens list
-                tokens/new/*.{ts,tsx}                   # v4 risk-checklist mint flow (9 files)
+                tokens/new/*.{ts,tsx}                   # Risk-checklist mint flow (9 files)
                                                         # page.tsx (server) + mint-form.tsx (orchestrator)
                                                         # + binding-risks-section / provider-risks-card
                                                         # + risk-row / vector-row / preview-footer
                                                         # + mint-result-dialog + mint-types + qualify-helpers
-                approvals/page.tsx                      # Pending approval requests
                 settings/page.tsx                       # Project settings
                 bash/page.tsx                           # Redirect → bindings/new
                 bash-bindings/[bindingId]/page.tsx      # Script + hosts + runner cards
       api/
         integrations/{github,vercel,supabase,railway}/{connect,callback}/route.ts
         v1/
-          tokens/                                       # unified-tokens API (post-2026-06-16)
+          tokens/                                       # unified-tokens API
             {[tokenId]/route, [tokenId]/rotate-key/route}.ts
             mint/route.ts                               # POST — mint child from any vbn_live_*
-            preview/route.ts                            # POST — gate preview (no persist)
-            pending/[id]/route.ts                       # GET — long-poll approval
-          mgmt/approvals/[id]/route.ts                  # operator decide via Bearer vbn_live_*
+            preview/route.ts                            # POST — preview (acceptable / inherited)
           mgmt/projects/route.ts                        # listing for SDK compat
           orgs/[slug]/{route, transfer-ownership/route}.ts
           orgs/[slug]/management-keys/{route, [keyId]/route}.ts  # UI shim: root org-scoped tokens
           projects/[projectId]/{route}.ts
-          projects/[projectId]/approvals/{route, [approvalId]/route}.ts
           providers/[provider]/route.ts                 # disconnect
           bindings/[bindingId]/route.ts                 # remove a provider binding
           bash-bindings/{route, [bindingId]/route}.ts
           bash-bindings/[bindingId]/hosts/{route, [hostId]/route, [hostId]/test/route}.ts
           bash-bindings/[bindingId]/run-tool/route.ts
           members/{route, [userId]/route}.ts
-          integrations/telegram/webhook/route.ts        # Telegram approval callbacks
-          integrations/email/decide/route.ts            # Email approval (signed link)
           catalog/route.ts                              # Risk catalog dump (per-provider)
       mcp/route.ts                                      # MCP gateway POST
       auth/callback/route.ts                            # Supabase auth callback
@@ -100,11 +93,9 @@ packages/web/
       oauth/{state, railway}.ts                         # nonce + PKCE helpers
       providers/{state, bytea}.ts                       # provider_admins helpers
       gateway/build.ts                                  # wire McpGateway with adapters + catalogs
-      risk-catalog/loader.ts                            # boot-time provider catalog index (v4)
-      mint/{preview, risk-preview}.ts                   # gate-resolution helpers (pure compute + DB plumbing)
-      approvals/{channel, manual, telegram, email, email-token,
-                 mint, decide, external-mint, load-parent, index}.ts
-      bash/{parse, exec, args, exec-host}.ts           # annotated-bash provider — cf. bash-provider handbook
+      risk-catalog/loader.ts                            # boot-time provider catalog index
+      mint/{preview, risk-preview, child-mint}.ts       # pure preview + child-mint helper
+      bash/{parse, exec, args, exec-host}.ts            # annotated-bash provider — cf. bash-provider handbook
     components/providers/
       provider-info.ts                                  # static per-provider strings (label, planes, mint mode)
       MermaidDiagram.tsx                                # client component rendering data-model mermaid
@@ -142,11 +133,10 @@ Guards REST (`packages/web/src/lib/auth/`) :
 
 - `requireOrgMember(orgSlug)` — utilisé par toutes les mutations org-scoped.
 - `requireOrgOwner(orgSlug)` — utilisé uniquement par le transfert d'ownership.
-- `requireToken(authHeader)` — pour les routes `/api/v1/tokens/*` +
-  `/api/v1/mgmt/approvals/*` qui consomment un Bearer `vbn_live_*`.
-  Remplace l'ancien `requireManagementKey` (`vbn_mgmt_*` n'existe plus
-  post-unified-tokens, cf. ADR
-  [[unified-tokens-delegation-chain-and-escalation-channel]]).
+- `requireToken(authHeader)` — pour les routes `/api/v1/tokens/*` qui
+  consomment un Bearer `vbn_live_*`. Remplace l'ancien
+  `requireManagementKey` (`vbn_mgmt_*` n'existe plus post-unified-tokens,
+  cf. ADR [[unified-tokens-delegation-chain-and-escalation-channel]]).
 
 ## Sidebar contextuelle
 
@@ -161,7 +151,7 @@ selon l'URL :
   `Audit log` / `Access tokens` + dropdown project switcher.
 - **Resources** : `Documentation` / `Support`.
 
-Les sous-pages projet `tokens/new/`, `approvals/`, `settings/`,
+Les sous-pages projet `tokens/new/`, `settings/`,
 `bash-bindings/[bindingId]/` ne figurent **pas** dans la sidebar — elles
 sont atteintes via les cards de l'Overview (`projects/[project]/page.tsx`)
 ou par lien direct. Le modèle Roles + le modèle Capabilities v1 ont
@@ -195,13 +185,14 @@ configuré). Le slug est ré-encodé dans le `state` nonce.
 Les autres providers OAuth (Vercel, Supabase, Railway) suivent le même
 shape : `/api/integrations/<provider>/{connect,callback}/route.ts`.
 
-## Token creation (api_key visible 1×, unified-tokens)
+## Token creation (api_key visible 1×, unified-tokens + drop-confirm)
 
-> **2026-06-16** : refacto unified-tokens — un seul endpoint mint
-> consommant n'importe quel `vbn_live_*` (org-scoped root ou
-> project-scoped child). Cf. ADR
-> [[unified-tokens-delegation-chain-and-escalation-channel]] et
-> handbook [[approvals]] §Mint flow pour le détail complet.
+> **2026-06-16** : refacto unified-tokens + drop-confirm — un seul endpoint
+> mint consommant n'importe quel `vbn_live_*`, qui répond 201 ou 4xx
+> (plus de 202 mint-pending). Cf. ADR
+> [[unified-tokens-delegation-chain-and-escalation-channel]] +
+> [[unified-gates-drop-confirm]] et handbook [[escalation]] pour le
+> runtime fallback quand un risk manque.
 
 Hot path utilisateur (cf. spec
 [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §9) :
@@ -215,21 +206,17 @@ POST /api/v1/tokens/mint
     name?, ttlHours?, ttlSeconds?, singleUse?, context? }
   │
   ├─ requireToken           (vbn_live_* → guard.token = MintParent)
-  ├─ computeMintPreview     (catalogs × project_risk_policies × bindings)
-  │     → per-risk effective_gate (allow | confirm | deny)
+  ├─ computeMintPreview     (catalogs × bindings × parent.accepted_risks)
+  │     → per-risk { acceptable, inherited }
   │
-  ├─ any deny → 403 { error, denied_risks, risks }
-  ├─ all allow → mintChildToken (subset/depth/expires invariants enforced) :
-  │     ├─ generateApiKey('live') → {apiKey, apiKeyPrefix}
-  │     ├─ hashApiKey(apiKey) → apiKeyHash (argon2id)
-  │     ├─ delegation_chain = parent.delegation_chain + parent
-  │     ├─ INSERT tokens (parent_id, depth, delegation_chain,
-  │     │                  accepted_risks, denied_risks, …)
-  │     └─ → 201 { token, api_key, accepted_risks }  ← visible only here
-  │
-  └─ any confirm → INSERT approval_requests + pickChannel + notify
-                → 202 { approval_id, status:'pending', channel, poll_url,
-                        needs_approval, risks }
+  ├─ !preview.ok → 403 { error, not_acceptable, not_inherited, risks }
+  └─ preview.ok  → mintChildToken (subset/depth/expires invariants enforced) :
+        ├─ generateApiKey('live') → {apiKey, apiKeyPrefix}
+        ├─ hashApiKey(apiKey) → apiKeyHash (argon2id)
+        ├─ delegation_chain = parent.delegation_chain + parent
+        ├─ INSERT tokens (parent_id, depth, delegation_chain,
+        │                  accepted_risks, denied_risks, …)
+        └─ → 201 { token, api_key, accepted_risks }  ← visible only here
 ```
 
 Le wire format est porté par `RiskId[]` plutôt que par des tuples
@@ -239,19 +226,23 @@ canonique de chaque provider vit dans
 au boot par `lib/risk-catalog/loader.ts` (cf.
 [`policy-engine.md`](./policy-engine.md) §Wiring côté gateway).
 L'helper `computeMintPreview` (`lib/mint/preview.ts`) wraps le pur
-`computePreview` (`lib/mint/risk-preview.ts`) avec le DB load des
-`project_risk_policies` ; les deux sont consommés par le mint endpoint
-et le preview endpoint.
+`computePreview` (`lib/mint/risk-preview.ts`) — pas de DB read
+post-drop-confirm. Les deux sont consommés par le mint endpoint et le
+preview endpoint.
 
 Le mint endpoint accepte `singleUse?: bool` (le gateway consume le
 token sur le premier call — spec §8), `ttlHours?: number` (default
 24h, max 7j) et `ttlSeconds?: number` (capé à 3600s — single-use
 obligatoire, cf. Zod refine). Full details in
-[`approvals.md`](./approvals.md).
+[`escalation.md`](./escalation.md).
 
 L'endpoint preview `POST /api/v1/tokens/preview` calcule la même
 résolution sans persister — utilisé par le composant `mint-form.tsx`
-pour afficher la checklist des risques en temps réel.
+pour afficher la checklist des risques en temps réel. Chaque row
+porte deux booleans : `acceptable` (catalog `acceptable_in_envs` OK
+pour le binding env) et `inherited` (risk_id présent dans
+`parent.accepted_risks`). Une row est mintable iff les deux sont true ;
+sinon la UI désactive la checkbox avec un tooltip explicatif.
 
 UI : après create, un modal affiche la `api_key` complète avec bouton
 Copy et un warning `won't be shown again`. Le modal montre aussi le
@@ -274,22 +265,26 @@ is `ci-deploy` rather than `claude-dev` to avoid presuming agent usage.
 
 ### Risk checklist picker (mint form)
 
-`tokens/new/mint-form.tsx` est le composer v4 :
+`tokens/new/mint-form.tsx` est le composer post drop-confirm :
 
-- Pour chaque provider × binding, fetch le catalog via
-  `GET /api/v1/catalog?provider=<p>` (cf.
-  `app/api/v1/catalog/route.ts`) — liste de risques avec
-  `effective_gate` (dérivé côté serveur via `computeMintPreview`).
-- Render en checklist groupée par bucket de sévérité : `allow`
-  (cochable freely) / `confirm` (cochable, mais le mint passera en 202)
-  / `deny` (greyed-out — blocked par project policy + tooltip avec la
-  raison).
+- Pour chaque provider × binding, le serveur passe le catalog inline
+  (la page `tokens/new/page.tsx` projette les `RiskEntry` du catalog
+  loader vers un shape client-side).
+- Render en **checklist plat** (pas de buckets). Chaque row porte
+  deux flags dérivés de la preview serveur : `acceptable` (catalog
+  `acceptable_in_envs` OK pour le binding env) et `inherited`
+  (`risk_id ∈ parent.accepted_risks`). Une row est disabled iff
+  `!acceptable || !inherited`, avec un tooltip qui dit quel côté
+  bloque.
 - Soumet `accepted_risks: RiskId[]` + `denied_risks?: RiskId[]` à
-  `POST /api/v1/tokens/mint`.
+  `POST /api/v1/tokens/mint`. Le serveur répond 201 (apparition du
+  modal api_key) ou 4xx (erreur inline avec
+  `{ not_acceptable, not_inherited, risks }`).
 
 `lib/mint/risk-preview.ts` est la **single source of truth** pour la
-résolution de gate (pure compute) ; `lib/mint/preview.ts` wraps avec
-le DB load. Les deux routes mint/preview les consomment.
+résolution (pure compute). `lib/mint/preview.ts` la wrappe avec le
+catalog load (pas de DB read post drop-confirm). Les routes
+`tokens/mint` et `tokens/preview` consomment le wrap.
 
 La table d'audit (`audit_log`) stocke désormais `slices_executed`,
 `risks_touched`, et `token_accepted_risks_snapshot` (cf.
@@ -330,8 +325,8 @@ Cf. [`mcp-gateway.md`](./mcp-gateway.md) pour le flow interne du gateway.
 
 Read paths use the user-bound `getSupabaseServer()` client (RLS enforced).
 Writes that need to bypass RLS (`tokens` insert, provider_admins
-upsert, audit_log insert, bash_bindings, approval_requests) use the
-service_role client (`getSupabaseServiceClient()`).
+upsert, audit_log insert, bash_bindings) use the service_role client
+(`getSupabaseServiceClient()`).
 
 Le service_role client est server-only et n'atteint jamais le bundle
 browser.

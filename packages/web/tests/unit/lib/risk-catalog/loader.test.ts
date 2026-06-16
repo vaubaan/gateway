@@ -30,7 +30,6 @@ const minimalCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'supabase.uncategorized-write',
@@ -45,7 +44,6 @@ const minimalCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };
@@ -102,7 +100,6 @@ describe('qualifyRiskId', () => {
       visibility: 'internal',
       persistence: 'session',
     },
-    default_gate: 'confirm',
     acceptable_in_envs: ['staging', 'preview'],
   };
   const accountScopedEntry: RiskEntry = {
@@ -118,7 +115,6 @@ describe('qualifyRiskId', () => {
       visibility: 'internal',
       persistence: 'posture',
     },
-    default_gate: 'deny',
   };
 
   test('returns base id when env is null', () => {

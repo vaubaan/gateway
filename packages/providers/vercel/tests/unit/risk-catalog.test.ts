@@ -12,7 +12,6 @@
  *   - duplicate RiskId
  *   - RiskId that breaks the wire-format regex (cf. shared/src/risk.ts)
  *   - a `matches` pattern that does not parse via `parseSlice`
- *   - a `default_gate` not in {`allow`, `confirm`, `deny`}
  *   - missing fallback risk (`vercel.uncategorized-*`)
  *   - any tool whose emitted slices are only covered by the fallback risk
  *     (signals a hole in the catalog).
@@ -24,7 +23,6 @@ import { dirname, resolve } from 'node:path';
 import { describe, expect, test } from 'vitest';
 import yaml from 'js-yaml';
 import type { ProviderBinding, RiskCatalog, RiskEntry, Slice } from '@vaubaan/shared';
-import { RISK_GATES } from '@vaubaan/shared';
 import { matches, parseSlice } from '@vaubaan/policy-engine';
 
 import { availableTools as vercelAvailableTools } from '../../src/tools.ts';
@@ -64,7 +62,6 @@ describe('vercel risk-catalog — YAML structural validation', () => {
       expect(typeof entry.reason).toBe('string');
       expect(typeof entry.matches).toBe('string');
       expect(entry.vector).toBeDefined();
-      expect(typeof entry.default_gate).toBe('string');
     }
   });
 
@@ -79,12 +76,6 @@ describe('vercel risk-catalog — YAML structural validation', () => {
     for (const entry of parsedCatalog.risks) {
       expect(seen.has(entry.id), `duplicate risk id '${entry.id}'`).toBe(false);
       seen.add(entry.id);
-    }
-  });
-
-  test('every default_gate is a valid RiskGate', () => {
-    for (const entry of parsedCatalog.risks) {
-      expect(RISK_GATES, `risk '${entry.id}' has invalid gate`).toContain(entry.default_gate);
     }
   });
 
@@ -230,44 +221,38 @@ describe('vercel risk-catalog — coverage lint (every tool matched by ≥1 non-
   }
 });
 
-describe('vercel risk-catalog — saliency checks (decisions from research doc §3)', () => {
-  test('env-var-write-prod is deny (catalog source of truth)', () => {
-    const e = parsedCatalog.risks.find((r) => r.id === 'vercel.env-var-write-prod');
-    expect(e?.default_gate).toBe('deny');
+describe('vercel risk-catalog — saliency checks (entries from research doc §3)', () => {
+  test('env-var-write-prod entry exists', () => {
+    expect(parsedCatalog.risks.find((r) => r.id === 'vercel.env-var-write-prod')).toBeDefined();
   });
 
-  test('env-var-fan-out is confirm', () => {
-    const e = parsedCatalog.risks.find((r) => r.id === 'vercel.env-var-fan-out');
-    expect(e?.default_gate).toBe('confirm');
+  test('env-var-fan-out entry exists', () => {
+    expect(parsedCatalog.risks.find((r) => r.id === 'vercel.env-var-fan-out')).toBeDefined();
   });
 
-  test('deploy-prod is confirm', () => {
-    const e = parsedCatalog.risks.find((r) => r.id === 'vercel.deploy-prod');
-    expect(e?.default_gate).toBe('confirm');
+  test('deploy-prod entry exists', () => {
+    expect(parsedCatalog.risks.find((r) => r.id === 'vercel.deploy-prod')).toBeDefined();
   });
 
-  test('deploy-preview is allow', () => {
-    const e = parsedCatalog.risks.find((r) => r.id === 'vercel.deploy-preview');
-    expect(e?.default_gate).toBe('allow');
+  test('deploy-preview entry exists', () => {
+    expect(parsedCatalog.risks.find((r) => r.id === 'vercel.deploy-preview')).toBeDefined();
   });
 
-  test('deployment-protection-write is deny', () => {
-    const e = parsedCatalog.risks.find((r) => r.id === 'vercel.deployment-protection-write');
-    expect(e?.default_gate).toBe('deny');
+  test('deployment-protection-write entry exists', () => {
+    expect(
+      parsedCatalog.risks.find((r) => r.id === 'vercel.deployment-protection-write'),
+    ).toBeDefined();
   });
 
-  test('domain-write is deny', () => {
-    const e = parsedCatalog.risks.find((r) => r.id === 'vercel.domain-write');
-    expect(e?.default_gate).toBe('deny');
+  test('domain-write entry exists', () => {
+    expect(parsedCatalog.risks.find((r) => r.id === 'vercel.domain-write')).toBeDefined();
   });
 
-  test('read-env-var-plaintext is deny', () => {
-    const e = parsedCatalog.risks.find((r) => r.id === 'vercel.read-env-var-plaintext');
-    expect(e?.default_gate).toBe('deny');
+  test('read-env-var-plaintext entry exists', () => {
+    expect(parsedCatalog.risks.find((r) => r.id === 'vercel.read-env-var-plaintext')).toBeDefined();
   });
 
-  test('fallback is confirm', () => {
-    const e = parsedCatalog.risks.find((r) => r.id === FALLBACK_ID);
-    expect(e?.default_gate).toBe('confirm');
+  test('fallback entry exists', () => {
+    expect(parsedCatalog.risks.find((r) => r.id === FALLBACK_ID)).toBeDefined();
   });
 });

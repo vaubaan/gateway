@@ -49,7 +49,6 @@ function risk(id: string, matches: string | string[]): RiskEntry {
       visibility: 'internal',
       persistence: 'stateless',
     },
-    default_gate: 'allow',
   };
 }
 

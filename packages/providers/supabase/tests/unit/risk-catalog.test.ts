@@ -9,8 +9,8 @@
  *     `supabase.uncategorized-write`),
  *   - `row[one]` and `row[bulk]` markers fire the right (and only the right)
  *     write risks (mutual exclusion),
- *   - posture-deny risks (`policy.W`, `auth-config.W`, `function-secret.W`,
- *     …) carry `default_gate: deny`,
+ *   - posture-sensitive entries (`policy.W`, `auth-config.W`,
+ *     `function-secret.W`, …) are declared in the catalog,
  *   - the fallback `supabase.**.W` is present and covers any naïve write.
  */
 
@@ -88,7 +88,6 @@ describe('risk-catalog.yaml — parse + schema', () => {
       expect(typeof e.label).toBe('string');
       expect(typeof e.reason).toBe('string');
       expect(typeof e.matches === 'string' || Array.isArray(e.matches)).toBe(true);
-      expect(['allow', 'confirm', 'deny']).toContain(e.default_gate);
       // 6-dim vector
       expect(e.vector).toBeDefined();
       expect(typeof e.vector.reversibility).toBe('string');
@@ -132,11 +131,14 @@ describe('risk-catalog.yaml — parse + schema', () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// Posture-deny invariants — these specific risks MUST be `deny`
+// Posture-sensitive entries — these specific risks MUST be present in the
+// catalog (they used to carry `default_gate=deny` ; post drop-confirm
+// they are simply non-default, opt-in only, severity captured by the
+// 6D vector — but the catalog must still list them).
 // ────────────────────────────────────────────────────────────────────────
 
-describe('risk-catalog.yaml — posture-deny invariants', () => {
-  const MUST_BE_DENY = [
+describe('risk-catalog.yaml — posture-sensitive entries', () => {
+  const REQUIRED_ENTRIES = [
     'supabase.policy-write',
     'supabase.auth-config-write',
     'supabase.function-secret-write',
@@ -147,11 +149,10 @@ describe('risk-catalog.yaml — posture-deny invariants', () => {
     'supabase.db-role-write',
     'supabase.extension-write',
   ];
-  for (const id of MUST_BE_DENY) {
-    test(`${id} → default_gate = deny`, () => {
+  for (const id of REQUIRED_ENTRIES) {
+    test(`${id} entry exists`, () => {
       const e = CATALOG.risks.find((r: RiskEntry) => r.id === id);
       expect(e, `entry ${id} missing from catalog`).toBeDefined();
-      expect(e!.default_gate).toBe('deny');
     });
   }
 
@@ -165,10 +166,9 @@ describe('risk-catalog.yaml — posture-deny invariants', () => {
     expect(e?.acceptable_in_envs).toEqual(['preview', 'staging']);
   });
 
-  test('fallback `supabase.uncategorized-write` is present with confirm gate', () => {
+  test('fallback `supabase.uncategorized-write` is present', () => {
     const e = CATALOG.risks.find((r: RiskEntry) => r.id === 'supabase.uncategorized-write');
     expect(e).toBeDefined();
-    expect(e!.default_gate).toBe('confirm');
     expect(e!.matches).toBe('supabase.**.W');
   });
 });
@@ -331,14 +331,14 @@ describe('risk-catalog.yaml — cardinality mutual exclusion', () => {
 // ────────────────────────────────────────────────────────────────────────
 
 describe('risk-catalog.yaml — decision-level spot checks', () => {
-  test('update_auth_config fires auth-config.W (deny posture)', () => {
+  test('update_auth_config fires auth-config.W', () => {
     const touched = risksFor('supabase__update_auth_config', {
       project_ref: STAGING_REF,
       config: {},
     });
     expect(touched).toContain('supabase.auth-config-write');
     const entry = CATALOG.risks.find((r: RiskEntry) => r.id === 'supabase.auth-config-write');
-    expect(entry?.default_gate).toBe('deny');
+    expect(entry).toBeDefined();
   });
 
   test('create_function_secrets fires function-secret.W (deny posture)', () => {

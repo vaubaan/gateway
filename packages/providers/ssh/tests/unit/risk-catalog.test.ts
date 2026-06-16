@@ -43,7 +43,6 @@ describe('sshRiskCatalog — shape', () => {
       expect(entry.label.length).toBeGreaterThan(0);
       expect(entry.reason.length).toBeGreaterThan(0);
       expect(entry.matches.length).toBeGreaterThan(0);
-      expect(['allow', 'confirm', 'deny']).toContain(entry.default_gate);
       expect(entry.vector).toBeDefined();
     }
   });
@@ -53,25 +52,9 @@ describe('sshRiskCatalog — shape', () => {
     expect(entry?.acceptable_in_envs).toEqual(['staging-vps', 'dev-vps']);
   });
 
-  test('exec-read default_gate is allow', () => {
-    const entry = sshRiskCatalog.risks.find((r) => r.id === 'ssh.exec-read');
-    expect(entry?.default_gate).toBe('allow');
-  });
-
-  test('exec-write-prod default_gate is deny', () => {
-    const entry = sshRiskCatalog.risks.find((r) => r.id === 'ssh.exec-write-prod');
-    expect(entry?.default_gate).toBe('deny');
-  });
-
-  test('exec-read-secret-files default_gate is confirm', () => {
-    const entry = sshRiskCatalog.risks.find((r) => r.id === 'ssh.exec-read-secret-files');
-    expect(entry?.default_gate).toBe('confirm');
-  });
-
   test('uncategorized-write is the fallback (matches ssh.**.W)', () => {
     const entry = sshRiskCatalog.risks.find((r) => r.id === 'ssh.uncategorized-write');
     expect(entry?.matches).toBe('ssh.**.W');
-    expect(entry?.default_gate).toBe('confirm');
   });
 });
 

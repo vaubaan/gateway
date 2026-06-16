@@ -28,7 +28,6 @@ const envScopedEntry: RiskEntry = {
     visibility: 'internal',
     persistence: 'session',
   },
-  default_gate: 'confirm',
   acceptable_in_envs: ['staging', 'preview'],
 };
 
@@ -45,7 +44,6 @@ const accountScopedEntry: RiskEntry = {
     visibility: 'internal',
     persistence: 'posture',
   },
-  default_gate: 'deny',
 };
 
 describe('isEnvScopedEntry', () => {

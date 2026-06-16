@@ -133,26 +133,8 @@ describe('railwayRiskCatalog — shape', () => {
       expect(entry.label.length).toBeGreaterThan(0);
       expect(entry.reason.length).toBeGreaterThan(0);
       expect(entry.matches.length).toBeGreaterThan(0);
-      expect(['allow', 'confirm', 'deny']).toContain(entry.default_gate);
       expect(entry.vector).toBeDefined();
     }
-  });
-
-  test('default_gate values match research §1.4 critical entries', () => {
-    const byId = new Map(railwayRiskCatalog.risks.map((r) => [r.id, r]));
-    expect(byId.get('railway.read-account')?.default_gate).toBe('allow');
-    expect(byId.get('railway.read-runtime')?.default_gate).toBe('allow');
-    expect(byId.get('railway.read-logs')?.default_gate).toBe('allow');
-    expect(byId.get('railway.read-variables')?.default_gate).toBe('confirm');
-    expect(byId.get('railway.deploy-staging')?.default_gate).toBe('allow');
-    expect(byId.get('railway.deploy-prod')?.default_gate).toBe('confirm');
-    expect(byId.get('railway.upsert-variable-staging')?.default_gate).toBe('confirm');
-    expect(byId.get('railway.upsert-variable-prod')?.default_gate).toBe('deny');
-    // The two critical edge cases highlighted in the task brief :
-    expect(byId.get('railway.bulk-variables-replace')?.default_gate).toBe('deny');
-    expect(byId.get('railway.agent-action')?.default_gate).toBe('confirm');
-    expect(byId.get('railway.create-project')?.default_gate).toBe('confirm');
-    expect(byId.get('railway.uncategorized-write')?.default_gate).toBe('confirm');
   });
 
   test('deploy-staging restricts to non-prod via acceptable_in_envs', () => {
@@ -168,7 +150,6 @@ describe('railwayRiskCatalog — shape', () => {
   test('uncategorized-write is the fallback (matches railway.**.W)', () => {
     const entry = railwayRiskCatalog.risks.find((r) => r.id === 'railway.uncategorized-write');
     expect(entry?.matches).toBe('railway.**.W');
-    expect(entry?.default_gate).toBe('confirm');
   });
 });
 

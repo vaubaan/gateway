@@ -47,7 +47,6 @@ const supabaseCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
   ],
 };

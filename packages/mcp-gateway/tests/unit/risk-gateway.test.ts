@@ -33,7 +33,6 @@ const catalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'stateless',
       },
-      default_gate: 'allow',
     },
     {
       id: 'supabase.row-write-one',
@@ -48,7 +47,6 @@ const catalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'allow',
     },
     {
       id: 'supabase.bulk-row-write',
@@ -63,7 +61,6 @@ const catalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
     {
       id: 'supabase.uncategorized-write',
@@ -78,7 +75,6 @@ const catalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      default_gate: 'confirm',
     },
   ],
 };

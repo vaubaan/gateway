@@ -143,7 +143,6 @@ describe('GitHub risk catalog — schema', () => {
       expect(entry.reason.length, `entry ${entry.id} reason`).toBeGreaterThan(0);
       expect(entry.matches, `entry ${entry.id} matches`).toBeDefined();
       expect(entry.vector, `entry ${entry.id} vector`).toBeDefined();
-      expect(['allow', 'confirm', 'deny']).toContain(entry.default_gate);
     }
   });
 
