@@ -4,8 +4,8 @@
  * Railway OAuth callback. Exchanges the `code` (with the PKCE verifier from the
  * single-use cookie and `resource=https://mcp.railway.com` audience binding)
  * for an access_token (1h) + refresh_token, then upserts the provider_admins
- * row. Tokens are encrypted via `upsert_provider_admin_encrypted` SQL RPC
- * (per-org pgsodium AEAD — see docs/decisions/per-org-encryption-pgsodium.md).
+ * row. Tokens are encrypted via app-level libsodium AEAD per-org encryption
+ * (see docs/decisions/per-org-encryption-app-level.md).
  *
  * ADR : docs/decisions/railway-rewrap-remote-mcp.md.
  */
@@ -15,6 +15,8 @@ import { cookies } from 'next/headers';
 import { getSupabaseServer, getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeStateOrgId } from '@/lib/oauth/state';
 import { RAILWAY_MCP_RESOURCE, RAILWAY_TOKEN_URL, railwayRedirectUri } from '@/lib/oauth/railway';
+import { encodeByteaHexRaw } from '@/lib/providers/bytea';
+import { encryptProviderSecret } from '@/lib/crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,14 +104,26 @@ export async function GET(req: NextRequest) {
     ? new Date(Date.now() + tokenJson.expires_in * 1000).toISOString()
     : null;
 
-  const { error: insertErr } = await svc.rpc('upsert_provider_admin_encrypted', {
-    p_org_id: orgId,
-    p_provider: 'railway',
-    p_access_token: tokenJson.access_token,
-    p_refresh_token: tokenJson.refresh_token ?? null,
-    p_expires_at: expiresAt,
-    p_connected_by: userData.user.id,
-  });
+  const upsertPayload: Record<string, unknown> = {
+    organization_id: orgId,
+    provider: 'railway',
+    status: 'connected',
+    access_token_encrypted: encodeByteaHexRaw(
+      await encryptProviderSecret(orgId, tokenJson.access_token),
+    ),
+    connected_by_user_id: userData.user.id,
+    connected_at: new Date().toISOString(),
+  };
+  if (tokenJson.refresh_token) {
+    upsertPayload.refresh_token_encrypted = encodeByteaHexRaw(
+      await encryptProviderSecret(orgId, tokenJson.refresh_token),
+    );
+  }
+  if (expiresAt) upsertPayload.expires_at = expiresAt;
+
+  const { error: insertErr } = await svc
+    .from('provider_admins')
+    .upsert(upsertPayload, { onConflict: 'organization_id,provider' });
   if (insertErr) {
     redirect.searchParams.set('error', `persist failed: ${insertErr.message}`);
     return NextResponse.redirect(redirect);

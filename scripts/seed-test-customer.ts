@@ -19,6 +19,7 @@ import { Client } from 'pg';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { generateApiKey, hashApiKey } from '../packages/shared/src/api-key.ts';
+import { encryptProviderSecret } from '../packages/web/src/lib/crypto/provider-secrets.ts';
 
 interface EnvTest {
   GITHUB_ORG: string;
@@ -104,23 +105,24 @@ async function main() {
     // so no explicit org_members insert is needed. Idempotent on re-runs.
 
     // 3) ProviderAdmin × 3 — paste-token mode (no installation_id).
-    // Tokens are encrypted at rest via pgsodium AEAD per-org keys
-    // (cf. per-org-encryption-pgsodium ADR).
+    // Tokens are encrypted at rest via app-level libsodium AEAD per-org keys
+    // (cf. per-org-encryption-app-level ADR).
     const insertAdmin = async (
       provider: 'github' | 'vercel' | 'supabase',
       pat: string,
       teamId: string | null,
     ) => {
+      const encrypted = await encryptProviderSecret(orgId, pat);
       await client.query(
         `insert into provider_admins
            (organization_id, provider, status, access_token_encrypted, team_id, connected_by_user_id)
-         values ($1, $2, 'connected', encrypt_provider_secret($1, $3), $4, $5)
+         values ($1, $2, 'connected', $3, $4, $5)
          on conflict (organization_id, provider) do update set
            status = 'connected',
-           access_token_encrypted = encrypt_provider_secret($1, $3),
+           access_token_encrypted = excluded.access_token_encrypted,
            team_id = excluded.team_id,
            connected_by_user_id = excluded.connected_by_user_id`,
-        [orgId, provider, pat, teamId, CUSTOMER_USER_ID],
+        [orgId, provider, encrypted, teamId, CUSTOMER_USER_ID],
       );
       console.log(`provider_admin: ${provider} (paste-token, ${pat.length} chars)`);
     };

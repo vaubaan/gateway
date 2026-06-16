@@ -18,6 +18,10 @@ export function encodeByteaHex(s: string): string {
   return '\\x' + Buffer.from(s, 'utf8').toString('hex');
 }
 
+export function encodeByteaHexRaw(buf: Uint8Array | Buffer): string {
+  return '\\x' + Buffer.from(buf).toString('hex');
+}
+
 export function decodeBytea(raw: unknown): Uint8Array | null {
   if (raw === null || raw === undefined) return null;
   if (raw instanceof Uint8Array) return raw;

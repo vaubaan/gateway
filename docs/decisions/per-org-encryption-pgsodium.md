@@ -1,8 +1,9 @@
 ---
 title: Per-org encryption at rest via pgsodium
-status: accepted
+status: superseded
 date: 2026-06-16
 supersedes: trust-model-clear-at-rest-idp-style.md (the "clear-at-rest" aspect only — the IdP trust model itself stays)
+superseded-by: per-org-encryption-app-level.md
 ---
 
 # Per-org encryption at rest via pgsodium

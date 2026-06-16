@@ -26,7 +26,8 @@ import {
   type UpstreamAdapter,
 } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { decodeBytea } from '@/lib/providers/bytea';
+import { decodeBytea, encodeByteaHexRaw } from '@/lib/providers/bytea';
+import { decryptProviderSecret, encryptProviderSecret } from '@/lib/crypto';
 import { getCatalog } from '@/lib/risk-catalog/loader';
 
 function getGitHubAppCredentials() {
@@ -188,17 +189,22 @@ export function buildGateway(opts: {
     provider: Provider,
   ): Promise<ProviderAdmin | null> => {
     const { data } = await supabase
-      .from('provider_admins_decrypted')
+      .from('provider_admins')
       .select('*')
       .eq('organization_id', orgId)
       .eq('provider', provider)
       .maybeSingle<ProviderAdmin>();
     if (!data) return null;
-    // Supabase returns bytea as a hex-encoded `\x...` string. Convert to Uint8Array.
+    const rawAccess = decodeBytea(data.access_token_encrypted);
+    const rawRefresh = decodeBytea(data.refresh_token_encrypted);
     return {
       ...data,
-      access_token_encrypted: decodeBytea(data.access_token_encrypted),
-      refresh_token_encrypted: decodeBytea(data.refresh_token_encrypted),
+      access_token_encrypted: rawAccess
+        ? new TextEncoder().encode(await decryptProviderSecret(orgId, rawAccess))
+        : null,
+      refresh_token_encrypted: rawRefresh
+        ? new TextEncoder().encode(await decryptProviderSecret(orgId, rawRefresh))
+        : null,
     };
   };
 
@@ -252,12 +258,18 @@ export function buildGateway(opts: {
     clientId: process.env.RAILWAY_CLIENT_ID,
     clientSecret: process.env.RAILWAY_CLIENT_SECRET,
     persistRefresh: async (admin, tokens) => {
-      await supabase.rpc('update_provider_admin_tokens', {
-        p_admin_id: admin.id,
-        p_access_token: tokens.accessToken,
-        p_refresh_token: tokens.refreshToken,
-        p_expires_at: tokens.expiresAt.toISOString(),
-      });
+      await supabase
+        .from('provider_admins')
+        .update({
+          access_token_encrypted: encodeByteaHexRaw(
+            await encryptProviderSecret(admin.organization_id, tokens.accessToken),
+          ),
+          refresh_token_encrypted: encodeByteaHexRaw(
+            await encryptProviderSecret(admin.organization_id, tokens.refreshToken),
+          ),
+          expires_at: tokens.expiresAt.toISOString(),
+        })
+        .eq('id', admin.id);
     },
   });
   upstreamByProvider.railway = {

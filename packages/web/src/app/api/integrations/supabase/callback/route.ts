@@ -11,6 +11,8 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { getSupabaseServer, getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeStateOrgId } from '@/lib/oauth/state';
+import { encodeByteaHexRaw } from '@/lib/providers/bytea';
+import { encryptProviderSecret } from '@/lib/crypto';
 
 export const dynamic = 'force-dynamic';
 
@@ -89,14 +91,23 @@ export async function GET(req: NextRequest) {
   }
   const redirect = new URL(`/orgs/${org.slug}/providers`, req.url);
 
-  const { error: insertErr } = await svc.rpc('upsert_provider_admin_encrypted', {
-    p_org_id: orgId,
-    p_provider: 'supabase',
-    p_access_token: tokenJson.access_token,
-    p_refresh_token: tokenJson.refresh_token,
-    p_expires_at: expiresAt,
-    p_connected_by: userData.user.id,
-  });
+  const { error: insertErr } = await svc.from('provider_admins').upsert(
+    {
+      organization_id: orgId,
+      provider: 'supabase',
+      status: 'connected',
+      access_token_encrypted: encodeByteaHexRaw(
+        await encryptProviderSecret(orgId, tokenJson.access_token),
+      ),
+      refresh_token_encrypted: encodeByteaHexRaw(
+        await encryptProviderSecret(orgId, tokenJson.refresh_token),
+      ),
+      expires_at: expiresAt,
+      connected_by_user_id: userData.user.id,
+      connected_at: new Date().toISOString(),
+    },
+    { onConflict: 'organization_id,provider' },
+  );
   if (insertErr) {
     redirect.searchParams.set('error', `persist failed: ${insertErr.message}`);
     return NextResponse.redirect(redirect);

@@ -18,7 +18,8 @@ import type {
   ProviderBinding,
 } from '@vaubaan/shared';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
-import { decodeBytea } from './bytea';
+import { decodeBytea, encodeByteaHexRaw } from './bytea';
+import { decryptProviderSecret, encryptProviderSecret } from '@/lib/crypto';
 
 export interface ProviderResource {
   ref: string;
@@ -201,12 +202,12 @@ async function loadVercelState(admin: AdminRow): Promise<ProviderState> {
     resources: [],
     error: null,
   };
-  const bytes = decodeBytea(admin.access_token_encrypted);
-  if (!bytes) {
+  const encBytes = decodeBytea(admin.access_token_encrypted);
+  if (!encBytes) {
     base.error = 'Token missing — reconnect required.';
     return base;
   }
-  const token = new TextDecoder().decode(bytes);
+  const token = await decryptProviderSecret(admin.organization_id, encBytes);
   let teamSlug: string | null = null;
   try {
     const teamId = admin.team_id;
@@ -305,7 +306,7 @@ async function refreshSupabaseToken(admin: AdminRow): Promise<string | null> {
   if (!clientId || !clientSecret) return null;
   const refreshBytes = decodeBytea(admin.refresh_token_encrypted);
   if (!refreshBytes) return null;
-  const refresh = new TextDecoder().decode(refreshBytes);
+  const refresh = await decryptProviderSecret(admin.organization_id, refreshBytes);
   const basicAuth = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
   const res = await fetch('https://api.supabase.com/v1/oauth/token', {
     method: 'POST',
@@ -323,12 +324,18 @@ async function refreshSupabaseToken(admin: AdminRow): Promise<string | null> {
   };
   const expiresAt = new Date(Date.now() + json.expires_in * 1000).toISOString();
   const svc = getSupabaseServiceClient();
-  await svc.rpc('update_provider_admin_tokens', {
-    p_admin_id: admin.id,
-    p_access_token: json.access_token,
-    p_refresh_token: json.refresh_token,
-    p_expires_at: expiresAt,
-  });
+  await svc
+    .from('provider_admins')
+    .update({
+      access_token_encrypted: encodeByteaHexRaw(
+        await encryptProviderSecret(admin.organization_id, json.access_token),
+      ),
+      refresh_token_encrypted: encodeByteaHexRaw(
+        await encryptProviderSecret(admin.organization_id, json.refresh_token),
+      ),
+      expires_at: expiresAt,
+    })
+    .eq('id', admin.id);
   return json.access_token;
 }
 
@@ -344,12 +351,12 @@ async function loadSupabaseState(admin: AdminRow): Promise<ProviderState> {
     resources: [],
     error: null,
   };
-  const bytes = decodeBytea(admin.access_token_encrypted);
-  if (!bytes) {
+  const encBytes2 = decodeBytea(admin.access_token_encrypted);
+  if (!encBytes2) {
     base.error = 'Token missing — reconnect required.';
     return base;
   }
-  let token = new TextDecoder().decode(bytes);
+  let token = await decryptProviderSecret(admin.organization_id, encBytes2);
 
   // Supabase OAuth access_tokens expire in 1h. Pre-emptively refresh if we're
   // within 60s of expiry (or already past). On refresh failure we still try
@@ -475,23 +482,34 @@ async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
     resources: [],
     error: null,
   };
-  const accessBytes = decodeBytea(admin.access_token_encrypted);
-  if (!accessBytes) {
+  const accessEncBytes = decodeBytea(admin.access_token_encrypted);
+  if (!accessEncBytes) {
     base.error = 'Token missing — reconnect required.';
     return base;
   }
+  const decryptedAccessToken = await decryptProviderSecret(admin.organization_id, accessEncBytes);
+  const refreshEncBytes = decodeBytea(admin.refresh_token_encrypted);
+  const decryptedRefreshToken = refreshEncBytes
+    ? await decryptProviderSecret(admin.organization_id, refreshEncBytes)
+    : null;
 
   const adapter = new RailwayAdapter({
     clientId: process.env.RAILWAY_CLIENT_ID,
     clientSecret: process.env.RAILWAY_CLIENT_SECRET,
     persistRefresh: async (_a, tokens) => {
       const svc = getSupabaseServiceClient();
-      await svc.rpc('update_provider_admin_tokens', {
-        p_admin_id: admin.id,
-        p_access_token: tokens.accessToken,
-        p_refresh_token: tokens.refreshToken,
-        p_expires_at: tokens.expiresAt.toISOString(),
-      });
+      await svc
+        .from('provider_admins')
+        .update({
+          access_token_encrypted: encodeByteaHexRaw(
+            await encryptProviderSecret(admin.organization_id, tokens.accessToken),
+          ),
+          refresh_token_encrypted: encodeByteaHexRaw(
+            await encryptProviderSecret(admin.organization_id, tokens.refreshToken),
+          ),
+          expires_at: tokens.expiresAt.toISOString(),
+        })
+        .eq('id', admin.id);
     },
   });
 
@@ -502,8 +520,10 @@ async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
     status: admin.status,
     installation_id: admin.installation_id,
     team_id: admin.team_id,
-    access_token_encrypted: accessBytes,
-    refresh_token_encrypted: decodeBytea(admin.refresh_token_encrypted),
+    access_token_encrypted: new TextEncoder().encode(decryptedAccessToken),
+    refresh_token_encrypted: decryptedRefreshToken
+      ? new TextEncoder().encode(decryptedRefreshToken)
+      : null,
     expires_at: admin.expires_at,
     connected_by_user_id: admin.connected_by_user_id,
     connected_at: admin.connected_at,
@@ -559,7 +579,7 @@ async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
 export async function loadProviderState(orgId: string, provider: Provider): Promise<ProviderState> {
   const svc = getSupabaseServiceClient();
   const { data: admin } = await svc
-    .from('provider_admins_decrypted')
+    .from('provider_admins')
     .select(
       'id, organization_id, provider, status, installation_id, team_id, access_token_encrypted, refresh_token_encrypted, expires_at, connected_by_user_id, connected_at',
     )
