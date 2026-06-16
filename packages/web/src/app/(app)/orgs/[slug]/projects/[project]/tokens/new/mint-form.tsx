@@ -69,6 +69,17 @@ interface TtlBodyFields {
   singleUse?: boolean;
 }
 
+/** Shape returned by `POST /api/v1/tokens/mint` on 201. Mirrors
+ *  `route.ts` lines 230-237 (token row + plaintext api_key + expiry +
+ *  echo of the accepted_risks). Kept local — the wire shape lives at
+ *  the route boundary, not in `@vaubaan/shared`. */
+interface MintSuccessBody {
+  token: { id: string; name: string; api_key_prefix: string };
+  api_key: string;
+  expires_at: string;
+  accepted_risks: RiskId[];
+}
+
 /** Convert a TTL preset into the body fields the mint route expects. The
  *  "short" preset enforces single-use (the route rejects ttlSeconds without
  *  it) ; longer buckets are free to be single-use or reusable. */
@@ -227,11 +238,12 @@ export function MintForm({
         });
         const json = (await res.json()) as Record<string, unknown>;
         if (res.status === 201) {
+          const body = json as unknown as MintSuccessBody;
           setMintResult({
             kind: 'minted',
-            apiKey: String(json.api_key),
-            tokenName: (json.token as { name?: string } | undefined)?.name ?? tokenName ?? '',
-            expiresAt: String(json.expires_at ?? ''),
+            apiKey: body.api_key,
+            tokenName: body.token?.name ?? tokenName ?? '',
+            expiresAt: body.expires_at ?? '',
           });
           return;
         }

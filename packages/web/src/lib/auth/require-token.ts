@@ -141,11 +141,17 @@ export async function requireToken(
       }
       if (!(await verifyApiKey(row.api_key_hash, raw))) return unauthorized('api_key mismatch.');
 
-      Promise.resolve(
-        svc.from('tokens').update({ last_used_at: new Date().toISOString() }).eq('id', row.id),
-      ).catch((e: unknown) => {
-        console.error('[require-token] touch last_used_at failed', e);
-      });
+      // Fire-and-forget : the `last_used_at` touch is best-effort
+      // (logging probe). We don't `await` so the auth hot path stays
+      // synchronous ; `void` + `.then().catch()` makes the lint-clean
+      // intent explicit (no floating promise warning).
+      void svc
+        .from('tokens')
+        .update({ last_used_at: new Date().toISOString() })
+        .eq('id', row.id)
+        .then(({ error }) => {
+          if (error) console.error('[require-token] touch last_used_at failed', error);
+        });
 
       return {
         ok: true,

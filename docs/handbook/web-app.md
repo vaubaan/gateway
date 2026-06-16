@@ -96,7 +96,7 @@ packages/web/
       providers/{state, bytea}.ts                       # provider_admins helpers
       gateway/build.ts                                  # wire McpGateway with adapters + catalogs
       risk-catalog/loader.ts                            # boot-time provider catalog index
-      mint/{preview, risk-preview, child-mint}.ts       # pure preview + child-mint helper
+      mint/{preview, risk-preview, child-mint, token-name}.ts  # pure preview, child-mint, name regex
       bash/{parse, exec, args, exec-host}.ts            # annotated-bash provider — cf. bash-provider handbook
     components/providers/
       provider-info.ts                                  # static per-provider strings (label, planes, mint mode)
@@ -296,6 +296,12 @@ is `ci-deploy` rather than `claude-dev` to avoid presuming agent usage.
 résolution (pure compute). `lib/mint/preview.ts` la wrappe avec le
 catalog load (pas de DB read post drop-confirm). Les routes
 `tokens/mint` et `tokens/preview` consomment le wrap.
+
+`lib/mint/token-name.ts` exporte `TOKEN_NAME_REGEX` — la single source
+of truth pour la règle kebab-case des noms de token (`^[a-z0-9](-?[a-z0-9])*$`).
+Consommé par le mint endpoint, le PATCH `/api/v1/tokens/:id`, la UI mint
+(`mint-form.tsx`) et la UI rename (`token-row-controls.tsx`) : rule-of-three
+honoré, pas de drift possible entre validation client et serveur.
 
 La table d'audit (`audit_log`) stocke désormais `slices_executed`,
 `risks_touched`, et `token_accepted_risks_snapshot` (cf.
