@@ -3,10 +3,14 @@
 --
 -- ADR : docs/decisions/per-org-encryption-pgsodium.md
 --
--- Every organization gets its own pgsodium AEAD-det key. Provider tokens are
--- encrypted/decrypted transparently via SQL helper functions. The app never
--- touches key material. DB dump without root key is useless. Per-org key
--- rotation and crypto-shred on org deletion are possible.
+-- Prerequisite (one-time, from Supabase Dashboard SQL Editor):
+--
+--   GRANT pgsodium_keyholder TO postgres;
+--
+-- The `postgres` role (used by both direct and pooler connections) needs
+-- pgsodium_keyholder so that SECURITY DEFINER functions it owns can call
+-- crypto_aead_det_encrypt / crypto_aead_det_decrypt. This GRANT must be
+-- done by supabase_admin (the Dashboard runs as supabase_admin).
 --
 -- Objects created :
 --   - extension pgsodium
@@ -21,15 +25,19 @@
 -- =============================================================================
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- 0. Elevate to supabase_admin
---
--- On Supabase hosted, `postgres` (the migration runner) is a member of
--- `supabase_admin` with NOINHERIT. SET ROLE makes the rest of this migration
--- run with full privileges, including pgsodium_keyholder (required for
--- crypto_aead_det_encrypt/decrypt) and the ability to ALTER FUNCTION OWNER.
--- This requires a DIRECT database connection (not the session pooler).
+-- 0. Prerequisite check
 -- ─────────────────────────────────────────────────────────────────────────────
-SET ROLE supabase_admin;
+DO $$
+BEGIN
+  IF NOT pg_has_role(current_user, 'pgsodium_keyholder', 'MEMBER') THEN
+    RAISE EXCEPTION
+      'Migration 0037 requires pgsodium_keyholder on %. '
+      'Run from the Supabase Dashboard SQL Editor (as supabase_admin): '
+      'GRANT pgsodium_keyholder TO postgres;',
+      current_user;
+  END IF;
+END;
+$$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. Enable pgsodium
@@ -58,8 +66,6 @@ BEGIN
   RETURN NEW;
 END;
 $$;
-
-ALTER FUNCTION create_org_encryption_key() OWNER TO supabase_admin;
 
 CREATE TRIGGER trg_org_create_encryption_key
   BEFORE INSERT ON organizations
@@ -93,11 +99,9 @@ ALTER TABLE organizations ALTER COLUMN encryption_key_id SET NOT NULL;
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 5. Encrypt / decrypt helper functions
 --
--- On Supabase hosted, the `postgres` role (used by the pooler) does not have
--- `pgsodium_keyholder`, which is required for crypto_aead_det_encrypt/decrypt.
--- The `supabase_admin` role DOES have it. We create the functions as postgres
--- (the migration runner) then ALTER OWNER to supabase_admin so the SECURITY
--- DEFINER context runs with the right privileges.
+-- SECURITY DEFINER + owned by postgres (who has pgsodium_keyholder via the
+-- prerequisite GRANT). Any caller — service_role, authenticated, anon — can
+-- call these wrappers; the DEFINER context provides pgsodium access.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE OR REPLACE FUNCTION encrypt_provider_secret(p_org_id uuid, p_plaintext text)
 RETURNS bytea LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pgsodium, public AS $$
@@ -120,15 +124,9 @@ RETURNS text LANGUAGE sql STABLE SECURITY DEFINER SET search_path = pgsodium, pu
   );
 $$;
 
-ALTER FUNCTION encrypt_provider_secret(uuid, text) OWNER TO supabase_admin;
-ALTER FUNCTION decrypt_provider_secret(uuid, bytea) OWNER TO supabase_admin;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 6. Decrypted view for reads
 -- ─────────────────────────────────────────────────────────────────────────────
--- The view uses our SECURITY DEFINER wrapper functions (not direct pgsodium
--- calls) so that any caller (including the service_role / postgres pooler
--- user that lacks pgsodium_keyholder) can read decrypted values.
 CREATE VIEW provider_admins_decrypted
 WITH (security_invoker = true)
 AS
@@ -194,8 +192,6 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION upsert_provider_admin_encrypted(uuid, text, text, text, text, text, text, timestamptz, uuid) OWNER TO supabase_admin;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 8. Write RPC: update tokens only (used by refresh flows)
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -223,15 +219,12 @@ BEGIN
 END;
 $$;
 
-ALTER FUNCTION update_provider_admin_tokens(uuid, text, text, timestamptz) OWNER TO supabase_admin;
-
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 9. Data migration: re-encrypt existing plaintext bytea data
 --
--- Uses our SECURITY DEFINER wrapper (owned by supabase_admin) to avoid the
--- pgsodium_keyholder permission issue on the pooler postgres role.
 -- Existing bytea holds raw UTF-8 of the plaintext token — convert_from
--- extracts the text, then encrypt_provider_secret encrypts it.
+-- extracts the text, then encrypt_provider_secret encrypts it with the
+-- org's pgsodium AEAD key.
 -- ─────────────────────────────────────────────────────────────────────────────
 UPDATE provider_admins pa SET
   access_token_encrypted = CASE
@@ -250,8 +243,3 @@ UPDATE provider_admins pa SET
   END
 WHERE pa.access_token_encrypted IS NOT NULL
    OR pa.refresh_token_encrypted IS NOT NULL;
-
--- ─────────────────────────────────────────────────────────────────────────────
--- 10. Drop back to the original role
--- ─────────────────────────────────────────────────────────────────────────────
-RESET ROLE;
