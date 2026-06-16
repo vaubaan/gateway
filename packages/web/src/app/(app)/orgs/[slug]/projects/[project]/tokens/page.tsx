@@ -2,6 +2,7 @@ import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
+import { TokenRowControls } from './token-row-controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -102,18 +103,26 @@ export default async function TokensIndex({
               <strong>{t.name}</strong>{' '}
               <code style={{ opacity: 0.55 }}>vbn_live_{t.api_key_prefix}…</code>
             </div>
-            <span style={{ opacity: 0.55, fontSize: 13 }}>
-              {t.status === 'active' ? (
-                <span style={{ color: '#16a34a' }}>active</span>
-              ) : (
-                <span style={{ color: '#dc2626' }}>revoked</span>
-              )}
-              {t.last_used_at && (
-                <span style={{ marginLeft: 8 }}>
-                  used <LocalDate ts={t.last_used_at} />
-                </span>
-              )}
-            </span>
+            <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>
+              <span style={{ opacity: 0.55, fontSize: 13 }}>
+                {t.status === 'active' ? (
+                  <span style={{ color: '#16a34a' }}>active</span>
+                ) : (
+                  <span style={{ color: '#dc2626' }}>revoked</span>
+                )}
+                {t.last_used_at && (
+                  <span style={{ marginLeft: 8 }}>
+                    used <LocalDate ts={t.last_used_at} />
+                  </span>
+                )}
+              </span>
+              <TokenRowControls
+                tokenId={t.id}
+                tokenName={t.name}
+                orgSlug={org.slug}
+                status={t.status as 'active' | 'revoked'}
+              />
+            </div>
           </li>
         ))}
         {(tokens ?? []).length === 0 && (
