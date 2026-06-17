@@ -152,6 +152,46 @@ Règles :
   de sens sur certains envs (ex : empêcher un risk "bulk-write" sur
   prod même si la policy l'autorise).
 
+#### Caps & InfraLimits — à considérer en C, pas obligatoires
+
+ADR [[scope-caps-amplification-axis]] introduit deux champs optionnels
+sur `RiskEntry` (cf. spec §4bis) :
+
+- `caps?: ScopeCaps` — default recommandé soft (temporal window, items
+  per call, bytes per call, rate). Loosenable au niveau org (informed
+  acceptance), tighten-only en aval (binding, token).
+- `infra_limits?: InfraLimits` — hard ceiling non-overrideable
+  (budget mémoire gateway, quotas Upstash partagés, plafonds upstream
+  durs imposés par le provider tiers).
+
+**Pour chaque risk du catalog, pose-toi la question** :
+
+1. Y a-t-il une amplitude par défaut "raisonnable" qu'on suggère ?
+   → `caps`.
+2. Y a-t-il une limite physique au-dessus de laquelle ça crashera
+   ou DOSera la plateforme ? → `infra_limits`.
+
+Si non aux deux, n'ajoute aucun des deux champs — c'est l'option par
+défaut et c'est OK pour beaucoup de risks.
+
+#### Guideline anti-duplication — un slice, plusieurs amplitudes
+
+Tentation possible : créer deux risks pour la même slice à des
+amplitudes différentes (`gmail.read-recent` items=50, `gmail.read-historical`
+sans cap). **Ne duplique que si le vecteur 6D ou le `reason` change
+matériellement** entre les deux niveaux d'amplitude :
+
+| Cas                                                                                                           | Action                                                    |
+| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Mêmes vecteur 6D + reason, juste un nombre différent                                                          | UN risk + caps au niveau acceptance (binding, org, token) |
+| Vecteur 6D différent (ex. `persistence: posture` quand on lit l'historique complet)                           | DEUX risks distincts                                      |
+| `reason` audit différent ("read-recent = contexte courant" vs "read-historical = révèle l'histoire de l'org") | DEUX risks distincts                                      |
+
+Concrètement : si la décision **qualitative** du manager ("est-ce que
+j'accepte ça ?") change avec l'amplitude, c'est deux risks. Sinon,
+c'est un seul risk + caps. La duplication précoce alourdit le catalog
+sans gain.
+
 **Test obligatoire** : `packages/providers/<vendor>/tests/unit/risk-catalog.test.ts`.
 Copie le pattern de `packages/providers/railway/tests/unit/risk-catalog.test.ts`.
 Le test doit vérifier :

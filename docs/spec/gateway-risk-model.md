@@ -359,6 +359,89 @@ de même la slice exécutée (l'env est résolu par le binding) et compare.
 - Supprimer / renommer un `RiskId` : interdit. On déprécie (`deprecated: true`)
   et on garde l'entrée pour ne pas casser les tokens existants.
 
+## 4bis. Scope caps — axe d'amplitude orthogonal
+
+Les `accepted_risks` capturent le *kind* d'action (lire un mail,
+écrire un env var) mais **pas son amplitude** (combien d'items, sur
+quelle fenêtre temporelle, à quel rythme). Cette dimension est portée
+par les **scope caps**, primitive orthogonale aux risks. Détails dans
+[[scope-caps-amplification-axis]] ; la spec en présente l'interface
+load-bearing.
+
+### 4bis.1 Deux types parallèles
+
+```ts
+export interface ScopeCaps {
+  readonly temporal_window_days?: number;
+  readonly items_per_call_max?: number;
+  readonly bytes_per_call_max?: number;
+  readonly calls_per_minute_max?: number;
+  readonly calls_per_session_max?: number;
+}
+
+export interface InfraLimits {
+  // Mêmes champs, sémantique hard-ceiling non-overrideable.
+  readonly temporal_window_days?: number;
+  readonly items_per_call_max?: number;
+  readonly bytes_per_call_max?: number;
+  readonly calls_per_minute_max?: number;
+  readonly calls_per_session_max?: number;
+}
+```
+
+`ScopeCaps` = soft defaults loosenable au niveau org puis tighten-only
+en aval. `InfraLimits` = hard ceiling imposé par le mainteneur provider
+plugin pour des raisons techniques/opérationnelles (budget mémoire
+gateway, quotas cache partagés cross-org, plafonds upstream durs).
+
+### 4bis.2 Quatre niveaux asymétriques + wrap infra
+
+| Niveau | Champ | Direction permise |
+|---|---|---|
+| catalog (suggestion) | `RiskEntry.caps?` | point de départ |
+| org (contractuel) | `organizations.caps_defaults` | loose OU tighten vs catalog |
+| binding (opérationnel) | `provider_bindings.caps` | tighten only vs org |
+| token (per-mint) | `tokens.caps_override` | tighten only vs binding |
+| infra (wrap final) | `RiskEntry.infra_limits?` | jamais overrideable |
+
+Résolution : dernière-valeur-définie sur la chaîne (token > binding >
+org > catalog) puis clamp silencieux sur `infra_limits`. Validations
+au write (binding ≤ org, token ≤ binding) avec 403
+`binding-caps-loosens-org` / `token-caps-loosens-binding`.
+
+### 4bis.3 Le catalog YAML gagne deux champs
+
+```yaml
+- id: gmail.bulk-read
+  label: 'Lecture bulk via filtre `q`'
+  matches: 'gmail.mailbox.bulk-marker.R'
+  vector: { … }
+  caps:                     # soft default, loosenable au niveau org
+    items_per_call_max: 200
+    calls_per_minute_max: 5
+  infra_limits:             # hard ceiling, jamais overrideable
+    bytes_per_call_max: 10485760    # 10 MB, budget parsing gateway
+    items_per_call_max: 500         # Gmail API plafonne à 500 max
+```
+
+Les deux champs sont optionnels. Absence = pas de cap soft / pas de
+ceiling hard.
+
+### 4bis.4 Enforcement runtime
+
+Deux familles distinctes :
+
+- **Caps stateless** (`temporal_window_days`, `items_per_call_max`,
+  `bytes_per_call_max`) : injection upstream via
+  `plugin.normalizeForCaps(args, caps)` quand possible, sinon check
+  post-hoc (read-only) ou refus pre-execute (mutating, cf.
+  `cap-not-enforceable`).
+- **Caps stateful** (`calls_per_minute_max`, `calls_per_session_max`) :
+  compteur sur l'infra cache existante du gateway (mémoire locale par
+  défaut, cache distribué optionnel — ADR cache hot-path référencée
+  par [[scope-caps-amplification-axis]] D5), toujours à priori,
+  429 `cap-exceeded` si dépassement.
+
 ## 5. Le wire format
 
 ```ts
@@ -480,13 +563,15 @@ Deux simplifications actées :
 flowchart TD
   call["call (tool, args)"] --> cl["plugin.classify(t,a) → slices[]"]
   cl --> int["intersect(slices, catalog.risks) → risks_touched[]"]
-  int --> cmp{"risks_touched ⊆ token.accepted_risks ?"}
-  cmp -->|"oui"| allow["ALLOW + executeCall + audit"]
-  cmp -->|"non"| deny["DENY (403, risks manquants explicités)"]
+  int --> acc{"risks_touched ⊆ token.accepted_risks ?"}
+  acc -->|"non"| denyR["403 risk-not-accepted"]
+  acc -->|"oui"| caps{"within(effective_caps) ?<br/>(stateful rate, stateless normalize)"}
+  caps -->|"rate dépassé"| denyRate["429 cap-exceeded"]
+  caps -->|"mutating + cap non-injectable"| denyM["403 cap-not-enforceable"]
+  caps -->|"OK"| allow["ALLOW + executeCall + audit"]
 ```
 
-**Pas de step-up runtime au MVP.** Si l'agent dépasse le profil de risque
-accepté, le call est rejeté avec un message explicite :
+Trois codes de refus distincts, sémantiques explicites :
 
 ```
 403 risk-not-accepted
@@ -497,9 +582,39 @@ accepté, le call est rejeté avec un message explicite :
 }
 ```
 
-L'agent (ou son orchestrateur) demande au manager de re-minter. Coût :
-un round-trip au manager. Bénéfice : **token immuable, runtime sans
-race condition, pas d'effet bord d'approbation mid-flow**.
+```
+429 cap-exceeded
+{
+  "risk_id": "gmail.bulk-read",
+  "field": "calls_per_minute_max",
+  "limit": 5,
+  "retry_after_ms": 12000,
+  "hint": "Slow down or restrict scope."
+}
+```
+
+```
+403 cap-not-enforceable
+{
+  "tool": "supabase__execute_sql",
+  "mutating_slices": ["supabase[prod].db.rows.W"],
+  "unenforceable_caps": ["items_per_call_max"],
+  "hint": "Mutating tool requires plugin.normalizeForCaps to enforce caps before the side effect."
+}
+```
+
+**Pas de step-up runtime au MVP.** Si l'agent dépasse le profil de
+risque accepté, le call est rejeté avec un message explicite. L'agent
+(ou son orchestrateur) demande au manager de re-minter pour
+`risk-not-accepted`, ralentit / restreint pour `cap-exceeded`, ou
+escalade vers ops pour `cap-not-enforceable`. Coût : un round-trip.
+Bénéfice : **token immuable, runtime sans race condition, pas
+d'effet bord d'approbation mid-flow**.
+
+Détails du modèle caps + des sémantiques d'enforcement (stateless
+normalize via `plugin.normalizeForCaps`, mutating à priori
+obligatoire, stateful rate via cache) : §4bis et
+[[scope-caps-amplification-axis]].
 
 Step-up runtime (option B, ajout d'un risk acceptépendant la session)
 est reporté en Phase 2 et nécessite un design dédié (token mutable
@@ -579,15 +694,24 @@ remonte à l'opérateur humain.
   "token_accepted_risks": [...],              // snapshot pour reproductibilité
   "decision": "allow",
   "decided_at": "2026-…",
-  "binding_used": { provider: "supabase", resource_ref: "tlqgxnezmthbpzhdwxgi", env: "staging" }
+  "binding_used": { provider: "supabase", resource_ref: "tlqgxnezmthbpzhdwxgi", env: "staging" },
+  // Caps (cf. §4bis et [[scope-caps-amplification-axis]] D7)
+  "effective_caps": { "items_per_call_max": 50 },
+  "cap_source":     { "items_per_call_max": "binding" },
+  "caps_action":    "normalized",             // "normalized" | "enforced-as-is" | "denied-pre-execute" | "exceeded-post-execute" | "infra-clamped" | null
+  "caps_normalization": { "args_diff": { "LIMIT": [100, 50] } }
 }
 ```
 
 Five Eyes (2026-05) + NIST AI RMF Agentic Profile exigent traçabilité
 100 % par action. `slices_executed` capture le détail technique ;
-`risks_touched` capture l'intention métier. Les deux sont indispensables.
+`risks_touched` capture l'intention métier ; `effective_caps` +
+`cap_source` capturent l'amplitude effective et sa provenance (catalog
+default vs informed loosening org vs tighten binding/token vs clamp
+infra). Les quatre sont indispensables pour la reproductibilité
+forensique.
 
-## 13. Migration de l'existant — 7 phases
+## 13. Migration de l'existant — 8 phases
 
 1. **Phase 0 — Data-model par provider.**
    Écrire `packages/providers/<vendor>/src/data-model.ts` pour chaque
@@ -598,32 +722,42 @@ Five Eyes (2026-05) + NIST AI RMF Agentic Profile exigent traçabilité
    par provider, +1 fallback générique. Lint qui vérifie que chaque tool
    MCP est couvert par au moins un risk.
 
-3. **Phase 2 — Plugin `classify` returns `Slice[]`.**
+3. **Phase 1bis — Caps optionnels sur les catalogs existants.**
+   Champs `caps?` (soft, ScopeCaps) et `infra_limits?` (hard,
+   InfraLimits) au niveau `RiskEntry`. Adoption opportuniste — les
+   providers existants restent fonctionnels sans caps. Les premiers
+   à en bénéficier seront ceux dont la normalisation upstream est
+   triviale (un `q: newer_than:Nd` ou un `LIMIT N` injectable). Cf.
+   [[scope-caps-amplification-axis]] Plan d'implémentation pour la
+   séquence ops complète.
+
+4. **Phase 2 — Plugin `classify` returns `Slice[]`.**
    Refacto des classifieurs existants. Drop `(plane, level, action)`,
    garde la logique "binding lookup" inchangée.
 
-4. **Phase 3 — Moteur runtime risk-based.**
+5. **Phase 3 — Moteur runtime risk-based.**
    `evaluateCall(token, slices) → allow|deny` + audit enrichi. Phase
    2-3 peuvent rouler en dual mode le temps de migrer les tokens
    existants (legacy capabilities → fallback risks).
 
-5. **Phase 4 — Nouveau wire de mint.**
+6. **Phase 4 — Nouveau wire de mint.**
    `POST /api/v1/mgmt/tokens` accepte `accepted_risks[]`. Migration
    greenfield : pas de back-compat sur l'ancien wire (on est encore en
    pre-1.0).
 
-6. **Phase 5 — UI risk-checklist par projet.**
+7. **Phase 5 — UI risk-checklist par projet.**
    Page operator "Token mint" : checklist des risks du catalogue × bindings,
    greyed-out pour ceux que `acceptable_in_envs` exclut, tooltip avec
-   `reason` + `vector`.
+   `reason` + `vector`. Affiche aussi les caps effectifs + leur source
+   (cf. §4bis et [[scope-caps-amplification-axis]] D8).
 
-7. **Phase 6 — Tools réduits.**
+8. **Phase 6 — Tools réduits.**
    Retirer `github__dispatch_workflow` & co (§7.2 #1).
    Migrer `supabase__execute_sql` vers read-only Postgres (§7.2 #2).
    Drop `classifySql` parsing.
 
 Estimation : Phases 0-4 ~ 2 semaines focus full-time. Phases 5-6 ~
-1 semaine chacune.
+1 semaine chacune. Phase 1bis incrémentale, sans bloquer les autres.
 
 ## 14. Anti-patterns à éviter (mis à jour pour risk-based)
 
