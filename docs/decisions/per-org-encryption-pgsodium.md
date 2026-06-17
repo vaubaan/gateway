@@ -8,7 +8,7 @@ superseded-by: per-org-encryption-app-level.md
 
 # Per-org encryption at rest via pgsodium
 
-## Context
+## Contexte
 
 v0 stored provider OAuth tokens in `provider_admins.access_token_encrypted`
 and `refresh_token_encrypted` as **plaintext UTF-8 in bytea columns** -- no
@@ -28,7 +28,7 @@ We need encryption at rest that:
 3. Keeps key material outside app memory (the app never sees the raw
    symmetric key).
 
-## Decision
+## Décision
 
 **Per-org encryption via pgsodium AEAD deterministic mode.** Each
 organization gets its own pgsodium key, created automatically at INSERT via a
@@ -67,7 +67,7 @@ true`) JOINs `provider_admins` with `organizations` and calls
 - **Data migration**: Existing plaintext bytea rows are re-encrypted in-place
   by the migration's final UPDATE statement.
 
-## Consequences
+## Conséquences
 
 **Positive:**
 
@@ -103,7 +103,7 @@ true`) JOINs `provider_admins` with `organizations` and calls
   derived keys. This is a known limitation of the Supabase Vault model --
   for higher assurance, an external KMS would be needed (deferred to v2+).
 
-## Alternatives rejected
+## Alternatives rejetées
 
 - **Single global key.** Simpler but no blast radius isolation -- one key
   compromise exposes all orgs. No crypto-shred per org. Rejected.

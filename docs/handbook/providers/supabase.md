@@ -253,6 +253,11 @@ ou binding unique). L'env est porté par le **binding**, pas par la slice
 
 ## 3. Décision spec v4 §7.2 #2 — `execute_sql` strictement read-only
 
+> Historique : la première itération avait essayé une classification
+> syntaxique du SQL (ADR [[sql-classification-syntactic-only]]), avant
+> que [[pivot-to-risk-based-model]] ne la remplace par le read-only
+> strict. Les failure modes ci-dessous justifient le pivot.
+
 ### 3.1 Motivation
 
 Le parser `classifySql` actuel (`sql-classify.ts`, ~300 lignes) tente de

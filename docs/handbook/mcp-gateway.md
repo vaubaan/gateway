@@ -273,8 +273,9 @@ row passent par le même chemin que les non-self-contained
 
 - **Encryption at rest** : provider tokens sont chiffrés par org via
   libsodium-wrappers XChaCha20-Poly1305 AEAD côté app (ADR
-  [[per-org-encryption-app-level]], migration `0037` nettoie les
-  anciens artefacts pgsodium). Chaque org a une clé dérivée de
+  [[per-org-encryption-app-level]], qui supersede [[per-org-encryption-pgsodium]]
+  rejeté pour contraintes pooler/permissions ; migration `0037` nettoie
+  les anciens artefacts pgsodium). Chaque org a une clé dérivée de
   `ENCRYPTION_MASTER_KEY` via `crypto_kdf_derive_from_key`, avec l'UUID
   org en AAD (anti-replay cross-org). `loadProviderAdmin()` lit la table
   `provider_admins`, décode le bytea via `decodeBytea()`, puis déchiffre
@@ -341,4 +342,5 @@ des bearers" et retombe sur le header statique.
   [[escalation]] (runtime escalation_channel out-of-gateway),
   [[bash-provider]] (self-contained pattern).
 - ADRs : [[redis-cache-upstash-with-memory-fallback]],
-  [[mcp-only-mvp-scope]], [[programmatic-access-token-minting]].
+  [[mcp-only-mvp-scope]], [[programmatic-access-token-minting]]
+  (qui supersede [[org-management-keys-for-runner]]).

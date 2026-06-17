@@ -7,7 +7,7 @@ supersedes: per-org-encryption-pgsodium.md
 
 # Per-org encryption at rest via app-level libsodium
 
-## Context
+## Contexte
 
 v0 stored provider OAuth tokens in `provider_admins.access_token_encrypted`
 and `refresh_token_encrypted` as **plaintext UTF-8 in bytea columns** -- no
@@ -35,7 +35,7 @@ We still need encryption at rest that:
 3. Is portable -- works on any Postgres, any hosting, no extensions.
 4. Is reproducible -- fully automated CI, no manual Dashboard steps.
 
-## Decision
+## Décision
 
 **App-level encryption via `libsodium-wrappers`** (the JS binding for
 libsodium -- the same cryptographic library that pgsodium wraps).
@@ -78,7 +78,7 @@ Implementation (`packages/web/src/lib/crypto/provider-secrets.ts`):
   and writes back. Idempotent (attempts decrypt first to skip already-
   migrated rows).
 
-## Consequences
+## Conséquences
 
 **Positive:**
 
@@ -111,7 +111,7 @@ Implementation (`packages/web/src/lib/crypto/provider-secrets.ts`):
   means re-encrypting every org's tokens. A migration script handles this,
   but it is an operational step.
 
-## Alternatives rejected
+## Alternatives rejetées
 
 - **pgsodium in Postgres.** Permission constraints on Supabase hosted make
   this undeployable via CI. The session pooler blocks `SET ROLE`, `ALTER

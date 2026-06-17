@@ -112,7 +112,11 @@ ailleurs (spec v4 §7.1) :
   → modifie le **workflow** (entité distincte) sans appeler de tool
   `workflow.W`. **Risk dérivé** : `github.workflow-write-via-file`.
 - `merge_pull_request` → trigge CI/CD aval (Vercel, etc.). Effet
-  cross-provider — capturé par le risk `github.merge-protected`.
+  cross-provider — capturé par le risk `github.merge-protected`. La
+  protection des branches `main`/`master`/`release-*` reste portée
+  par ce risk, qui a remplacé l'ancien mécanisme `env_less_exclude_protected`
+  par-binding (cf. [[env-less-grant-fan-out-with-binding-exclude]],
+  partiellement superseded par [[pivot-to-risk-based-model]]).
 - `create_release` non-draft + non-prerelease → publication publique,
   notifications watchers, déclenche workflows `on: release`.
 - `push_files` ou `create_or_update_file` sur un fichier touchant le
@@ -850,7 +854,7 @@ du `availableTools` :
 Ils existent encore aujourd'hui dans
 [`tools.ts:272-308`](../../../packages/providers/github/src/tools.ts) et
 sont mappés dans
-[`classify.ts:58-60`](../../../packages/providers/github/src/classify.ts).
+[`risk-classifier.ts`](../../../packages/providers/github/src/risk-classifier.ts).
 Le PR de Phase 6 doit :
 
 1. Supprimer ces entrées de `availableTools`.
