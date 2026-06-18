@@ -29,6 +29,10 @@ import {
 } from '@vaubaan/providers-supabase';
 import { railwayAvailableTools, railwayDataModel } from '@vaubaan/providers-railway';
 import { sshAvailableTools, sshDataModel } from '@vaubaan/providers-ssh';
+import {
+  upstashRedisAvailableTools,
+  upstashRedisDataModel,
+} from '@vaubaan/providers-upstash-redis';
 
 /** Per-plane presentation copy. */
 export interface PlaneInfo {
@@ -187,6 +191,27 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
       'Bash bindings live per-project (not org-level). Each binding pairs an annotated bash script with one or more SSH hosts. Hosts are registered via the `ssh_binding` form; commands are dispatched through `ssh__exec`.',
     catalogPath: 'packages/providers/ssh/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/railway-ssh.md',
+  },
+  'upstash-redis': {
+    slug: 'upstash-redis',
+    label: 'Upstash Redis',
+    pitch:
+      'Cache plane — serverless Redis databases (Management API CRUD) and key-value data operations (Data API via REST).',
+    kind: 'cloud',
+    dataModel: upstashRedisDataModel,
+    tools: upstashRedisAvailableTools,
+    planes: [
+      {
+        slug: 'cache',
+        label: 'Cache',
+        pitch:
+          'Serverless Redis — databases, key-value data (strings, hashes, lists, sets), usage statistics.',
+      },
+    ],
+    setup:
+      'Paste your Upstash email and Management API key concatenated as `email:api_key`. Vaubaan stores the credential encrypted and uses Basic Auth for the Management API. Per-database REST tokens are fetched at runtime.',
+    catalogPath: 'packages/providers/upstash-redis/src/risk-catalog.yaml',
+    handbook: 'docs/handbook/providers/upstash-redis.md',
   },
 };
 

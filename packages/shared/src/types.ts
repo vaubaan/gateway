@@ -10,7 +10,7 @@
 
 import type { RiskId } from './risk.ts';
 
-export type Provider = 'github' | 'vercel' | 'supabase' | 'railway' | 'bash';
+export type Provider = 'github' | 'vercel' | 'supabase' | 'railway' | 'bash' | 'upstash-redis';
 
 export const PROVIDERS = [
   'github',
@@ -18,6 +18,7 @@ export const PROVIDERS = [
   'supabase',
   'railway',
   'bash',
+  'upstash-redis',
 ] as const satisfies readonly Provider[];
 
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';

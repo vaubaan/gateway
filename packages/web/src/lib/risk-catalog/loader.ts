@@ -27,6 +27,7 @@ import { vercelRiskCatalog } from '@vaubaan/providers-vercel';
 import { supabaseRiskCatalog } from '@vaubaan/providers-supabase';
 import { railwayRiskCatalog } from '@vaubaan/providers-railway';
 import { sshRiskCatalog } from '@vaubaan/providers-ssh';
+import { upstashRedisRiskCatalog } from '@vaubaan/providers-upstash-redis';
 import {
   indexCatalog,
   qualifyRiskId as engineQualifyRiskId,
@@ -36,7 +37,14 @@ import {
 import type { Provider, RiskCatalog } from '@vaubaan/shared';
 
 /** All providers we know about. Keep in sync with `Provider` in shared. */
-const PROVIDERS: readonly Provider[] = ['github', 'vercel', 'supabase', 'railway', 'bash'];
+const PROVIDERS: readonly Provider[] = [
+  'github',
+  'vercel',
+  'supabase',
+  'railway',
+  'bash',
+  'upstash-redis',
+];
 
 /** Provider → its TS-exported risk catalog. The `bash` provider key maps
  *  to the SSH provider package (cf. shared/src/types.ts — historic naming). */
@@ -46,6 +54,7 @@ const PROVIDER_CATALOGS: Record<Provider, RiskCatalog> = {
   supabase: supabaseRiskCatalog,
   railway: railwayRiskCatalog,
   bash: sshRiskCatalog,
+  'upstash-redis': upstashRedisRiskCatalog,
 };
 
 /** Per-provider cache, built once on first call to `getCatalog`. `undefined`

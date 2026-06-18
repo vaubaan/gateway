@@ -9,6 +9,7 @@ import { GitHubAdapter, githubAvailableTools } from '@vaubaan/providers-github';
 import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
+import { UpstashRedisAdapter, upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
 import type {
   AccessTokenContext,
   Provider,
@@ -286,9 +287,27 @@ export function buildGateway(opts: {
   // (/api/v1/bash-bindings/:id/run-tool) drives invocations through a
   // session-authenticated path.
 
+  // Upstash Redis : paste-token mode (email:api_key from provider_admins).
+  const upstashRedisAdapter = new UpstashRedisAdapter();
+  upstreamByProvider['upstash-redis'] = {
+    provider: 'upstash-redis',
+    availableTools: upstashRedisAvailableTools,
+    classifyV4: (tool, args, bindings) => upstashRedisAdapter.classifyV4(tool, args, bindings),
+    executeCall: (admin, binding, tool, args) =>
+      upstashRedisAdapter.executeCall(admin, binding, tool, args),
+    loadProviderAdmin,
+  };
+
   // Load per-provider risk catalogs at boot (lazy / cached in the loader).
   const catalogByProvider: Partial<Record<Provider, IndexedRiskCatalog>> = {};
-  for (const provider of ['github', 'vercel', 'supabase', 'railway', 'bash'] as Provider[]) {
+  for (const provider of [
+    'github',
+    'vercel',
+    'supabase',
+    'railway',
+    'bash',
+    'upstash-redis',
+  ] as Provider[]) {
     const c = getCatalog(provider);
     if (c) catalogByProvider[provider] = c;
   }

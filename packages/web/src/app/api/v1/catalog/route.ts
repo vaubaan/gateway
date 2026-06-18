@@ -23,6 +23,7 @@ import { vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { railwayAvailableTools } from '@vaubaan/providers-railway';
 import { sshAvailableTools } from '@vaubaan/providers-ssh';
+import { upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
 import { requireToken } from '@/lib/auth/require-token';
 import { buildGateway } from '@/lib/gateway/build';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
@@ -42,6 +43,7 @@ const PROVIDERS: readonly ProviderEntry[] = [
   { slug: 'supabase', displayName: 'Supabase', tools: supabaseAvailableTools },
   { slug: 'railway', displayName: 'Railway', tools: railwayAvailableTools },
   { slug: 'ssh', displayName: 'SSH', tools: sshAvailableTools },
+  { slug: 'upstash-redis', displayName: 'Upstash Redis', tools: upstashRedisAvailableTools },
 ];
 
 interface BindingDescriptor {
