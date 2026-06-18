@@ -10,7 +10,14 @@
 
 import type { RiskId } from './risk.ts';
 
-export type Provider = 'github' | 'vercel' | 'supabase' | 'railway' | 'bash' | 'upstash-redis';
+export type Provider =
+  | 'github'
+  | 'vercel'
+  | 'supabase'
+  | 'railway'
+  | 'bash'
+  | 'upstash-redis'
+  | 'gmail';
 
 export const PROVIDERS = [
   'github',
@@ -19,6 +26,7 @@ export const PROVIDERS = [
   'railway',
   'bash',
   'upstash-redis',
+  'gmail',
 ] as const satisfies readonly Provider[];
 
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';
@@ -94,6 +102,17 @@ export interface ProviderBinding {
    * binding literals stay valid; absent ≡ null.
    */
   environment?: string | null;
+  /**
+   * Provider-specific JSONB bag for configuration that doesn't fit anywhere
+   * else on the row but is needed at classification time. Examples (Gmail) :
+   * `internal_domains`, `allowlist_addresses`, `allowlist_domains`,
+   * `sensitive_labels`. Stays opaque from the gateway's POV — each provider
+   * plugin types and consumes the shape it expects.
+   *
+   * Optional on the TS shape so legacy binding literals (without metadata)
+   * stay valid; absent ≡ {}.
+   */
+  metadata?: Record<string, unknown> | null;
   created_at: string;
 }
 

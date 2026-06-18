@@ -156,11 +156,72 @@ export interface RiskEntry {
    *  E.g. ['preview', 'staging'] = never acceptable on env 'prod'. Enforced
    *  applicatively at mint (the env comes from the binding). */
   readonly acceptable_in_envs?: readonly string[];
+  /** Soft default caps (ScopeCaps). Loosenable at org-level, tighten-only
+   *  in aval (binding, token). Optional — absent ≡ no cap suggested at
+   *  catalog level. Cf. ADR scope-caps-amplification-axis §D1. */
+  readonly caps?: ScopeCaps;
+  /** Hard infra ceilings — never overrideable at any level. Wrap final in
+   *  the cap-resolution chain (cf. ADR scope-caps §D2 "Wrap infra").
+   *  Optional — absent ≡ no hard ceiling. */
+  readonly infra_limits?: InfraLimits;
   /** When true, the entry is kept for backward compatibility but should not
    *  be offered in new mints. UI displays "deprecated" badge. */
   readonly deprecated?: boolean;
   /** When `deprecated`, the replacement risk id (informational). */
   readonly replaced_by?: RiskId;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Scope caps — ADR scope-caps-amplification-axis (accepted 2026-06-17)
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Soft scope caps — "policy" defaults loosenable at the org level then
+ * tighten-only in aval (binding, token). Reflect the posture an organisation
+ * accepts ; they are NOT physical limits (`InfraLimits` are).
+ *
+ * Cf. ADR scope-caps-amplification-axis §D1. All fields optional ; absent ≡
+ * no cap on that axis at the level carrying the value.
+ */
+export interface ScopeCaps {
+  /** Temporal window in days : the agent can only reach items created /
+   *  modified within the last N days. The classifier injects the constraint
+   *  upstream when the provider supports it (`q: newer_than:Nd`,
+   *  `?since=...`, `WHERE created_at > now() - ...`), otherwise denied
+   *  (read-only post-hoc) or 403 `cap-not-enforceable` (mutating). */
+  readonly temporal_window_days?: number;
+  /** Items per call ceiling — the agent cannot demand / touch more than N
+   *  items in a single tool call. The classifier caps the relevant upstream
+   *  arg (`pageSize`, `?per_page=`, `LIMIT N`). */
+  readonly items_per_call_max?: number;
+  /** Bytes per call ceiling — for payload-variable tools (Gmail attachments,
+   *  Vercel runtime-log, Supabase storage object). Optional — not all tools
+   *  carry a meaningful byte size. */
+  readonly bytes_per_call_max?: number;
+  /** Stateful : calls per rolling minute on the scope holding the cap.
+   *  Counter on the gateway cache backend (in-memory by default, Upstash
+   *  Redis if env vars present). Cf. ADR scope-caps §D5. */
+  readonly calls_per_minute_max?: number;
+  /** Stateful : cumulative calls over the lifetime of ONE token. Best-effort
+   *  cache counter, not DB (D6). */
+  readonly calls_per_session_max?: number;
+}
+
+/**
+ * Hard infra ceilings — imposed by the provider plugin maintainer for
+ * technical/operational reasons (memory budget, shared Upstash quotas, upstream
+ * provider hard caps). **Never overrideable** at any level (org, binding,
+ * token). Wrap final in the resolution chain (cf. ADR scope-caps §D2).
+ *
+ * Same shape as `ScopeCaps` ; the distinction is in *who can modify* them,
+ * not in the field semantics.
+ */
+export interface InfraLimits {
+  readonly temporal_window_days?: number;
+  readonly items_per_call_max?: number;
+  readonly bytes_per_call_max?: number;
+  readonly calls_per_minute_max?: number;
+  readonly calls_per_session_max?: number;
 }
 
 /** A provider's full risk catalog. */

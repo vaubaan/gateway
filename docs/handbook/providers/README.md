@@ -1,12 +1,12 @@
 ---
 title: Provider risk-model handbooks — index
 status: current
-date: 2026-06-15
+date: 2026-06-18
 ---
 
 # Provider risk-model handbooks
 
-Cinq documents de modélisation v4 risk-based — un par provider Vaubaan.
+Six documents de modélisation v4 risk-based — un par provider Vaubaan.
 Chacun couvre la même structure (cf. spec
 [`gateway-risk-model.md`](../../spec/gateway-risk-model.md)) :
 
@@ -31,6 +31,7 @@ le frontmatter `tracks:` (cf. skill `drift-detector`).
 | Supabase   | [`supabase.md`](./supabase.md)          | `db`, `storage`, `auth`, `functions` | 23 + fallback |
 | Railway    | [`railway-ssh.md`](./railway-ssh.md) §1 | `runtime`                            | 11 + fallback |
 | SSH (bash) | [`railway-ssh.md`](./railway-ssh.md) §2 | `host`                               | 5 + fallback  |
+| Gmail      | [`gmail.md`](./gmail.md)                | `mailbox`                            | 14 + fallback |
 
 > Railway et SSH cohabitent dans un seul handbook car les deux providers
 > ont émergé du même round d'analyse (.vaubaan/research/). À splitter

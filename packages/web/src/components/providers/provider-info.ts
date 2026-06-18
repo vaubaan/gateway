@@ -33,6 +33,7 @@ import {
   upstashRedisAvailableTools,
   upstashRedisDataModel,
 } from '@vaubaan/providers-upstash-redis';
+import { gmailAvailableTools, gmailDataModel } from '@vaubaan/providers-gmail';
 
 /** Per-plane presentation copy. */
 export interface PlaneInfo {
@@ -212,6 +213,27 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
       'Paste your Upstash email and Management API key concatenated as `email:api_key`. Vaubaan stores the credential encrypted and uses Basic Auth for the Management API. Per-database REST tokens are fetched at runtime.',
     catalogPath: 'packages/providers/upstash-redis/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/upstash-redis.md',
+  },
+  gmail: {
+    slug: 'gmail',
+    label: 'Gmail',
+    pitch:
+      'Mailbox plane — read threads / messages / labels / drafts via Google’s official MCP server, classified by sender / recipient identity zones (automated / internal / known-external / unknown).',
+    kind: 'cloud',
+    dataModel: gmailDataModel,
+    tools: gmailAvailableTools,
+    planes: [
+      {
+        slug: 'mailbox',
+        label: 'Mailbox',
+        pitch:
+          'A single Gmail account — labels, threads, messages, drafts. Synthetic from-zone / to-zone / bulk-marker / sensitive-label markers gate access by identity rather than containment.',
+      },
+    ],
+    setup:
+      'Connect a Gmail account via OAuth (scopes `gmail.readonly` + `gmail.compose`). Configure per-binding `internal_domains`, `allowlist_addresses`, `allowlist_domains`, and `sensitive_labels` to drive the identity-zone classification.',
+    catalogPath: 'packages/providers/gmail/src/risk-catalog.yaml',
+    handbook: 'docs/handbook/providers/gmail.md',
   },
 };
 

@@ -28,6 +28,7 @@ import { supabaseRiskCatalog } from '@vaubaan/providers-supabase';
 import { railwayRiskCatalog } from '@vaubaan/providers-railway';
 import { sshRiskCatalog } from '@vaubaan/providers-ssh';
 import { upstashRedisRiskCatalog } from '@vaubaan/providers-upstash-redis';
+import { gmailRiskCatalog } from '@vaubaan/providers-gmail';
 import {
   indexCatalog,
   qualifyRiskId as engineQualifyRiskId,
@@ -44,6 +45,7 @@ const PROVIDERS: readonly Provider[] = [
   'railway',
   'bash',
   'upstash-redis',
+  'gmail',
 ];
 
 /** Provider → its TS-exported risk catalog. The `bash` provider key maps
@@ -55,6 +57,7 @@ const PROVIDER_CATALOGS: Record<Provider, RiskCatalog> = {
   railway: railwayRiskCatalog,
   bash: sshRiskCatalog,
   'upstash-redis': upstashRedisRiskCatalog,
+  gmail: gmailRiskCatalog,
 };
 
 /** Per-provider cache, built once on first call to `getCatalog`. `undefined`
