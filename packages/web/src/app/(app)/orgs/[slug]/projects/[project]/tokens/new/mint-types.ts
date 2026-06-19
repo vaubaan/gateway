@@ -64,7 +64,7 @@ export interface MintSuccessResult {
   kind: 'minted';
   apiKey: string;
   tokenName: string;
-  expiresAt: string;
+  expiresAt: string | null;
   projectSlug: string;
   orgSlug: string;
   bindings: MintFormBinding[];

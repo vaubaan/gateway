@@ -43,8 +43,8 @@ export interface ChildMintInput {
   tokenName: string;
   /** Project the child token is scoped to. Must match parent.project_id. */
   projectId: string;
-  /** TTL in milliseconds. */
-  ttlMs: number;
+  /** TTL in milliseconds. Null = never expire. */
+  ttlMs: number | null;
   accepted_risks: readonly RiskId[];
   denied_risks?: readonly RiskId[];
   singleUse?: boolean;
@@ -59,7 +59,7 @@ export interface ChildMintResult {
   tokenId: string;
   apiKey: string;
   apiKeyPrefix: string;
-  expiresAt: string;
+  expiresAt: string | null;
   delegationChain: DelegationChainEntry[];
 }
 
@@ -99,7 +99,7 @@ export function computeChildChain(parent: MintParent): DelegationChainEntry[] {
  *  - child.denied_risks ⊇ parent.denied_risks (denials propagate)
  *  - child.project_id = parent.project_id (project-scoped roots only).
  */
-export function checkMintInvariants(input: ChildMintInput, childExpiresAt: string): void {
+export function checkMintInvariants(input: ChildMintInput, childExpiresAt: string | null): void {
   const { parent } = input;
 
   const childDepth = parent.depth + 1;
@@ -110,6 +110,11 @@ export function checkMintInvariants(input: ChildMintInput, childExpiresAt: strin
   }
 
   if (parent.expires_at) {
+    if (!childExpiresAt) {
+      throw new MintInvariantError(
+        `child token must not outlive parent (parent expires ${parent.expires_at}).`,
+      );
+    }
     if (Date.parse(childExpiresAt) > Date.parse(parent.expires_at)) {
       throw new MintInvariantError(
         `child token expires_at (${childExpiresAt}) exceeds parent's (${parent.expires_at}).`,
@@ -148,8 +153,8 @@ export interface RootMintInput {
   projectId: string;
   /** Display name for the root token. Must be kebab-case + unique per org. */
   tokenName: string;
-  /** TTL in milliseconds. */
-  ttlMs: number;
+  /** TTL in milliseconds. Null = never expire. */
+  ttlMs: number | null;
   /** Explicitly enumerated risks the root token accepts. No subset check
    *  (no parent) — but the caller is responsible for verifying the risks
    *  exist in the catalog and are acceptable for the project's bindings. */
@@ -172,7 +177,7 @@ export async function mintRootToken(
   svc: SupabaseClient,
   input: RootMintInput,
 ): Promise<ChildMintResult> {
-  const expiresAt = new Date(Date.now() + input.ttlMs).toISOString();
+  const expiresAt = input.ttlMs !== null ? new Date(Date.now() + input.ttlMs).toISOString() : null;
   const { apiKey, apiKeyPrefix } = generateApiKey('live');
   const apiKeyHash = await hashApiKey(apiKey);
 
@@ -216,7 +221,7 @@ export async function mintChildToken(
   svc: SupabaseClient,
   input: ChildMintInput,
 ): Promise<ChildMintResult> {
-  const expiresAt = new Date(Date.now() + input.ttlMs).toISOString();
+  const expiresAt = input.ttlMs !== null ? new Date(Date.now() + input.ttlMs).toISOString() : null;
   checkMintInvariants(input, expiresAt);
 
   const { apiKey, apiKeyPrefix } = generateApiKey('live');

@@ -48,7 +48,6 @@ import { TOKEN_NAME_REGEX } from '@/lib/mint/token-name';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const DEFAULT_TTL_HOURS = 24;
 const MAX_TTL_HOURS = 24 * 7;
 const MAX_TTL_SECONDS = 3600;
 
@@ -81,16 +80,18 @@ const BodySchema = z
   });
 
 function ttlExpiresAt(body: { ttlHours?: number; ttlSeconds?: number }): {
-  expiresAt: string;
-  ttlMs: number;
+  expiresAt: string | null;
+  ttlMs: number | null;
 } {
   if (body.ttlSeconds !== undefined) {
     const ttlMs = body.ttlSeconds * 1000;
     return { expiresAt: new Date(Date.now() + ttlMs).toISOString(), ttlMs };
   }
-  const h = body.ttlHours ?? DEFAULT_TTL_HOURS;
-  const ttlMs = h * 3600 * 1000;
-  return { expiresAt: new Date(Date.now() + ttlMs).toISOString(), ttlMs };
+  if (body.ttlHours !== undefined) {
+    const ttlMs = body.ttlHours * 3600 * 1000;
+    return { expiresAt: new Date(Date.now() + ttlMs).toISOString(), ttlMs };
+  }
+  return { expiresAt: null, ttlMs: null };
 }
 
 function randomSuffix(): string {
