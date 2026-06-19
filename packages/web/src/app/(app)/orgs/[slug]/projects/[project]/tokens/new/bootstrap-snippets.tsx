@@ -30,7 +30,8 @@ function buildMcpJson(gatewayUrl: string): string {
     {
       mcpServers: {
         vaubaan: {
-          url: `${gatewayUrl}/api/v1/mcp`,
+          type: 'http',
+          url: `${gatewayUrl}/mcp`,
           headers: { Authorization: 'Bearer ${VAUBAAN_TOKEN}' },
         },
       },
@@ -70,7 +71,7 @@ function buildClaudeMd(
 }
 
 function buildCurl(gatewayUrl: string, apiKey: string): string {
-  return `curl -s ${gatewayUrl}/api/v1/mcp \\
+  return `curl -s ${gatewayUrl}/mcp \\
   -H "Authorization: Bearer ${apiKey}" \\
   -H "Content-Type: application/json" \\
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | jq .`;
@@ -148,6 +149,8 @@ export function BootstrapSnippets({
             borderRadius: 'var(--radius-md)',
             fontSize: 12,
             overflowX: 'auto',
+            overflowY: 'auto',
+            maxHeight: 260,
             whiteSpace: 'pre-wrap',
             wordBreak: 'break-all',
             margin: 0,
