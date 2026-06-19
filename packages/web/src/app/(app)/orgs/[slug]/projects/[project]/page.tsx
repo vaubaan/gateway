@@ -201,9 +201,11 @@ export default async function ProjectPage({
         <Card>
           <CardHeader>
             <CardTitle>Access tokens</CardTitle>
-            <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-              Mint via <Code>POST /api/v1/tokens/mint</Code>
-            </span>
+            <Link href={`/orgs/${org.slug}/projects/${proj.slug}/tokens/new`}>
+              <Button size="sm" variant="primary">
+                + Mint token
+              </Button>
+            </Link>
           </CardHeader>
           <CardBody>
             {(tokens ?? []).length === 0 ? (
