@@ -34,7 +34,7 @@ import {
   upstashRedisDataModel,
 } from '@vaubaan/providers-upstash-redis';
 import { gmailAvailableTools, gmailDataModel } from '@vaubaan/providers-gmail';
-import { stripeDataModel } from '@vaubaan/providers-stripe';
+import { stripeAvailableTools, stripeDataModel } from '@vaubaan/providers-stripe';
 
 /** Per-plane presentation copy. */
 export interface PlaneInfo {
@@ -243,11 +243,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
       'Billing plane — products, prices, coupons, customers, subscriptions, invoices, payments, refunds, webhook endpoints. The `mode` calque (test/live) gates risks per binding via the API-key namespace.',
     kind: 'cloud',
     dataModel: stripeDataModel,
-    // tools: [] placeholder at MVP — provider-modeler skill produces the
-    // data-model + catalog + classifier only. The MCP wire (adapter +
-    // tools.ts) is added by the coding agent who picks this provider up
-    // after the modelling pass (cf. handbook §"Reste à faire").
-    tools: [],
+    tools: stripeAvailableTools,
     planes: [
       {
         slug: 'billing',

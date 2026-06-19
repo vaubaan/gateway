@@ -1,15 +1,23 @@
 ---
-title: Stripe provider — modélisation v4 risk-based
+title: Stripe provider — modélisation v4 risk-based + runtime
 status: current
 date: 2026-06-19
+last_reviewed: 2026-06-19
 tracks:
   - packages/providers/stripe/src/data-model.ts
   - packages/providers/stripe/src/risk-catalog.ts
   - packages/providers/stripe/src/risk-catalog.yaml
   - packages/providers/stripe/src/risk-classifier.ts
+  - packages/providers/stripe/src/tools.ts
+  - packages/providers/stripe/src/execute.ts
+  - packages/providers/stripe/src/stripe-adapter.ts
+  - packages/providers/stripe/src/index.ts
+  - packages/mcp-gateway/src/gateway.ts
+  - packages/web/src/lib/gateway/build.ts
+  - packages/web/src/components/providers/provider-info.ts
 ---
 
-# Stripe provider — modélisation v4
+# Stripe provider — modélisation v4 + runtime
 
 Huitième provider Vaubaan, premier à introduire un risk au vecteur
 `cost: unbounded` (sortie d'argent réelle via `refund-create`). Cible :
@@ -37,8 +45,9 @@ Identity / Issuing.
   webhook_endpoint.secret synthétique, `payment_intent.confirm` non
   exposé au MVP, dual-emission slices (customer.R + customer.pii.R,
   subscription.W + payment-intent.W, webhook-endpoint.W + secret.W).
-- Un **reste à faire** pour le coding agent successeur (adapter,
-  binding form, OAuth wire, UI token mint).
+- Un **runtime complet** : adapter paste-token, dispatcher REST
+  `application/x-www-form-urlencoded`, 25 `McpToolDeclaration`
+  entries, gateway wiring + `build.ts` + `provider-info.ts`.
 
 Sourcing :
 
@@ -615,22 +624,77 @@ traduire en erreur lisible. Phase 2 : detection + alerte automatique.
 
 ---
 
-## 7. Reste à faire — pour le coding agent successeur
+## 7. Runtime — adapter, execute, tools, gateway wiring
 
-La modélisation v4 (Phases B/C/D/E) est terminée. Le coding agent qui
-prend la suite a 5 chantiers principaux :
+### 7.1 `tools.ts` — 25 `McpToolDeclaration` entries
 
-1. **Adapter Stripe** (`packages/providers/stripe/src/stripe-adapter.ts`)
-   suivant le pattern de `vercel-adapter.ts`. Wrap des 25 endpoints REST
-   Stripe via fetch authentifié + injection du Bearer (clé API du
-   binding). Gestion des erreurs Stripe (4xx codes typés : insufficient
-   funds, invalid_request, etc.).
+`packages/providers/stripe/src/tools.ts` declares 10 read tools and 15
+write tools, each prefixed `stripe__`. The `inputSchema` properties are
+aligned with the Stripe REST v1 parameters. Exports `availableTools`
+(the full array) and `WRITE_TOOL_NAMES` (a `Set<string>` of the 15
+write tool names).
 
-2. **tools.ts** (`packages/providers/stripe/src/tools.ts`) — déclarer
-   les 25 `McpToolDeclaration` avec leurs JSON schemas (inputSchema).
-   Le `provider-info.ts` côté web référence actuellement `tools: []`
-   placeholder ; basculer sur `import { stripeAvailableTools }` une fois
-   `tools.ts` créé.
+### 7.2 `execute.ts` — REST dispatcher
+
+`packages/providers/stripe/src/execute.ts` routes each tool call to the
+correct Stripe REST endpoint via a `switch` statement. Key details :
+
+- **Auth** : `Authorization: Bearer <token>` on every request.
+- **Content-Type** : Stripe requires `application/x-www-form-urlencoded`
+  for POST and DELETE bodies (NOT JSON). The `toFormBody()` helper
+  flattens nested objects using Stripe's bracket notation
+  (`items[0][price]=...`, `metadata[key]=...`). GET requests use
+  `toQueryString()` for query parameters.
+- **Path params** : tools with an `:id` path segment (e.g.
+  `stripe__update_product`) destructure `id` from args, place it in the
+  URL, and forward the rest as form body.
+- **Signature** : `executeCall(fetchImpl, token, tool, args)` — no
+  `databaseId` or `teamId` scoping (Stripe scoping = the API key
+  itself).
+
+### 7.3 `stripe-adapter.ts` — paste-token adapter
+
+`packages/providers/stripe/src/stripe-adapter.ts` follows the
+`UpstashRedisAdapter` pattern :
+
+- `provider = 'stripe' as const`
+- `mintUpstreamToken(admin)` : decodes `access_token_encrypted` bytes to
+  a plain string (the Stripe API key). Stripe keys do not expire — uses
+  a far-future date.
+- `validateBinding(admin, resourceRef)` : calls `GET /v1/account` with
+  the token to verify the key is valid. Returns the
+  `business_profile.name` or account `id` as `displayName`.
+- `executeCall(admin, binding, tool, args)` : decodes the token, calls
+  `executeCall` from `execute.ts`.
+- `classifyV4(tool, args, bindings)` : delegates to `classifyStripeV4`
+  from `risk-classifier.ts`.
+
+### 7.4 Gateway wiring
+
+Three files updated for gateway integration :
+
+- **`packages/mcp-gateway/src/gateway.ts`** —
+  `providerFor()` gains the `stripe__` prefix check. `listTools()` now
+  iterates `stripe` in its provider loop. Error message includes
+  `stripe__` in the supported-provider hint.
+- **`packages/web/src/lib/gateway/build.ts`** —
+  imports `StripeAdapter` + `stripeAvailableTools`, instantiates the
+  adapter, and registers `upstreamByProvider.stripe`. Adds `'stripe'` to
+  the `catalogByProvider` loader loop. No OAuth, no `teamId` — paste-
+  token mode like Upstash Redis.
+- **`packages/web/src/components/providers/provider-info.ts`** —
+  `tools: []` placeholder replaced with `tools: stripeAvailableTools`.
+
+---
+
+## 8. Reste à faire
+
+Items 1 (adapter) and 2 (tools.ts) from the original modelling pass are
+complete. Remaining chantiers :
+
+1. ~~**Adapter Stripe**~~ — done (`stripe-adapter.ts`).
+
+2. ~~**tools.ts**~~ — done (25 `McpToolDeclaration` entries).
 
 3. **Web UI binding form** —
    `packages/web/src/app/(app)/orgs/[slug]/projects/[project]/bindings/new/binding-form.tsx`
@@ -666,7 +730,7 @@ irreversible`).
 
 ---
 
-## 8. Synthèse — ce qui distingue Stripe des autres providers
+## 9. Synthèse — ce qui distingue Stripe des autres providers
 
 | Aspect                    | Pattern Stripe                                                                             | Pattern autres providers                                                  |
 | ------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------- |
@@ -800,7 +864,7 @@ signing secret" est explicite — pas d'ambiguïté.
 
 ## Statut
 
-**Phase B/C/D/E terminées 2026-06-19.**
+**Modélisation (Phases B/C/D/E) + Runtime terminés 2026-06-19.**
 
 Toutes les 10 questions cardinales du research Phase A ont été tranchées
 (Q1-Q10). Le code matérialise les décisions :
@@ -813,8 +877,18 @@ Toutes les 10 questions cardinales du research Phase A ont été tranchées
   (`refund-create`).
 - `packages/providers/stripe/src/risk-classifier.ts` — 25 tools
   classifiés (10 reads + 15 writes), mode propagation depuis le binding.
-- Tests : 4 fichiers, 123 tests passants au total.
+- `packages/providers/stripe/src/tools.ts` — 25 `McpToolDeclaration`
+  entries (10 reads + 15 writes) with input schemas.
+- `packages/providers/stripe/src/execute.ts` — REST dispatcher, routes
+  each tool to `api.stripe.com/v1/`, `application/x-www-form-urlencoded`
+  for POST/DELETE, query params for GET.
+- `packages/providers/stripe/src/stripe-adapter.ts` — paste-token
+  adapter, validates via `GET /v1/account`, delegates classify to
+  `classifyStripeV4`.
+- Gateway wired : `gateway.ts` routing, `build.ts` instantiation,
+  `provider-info.ts` tools populated.
+- Tests : 6 fichiers, 150 tests passants au total.
 
-Le coding agent qui prend la suite a 7 chantiers documentés au §7
-(adapter, tools.ts, UI binding, UI token mint, migration DB optionnelle,
-Phase 2 confirm, Phase 2 amount_per_call_max).
+Les 5 chantiers restants sont documentés au §8 (UI binding form, UI
+token mint, migration DB optionnelle, Phase 2 confirm, Phase 2
+amount_per_call_max).

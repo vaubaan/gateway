@@ -10,6 +10,7 @@ import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
 import { UpstashRedisAdapter, upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
+import { StripeAdapter, stripeAvailableTools } from '@vaubaan/providers-stripe';
 import type {
   AccessTokenContext,
   Provider,
@@ -298,6 +299,17 @@ export function buildGateway(opts: {
     loadProviderAdmin,
   };
 
+  // Stripe : paste-token mode (restricted API key from provider_admins).
+  const stripeAdapter = new StripeAdapter();
+  upstreamByProvider.stripe = {
+    provider: 'stripe',
+    availableTools: stripeAvailableTools,
+    classifyV4: (tool, args, bindings) => stripeAdapter.classifyV4(tool, args, bindings),
+    executeCall: (admin, binding, tool, args) =>
+      stripeAdapter.executeCall(admin, binding, tool, args),
+    loadProviderAdmin,
+  };
+
   // Load per-provider risk catalogs at boot (lazy / cached in the loader).
   const catalogByProvider: Partial<Record<Provider, IndexedRiskCatalog>> = {};
   for (const provider of [
@@ -307,6 +319,7 @@ export function buildGateway(opts: {
     'railway',
     'bash',
     'upstash-redis',
+    'stripe',
   ] as Provider[]) {
     const c = getCatalog(provider);
     if (c) catalogByProvider[provider] = c;

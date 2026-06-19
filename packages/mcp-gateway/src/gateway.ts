@@ -204,7 +204,15 @@ export class McpGateway {
   private listTools(ctx: AccessTokenContext): McpToolDeclaration[] {
     const out: McpToolDeclaration[] = [];
     const targets = ctx.accepted_risks;
-    for (const provider of ['github', 'vercel', 'supabase', 'railway', 'bash'] as Provider[]) {
+    for (const provider of [
+      'github',
+      'vercel',
+      'supabase',
+      'railway',
+      'bash',
+      'upstash-redis',
+      'stripe',
+    ] as Provider[]) {
       const adapter = this.cfg.upstreamByProvider[provider];
       if (!adapter) continue;
       const matchesProvider = targets.some(
@@ -248,7 +256,7 @@ export class McpGateway {
 
     const provider = this.providerFor(toolName);
     if (!provider) {
-      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__/railway__/bash__).`;
+      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__/railway__/bash__/upstash_redis__/stripe__).`;
       await this.audit(ctx, toolName, rawArgs, 'denied', null, [], reason, null);
       return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
@@ -449,6 +457,8 @@ export class McpGateway {
     if (tool.startsWith('supabase__')) return 'supabase';
     if (tool.startsWith('railway__')) return 'railway';
     if (tool.startsWith('bash__')) return 'bash';
+    if (tool.startsWith('upstash_redis__')) return 'upstash-redis';
+    if (tool.startsWith('stripe__')) return 'stripe';
     return null;
   }
 
