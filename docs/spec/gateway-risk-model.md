@@ -741,7 +741,7 @@ forensique.
    existants (legacy capabilities → fallback risks).
 
 6. **Phase 4 — Nouveau wire de mint.**
-   `POST /api/v1/mgmt/tokens` accepte `accepted_risks[]`. Migration
+   `POST /api/v1/tokens/mint` accepte `accepted_risks[]`. Migration
    greenfield : pas de back-compat sur l'ancien wire (on est encore en
    pre-1.0).
 
@@ -879,10 +879,11 @@ Coding Agent (agent IA exécutant, fait le travail concret)
 
 - **Renaud** a une UI qui lui permet d'éditer la `project policy` et de
   recevoir les escalades par Telegram/email/manual.
-- **Story Dev** détient une `management key` (table existante
-  `org_management_keys`) elle-même limitée à un sous-ensemble de risks
-  acceptables ("Story Dev peut grant tout sauf `*.branch-protection.W`,
-  `*.policy.W`, `*.mint-install-token.*` — pour ça il doit escalader").
+- **Story Dev** détient un `vbn_live_*` parent (root project-scoped, minté
+  via UI Project page) lui-même limité à un sous-ensemble de risks
+  acceptés ("Story Dev peut mint des children avec tout sauf
+  `*.branch-protection.W`, `*.policy.W`, `*.mint-install-token.*` — pour
+  ça il doit escalader via son propre `escalation_channel`").
 - **Coding Agent** porte un `access_token` minté par le Story Dev pour
   une tâche précise.
 
@@ -974,12 +975,13 @@ la main proprement.
 > le but de la feature. Le humain serait d'accord. Est-ce que MA
 > propre management key autorise ce risk à grant ? »*
 
-Hypothèse : la management key du Story Dev a `granteable_risks` qui
-**inclut** `github.branch-protection-write` (parce que c'est un orchestrateur
-de confiance pour ce projet). Donc il peut grant sans escalader.
+Hypothèse : le token parent du Story Dev a `accepted_risks` qui **inclut**
+`github.branch-protection-write` (parce que c'est un orchestrateur de
+confiance pour ce projet). Donc il peut mint un child avec ce risk en
+restant subset du parent.
 
 ```
-POST /api/v1/mgmt/tokens
+POST /api/v1/tokens/mint
   { bindings: [...], accepted_risks: [
       ... (les 6 du scenario 1),
       "github.branch-protection-write"           // ← ajouté

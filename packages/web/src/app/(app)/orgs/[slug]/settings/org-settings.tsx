@@ -1,7 +1,6 @@
 'use client';
 
 import { useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   Banner,
@@ -140,25 +139,6 @@ export function OrgSettings({
                 </Button>
               </div>
             </form>
-          </CardBody>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Management keys</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <p style={{ color: 'var(--text-muted)', marginTop: 0 }}>
-              Org-scoped Bearer credentials used by programmatic clients (CI jobs, bootstrap
-              scripts, automation) to mint short-lived AccessTokens via{' '}
-              <Code>POST /api/v1/mgmt/tokens</Code>.
-            </p>
-            <Link
-              href={`/orgs/${encodeURIComponent(org.slug)}/settings/management-keys`}
-              style={{ color: 'var(--accent-fg)' }}
-            >
-              Manage keys →
-            </Link>
           </CardBody>
         </Card>
 

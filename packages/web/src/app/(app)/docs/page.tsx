@@ -114,8 +114,8 @@ export default function DocsPage() {
         Once the agent has its <code>api_key</code>, it can <strong>mint sub-agents</strong>{' '}
         programmatically with a stricter envelope — e.g. a Story-Dev token covering &ldquo;coder +
         supabase[staging] + vercel.deploy-preview&rdquo; can spin up a one-shot coding-agent token
-        narrowed down to just <code>github.feature-branch-write</code> for a single task. See{' '}
-        <Link href="/docs/mgmt">/docs/mgmt</Link> for the programmatic API.
+        narrowed down to just <code>github.feature-branch-write</code> for a single task. Any{' '}
+        <code>vbn_live_*</code> token can POST <code>/api/v1/tokens/mint</code> to mint a child.
       </p>
 
       <h2 id="connect-provider">3. Connect a provider</h2>
@@ -399,9 +399,11 @@ export default function DocsPage() {
 
       <hr />
       <p>
-        Programmatic API (mint children, preview risks, revoke):{' '}
-        <Link href="/docs/mgmt">/docs/mgmt</Link>. Still stuck?{' '}
-        <Link href="/support">Open a ticket</Link>.
+        Agent reference (auth, JSON-RPC shape, discovery, error model):{' '}
+        <a href="/agent-bootstrap.md">
+          <code>https://vaubaan.com/agent-bootstrap.md</code>
+        </a>
+        . Still stuck? <Link href="/support">Open a ticket</Link>.
       </p>
     </ProseWrap>
   );

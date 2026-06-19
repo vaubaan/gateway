@@ -16,7 +16,6 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireToken } from '@/lib/auth/require-token';
-import { isCarteBlancheParent } from '@/lib/mint/child-mint';
 import { computeMintPreview } from '@/lib/mint/preview';
 
 export const runtime = 'nodejs';
@@ -98,24 +97,10 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'project not found in this org' }, { status: 404 });
   }
 
-  // Carte-blanche parents (root org tokens) bypass the inherited check.
-  // Pass `null` so every risk row is reported as inherited at preview time.
-  const parentRisksForPreview = isCarteBlancheParent({
-    id: guard.token.id,
-    name: guard.token.name,
-    organization_id: guard.token.organization_id,
-    scope: guard.token.scope,
-    project_id: guard.token.project_id,
-    accepted_risks: guard.token.accepted_risks,
-    denied_risks: guard.token.denied_risks,
-    depth: guard.token.depth,
-    delegation_chain: guard.token.delegation_chain,
-    expires_at: guard.token.expires_at,
-    created_at: guard.token.created_at,
-    created_by: guard.token.created_by,
-  })
-    ? null
-    : guard.token.accepted_risks;
+  // In bearer mode (child mint), the inherited check uses the parent's
+  // accepted_risks. In session mode (root mint), there's no parent —
+  // pass null so every risk row is reported as inherited at preview time.
+  const parentRisksForPreview = guard.mode === 'bearer' ? guard.token.accepted_risks : null;
 
   const preview = computeMintPreview(
     { bindings: body.bindings, accepted_risks: body.accepted_risks },

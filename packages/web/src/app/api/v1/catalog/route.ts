@@ -3,16 +3,12 @@
  *
  * Spec : docs/spec/vaubaan-gateway.md §7 (gateway surface).
  *
- * Lets a Bearer caller discover the full MCP tool surface and (for a
- * `vbn_live_*` token) the project's bindings + accepted risks. Risk
- * gating is enforced at `tools/call` time — the catalog itself is
- * purely informational.
+ * Lets a Bearer `vbn_live_*` caller discover the full MCP tool surface
+ * and the project's bindings + accepted risks. Risk gating is enforced
+ * at `tools/call` time — the catalog itself is purely informational.
  *
- * Two authentication modes :
- * - `Authorization: Bearer vbn_live_…` → catalog scoped to the token's
- *   project, with the token's accepted_risks echoed back.
- * - `Authorization: Bearer vbn_mgmt_…` → org-wide catalog ; no token
- *   info (the org-admin can mint anything modulo project policy).
+ * Auth : `Authorization: Bearer vbn_live_…`. All tokens are
+ * project-scoped (cf. ADR unified-tokens §2026-06-19 amendement).
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -24,9 +20,7 @@ import { supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { railwayAvailableTools } from '@vaubaan/providers-railway';
 import { sshAvailableTools } from '@vaubaan/providers-ssh';
 import { upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
-import { requireToken } from '@/lib/auth/require-token';
 import { buildGateway } from '@/lib/gateway/build';
-import { getSupabaseServiceClient } from '@/lib/supabase/server';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -54,15 +48,13 @@ interface BindingDescriptor {
 
 interface CatalogResponse {
   auth: {
-    /** 'live' = project-scoped (project context echoed back) ; 'mgmt' =
-     *  org-scoped root token (legacy label kept for SDK compat). */
-    kind: 'live' | 'mgmt';
+    kind: 'live';
     organization: { id: string; slug: string; name?: string };
-    project?: { id: string; slug: string };
+    project: { id: string; slug: string };
     /** v4 — risk ids the token is allowed to touch (snapshot). */
-    accepted_risks?: readonly string[];
-    denied_risks?: readonly string[];
-    bindings?: Record<string, BindingDescriptor[]>;
+    accepted_risks: readonly string[];
+    denied_risks: readonly string[];
+    bindings: Record<string, BindingDescriptor[]>;
   };
   providers: Array<{
     slug: string;
@@ -81,7 +73,7 @@ const MINT_HINT = {
   endpoint: '/api/v1/tokens/mint',
   method: 'POST',
   bodyShape:
-    '{ "name": "<child-name>", "scope": "project", "projectId": "<id>", "bindings": [{ "provider": "github", "resource_ref": "owner/repo" }], "accepted_risks": ["<risk-id>", ...] }',
+    '{ "name": "<child-name>", "projectId": "<id>", "bindings": [{ "provider": "github", "resource_ref": "owner/repo" }], "accepted_risks": ["<risk-id>", ...] }',
   note: 'Requires a Bearer vbn_live_* token. The mint returns 201 on success or 403 with { not_acceptable, not_inherited, risks } when a requested risk violates acceptable_in_envs or the parent-subset rule.',
 };
 
@@ -128,25 +120,6 @@ export async function GET(req: NextRequest) {
   const parsed = parseApiKey(raw);
   if (!parsed) return NextResponse.json({ error: 'api_key format invalid.' }, { status: 401 });
 
-  // Org-scoped tokens (parent_id IS NULL AND scope='org') get the org-wide
-  // catalog ; project-scoped tokens get their project's view with the
-  // accepted_risks echoed back.
-  const guard = await requireToken(auth);
-  if (!guard.ok) return guard.response;
-
-  if (guard.token.scope === 'org') {
-    const orgRow = await loadOrgById(guard.orgId);
-    if (!orgRow) {
-      return NextResponse.json({ error: 'organization not found.' }, { status: 404 });
-    }
-    const res: CatalogResponse = {
-      auth: { kind: 'mgmt', organization: orgRow },
-      providers: providersPayload(),
-      mintHint: MINT_HINT,
-    };
-    return NextResponse.json(res);
-  }
-
   try {
     const gateway = buildGateway({ clientIp: null, clientUserAgent: null });
     const ctx = await gateway.authenticate(auth);
@@ -174,16 +147,4 @@ export async function GET(req: NextRequest) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ error: `internal error: ${msg}` }, { status: 500 });
   }
-}
-
-async function loadOrgById(
-  orgId: string,
-): Promise<{ id: string; slug: string; name?: string } | null> {
-  const svc = getSupabaseServiceClient();
-  const { data } = await svc
-    .from('organizations')
-    .select('id, slug, name')
-    .eq('id', orgId)
-    .maybeSingle<{ id: string; slug: string; name: string }>();
-  return data ?? null;
 }

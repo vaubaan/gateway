@@ -1,25 +1,35 @@
 /**
- * Unified token-mint — every caller mints a child token here.
+ * Unified token-mint — two modes :
  *
  *   POST /api/v1/tokens/mint
- *     Authorization: Bearer vbn_live_…
+ *     Authorization: Bearer vbn_live_…   →  child mint (parent.id known,
+ *                                            subset check applied)
+ *     [session cookie, no Bearer]        →  root mint (parent_id=NULL,
+ *                                            no subset check, user must
+ *                                            be member of project's org)
+ *
  *     body: {
- *       name, accepted_risks[], denied_risks?,
- *       scope: 'org' | 'project',
- *       projectId?, projectSlug?,
- *       bindings?: ProjectBinding[],   // for the preview computation
+ *       name?,
+ *       projectId | projectSlug,
+ *       accepted_risks[],
+ *       denied_risks?,
+ *       bindings?: ProjectBinding[],   // for preview computation
  *       context?,
- *       ttlSeconds?, ttlHours?,
+ *       ttlSeconds?,
+ *       ttlHours?,
  *       singleUse?,
  *     }
  *
  *   Responses
  *   - 201 { token, api_key, expires_at, accepted_risks } when preview is OK.
  *   - 403 { error, not_acceptable, not_inherited, risks } when at least one
- *         risk violates `acceptable_in_envs` or the parent-subset rule.
+ *         risk violates `acceptable_in_envs` (preview) or — in child mode
+ *         only — the parent-subset rule.
  *   - 400 schema/validation error.
  *
- * Spec : docs/decisions/unified-gates-drop-confirm.md §D5.
+ * Spec : docs/decisions/unified-gates-drop-confirm.md §D5,
+ *        docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
+ *        (amended 2026-06-19).
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -27,8 +37,8 @@ import { z } from 'zod';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireToken } from '@/lib/auth/require-token';
 import {
-  isCarteBlancheParent,
   mintChildToken,
+  mintRootToken,
   MintInvariantError,
   type MintParent,
 } from '@/lib/mint/child-mint';
@@ -51,7 +61,6 @@ const BindingSchema = z.object({
 const BodySchema = z
   .object({
     name: z.string().regex(TOKEN_NAME_REGEX).optional(),
-    scope: z.enum(['org', 'project']),
     projectId: z.string().uuid().optional(),
     projectSlug: z.string().min(1).optional(),
     ttlHours: z.number().int().positive().max(MAX_TTL_HOURS).optional(),
@@ -61,6 +70,10 @@ const BodySchema = z
     bindings: z.array(BindingSchema).optional(),
     accepted_risks: z.array(z.string().min(1)),
     denied_risks: z.array(z.string().min(1)).optional(),
+  })
+  .refine((b) => b.projectId !== undefined || b.projectSlug !== undefined, {
+    message: 'projectId or projectSlug is required (all tokens are project-scoped).',
+    path: ['projectId'],
   })
   .refine((b) => b.ttlSeconds === undefined || b.singleUse === true, {
     message: '`ttlSeconds` requires `singleUse: true` (use `ttlHours` for session tokens).',
@@ -92,8 +105,6 @@ interface ProjectRow {
 }
 
 export async function POST(req: NextRequest) {
-  // Parse the body first so the session-fallback can hint org context from
-  // `projectId|projectSlug` (the UI ships no Bearer but is logged in).
   let body: z.infer<typeof BodySchema>;
   try {
     body = BodySchema.parse(await req.json());
@@ -106,75 +117,49 @@ export async function POST(req: NextRequest) {
 
   const svc = getSupabaseServiceClient();
 
-  // Resolve the target project (if scope='project'). We look it up org-
-  // agnostically first so the session-fallback can pick up the org id from
-  // the project itself ; the org-membership check is done by the guard, and
-  // an extra equality on `organization_id === guard.orgId` re-locks scope
-  // below (defense-in-depth against project-id leak across orgs).
+  // Resolve the target project. We look it up org-agnostically first so
+  // the session-fallback can hint org context from the project itself ;
+  // the org-membership check is done by the guard, and an extra equality
+  // on `organization_id === guard.orgId` re-locks scope below.
   let projectRow: ProjectRow | null = null;
-  if (body.scope === 'project') {
-    if (body.projectId) {
-      const { data } = await svc
-        .from('projects')
-        .select('id, slug, name, organization_id')
-        .eq('id', body.projectId)
-        .maybeSingle<ProjectRow>();
-      projectRow = data ?? null;
-    } else if (body.projectSlug) {
-      const { data } = await svc
-        .from('projects')
-        .select('id, slug, name, organization_id')
-        .eq('slug', body.projectSlug)
-        .maybeSingle<ProjectRow>();
-      projectRow = data ?? null;
-    } else {
-      return NextResponse.json(
-        { error: 'scope="project" requires projectId or projectSlug' },
-        { status: 400 },
-      );
-    }
+  if (body.projectId) {
+    const { data } = await svc
+      .from('projects')
+      .select('id, slug, name, organization_id')
+      .eq('id', body.projectId)
+      .maybeSingle<ProjectRow>();
+    projectRow = data ?? null;
+  } else if (body.projectSlug) {
+    const { data } = await svc
+      .from('projects')
+      .select('id, slug, name, organization_id')
+      .eq('slug', body.projectSlug)
+      .maybeSingle<ProjectRow>();
+    projectRow = data ?? null;
   }
-  const projectOrgId = projectRow?.organization_id;
+  if (!projectRow) {
+    return NextResponse.json({ error: 'project not found' }, { status: 404 });
+  }
 
   const guard = await requireToken(req.headers.get('authorization'), {
-    allowSessionFallback: projectOrgId ? { orgId: projectOrgId } : undefined,
+    allowSessionFallback: { orgId: projectRow.organization_id },
   });
   if (!guard.ok) return guard.response;
 
-  if (body.scope === 'project') {
-    if (!projectRow || projectOrgId !== guard.orgId) {
-      return NextResponse.json({ error: 'project not found in this org' }, { status: 404 });
-    }
+  if (projectRow.organization_id !== guard.orgId) {
+    return NextResponse.json({ error: 'project not found in this org' }, { status: 404 });
   }
 
   const { expiresAt, ttlMs } = ttlExpiresAt(body);
-  const tokenName = body.name ?? `${body.scope}-${randomSuffix()}`;
+  const tokenName = body.name ?? `${projectRow.slug}-${randomSuffix()}`;
   const singleUse = body.singleUse ?? false;
 
-  // Compute the preview when bindings are provided. Org-scoped mints
-  // without bindings skip this — the subset check is enforced by
-  // mintChildToken's invariants regardless.
-  // Carte-blanche parents (migrated mgmt-keys, dashboard root tokens) bypass
-  // the inherited check : pass `null` so resolveRiskRow treats every risk as
-  // implicitly held. The subset rule is bypassed in `mintChildToken` too via
-  // `isCarteBlancheParent`.
-  if (body.scope === 'project' && projectRow && body.bindings && body.bindings.length > 0) {
-    const parentRisksForPreview = isCarteBlancheParent({
-      id: guard.token.id,
-      name: guard.token.name,
-      organization_id: guard.token.organization_id,
-      scope: guard.token.scope,
-      project_id: guard.token.project_id,
-      accepted_risks: guard.token.accepted_risks,
-      denied_risks: guard.token.denied_risks,
-      depth: guard.token.depth,
-      delegation_chain: guard.token.delegation_chain,
-      expires_at: guard.token.expires_at,
-      created_at: guard.token.created_at,
-      created_by: guard.token.created_by,
-    })
-      ? null
-      : guard.token.accepted_risks;
+  // Acceptability preview (catalog `acceptable_in_envs` guardrail). When
+  // bindings are provided we run the preview ; subset check is only run
+  // in child mode (mode='bearer') by passing the parent's accepted_risks
+  // — in session/root mode the parent risks are null (no parent).
+  const parentRisksForPreview = guard.mode === 'bearer' ? guard.token.accepted_risks : null;
+  if (body.bindings && body.bindings.length > 0) {
     const preview = computeMintPreview(
       { bindings: body.bindings, accepted_risks: body.accepted_risks },
       parentRisksForPreview,
@@ -192,38 +177,50 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Direct mint.
-  const parent: MintParent = {
-    id: guard.token.id,
-    name: guard.token.name,
-    organization_id: guard.token.organization_id,
-    scope: guard.token.scope,
-    project_id: guard.token.project_id,
-    accepted_risks: guard.token.accepted_risks,
-    denied_risks: guard.token.denied_risks,
-    depth: guard.token.depth,
-    delegation_chain: guard.token.delegation_chain,
-    expires_at: guard.token.expires_at,
-    created_at: guard.token.created_at,
-    created_by: guard.token.created_by,
-  };
   try {
-    const minted = await mintChildToken(svc, {
-      parent,
-      tokenName,
-      scope: body.scope,
-      projectId: projectRow?.id ?? null,
-      ttlMs,
-      accepted_risks: body.accepted_risks,
-      denied_risks: body.denied_risks ?? parent.denied_risks,
-      singleUse,
-      context: body.context ?? null,
-      createdBy: guard.token.created_by,
-    });
+    let minted;
+    if (guard.mode === 'bearer') {
+      const parent: MintParent = {
+        id: guard.token.id,
+        name: guard.token.name,
+        organization_id: guard.token.organization_id,
+        project_id: guard.token.project_id ?? projectRow.id,
+        accepted_risks: guard.token.accepted_risks,
+        denied_risks: guard.token.denied_risks,
+        depth: guard.token.depth,
+        delegation_chain: guard.token.delegation_chain,
+        expires_at: guard.token.expires_at,
+        created_at: guard.token.created_at,
+        created_by: guard.token.created_by,
+      };
+      minted = await mintChildToken(svc, {
+        parent,
+        tokenName,
+        projectId: projectRow.id,
+        ttlMs,
+        accepted_risks: body.accepted_risks,
+        denied_risks: body.denied_risks ?? parent.denied_risks,
+        singleUse,
+        context: body.context ?? null,
+        createdBy: guard.token.created_by,
+      });
+    } else {
+      minted = await mintRootToken(svc, {
+        organizationId: guard.orgId,
+        projectId: projectRow.id,
+        tokenName,
+        ttlMs,
+        accepted_risks: body.accepted_risks,
+        denied_risks: body.denied_risks,
+        singleUse,
+        context: body.context ?? null,
+        createdBy: guard.userId,
+      });
+    }
     const { data: tokenRow } = await svc
       .from('tokens')
       .select(
-        'id, name, scope, project_id, organization_id, api_key_prefix, status, expires_at, created_at, depth, delegation_chain',
+        'id, name, project_id, organization_id, api_key_prefix, status, expires_at, created_at, depth, delegation_chain',
       )
       .eq('id', minted.tokenId)
       .maybeSingle();
@@ -241,7 +238,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: e.message }, { status: e.httpStatus });
     }
     return NextResponse.json(
-      { error: e instanceof Error ? e.message : 'failed to mint child token' },
+      { error: e instanceof Error ? e.message : 'failed to mint token' },
       { status: 500 },
     );
   }

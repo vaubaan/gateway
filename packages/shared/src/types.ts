@@ -35,7 +35,10 @@ export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';
 
 export type TokenStatus = 'active' | 'revoked';
 
-export type TokenScope = 'org' | 'project';
+/** Token scope. Per ADR unified-tokens §amendement 2026-06-19, all tokens
+ *  are project-scoped — `'org'` was dropped from the enum. The DB column
+ *  is kept (CHECK tightened, not DROP COLUMN) for reversibility. */
+export type TokenScope = 'project';
 
 export type AuditDecision = 'allowed' | 'denied';
 
@@ -199,19 +202,18 @@ export function narrowTokenContext(
  * Token row (table `tokens`).
  *
  * Unified replacement for the legacy (org_management_keys, access_tokens)
- * pair — cf. ADR unified-tokens-delegation-chain-and-escalation-channel.md.
- * A token is either org-scoped (`scope='org'`, no project) or project-scoped
- * (`scope='project'`, project_id set). It carries `accepted_risks` /
- * `denied_risks` directly + a `parent_id` self-FK + a pre-computed
- * `delegation_chain` snapshot.
+ * pair — cf. ADR unified-tokens-delegation-chain-and-escalation-channel.md
+ * (amended 2026-06-19 — project-scoped roots only, no carte-blanche).
+ * Carries `accepted_risks` / `denied_risks` directly + a `parent_id`
+ * self-FK + a pre-computed `delegation_chain` snapshot.
  */
 export interface Token {
   id: string;
   organization_id: string;
   parent_id: string | null;
   scope: TokenScope;
-  /** Required when scope='project', null when scope='org'. */
-  project_id: string | null;
+  /** Required (all tokens are project-scoped post 2026-06-19 amendment). */
+  project_id: string;
   name: string;
   api_key_prefix: string;
   api_key_hash: string;
@@ -266,9 +268,8 @@ export interface AuditLogRow {
 
 /** Hot-path snapshot for an authenticated `vbn_live_*` Bearer.
  *
- *  Only project-scoped tokens (`scope='project'`) reach the MCP gateway —
- *  org-scoped tokens authenticate the /api/v1/tokens/* mint surface and
- *  never call `tools/call`. The shape therefore assumes a concrete project. */
+ *  Every token is project-scoped (cf. ADR unified-tokens §amendement
+ *  2026-06-19). The shape carries the concrete project. */
 export interface TokenContext {
   token: Pick<
     Token,

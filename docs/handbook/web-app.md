@@ -38,7 +38,7 @@ packages/web/
       (app)/                                            # Authenticated shell
         layout.tsx                                      # Sidebar + auth gate
         dashboard/page.tsx                              # User's organizations
-        docs/{page,mgmt/page}.tsx                       # In-app reference
+        docs/page.tsx                                    # In-app reference
         orgs/
           new/page.tsx                                  # Create org (creator → owner)
           [slug]/
@@ -47,7 +47,7 @@ packages/web/
             audit/page.tsx                              # Org audit log
             providers/page.tsx                          # Org-wide providers catalogue
             providers/[provider]/page.tsx               # Provider info — data-model mermaid + risk catalog + tools
-            settings/{page,management-keys/page}.tsx    # Org settings + mgmt key vault
+            settings/page.tsx                             # Org settings
             projects/
               new/page.tsx                              # Create project
               [project]/
@@ -71,9 +71,7 @@ packages/web/
             {[tokenId]/route, [tokenId]/rotate-key/route}.ts
             mint/route.ts                               # POST — mint child from any vbn_live_*
             preview/route.ts                            # POST — preview (acceptable / inherited)
-          mgmt/projects/route.ts                        # listing for SDK compat
           orgs/[slug]/{route, transfer-ownership/route}.ts
-          orgs/[slug]/management-keys/{route, [keyId]/route}.ts  # UI shim: root org-scoped tokens
           projects/[projectId]/{route}.ts
           providers/[provider]/route.ts                 # disconnect
           bindings/[bindingId]/route.ts                 # remove a provider binding
@@ -137,18 +135,16 @@ Guards REST (`packages/web/src/lib/auth/`) :
 - `requireOrgMember(orgSlug)` — utilisé par toutes les mutations org-scoped.
 - `requireOrgOwner(orgSlug)` — utilisé uniquement par le transfert d'ownership.
 - `requireToken(authHeader, options?)` — pour les routes
-  `/api/v1/tokens/*` qui consomment un Bearer `vbn_live_*`. Remplace
-  l'ancien `requireManagementKey` (`vbn_mgmt_*` n'existe plus
-  post-unified-tokens, cf. ADR
+  `/api/v1/tokens/*` qui consomment un Bearer `vbn_live_*` (cf. ADR
   [[unified-tokens-delegation-chain-and-escalation-channel]]).
-  Avec `options.allowSessionFallback: { orgId | orgSlug }`, le guard
+  Retourne un union discriminé : `mode='bearer'` (child mint, parent
+  token résolu) ou `mode='session'` (root mint, session cookie).
+  Avec `options.allowSessionFallback: { orgId }`, le guard
   bascule en mode cookie-auth quand le Bearer est absent : il résout
-  la session Supabase, vérifie la membership de l'org cible, et utilise
-  le premier carte-blanche root token (`scope='org', parent_id IS NULL,
-accepted_risks=[]`) comme parent virtuel pour le mint. C'est ce qui
-  permet à la UI mint `/tokens/new` de fonctionner sans demander à
-  l'humain de coller un Bearer — la session est traduite en root token
-  côté serveur.
+  la session Supabase et vérifie la membership de l'org cible. Le mint
+  endpoint crée alors un root token directement (`parent_id IS NULL`,
+  `depth=0`, pas de subset check). C'est ce qui permet à la UI mint
+  `/tokens/new` de fonctionner sans Bearer — la session suffit.
 
 ## Sidebar contextuelle
 
