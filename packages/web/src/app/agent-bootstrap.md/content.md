@@ -185,7 +185,6 @@ curl -sS -X POST https://vaubaan.com/api/v1/tokens/mint \
   -H "Content-Type: application/json" \
   -d '{
     "name": "feature-x-helper",
-    "scope": "project",
     "projectSlug": "gateway",
     "accepted_risks": ["github.feature-branch-write", "github.create-pr"],
     "bindings": [
@@ -208,8 +207,8 @@ Responses :
 - `201` → the child token. The `api_key` is shown **once** — copy it
   immediately. `accepted_risks` is echoed back for confirmation.
 - `403` → either the request violates an invariant (max-depth, depth
-  cap of 5 reached, child `expires_at` exceeds parent's, scope
-  mismatch, denial-propagation), or at least one risk in
+  cap of 5 reached, child `expires_at` exceeds parent's,
+  denial-propagation), or at least one risk in
   `accepted_risks` is not in **your** `accepted_risks` (subset rule)
   or not acceptable in the binding env (catalog `acceptable_in_envs`).
   Body includes `not_acceptable` and `not_inherited` arrays.

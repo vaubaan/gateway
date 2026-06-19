@@ -158,8 +158,7 @@ export async function POST(req: NextRequest) {
   // bindings are provided we run the preview ; subset check is only run
   // in child mode (mode='bearer') by passing the parent's accepted_risks
   // — in session/root mode the parent risks are null (no parent).
-  const parentRisksForPreview =
-    guard.mode === 'bearer' ? guard.token.accepted_risks : null;
+  const parentRisksForPreview = guard.mode === 'bearer' ? guard.token.accepted_risks : null;
   if (body.bindings && body.bindings.length > 0) {
     const preview = computeMintPreview(
       { bindings: body.bindings, accepted_risks: body.accepted_risks },

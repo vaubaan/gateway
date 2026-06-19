@@ -150,7 +150,9 @@ export function MintForm({
     return ids;
   }, [bindings, catalogs]);
 
-  const allSelected = allQualifiedRiskIds.size > 0 && allQualifiedRiskIds.size === accepted.size &&
+  const allSelected =
+    allQualifiedRiskIds.size > 0 &&
+    allQualifiedRiskIds.size === accepted.size &&
     [...allQualifiedRiskIds].every((id) => accepted.has(id));
 
   const toggleSelectAll = useCallback(() => {
@@ -429,11 +431,7 @@ export function MintForm({
 
       {allQualifiedRiskIds.size > 0 && (
         <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-          <Button
-            size="sm"
-            variant={allSelected ? 'ghost' : 'secondary'}
-            onClick={toggleSelectAll}
-          >
+          <Button size="sm" variant={allSelected ? 'ghost' : 'secondary'} onClick={toggleSelectAll}>
             {allSelected ? 'Deselect all' : `Select all (${allQualifiedRiskIds.size} risks)`}
           </Button>
         </div>

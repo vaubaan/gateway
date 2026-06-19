@@ -342,5 +342,5 @@ des bearers" et retombe sur le header statique.
   [[escalation]] (runtime escalation_channel out-of-gateway),
   [[bash-provider]] (self-contained pattern).
 - ADRs : [[redis-cache-upstash-with-memory-fallback]],
-  [[mcp-only-mvp-scope]], [[programmatic-access-token-minting]]
-  (qui supersede [[org-management-keys-for-runner]]).
+  [[mcp-only-mvp-scope]], [[programmatic-access-token-minting]],
+  [[unified-tokens-delegation-chain-and-escalation-channel]].

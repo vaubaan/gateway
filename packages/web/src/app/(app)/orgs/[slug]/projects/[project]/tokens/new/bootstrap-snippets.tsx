@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { Badge, Button, Code } from '@/components/ui';
+import { Button } from '@/components/ui';
 import type { MintFormBinding } from './mint-types';
 
 type Tab = 'env' | 'mcp' | 'claude' | 'curl';
@@ -46,12 +46,7 @@ function buildClaudeMd(
   bindings: MintFormBinding[],
   acceptedRisks: string[],
 ): string {
-  const lines: string[] = [
-    '# Vaubaan Gateway',
-    '',
-    `Project: ${orgSlug}/${projectSlug}`,
-    '',
-  ];
+  const lines: string[] = ['# Vaubaan Gateway', '', `Project: ${orgSlug}/${projectSlug}`, ''];
   if (bindings.length > 0) {
     lines.push('## Bindings');
     for (const b of bindings) {
@@ -102,7 +97,8 @@ export function BootstrapSnippets({
   acceptedRisks: string[];
 }) {
   const [tab, setTab] = useState<Tab>('env');
-  const gatewayUrl = typeof window !== 'undefined' ? window.location.origin : 'https://gateway.vaubaan.com';
+  const gatewayUrl =
+    typeof window !== 'undefined' ? window.location.origin : 'https://gateway.vaubaan.com';
 
   const snippets: Record<Tab, string> = {
     env: buildEnvLocal(apiKey),
@@ -113,10 +109,14 @@ export function BootstrapSnippets({
 
   return (
     <div style={{ marginTop: 'var(--space-4)' }}>
-      <h3 style={{ margin: '0 0 var(--space-2)', fontSize: 'var(--text-sm)' }}>
-        Bootstrap kit
-      </h3>
-      <p style={{ margin: '0 0 var(--space-3)', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+      <h3 style={{ margin: '0 0 var(--space-2)', fontSize: 'var(--text-sm)' }}>Bootstrap kit</h3>
+      <p
+        style={{
+          margin: '0 0 var(--space-3)',
+          fontSize: 'var(--text-xs)',
+          color: 'var(--text-muted)',
+        }}
+      >
         Copy these into your project to wire up Claude Code in 30 seconds.
       </p>
       <div style={{ display: 'flex', gap: 'var(--space-1)', marginBottom: 'var(--space-2)' }}>
