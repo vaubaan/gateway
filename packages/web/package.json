@@ -18,6 +18,7 @@
     "@vaubaan/providers-gmail": "*",
     "@vaubaan/providers-railway": "*",
     "@vaubaan/providers-ssh": "*",
+    "@vaubaan/providers-stripe": "*",
     "@vaubaan/providers-supabase": "*",
     "@vaubaan/providers-vercel": "*",
     "@vaubaan/shared": "*",

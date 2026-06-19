@@ -17,7 +17,8 @@ export type Provider =
   | 'railway'
   | 'bash'
   | 'upstash-redis'
-  | 'gmail';
+  | 'gmail'
+  | 'stripe';
 
 export const PROVIDERS = [
   'github',
@@ -27,6 +28,7 @@ export const PROVIDERS = [
   'bash',
   'upstash-redis',
   'gmail',
+  'stripe',
 ] as const satisfies readonly Provider[];
 
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';

@@ -34,6 +34,7 @@ import {
   upstashRedisDataModel,
 } from '@vaubaan/providers-upstash-redis';
 import { gmailAvailableTools, gmailDataModel } from '@vaubaan/providers-gmail';
+import { stripeDataModel } from '@vaubaan/providers-stripe';
 
 /** Per-plane presentation copy. */
 export interface PlaneInfo {
@@ -234,6 +235,31 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
       'Connect a Gmail account via OAuth (scopes `gmail.readonly` + `gmail.compose`). Configure per-binding `internal_domains`, `allowlist_addresses`, `allowlist_domains`, and `sensitive_labels` to drive the identity-zone classification.',
     catalogPath: 'packages/providers/gmail/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/gmail.md',
+  },
+  stripe: {
+    slug: 'stripe',
+    label: 'Stripe',
+    pitch:
+      'Billing plane — products, prices, coupons, customers, subscriptions, invoices, payments, refunds, webhook endpoints. The `mode` calque (test/live) gates risks per binding via the API-key namespace.',
+    kind: 'cloud',
+    dataModel: stripeDataModel,
+    // tools: [] placeholder at MVP — provider-modeler skill produces the
+    // data-model + catalog + classifier only. The MCP wire (adapter +
+    // tools.ts) is added by the coding agent who picks this provider up
+    // after the modelling pass (cf. handbook §"Reste à faire").
+    tools: [],
+    planes: [
+      {
+        slug: 'billing',
+        label: 'Billing',
+        pitch:
+          'A single Stripe account (one API key = one mode = test or live) — catalog, customers, subscriptions, invoices, payment intents, refunds, monitoring, webhooks. Refund-create carries cardinal caps (cost: unbounded, irreversible).',
+      },
+    ],
+    setup:
+      'Paste a Stripe restricted API key (`sk_test_*` for test, `sk_live_*` for live) — Vaubaan stores it encrypted and the binding pins the mode. The classifier reads `environment` on the binding (`live` | `test`) and qualifies cardinal risks as `stripe[live].refund-create` etc.',
+    catalogPath: 'packages/providers/stripe/src/risk-catalog.yaml',
+    handbook: 'docs/handbook/providers/stripe.md',
   },
 };
 
