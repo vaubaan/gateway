@@ -1,23 +1,22 @@
 /**
  * Auth guard for /api/v1/tokens/* (mint, preview) routes.
  *
- * Two paths :
- *  1. **Bearer (default)** — verifies `Authorization: Bearer vbn_live_…`
+ * Two modes :
+ *  1. **Bearer (child-mint mode)** — verifies `Authorization: Bearer vbn_live_…`
  *     against the unified `tokens` table (argon2id) and returns the parent
- *     token row that the caller will use to mint a child. Touches
- *     `last_used_at` best-effort.
- *  2. **Session fallback (opt-in)** — when no valid Bearer is present AND
- *     the caller opted in via `{ allowSessionFallback: { orgId | orgSlug } }`,
- *     resolve the Supabase session, verify org membership, and return the
- *     org's first carte-blanche root token (`scope='org', parent_id IS NULL,
- *     accepted_risks=[]`) as the virtual parent. This is what the dashboard
- *     mint UI uses — the user mints a child via session cookie instead of
- *     having to paste a vbn_live_* token in the browser.
+ *     token row that the caller will use to mint a child. The mint endpoint
+ *     enforces `child.accepted_risks ⊆ parent.accepted_risks` invariant.
+ *     Touches `last_used_at` best-effort.
+ *  2. **Session fallback (root-mint mode)** — when no valid Bearer is present
+ *     AND the caller opted in via `{ allowSessionFallback: { orgId | orgSlug } }`,
+ *     resolve the Supabase session, verify org membership, and return a
+ *     `'session'` mode marker. The mint endpoint then creates a root token
+ *     (`parent_id = NULL`, `depth = 0`) with the explicitly enumerated
+ *     `accepted_risks` from the body — no subset check (no parent).
  *
- * Replaces the legacy `requireManagementKey` — every Bearer is `vbn_live_*`
- * now (cf. ADR unified-tokens-delegation-chain-and-escalation-channel.md §D3).
- *
- * Spec : docs/spec/vaubaan-gateway.md §3.1, §8.
+ * Spec : docs/spec/vaubaan-gateway.md §3.1, §8.8.
+ * ADR  : docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
+ *        (amended 2026-06-19 — project-scoped roots, no carte-blanche).
  */
 
 import { NextResponse } from 'next/server';
@@ -36,7 +35,6 @@ export type GuardedToken = Pick<
   | 'name'
   | 'organization_id'
   | 'parent_id'
-  | 'scope'
   | 'project_id'
   | 'accepted_risks'
   | 'denied_risks'
@@ -48,10 +46,21 @@ export type GuardedToken = Pick<
   | 'created_by'
 >;
 
-export interface TokenGuardOk {
+export interface TokenGuardBearer {
   ok: true;
+  mode: 'bearer';
+  /** The parent token. The mint endpoint will mint a child of this token. */
   token: GuardedToken;
   orgId: string;
+}
+
+export interface TokenGuardSession {
+  ok: true;
+  mode: 'session';
+  /** The org the session user is a member of. The mint endpoint will mint
+   *  a project-scoped root token (`parent_id = NULL`) in this org. */
+  orgId: string;
+  userId: string;
 }
 
 export interface TokenGuardErr {
@@ -59,15 +68,14 @@ export interface TokenGuardErr {
   response: NextResponse;
 }
 
-export type TokenGuard = TokenGuardOk | TokenGuardErr;
+export type TokenGuard = TokenGuardBearer | TokenGuardSession | TokenGuardErr;
 
 interface TokenAuthRow {
   id: string;
   name: string;
   organization_id: string;
   parent_id: string | null;
-  scope: 'org' | 'project';
-  project_id: string | null;
+  project_id: string;
   accepted_risks: unknown;
   denied_risks: unknown;
   depth: number;
@@ -103,7 +111,9 @@ function toDelegationChain(v: unknown): DelegationChainEntry[] {
  * Opt-in session fallback. When set, `requireToken` will attempt to resolve
  * the request via Supabase cookie session if no valid Bearer is present.
  *
- *  - `orgId` or `orgSlug` : the org we mint into. Membership is enforced.
+ *  - `orgId` or `orgSlug` : the org the session user must be a member of.
+ *    The mint endpoint will then create a project-scoped root token in
+ *    this org.
  */
 export interface SessionFallbackHint {
   orgId?: string;
@@ -111,9 +121,8 @@ export interface SessionFallbackHint {
 }
 
 export interface RequireTokenOptions {
-  /** When provided, enable the cookie-auth fallback. The session user must
-   *  be a member of the target org ; we use its first carte-blanche root
-   *  token (`scope='org', parent_id IS NULL`) as the virtual parent. */
+  /** When provided, enable the cookie-auth fallback. Returns `mode: 'session'`
+   *  so the mint endpoint switches to root-mint behavior. */
   allowSessionFallback?: SessionFallbackHint;
 }
 
@@ -130,7 +139,7 @@ export async function requireToken(
       const { data: row } = await svc
         .from('tokens')
         .select(
-          'id, name, organization_id, parent_id, scope, project_id, accepted_risks, denied_risks, depth, delegation_chain, status, api_key_hash, expires_at, created_at, created_by',
+          'id, name, organization_id, parent_id, project_id, accepted_risks, denied_risks, depth, delegation_chain, status, api_key_hash, expires_at, created_at, created_by',
         )
         .eq('api_key_prefix', parsed.prefix)
         .maybeSingle<TokenAuthRow>();
@@ -155,13 +164,13 @@ export async function requireToken(
 
       return {
         ok: true,
+        mode: 'bearer',
         orgId: row.organization_id,
         token: {
           id: row.id,
           name: row.name,
           organization_id: row.organization_id,
           parent_id: row.parent_id,
-          scope: row.scope,
           project_id: row.project_id,
           accepted_risks: toRiskArray(row.accepted_risks),
           denied_risks: toRiskArray(row.denied_risks),
@@ -192,8 +201,10 @@ export async function requireToken(
 }
 
 /**
- * Resolve the dashboard session into a virtual parent token. Used by the
- * mint UI which has a Supabase cookie session but no Bearer to paste.
+ * Resolve the dashboard session into a `mode: 'session'` guard. The mint
+ * endpoint will then mint a project-scoped root token (parent_id=NULL)
+ * with the explicitly enumerated risks from the request body — no parent,
+ * no subset check.
  */
 async function resolveSessionFallback(hint: SessionFallbackHint): Promise<TokenGuard> {
   const ssr = await getSupabaseServer();
@@ -202,7 +213,6 @@ async function resolveSessionFallback(hint: SessionFallbackHint): Promise<TokenG
 
   const svc = getSupabaseServiceClient();
 
-  // Resolve org id from hint.
   let orgId: string | null = hint.orgId ?? null;
   if (!orgId && hint.orgSlug) {
     const { data: orgRow } = await svc
@@ -214,7 +224,6 @@ async function resolveSessionFallback(hint: SessionFallbackHint): Promise<TokenG
   }
   if (!orgId) return unauthorized('session fallback: missing org context.');
 
-  // Membership check — the user must belong to the org we mint into.
   const { data: member } = await svc
     .from('org_members')
     .select('user_id')
@@ -223,52 +232,10 @@ async function resolveSessionFallback(hint: SessionFallbackHint): Promise<TokenG
     .maybeSingle<{ user_id: string }>();
   if (!member) return unauthorized('session fallback: user is not a member of this org.');
 
-  // Pick the org's first active carte-blanche root token. The dashboard
-  // creates these via /settings/management-keys ; we use ANY active one
-  // as the parent for the child being minted.
-  const { data: root } = await svc
-    .from('tokens')
-    .select(
-      'id, name, organization_id, parent_id, scope, project_id, accepted_risks, denied_risks, depth, delegation_chain, status, expires_at, created_at, created_by',
-    )
-    .eq('organization_id', orgId)
-    .eq('scope', 'org')
-    .is('parent_id', null)
-    .eq('status', 'active')
-    .order('created_at', { ascending: true })
-    .limit(1)
-    .maybeSingle<Omit<TokenAuthRow, 'api_key_hash'>>();
-  if (!root) {
-    return {
-      ok: false,
-      response: NextResponse.json(
-        {
-          error:
-            'no active root token in this org — create one at /orgs/<slug>/settings/management-keys first.',
-        },
-        { status: 409 },
-      ),
-    };
-  }
-
   return {
     ok: true,
-    orgId: root.organization_id,
-    token: {
-      id: root.id,
-      name: root.name,
-      organization_id: root.organization_id,
-      parent_id: root.parent_id,
-      scope: root.scope,
-      project_id: root.project_id,
-      accepted_risks: toRiskArray(root.accepted_risks),
-      denied_risks: toRiskArray(root.denied_risks),
-      depth: root.depth,
-      delegation_chain: toDelegationChain(root.delegation_chain),
-      status: root.status,
-      expires_at: root.expires_at,
-      created_at: root.created_at,
-      created_by: root.created_by,
-    },
+    mode: 'session',
+    orgId,
+    userId: userRes.user.id,
   };
 }

@@ -202,7 +202,7 @@ export default async function ProjectPage({
           <CardHeader>
             <CardTitle>Access tokens</CardTitle>
             <span style={{ fontSize: 'var(--text-sm)', color: 'var(--text-muted)' }}>
-              Mint via <Code>POST /api/v1/mgmt/tokens</Code>
+              Mint via <Code>POST /api/v1/tokens/mint</Code>
             </span>
           </CardHeader>
           <CardBody>

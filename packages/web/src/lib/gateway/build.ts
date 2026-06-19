@@ -51,8 +51,8 @@ interface TokenRow {
   id: string;
   name: string;
   parent_id: string | null;
-  scope: 'org' | 'project';
-  project_id: string | null;
+  scope: 'project';
+  project_id: string;
   status: 'active' | 'revoked';
   api_key_prefix: string;
   expires_at: string | null;

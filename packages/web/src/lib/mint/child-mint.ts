@@ -1,14 +1,15 @@
 /**
- * Token-mint helpers (post drop-confirm).
+ * Token-mint helpers (post drop-confirm, post unified-tokens amendment 2026-06-19).
  *
- * Spec : docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md.
+ * Spec : docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
+ *        (amended 2026-06-19 — project-scoped roots only, no carte-blanche).
  * ADR  : docs/decisions/unified-gates-drop-confirm.md.
  *
  * Mints a child token from a known parent token, enforcing the subset /
- * depth / expires_at invariants. Post drop-confirm the mint-time approval
- * loop is gone — every successful preview leads directly to an INSERT
- * into `tokens`. Escalation happens at runtime, outside the gateway, via
- * the parent's `context.escalation_channel`.
+ * depth / expires_at invariants. Every token is project-scoped — both
+ * roots (parent_id = NULL, minted from the UI Project page with explicit
+ * accepted_risks[]) and children (parent_id = caller.id). No bypass of
+ * the subset check.
  */
 
 import {
@@ -17,7 +18,6 @@ import {
   type DelegationChainEntry,
   type RiskId,
   type Token,
-  type TokenScope,
 } from '@vaubaan/shared';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
@@ -27,7 +27,6 @@ export type MintParent = Pick<
   | 'id'
   | 'name'
   | 'organization_id'
-  | 'scope'
   | 'project_id'
   | 'accepted_risks'
   | 'denied_risks'
@@ -42,10 +41,8 @@ export interface ChildMintInput {
   parent: MintParent;
   /** Display name for the child token. Must be kebab-case + unique per org. */
   tokenName: string;
-  /** Effective scope on the child. */
-  scope: TokenScope;
-  /** Required when scope='project'. */
-  projectId?: string | null;
+  /** Project the child token is scoped to. Must match parent.project_id. */
+  projectId: string;
   /** TTL in milliseconds. */
   ttlMs: number;
   accepted_risks: readonly RiskId[];
@@ -76,20 +73,6 @@ export class MintInvariantError extends Error {
 
 export const MAX_DEPTH = 5;
 
-/**
- * Carte-blanche bypass rule (unified-tokens ADR §3 "data-migration shim").
- *
- * A root org-scoped token with NO accepted_risks is treated as having
- * implicit grant on every risk — the subset check is skipped at mint
- * time. This is the side-door that lets the migrated `org_management_keys`
- * rows continue to mint child tokens (they have `accepted_risks=[]` by
- * design — the legacy mgmt-key authorised by org membership, not by a
- * risk grant).
- */
-export function isCarteBlancheParent(parent: MintParent): boolean {
-  return parent.scope === 'org' && parent.depth === 0 && (parent.accepted_risks?.length ?? 0) === 0;
-}
-
 /** Build the child's delegation_chain from the parent. */
 export function computeChildChain(parent: MintParent): DelegationChainEntry[] {
   return [
@@ -98,7 +81,7 @@ export function computeChildChain(parent: MintParent): DelegationChainEntry[] {
       id: parent.id,
       name: parent.name,
       depth: parent.depth,
-      scope: parent.scope,
+      scope: 'project',
       created_at: parent.created_at,
       created_by: parent.created_by,
     },
@@ -109,14 +92,12 @@ export function computeChildChain(parent: MintParent): DelegationChainEntry[] {
  * Verify the mint invariants against the parent and throw
  * `MintInvariantError` (caller maps to 403) on violation.
  *
- * Invariants (unified-tokens ADR D1) :
+ * Invariants (unified-tokens ADR D1, amended 2026-06-19) :
  *  - child.depth = parent.depth + 1 ≤ 5
  *  - child.expires_at ≤ parent.expires_at (when parent has expiry)
- *  - child.accepted_risks ⊆ parent.accepted_risks
- *    EXCEPT when parent is a "carte blanche" root (scope='org' AND
- *    accepted_risks=[]) — legacy mgmt-key migrated row.
+ *  - child.accepted_risks ⊆ parent.accepted_risks (always — no bypass)
  *  - child.denied_risks ⊇ parent.denied_risks (denials propagate)
- *  - scope rules : org parent → org|project ; project parent → project (same project_id).
+ *  - child.project_id = parent.project_id (project-scoped roots only).
  */
 export function checkMintInvariants(input: ChildMintInput, childExpiresAt: string): void {
   const { parent } = input;
@@ -136,33 +117,18 @@ export function checkMintInvariants(input: ChildMintInput, childExpiresAt: strin
     }
   }
 
-  if (parent.scope === 'project') {
-    if (input.scope !== 'project') {
-      throw new MintInvariantError(
-        `parent token is project-scoped — child must also be project-scoped.`,
-      );
-    }
-    if (input.projectId !== parent.project_id) {
-      throw new MintInvariantError(
-        `child project_id (${input.projectId}) must match parent's (${parent.project_id}).`,
-      );
-    }
-  }
-  if (input.scope === 'project' && !input.projectId) {
-    throw new MintInvariantError(`scope='project' requires a project_id on the child.`);
-  }
-  if (input.scope === 'org' && input.projectId) {
-    throw new MintInvariantError(`scope='org' must not carry a project_id.`);
+  if (input.projectId !== parent.project_id) {
+    throw new MintInvariantError(
+      `child project_id (${input.projectId}) must match parent's (${parent.project_id}).`,
+    );
   }
 
-  if (!isCarteBlancheParent(parent)) {
-    const parentRisks = new Set(parent.accepted_risks);
-    const missing = input.accepted_risks.filter((r) => !parentRisks.has(r));
-    if (missing.length > 0) {
-      throw new MintInvariantError(
-        `subset-violation: child requests risks not held by parent: ${missing.join(', ')}`,
-      );
-    }
+  const parentRisks = new Set(parent.accepted_risks);
+  const missing = input.accepted_risks.filter((r) => !parentRisks.has(r));
+  if (missing.length > 0) {
+    throw new MintInvariantError(
+      `subset-violation: child requests risks not held by parent: ${missing.join(', ')}`,
+    );
   }
 
   const childDenied = new Set(input.denied_risks ?? []);
@@ -172,6 +138,71 @@ export function checkMintInvariants(input: ChildMintInput, childExpiresAt: strin
       `denial-propagation: child must inherit parent denied_risks: ${missingDenials.join(', ')}`,
     );
   }
+}
+
+export interface RootMintInput {
+  /** Org the root token belongs to. The mint endpoint must have verified
+   *  org membership via session before calling this. */
+  organizationId: string;
+  /** Project the root token is scoped to. */
+  projectId: string;
+  /** Display name for the root token. Must be kebab-case + unique per org. */
+  tokenName: string;
+  /** TTL in milliseconds. */
+  ttlMs: number;
+  /** Explicitly enumerated risks the root token accepts. No subset check
+   *  (no parent) — but the caller is responsible for verifying the risks
+   *  exist in the catalog and are acceptable for the project's bindings. */
+  accepted_risks: readonly RiskId[];
+  denied_risks?: readonly RiskId[];
+  singleUse?: boolean;
+  context?: Record<string, unknown> | null;
+  /** Supabase auth.users.id of the human who clicked "Mint" in the dashboard. */
+  createdBy: string;
+}
+
+/**
+ * Mint a root token (parent_id = NULL, depth = 0). Called from the
+ * dashboard session-fallback path — every root is project-scoped and
+ * carries its `accepted_risks` explicitly enumerated.
+ *
+ * Throws generic `Error` (→ 500) on DB failure.
+ */
+export async function mintRootToken(
+  svc: SupabaseClient,
+  input: RootMintInput,
+): Promise<ChildMintResult> {
+  const expiresAt = new Date(Date.now() + input.ttlMs).toISOString();
+  const { apiKey, apiKeyPrefix } = generateApiKey('live');
+  const apiKeyHash = await hashApiKey(apiKey);
+
+  const { data: inserted, error: insertErr } = await svc
+    .from('tokens')
+    .insert({
+      organization_id: input.organizationId,
+      parent_id: null,
+      scope: 'project',
+      project_id: input.projectId,
+      name: input.tokenName,
+      api_key_prefix: apiKeyPrefix,
+      api_key_hash: apiKeyHash,
+      status: 'active',
+      accepted_risks: input.accepted_risks,
+      denied_risks: input.denied_risks ?? [],
+      depth: 0,
+      delegation_chain: [],
+      context: input.context ?? null,
+      expires_at: expiresAt,
+      single_use: input.singleUse ?? false,
+      created_by: input.createdBy,
+    })
+    .select('id')
+    .single<{ id: string }>();
+  if (insertErr || !inserted) {
+    throw new Error(insertErr?.message ?? 'failed to insert root token');
+  }
+
+  return { tokenId: inserted.id, apiKey, apiKeyPrefix, expiresAt, delegationChain: [] };
 }
 
 /**
@@ -198,8 +229,8 @@ export async function mintChildToken(
     .insert({
       organization_id: input.parent.organization_id,
       parent_id: input.parent.id,
-      scope: input.scope,
-      project_id: input.scope === 'project' ? input.projectId : null,
+      scope: 'project',
+      project_id: input.projectId,
       name: input.tokenName,
       api_key_prefix: apiKeyPrefix,
       api_key_hash: apiKeyHash,
