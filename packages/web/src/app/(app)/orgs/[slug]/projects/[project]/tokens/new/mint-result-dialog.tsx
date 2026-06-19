@@ -10,6 +10,7 @@
 import { Button, Code } from '@/components/ui';
 
 import type { MintResult } from './mint-types';
+import { BootstrapSnippets } from './bootstrap-snippets';
 
 export function MintResultDialog({ result, onClose }: { result: MintResult; onClose: () => void }) {
   return (
@@ -33,7 +34,7 @@ export function MintResultDialog({ result, onClose }: { result: MintResult; onCl
           border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--radius-md)',
           padding: 'var(--space-5)',
-          maxWidth: 640,
+          maxWidth: 720,
           width: '100%',
           boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
         }}
@@ -61,9 +62,18 @@ export function MintResultDialog({ result, onClose }: { result: MintResult; onCl
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
               Expires : <Code>{result.expiresAt}</Code>
             </p>
-            <Button variant="primary" onClick={onClose}>
-              I&apos;ve copied it — close
-            </Button>
+            <BootstrapSnippets
+              apiKey={result.apiKey}
+              orgSlug={result.orgSlug}
+              projectSlug={result.projectSlug}
+              bindings={result.bindings}
+              acceptedRisks={result.acceptedRisks}
+            />
+            <div style={{ marginTop: 'var(--space-4)' }}>
+              <Button variant="primary" onClick={onClose}>
+                I&apos;ve copied it — close
+              </Button>
+            </div>
           </>
         )}
         {result.kind === 'denied' && (

@@ -29,8 +29,9 @@ import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from
 import { useRouter } from 'next/navigation';
 
 import type { Provider, RiskId } from '@vaubaan/shared';
+import { qualifyRiskId } from '@vaubaan/policy-engine';
 
-import { Badge, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
+import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import { TOKEN_NAME_REGEX } from '@/lib/mint/token-name';
 
 import {
@@ -43,6 +44,7 @@ import {
 import { MintResultDialog } from './mint-result-dialog';
 import { PreviewFooter } from './preview-footer';
 import { ProviderRisksCard } from './provider-risks-card';
+import { entryAppliesToBinding } from './qualify-helpers';
 
 // Re-export public shapes consumed by page.tsx.
 export type { MintFormBinding, MintFormCatalog, MintFormCatalogEntry } from './mint-types';
@@ -134,6 +136,32 @@ export function MintForm({
   const [isMinting, startMint] = useTransition();
 
   const groupedBindings = useMemo(() => groupBindings(bindings), [bindings]);
+
+  const allQualifiedRiskIds = useMemo(() => {
+    const ids = new Set<RiskId>();
+    for (const binding of bindings) {
+      const cat = catalogs.find((c) => c.provider === binding.provider);
+      if (!cat?.loaded) continue;
+      for (const entry of cat.entries) {
+        if (!entryAppliesToBinding(entry, binding.env)) continue;
+        ids.add(qualifyRiskId(entry.id, binding.env, entry));
+      }
+    }
+    return ids;
+  }, [bindings, catalogs]);
+
+  const allSelected = allQualifiedRiskIds.size > 0 && allQualifiedRiskIds.size === accepted.size &&
+    [...allQualifiedRiskIds].every((id) => accepted.has(id));
+
+  const toggleSelectAll = useCallback(() => {
+    if (allSelected) {
+      setAccepted(new Set());
+    } else {
+      setAccepted(new Set(allQualifiedRiskIds));
+    }
+    setMintResult(null);
+  }, [allSelected, allQualifiedRiskIds]);
+
   const acceptedArray = useMemo(() => Array.from(accepted), [accepted]);
   const bindingsBody = useMemo(
     () =>
@@ -220,15 +248,11 @@ export function MintForm({
     startMint(async () => {
       try {
         // The unified mint route (cf. tokens/mint/route.ts) requires
-        // `scope` + `projectId|projectSlug`. TTL goes via `ttlSeconds` (the
-        // route accepts it only when `singleUse: true` ; we mirror that
-        // pairing here — the UI session bucket is "short single-use" by
-        // construction).
+        // `projectId|projectSlug` + `accepted_risks[]`.
         const res = await fetch(`/api/v1/tokens/mint`, {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({
-            scope: 'project',
             projectId,
             bindings: bindingsBody,
             accepted_risks: wireAcceptedRisks,
@@ -244,6 +268,10 @@ export function MintForm({
             apiKey: body.api_key,
             tokenName: body.token?.name ?? tokenName ?? '',
             expiresAt: body.expires_at ?? '',
+            projectSlug,
+            orgSlug,
+            bindings,
+            acceptedRisks: wireAcceptedRisks,
           });
           return;
         }
@@ -398,6 +426,18 @@ export function MintForm({
           </ul>
         </CardBody>
       </Card>
+
+      {allQualifiedRiskIds.size > 0 && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+          <Button
+            size="sm"
+            variant={allSelected ? 'ghost' : 'secondary'}
+            onClick={toggleSelectAll}
+          >
+            {allSelected ? 'Deselect all' : `Select all (${allQualifiedRiskIds.size} risks)`}
+          </Button>
+        </div>
+      )}
 
       {Array.from(groupedBindings.entries()).map(([provider, providerBindings]) => {
         const cat = catalogs.find((c) => c.provider === provider);

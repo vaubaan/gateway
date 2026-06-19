@@ -65,6 +65,10 @@ export interface MintSuccessResult {
   apiKey: string;
   tokenName: string;
   expiresAt: string;
+  projectSlug: string;
+  orgSlug: string;
+  bindings: MintFormBinding[];
+  acceptedRisks: string[];
 }
 
 export interface MintDeniedResult {
