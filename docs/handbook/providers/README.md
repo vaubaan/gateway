@@ -1,13 +1,14 @@
 ---
 title: Provider risk-model handbooks — index
 status: current
-date: 2026-06-18
+date: 2026-06-19
 ---
 
 # Provider risk-model handbooks
 
-Six documents de modélisation v4 risk-based — un par provider Vaubaan.
-Chacun couvre la même structure (cf. spec
+Sept documents de modélisation v4 risk-based — un par provider Vaubaan
+(Upstash Redis handbook reste à rédiger). Chacun couvre la même
+structure (cf. spec
 [`gateway-risk-model.md`](../../spec/gateway-risk-model.md)) :
 
 1. **Data-model** — entités du plane + cardinalités + diagram mermaid
@@ -24,14 +25,16 @@ le frontmatter `tracks:` (cf. skill `drift-detector`).
 
 ## Liste
 
-| Provider   | Handbook                                | Plane(s)                             | Risks         |
-| ---------- | --------------------------------------- | ------------------------------------ | ------------- |
-| GitHub     | [`github.md`](./github.md)              | `repo`                               | 14 + fallback |
-| Vercel     | [`vercel.md`](./vercel.md)              | `runtime`                            | 15 + fallback |
-| Supabase   | [`supabase.md`](./supabase.md)          | `db`, `storage`, `auth`, `functions` | 23 + fallback |
-| Railway    | [`railway-ssh.md`](./railway-ssh.md) §1 | `runtime`                            | 11 + fallback |
-| SSH (bash) | [`railway-ssh.md`](./railway-ssh.md) §2 | `host`                               | 5 + fallback  |
-| Gmail      | [`gmail.md`](./gmail.md)                | `mailbox`                            | 14 + fallback |
+| Provider      | Handbook                                | Plane(s)                             | Risks         |
+| ------------- | --------------------------------------- | ------------------------------------ | ------------- |
+| GitHub        | [`github.md`](./github.md)              | `repo`                               | 14 + fallback |
+| Vercel        | [`vercel.md`](./vercel.md)              | `runtime`                            | 15 + fallback |
+| Supabase      | [`supabase.md`](./supabase.md)          | `db`, `storage`, `auth`, `functions` | 23 + fallback |
+| Railway       | [`railway-ssh.md`](./railway-ssh.md) §1 | `runtime`                            | 11 + fallback |
+| SSH (bash)    | [`railway-ssh.md`](./railway-ssh.md) §2 | `host`                               | 5 + fallback  |
+| Gmail         | [`gmail.md`](./gmail.md)                | `mailbox`                            | 14 + fallback |
+| Upstash Redis | _handbook à rédiger_                    | `cache`                              | _à rédiger_   |
+| Stripe        | [`stripe.md`](./stripe.md)              | `billing`                            | 14 + fallback |
 
 > Railway et SSH cohabitent dans un seul handbook car les deux providers
 > ont émergé du même round d'analyse (.vaubaan/research/). À splitter
