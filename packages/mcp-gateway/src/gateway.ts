@@ -201,7 +201,7 @@ export class McpGateway {
    * time (clear `risk-not-accepted` body) instead of being silently filtered.
    * Coarse but predictable. Spec v4 §A6.
    */
-  private listTools(ctx: AccessTokenContext): McpToolDeclaration[] {
+  listTools(ctx: AccessTokenContext): McpToolDeclaration[] {
     const out: McpToolDeclaration[] = [];
     const targets = ctx.accepted_risks;
     for (const provider of [

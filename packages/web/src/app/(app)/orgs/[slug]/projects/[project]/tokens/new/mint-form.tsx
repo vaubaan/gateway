@@ -61,6 +61,7 @@ const TTL_OPTIONS = [
   { value: '600', label: 'short (10 min, single-use)' },
   { value: '3600', label: 'session (1 h)' },
   { value: '86400', label: 'long (24 h)' },
+  { value: 'never', label: 'never expire' },
 ] as const;
 
 type TtlValue = (typeof TTL_OPTIONS)[number]['value'];
@@ -78,7 +79,7 @@ interface TtlBodyFields {
 interface MintSuccessBody {
   token: { id: string; name: string; api_key_prefix: string };
   api_key: string;
-  expires_at: string;
+  expires_at: string | null;
   accepted_risks: RiskId[];
 }
 
@@ -86,6 +87,7 @@ interface MintSuccessBody {
  *  "short" preset enforces single-use (the route rejects ttlSeconds without
  *  it) ; longer buckets are free to be single-use or reusable. */
 function ttlPresetToBody(ttl: TtlValue, singleUseExplicit: boolean): TtlBodyFields {
+  if (ttl === 'never') return { singleUse: singleUseExplicit };
   const seconds = Number(ttl);
   if (seconds < 3600) {
     // Sub-hour bucket : the route refuses ttlSeconds unless singleUse=true.
@@ -470,7 +472,8 @@ export function MintForm({
           onClose={() => {
             setMintResult(null);
             if (mintResult.kind === 'minted') {
-              router.push(`/orgs/${orgSlug}/projects/${projectSlug}/tokens`);
+              router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
+              router.refresh();
             }
           }}
         />

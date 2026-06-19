@@ -60,7 +60,7 @@ export function MintResultDialog({ result, onClose }: { result: MintResult; onCl
               {result.apiKey}
             </pre>
             <p style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-              Expires : <Code>{result.expiresAt}</Code>
+              Expires : <Code>{result.expiresAt ?? 'never'}</Code>
             </p>
             <BootstrapSnippets
               apiKey={result.apiKey}
