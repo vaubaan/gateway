@@ -4,7 +4,10 @@
  * Spec : docs/spec/vaubaan-gateway.md §7.1.
  *
  * Auth : `Authorization: Bearer vbn_live_<prefix>_<secret>`.
- * Body : JSON-RPC 2.0 request. Methods : initialize | tools/list | tools/call | ping.
+ *
+ * Uses the official MCP SDK (`@modelcontextprotocol/sdk`) with
+ * `WebStandardStreamableHTTPServerTransport` for protocol compliance
+ * (streamable HTTP, correct 405 for unsupported methods, session mgmt).
  *
  * CORS : open (`*`). Browser-based MCP clients (Inspector, MCPJam, future
  * web playgrounds) must be able to call us. The actual auth is done via the
@@ -13,8 +16,10 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
+import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { AuthError } from '@vaubaan/mcp-gateway';
-import type { JsonRpcRequest } from '@vaubaan/shared';
 import { buildGateway } from '@/lib/gateway/build';
 
 export const runtime = 'nodejs';
@@ -22,79 +27,39 @@ export const dynamic = 'force-dynamic';
 
 const CORS_HEADERS: Record<string, string> = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Methods': 'POST, GET, DELETE, OPTIONS',
   'Access-Control-Allow-Headers':
     'Authorization, Content-Type, mcp-session-id, mcp-protocol-version',
   'Access-Control-Expose-Headers': 'mcp-session-id',
   'Access-Control-Max-Age': '86400',
 };
 
-function withCors(res: NextResponse): NextResponse {
+function withCors(res: Response): Response {
+  const patched = new Response(res.body, res);
+  for (const [k, v] of Object.entries(CORS_HEADERS)) patched.headers.set(k, v);
+  return patched;
+}
+
+export function OPTIONS(): NextResponse {
+  const res = new NextResponse(null, { status: 204 });
   for (const [k, v] of Object.entries(CORS_HEADERS)) res.headers.set(k, v);
   return res;
 }
 
-export function OPTIONS(): NextResponse {
-  return withCors(new NextResponse(null, { status: 204 }));
-}
-
-export function GET(): NextResponse {
-  const res = NextResponse.json(
-    {
-      jsonrpc: '2.0',
-      id: null,
-      error: { code: -32600, message: 'Method not allowed. Use POST with a JSON-RPC 2.0 body.' },
-    },
-    { status: 405 },
-  );
-  res.headers.set('Allow', 'POST, OPTIONS');
-  return withCors(res);
-}
-
-export function DELETE(): NextResponse {
-  const res = NextResponse.json(
-    {
-      jsonrpc: '2.0',
-      id: null,
-      error: { code: -32600, message: 'Method not allowed. Use POST with a JSON-RPC 2.0 body.' },
-    },
-    { status: 405 },
-  );
-  res.headers.set('Allow', 'POST, OPTIONS');
-  return withCors(res);
+export async function GET(req: NextRequest) {
+  return handleMcpRequest(req);
 }
 
 export async function POST(req: NextRequest) {
+  return handleMcpRequest(req);
+}
+
+export async function DELETE(req: NextRequest) {
+  return handleMcpRequest(req);
+}
+
+async function handleMcpRequest(req: NextRequest): Promise<Response> {
   const auth = req.headers.get('authorization');
-  let body: JsonRpcRequest;
-  try {
-    body = (await req.json()) as JsonRpcRequest;
-  } catch {
-    return withCors(
-      NextResponse.json(
-        {
-          jsonrpc: '2.0',
-          id: null,
-          error: { code: -32700, message: 'parse error: body is not valid JSON' },
-        },
-        { status: 400 },
-      ),
-    );
-  }
-
-  if (body.jsonrpc !== '2.0' || typeof body.method !== 'string') {
-    return withCors(
-      NextResponse.json(
-        {
-          jsonrpc: '2.0',
-          id: body.id ?? null,
-          error: { code: -32600, message: 'invalid request: expected JSON-RPC 2.0' },
-        },
-        { status: 400 },
-      ),
-    );
-  }
-
   const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null;
   const clientUserAgent = req.headers.get('user-agent') ?? null;
 
@@ -104,10 +69,10 @@ export async function POST(req: NextRequest) {
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return withCors(
-      NextResponse.json(
+      Response.json(
         {
           jsonrpc: '2.0',
-          id: body.id ?? null,
+          id: null,
           error: { code: -32603, message: `gateway misconfigured: ${msg}` },
         },
         { status: 503 },
@@ -115,17 +80,16 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let ctx;
   try {
-    const ctx = await gateway.authenticate(auth);
-    const response = await gateway.handle(ctx, body);
-    return withCors(NextResponse.json(response));
+    ctx = await gateway.authenticate(auth);
   } catch (e) {
     if (e instanceof AuthError) {
       return withCors(
-        NextResponse.json(
+        Response.json(
           {
             jsonrpc: '2.0',
-            id: body.id ?? null,
+            id: null,
             error: { code: e.code, message: e.message },
           },
           { status: e.httpStatus },
@@ -134,14 +98,57 @@ export async function POST(req: NextRequest) {
     }
     const message = e instanceof Error ? e.message : String(e);
     return withCors(
-      NextResponse.json(
+      Response.json(
         {
           jsonrpc: '2.0',
-          id: body.id ?? null,
+          id: null,
           error: { code: -32603, message: `internal error: ${message}` },
         },
         { status: 500 },
       ),
     );
+  }
+
+  const server = new Server(
+    { name: 'vaubaan-gateway', version: '0.1.0' },
+    { capabilities: { tools: {} } },
+  );
+
+  server.setRequestHandler(ListToolsRequestSchema, async () => {
+    return { tools: gateway.listTools(ctx) };
+  });
+
+  server.setRequestHandler(CallToolRequestSchema, async (request) => {
+    const response = await gateway.handle(ctx, {
+      jsonrpc: '2.0',
+      id: 'sdk',
+      method: 'tools/call',
+      params: { name: request.params.name, arguments: request.params.arguments ?? {} },
+    });
+    if ('error' in response) {
+      return {
+        content: [{ type: 'text' as const, text: response.error.message }],
+        isError: true,
+      };
+    }
+    const result = response.result as { content?: unknown[]; isError?: boolean } | undefined;
+    return {
+      content: (result?.content ?? []) as Array<{ type: 'text'; text: string }>,
+      isError: result?.isError ?? false,
+    };
+  });
+
+  const transport = new WebStandardStreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+
+  await server.connect(transport);
+  try {
+    const response = await transport.handleRequest(req);
+    return withCors(response);
+  } finally {
+    await server.close();
+    await transport.close();
   }
 }
