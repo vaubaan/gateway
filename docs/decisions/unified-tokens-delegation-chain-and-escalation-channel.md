@@ -2,6 +2,7 @@
 title: Tokens unifiés avec parent_id + delegation_chain + escalation_channel hors-gateway
 status: accepted
 date: 2026-06-16
+amended: 2026-06-19
 supersedes:
   - programmatic-access-token-minting
   - mint-install-token-credential
@@ -16,6 +17,76 @@ extends:
 > `access_tokens`) par une **table unique** `tokens` avec relation
 > `parent_id` récursive, et on sort **l'escalation hors du périmètre du
 > gateway** (échange direct enfant → parent).
+
+## Amendement 2026-06-19 — project-scoped roots only
+
+> **Override** des décisions D1 et §"Wire / DB changes" ci-dessous.
+> Validé par Renaud le 2026-06-19. Le reste de l'ADR est inchangé.
+
+Trois deltas qui se motivent mutuellement :
+
+**Δ1 — Drop `scope = 'org'`.** L'enum `scope` du schéma D1 est réduit à
+la seule valeur `'project'`. Le CHECK devient :
+
+```sql
+scope text NOT NULL CHECK (scope = 'project'),
+project_id uuid NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+```
+
+Toute mention de "root org-scoped" / "scope='org' → org|project" dans
+D1, D3 et §"UX implications" est caduque.
+
+**Δ2 — Aucune migration depuis `org_management_keys`.** La section
+"DB changes" qui prévoyait de migrer les rows existants vers
+`tokens(parent_id = NULL, scope = 'org')` est **annulée**. La table
+`org_management_keys` est `DROP`-ée sans data preservation. Idem pour
+les rows legacy `access_tokens` : ils sont migrés vers `tokens` avec
+`scope = 'project'` et `parent_id = NULL` (root). S'il n'y a pas
+d'historique de minting traçable, `parent_id` reste `NULL`.
+
+**Δ3 — Drop la notion de "carte-blanche parent".** Pas de bypass du
+subset check pour aucun token. Un root token (`parent_id = NULL`)
+porte une liste **explicitement énumérée** de `accepted_risks[]` —
+résolue depuis le catalog au moment du mint. Pas de sentinel `'*'`,
+pas de flag `is_carte_blanche`, pas de branche conditionnelle au mint.
+Le helper `isCarteBlancheParent` introduit dans `packages/web/src/lib/mint/`
+est supprimé.
+
+### Justification
+
+L'org-scope était un héritage du flow "Coding Agent Runner" (cf. ADRs
+[[org-management-keys-for-runner]] → [[programmatic-access-token-minting]],
+tous deux superseded par cet ADR) qui devait **auto-provisionner**
+des projets côté customer. Ce cas d'usage est abandonné : chaque
+projet est créé manuellement via l'UI Vaubaan et a son propre root
+token project-scoped. Un root org-scoped élargit la surface d'un
+leak (≈ ancien mgmt-key) sans bénéfice tangible.
+
+La carte-blanche tombe avec la même cohérence : sans root org-scoped
+à provisionner par migration, on n'a plus aucune row sans
+`accepted_risks` explicite à protéger. Tous les roots passent par le
+même chemin (`POST /api/v1/tokens/mint` depuis l'UI Project page,
+liste de risks énumérée). Le subset check est toujours appliqué — un
+parent sans accepted_risks ne peut mint aucun child, ce qui est le
+comportement attendu.
+
+### Impacts
+
+- **D1 schema** : enum scope rétréci ; `project_id` devient `NOT NULL`.
+- **D3 mint endpoint** : body schema drop le champ `scope` (toujours
+  `'project'` implicitement) ; `projectId|projectSlug` devient
+  obligatoire. La règle "child.scope ∈ allowed-by-parent-scope" est
+  triviale (toujours `'project'`).
+- **Wire changes** : `org_management_keys` → drop sans migration ;
+  `vbn_mgmt_*` → drop sans dual-period.
+- **UI** : `Org Settings → Management Keys` est supprimé sans
+  remplacement à l'org-level. Le mint racine se fait via la
+  **Project page**, onglet "Tokens". Cf. spec §10 "Bootstrap kit".
+- **Forward-compat** : la colonne `scope` est gardée (CHECK tighten,
+  pas DROP COLUMN) pour réversibilité en cas de besoin futur. Si on
+  ré-introduit jamais un scope org-level, on relâche le CHECK.
+
+---
 
 ## Contexte
 

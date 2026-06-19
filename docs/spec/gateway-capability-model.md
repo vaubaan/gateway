@@ -8,6 +8,14 @@
 > (rings v1 → capabilities v2 → slices v3 → risk-based v4).
 > Audit de cohérence : `/.vaubaan/reports/v4-coherence-audit.md`.
 >
+> **⚠️ 2026-06-19 — Le wire `/mgmt/tokens` mentionné ci-dessous est lui
+> aussi obsolète.** Le mint unifié vit désormais sur
+> `POST /api/v1/tokens/mint` (tout `vbn_live_*` peut mint un child),
+> et il n'y a plus de scope org (project-scoped roots only). Cf. ADR
+> [[unified-tokens-delegation-chain-and-escalation-channel]] + amendement
+> 2026-06-19. Les refs `/mgmt/*` ci-dessous restent comme artefacts
+> historiques de la grammaire capabilities.
+>
 > ---
 >
 > Brouillon de modélisation, pas encore une spec scellée ni un ADR. Sert à

@@ -2,21 +2,35 @@
 
 > **Statut :** spec greenfield.
 >
+> **⚠️ Note 2026-06-19 — Unified tokens, project-scoped roots only :**
+> Amendement de la note 2026-06-16 ci-dessous. Le scope `org` du modèle
+> tokens unifiés est **drop** — tous les roots (`parent_id = NULL`) sont
+> obligatoirement project-scoped. La table `org_management_keys` est
+> drop sans migration. Pas de carte-blanche : tout token porte une liste
+> **explicitement énumérée** de `accepted_risks[]` (résolue depuis le
+> catalog au mint). L'UI `Org Settings → Management Keys` est supprimée ;
+> le mint racine vit sur la **Project page**, onglet "Tokens", avec un
+> bouton "Select all" qui énumère tous les risks applicables aux
+> bindings du projet. Un nouvel onglet **"Bootstrap"** sur la Project
+> page sert les 3 snippets (`.env.local`, `.mcp.json`, bloc `CLAUDE.md`)
+> + un curl de vérif. Cf. §12.4 "Bootstrap kit après mint" + amendement
+> ADR [[unified-tokens-delegation-chain-and-escalation-channel]] §2026-06-19.
+>
 > **⚠️ Note 2026-06-16 — Unified tokens (4ème évolution) :**
 > Le couple `org_management_keys` (`vbn_mgmt_*`) + `access_tokens`
 > (`vbn_live_*`) est **fusionné** dans une table unique `tokens` avec
 > `parent_id` + `delegation_chain` pré-calculé (cf. ADR
 > [[unified-tokens-delegation-chain-and-escalation-channel]]). Le
 > préfixe `vbn_mgmt_*` disparaît ; tous les Bearers sont `vbn_live_*`
-> et le scope (`org` / `project`) vit sur le row. Les endpoints
-> `POST /api/v1/mgmt/tokens*` + `POST /api/v1/projects/[id]/mint*`
-> sont retirés au profit du seul `POST /api/v1/tokens/mint` (qui
-> accepte n'importe quel `vbn_live_*` et produit un child avec
-> `parent_id = caller.id`). L'audit_log carry désormais
-> `delegation_chain` (snapshot frozen-in-time). Les sections §0, §3
-> (DDL), §7 (REST surface) sont **historiques** jusqu'à réécriture —
-> source de vérité du nouveau modèle : ADR unified-tokens. Pour le
-> handbook applicatif, voir [[escalation]].
+> et le scope vit sur le row (réduit à `project` seul par l'amendement
+> 2026-06-19). Les endpoints `POST /api/v1/mgmt/tokens*` +
+> `POST /api/v1/projects/[id]/mint*` sont retirés au profit du seul
+> `POST /api/v1/tokens/mint` (qui accepte n'importe quel `vbn_live_*`
+> et produit un child avec `parent_id = caller.id`). L'audit_log carry
+> désormais `delegation_chain` (snapshot frozen-in-time). Les sections
+> §0, §3 (DDL), §7 (REST surface) sont **historiques** jusqu'à
+> réécriture — source de vérité du nouveau modèle : ADR unified-tokens.
+> Pour le handbook applicatif, voir [[escalation]].
 >
 > **⚠️ Note 2026-06-15 — Capabilities → Risk-based (3ème évolution) :**
 > Le modèle **capabilities** introduit en 2026-06-08 (tuple `(provider,
@@ -101,11 +115,6 @@ Le MCP Gateway raisonne sur ces termes (modèle risk-based — cf.
   indistinctement par un agent LLM, un script CI, un cron ou un humain.
   Peut porter un `expires_at` (TTL — default 24h, max 7j) et un flag
   `singleUse`.
-- **ManagementKey** — Bearer credential **org-scoped**, distinct des
-  AccessTokens et **inutilisable** sur le MCP gateway. Préfixe `vbn_mgmt_…`.
-  Authentifie tout client programmatique (CI job, script de bootstrap,
-  automation) sur `POST /api/v1/mgmt/tokens` pour qu'il puisse mint des
-  AccessTokens. Cf. ADR [[programmatic-access-token-minting]].
 - **RiskId** — identifiant d'une entrée du catalogue de risques d'un
   provider (`supabase[staging].bulk-row-write`, `github.mint-install-token`).
   Forme `<provider>[<env>].<name>` ou `<provider>.<name>`. C'est ce que le
@@ -189,11 +198,11 @@ Organization (owner_id : FK auth.users, unique, transferable)
    ├── ProviderAdmins[]      1 par CloudProvider connecté (post-OAuth/App install)
    ├── RoleCatalog[]         provider-scoped, builtin global + custom (v2) org-level
    ├── OrgMembers[]          membership plat — tout member a full RW
-   ├── ManagementKeys[]      org-scoped Bearer creds /api/v1/mgmt/* (vbn_mgmt_…)
    └── Projects[]
          ├── ProviderBindings[]    1 par CloudProvider activé pour ce Project
-         └── AccessTokens[]        project-scoped, porteurs de N Roles
-                                   (optionnellement expires_at — mgmt-minted)
+         └── Tokens[]              project-scoped, racine ou child via parent_id,
+                                   porteurs d'accepted_risks[] énumérés
+                                   (optionnellement expires_at)
 
 AuditLog (transversal)     one row per MCP call : (access_token, tool, args_hash,
                                                     role_matched, decision,
@@ -211,8 +220,7 @@ AuditLog (transversal)     one row per MCP call : (access_token, tool, args_hash
 | **ProviderAdmin**   | Bundle de credentials que Vaubaan détient au niveau Org pour un Provider, issu d'un flow OAuth/App install. 1 par (org, provider).          |
 | **ProviderBinding** | Référence concrète d'un Project vers une ressource côté Provider. 1 par (project, provider).                                               |
 | **Role**            | Bundle nommé de permissions, **provider-scoped**, naming `<provider>:<role-name>`. Builtin v1 = `github:reader`, `github:developer`.       |
-| **AccessToken**     | Identité project-scoped, porteur de N Roles, identifiée par une `api_key` Vaubaan (`vbn_live_xxxx…`). Usager agnostique (agent/script/humain). Optionnellement TTL via `expires_at`. |
-| **ManagementKey**   | Bearer creds org-scoped (`vbn_mgmt_xxxx…`), inutilisable sur `/mcp`. Authentifie un client programmatique sur `/api/v1/mgmt/*` pour mint/révoquer des AccessTokens éphémères. |
+| **AccessToken**     | Identité project-scoped, porteur de N Roles, identifiée par une `api_key` Vaubaan (`vbn_live_xxxx…`). Usager agnostique (agent/script/humain). Optionnellement TTL via `expires_at`. N'importe quel `vbn_live_*` peut mint un child token via `POST /api/v1/tokens/mint`. |
 | **Policy**          | Règle dans `Role.permissions.rules[]` : `{effect, tool/tool_matches, target?, constraints?, priority?}`.                                   |
 | **MCPGateway**      | Endpoint Vaubaan `/mcp` en JSON-RPC. Auth via `Authorization: Bearer <api_key>`. C'est le hot-path produit.                                  |
 | **AuditLog**        | Une row par MCP call : qui/quoi/décision/latence. Append-only via app, rétention 90j.                                                       |
@@ -339,23 +347,6 @@ create table access_tokens (
   unique (project_id, name)
 );
 
--- ManagementKey : Bearer creds org-scoped, distinct des AccessTokens,
--- utilisé exclusivement pour authentifier les appels /api/v1/mgmt/*.
--- Inutilisable sur le MCP gateway. Cf. ADR [[programmatic-access-token-minting]].
-create table org_management_keys (
-  id              uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references organizations(id) on delete cascade,
-  name            text not null check (name ~ '^[a-z0-9](-?[a-z0-9])*$'),
-  api_key_prefix  text not null unique,   -- 'vbn_mgmt_AbCdEfGh'
-  api_key_hash    text not null,           -- argon2id(full api_key)
-  status          text not null default 'active'
-                      check (status in ('active', 'revoked')),
-  last_used_at    timestamptz,
-  created_by      uuid references auth.users(id),
-  created_at      timestamptz not null default now(),
-  unique (organization_id, name)
-);
-
 create table access_token_roles (
   access_token_id uuid not null references access_tokens(id) on delete cascade,
   role_id         uuid not null references roles(id) on delete restrict,
@@ -389,11 +380,8 @@ create table audit_log (
 - `access_tokens (api_key_prefix)` — fast lookup au moment de l'auth (puis vérifier hash).
 - `access_tokens (project_id)` — listing UI.
 - `access_tokens (expires_at) where expires_at is not null` — partial index pour
-  les purges de tokens expirés (mgmt-minted).
+  les purges de tokens expirés.
 - `access_token_roles (access_token_id)` — lookup roles d'un access_token au hot-path.
-- `org_management_keys (api_key_prefix)` — UNIQUE, fast lookup au moment de
-  l'auth /api/v1/mgmt/* (puis vérifier hash).
-- `org_management_keys (organization_id)` — listing UI.
 - `audit_log (organization_id, ts desc)` — historique org.
 - `audit_log (access_token_id, ts desc)` — historique access_token.
 - `audit_log (decision, ts desc) where decision='denied'` — partial index pour
@@ -417,7 +405,6 @@ suppression depuis `org_members` (transfert préalable via
 | `roles`              |   RW²  |  RW²  |
 | `access_tokens`      |   RW   |  RW   |
 | `access_token_roles` |   RW   |  RW   |
-| `org_management_keys`|   RW   |  RW   |
 | `audit_log`          |   R    |   R   |
 
 ¹ DELETE refusé si la cible est l'owner ; l'UPDATE de `organizations.owner_id`
@@ -996,9 +983,6 @@ complète** des tools + ce que le token peut callable. Sert deux clients :
 - `Bearer vbn_live_…` → catalog scopé au projet du token, avec `callable` +
   `missingCapabilities` par tool + `auth.bindings` (les refs amont du
   projet).
-- `Bearer vbn_mgmt_…` → catalog org-wide, sans `callable` ni `bindings`
-  (un mgmt key n'est pas scopé à un projet et peut mint n'importe quoi
-  modulo policy gate).
 
 Forme de la réponse (mode `live`) :
 
@@ -1034,7 +1018,7 @@ Forme de la réponse (mode `live`) :
       ]
     }
   ],
-  "mintHint": { "endpoint": "/api/v1/mgmt/tokens", "method": "POST", ... }
+  "mintHint": { "endpoint": "/api/v1/tokens/mint", "method": "POST", ... }
 }
 ```
 
@@ -1149,54 +1133,52 @@ GET    /catalog/roles                       -- liste roles builtin
 GET    /catalog/tools?provider=...          -- availableTools par provider
 ```
 
-### 8.8 ManagementKeys + Management API (programmatic AccessToken minting)
+### 8.8 Mint API unifié (programmatic + UI)
 
-Cf. ADR [[programmatic-access-token-minting]].
+Cf. ADRs [[unified-tokens-delegation-chain-and-escalation-channel]] (modèle
+unifié + amendement 2026-06-19 project-scoped only) et
+[[programmatic-access-token-minting]] (historique — superseded).
+
+Un seul endpoint de mint sert le **dashboard humain** ET les clients
+programmatiques. Il authentifie le caller par n'importe quel `vbn_live_*`
+(session Supabase fallback pour le flow UI). Le child produit a
+`parent_id = caller.id`.
 
 ```
-GET    /orgs/:slug/management-keys                 -- list (admin/member)
-POST   /orgs/:slug/management-keys                 -- { name } ; returns { management_key, api_key }
-                                                   --   api_key visible 1× (argon2id at-rest)
-DELETE /orgs/:slug/management-keys/:keyId          -- hard delete
-```
-
-```
-GET    /api/v1/mgmt/roles
-       Authorization: Bearer vbn_mgmt_…
-       returns 200 { roles: [{ id, name, provider, description, is_builtin }] }
-
-GET    /api/v1/mgmt/projects
-       Authorization: Bearer vbn_mgmt_…
-       returns 200 {
-         projects: [{
-           id, slug, name, created_at,
-           bindings: [{ provider, resource_ref, display_name }]
-         }]
+POST   /api/v1/tokens/mint
+       Authorization: Bearer vbn_live_…
+       body: {
+         name?,
+         projectId | projectSlug,
+         accepted_risks: RiskId[],
+         denied_risks?: RiskId[],
+         bindings?: ProjectBinding[],
+         context?,
+         ttlHours? (default 24, max 168),
+         ttlSeconds? (requires singleUse),
+         singleUse? (default false)
        }
+       returns 201 { token, api_key, expires_at, accepted_risks }
+              | 403 { error, not_acceptable, not_inherited, risks } (subset / env violation)
+              | 400 schema
 
-POST   /api/v1/mgmt/tokens
-       Authorization: Bearer vbn_mgmt_…
-       body: { projectSlug, roleIds, name?, ttlHours? }
-       returns 201 { access_token, api_key, expires_at }
-
-DELETE /api/v1/mgmt/tokens/:tokenId
-       Authorization: Bearer vbn_mgmt_…
-       returns 200 { ok: true } | 404 if token not in bound org
+DELETE /api/v1/tokens/:tokenId
+       Authorization: Bearer vbn_live_…  OU session
+       returns 200 { ok: true } | 404 si le token n'appartient pas au caller scope
 ```
 
-`GET /mgmt/roles` retourne les builtin globaux **plus** les roles custom
-de l'org liée à la management key — c'est la liste actionable pour les
-`roleIds[]` du `POST /mgmt/tokens`. `GET /mgmt/projects` retourne les
-projects de l'org avec leurs bindings pour permettre au client de découvrir
-les `projectSlug` valides et savoir quels providers sont activés sur chacun.
+Default `ttlHours=24`, hard-cap **168h** (7j). Tout token émis porte un
+`expires_at` que le hot-path gateway respecte. Le client (humain dashboard
+ou programmatique) appelle `POST /tokens/mint`, stocke l'`api_key`
+localement pour la session, et peut appeler `DELETE /tokens/:id` à la fin
+pour cleanup explicite. Les tokens oubliés sont purgés serveur-side 7 jours
+après leur `expires_at` (cf. migration `0010_purge_expired_access_tokens.sql`).
 
-Default `ttlHours=24`, hard-cap **168h** (7j). Tout AccessToken émis ici porte
-un `expires_at` que le hot-path gateway respecte (`AuthError('access token
-has expired.')` quand `now > expires_at`). Le client appelle `POST /mgmt/tokens`
-au début de chaque session, stocke l'`api_key` localement pour la durée de la
-session, et peut appeler `DELETE /mgmt/tokens/:id` à la fin pour cleanup
-explicite. Les tokens oubliés sont purgés serveur-side 7 jours après leur
-`expires_at` (cf. migration `0010_purge_expired_access_tokens.sql`).
+L'invariant **`child.accepted_risks ⊆ caller.accepted_risks`** est vérifié
+serveur-side au mint. Pas de bypass (carte-blanche supprimée par
+amendement 2026-06-19) — un root token est minté via l'UI Project page
+"Tokens" avec sa liste de risks énumérée explicitement (cf. §12.4
+"Bootstrap kit après mint").
 
 ## 9. Workflows
 
@@ -1419,6 +1401,125 @@ Pas de granularité fine par-resource. La granularité fine vit dans la
 Voir `docs/spec/style-guide.md` (gardé du repo v3 ; design tokens et UI
 primitives toujours applicables avec Next.js + Tailwind v4).
 
+### 12.4 Bootstrap kit après mint
+
+> **Source de vérité du flow developer onboarding.** Add 2026-06-19 par
+> l'amendement [[unified-tokens-delegation-chain-and-escalation-channel]]
+> §2026-06-19.
+
+**Cible.** Un developer humain qui vient de cliquer "Mint token" sur la
+Project page et qui a un projet git local avec Claude Code installé —
+mais qui ne connaît rien à Vaubaan. Le panel "Bootstrap" lui sert tout
+ce dont il a besoin pour wire-up le gateway en 30 secondes.
+
+#### 12.4.1 Flow Mint
+
+Le bouton "Mint token" ouvre un modal qui affiche **une checklist** des
+`RiskId` du catalog applicables aux bindings du projet (résolus depuis
+`/api/v1/catalog` en mode `live`, filtrés par `acceptable_in_envs` pour
+chaque binding). Greyed-out pour ceux que le catalog exclut.
+
+Un bouton **"Select all"** coche toutes les cases en un click. C'est un
+raccourci UX, **pas** un sentinel : le POST envoie la liste explicitement
+énumérée des risks cochés (cf. amendement ADR
+[[unified-tokens-delegation-chain-and-escalation-channel]] §Δ3 — pas de
+carte-blanche, pas de `'*'`). Si un risk est ajouté au catalog plus tard,
+ce token NE le couvrira PAS — re-mint requis.
+
+Submit → `POST /api/v1/tokens/mint { name, projectSlug, accepted_risks }`
+→ 201 → on bascule sur le panel "Bootstrap".
+
+#### 12.4.2 Panel "Bootstrap" — post-mint
+
+Affiche **3 snippets numérotés à copier-coller** + un curl de vérif :
+
+**① `.env.local` (à créer/compléter à la racine du projet git)**
+
+```env
+VAUBAAN_TOKEN=vbn_live_<prefix>_<secret>
+```
+
+Le secret n'est révélé qu'**une seule fois** ici. Le panel re-visité plus
+tard montre un placeholder `vbn_live_<prefix>_<…>` sans le secret (avec
+un lien "Rotate" qui re-mint).
+
+**② `.mcp.json` (à créer à la racine du projet git)**
+
+Config MCP que Claude Code lit automatiquement à l'ouverture du projet :
+
+```jsonc
+{
+  "mcpServers": {
+    "vaubaan": {
+      "type": "http",
+      "url": "https://gateway.vaubaan.com/mcp",
+      "headers": { "Authorization": "Bearer ${VAUBAAN_TOKEN}" }
+    }
+  }
+}
+```
+
+**③ Bloc à coller dans `CLAUDE.md`** (généré statiquement au mint —
+snapshot des bindings du projet + des risks acceptés du token)
+
+```markdown
+## Vaubaan Gateway
+
+Ce projet utilise [Vaubaan](https://vaubaan.com) comme MCP gateway pour
+accéder aux providers externes avec gates de risque explicites.
+
+**Providers connectés :**
+- GitHub : `<owner/repo>` (cf. binding github)
+- Vercel : `<prj_xxx>` (preview + prod si bindings différents)
+- Supabase : projet `<ref>`
+
+**Risks acceptés par `$VAUBAAN_TOKEN` :**
+- `github.feature-branch-write` — push sur branches feature/*
+- `github.create-pr` — ouvrir des PRs
+- … (liste complète énumérée — output du mint, jamais agrégée)
+
+**Comportement sur `risk-not-accepted` :** stoppe l'appel, remonte
+l'erreur à l'humain. Ce token est root (`parent_id = null`) — pas
+d'`escalation_channel`, donc pas de step-up runtime possible.
+
+**Référence agent :** <https://vaubaan.com/agent-bootstrap.md>
+```
+
+**④ Curl de vérif** (l'humain le run pour confirmer que la connexion
+marche et lister les tools que ce token peut callable) :
+
+```bash
+curl -sS https://gateway.vaubaan.com/mcp \
+  -H "Authorization: Bearer $VAUBAAN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | jq '.result.tools[].name'
+```
+
+#### 12.4.3 Re-visite ultérieure du panel
+
+L'onglet "Bootstrap" reste accessible après le mint initial. Les snippets
+②③④ sont régénérés à chaque vue (statique au mint, mais re-rendable
+depuis `tokens.bindings` + `tokens.accepted_risks`). Le ① montre
+**seulement le prefix** — le secret est définitivement perdu côté serveur
+(argon2id). Si l'humain le perd, il rotate via "Mint new token".
+
+#### 12.4.4 Discovery — comment l'agent découvre ses capacités
+
+La discovery est **layered** :
+
+- **Connexion** = `.env.local` + `.mcp.json` (l'humain copie une fois)
+- **Tools callables** = MCP `tools/list` (déjà filtré côté gateway par
+  intersection `tool.risks ∩ token.accepted_risks`)
+- **Contexte narratif** = bloc `CLAUDE.md` (snapshot statique des
+  bindings + risks acceptés, mis à jour seulement au re-mint)
+- **Protocole** = `agent-bootstrap.md` (lien stable
+  `https://vaubaan.com/agent-bootstrap.md`, mis à jour côté Vaubaan ;
+  l'agent y va à l'aide quand il rencontre un cas de protocole inconnu)
+
+Aucune lecture de DB côté agent. Aucune introspection magique. Tout passe
+par MCP standard (`tools/list`, `tools/call`) + le markdown du
+`CLAUDE.md` que l'humain a déjà collé.
+
 ## 13. Audit
 
 Toute mutation REST + tout MCP call produit une row.
@@ -1600,10 +1701,13 @@ mort dans ce repo.
 - **Connect providers** : OAuth/App install. Pas de paste-token jamais.
 - **Roles** : org-level catalog, builtin v1, custom v2.
 - **Bots** : project-scoped, N roles, identifiés par api_key (`vbn_live_…`).
-- **Management keys** : org-scoped (`vbn_mgmt_…`), inutilisables sur `/mcp`,
-  utilisées par tout client programmatique pour mint/révoquer des AccessTokens
-  éphémères via `/api/v1/mgmt/*` (TTL default 24h, max 7j). Cf. ADR
-  [[programmatic-access-token-minting]].
+- **Mint API unifié** : `POST /api/v1/tokens/mint` accepte n'importe quel
+  `vbn_live_*` (Bearer ou session UI). Le child a `parent_id = caller.id`
+  et un `accepted_risks[]` strictement subset du parent. Root tokens
+  project-scoped seulement (pas de scope org). Pas de carte-blanche : tout
+  token porte une liste explicitement énumérée de risks. Cf. ADR
+  [[unified-tokens-delegation-chain-and-escalation-channel]] + amendement
+  2026-06-19.
 - **DSL policy** : JSON déclaratif `jsonb`, 7 opérateurs (equals, in,
   not_in, match, regex, starts_with, not_starts_with).
 - **Default deny** : un call non couvert par au moins une allow rule est denied.
