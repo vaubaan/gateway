@@ -38,6 +38,32 @@ export function OPTIONS(): NextResponse {
   return withCors(new NextResponse(null, { status: 204 }));
 }
 
+export function GET(): NextResponse {
+  const res = NextResponse.json(
+    {
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32600, message: 'Method not allowed. Use POST with a JSON-RPC 2.0 body.' },
+    },
+    { status: 405 },
+  );
+  res.headers.set('Allow', 'POST, OPTIONS');
+  return withCors(res);
+}
+
+export function DELETE(): NextResponse {
+  const res = NextResponse.json(
+    {
+      jsonrpc: '2.0',
+      id: null,
+      error: { code: -32600, message: 'Method not allowed. Use POST with a JSON-RPC 2.0 body.' },
+    },
+    { status: 405 },
+  );
+  res.headers.set('Allow', 'POST, OPTIONS');
+  return withCors(res);
+}
+
 export async function POST(req: NextRequest) {
   const auth = req.headers.get('authorization');
   let body: JsonRpcRequest;
