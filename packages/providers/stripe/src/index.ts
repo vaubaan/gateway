@@ -9,6 +9,7 @@
 // Runtime exports
 export { StripeAdapter } from './stripe-adapter.ts';
 export { availableTools as stripeAvailableTools } from './tools.ts';
+export { executeCall as stripeExecuteCall } from './execute.ts';
 
 // v4 risk-based exports
 export { dataModel as stripeDataModel } from './data-model.ts';

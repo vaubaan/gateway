@@ -10,7 +10,7 @@ import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
 import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
 import { UpstashRedisAdapter, upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
-import { StripeAdapter, stripeAvailableTools } from '@vaubaan/providers-stripe';
+import { StripeAdapter, stripeAvailableTools, stripeExecuteCall } from '@vaubaan/providers-stripe';
 import type {
   AccessTokenContext,
   Provider,
@@ -357,15 +357,34 @@ export function buildGateway(opts: {
     loadProviderAdmin,
   };
 
-  // Stripe : paste-token mode (restricted API key from provider_admins).
+  // Stripe : per-project self-contained (keys in stripe_bindings, not provider_admins).
   const stripeAdapter = new StripeAdapter();
   upstreamByProvider.stripe = {
     provider: 'stripe',
     availableTools: stripeAvailableTools,
     classifyV4: (tool, args, bindings) => stripeAdapter.classifyV4(tool, args, bindings),
-    executeCall: (admin, binding, tool, args) =>
-      stripeAdapter.executeCall(admin, binding, tool, args),
-    loadProviderAdmin,
+    selfContained: true,
+    executeCall: () => {
+      throw new Error('stripe is self-contained — use executeCallSelfContained');
+    },
+    loadProviderAdmin: async () => null,
+    async executeCallSelfContained(ctx, tool, args) {
+      const binding = ctx.bindings.find((b) => b.provider === 'stripe');
+      if (!binding) throw new Error('no stripe binding on this project');
+      const { data: sb } = await supabase
+        .from('stripe_bindings')
+        .select('test_key_encrypted, live_key_encrypted')
+        .eq('project_id', ctx.project.id)
+        .eq('account_id', binding.resource_ref)
+        .maybeSingle<{ test_key_encrypted: string | null; live_key_encrypted: string | null }>();
+      if (!sb) throw new Error('stripe_bindings row not found — re-bind required');
+      const enc = sb.live_key_encrypted ?? sb.test_key_encrypted;
+      if (!enc) throw new Error('no API key configured for this Stripe binding');
+      const encBytes = decodeBytea(enc);
+      if (!encBytes) throw new Error('stripe key decryption failed — corrupt bytea');
+      const token = await decryptProviderSecret(ctx.organization.id, encBytes);
+      return stripeExecuteCall(fetch, token, tool, args);
+    },
   };
 
   // Load per-provider risk catalogs at boot (lazy / cached in the loader).
