@@ -26,6 +26,8 @@ import {
   type ContextLoader,
   type SupabaseLike,
   type UpstreamAdapter,
+  type VenvStore,
+  type VenvEntry,
 } from '@vaubaan/mcp-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeBytea, encodeByteaHexRaw } from '@/lib/providers/bytea';
@@ -77,11 +79,67 @@ interface OrgRow {
   name: string;
 }
 
+class SupabaseVenvStore implements VenvStore {
+  constructor(private readonly client: ReturnType<typeof getSupabaseServiceClient>) {}
+
+  async put(projectId: string, key: string, value: string, source: string): Promise<void> {
+    const { error } = await this.client
+      .from('project_env_vars')
+      .upsert(
+        { project_id: projectId, key, value, source, updated_at: new Date().toISOString() },
+        { onConflict: 'project_id,key' },
+      );
+    if (error) throw new Error(`venv put failed: ${error.message}`);
+  }
+
+  async get(projectId: string, key: string): Promise<string> {
+    const { data, error } = await this.client
+      .from('project_env_vars')
+      .select('value')
+      .eq('project_id', projectId)
+      .eq('key', key)
+      .maybeSingle<{ value: string }>();
+    if (error) throw new Error(`venv get failed: ${error.message}`);
+    if (!data) throw new Error(`venv key '${key}' not found.`);
+    return data.value;
+  }
+
+  async has(projectId: string, key: string): Promise<boolean> {
+    const { data } = await this.client
+      .from('project_env_vars')
+      .select('key')
+      .eq('project_id', projectId)
+      .eq('key', key)
+      .maybeSingle<{ key: string }>();
+    return !!data;
+  }
+
+  async list(projectId: string): Promise<VenvEntry[]> {
+    const { data, error } = await this.client
+      .from('project_env_vars')
+      .select('key, source, updated_at')
+      .eq('project_id', projectId)
+      .order('key');
+    if (error) throw new Error(`venv list failed: ${error.message}`);
+    return data ?? [];
+  }
+
+  async delete(projectId: string, key: string): Promise<void> {
+    const { error } = await this.client
+      .from('project_env_vars')
+      .delete()
+      .eq('project_id', projectId)
+      .eq('key', key);
+    if (error) throw new Error(`venv delete failed: ${error.message}`);
+  }
+}
+
 export function buildGateway(opts: {
   clientIp: string | null;
   clientUserAgent: string | null;
 }): McpGateway {
   const supabase = getSupabaseServiceClient();
+  const venvStore = new SupabaseVenvStore(supabase);
 
   const contextLoader: ContextLoader = {
     async loadAccessTokenForAuth(prefix) {
@@ -234,7 +292,7 @@ export function buildGateway(opts: {
   };
 
   // Vercel: paste-token mode (team token from .env.test or per-customer).
-  const vercelAdapter = new VercelAdapter();
+  const vercelAdapter = new VercelAdapter({ venvStore });
   upstreamByProvider.vercel = {
     provider: 'vercel',
     availableTools: vercelAvailableTools,
@@ -245,7 +303,7 @@ export function buildGateway(opts: {
   };
 
   // Supabase: paste-token mode (Management API PAT).
-  const supabaseAdapter = new SupabaseAdapter();
+  const supabaseAdapter = new SupabaseAdapter({ venvStore });
   upstreamByProvider.supabase = {
     provider: 'supabase',
     availableTools: supabaseAvailableTools,
@@ -334,5 +392,6 @@ export function buildGateway(opts: {
     catalogByProvider,
     clientIp: opts.clientIp,
     clientUserAgent: opts.clientUserAgent,
+    venvStore,
   });
 }

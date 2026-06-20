@@ -444,6 +444,26 @@ export const availableTools: readonly McpToolDeclaration[] = [
     },
   },
 
+  // ─── venv — opaque secret transfer to project env var store ──────────────
+  {
+    name: 'supabase__service_role_to_venv',
+    description:
+      "Fetch the project service_role key from the Supabase Management API and store it in the project's venv (env var store). The secret value is stored server-side and NEVER returned in the tool response — only the key name and status are surfaced. Use `vercel__upsert_env_from_venv` or similar to deploy the stored value to a target environment.",
+    inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
+  },
+  {
+    name: 'supabase__anon_key_to_venv',
+    description:
+      "Fetch the project anon (public) key from the Supabase Management API and store it in the project's venv. The value is stored server-side and NEVER returned. Useful for provisioning NEXT_PUBLIC_SUPABASE_ANON_KEY to Vercel or Railway.",
+    inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
+  },
+  {
+    name: 'supabase__url_to_venv',
+    description:
+      "Store the project API URL (https://{ref}.supabase.co) in the project's venv as NEXT_PUBLIC_SUPABASE_URL. Deterministic — no API call needed.",
+    inputSchema: { type: 'object', properties: { ...projectArg }, required: ['project_ref'] },
+  },
+
   // ─── auth/users — data plane (gateway fetches service_role internally) ────
   {
     name: 'supabase__list_users',

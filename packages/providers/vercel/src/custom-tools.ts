@@ -21,6 +21,7 @@ export const ADD_DOMAIN = 'vercel__add_project_domain';
 export const VERIFY_DOMAIN = 'vercel__verify_project_domain';
 export const REMOVE_DOMAIN = 'vercel__remove_project_domain';
 export const UPDATE_DEPLOYMENT_PROTECTION = 'vercel__update_deployment_protection';
+export const UPSERT_ENV_FROM_VENV = 'vercel__upsert_env_from_venv';
 
 export const customTools: readonly McpToolDeclaration[] = [
   {
@@ -273,6 +274,44 @@ export const customTools: readonly McpToolDeclaration[] = [
         },
       },
       required: ['projectId'],
+    },
+  },
+  {
+    name: UPSERT_ENV_FROM_VENV,
+    description:
+      "Deploy an env var from this project's venv store to a Vercel project. The secret value is read server-side from venv and pushed directly to Vercel — it is NEVER returned in the tool response. Use a `_to_venv` tool (e.g. `supabase__service_role_to_venv`) to populate the venv key first.",
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Vercel project id (e.g. `prj_xxx`).',
+        },
+        teamId: {
+          type: 'string',
+          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
+        },
+        venv_key: {
+          type: 'string',
+          description:
+            'The env var key to read from venv (e.g. `SUPABASE_SERVICE_ROLE_KEY`). This same key name is used as the Vercel env var name.',
+        },
+        target: {
+          type: 'array',
+          items: {
+            type: 'string',
+            enum: ['production', 'preview', 'development'],
+          },
+          description:
+            'Vercel environments to apply this variable to. Defaults to all three when omitted.',
+        },
+        type: {
+          type: 'string',
+          enum: ['plain', 'encrypted', 'sensitive'],
+          description: 'Variable type. Defaults to `encrypted`.',
+        },
+      },
+      required: ['projectId', 'venv_key'],
     },
   },
 ];

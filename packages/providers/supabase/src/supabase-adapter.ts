@@ -8,12 +8,15 @@
 
 import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
-import { executeCall, type FetchImpl } from './execute.ts';
+import { executeCall, executeVenvTool, type FetchImpl, type VenvStoreLike } from './execute.ts';
 import { classifySupabaseV4, type ClassifyV4Result } from './risk-classifier.ts';
 
 export interface SupabaseAdapterConfig {
   /** Override fetch in tests. */
   fetchImpl?: FetchImpl;
+  /** Project env var store for _to_venv tools. When absent, venv tools
+   *  are still listed but throw at execution time. */
+  venvStore?: VenvStoreLike | null;
 }
 
 export interface ValidateResult {
@@ -22,13 +25,21 @@ export interface ValidateResult {
   error?: string;
 }
 
+const VENV_TOOLS = new Set([
+  'supabase__service_role_to_venv',
+  'supabase__anon_key_to_venv',
+  'supabase__url_to_venv',
+]);
+
 export class SupabaseAdapter {
   readonly provider = 'supabase' as const;
   readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
   private readonly fetchImpl: FetchImpl;
+  private readonly venvStore: VenvStoreLike | null;
 
   constructor(config: SupabaseAdapterConfig = {}) {
     this.fetchImpl = config.fetchImpl ?? fetch;
+    this.venvStore = config.venvStore ?? null;
   }
 
   authorizationUrl(_orgId: string, _returnUrl: string, _state: string): string {
@@ -67,11 +78,15 @@ export class SupabaseAdapter {
 
   async executeCall(
     admin: ProviderAdmin,
-    _binding: ProviderBinding,
+    binding: ProviderBinding,
     tool: string,
     args: Record<string, unknown>,
   ): Promise<unknown> {
     const { token } = await this.mintUpstreamToken(admin);
+    if (VENV_TOOLS.has(tool)) {
+      if (!this.venvStore) throw new Error('venv store is not configured on this gateway.');
+      return executeVenvTool(this.fetchImpl, token, tool, args, this.venvStore, binding.project_id);
+    }
     return executeCall(this.fetchImpl, token, tool, args);
   }
 

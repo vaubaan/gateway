@@ -247,6 +247,9 @@ describe('risk-catalog.yaml — coverage lint', () => {
       secrets: [{ name: 'K', value: 'v' }],
     },
     supabase__delete_function_secrets: { project_ref: STAGING_REF, names: ['K'] },
+    supabase__service_role_to_venv: { project_ref: STAGING_REF },
+    supabase__anon_key_to_venv: { project_ref: STAGING_REF },
+    supabase__url_to_venv: { project_ref: STAGING_REF },
   };
 
   test('every supported tool has canned args wired in this test', () => {

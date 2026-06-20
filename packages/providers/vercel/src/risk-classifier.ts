@@ -288,6 +288,25 @@ export function classifyVercelV4(
       return { slices };
     }
 
+    case 'vercel__upsert_env_from_venv': {
+      const envs = envsForUpsert(args.target);
+      const key = typeof args.venv_key === 'string' ? args.venv_key : '*';
+      const slices: Slice[] = envs.map((e) =>
+        slice('W', [
+          name('project'),
+          projectSeg,
+          name('env'),
+          ident(e),
+          name('env-var'),
+          ident(key),
+        ]),
+      );
+      if (envs.length > 1) {
+        slices.push(slice('W', [name('project'), projectSeg, name('env-var-fan-out')]));
+      }
+      return { slices };
+    }
+
     case 'vercel__delete_env_var': {
       // The upstream API removes the var from EVERY env it lives in — the
       // `target` arg is only a Vaubaan-side hint. We emit slices on all 3

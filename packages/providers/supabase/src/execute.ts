@@ -4,6 +4,10 @@
  * Spec : docs/spec/vaubaan-gateway.md §7.4.
  */
 
+export interface VenvStoreLike {
+  put(projectId: string, key: string, value: string, source: string): Promise<void>;
+}
+
 export type FetchImpl = typeof fetch;
 
 const BASE = 'https://api.supabase.com/v1';
@@ -453,4 +457,48 @@ function stripProjectRef(
     if (!drop.has(k) && v !== undefined) out[k] = v;
   }
   return out;
+}
+
+// ─── venv — opaque secret transfer ──────────────────────────────────────────
+
+export async function executeVenvTool(
+  fetchImpl: FetchImpl,
+  pat: string,
+  tool: string,
+  args: Record<string, unknown>,
+  venvStore: VenvStoreLike,
+  projectId: string,
+): Promise<unknown> {
+  const ref = args.project_ref as string;
+  switch (tool) {
+    case 'supabase__service_role_to_venv': {
+      const sr = await fetchServiceRoleKey(fetchImpl, pat, ref);
+      const key = 'SUPABASE_SERVICE_ROLE_KEY';
+      await venvStore.put(projectId, key, sr, `supabase/api-keys/service_role`);
+      return { venv_key: key, source: 'supabase/api-keys/service_role', status: 'stored' };
+    }
+    case 'supabase__anon_key_to_venv': {
+      const keys = (await mgmtFetch(
+        fetchImpl,
+        pat,
+        `/projects/${encodeURIComponent(ref)}/api-keys`,
+      )) as Array<{
+        name: string;
+        api_key: string;
+      }> | null;
+      const anon = keys?.find((k) => k.name === 'anon')?.api_key;
+      if (!anon) throw new Error(`Supabase /projects/${ref}/api-keys returned no 'anon' entry`);
+      const key = 'NEXT_PUBLIC_SUPABASE_ANON_KEY';
+      await venvStore.put(projectId, key, anon, `supabase/api-keys/anon`);
+      return { venv_key: key, source: 'supabase/api-keys/anon', status: 'stored' };
+    }
+    case 'supabase__url_to_venv': {
+      const url = `https://${ref}.supabase.co`;
+      const key = 'NEXT_PUBLIC_SUPABASE_URL';
+      await venvStore.put(projectId, key, url, `supabase/project-url`);
+      return { venv_key: key, source: 'supabase/project-url', status: 'stored' };
+    }
+    default:
+      throw new Error(`Unknown Supabase venv tool: ${tool}`);
+  }
 }

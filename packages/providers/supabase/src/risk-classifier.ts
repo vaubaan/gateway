@@ -156,6 +156,18 @@ const TOOLS: Record<string, ToolDescriptor> = {
     plane: 'db',
     produce: (_args, ref) => [slice([s('project'), id(ref), s('project-settings')], 'R')],
   },
+  supabase__service_role_to_venv: {
+    plane: 'db',
+    produce: (_args, ref) => [slice([s('project'), id(ref), s('project-settings')], 'R')],
+  },
+  supabase__anon_key_to_venv: {
+    plane: 'db',
+    produce: (_args, ref) => [slice([s('project'), id(ref), s('project-settings')], 'R')],
+  },
+  supabase__url_to_venv: {
+    plane: 'db',
+    produce: (_args, ref) => [slice([s('project'), id(ref), s('project-settings')], 'R')],
+  },
   supabase__list_tables: {
     plane: 'db',
     produce: (_args, ref) => [

@@ -29,6 +29,26 @@ import { hashArguments, type AuditWriter } from './audit.ts';
 import { AuthError, rpcError, rpcSuccess } from './errors.ts';
 import { denyResponseBody, evaluateCallForToken, type V4ClassifyOutcome } from './risk-gateway.ts';
 import type { IndexedRiskCatalog } from '@vaubaan/policy-engine';
+import type { VenvStore } from './venv-store.ts';
+
+const VENV_TOOLS: McpToolDeclaration[] = [
+  {
+    name: 'venv__list',
+    description:
+      "List env var keys stored in this project's venv (names, sources, timestamps — values are NEVER returned). Use to check what secrets are already provisioned before running a _to_venv tool.",
+    inputSchema: { type: 'object', properties: {}, required: [] },
+  },
+  {
+    name: 'venv__delete',
+    description:
+      "Delete an env var from this project's venv store. The value is destroyed server-side and never returned.",
+    inputSchema: {
+      type: 'object',
+      properties: { key: { type: 'string', description: 'The env var key to delete.' } },
+      required: ['key'],
+    },
+  },
+];
 
 function assertNotExpired(expiresAt: string | null | undefined): void {
   if (!expiresAt) return;
@@ -112,6 +132,10 @@ export interface GatewayConfig {
   /** Optional request metadata captured into audit_log. */
   clientIp?: string | null;
   clientUserAgent?: string | null;
+  /** Project-scoped secret store for cross-provider secret transfer.
+   *  When set, `venv__*` tools are exposed and `_to_venv`/`_from_venv`
+   *  tools on providers can read/write opaque secrets. */
+  venvStore?: VenvStore | null;
 }
 
 export class McpGateway {
@@ -237,6 +261,9 @@ export class McpGateway {
         out.push(...filtered);
       }
     }
+    if (this.cfg.venvStore) {
+      out.push(...VENV_TOOLS);
+    }
     return out;
   }
 
@@ -253,6 +280,10 @@ export class McpGateway {
     const toolName = typeof params.name === 'string' ? params.name : '';
     if (!toolName) return rpcError(id, -32602, 'tools/call requires params.name');
     const rawArgs = (params.arguments as Record<string, unknown> | undefined) ?? {};
+
+    if (toolName.startsWith('venv__')) {
+      return this.handleVenvTool(ctx, id, toolName, rawArgs);
+    }
 
     const provider = this.providerFor(toolName);
     if (!provider) {
@@ -448,6 +479,41 @@ export class McpGateway {
         latency,
       );
       return rpcError(id, -32603, `Upstream call failed: ${message}`);
+    }
+  }
+
+  private async handleVenvTool(
+    ctx: AccessTokenContext,
+    id: string | number | null,
+    tool: string,
+    args: Record<string, unknown>,
+  ): Promise<JsonRpcResponse> {
+    const store = this.cfg.venvStore;
+    if (!store) {
+      return rpcError(id, -32603, 'venv store is not configured on this gateway.');
+    }
+    const projectId = ctx.project.id;
+    try {
+      switch (tool) {
+        case 'venv__list': {
+          const entries = await store.list(projectId);
+          await this.audit(ctx, tool, args, 'allowed', null, [], null, null);
+          return rpcSuccess(id, this.shapeMcpResult(entries));
+        }
+        case 'venv__delete': {
+          const key = typeof args.key === 'string' ? args.key : '';
+          if (!key) return rpcError(id, -32602, 'venv__delete requires params.key');
+          await store.delete(projectId, key);
+          await this.audit(ctx, tool, args, 'allowed', null, [], null, null);
+          return rpcSuccess(id, this.shapeMcpResult({ key, status: 'deleted' }));
+        }
+        default:
+          return rpcError(id, -32601, `unknown venv tool '${tool}'.`);
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      await this.audit(ctx, tool, args, 'denied', null, [], `venv-error: ${message}`, null);
+      return rpcError(id, -32603, `venv operation failed: ${message}`);
     }
   }
 
