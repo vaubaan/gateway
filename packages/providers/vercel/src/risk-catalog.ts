@@ -9,11 +9,12 @@
  * `.yaml` files in the Lambda). Keep both in sync — a CI test in
  * `tests/unit/risk-catalog-sync.test.ts` diffs the two structures.
  *
- * 15 named risks + 1 fallback = 16 total. RiskId format follows
- * `<provider>.<name>` (cf. shared/src/risk.ts RISK_ID_REGEX). The env
- * qualification is encoded in the risk *name* (`-prod`, `-preview`) rather
- * than via the bracketed `[<env>]` shorthand, because the runtime resolves
- * the env from the binding, not from the catalog literal.
+ * 13 named risks + 1 fallback = 14 total. RiskId format follows
+ * `<provider>.<name>` (cf. shared/src/risk.ts RISK_ID_REGEX). Env-specific
+ * pairs (deploy-preview / deploy-prod, env-var-write-preview /
+ * env-var-write-prod) are merged into single entries with
+ * `vector_overrides` for the prod env — the runtime resolves the effective
+ * vector via `resolveVector(entry, env)` in policy-engine.
  *
  * Slice patterns use the DSL declared in policy-engine/src/slice-dsl.ts
  * (no regex, only `[*]` / `[**]` wildcards and `[a,b,c]` lists). Each
@@ -135,13 +136,18 @@ export const vercelRiskCatalog: RiskCatalog = {
 
     // ─── WRITES — DEPLOYMENT ───────────────────────────────────────────────
     {
-      id: 'vercel.deploy-preview',
-      label: 'Trigger a preview / development deploy',
+      id: 'vercel.deploy',
+      label: 'Trigger a deployment',
       reason:
-        'No prod impact. The build runs on Vercel infra, the URL is non-indexed ' +
-        'preview / development. Reversible (preview builds expire or can be deleted by ' +
-        'the team).',
-      matches: 'vercel.project[**].env[preview,development].deployment.W',
+        'Preview / development builds have no prod impact and are reversible. ' +
+        'Production deploys are public and costly to roll back (prod alias ' +
+        're-pointed, CDN cache invalidated). The vector_overrides for prod ' +
+        'reflect the higher blast and visibility.',
+      matches: [
+        'vercel.project[**].env[preview,development].deployment.W',
+        'vercel.project[**].env[prod].deployment.W',
+      ],
+      acceptable_in_envs: ['preview', 'development', 'prod'],
       vector: {
         reversibility: 'reversible',
         blast: 'single',
@@ -150,21 +156,12 @@ export const vercelRiskCatalog: RiskCatalog = {
         visibility: 'team',
         persistence: 'session',
       },
-    },
-    {
-      id: 'vercel.deploy-prod',
-      label: 'Trigger a production deploy',
-      reason:
-        'Public, costly to roll back (prod alias re-pointed, CDN cache invalidated, ' +
-        'release-note / comms downstream). Immediate impact on end visitors.',
-      matches: 'vercel.project[**].env[prod].deployment.W',
-      vector: {
-        reversibility: 'costly',
-        blast: 'env',
-        data: 'data',
-        cost: 'moderate',
-        visibility: 'public',
-        persistence: 'session',
+      vector_overrides: {
+        prod: {
+          reversibility: 'costly',
+          blast: 'env',
+          visibility: 'public',
+        },
       },
     },
 
@@ -189,37 +186,31 @@ export const vercelRiskCatalog: RiskCatalog = {
 
     // ─── WRITES — ENV VARS (secrets) ───────────────────────────────────────
     {
-      id: 'vercel.env-var-write-preview',
-      label: 'Write env var on preview / development',
+      id: 'vercel.env-var-write',
+      label: 'Write / update / delete env vars',
       reason:
-        'Affects future preview / development builds. No direct prod impact but the ' +
-        'stored value is still a secret on the Vercel side. Acceptable for a coding ' +
-        'agent that opens its own PRs.',
-      matches: 'vercel.project[**].env[preview,development].env-var[**].W',
+        'Affects future builds on the targeted env. The stored value is a ' +
+        'secret on the Vercel side. On prod a bad value breaks the service ' +
+        'at the next deploy ; an attacker-injected value exfiltrates traffic ' +
+        'or takes over the app. The vector_overrides for prod reflect the ' +
+        'costly reversibility.',
+      matches: [
+        'vercel.project[**].env[preview,development].env-var[**].W',
+        'vercel.project[**].env[prod].env-var[**].W',
+      ],
+      acceptable_in_envs: ['preview', 'development', 'prod'],
       vector: {
         reversibility: 'reversible',
         blast: 'env',
         data: 'secret',
-        cost: 'free',
+        cost: 'moderate',
         visibility: 'internal',
         persistence: 'posture',
       },
-    },
-    {
-      id: 'vercel.env-var-write-prod',
-      label: 'Write env var on prod',
-      reason:
-        'Posture-shift on prod credentials (DB url, JWT secret, API keys). A bad value ' +
-        'breaks the service at the next deploy ; an attacker- injected value exfiltrates ' +
-        'traffic or takes over the app.',
-      matches: 'vercel.project[**].env[prod].env-var[**].W',
-      vector: {
-        reversibility: 'costly',
-        blast: 'env',
-        data: 'secret',
-        cost: 'free',
-        visibility: 'internal',
-        persistence: 'posture',
+      vector_overrides: {
+        prod: {
+          reversibility: 'costly',
+        },
       },
     },
     {
@@ -230,7 +221,7 @@ export const vercelRiskCatalog: RiskCatalog = {
         'omitted = all 3 by Vercel default), and `delete_env_var` (whose upstream API ' +
         'removes the var from every env it lives in regardless of the Vaubaan hint), ' +
         'touch all 3 envs in a single tool call. Treated as its own risk so the ' +
-        'agent who only has `env-var-write-preview` accepted does NOT silently ' +
+        'agent who only has `env-var-write` accepted on preview does NOT silently ' +
         'escalate to prod.',
       matches: 'vercel.project[**].env-var-fan-out.W',
       vector: {

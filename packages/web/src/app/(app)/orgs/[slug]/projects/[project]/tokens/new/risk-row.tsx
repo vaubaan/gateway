@@ -10,6 +10,7 @@
 
 import { useState } from 'react';
 import type { RiskId } from '@vaubaan/shared';
+import { resolveVector } from '@vaubaan/policy-engine';
 
 import { Badge, Code } from '@/components/ui';
 
@@ -19,6 +20,7 @@ import { VectorRow } from './vector-row';
 export function RiskRow({
   entry,
   qualifiedId,
+  env,
   isAccepted,
   acceptable,
   inherited,
@@ -27,6 +29,7 @@ export function RiskRow({
 }: {
   entry: MintFormCatalogEntry;
   qualifiedId: RiskId;
+  env: string | null;
   isAccepted: boolean;
   acceptable: boolean;
   inherited: boolean;
@@ -120,7 +123,7 @@ export function RiskRow({
               }}
             >
               <div style={{ marginBottom: 6 }}>{entry.reason}</div>
-              <VectorRow vector={entry.vector} />
+              <VectorRow vector={resolveVector(entry, env)} />
               {blocked && (
                 <div
                   style={{

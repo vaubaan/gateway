@@ -53,6 +53,7 @@ describe('vercel risk-catalog YAML ↔ TS sync', () => {
       expect(matchesAsArray(tsEntry!)).toEqual(matchesAsArray(yamlEntry));
       expect(tsEntry!.vector).toEqual(yamlEntry.vector);
       expect(tsEntry!.acceptable_in_envs ?? null).toEqual(yamlEntry.acceptable_in_envs ?? null);
+      expect(tsEntry!.vector_overrides ?? null).toEqual(yamlEntry.vector_overrides ?? null);
       expect(tsEntry!.deprecated ?? null).toEqual(yamlEntry.deprecated ?? null);
       expect(tsEntry!.replaced_by ?? null).toEqual(yamlEntry.replaced_by ?? null);
     });

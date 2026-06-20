@@ -114,7 +114,7 @@ export interface RiskVector {
  *   - Env-scoped     : `<provider>[<env>].<name>`
  *     ex: `supabase[staging].bulk-row-write`, `vercel[prod].env-var-write`
  *   - Non-env-scoped : `<provider>.<name>`
- *     ex: `github.mint-install-token`, `vercel.deploy-preview` (fan-out)
+ *     ex: `github.mint-install-token`, `vercel.deploy`
  *
  * Slug regex (validated at catalog load) :
  *   `^[a-z][a-z0-9]*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$`
@@ -150,8 +150,14 @@ export interface RiskEntry {
    *  capture its surface). All patterns are parsed at catalog load. */
   readonly matches: string | readonly string[];
   /** 6D vector explaining the risk's profile. Drives UI ordering and
-   *  audit explainability only — no gate is derived from it. */
+   *  audit explainability only — no gate is derived from it.
+   *  When `vector_overrides` is present this is the default (non-prod)
+   *  profile ; per-env overrides replace individual axes. */
   readonly vector: RiskVector;
+  /** Per-env vector overrides. Keys are env slugs (e.g. `'prod'`),
+   *  values contain only the axes that differ from `vector`. Resolved
+   *  via `resolveVector(entry, env)` in `@vaubaan/policy-engine`. */
+  readonly vector_overrides?: Readonly<Record<string, Partial<RiskVector>>>;
   /** When present, restricts which env scopes can ever accept this risk.
    *  E.g. ['preview', 'staging'] = never acceptable on env 'prod'. Enforced
    *  applicatively at mint (the env comes from the binding). */

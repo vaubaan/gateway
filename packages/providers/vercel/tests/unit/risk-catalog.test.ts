@@ -60,7 +60,10 @@ describe('vercel risk-catalog — YAML structural validation', () => {
       expect(typeof entry.id).toBe('string');
       expect(typeof entry.label).toBe('string');
       expect(typeof entry.reason).toBe('string');
-      expect(typeof entry.matches).toBe('string');
+      expect(
+        typeof entry.matches === 'string' || Array.isArray(entry.matches),
+        `risk '${entry.id}' matches must be a string or string[]`,
+      ).toBe(true);
       expect(entry.vector).toBeDefined();
     }
   });
@@ -121,14 +124,14 @@ describe('vercel risk-catalog — every `matches` pattern parses via parseSlice'
 
 // ─── Build the parsed-pattern index once for lint usage ─────────────────────
 
-const indexed = parsedCatalog.risks.map((entry) => ({
-  entry,
-  // The v4 catalog allows multiple disjoint patterns per entry. The lint
-  // uses the FIRST pattern as the canonical one for coverage matrices —
-  // this is sufficient because every tool's slice intersects at least one
-  // pattern of the matching risk by construction.
-  pattern: parseSlice(typeof entry.matches === 'string' ? entry.matches : entry.matches[0]!),
-}));
+const indexed = parsedCatalog.risks.map((entry) => {
+  const raws: readonly string[] =
+    typeof entry.matches === 'string' ? [entry.matches] : entry.matches;
+  return {
+    entry,
+    patterns: raws.map((raw) => parseSlice(raw)),
+  };
+});
 
 const FALLBACK_ID = 'vercel.uncategorized-write';
 
@@ -200,8 +203,8 @@ function risksForTool(tool: string): string[] {
   const sl = slicesForTool(tool);
   const matched = new Set<string>();
   for (const slice of sl) {
-    for (const { entry, pattern } of indexed) {
-      if (matches(pattern, slice)) matched.add(entry.id);
+    for (const { entry, patterns } of indexed) {
+      if (patterns.some((p) => matches(p, slice))) matched.add(entry.id);
     }
   }
   return [...matched];
@@ -222,20 +225,30 @@ describe('vercel risk-catalog — coverage lint (every tool matched by ≥1 non-
 });
 
 describe('vercel risk-catalog — saliency checks (entries from research doc §3)', () => {
-  test('env-var-write-prod entry exists', () => {
-    expect(parsedCatalog.risks.find((r) => r.id === 'vercel.env-var-write-prod')).toBeDefined();
+  test('deploy entry exists (merged from deploy-preview + deploy-prod)', () => {
+    const entry = parsedCatalog.risks.find((r) => r.id === 'vercel.deploy');
+    expect(entry).toBeDefined();
+    expect(Array.isArray(entry!.matches)).toBe(true);
+    expect(entry!.acceptable_in_envs).toEqual(['preview', 'development', 'prod']);
+    expect(entry!.vector_overrides).toBeDefined();
+    expect(entry!.vector_overrides!.prod).toEqual({
+      reversibility: 'costly',
+      blast: 'env',
+      visibility: 'public',
+    });
+  });
+
+  test('env-var-write entry exists (merged from env-var-write-preview + env-var-write-prod)', () => {
+    const entry = parsedCatalog.risks.find((r) => r.id === 'vercel.env-var-write');
+    expect(entry).toBeDefined();
+    expect(Array.isArray(entry!.matches)).toBe(true);
+    expect(entry!.acceptable_in_envs).toEqual(['preview', 'development', 'prod']);
+    expect(entry!.vector_overrides).toBeDefined();
+    expect(entry!.vector_overrides!.prod).toEqual({ reversibility: 'costly' });
   });
 
   test('env-var-fan-out entry exists', () => {
     expect(parsedCatalog.risks.find((r) => r.id === 'vercel.env-var-fan-out')).toBeDefined();
-  });
-
-  test('deploy-prod entry exists', () => {
-    expect(parsedCatalog.risks.find((r) => r.id === 'vercel.deploy-prod')).toBeDefined();
-  });
-
-  test('deploy-preview entry exists', () => {
-    expect(parsedCatalog.risks.find((r) => r.id === 'vercel.deploy-preview')).toBeDefined();
   });
 
   test('deployment-protection-write entry exists', () => {

@@ -91,6 +91,7 @@ export function BindingRisksSection({
               key={row.qualifiedId}
               entry={row.entry}
               qualifiedId={row.qualifiedId}
+              env={binding.env}
               isAccepted={row.isAccepted}
               acceptable={row.acceptable}
               inherited={row.inherited}

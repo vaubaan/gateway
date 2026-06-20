@@ -19,7 +19,7 @@
  *          which matches `railway.bulk-variables-replace` (deny by default).
  *        - `replace: false` (or absent) → emit a list slice
  *          `railway.project[X].environment[Y].service[Z].service-var[K1,K2,…].W`
- *          which still matches `upsert-variable-{staging,prod}` but NOT the
+ *          which still matches `upsert-variable` but NOT the
  *          destructive `bulk-variables-replace`. This resolves the v1 TODO
  *          (cf. research §1.6 edge 2 + research §3.1).
  *
@@ -28,11 +28,11 @@
  *      accept the union of risks the agent could *possibly* touch :
  *        - `railway.account[*].agent-session.W`     → `agent-action`
  *        - `railway.project[X].environment[Y].service[*].deployment.W`
- *                                                    → deploy-{staging,prod}
+ *                                                    → deploy
  *        - `railway.project[X].environment[Y].service[*].service-var[*].W`
- *                                                    → upsert-variable + bulk
+ *                                                    → upsert-variable + bulk-variables-replace
  *      Without the catch-all slices an agent could request the meta-tool
- *      and have it redeploy prod without the token having `deploy-prod`.
+ *      and have it redeploy prod without the token having `deploy`.
  *      Reference : research §1.6 edge 1.
  *
  * Env qualification : project-scoped slices stamp the binding's
@@ -406,9 +406,9 @@ function classifyProjectScoped(
       return [
         // 1. agent-session match (touches `railway.agent-action`).
         slice([name('account'), wildOne(), name('agent-session')], 'W'),
-        // 2. deployment catch-all (touches deploy-staging / deploy-prod).
+        // 2. deployment catch-all (touches deploy).
         slice([...projectSegments, name('deployment')], 'W'),
-        // 3. service-var catch-all (touches upsert-variable-* + bulk-variables-replace).
+        // 3. service-var catch-all (touches upsert-variable + bulk-variables-replace).
         slice([...projectSegments, name('service-var'), wildOne()], 'W'),
       ];
     }

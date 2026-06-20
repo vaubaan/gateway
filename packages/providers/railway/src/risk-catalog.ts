@@ -8,15 +8,15 @@
  * what the runtime imports (no YAML dep at runtime). Keep both in sync —
  * a CI lint in Phase 2 will diff the two structures.
  *
- * 11 risks + 1 fallback. See research §1.5 for the tool × risk coverage
+ * 9 risks + 1 fallback. See research §1.5 for the tool × risk coverage
  * matrix. Coverage of every Railway tool by ≥ 1 catalog entry is enforced
  * by `risk-catalog.test.ts`.
  *
  * Conventions :
- *  - Env-scoped risks embed the env discriminator in the *name* part
- *    (`-staging`, `-prod`) — matches the research literal. We do not use
- *    the `<provider>[<env>].<name>` bracket form here (which is reserved
- *    for risks that share a single matches pattern qualified at mint).
+ *  - Env-specific risks (deploy, upsert-variable) use a single entry with
+ *    `vector_overrides` for prod instead of separate `-staging` / `-prod`
+ *    entries. The base vector describes the non-prod profile ; overrides
+ *    patch the axes that differ on prod.
  *  - Bulk-variables-replace catches the destructive `replace:true`
  *    codepath via a wildcard slice emitted by the classifier (cf.
  *    `risk-classifier.ts`) ; severity comes from the 6D vector.
@@ -94,12 +94,13 @@ export const railwayRiskCatalog: RiskCatalog = {
 
     // ─── Deploys ───────────────────────────────────────────────────────────
     {
-      id: 'railway.deploy-staging',
-      label: 'Redeploy / accept-deploy sur un env non-prod',
+      id: 'railway.deploy',
+      label: 'Redeploy / accept-deploy',
       reason:
         'Reversible : un nouveau deploy peut tout corriger. Pas de communication ' +
         "aval. Coût Railway facturé à l'usage.",
       matches: 'railway.project[**].environment[**].service[**].deployment.W',
+      acceptable_in_envs: ['staging', 'preview', 'dev', 'prod'],
       vector: {
         reversibility: 'reversible',
         blast: 'env',
@@ -108,35 +109,21 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'session',
       },
-      acceptable_in_envs: ['staging', 'preview', 'dev'],
-    },
-    {
-      id: 'railway.deploy-prod',
-      label: 'Redeploy / accept-deploy sur production',
-      reason:
-        'Trigger un déploiement public, traffic switch immédiat, potentiel downtime ' +
-        '+ propagation aval. Costly à rollback (re-deploy précédent peut prendre ' +
-        'quelques minutes).',
-      matches: 'railway.project[**].environment[**].service[**].deployment.W',
-      vector: {
-        reversibility: 'costly',
-        blast: 'env',
-        data: 'data',
-        cost: 'moderate',
-        visibility: 'public',
-        persistence: 'session',
+      vector_overrides: {
+        prod: { reversibility: 'costly', visibility: 'public' },
       },
-      acceptable_in_envs: ['prod'],
     },
 
     // ─── Variables ─────────────────────────────────────────────────────────
     {
-      id: 'railway.upsert-variable-staging',
-      label: 'Modifier une env var (non-prod)',
+      id: 'railway.upsert-variable',
+      label: 'Modifier une env var',
       reason:
         "Modif scalaire d'une var. Trigge un redeploy implicite sauf " +
-        "skipDeploys=true. Reversible (réécrire l'ancienne valeur).",
+        'skipDeploys=true. Sur prod, une valeur erronée peut briser ' +
+        'immédiatement le service.',
       matches: 'railway.project[**].environment[**].service-var[**].W',
+      acceptable_in_envs: ['staging', 'preview', 'dev', 'prod'],
       vector: {
         reversibility: 'reversible',
         blast: 'env',
@@ -145,24 +132,9 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
-      acceptable_in_envs: ['staging', 'preview', 'dev'],
-    },
-    {
-      id: 'railway.upsert-variable-prod',
-      label: 'Modifier une env var en production',
-      reason:
-        'Posture-shift sur prod. Une valeur erronée peut briser immédiatement le ' +
-        'service (Stripe, DB, OAuth).',
-      matches: 'railway.project[**].environment[**].service-var[**].W',
-      vector: {
-        reversibility: 'costly',
-        blast: 'env',
-        data: 'secret',
-        cost: 'moderate',
-        visibility: 'internal',
-        persistence: 'posture',
+      vector_overrides: {
+        prod: { reversibility: 'costly' },
       },
-      acceptable_in_envs: ['prod'],
     },
     {
       id: 'railway.bulk-variables-replace',

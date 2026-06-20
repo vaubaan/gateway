@@ -217,6 +217,7 @@ function entryToClient(entry: RiskEntry): MintFormCatalog['entries'][number] {
     label: entry.label,
     reason: entry.reason,
     vector: entry.vector,
+    vector_overrides: entry.vector_overrides,
     acceptable_in_envs: entry.acceptable_in_envs ?? null,
     deprecated: entry.deprecated ?? false,
   };

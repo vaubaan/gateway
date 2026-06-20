@@ -3,30 +3,25 @@
 # Spec    : docs/spec/gateway-risk-model.md §4.
 # Source  : .vaubaan/research/providers/railway-ssh.md §2.4.
 #
-# Five risks + one fallback :
+# Four risks + one fallback :
 #   - ssh.exec-read                    — whitelisted reads
-#   - ssh.exec-write-staging           — writes on non-prod hosts
-#   - ssh.exec-write-prod              — writes on prod hosts
+#   - ssh.exec-write                   — writes on any host (env-varied via vector_overrides)
 #   - ssh.exec-read-secret-files       — co-touched on cat /etc/..., etc.
 #   - ssh.uncategorized-write          — fallback catch-all
 #
 # CONVENTION — `acceptable_in_envs`
 # ---------------------------------
 # SSH's "env" segment is the `host_slug` of the binding (one host = one env).
-# Hosts named `staging-vps`, `dev-vps` are non-prod ; anything else is
-# considered prod-shaped. The list below is the canonical set of slugs
-# acceptable for the `exec-write-staging` risk.
+# `acceptable_in_envs` lists every known host slug the manager may accept
+# this risk for. The canonical slugs are `staging-vps`, `dev-vps`, and
+# `prod-vps`.
 #
-# MATCH PATTERN ambiguity
-# ------------------------
-# `ssh.exec-write-staging` and `ssh.exec-write-prod` both declare
-# `matches: "ssh.host[**].command.W"` — they target the same slice
-# space. The runtime distinguishes them at MINT time via
-# `acceptable_in_envs` : the manager can only accept `exec-write-staging`
-# for bindings whose host_slug is in {staging-vps, dev-vps} ; for any
-# other host the manager must accept `exec-write-prod` explicitly. Opt-in
-# to prod writes is loud (no structural restriction = must be explicitly
-# checked at mint).
+# PER-ENV RISK PROFILE — `vector_overrides`
+# ------------------------------------------
+# `ssh.exec-write` carries a default vector (non-prod profile) and
+# `vector_overrides` for env slugs whose risk profile differs. The
+# runtime resolves the effective vector via `resolveVector(entry, env)`.
+# Cf. docs/spec/risk-entry-per-env-vector.md §1.
 #
 # MULTI-SLICE — secret-file co-touch
 # -----------------------------------
@@ -57,13 +52,17 @@ ssh:
         visibility: internal
         persistence: stateless
 
-    - id: ssh.exec-write-staging
-      label: 'Exécuter une commande shell arbitraire (host non-prod)'
+    - id: ssh.exec-write
+      label: 'Exécuter une commande shell arbitraire'
       reason: >
         Toute commande hors-whitelist read → traitée W. Inclut sudo,
         install, rm, systemctl restart, docker run, etc. Sur un host
-        non-prod (`staging-vps`, `dev-vps`) c'est acceptable avec
-        confirmation explicite du manager.
+        non-prod (`staging-vps`, `dev-vps`) le risque est acceptable
+        avec confirmation explicite du manager (reversal coûteux mais
+        blast limité). Sur un host de production (`prod-vps`) la surface
+        d'attaque est maximale : posture-shift potentiel, downtime
+        possible, coût non borné. Le vector_overrides prod-vps reflète
+        cette escalation.
       matches: 'ssh.host[**].command.W'
       vector:
         reversibility: costly
@@ -72,25 +71,15 @@ ssh:
         cost: moderate
         visibility: internal
         persistence: posture
+      vector_overrides:
+        prod-vps:
+          reversibility: irreversible
+          data: secret
+          cost: unbounded
       acceptable_in_envs:
         - staging-vps
         - dev-vps
-
-    - id: ssh.exec-write-prod
-      label: 'Exécuter une commande shell arbitraire (host prod)'
-      reason: >
-        Mêmes commandes que ci-dessus mais sur un host de production.
-        Posture-shift potentiel, downtime possible, surface d'attaque
-        maximale. Opt-in explicite obligatoire ; toute escalation passe
-        par le runtime escalation_channel hors-gateway.
-      matches: 'ssh.host[**].command.W'
-      vector:
-        reversibility: irreversible
-        blast: env
-        data: secret
-        cost: unbounded
-        visibility: internal
-        persistence: posture
+        - prod-vps
 
     - id: ssh.exec-read-secret-files
       label: 'Lire un fichier potentiellement sensible (cat /etc/..., stat key)'
@@ -113,8 +102,8 @@ ssh:
       label: 'Écriture SSH non catégorisée'
       reason: >
         Catch-all pour les writes qui n'ont pas été explicitement
-        catégorisés (toute slice W non couverte par exec-write-staging
-        ni exec-write-prod). Sert de filet pour les futurs tools (ex.
+        catégorisés (toute slice W non couverte par exec-write).
+        Sert de filet pour les futurs tools (ex.
         `ssh__sftp_put`) — en pratique jamais touché tant que `ssh__exec`
         est le seul tool exposé.
       matches: 'ssh.**.W'

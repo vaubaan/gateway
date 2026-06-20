@@ -26,13 +26,12 @@ describe('sshRiskCatalog — shape', () => {
     expect(sshRiskCatalog.provider).toBe('ssh');
   });
 
-  test('declares the 5 risks + fallback expected by the research doc', () => {
+  test('declares the 4 risks + fallback expected by the research doc', () => {
     const ids = sshRiskCatalog.risks.map((r) => r.id);
     expect(ids).toEqual([
       'ssh.exec-read',
       'ssh.exec-read-secret-files',
-      'ssh.exec-write-staging',
-      'ssh.exec-write-prod',
+      'ssh.exec-write',
       'ssh.uncategorized-write',
     ]);
   });
@@ -47,9 +46,20 @@ describe('sshRiskCatalog — shape', () => {
     }
   });
 
-  test('exec-write-staging restricts to staging-vps / dev-vps via acceptable_in_envs', () => {
-    const entry = sshRiskCatalog.risks.find((r) => r.id === 'ssh.exec-write-staging');
-    expect(entry?.acceptable_in_envs).toEqual(['staging-vps', 'dev-vps']);
+  test('exec-write lists all known host slugs via acceptable_in_envs', () => {
+    const entry = sshRiskCatalog.risks.find((r) => r.id === 'ssh.exec-write');
+    expect(entry?.acceptable_in_envs).toEqual(['staging-vps', 'dev-vps', 'prod-vps']);
+  });
+
+  test('exec-write carries vector_overrides for prod-vps', () => {
+    const entry = sshRiskCatalog.risks.find((r) => r.id === 'ssh.exec-write');
+    expect(entry?.vector_overrides).toEqual({
+      'prod-vps': {
+        reversibility: 'irreversible',
+        data: 'secret',
+        cost: 'unbounded',
+      },
+    });
   });
 
   test('uncategorized-write is the fallback (matches ssh.**.W)', () => {
@@ -82,15 +92,11 @@ describe('sshRiskCatalog — runtime risksTouchedBy', () => {
     expect(touched).toEqual(['ssh.exec-read', 'ssh.exec-read-secret-files']);
   });
 
-  test('a write slice touches exec-write-staging + exec-write-prod + uncategorized-write fallback', () => {
-    // All three W-shaped catalog entries have overlapping `matches`
+  test('a write slice touches exec-write + uncategorized-write fallback', () => {
+    // Both W-shaped catalog entries have overlapping `matches`
     // patterns (the env qualification happens at mint, not runtime).
-    const touched = risksTouchedBy(commandSlice('prod-host', 'W'), indexed);
-    expect(touched).toEqual([
-      'ssh.exec-write-staging',
-      'ssh.exec-write-prod',
-      'ssh.uncategorized-write',
-    ]);
+    const touched = risksTouchedBy(commandSlice('prod-vps', 'W'), indexed);
+    expect(touched).toEqual(['ssh.exec-write', 'ssh.uncategorized-write']);
   });
 
   test('multi-slice read (secret-file co-touch) deduplicates risks across slices', () => {

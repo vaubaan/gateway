@@ -171,8 +171,8 @@ describe('classifySshV4 — secret-file co-touch (multi-slice)', () => {
     // Documents an existing limitation of `policy.ts:isReadAllowed`
     // — the regex matches `^cat` not `^sudo cat`. The classifier
     // doesn't pre-strip `sudo`, so the call lands in W. The intent
-    // (read of a sensitive file) is still covered by exec-write-prod /
-    // exec-write-staging gates ; the secret-files heuristic is only
+    // (read of a sensitive file) is still covered by the exec-write
+    // gate ; the secret-files heuristic is only
     // relevant on the R branch.
     const r = classifySshV4(
       'ssh__exec',

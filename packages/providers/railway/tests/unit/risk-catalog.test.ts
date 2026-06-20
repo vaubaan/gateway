@@ -4,7 +4,7 @@
  * Source : .vaubaan/research/providers/railway-ssh.md §1.4 + §1.5.
  *
  * Verifies the catalog :
- *   - declares the 11 expected risks + 1 fallback (research §1.4).
+ *   - declares the 9 expected risks + 1 fallback (research §1.4).
  *   - every entry has the required shape (`RiskEntry` invariants).
  *   - every `matches` pattern parses as a valid slice.
  *   - the catalog round-trips through `prepareCatalog` (RiskId regex,
@@ -109,17 +109,15 @@ describe('railwayRiskCatalog — shape', () => {
     expect(railwayRiskCatalog.provider).toBe('railway');
   });
 
-  test('declares the 11 risks + 1 fallback expected by the research doc (§1.4)', () => {
+  test('declares the 9 risks + 1 fallback expected by the research doc (§1.4)', () => {
     const ids = railwayRiskCatalog.risks.map((r) => r.id);
     expect(ids).toEqual([
       'railway.read-account',
       'railway.read-runtime',
       'railway.read-logs',
       'railway.read-variables',
-      'railway.deploy-staging',
-      'railway.deploy-prod',
-      'railway.upsert-variable-staging',
-      'railway.upsert-variable-prod',
+      'railway.deploy',
+      'railway.upsert-variable',
       'railway.bulk-variables-replace',
       'railway.create-project',
       'railway.agent-action',
@@ -137,14 +135,20 @@ describe('railwayRiskCatalog — shape', () => {
     }
   });
 
-  test('deploy-staging restricts to non-prod via acceptable_in_envs', () => {
-    const entry = railwayRiskCatalog.risks.find((r) => r.id === 'railway.deploy-staging');
-    expect(entry?.acceptable_in_envs).toEqual(['staging', 'preview', 'dev']);
+  test('deploy covers all envs via acceptable_in_envs and overrides prod vector', () => {
+    const entry = railwayRiskCatalog.risks.find((r) => r.id === 'railway.deploy');
+    expect(entry?.acceptable_in_envs).toEqual(['staging', 'preview', 'dev', 'prod']);
+    expect(entry?.vector.reversibility).toBe('reversible');
+    expect(entry?.vector_overrides).toEqual({
+      prod: { reversibility: 'costly', visibility: 'public' },
+    });
   });
 
-  test('upsert-variable-staging restricts to non-prod via acceptable_in_envs', () => {
-    const entry = railwayRiskCatalog.risks.find((r) => r.id === 'railway.upsert-variable-staging');
-    expect(entry?.acceptable_in_envs).toEqual(['staging', 'preview', 'dev']);
+  test('upsert-variable covers all envs via acceptable_in_envs and overrides prod vector', () => {
+    const entry = railwayRiskCatalog.risks.find((r) => r.id === 'railway.upsert-variable');
+    expect(entry?.acceptable_in_envs).toEqual(['staging', 'preview', 'dev', 'prod']);
+    expect(entry?.vector.reversibility).toBe('reversible');
+    expect(entry?.vector_overrides).toEqual({ prod: { reversibility: 'costly' } });
   });
 
   test('uncategorized-write is the fallback (matches railway.**.W)', () => {
@@ -186,15 +190,11 @@ describe('railwayRiskCatalog — runtime risksTouchedBy', () => {
     expect(touched).toEqual(['railway.agent-action', 'railway.uncategorized-write']);
   });
 
-  test('deployment.W (staging env) touches deploy-staging + deploy-prod + uncategorized-write', () => {
-    // Both deploy-{staging,prod} share the same matches pattern ; the env
-    // qualification happens at mint time (acceptable_in_envs gate).
+  test('deployment.W (staging env) touches deploy + uncategorized-write', () => {
+    // Single deploy entry with vector_overrides covers all envs ;
+    // env qualification happens at mint time (acceptable_in_envs gate).
     const touched = risksTouchedBy(deploymentWriteSlice('staging'), indexed);
-    expect(touched).toEqual([
-      'railway.deploy-staging',
-      'railway.deploy-prod',
-      'railway.uncategorized-write',
-    ]);
+    expect(touched).toEqual(['railway.deploy', 'railway.uncategorized-write']);
   });
 
   test('variable read on prod env touches read-runtime (broad) + read-variables (specific)', () => {
@@ -229,10 +229,8 @@ describe('railwayRiskCatalog — lint coverage', () => {
       'railway.read-runtime', // list-services, list-deployments, get-status, get-logs
       'railway.read-logs', // get-logs (additionally)
       'railway.read-variables', // list-variables
-      'railway.deploy-staging', // redeploy (staging), accept-deploy (staging)
-      'railway.deploy-prod', // redeploy (prod), accept-deploy (prod)
-      'railway.upsert-variable-staging', // upsert-variable (staging)
-      'railway.upsert-variable-prod', // upsert-variable (prod)
+      'railway.deploy', // redeploy, accept-deploy (all envs, vector_overrides for prod)
+      'railway.upsert-variable', // upsert-variable (all envs, vector_overrides for prod)
       'railway.bulk-variables-replace', // upsert-variables replace=true
       'railway.create-project', // create-project
       'railway.agent-action', // railway-agent

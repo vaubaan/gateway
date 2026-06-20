@@ -278,17 +278,19 @@ describe('evaluateCall — env-qualified subset check', () => {
   });
 });
 
-// ─── acceptable_in_envs runtime filter (Railway upsert-variable bug) ────────
+// ─── acceptable_in_envs runtime filter (Railway upsert-variable) ────────────
 
 describe('evaluateCall — acceptable_in_envs runtime filter', () => {
+  // Post-merge: single upsert-variable entry with vector_overrides for prod.
   const railwayCatalog: RiskCatalog = {
     provider: 'railway',
     risks: [
       {
-        id: 'railway.upsert-variable-staging',
-        label: 'upsert var (non-prod)',
+        id: 'railway.upsert-variable',
+        label: 'Modifier une env var',
         reason: 'r',
         matches: 'railway.project[**].environment[**].service-var[**].W',
+        acceptable_in_envs: ['staging', 'preview', 'dev', 'prod'],
         vector: {
           reversibility: 'reversible',
           blast: 'env',
@@ -297,22 +299,9 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
           visibility: 'internal',
           persistence: 'posture',
         },
-        acceptable_in_envs: ['staging', 'preview', 'dev'],
-      },
-      {
-        id: 'railway.upsert-variable-prod',
-        label: 'upsert var (prod)',
-        reason: 'r',
-        matches: 'railway.project[**].environment[**].service-var[**].W',
-        vector: {
-          reversibility: 'costly',
-          blast: 'env',
-          data: 'secret',
-          cost: 'moderate',
-          visibility: 'internal',
-          persistence: 'posture',
+        vector_overrides: {
+          prod: { reversibility: 'costly' },
         },
-        acceptable_in_envs: ['prod'],
       },
       {
         id: 'railway.uncategorized-write',
@@ -357,11 +346,11 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     'railway.project[pid-456].environment[staging].service-var[MY_VAR].W',
   );
 
-  test('prod binding: only upsert-variable-prod fires (env-qualified), staging variant is skipped', () => {
+  test('prod binding: upsert-variable fires with env-qualified id', () => {
     const d = evaluateCall({
       executed_slices: [prodSlice],
       token_accepted_risks: new Set([
-        'railway[prod].upsert-variable-prod',
+        'railway[prod].upsert-variable',
         'railway.uncategorized-write',
       ]),
       catalog: railwayIdx,
@@ -369,17 +358,16 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
-      expect(d.risks_touched).toContain('railway[prod].upsert-variable-prod');
+      expect(d.risks_touched).toContain('railway[prod].upsert-variable');
       expect(d.risks_touched).toContain('railway.uncategorized-write');
-      expect(d.risks_touched).not.toContain('railway[prod].upsert-variable-staging');
     }
   });
 
-  test('staging binding: only upsert-variable-staging fires, prod variant is skipped', () => {
+  test('staging binding: upsert-variable fires with staging-qualified id', () => {
     const d = evaluateCall({
       executed_slices: [stagingSlice],
       token_accepted_risks: new Set([
-        'railway[staging].upsert-variable-staging',
+        'railway[staging].upsert-variable',
         'railway.uncategorized-write',
       ]),
       catalog: railwayIdx,
@@ -387,14 +375,12 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
-      expect(d.risks_touched).toContain('railway[staging].upsert-variable-staging');
-      expect(d.risks_touched).not.toContain('railway.upsert-variable-prod');
-      expect(d.risks_touched).not.toContain('railway[staging].upsert-variable-prod');
+      expect(d.risks_touched).toContain('railway[staging].upsert-variable');
       expect(d.risks_touched).toContain('railway.uncategorized-write');
     }
   });
 
-  test('prod binding without upsert-variable-prod accepted → deny (not phantom staging)', () => {
+  test('prod binding without upsert-variable accepted → deny', () => {
     const d = evaluateCall({
       executed_slices: [prodSlice],
       token_accepted_risks: new Set(['railway.uncategorized-write']),
@@ -403,8 +389,7 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     });
     expect(d.outcome).toBe('denied');
     if (d.outcome === 'denied') {
-      expect(d.missing_risks).toContain('railway[prod].upsert-variable-prod');
-      expect(d.missing_risks).not.toContain('railway[prod].upsert-variable-staging');
+      expect(d.missing_risks).toContain('railway[prod].upsert-variable');
     }
   });
 });

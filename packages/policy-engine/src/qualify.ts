@@ -25,7 +25,7 @@
  * drift-by-copy hazard flagged in the v4 clean-code report (B3).
  */
 
-import type { ProviderBinding, RiskId, Slice } from '@vaubaan/shared';
+import type { ProviderBinding, RiskEntry, RiskId, RiskVector, Slice } from '@vaubaan/shared';
 
 /** Regex for an env qualifier embedded in a RiskId : `[<env-slug>]`. */
 const ENV_QUALIFIER_RE = /\[[a-z][a-z0-9-]*\]/;
@@ -135,4 +135,20 @@ export function resolveSliceBindingEnv(
     return providerBindings[0]!.environment ?? null;
   }
   return null;
+}
+
+/**
+ * Resolve the effective `RiskVector` for a catalog entry in a given env.
+ * When the entry declares `vector_overrides[env]`, the overridden axes
+ * replace those in the base `vector` ; absent axes inherit from the base.
+ * Returns the base vector unchanged when no override applies.
+ *
+ * Spec : docs/spec/risk-entry-per-env-vector.md §1.
+ */
+export function resolveVector(
+  entry: Pick<RiskEntry, 'vector' | 'vector_overrides'>,
+  env: string | null | undefined,
+): RiskVector {
+  if (!env || !entry.vector_overrides?.[env]) return entry.vector;
+  return { ...entry.vector, ...entry.vector_overrides[env] };
 }

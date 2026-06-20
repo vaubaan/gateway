@@ -7,7 +7,7 @@
 # runtime imports `risk-catalog.ts` (1:1 with this file). When editing,
 # update BOTH. A CI lint (Phase 2) will diff the two.
 #
-# 11 risks + 1 fallback. Coverage matrix : research §1.5.
+# 9 risks + 1 fallback. Coverage matrix : research §1.5.
 
 railway:
   risks:
@@ -75,12 +75,13 @@ railway:
         }
 
     # ───── Deploys ──────────────────────────────────────────────────────────
-    - id: railway.deploy-staging
-      label: 'Redeploy / accept-deploy sur un env non-prod'
+    - id: railway.deploy
+      label: 'Redeploy / accept-deploy'
       reason: >-
         Reversible : un nouveau deploy peut tout corriger. Pas de
         communication aval. Coût Railway facturé à l'usage.
       matches: 'railway.project[**].environment[**].service[**].deployment.W'
+      acceptable_in_envs: [staging, preview, dev, prod]
       vector:
         {
           reversibility: reversible,
@@ -90,33 +91,20 @@ railway:
           visibility: internal,
           persistence: session,
         }
-      acceptable_in_envs: [staging, preview, dev]
-
-    - id: railway.deploy-prod
-      label: 'Redeploy / accept-deploy sur production'
-      reason: >-
-        Trigger un déploiement public, traffic switch immédiat, potentiel
-        downtime + propagation aval. Costly à rollback (re-deploy précédent
-        peut prendre quelques minutes).
-      matches: 'railway.project[**].environment[**].service[**].deployment.W'
-      vector:
-        {
-          reversibility: costly,
-          blast: env,
-          data: data,
-          cost: moderate,
-          visibility: public,
-          persistence: session,
-        }
-      acceptable_in_envs: [prod]
+      vector_overrides:
+        prod:
+          reversibility: costly
+          visibility: public
 
     # ───── Variables ────────────────────────────────────────────────────────
-    - id: railway.upsert-variable-staging
-      label: 'Modifier une env var (non-prod)'
+    - id: railway.upsert-variable
+      label: 'Modifier une env var'
       reason: >-
         Modif scalaire d'une var. Trigge un redeploy implicite sauf
-        skipDeploys=true. Reversible (réécrire l'ancienne valeur).
+        skipDeploys=true. Sur prod, une valeur erronée peut briser
+        immédiatement le service.
       matches: 'railway.project[**].environment[**].service-var[**].W'
+      acceptable_in_envs: [staging, preview, dev, prod]
       vector:
         {
           reversibility: reversible,
@@ -126,24 +114,9 @@ railway:
           visibility: internal,
           persistence: posture,
         }
-      acceptable_in_envs: [staging, preview, dev]
-
-    - id: railway.upsert-variable-prod
-      label: 'Modifier une env var en production'
-      reason: >-
-        Posture-shift sur prod. Une valeur erronée peut briser
-        immédiatement le service (Stripe, DB, OAuth).
-      matches: 'railway.project[**].environment[**].service-var[**].W'
-      vector:
-        {
-          reversibility: costly,
-          blast: env,
-          data: secret,
-          cost: moderate,
-          visibility: internal,
-          persistence: posture,
-        }
-      acceptable_in_envs: [prod]
+      vector_overrides:
+        prod:
+          reversibility: costly
 
     - id: railway.bulk-variables-replace
       label: 'Remplacer en bulk toutes les env vars (replace=true)'

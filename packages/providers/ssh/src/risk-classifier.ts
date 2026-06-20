@@ -38,7 +38,7 @@
  *
  * The host_slug is the env qualifier. We do NOT inject env into the
  * slice path beyond the `host_slug` identifier ; the `acceptable_in_envs`
- * gate on `exec-write-staging` is checked at mint time by the runtime
+ * gate on `exec-write` is checked at mint time by the runtime
  * (which compares `binding.host_slug ∈ acceptable_in_envs`).
  */
 

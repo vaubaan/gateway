@@ -26,6 +26,7 @@ export interface MintFormCatalogEntry {
   label: string;
   reason: string;
   vector: RiskVector;
+  vector_overrides?: Readonly<Record<string, Partial<RiskVector>>>;
   acceptable_in_envs: readonly string[] | null;
   deprecated: boolean;
 }
