@@ -6,6 +6,7 @@ import { getSupabaseServer } from '@/lib/supabase/server';
 import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code } from '@/components/ui';
 import { BindingControls } from './binding-controls';
 import { BashBindingControls } from './bash-binding-controls';
+import { SshBindingControls } from './ssh-binding-controls';
 
 export const dynamic = 'force-dynamic';
 
@@ -25,6 +26,14 @@ interface BashBindingRow {
   parsed_meta: { tools: Array<{ functionName: string }>; rings: string[] } | null;
   parse_error: string | null;
   hosts: Array<{ id: string; host_slug: string; host_address: string; ssh_user: string }>;
+}
+
+interface SshBindingRow {
+  id: string;
+  host_slug: string;
+  host_address: string;
+  port: number;
+  ssh_user: string;
 }
 
 interface TokenRow {
@@ -60,27 +69,35 @@ export default async function ProjectPage({
     .maybeSingle<{ id: string; slug: string; name: string }>();
   if (!proj) notFound();
 
-  const [{ data: bindings }, { data: bashBindings }, { data: tokens }] = await Promise.all([
-    supabase
-      .from('provider_bindings')
-      .select('id, provider, resource_ref, display_name, environment')
-      .eq('project_id', proj.id)
-      .returns<BindingRow[]>(),
-    supabase
-      .from('bash_bindings')
-      .select(
-        'id, slug, display_name, description, parsed_meta, parse_error, hosts:ssh_bindings(id, host_slug, host_address, ssh_user)',
-      )
-      .eq('project_id', proj.id)
-      .order('created_at', { ascending: true })
-      .returns<BashBindingRow[]>(),
-    supabase
-      .from('tokens')
-      .select('id, name, api_key_prefix, status, last_used_at')
-      .eq('project_id', proj.id)
-      .order('created_at', { ascending: false })
-      .returns<TokenRow[]>(),
-  ]);
+  const [{ data: bindings }, { data: bashBindings }, { data: sshBindings }, { data: tokens }] =
+    await Promise.all([
+      supabase
+        .from('provider_bindings')
+        .select('id, provider, resource_ref, display_name, environment')
+        .eq('project_id', proj.id)
+        .returns<BindingRow[]>(),
+      supabase
+        .from('bash_bindings')
+        .select(
+          'id, slug, display_name, description, parsed_meta, parse_error, hosts:ssh_bindings(id, host_slug, host_address, ssh_user)',
+        )
+        .eq('project_id', proj.id)
+        .order('created_at', { ascending: true })
+        .returns<BashBindingRow[]>(),
+      supabase
+        .from('ssh_bindings')
+        .select('id, host_slug, host_address, port, ssh_user')
+        .eq('project_id', proj.id)
+        .is('bash_binding_id', null)
+        .order('host_slug', { ascending: true })
+        .returns<SshBindingRow[]>(),
+      supabase
+        .from('tokens')
+        .select('id, name, api_key_prefix, status, last_used_at')
+        .eq('project_id', proj.id)
+        .order('created_at', { ascending: false })
+        .returns<TokenRow[]>(),
+    ]);
 
   return (
     <main>
@@ -114,7 +131,9 @@ export default async function ProjectPage({
             </Link>
           </CardHeader>
           <CardBody>
-            {(bindings ?? []).length === 0 && (bashBindings ?? []).length === 0 ? (
+            {(bindings ?? []).length === 0 &&
+            (bashBindings ?? []).length === 0 &&
+            (sshBindings ?? []).length === 0 ? (
               <p style={{ color: 'var(--text-subtle)', margin: 0 }}>No bindings yet.</p>
             ) : (
               <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
@@ -191,6 +210,28 @@ export default async function ProjectPage({
                       orgSlug={org.slug}
                       detailHref={`/orgs/${org.slug}/projects/${proj.slug}/bash-bindings/${b.id}`}
                     />
+                  </li>
+                ))}
+                {(sshBindings ?? []).map((h) => (
+                  <li
+                    key={`ssh-${h.id}`}
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      gap: 'var(--space-3)',
+                      padding: 'var(--space-3) 0',
+                      borderBottom: '1px solid var(--border-subtle)',
+                    }}
+                  >
+                    <span style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
+                      <Badge tone="neutral">ssh</Badge>
+                      <Code>{h.host_slug}</Code>
+                      <span style={{ color: 'var(--text-subtle)', fontSize: 'var(--text-xs)' }}>
+                        {h.ssh_user}@{h.host_address}:{h.port}
+                      </span>
+                    </span>
+                    <SshBindingControls hostId={h.id} hostSlug={h.host_slug} orgSlug={org.slug} />
                   </li>
                 ))}
               </ul>

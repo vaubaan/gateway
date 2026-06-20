@@ -16,6 +16,7 @@ export type Provider =
   | 'supabase'
   | 'railway'
   | 'bash'
+  | 'ssh'
   | 'upstash-redis'
   | 'gmail'
   | 'stripe';
@@ -26,6 +27,7 @@ export const PROVIDERS = [
   'supabase',
   'railway',
   'bash',
+  'ssh',
   'upstash-redis',
   'gmail',
   'stripe',
