@@ -26,6 +26,7 @@ export function RiskRow({
   inherited,
   blocked,
   onToggle,
+  readOnly,
 }: {
   entry: MintFormCatalogEntry;
   qualifiedId: RiskId;
@@ -35,10 +36,11 @@ export function RiskRow({
   inherited: boolean;
   blocked: string | null;
   onToggle: (qualifiedId: RiskId) => void;
+  readOnly?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const disabled = !acceptable || !inherited;
-  const opacity = disabled ? 0.45 : 1;
+  const disabled = readOnly || !acceptable || !inherited;
+  const opacity = readOnly ? 1 : disabled ? 0.45 : 1;
   const tooltip = !acceptable
     ? (blocked ?? `Not acceptable in this env (catalog restriction)`)
     : !inherited
@@ -61,7 +63,10 @@ export function RiskRow({
           checked={isAccepted}
           disabled={disabled}
           onChange={() => onToggle(qualifiedId)}
-          style={{ marginTop: 4, cursor: disabled ? 'not-allowed' : 'pointer' }}
+          style={{
+            marginTop: 4,
+            cursor: readOnly ? 'default' : disabled ? 'not-allowed' : 'pointer',
+          }}
           aria-label={`Accept risk ${qualifiedId}`}
           title={tooltip}
         />

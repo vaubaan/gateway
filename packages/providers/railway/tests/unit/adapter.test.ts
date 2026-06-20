@@ -156,6 +156,38 @@ describe('RailwayAdapter — executeCall (rewrap mcp.railway.com)', () => {
   });
 });
 
+describe('RailwayAdapter — railway-agent hint', () => {
+  test('wraps railway-agent result with a vaubaan_hint about staged changes', async () => {
+    const agentResult = {
+      content: [{ type: 'text', text: 'I configured the service. Deployment triggered.' }],
+    };
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      const id = (JSON.parse(init.body as string) as { id: number }).id;
+      return sseResponse(id, agentResult);
+    });
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    const out = (await adapter.executeCall(baseAdmin, binding, 'railway__railway-agent', {
+      projectId: 'p',
+      environmentId: 'e',
+      message: 'deploy',
+    })) as { agent_response: unknown; vaubaan_hint: string };
+    expect(out.agent_response).toEqual(agentResult);
+    expect(out.vaubaan_hint).toContain('accept-deploy');
+    expect(out.vaubaan_hint).toContain('staged');
+  });
+
+  test('does NOT wrap non-agent tools', async () => {
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      const id = (JSON.parse(init.body as string) as { id: number }).id;
+      return sseResponse(id, { projects: [] });
+    });
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    const out = await adapter.executeCall(baseAdmin, binding, 'railway__list-projects', {});
+    expect(out).toEqual({ projects: [] });
+    expect(out).not.toHaveProperty('vaubaan_hint');
+  });
+});
+
 describe('RailwayAdapter — validateBinding', () => {
   test('rejects a non-UUID resource_ref', async () => {
     const adapter = new RailwayAdapter();

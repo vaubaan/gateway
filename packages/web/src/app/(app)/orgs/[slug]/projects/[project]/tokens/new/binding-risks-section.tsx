@@ -30,12 +30,14 @@ export function BindingRisksSection({
   accepted,
   previewByRiskId,
   onToggle,
+  readOnly,
 }: {
   binding: MintFormBinding;
   catalog: MintFormCatalog;
   accepted: Set<RiskId>;
   previewByRiskId: Map<RiskId, PreviewRiskRow>;
   onToggle: (qualifiedId: RiskId) => void;
+  readOnly?: boolean;
 }) {
   const applicableEntries = catalog.entries.filter((e: MintFormCatalogEntry) =>
     entryAppliesToBinding(e, binding.env),
@@ -97,6 +99,7 @@ export function BindingRisksSection({
               inherited={row.inherited}
               blocked={row.blocked}
               onToggle={onToggle}
+              readOnly={readOnly}
             />
           ))}
         </ul>

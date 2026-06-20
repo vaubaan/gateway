@@ -100,7 +100,14 @@ export default async function TokensIndex({
             }}
           >
             <div>
-              <strong>{t.name}</strong>{' '}
+              <Link
+                href={`/orgs/${org.slug}/projects/${proj.slug}/tokens/${t.id}`}
+                style={{ textDecoration: 'none', color: 'inherit' }}
+              >
+                <strong style={{ textDecoration: 'underline', textUnderlineOffset: 2 }}>
+                  {t.name}
+                </strong>
+              </Link>{' '}
               <code style={{ opacity: 0.55 }}>vbn_live_{t.api_key_prefix}…</code>
             </div>
             <div style={{ display: 'flex', gap: 16, alignItems: 'center' }}>

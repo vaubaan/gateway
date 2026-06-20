@@ -156,7 +156,18 @@ export class RailwayAdapter {
     args: Record<string, unknown>,
   ): Promise<unknown> {
     const { token } = await this.mintUpstreamToken(admin);
-    return executeCall(this.fetchImpl, token, tool, args);
+    const result = await executeCall(this.fetchImpl, token, tool, args);
+    if (tool === 'railway__railway-agent') {
+      return {
+        agent_response: result,
+        vaubaan_hint:
+          'The railway-agent stages configuration changes (repo source, Dockerfile, build settings, etc.) ' +
+          'but does NOT commit or deploy them. If the agent reports that changes were made or a ' +
+          '"deployment was triggered", the changes are only staged. You MUST call railway__accept-deploy ' +
+          'with the environmentId to commit the staged changes and trigger the actual deployment.',
+      };
+    }
+    return result;
   }
 
   /**

@@ -20,15 +20,15 @@ export function ProviderRisksCard({
   accepted,
   previewByRiskId,
   onToggle,
+  readOnly,
 }: {
   provider: Provider;
   providerBindings: MintFormBinding[];
   catalog: MintFormCatalog | undefined;
   accepted: Set<RiskId>;
-  /** Preview rows indexed by qualified RiskId — drives per-row enable/disable
-   *  + tooltip text in {@link BindingRisksSection}. */
   previewByRiskId: Map<RiskId, PreviewRiskRow>;
   onToggle: (qualifiedId: RiskId) => void;
+  readOnly?: boolean;
 }) {
   if (!catalog || !catalog.loaded) {
     return (
@@ -64,6 +64,7 @@ export function ProviderRisksCard({
               accepted={accepted}
               previewByRiskId={previewByRiskId}
               onToggle={onToggle}
+              readOnly={readOnly}
             />
           ))}
         </div>
