@@ -52,7 +52,7 @@ const MAX_TTL_HOURS = 24 * 7;
 const MAX_TTL_SECONDS = 3600;
 
 const BindingSchema = z.object({
-  provider: z.enum(['github', 'vercel', 'supabase', 'railway', 'bash']),
+  provider: z.enum(['github', 'vercel', 'supabase', 'railway', 'bash', 'stripe']),
   resource_ref: z.string().min(1),
   env: z.string().min(1).optional().nullable(),
 });
