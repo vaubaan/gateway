@@ -4,7 +4,7 @@ import { useCallback, useState } from 'react';
 import { Button } from '@/components/ui';
 import type { MintFormBinding } from './mint-types';
 
-type Tab = 'env' | 'mcp' | 'claude' | 'curl';
+type Tab = 'mcp' | 'claude' | 'curl';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
@@ -21,18 +21,14 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-function buildEnvLocal(apiKey: string): string {
-  return `# Vaubaan Gateway token — paste into your project's .env.local\nVAUBAAN_TOKEN=${apiKey}`;
-}
-
-function buildMcpJson(gatewayUrl: string): string {
+function buildMcpJson(gatewayUrl: string, apiKey: string): string {
   return JSON.stringify(
     {
       mcpServers: {
         vaubaan: {
           type: 'http',
           url: `${gatewayUrl}/mcp`,
-          headers: { Authorization: 'Bearer ${VAUBAAN_TOKEN}' },
+          headers: { Authorization: `Bearer ${apiKey}` },
         },
       },
     },
@@ -78,7 +74,6 @@ function buildCurl(gatewayUrl: string, apiKey: string): string {
 }
 
 const TAB_LABELS: Record<Tab, string> = {
-  env: '.env.local',
   mcp: '.mcp.json',
   claude: 'CLAUDE.md',
   curl: 'curl verify',
@@ -97,13 +92,12 @@ export function BootstrapSnippets({
   bindings: MintFormBinding[];
   acceptedRisks: string[];
 }) {
-  const [tab, setTab] = useState<Tab>('env');
+  const [tab, setTab] = useState<Tab>('mcp');
   const gatewayUrl =
     typeof window !== 'undefined' ? window.location.origin : 'https://gateway.vaubaan.com';
 
   const snippets: Record<Tab, string> = {
-    env: buildEnvLocal(apiKey),
-    mcp: buildMcpJson(gatewayUrl),
+    mcp: buildMcpJson(gatewayUrl, apiKey),
     claude: buildClaudeMd(orgSlug, projectSlug, bindings, acceptedRisks),
     curl: buildCurl(gatewayUrl, apiKey),
   };
