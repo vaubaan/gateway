@@ -32,7 +32,7 @@ export const dataModel: DataModel = {
       slug: 'runtime',
       description:
         'The only Vercel plane Vaubaan exposes — covers projects, deployments, env vars, ' +
-        'domains, deployment-protection governance, and the toolbar comment surface.',
+        'domains, and the toolbar comment surface.',
       entities: [
         {
           name: 'account',
@@ -64,14 +64,6 @@ export const dataModel: DataModel = {
           description:
             'Singleton bag of build pipeline configuration : framework, build/dev/install command, ' +
             'node version, root directory. Affects all 3 envs at the next deploy.',
-        },
-        {
-          name: 'deployment-protection',
-          parent: 'project',
-          cardinalities: ['one'],
-          description:
-            'Singleton governance config : SSO gate + Password gate. Posture-shift on access to ' +
-            'every deployment of the project.',
         },
         {
           name: 'domain',

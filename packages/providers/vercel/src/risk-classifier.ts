@@ -332,13 +332,6 @@ export function classifyVercelV4(
     case 'vercel__update_project_settings':
       return { slices: [slice('W', [name('project'), projectSeg, name('project-settings')])] };
 
-    // ─── Writes — deployment protection ──────────────────────────────
-
-    case 'vercel__update_deployment_protection':
-      return {
-        slices: [slice('W', [name('project'), projectSeg, name('deployment-protection')])],
-      };
-
     // ─── Writes — domains ────────────────────────────────────────────
 
     case 'vercel__add_project_domain':

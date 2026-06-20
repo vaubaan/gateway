@@ -32,6 +32,7 @@ export interface ValidateResult {
   ok: boolean;
   displayName?: string;
   error?: string;
+  warnings?: string[];
 }
 
 export class VercelAdapter {
@@ -86,7 +87,15 @@ export class VercelAdapter {
           }
         }
       }
-      return { ok: true, displayName };
+      return {
+        ok: true,
+        displayName,
+        warnings: [
+          'Vercel does not allow API tokens to modify Deployment Protection (SSO / Password). ' +
+            'If your previews are behind Vercel Authentication, disable it manually in the ' +
+            'Vercel dashboard (Project → Settings → Deployment Protection) or attach a custom domain.',
+        ],
+      };
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
       return { ok: false, error: `Vercel validation failed: ${message}` };

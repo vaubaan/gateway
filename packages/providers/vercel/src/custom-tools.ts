@@ -20,7 +20,6 @@ export const LIST_DOMAINS = 'vercel__list_project_domains';
 export const ADD_DOMAIN = 'vercel__add_project_domain';
 export const VERIFY_DOMAIN = 'vercel__verify_project_domain';
 export const REMOVE_DOMAIN = 'vercel__remove_project_domain';
-export const UPDATE_DEPLOYMENT_PROTECTION = 'vercel__update_deployment_protection';
 export const UPSERT_ENV_FROM_VENV = 'vercel__upsert_env_from_venv';
 
 export const customTools: readonly McpToolDeclaration[] = [
@@ -251,29 +250,6 @@ export const customTools: readonly McpToolDeclaration[] = [
         domain: { type: 'string', description: 'The exact domain name to detach.' },
       },
       required: ['projectId', 'domain'],
-    },
-  },
-  {
-    name: UPDATE_DEPLOYMENT_PROTECTION,
-    description:
-      'Toggle / configure Vercel deployment protection (Vercel Auth SSO + Password Protection). Backed by PATCH /v9/projects/{projectId} with `ssoProtection` and/or `passwordProtection` fields. Pass `null` for a field to disable it.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        projectId: { type: 'string' },
-        teamId: { type: 'string' },
-        ssoProtection: {
-          type: ['object', 'null'],
-          description:
-            'Vercel SSO/team auth — `{ deploymentType: "all" | "preview" | "prod_deployment_urls_and_all_previews" | null }`. Pass null to disable.',
-        },
-        passwordProtection: {
-          type: ['object', 'null'],
-          description:
-            'Password gate — `{ password: string, deploymentType: same enum as ssoProtection }`. Pass null to disable.',
-        },
-      },
-      required: ['projectId'],
     },
   },
   {

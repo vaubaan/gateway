@@ -251,12 +251,6 @@ describe('vercel risk-catalog — saliency checks (entries from research doc §3
     expect(parsedCatalog.risks.find((r) => r.id === 'vercel.env-var-fan-out')).toBeDefined();
   });
 
-  test('deployment-protection-write entry exists', () => {
-    expect(
-      parsedCatalog.risks.find((r) => r.id === 'vercel.deployment-protection-write'),
-    ).toBeDefined();
-  });
-
   test('domain-write entry exists', () => {
     expect(parsedCatalog.risks.find((r) => r.id === 'vercel.domain-write')).toBeDefined();
   });

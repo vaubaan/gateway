@@ -61,6 +61,22 @@ describe('VercelAdapter — mintUpstreamToken', () => {
   });
 });
 
+describe('VercelAdapter — validateBinding', () => {
+  test('returns SSO warning on successful validation', async () => {
+    const fetchImpl = vi.fn(async (_url: string, init: RequestInit) => {
+      const id = (JSON.parse(init.body as string) as { id: number }).id;
+      return sseResponse(id, { content: [{ type: 'text', text: '{"name":"my-app"}' }] });
+    });
+    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
+    const result = await adapter.validateBinding(baseAdmin, 'prj_abc');
+    expect(result.ok).toBe(true);
+    expect(result.displayName).toBe('my-app');
+    expect(result.warnings).toBeDefined();
+    expect(result.warnings![0]).toContain('Deployment Protection');
+    expect(result.warnings![0]).toContain('dashboard');
+  });
+});
+
 describe('VercelAdapter — executeCall (rewrap mcp.vercel.com)', () => {
   test('forwards JSON-RPC tools/call with stripped prefix + injected teamId', async () => {
     let capturedBody: string | null = null;
@@ -364,26 +380,6 @@ describe('VercelAdapter — executeCall (custom domain + protection tools)', () 
     expect(init.body).toBeUndefined();
   });
 
-  test('update_deployment_protection PATCHes /v9/projects/{id} with ssoProtection + passwordProtection only', async () => {
-    const fetchImpl = vi.fn(async (_url: string, _init: RequestInit) => jsonResponse({}));
-    const adapter = new VercelAdapter({ fetchImpl: fetchImpl as never });
-    await adapter.executeCall(baseAdmin, binding, 'vercel__update_deployment_protection', {
-      projectId: 'prj_abc',
-      ssoProtection: { deploymentType: 'all' },
-      passwordProtection: null,
-      // a field not in the whitelist must be dropped
-      rootDirectory: 'leak',
-    });
-    const [url, init] = fetchImpl.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://api.vercel.com/v9/projects/prj_abc?teamId=team_abc');
-    expect(init.method).toBe('PATCH');
-    const body = JSON.parse(init.body as string) as Record<string, unknown>;
-    expect(body).toEqual({
-      ssoProtection: { deploymentType: 'all' },
-      passwordProtection: null,
-    });
-  });
-
   test('new custom tools exposed in availableTools', () => {
     const adapter = new VercelAdapter();
     const names = adapter.availableTools.map((t) => t.name);
@@ -391,6 +387,6 @@ describe('VercelAdapter — executeCall (custom domain + protection tools)', () 
     expect(names).toContain('vercel__add_project_domain');
     expect(names).toContain('vercel__verify_project_domain');
     expect(names).toContain('vercel__remove_project_domain');
-    expect(names).toContain('vercel__update_deployment_protection');
+    expect(names).not.toContain('vercel__update_deployment_protection');
   });
 });

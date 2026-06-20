@@ -208,15 +208,6 @@ describe('classifyVercelV4 — custom REST tools (project settings, domains, pro
     ).toEqual(['vercel.project[prj_abc].project-settings.W']);
   });
 
-  test('update_deployment_protection → project[prj_abc].deployment-protection.W', () => {
-    expect(
-      classify('vercel__update_deployment_protection', {
-        projectId: 'prj_abc',
-        ssoProtection: null,
-      }),
-    ).toEqual(['vercel.project[prj_abc].deployment-protection.W']);
-  });
-
   test('add_project_domain with ident-safe name → domain[NAME].W', () => {
     expect(
       classify('vercel__add_project_domain', { projectId: 'prj_abc', name: 'staging' }),

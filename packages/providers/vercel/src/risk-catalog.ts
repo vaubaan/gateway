@@ -9,7 +9,7 @@
  * `.yaml` files in the Lambda). Keep both in sync — a CI test in
  * `tests/unit/risk-catalog-sync.test.ts` diffs the two structures.
  *
- * 13 named risks + 1 fallback = 14 total. RiskId format follows
+ * 12 named risks + 1 fallback = 13 total. RiskId format follows
  * `<provider>.<name>` (cf. shared/src/risk.ts RISK_ID_REGEX). Env-specific
  * pairs (deploy-preview / deploy-prod, env-var-write-preview /
  * env-var-write-prod) are merged into single entries with
@@ -249,25 +249,6 @@ export const vercelRiskCatalog: RiskCatalog = {
         data: 'metadata',
         cost: 'free',
         visibility: 'internal',
-        persistence: 'posture',
-      },
-    },
-
-    // ─── WRITES — DEPLOYMENT-PROTECTION (governance) ───────────────────────
-    {
-      id: 'vercel.deployment-protection-write',
-      label: 'Enable / disable / configure deployment protection (SSO + password)',
-      reason:
-        'Governance of access to deployments. Disabling protection exposes a ' +
-        'previously-internal preview ; modifying the password breaks existing human ' +
-        'accesses. External-visible posture-shift.',
-      matches: 'vercel.project[**].deployment-protection.W',
-      vector: {
-        reversibility: 'reversible',
-        blast: 'account',
-        data: 'secret',
-        cost: 'free',
-        visibility: 'team',
         persistence: 'posture',
       },
     },

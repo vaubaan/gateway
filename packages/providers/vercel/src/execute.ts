@@ -21,7 +21,6 @@ import {
   LIST_DOMAINS,
   LIST_ENV_VARS,
   REMOVE_DOMAIN,
-  UPDATE_DEPLOYMENT_PROTECTION,
   UPDATE_PROJECT_SETTINGS,
   UPSERT_ENV_VAR,
   VERIFY_DOMAIN,
@@ -164,8 +163,6 @@ const ADD_DOMAIN_FIELDS = [
   'redirectStatusCode',
   'customEnvironmentId',
 ] as const;
-const PROTECTION_FIELDS = ['ssoProtection', 'passwordProtection'] as const;
-
 async function executeCustom(
   fetchImpl: FetchImpl,
   token: string,
@@ -237,10 +234,6 @@ async function executeCustom(
       query,
       null,
     );
-  }
-  if (tool === UPDATE_DEPLOYMENT_PROTECTION) {
-    const body = pickDefined(args, PROTECTION_FIELDS);
-    return callRest(fetchImpl, token, 'PATCH', `/v9/projects/${projectId}`, query, body);
   }
   throw new Error(`Vercel custom tool not implemented: ${tool}`);
 }

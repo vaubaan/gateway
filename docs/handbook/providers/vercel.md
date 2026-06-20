@@ -153,21 +153,20 @@ les cas où une seule invocation touche plusieurs envs (cf. risk
 
 ### 2.2 Writes (12 tools)
 
-| Tool                                              | Slice (pattern catalogue)                                                       | Env-resolution                                 | Fan-out                                          |
-| ------------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | ------------------ | --------------------------------------------- |
-| `vercel__deploy_to_vercel`                        | `vercel.project[P].env[target].deployment.W`                                    | `runtime` (`args.target` → `prod               | preview                                          | development`)      | Non — 1 env                                   |
-| `vercel__get_access_to_vercel_url`                | `vercel.project[P].env[E].deployment[D].bypass-token.W`                         | static (héritage de la deployment)             | Non                                              |
-| `vercel__upsert_env_var` _(custom)_               | `vercel.project[P].env[target ∈ array].env-var[KEY].W`                          | `runtime` (`args.target: ('prod'               | 'preview'                                        | 'development')[]`) | **Oui** — `target` array, par défaut = 3 envs |
-| `vercel__delete_env_var` _(custom)_               | `vercel.project[P].env[target].env-var[ID].W` (delete)                          | `runtime` (`args.target`, défaut `production`) | Non (delete unique côté API mais hint d'env)     |
-| `vercel__update_project_settings` _(custom)_      | `vercel.project[P].project-settings.W`                                          | static                                         | Implicite — affecte les builds futurs des 3 envs |
-| `vercel__update_deployment_protection` _(custom)_ | `vercel.project[P].deployment-protection.W`                                     | static                                         | Implicite — affecte la posture cross-env         |
-| `vercel__add_project_domain` _(custom)_           | `vercel.project[P].domain[NAME].W` (+ DNS posture-shift externe)                | static                                         | Non                                              |
-| `vercel__verify_project_domain` _(custom)_        | `vercel.project[P].domain[NAME].W` (re-check, pas d'écriture nouvelle)          | static                                         | Non                                              |
-| `vercel__remove_project_domain` _(custom)_        | `vercel.project[P].domain[NAME].W` (delete)                                     | static                                         | Non                                              |
-| `vercel__change_toolbar_thread_resolve_status`    | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].W`                    | static                                         | Non                                              |
-| `vercel__reply_to_toolbar_thread`                 | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message.W`    | static                                         | Non                                              |
-| `vercel__edit_toolbar_message`                    | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message[M].W` | static                                         | Non                                              |
-| `vercel__add_toolbar_reaction`                    | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message[M].W` | static                                         | Non                                              |
+| Tool                                           | Slice (pattern catalogue)                                                       | Env-resolution                                 | Fan-out                                          |
+| ---------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | ------------------ | --------------------------------------------- |
+| `vercel__deploy_to_vercel`                     | `vercel.project[P].env[target].deployment.W`                                    | `runtime` (`args.target` → `prod               | preview                                          | development`)      | Non — 1 env                                   |
+| `vercel__get_access_to_vercel_url`             | `vercel.project[P].env[E].deployment[D].bypass-token.W`                         | static (héritage de la deployment)             | Non                                              |
+| `vercel__upsert_env_var` _(custom)_            | `vercel.project[P].env[target ∈ array].env-var[KEY].W`                          | `runtime` (`args.target: ('prod'               | 'preview'                                        | 'development')[]`) | **Oui** — `target` array, par défaut = 3 envs |
+| `vercel__delete_env_var` _(custom)_            | `vercel.project[P].env[target].env-var[ID].W` (delete)                          | `runtime` (`args.target`, défaut `production`) | Non (delete unique côté API mais hint d'env)     |
+| `vercel__update_project_settings` _(custom)_   | `vercel.project[P].project-settings.W`                                          | static                                         | Implicite — affecte les builds futurs des 3 envs |
+| `vercel__add_project_domain` _(custom)_        | `vercel.project[P].domain[NAME].W` (+ DNS posture-shift externe)                | static                                         | Non                                              |
+| `vercel__verify_project_domain` _(custom)_     | `vercel.project[P].domain[NAME].W` (re-check, pas d'écriture nouvelle)          | static                                         | Non                                              |
+| `vercel__remove_project_domain` _(custom)_     | `vercel.project[P].domain[NAME].W` (delete)                                     | static                                         | Non                                              |
+| `vercel__change_toolbar_thread_resolve_status` | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].W`                    | static                                         | Non                                              |
+| `vercel__reply_to_toolbar_thread`              | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message.W`    | static                                         | Non                                              |
+| `vercel__edit_toolbar_message`                 | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message[M].W` | static                                         | Non                                              |
+| `vercel__add_toolbar_reaction`                 | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message[M].W` | static                                         | Non                                              |
 
 ### 2.3 Notes sur l'env-resolution
 
@@ -388,22 +387,6 @@ vercel:
         visibility: internal
         persistence: posture
 
-    # ─── WRITES — DEPLOYMENT PROTECTION (governance) ───────────────────────
-
-    - id: vercel.deployment-protection-write
-      label: 'Activer / désactiver / configurer la deployment protection (SSO + password)'
-      reason: "Gouvernance d'accès aux deployments. Disabler la protection
-        expose une preview qui était interne. Modifier le mot de passe
-        casse les accès humains existants. Posture-shift externe."
-      matches: 'vercel.project[**].deployment-protection.W'
-      vector:
-        reversibility: reversible
-        blast: account
-        data: secret
-        cost: free
-        visibility: team
-        persistence: posture
-
     # ─── WRITES — DOMAINS (DNS posture-shift externe) ──────────────────────
 
     - id: vercel.domain-write
@@ -478,28 +461,27 @@ fallback uniquement (signal de risk manquant).
 | `vercel__list_env_vars` (decrypt=false)       |              |                 |      ✓       |                        |                      |
 | `vercel__list_env_vars` (decrypt=true)        |              |                 |      ✓       |           ✓            |                      |
 
-### 4.2 Writes (12 tools)
+### 4.2 Writes (11 tools)
 
-| Tool                                            | deploy-preview | deploy-prod | toolbar-write | env-var-write-preview | env-var-write-prod | env-var-fan-out | project-settings-write | deployment-protection-write | domain-write | mint-bypass-token | uncategorized (fallback) |
-| ----------------------------------------------- | :------------: | :---------: | :-----------: | :-------------------: | :----------------: | :-------------: | :--------------------: | :-------------------------: | :----------: | :---------------: | :----------------------: |
-| `vercel__deploy_to_vercel` (target=preview)     |       ✓        |             |               |                       |                    |                 |                        |                             |              |                   |                          |
-| `vercel__deploy_to_vercel` (target=prod)        |                |      ✓      |               |                       |                    |                 |                        |                             |              |                   |                          |
-| `vercel__deploy_to_vercel` (target=development) |       ✓        |             |               |                       |                    |                 |                        |                             |              |                   |                          |
-| `vercel__upsert_env_var` (target=[preview])     |                |             |               |           ✓           |                    |                 |                        |                             |              |                   |                          |
-| `vercel__upsert_env_var` (target=[production])  |                |             |               |                       |         ✓          |                 |                        |                             |              |                   |                          |
-| `vercel__upsert_env_var` (target=all 3 / omis)  |                |             |               |           ✓           |         ✓          |        ✓        |                        |                             |              |                   |                          |
-| `vercel__delete_env_var` (target=preview)       |                |             |               |           ✓           |                    |                 |                        |                             |              |                   |                          |
-| `vercel__delete_env_var` (target=production)    |                |             |               |                       |         ✓          |                 |                        |                             |              |                   |                          |
-| `vercel__update_project_settings`               |                |             |               |                       |                    |                 |           ✓            |                             |              |                   |                          |
-| `vercel__update_deployment_protection`          |                |             |               |                       |                    |                 |                        |              ✓              |              |                   |                          |
-| `vercel__add_project_domain`                    |                |             |               |                       |                    |                 |                        |                             |      ✓       |                   |                          |
-| `vercel__verify_project_domain`                 |                |             |               |                       |                    |                 |                        |                             |      ✓       |                   |                          |
-| `vercel__remove_project_domain`                 |                |             |               |                       |                    |                 |                        |                             |      ✓       |                   |                          |
-| `vercel__get_access_to_vercel_url`              |                |             |               |                       |                    |                 |                        |                             |              |         ✓         |                          |
-| `vercel__change_toolbar_thread_resolve_status`  |                |             |       ✓       |                       |                    |                 |                        |                             |              |                   |                          |
-| `vercel__reply_to_toolbar_thread`               |                |             |       ✓       |                       |                    |                 |                        |                             |              |                   |                          |
-| `vercel__edit_toolbar_message`                  |                |             |       ✓       |                       |                    |                 |                        |                             |              |                   |                          |
-| `vercel__add_toolbar_reaction`                  |                |             |       ✓       |                       |                    |                 |                        |                             |              |                   |                          |
+| Tool                                            | deploy-preview | deploy-prod | toolbar-write | env-var-write-preview | env-var-write-prod | env-var-fan-out | project-settings-write | domain-write | mint-bypass-token | uncategorized (fallback) |
+| ----------------------------------------------- | :------------: | :---------: | :-----------: | :-------------------: | :----------------: | :-------------: | :--------------------: | :----------: | :---------------: | :----------------------: |
+| `vercel__deploy_to_vercel` (target=preview)     |       ✓        |             |               |                       |                    |                 |                        |              |                   |                          |
+| `vercel__deploy_to_vercel` (target=prod)        |                |      ✓      |               |                       |                    |                 |                        |              |                   |                          |
+| `vercel__deploy_to_vercel` (target=development) |       ✓        |             |               |                       |                    |                 |                        |              |                   |                          |
+| `vercel__upsert_env_var` (target=[preview])     |                |             |               |           ✓           |                    |                 |                        |              |                   |                          |
+| `vercel__upsert_env_var` (target=[production])  |                |             |               |                       |         ✓          |                 |                        |              |                   |                          |
+| `vercel__upsert_env_var` (target=all 3 / omis)  |                |             |               |           ✓           |         ✓          |        ✓        |                        |              |                   |                          |
+| `vercel__delete_env_var` (target=preview)       |                |             |               |           ✓           |                    |                 |                        |              |                   |                          |
+| `vercel__delete_env_var` (target=production)    |                |             |               |                       |         ✓          |                 |                        |              |                   |                          |
+| `vercel__update_project_settings`               |                |             |               |                       |                    |                 |           ✓            |              |                   |                          |
+| `vercel__add_project_domain`                    |                |             |               |                       |                    |                 |                        |      ✓       |                   |                          |
+| `vercel__verify_project_domain`                 |                |             |               |                       |                    |                 |                        |      ✓       |                   |                          |
+| `vercel__remove_project_domain`                 |                |             |               |                       |                    |                 |                        |      ✓       |                   |                          |
+| `vercel__get_access_to_vercel_url`              |                |             |               |                       |                    |                 |                        |              |         ✓         |                          |
+| `vercel__change_toolbar_thread_resolve_status`  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                          |
+| `vercel__reply_to_toolbar_thread`               |                |             |       ✓       |                       |                    |                 |                        |              |                   |                          |
+| `vercel__edit_toolbar_message`                  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                          |
+| `vercel__add_toolbar_reaction`                  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                          |
 
 **Résultat lint** : 0 tool tombe uniquement dans le fallback. Le fallback
 `vercel.uncategorized-write` reste néanmoins **obligatoire** (spec §14 anti-
@@ -520,25 +502,24 @@ Trois tools émettent **plusieurs slices** ou **plusieurs risks_touched** :
    `mint-bypass-token`). Vérifier que le classifier émet bien un `W` ici et
    pas un `R` (cf. §5 edge case).
 
-3. **`vercel__update_deployment_protection`** → écrit un password (champ
-   `passwordProtection.password`) + un toggle SSO. Le risk
-   `deployment-protection-write` a `data: secret` pour cette raison.
-
 ---
 
 ## 5. Edge cases — décisions à acter
 
-### 5.1 `vercel__update_deployment_protection` — `govern` ou `mutate` ?
+### 5.1 Deployment Protection (SSO / Password) — non modifiable via API
 
-C'est **clairement governance** (control de l'accès aux deployments). En v4
-on n'a plus de macro `govern`, mais le risk dédié
-`vercel.deployment-protection-write` porte la sémantique via son vecteur :
+Vercel interdit aux tokens API (PAT et intégrations) de modifier les settings
+de Vercel Authentication (SSO + Password Protection). Le tool
+`vercel__update_deployment_protection` a été **supprimé** — l'opération
+ne peut être faite que manuellement dans le dashboard Vercel :
+**Project → Settings → Deployment Protection**.
 
-- `persistence: posture` (changement durable).
-- `data: secret` (le password EST stocké).
+Le `validateBinding` retourne un **warning** à ce sujet pour que l'admin
+soit informé dès le onboarding.
 
-**Décision proposée** : risk distinct. Aligne le traitement avec
-`branch-protection-write` côté GitHub.
+**Alternative** : attacher un custom domain au projet
+(`vercel__add_project_domain`) — les custom domains ne sont pas soumis
+au SSO gate de `*.vercel.app`.
 
 ### 5.2 `vercel__add_project_domain` — DNS = posture-shift externe
 
@@ -563,8 +544,8 @@ granularité, splitter en Phase 2.
 
 ### 5.3 Tools custom vs natifs Vercel — risk distinct ?
 
-Les 9 tools custom REST (`add_project_domain`, `verify_project_domain`,
-`update_deployment_protection`, `update_project_settings`, `upsert_env_var`,
+Les 8 tools custom REST (`add_project_domain`, `verify_project_domain`,
+`update_project_settings`, `upsert_env_var`,
 `list_env_vars`, `delete_env_var`, `list_project_domains`,
 `remove_project_domain`) sont des **augmentations sur des trous du MCP
 officiel**, pas des opérations sémantiquement différentes.
@@ -684,7 +665,7 @@ write` au mapping actuel. Le fallback reste présent **pour le futur**.
 | `get_access_to_vercel_url`         | `deployment:read`                                         | `bypass-token.W` → risk `mint-bypass-token`                                             |
 | `list_env_vars decrypt=true`       | `config:read`                                             | 2 slices : `env-var[**].R` + `env-var[**].R[plaintext]` → risk `read-env-var-plaintext` |
 | `update_project_settings`          | `project-settings:write`                                  | `project-settings.W` → risk `project-settings-write`                                    |
-| `update_deployment_protection`     | `project-settings:write` (mélangé avec settings normaux)  | risk distinct `deployment-protection-write`                                             |
+| `update_deployment_protection`     | `project-settings:write` (mélangé avec settings normaux)  | **supprimé** — Vercel interdit la modification via API                                  |
 | `add/verify/remove_project_domain` | `project-settings:write`                                  | risk distinct `domain-write`                                                            |
 | `toolbar-*` writes                 | `deployment:write` (env-less, mélangé avec deploy)        | risk distinct `toolbar-write`                                                           |
 | Décision binaire                   | gates `allow/confirm/deny` côté policy                    | `risk ∈ accepted_risks` (strict-fail au runtime, ADR unified-gates-drop-confirm)        |
@@ -714,7 +695,6 @@ Coder Vercel — risks à cocher au mint :
   ☐ vercel.env-var-fan-out
   ☐ vercel.read-env-var-plaintext
   ☐ vercel.env-var-write-prod
-  ☐ vercel.deployment-protection-write
   ☐ vercel.domain-write
 ```
 
