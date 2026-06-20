@@ -5,7 +5,17 @@ import { type Provider } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState, type ProviderState } from '@/lib/providers/state';
 import { ProviderDisconnectButton } from '../provider-disconnect';
-import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Code, Row } from '@/components/ui';
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Code,
+  Row,
+} from '@/components/ui';
 
 export const dynamic = 'force-dynamic';
 
@@ -153,6 +163,30 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
 function ProviderDetails({ state }: { state: ProviderState }) {
   return (
     <div style={{ display: 'grid', gap: 'var(--space-3)' }}>
+      {state.setupAction && (
+        <Banner tone="warning">
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              gap: 'var(--space-3)',
+            }}
+          >
+            <span>{state.setupAction.message}</span>
+            <a
+              href={state.setupAction.actionUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              style={{ textDecoration: 'none', flexShrink: 0 }}
+            >
+              <Button size="sm" variant="primary">
+                {state.setupAction.actionLabel}
+              </Button>
+            </a>
+          </div>
+        </Banner>
+      )}
       <dl
         style={{
           display: 'grid',

@@ -218,7 +218,7 @@ async function executeCustom(
   }
 }
 
-async function callGraphql<T>(
+export async function callGraphql<T>(
   fetchImpl: FetchImpl,
   token: string,
   query: string,

@@ -17,7 +17,7 @@
 
 import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
 import { availableTools } from './tools.ts';
-import { executeCall, type FetchImpl } from './execute.ts';
+import { callGraphql, executeCall, type FetchImpl } from './execute.ts';
 import { classifyRailwayV4, type RailwayClassifyResult } from './risk-classifier.ts';
 
 const TOKEN_ENDPOINT = 'https://backboard.railway.com/oauth/token';
@@ -157,6 +157,25 @@ export class RailwayAdapter {
   ): Promise<unknown> {
     const { token } = await this.mintUpstreamToken(admin);
     return executeCall(this.fetchImpl, token, tool, args);
+  }
+
+  /**
+   * Check whether Railway can see GitHub repos (i.e. the Railway GitHub App is
+   * installed on the user's GitHub account/org). Fail-open: on any error we
+   * assume repos are available so we don't show a misleading CTA.
+   */
+  async checkGitHubRepos(
+    admin: ProviderAdmin,
+  ): Promise<{ available: boolean; repos: Array<{ fullName: string; id: number }> }> {
+    try {
+      const { token } = await this.mintUpstreamToken(admin);
+      const data = await callGraphql<{
+        githubRepos: Array<{ fullName: string; id: number }>;
+      }>(this.fetchImpl, token, `{ githubRepos { fullName id } }`, {});
+      return { available: data.githubRepos.length > 0, repos: data.githubRepos };
+    } catch {
+      return { available: true, repos: [] };
+    }
   }
 
   /**

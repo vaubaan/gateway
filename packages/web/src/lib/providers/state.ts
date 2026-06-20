@@ -43,6 +43,12 @@ export interface ProviderState {
   resources: ProviderResource[];
   /** Free-form error or note (e.g. token expired, listing failed). */
   error: string | null;
+  /** Optional setup action the user should take (e.g. install a GitHub App). */
+  setupAction?: {
+    message: string;
+    actionUrl: string;
+    actionLabel: string;
+  };
 }
 
 interface AdminRow {
@@ -538,36 +544,55 @@ async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
   };
 
   try {
-    const result = await adapter.executeCall(
-      providerAdmin,
-      railwayBinding,
-      'railway__list-projects',
-      {},
-    );
-    // The upstream MCP wraps results in {content:[{text:<string>}]}. The text is
-    // sometimes a JSON-encoded list, sometimes a plain status message like
-    // "No projects found." — handle both.
-    const text = extractMcpText(result);
-    let projects: Array<{ id: string; name?: string }> = [];
-    let upstreamNote: string | null = null;
-    if (text) {
-      try {
-        projects = normalizeRailwayProjects(JSON.parse(text));
-      } catch {
-        upstreamNote = text.trim();
+    const [projectsResult, reposResult] = await Promise.allSettled([
+      adapter.executeCall(providerAdmin, railwayBinding, 'railway__list-projects', {}),
+      adapter.checkGitHubRepos(providerAdmin),
+    ]);
+
+    // --- Projects (existing logic) ---
+    if (projectsResult.status === 'fulfilled') {
+      const result = projectsResult.value;
+      // The upstream MCP wraps results in {content:[{text:<string>}]}. The text is
+      // sometimes a JSON-encoded list, sometimes a plain status message like
+      // "No projects found." — handle both.
+      const text = extractMcpText(result);
+      let projects: Array<{ id: string; name?: string }> = [];
+      let upstreamNote: string | null = null;
+      if (text) {
+        try {
+          projects = normalizeRailwayProjects(JSON.parse(text));
+        } catch {
+          upstreamNote = text.trim();
+        }
+      } else {
+        projects = normalizeRailwayProjects(result);
+      }
+      base.resources = projects.map((p) => ({
+        ref: p.id,
+        name: p.name ?? p.id,
+        url: `https://railway.com/project/${p.id}`,
+      }));
+      if (base.resources.length === 0) {
+        base.error =
+          (upstreamNote ? `${upstreamNote} ` : '') +
+          'Bind by typing a Railway project id (UUID) manually.';
       }
     } else {
-      projects = normalizeRailwayProjects(result);
+      const message =
+        projectsResult.reason instanceof Error
+          ? projectsResult.reason.message
+          : String(projectsResult.reason);
+      base.error = `${message} — bind by typing a Railway project id (UUID) manually.`;
     }
-    base.resources = projects.map((p) => ({
-      ref: p.id,
-      name: p.name ?? p.id,
-      url: `https://railway.com/project/${p.id}`,
-    }));
-    if (base.resources.length === 0) {
-      base.error =
-        (upstreamNote ? `${upstreamNote} ` : '') +
-        'Bind by typing a Railway project id (UUID) manually.';
+
+    // --- GitHub repos detection ---
+    if (reposResult.status === 'fulfilled' && !reposResult.value.available) {
+      base.setupAction = {
+        message:
+          'Install the Railway GitHub App on your GitHub org to enable auto-deploy from a repository.',
+        actionUrl: 'https://railway.com/account/github',
+        actionLabel: 'Connect GitHub',
+      };
     }
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

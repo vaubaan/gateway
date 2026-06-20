@@ -319,3 +319,63 @@ describe('RailwayAdapter — executeCall (custom GraphQL env-var tools)', () => 
     ).rejects.toThrow(/project not found/);
   });
 });
+
+describe('RailwayAdapter — checkGitHubRepos', () => {
+  function jsonOk(body: unknown) {
+    return {
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve(body),
+      text: () => Promise.resolve(JSON.stringify(body)),
+    };
+  }
+
+  test('returns available=true with repos when GraphQL returns a non-empty array', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(
+      jsonOk({
+        data: { githubRepos: [{ fullName: 'acme/web', id: 42 }] },
+      }),
+    );
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    const result = await adapter.checkGitHubRepos(baseAdmin);
+    expect(result.available).toBe(true);
+    expect(result.repos).toEqual([{ fullName: 'acme/web', id: 42 }]);
+    const [url] = fetchImpl.mock.calls[0] as [string];
+    expect(url).toBe('https://backboard.railway.com/graphql/v2');
+  });
+
+  test('returns available=false when GraphQL returns an empty array', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(jsonOk({ data: { githubRepos: [] } }));
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    const result = await adapter.checkGitHubRepos(baseAdmin);
+    expect(result.available).toBe(false);
+    expect(result.repos).toEqual([]);
+  });
+
+  test('fail-open: returns available=true on GraphQL error (unknown field)', async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(jsonOk({ errors: [{ message: 'Cannot query field "githubRepos"' }] }));
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    const result = await adapter.checkGitHubRepos(baseAdmin);
+    expect(result.available).toBe(true);
+  });
+
+  test('fail-open: returns available=true on HTTP 401', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      text: () => Promise.resolve('Unauthorized'),
+    });
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    const result = await adapter.checkGitHubRepos(baseAdmin);
+    expect(result.available).toBe(true);
+  });
+
+  test('fail-open: returns available=true on network error', async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+    const adapter = new RailwayAdapter({ fetchImpl: fetchImpl as never });
+    const result = await adapter.checkGitHubRepos(baseAdmin);
+    expect(result.available).toBe(true);
+  });
+});
