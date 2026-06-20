@@ -194,6 +194,26 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     catalogPath: 'packages/providers/ssh/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/railway-ssh.md',
   },
+  ssh: {
+    slug: 'ssh',
+    label: 'SSH',
+    pitch:
+      'Standalone SSH host binding — direct command execution on a registered server via ssh__exec.',
+    kind: 'host',
+    dataModel: sshDataModel,
+    tools: sshAvailableTools,
+    planes: [
+      {
+        slug: 'host',
+        label: 'Host',
+        pitch: 'A standalone SSH host — commands dispatched through ssh__exec.',
+      },
+    ],
+    setup:
+      'SSH bindings live per-project. Each binding registers a single host (address, port, user, key). Commands are dispatched through the ssh__exec tool.',
+    catalogPath: 'packages/providers/ssh/src/risk-catalog.yaml',
+    handbook: 'docs/handbook/providers/railway-ssh.md',
+  },
   'upstash-redis': {
     slug: 'upstash-redis',
     label: 'Upstash Redis',

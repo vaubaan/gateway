@@ -318,6 +318,7 @@ export function buildGateway(opts: {
     'supabase',
     'railway',
     'bash',
+    'ssh',
     'upstash-redis',
     'stripe',
   ] as Provider[]) {
