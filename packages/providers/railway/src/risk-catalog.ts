@@ -126,6 +126,7 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'public',
         persistence: 'session',
       },
+      acceptable_in_envs: ['prod'],
     },
 
     // ─── Variables ─────────────────────────────────────────────────────────
@@ -161,6 +162,7 @@ export const railwayRiskCatalog: RiskCatalog = {
         visibility: 'internal',
         persistence: 'posture',
       },
+      acceptable_in_envs: ['prod'],
     },
     {
       id: 'railway.bulk-variables-replace',

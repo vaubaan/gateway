@@ -312,6 +312,7 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
           visibility: 'internal',
           persistence: 'posture',
         },
+        acceptable_in_envs: ['prod'],
       },
       {
         id: 'railway.uncategorized-write',
@@ -356,11 +357,11 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     'railway.project[pid-456].environment[staging].service-var[MY_VAR].W',
   );
 
-  test('prod binding: only upsert-variable-prod fires, staging variant is skipped', () => {
+  test('prod binding: only upsert-variable-prod fires (env-qualified), staging variant is skipped', () => {
     const d = evaluateCall({
       executed_slices: [prodSlice],
       token_accepted_risks: new Set([
-        'railway.upsert-variable-prod',
+        'railway[prod].upsert-variable-prod',
         'railway.uncategorized-write',
       ]),
       catalog: railwayIdx,
@@ -368,21 +369,17 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     });
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
-      expect(d.risks_touched).toContain('railway.upsert-variable-prod');
+      expect(d.risks_touched).toContain('railway[prod].upsert-variable-prod');
       expect(d.risks_touched).toContain('railway.uncategorized-write');
       expect(d.risks_touched).not.toContain('railway[prod].upsert-variable-staging');
     }
   });
 
-  test('staging binding: upsert-variable-staging fires; prod variant also fires (not env-scoped)', () => {
-    // upsert-variable-prod has no acceptable_in_envs → it is NOT env-scoped
-    // and fires for any env. The token must include it. A follow-up catalog
-    // fix should add acceptable_in_envs: ['prod'] to the -prod variant.
+  test('staging binding: only upsert-variable-staging fires, prod variant is skipped', () => {
     const d = evaluateCall({
       executed_slices: [stagingSlice],
       token_accepted_risks: new Set([
         'railway[staging].upsert-variable-staging',
-        'railway.upsert-variable-prod',
         'railway.uncategorized-write',
       ]),
       catalog: railwayIdx,
@@ -391,7 +388,8 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     expect(d.outcome).toBe('allowed');
     if (d.outcome === 'allowed') {
       expect(d.risks_touched).toContain('railway[staging].upsert-variable-staging');
-      expect(d.risks_touched).toContain('railway.upsert-variable-prod');
+      expect(d.risks_touched).not.toContain('railway.upsert-variable-prod');
+      expect(d.risks_touched).not.toContain('railway[staging].upsert-variable-prod');
       expect(d.risks_touched).toContain('railway.uncategorized-write');
     }
   });
@@ -405,7 +403,7 @@ describe('evaluateCall — acceptable_in_envs runtime filter', () => {
     });
     expect(d.outcome).toBe('denied');
     if (d.outcome === 'denied') {
-      expect(d.missing_risks).toContain('railway.upsert-variable-prod');
+      expect(d.missing_risks).toContain('railway[prod].upsert-variable-prod');
       expect(d.missing_risks).not.toContain('railway[prod].upsert-variable-staging');
     }
   });
