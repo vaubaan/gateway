@@ -20,6 +20,7 @@ import { supabaseAvailableTools } from '@vaubaan/providers-supabase';
 import { railwayAvailableTools } from '@vaubaan/providers-railway';
 import { sshAvailableTools } from '@vaubaan/providers-ssh';
 import { upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
+import { stripeAvailableTools } from '@vaubaan/providers-stripe';
 import { buildGateway } from '@/lib/gateway/build';
 
 export const runtime = 'nodejs';
@@ -38,6 +39,7 @@ const PROVIDERS: readonly ProviderEntry[] = [
   { slug: 'railway', displayName: 'Railway', tools: railwayAvailableTools },
   { slug: 'ssh', displayName: 'SSH', tools: sshAvailableTools },
   { slug: 'upstash-redis', displayName: 'Upstash Redis', tools: upstashRedisAvailableTools },
+  { slug: 'stripe', displayName: 'Stripe', tools: stripeAvailableTools },
 ];
 
 interface BindingDescriptor {

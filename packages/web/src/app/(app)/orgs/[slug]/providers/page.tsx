@@ -1,7 +1,6 @@
 import { LocalDate } from '@/components/LocalDate';
 import Link from 'next/link';
 import { notFound, redirect } from 'next/navigation';
-import { type Provider } from '@vaubaan/shared';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState, type ProviderState } from '@/lib/providers/state';
 import { ProviderDisconnectButton } from '../provider-disconnect';
@@ -19,15 +18,18 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// bash is per-project, not org-level — shown as a static info card below.
-const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
+// bash / ssh are per-project, not org-level — shown as static info cards below.
+const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway', 'stripe'] as const;
 type OrgProvider = (typeof ORG_PROVIDERS)[number];
+
+const PASTE_TOKEN_PROVIDERS: ReadonlySet<string> = new Set(['stripe']);
 
 const PROVIDER_LABEL: Record<OrgProvider, string> = {
   github: 'GitHub',
   vercel: 'Vercel',
   supabase: 'Supabase',
   railway: 'Railway',
+  stripe: 'Stripe',
 };
 
 const PROVIDER_DESCRIPTION: Record<OrgProvider, string> = {
@@ -38,6 +40,8 @@ const PROVIDER_DESCRIPTION: Record<OrgProvider, string> = {
   supabase:
     'Paste a Supabase Management API personal access token (PAT) to allow Vaubaan to enumerate projects.',
   railway: 'Authorize the Vaubaan Gateway Railway app to manage the projects in your workspace.',
+  stripe:
+    'Paste a Stripe restricted API key (sk_test_* / sk_live_* / rk_*) to expose billing tools.',
 };
 
 export default async function OrgPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -54,7 +58,24 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
   if (!org) notFound();
 
   const states = await Promise.all(
-    ORG_PROVIDERS.map((p) => loadProviderState(org.id, p as Provider)),
+    ORG_PROVIDERS.map(async (p): Promise<ProviderState> => {
+      try {
+        return await loadProviderState(org.id, p);
+      } catch {
+        return {
+          provider: p,
+          status: 'connected',
+          connectedAt: null,
+          connectedByEmail: null,
+          serviceUrl: null,
+          account: null,
+          scopes: [],
+          resources: [],
+          error:
+            'Could not load provider state (token decryption failed — wrong ENCRYPTION_MASTER_KEY?).',
+        };
+      }
+    }),
   );
 
   return (
@@ -101,6 +122,28 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
             </p>
           </CardBody>
         </Card>
+        <Card>
+          <CardHeader>
+            <Row gap="var(--space-3)">
+              <CardTitle>SSH</CardTitle>
+              <Badge tone="neutral">per-project</Badge>
+            </Row>
+            <Row gap="var(--space-2)">
+              <Link href={`/orgs/${org.slug}/providers/ssh`} style={{ textDecoration: 'none' }}>
+                <Button size="sm" variant="secondary">
+                  Info
+                </Button>
+              </Link>
+            </Row>
+          </CardHeader>
+          <CardBody>
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+              A standalone SSH host binding — direct command execution via <Code>ssh__exec</Code>.
+              Each binding registers a single host (address, port, user, key). Add one from the
+              project&apos;s <strong>+ Bind a resource</strong> form.
+            </p>
+          </CardBody>
+        </Card>
       </div>
     </main>
   );
@@ -132,12 +175,16 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
           {connected && (
             <ProviderDisconnectButton
               orgSlug={orgSlug}
-              provider={state.provider as 'github' | 'vercel' | 'supabase' | 'railway'}
+              provider={state.provider as 'github' | 'vercel' | 'supabase' | 'railway' | 'stripe'}
             />
           )}
           {!connected && (
             <a
-              href={`/api/integrations/${state.provider}/connect?org=${orgSlug}`}
+              href={
+                PASTE_TOKEN_PROVIDERS.has(state.provider)
+                  ? `/orgs/${orgSlug}/providers/${state.provider}/connect`
+                  : `/api/integrations/${state.provider}/connect?org=${orgSlug}`
+              }
               style={{ textDecoration: 'none' }}
             >
               <Button size="sm" variant="primary">
