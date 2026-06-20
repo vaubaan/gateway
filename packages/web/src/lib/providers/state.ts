@@ -601,60 +601,6 @@ async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
   return base;
 }
 
-async function loadStripeState(admin: AdminRow): Promise<ProviderState> {
-  const base: ProviderState = {
-    provider: 'stripe',
-    status: admin.status,
-    connectedAt: admin.connected_at,
-    connectedByEmail: await loadGranterEmail(admin.connected_by_user_id),
-    serviceUrl: 'https://dashboard.stripe.com/apikeys',
-    account: null,
-    scopes: [],
-    resources: [],
-    error: null,
-  };
-  const encBytes = decodeBytea(admin.access_token_encrypted);
-  if (!encBytes) {
-    base.error = 'Token missing — reconnect required.';
-    return base;
-  }
-  const token = await decryptProviderSecret(admin.organization_id, encBytes);
-  const isTest = token.includes('_test_');
-  base.scopes.push(
-    isTest ? 'Test mode (sk_test_* / rk_test_*)' : 'Live mode (sk_live_* / rk_live_*)',
-  );
-
-  try {
-    const res = await fetch('https://api.stripe.com/v1/account', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-      },
-    });
-    if (res.ok) {
-      const data = (await res.json()) as {
-        id?: string;
-        business_profile?: { name?: string };
-        settings?: { dashboard?: { display_name?: string } };
-      };
-      base.account =
-        data.settings?.dashboard?.display_name ?? data.business_profile?.name ?? data.id ?? null;
-      if (data.id) {
-        base.resources.push({
-          ref: data.id,
-          name: data.id,
-          url: `https://dashboard.stripe.com/${isTest ? 'test/' : ''}`,
-        });
-      }
-    } else {
-      base.error = await readErrorSnippet(res);
-    }
-  } catch (e) {
-    base.error = e instanceof Error ? e.message : String(e);
-  }
-  return base;
-}
-
 export async function loadProviderState(orgId: string, provider: Provider): Promise<ProviderState> {
   const svc = getSupabaseServiceClient();
   const { data: admin } = await svc
@@ -683,6 +629,5 @@ export async function loadProviderState(orgId: string, provider: Provider): Prom
   if (provider === 'github') return loadGitHubState(admin);
   if (provider === 'vercel') return loadVercelState(admin);
   if (provider === 'railway') return loadRailwayState(admin);
-  if (provider === 'stripe') return loadStripeState(admin);
   return loadSupabaseState(admin);
 }

@@ -8,7 +8,7 @@ export function ProviderDisconnectButton({
   provider,
 }: {
   orgSlug: string;
-  provider: 'github' | 'vercel' | 'supabase' | 'railway' | 'stripe';
+  provider: 'github' | 'vercel' | 'supabase' | 'railway';
 }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);

@@ -18,18 +18,15 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// bash / ssh are per-project, not org-level — shown as static info cards below.
-const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway', 'stripe'] as const;
+// bash / ssh / stripe are per-project, not org-level — shown as static info cards below.
+const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
 type OrgProvider = (typeof ORG_PROVIDERS)[number];
-
-const PASTE_TOKEN_PROVIDERS: ReadonlySet<string> = new Set(['stripe']);
 
 const PROVIDER_LABEL: Record<OrgProvider, string> = {
   github: 'GitHub',
   vercel: 'Vercel',
   supabase: 'Supabase',
   railway: 'Railway',
-  stripe: 'Stripe',
 };
 
 const PROVIDER_DESCRIPTION: Record<OrgProvider, string> = {
@@ -40,8 +37,6 @@ const PROVIDER_DESCRIPTION: Record<OrgProvider, string> = {
   supabase:
     'Paste a Supabase Management API personal access token (PAT) to allow Vaubaan to enumerate projects.',
   railway: 'Authorize the Vaubaan Gateway Railway app to manage the projects in your workspace.',
-  stripe:
-    'Paste a Stripe restricted API key (sk_test_* / sk_live_* / rk_*) to expose billing tools.',
 };
 
 export default async function OrgPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -144,6 +139,37 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
             </p>
           </CardBody>
         </Card>
+        <Card>
+          <CardHeader>
+            <Row gap="var(--space-3)">
+              <CardTitle>Stripe</CardTitle>
+              <Badge tone="neutral">per-project</Badge>
+            </Row>
+            <Row gap="var(--space-2)">
+              <Link href={`/orgs/${org.slug}/providers/stripe`} style={{ textDecoration: 'none' }}>
+                <Button size="sm" variant="secondary">
+                  Info
+                </Button>
+              </Link>
+            </Row>
+          </CardHeader>
+          <CardBody>
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+              Each project gets its own Stripe API keys (test + live). Paste project-scoped
+              restricted keys (<Code>sk_test_*</Code> / <Code>sk_live_*</Code> / <Code>rk_*</Code>)
+              from the{' '}
+              <a
+                href="https://dashboard.stripe.com/apikeys"
+                target="_blank"
+                rel="noreferrer noopener"
+                style={{ color: 'var(--accent-fg)' }}
+              >
+                Stripe Dashboard
+              </a>
+              . Add one from the project&apos;s <strong>+ Bind a resource</strong> form.
+            </p>
+          </CardBody>
+        </Card>
       </div>
     </main>
   );
@@ -175,16 +201,12 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
           {connected && (
             <ProviderDisconnectButton
               orgSlug={orgSlug}
-              provider={state.provider as 'github' | 'vercel' | 'supabase' | 'railway' | 'stripe'}
+              provider={state.provider as 'github' | 'vercel' | 'supabase' | 'railway'}
             />
           )}
           {!connected && (
             <a
-              href={
-                PASTE_TOKEN_PROVIDERS.has(state.provider)
-                  ? `/orgs/${orgSlug}/providers/${state.provider}/connect`
-                  : `/api/integrations/${state.provider}/connect?org=${orgSlug}`
-              }
+              href={`/api/integrations/${state.provider}/connect?org=${orgSlug}`}
               style={{ textDecoration: 'none' }}
             >
               <Button size="sm" variant="primary">

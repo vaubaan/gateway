@@ -101,7 +101,9 @@ export function BindingForm({
   // detail page for editing).
   const isBash = !isEdit && provider === 'bash';
   const isSsh = !isEdit && provider === 'ssh';
-  const supportsBindingSlug = !isBash && !isSsh && PROVIDERS_WITH_BINDING_SLUG.has(provider);
+  const isStripe = !isEdit && provider === 'stripe';
+  const supportsBindingSlug =
+    !isBash && !isSsh && !isStripe && PROVIDERS_WITH_BINDING_SLUG.has(provider);
 
   const current = offered.find((o) => o.provider === provider) ?? null;
   const [ref, setRef] = useState<string>(initial?.resource_ref ?? current?.resources[0]?.ref ?? '');
@@ -134,6 +136,11 @@ export function BindingForm({
   const [pastePem, setPastePem] = useState('');
   const [publicKey, setPublicKey] = useState('');
 
+  // Stripe binding fields (create-mode only).
+  const [stripeAccountId, setStripeAccountId] = useState('');
+  const [stripeTestKey, setStripeTestKey] = useState('');
+  const [stripeLiveKey, setStripeLiveKey] = useState('');
+
   // GitHub-only : narrows the fan-out of an env-less grant (spec §5.1 #4).
   // Default = exclude 'main', the dominant SaaS pattern (main = canonical /
   // protected). Operator picks 'protected' for repos that already declare a
@@ -148,7 +155,7 @@ export function BindingForm({
 
   function onProviderChange(p: Provider) {
     setProvider(p);
-    if (p !== 'bash' && p !== 'ssh') {
+    if (p !== 'bash' && p !== 'ssh' && p !== 'stripe') {
       const next = offered.find((o) => o.provider === p);
       setRef(next?.resources[0]?.ref ?? '');
       if (!slugTouched) {
@@ -177,7 +184,9 @@ export function BindingForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (isSsh) {
+    if (isStripe) {
+      await submitStripe();
+    } else if (isSsh) {
       await submitSsh();
     } else if (isBash) {
       await submitBash();
@@ -238,6 +247,39 @@ export function BindingForm({
         router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
         router.refresh();
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setBusy(false);
+    }
+  }
+
+  async function submitStripe() {
+    if (!stripeAccountId) {
+      setError('Stripe account ID is required.');
+      return;
+    }
+    if (!stripeTestKey && !stripeLiveKey) {
+      setError('At least one API key (test or live) is required.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/v1/stripe-bindings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          orgSlug,
+          projectSlug,
+          account_id: stripeAccountId,
+          test_key: stripeTestKey || undefined,
+          live_key: stripeLiveKey || undefined,
+        }),
+      });
+      const json = (await res.json()) as { binding?: unknown; error?: string };
+      if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+      router.push(`/orgs/${orgSlug}/projects/${projectSlug}`);
+      router.refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setBusy(false);
@@ -371,11 +413,13 @@ export function BindingForm({
 
   const cardTitle = isEdit
     ? `Edit ${provider} binding`
-    : isSsh
-      ? 'Add SSH host binding'
-      : isBash
-        ? 'New Bash binding (script identity ; add hosts after)'
-        : 'Pick a resource from a connected provider';
+    : isStripe
+      ? 'Add Stripe API keys'
+      : isSsh
+        ? 'Add SSH host binding'
+        : isBash
+          ? 'New Bash binding (script identity ; add hosts after)'
+          : 'Pick a resource from a connected provider';
 
   return (
     <Stack gap="var(--space-4)">
@@ -432,12 +476,22 @@ export function BindingForm({
                       {o.resources.length === 0 ? ' (no resources)' : ''}
                     </option>
                   ))}
+                  {!isEdit && <option value="stripe">Stripe</option>}
                   {!isEdit && <option value="ssh">SSH</option>}
                   {!isEdit && <option value="bash">Bash (SSH transport)</option>}
                 </Select>
               </Field>
 
-              {isSsh ? (
+              {isStripe ? (
+                <StripeFields
+                  accountId={stripeAccountId}
+                  setAccountId={setStripeAccountId}
+                  testKey={stripeTestKey}
+                  setTestKey={setStripeTestKey}
+                  liveKey={stripeLiveKey}
+                  setLiveKey={setStripeLiveKey}
+                />
+              ) : isSsh ? (
                 <SshFields
                   hostSlug={hostSlug}
                   setHostSlug={setHostSlug}
@@ -520,18 +574,20 @@ export function BindingForm({
               <div>
                 <Button
                   type="submit"
-                  disabled={busy || (!isBash && !isSsh && !ref)}
+                  disabled={busy || (!isBash && !isSsh && !isStripe && !ref)}
                   variant="primary"
                 >
                   {busy
-                    ? 'Saving…'
+                    ? 'Validating…'
                     : isEdit
                       ? 'Save changes'
-                      : isSsh
-                        ? 'Save SSH binding'
-                        : isBash
-                          ? 'Save bash binding'
-                          : 'Save binding'}
+                      : isStripe
+                        ? 'Save Stripe binding'
+                        : isSsh
+                          ? 'Save SSH binding'
+                          : isBash
+                            ? 'Save bash binding'
+                            : 'Save binding'}
                 </Button>
               </div>
             </div>
@@ -539,6 +595,107 @@ export function BindingForm({
         </Card>
       </form>
     </Stack>
+  );
+}
+
+function StripeFields({
+  accountId,
+  setAccountId,
+  testKey,
+  setTestKey,
+  liveKey,
+  setLiveKey,
+}: {
+  accountId: string;
+  setAccountId: (v: string) => void;
+  testKey: string;
+  setTestKey: (v: string) => void;
+  liveKey: string;
+  setLiveKey: (v: string) => void;
+}) {
+  const testUrl = accountId ? `https://dashboard.stripe.com/${accountId}/test/apikeys` : null;
+  const liveUrl = accountId ? `https://dashboard.stripe.com/${accountId}/apikeys` : null;
+  return (
+    <>
+      <Field
+        label="Stripe Account ID"
+        hint="Find it in your Stripe Dashboard → Settings → Business settings → Account details."
+      >
+        <Input
+          placeholder="acct_1TkUBa…"
+          value={accountId}
+          onChange={(e) => setAccountId(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+          pattern="^acct_.+"
+          required
+        />
+      </Field>
+
+      {accountId && /^acct_/.test(accountId) && (
+        <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
+          Find your project-scoped API keys:{' '}
+          <a
+            href={testUrl!}
+            target="_blank"
+            rel="noreferrer noopener"
+            style={{ color: 'var(--accent-fg)' }}
+          >
+            Test keys
+          </a>
+          {' · '}
+          <a
+            href={liveUrl!}
+            target="_blank"
+            rel="noreferrer noopener"
+            style={{ color: 'var(--accent-fg)' }}
+          >
+            Live keys
+          </a>
+        </p>
+      )}
+
+      <Field
+        label="Test API key"
+        hint={
+          <>
+            <Code>sk_test_*</Code> or <Code>rk_test_*</Code> — optional if you only use live mode.
+          </>
+        }
+      >
+        <Input
+          type="password"
+          placeholder="sk_test_…"
+          value={testKey}
+          onChange={(e) => setTestKey(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </Field>
+
+      <Field
+        label="Live API key"
+        hint={
+          <>
+            <Code>sk_live_*</Code> or <Code>rk_live_*</Code> — optional if you only use test mode.
+          </>
+        }
+      >
+        <Input
+          type="password"
+          placeholder="sk_live_…"
+          value={liveKey}
+          onChange={(e) => setLiveKey(e.target.value)}
+          autoComplete="off"
+          spellCheck={false}
+        />
+      </Field>
+
+      <p style={{ color: 'var(--text-muted)', fontSize: 'var(--text-sm)', margin: 0 }}>
+        Keys are validated against Stripe, then stored encrypted. Use{' '}
+        <strong>restricted keys</strong> with the minimum permissions your workflows need.
+      </p>
+    </>
   );
 }
 
