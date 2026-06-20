@@ -81,6 +81,18 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
     const env = bindings ? resolveSliceBindingEnv(slice, bindings) : null;
     for (const baseId of risksTouchedBy(slice, catalog)) {
       const entry = findRiskEntry(catalog, baseId);
+      // When bindings are present, skip risks whose acceptable_in_envs
+      // excludes this binding's env. Without this, overlapping patterns
+      // (e.g. upsert-variable-staging and upsert-variable-prod sharing
+      // the same matches pattern) produce phantom qualified IDs like
+      // `railway[prod].upsert-variable-staging` that no token can ever
+      // contain. The guard is skipped when bindings are absent (test/legacy
+      // mode where env qualification is disabled entirely).
+      if (bindings && entry?.acceptable_in_envs && entry.acceptable_in_envs.length > 0) {
+        if (env === null || !entry.acceptable_in_envs.includes(env)) {
+          continue;
+        }
+      }
       const qualified = qualifyRiskId(baseId, env, entry);
       if (!seen.has(qualified)) {
         seen.add(qualified);

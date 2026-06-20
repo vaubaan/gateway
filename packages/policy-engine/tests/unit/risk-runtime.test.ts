@@ -277,3 +277,136 @@ describe('evaluateCall — env-qualified subset check', () => {
     expect(d.outcome).toBe('allowed');
   });
 });
+
+// ─── acceptable_in_envs runtime filter (Railway upsert-variable bug) ────────
+
+describe('evaluateCall — acceptable_in_envs runtime filter', () => {
+  const railwayCatalog: RiskCatalog = {
+    provider: 'railway',
+    risks: [
+      {
+        id: 'railway.upsert-variable-staging',
+        label: 'upsert var (non-prod)',
+        reason: 'r',
+        matches: 'railway.project[**].environment[**].service-var[**].W',
+        vector: {
+          reversibility: 'reversible',
+          blast: 'env',
+          data: 'secret',
+          cost: 'moderate',
+          visibility: 'internal',
+          persistence: 'posture',
+        },
+        acceptable_in_envs: ['staging', 'preview', 'dev'],
+      },
+      {
+        id: 'railway.upsert-variable-prod',
+        label: 'upsert var (prod)',
+        reason: 'r',
+        matches: 'railway.project[**].environment[**].service-var[**].W',
+        vector: {
+          reversibility: 'costly',
+          blast: 'env',
+          data: 'secret',
+          cost: 'moderate',
+          visibility: 'internal',
+          persistence: 'posture',
+        },
+      },
+      {
+        id: 'railway.uncategorized-write',
+        label: 'fallback',
+        reason: 'r',
+        matches: 'railway.**.W',
+        vector: {
+          reversibility: 'costly',
+          blast: 'env',
+          data: 'data',
+          cost: 'moderate',
+          visibility: 'internal',
+          persistence: 'session',
+        },
+      },
+    ],
+  };
+  const railwayIdx = indexCatalog(railwayCatalog);
+
+  const prodBinding: ProviderBinding = {
+    id: 'b1',
+    project_id: 'p1',
+    provider: 'railway',
+    resource_ref: 'pid-123',
+    display_name: null,
+    environment: 'prod',
+    created_at: '2026-01-01',
+  };
+
+  const stagingBinding: ProviderBinding = {
+    id: 'b2',
+    project_id: 'p1',
+    provider: 'railway',
+    resource_ref: 'pid-456',
+    display_name: null,
+    environment: 'staging',
+    created_at: '2026-01-01',
+  };
+
+  const prodSlice = parseSlice('railway.project[pid-123].environment[prod].service-var[MY_VAR].W');
+  const stagingSlice = parseSlice(
+    'railway.project[pid-456].environment[staging].service-var[MY_VAR].W',
+  );
+
+  test('prod binding: only upsert-variable-prod fires, staging variant is skipped', () => {
+    const d = evaluateCall({
+      executed_slices: [prodSlice],
+      token_accepted_risks: new Set([
+        'railway.upsert-variable-prod',
+        'railway.uncategorized-write',
+      ]),
+      catalog: railwayIdx,
+      bindings: [prodBinding],
+    });
+    expect(d.outcome).toBe('allowed');
+    if (d.outcome === 'allowed') {
+      expect(d.risks_touched).toContain('railway.upsert-variable-prod');
+      expect(d.risks_touched).toContain('railway.uncategorized-write');
+      expect(d.risks_touched).not.toContain('railway[prod].upsert-variable-staging');
+    }
+  });
+
+  test('staging binding: upsert-variable-staging fires; prod variant also fires (not env-scoped)', () => {
+    // upsert-variable-prod has no acceptable_in_envs → it is NOT env-scoped
+    // and fires for any env. The token must include it. A follow-up catalog
+    // fix should add acceptable_in_envs: ['prod'] to the -prod variant.
+    const d = evaluateCall({
+      executed_slices: [stagingSlice],
+      token_accepted_risks: new Set([
+        'railway[staging].upsert-variable-staging',
+        'railway.upsert-variable-prod',
+        'railway.uncategorized-write',
+      ]),
+      catalog: railwayIdx,
+      bindings: [stagingBinding],
+    });
+    expect(d.outcome).toBe('allowed');
+    if (d.outcome === 'allowed') {
+      expect(d.risks_touched).toContain('railway[staging].upsert-variable-staging');
+      expect(d.risks_touched).toContain('railway.upsert-variable-prod');
+      expect(d.risks_touched).toContain('railway.uncategorized-write');
+    }
+  });
+
+  test('prod binding without upsert-variable-prod accepted → deny (not phantom staging)', () => {
+    const d = evaluateCall({
+      executed_slices: [prodSlice],
+      token_accepted_risks: new Set(['railway.uncategorized-write']),
+      catalog: railwayIdx,
+      bindings: [prodBinding],
+    });
+    expect(d.outcome).toBe('denied');
+    if (d.outcome === 'denied') {
+      expect(d.missing_risks).toContain('railway.upsert-variable-prod');
+      expect(d.missing_risks).not.toContain('railway[prod].upsert-variable-staging');
+    }
+  });
+});
