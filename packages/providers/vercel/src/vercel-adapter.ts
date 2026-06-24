@@ -17,7 +17,7 @@ import { executeCall, type FetchImpl } from './execute.ts';
 import { classifyVercelV4, type ClassifyResult } from './risk-classifier.ts';
 import { UPSERT_ENV_FROM_VENV } from './custom-tools.ts';
 
-const TOKEN_ENDPOINT = 'https://api.vercel.com/v1/auth/token';
+const TOKEN_ENDPOINT = 'https://api.vercel.com/login/oauth/token';
 const REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 
 export interface VercelRefreshedTokens {

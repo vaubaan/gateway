@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
 
   const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
 
-  const tokenRes = await fetch('https://api.vercel.com/v1/auth/token', {
+  const tokenRes = await fetch('https://api.vercel.com/login/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
