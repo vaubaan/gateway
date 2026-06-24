@@ -87,8 +87,8 @@ export class VercelAdapter {
     const refreshToken = new TextDecoder().decode(admin.refresh_token_encrypted);
     const res = await this.fetchImpl(TOKEN_ENDPOINT, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
         client_id: this.clientId,
         client_secret: this.clientSecret,
         grant_type: 'refresh_token',
