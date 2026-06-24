@@ -52,6 +52,8 @@ export async function GET(req: NextRequest) {
   cookieStore.set('vbn_oauth_state', state, cookieOpts);
   cookieStore.set('vbn_pkce_verifier', codeVerifier, cookieOpts);
 
+  const vercelTeam = req.nextUrl.searchParams.get('vercel_team');
+
   const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
   const authorizeUrl = new URL('https://vercel.com/oauth/authorize');
   authorizeUrl.searchParams.set('client_id', clientId);
@@ -61,5 +63,6 @@ export async function GET(req: NextRequest) {
   authorizeUrl.searchParams.set('state', state);
   authorizeUrl.searchParams.set('code_challenge', codeChallenge);
   authorizeUrl.searchParams.set('code_challenge_method', 'S256');
+  if (vercelTeam) authorizeUrl.searchParams.set('team_id', vercelTeam);
   return NextResponse.redirect(authorizeUrl.toString());
 }
