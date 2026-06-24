@@ -205,9 +205,7 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
               provider={state.provider as 'github' | 'vercel' | 'supabase' | 'railway'}
             />
           )}
-          {!connected && state.provider === 'vercel' && (
-            <VercelConnectButton orgSlug={orgSlug} />
-          )}
+          {!connected && state.provider === 'vercel' && <VercelConnectButton orgSlug={orgSlug} />}
           {!connected && state.provider !== 'vercel' && (
             <a
               href={`/api/integrations/${state.provider}/connect?org=${orgSlug}`}

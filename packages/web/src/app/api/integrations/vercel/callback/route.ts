@@ -37,7 +37,10 @@ export async function GET(req: NextRequest) {
   const fallback = new URL('/dashboard', req.url);
 
   if (!state || !code || state !== expectedState || !codeVerifier) {
-    fallback.searchParams.set('error', 'invalid OAuth state or missing PKCE verifier — please retry');
+    fallback.searchParams.set(
+      'error',
+      'invalid OAuth state or missing PKCE verifier — please retry',
+    );
     return NextResponse.redirect(fallback);
   }
 

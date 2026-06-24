@@ -66,8 +66,7 @@ export function VercelConnectButton({ orgSlug }: { orgSlug: string }) {
 export function VercelTeamIdHint() {
   return (
     <p style={{ color: 'var(--text-muted)', margin: 0 }}>
-      Paste your Vercel Team ID (<Code>team_...</Code>) to connect.
-      Find it in{' '}
+      Paste your Vercel Team ID (<Code>team_...</Code>) to connect. Find it in{' '}
       <a
         href="https://vercel.com/account"
         target="_blank"

@@ -36,10 +36,7 @@ export async function GET(req: NextRequest) {
   const state = generateState(guard.orgId);
 
   const codeVerifier = crypto.randomBytes(32).toString('base64url');
-  const codeChallenge = crypto
-    .createHash('sha256')
-    .update(codeVerifier)
-    .digest('base64url');
+  const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
 
   const cookieStore = await cookies();
   const cookieOpts = {
