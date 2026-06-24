@@ -55,8 +55,8 @@ export async function GET(req: NextRequest) {
 
   const tokenRes = await fetch('https://api.vercel.com/v1/auth/token', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
       client_id: clientId,
       client_secret: clientSecret,
       code,
