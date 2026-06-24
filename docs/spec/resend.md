@@ -244,7 +244,7 @@ provider_admins row:
 ```
 provider_bindings row:
   provider      = 'resend'
-  resource_ref  = '<resend_account_id>'   -- from GET /api-keys or account info
+  resource_ref  = '<operator-chosen-slug>' -- e.g. 'prod-email', 'staging-notif'
   environment   = 'prod' | 'staging' | NULL
   display_name  = 'Acme Prod Email'
   metadata      = {
@@ -711,6 +711,13 @@ The classifier resolves the `account` identifier from the binding's
 **Domain operations** emit :
 `resend.account[A].domain[D].W` (or `.dns-record[*].W` for verify).
 
+**Attachment denial (v1)** : before emitting any slice, the classifier
+checks `args.attachments`. If the array is non-empty, the classifier
+short-circuits with `{ denied: 'attachments not supported in v1' }`.
+This ensures the denial is audited as a DENY in the trail (not a runtime
+error) and the agent gets an actionable message. Precedent : Gmail's
+classifier inspects recipients beyond pure slice emission.
+
 ### 7.2 Multi-slice examples
 
 ```
@@ -833,45 +840,36 @@ has `environment = NULL` and risks are unqualified
 | **`send_email` with attachments** | Attachments add a data-exfiltration surface (binary blobs). Blocked at v1 — the classifier rejects calls with non-empty `attachments` array. | Phase 2 (with `bytes_per_call_max` cap) |
 | **Multi-recipient to-zone per-address** | At v1, zone is worst-case across all recipients. Future: emit per-recipient slices for fine-grained gating. | Phase 3        |
 
-## 11. Questions ouvertes
+## 11. Questions résolues
 
 **Q1 — `recipient-count` as a separate risk vs folded into to-zone ?**
-Current design : `recipient-count[batch]` is a separate risk
-(`resend.send-batch`) so the operator explicitly opts into bulk sending.
-Alternative : fold it into the to-zone risks (e.g.
-`resend.send-email-internal-batch`). The separate approach is more
-composable (batch is orthogonal to zone) but produces more risk entries.
-To validate.
+**Resolved : keep separate.** Composability wins — batch is orthogonal
+to zone. 3 zones + 1 batch = 4 entries vs 3×3 = 9 if folded.
 
 **Q2 — Should `broadcast-send` require `send-email-external-unbounded` too ?**
-Current design : `broadcast-send` is self-contained (its own risk entry).
-The broadcast audience composition is unknown at classify time (the
-classifier sees only the broadcast ID, not the contact list). Requiring
-the external-unbounded risk as well would be conservative but forces
-the operator to accept external sends even for internal-only
-newsletters. To validate.
+**Resolved : no, self-contained.** The classifier cannot determine
+audience composition at classify time (sees only broadcast ID). And
+`broadcast-send` already carries the highest severity vector. Requiring
+`external-unbounded` would block legitimate internal newsletters.
 
 **Q3 — Account ID as `resource_ref` — how to discover it ?**
-Resend does not expose a clean `GET /account` endpoint returning an
-account ID. The `resource_ref` might need to be a user-chosen slug or
-the first domain name. Alternatively, use the API key prefix as the
-identifier. To validate after integration testing.
+**Resolved : operator-chosen slug** (e.g. `prod-email`, `staging-notif`).
+Resend has no stable `GET /account` endpoint. The slug is chosen at
+binding creation and validated by a successful `GET /domains` call.
+Stable across key rotations.
 
 **Q4 — `vector_overrides` for staging vs prod ?**
-Several risks (especially sends) have a fundamentally different profile
-on staging (low cost, internal visibility, reversible-ish via test
-accounts) vs prod (real deliveries, cost, public visibility). Should we
-use `vector_overrides` (per the risk-entry-per-env-vector spec) or keep
-the uniform vector with `acceptable_in_envs` as the only differentiator ?
+**Resolved : `acceptable_in_envs` only for v1.** Sufficient for the
+current gating needs. `vector_overrides` deferred to v2 if demand
+emerges.
 
 **Q5 — Attachment blocking at classifier vs at adapter level ?**
-Current design says the classifier rejects calls with attachments. Should
-this be a classifier-level denial (returns `{ denied: 'attachments not
-supported in v1' }`) or a pre-execute check in the adapter ? Classifier-
-level denial is cleaner (audited as deny, actionable message) but
-requires the classifier to inspect args beyond its slice-emission duty.
+**Resolved : classifier-level denial.** Returns
+`{ denied: 'attachments not supported in v1' }` before emitting slices.
+Audited as DENY in trail, actionable message for the agent. Precedent :
+Gmail classifier inspects recipients beyond pure slice emission.
 
 ---
 
-_Date : 2026-06-23. Author : rpelissier + Claude (drafting). Status :
-draft for review._
+_Date : 2026-06-24. Author : rpelissier + Claude. Status :
+reviewed — questions resolved, ready for implementation._
