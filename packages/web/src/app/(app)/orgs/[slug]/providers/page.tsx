@@ -34,7 +34,7 @@ const PROVIDER_DESCRIPTION: Record<OrgProvider, string> = {
   github:
     'Install the Vaubaan Gateway GitHub App on the org or user account that owns the repos you want to expose.',
   vercel:
-    'Install the Vaubaan Marketplace Integration on the team that owns the projects you want to expose.',
+    'Paste a Vercel Personal Access Token (PAT) scoped to the team that owns the projects you want to expose.',
   supabase:
     'Paste a Supabase Management API personal access token (PAT) to allow Vaubaan to enumerate projects.',
   railway: 'Authorize the Vaubaan Gateway Railway app to manage the projects in your workspace.',

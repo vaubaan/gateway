@@ -292,26 +292,8 @@ export function buildGateway(opts: {
     loadProviderAdmin,
   };
 
-  // Vercel: Marketplace Integration OAuth with refresh.
-  const vercelAdapter = new VercelAdapter({
-    venvStore,
-    clientId: process.env.VERCEL_APP_CLIENT_ID,
-    clientSecret: process.env.VERCEL_APP_CLIENT_SECRET,
-    persistRefresh: async (admin, tokens) => {
-      await supabase
-        .from('provider_admins')
-        .update({
-          access_token_encrypted: encodeByteaHexRaw(
-            await encryptProviderSecret(admin.organization_id, tokens.accessToken),
-          ),
-          refresh_token_encrypted: encodeByteaHexRaw(
-            await encryptProviderSecret(admin.organization_id, tokens.refreshToken),
-          ),
-          expires_at: tokens.expiresAt.toISOString(),
-        })
-        .eq('id', admin.id);
-    },
-  });
+  // Vercel: PAT (Personal Access Token) scoped to a team.
+  const vercelAdapter = new VercelAdapter({ venvStore });
   upstreamByProvider.vercel = {
     provider: 'vercel',
     availableTools: vercelAvailableTools,

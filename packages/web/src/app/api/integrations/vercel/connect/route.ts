@@ -1,66 +1,75 @@
 /**
- * GET /api/integrations/vercel/connect?org=<slug>
+ * POST /api/integrations/vercel/connect
  *
- * Starts the Vercel Connected App OAuth flow. Redirects the user to
- * `https://vercel.com/oauth/authorize` which shows a consent screen,
- * then redirects back to /api/integrations/vercel/callback with `?code=...&state=...`.
+ * Stores a Vercel Personal Access Token (PAT) for the organization.
+ * The PAT must be scoped to the target team. We validate it by calling
+ * /v2/teams/:id before persisting.
  *
- * The Connected App token acts on behalf of the user (full API access),
- * unlike Marketplace Integration tokens which are scoped to integration-level
- * permissions and lack access to endpoints like runtime logs.
+ * Body: { org: string (slug), token: string, teamId: string }
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-import crypto from 'node:crypto';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
-import { generateState } from '@/lib/oauth/state';
+import { getSupabaseServer, getSupabaseServiceClient } from '@/lib/supabase/server';
+import { encodeByteaHexRaw } from '@/lib/providers/bytea';
+import { encryptProviderSecret } from '@/lib/crypto';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET(req: NextRequest) {
-  const slug = req.nextUrl.searchParams.get('org');
-  if (!slug) return NextResponse.json({ error: 'org query param required' }, { status: 400 });
+export async function POST(req: NextRequest) {
+  const body = (await req.json()) as { org?: string; token?: string; teamId?: string };
+  const { org: slug, token, teamId } = body;
+
+  if (!slug || !token || !teamId) {
+    return NextResponse.json({ error: 'org, token, and teamId are required' }, { status: 400 });
+  }
 
   const guard = await requireOrgMember(slug);
   if (!guard.ok) return guard.response;
 
-  const clientId = process.env.VERCEL_APP_CLIENT_ID;
-  if (!clientId) {
-    return NextResponse.json(
-      { error: 'server misconfigured: VERCEL_APP_CLIENT_ID unset' },
-      { status: 503 },
-    );
+  const auth = await getSupabaseServer();
+  const { data: userData } = await auth.auth.getUser();
+  if (!userData.user) {
+    return NextResponse.json({ error: 'not authenticated' }, { status: 401 });
   }
 
-  const state = generateState(guard.orgId);
+  // Validate the token + team by calling the Vercel API.
+  const teamRes = await fetch(`https://api.vercel.com/v2/teams/${encodeURIComponent(teamId)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!teamRes.ok) {
+    const detail = (await teamRes.text()).slice(0, 200);
+    return NextResponse.json(
+      {
+        error: `Vercel API rejected the token for team '${teamId}' (${teamRes.status}): ${detail}`,
+      },
+      { status: 400 },
+    );
+  }
+  const teamJson = (await teamRes.json()) as { name?: string; slug?: string };
 
-  const codeVerifier = crypto.randomBytes(32).toString('base64url');
-  const codeChallenge = crypto.createHash('sha256').update(codeVerifier).digest('base64url');
+  const svc = getSupabaseServiceClient();
 
-  const cookieStore = await cookies();
-  const cookieOpts = {
-    httpOnly: true,
-    sameSite: 'lax' as const,
-    secure: process.env.NODE_ENV === 'production',
-    maxAge: 300,
-    path: '/',
-  };
-  const vercelTeam = req.nextUrl.searchParams.get('vercel_team');
+  const { error: insertErr } = await svc.from('provider_admins').upsert(
+    {
+      organization_id: guard.orgId,
+      provider: 'vercel',
+      status: 'connected',
+      team_id: teamId,
+      access_token_encrypted: encodeByteaHexRaw(await encryptProviderSecret(guard.orgId, token)),
+      refresh_token_encrypted: null,
+      expires_at: null,
+      connected_by_user_id: userData.user.id,
+      connected_at: new Date().toISOString(),
+    },
+    { onConflict: 'organization_id,provider' },
+  );
+  if (insertErr) {
+    return NextResponse.json({ error: `persist failed: ${insertErr.message}` }, { status: 500 });
+  }
 
-  cookieStore.set('vbn_oauth_state', state, cookieOpts);
-  cookieStore.set('vbn_pkce_verifier', codeVerifier, cookieOpts);
-  if (vercelTeam) cookieStore.set('vbn_vercel_team', vercelTeam, cookieOpts);
-
-  const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
-  const authorizeUrl = new URL('https://vercel.com/oauth/authorize');
-  authorizeUrl.searchParams.set('client_id', clientId);
-  authorizeUrl.searchParams.set('redirect_uri', redirectUri);
-  authorizeUrl.searchParams.set('response_type', 'code');
-  authorizeUrl.searchParams.set('scope', 'openid offline_access');
-  authorizeUrl.searchParams.set('state', state);
-  authorizeUrl.searchParams.set('code_challenge', codeChallenge);
-  authorizeUrl.searchParams.set('code_challenge_method', 'S256');
-  if (vercelTeam) authorizeUrl.searchParams.set('team_id', vercelTeam);
-  return NextResponse.redirect(authorizeUrl.toString());
+  return NextResponse.json({
+    ok: true,
+    teamName: teamJson.name ?? teamJson.slug ?? teamId,
+  });
 }
