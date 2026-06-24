@@ -1,9 +1,10 @@
 /**
  * GET /api/integrations/vercel/callback?code=...&state=...&teamId=...&configurationId=...
  *
- * Vercel Integration callback. Exchanges the install `code` for a long-lived
- * `access_token`, then upserts the provider_admins row with `team_id` and
- * the encrypted token (app-level libsodium AEAD per-org encryption —
+ * Vercel Marketplace Integration callback. Exchanges the install `code` for an
+ * `access_token` + `refresh_token` via the Marketplace API POST /v1/auth/token,
+ * then upserts the provider_admins row with `team_id` and the encrypted tokens
+ * (app-level libsodium AEAD per-org encryption —
  * see docs/decisions/per-org-encryption-app-level.md).
  */
 
@@ -52,7 +53,7 @@ export async function GET(req: NextRequest) {
 
   const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
 
-  const tokenRes = await fetch('https://api.vercel.com/v2/oauth/access_token', {
+  const tokenRes = await fetch('https://api.vercel.com/v1/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -60,6 +61,7 @@ export async function GET(req: NextRequest) {
       client_secret: clientSecret,
       code,
       redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
     }),
   });
   if (!tokenRes.ok) {
@@ -70,7 +72,13 @@ export async function GET(req: NextRequest) {
     );
     return NextResponse.redirect(fallback);
   }
-  const tokenJson = (await tokenRes.json()) as { access_token: string; team_id?: string };
+  const tokenJson = (await tokenRes.json()) as {
+    access_token: string;
+    refresh_token?: string;
+    token_type?: string;
+    team_id?: string;
+    expires_in?: number;
+  };
 
   const svc = getSupabaseServiceClient();
   const { data: org } = await svc
@@ -84,6 +92,10 @@ export async function GET(req: NextRequest) {
   }
   const redirect = new URL(`/orgs/${org.slug}/providers`, req.url);
 
+  const expiresAt = tokenJson.expires_in
+    ? new Date(Date.now() + tokenJson.expires_in * 1000).toISOString()
+    : null;
+
   const { error: insertErr } = await svc.from('provider_admins').upsert(
     {
       organization_id: orgId,
@@ -93,6 +105,10 @@ export async function GET(req: NextRequest) {
       access_token_encrypted: encodeByteaHexRaw(
         await encryptProviderSecret(orgId, tokenJson.access_token),
       ),
+      refresh_token_encrypted: tokenJson.refresh_token
+        ? encodeByteaHexRaw(await encryptProviderSecret(orgId, tokenJson.refresh_token))
+        : null,
+      expires_at: expiresAt,
       connected_by_user_id: userData.user.id,
       connected_at: new Date().toISOString(),
     },

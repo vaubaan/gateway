@@ -291,8 +291,26 @@ export function buildGateway(opts: {
     loadProviderAdmin,
   };
 
-  // Vercel: paste-token mode (team token from .env.test or per-customer).
-  const vercelAdapter = new VercelAdapter({ venvStore });
+  // Vercel: Marketplace Integration OAuth with refresh.
+  const vercelAdapter = new VercelAdapter({
+    venvStore,
+    clientId: process.env.VERCEL_APP_CLIENT_ID,
+    clientSecret: process.env.VERCEL_APP_CLIENT_SECRET,
+    persistRefresh: async (admin, tokens) => {
+      await supabase
+        .from('provider_admins')
+        .update({
+          access_token_encrypted: encodeByteaHexRaw(
+            await encryptProviderSecret(admin.organization_id, tokens.accessToken),
+          ),
+          refresh_token_encrypted: encodeByteaHexRaw(
+            await encryptProviderSecret(admin.organization_id, tokens.refreshToken),
+          ),
+          expires_at: tokens.expiresAt.toISOString(),
+        })
+        .eq('id', admin.id);
+    },
+  });
   upstreamByProvider.vercel = {
     provider: 'vercel',
     availableTools: vercelAvailableTools,

@@ -1,4 +1,5 @@
 export { VercelAdapter } from './vercel-adapter.ts';
+export type { VercelRefreshedTokens } from './vercel-adapter.ts';
 export { availableTools as vercelAvailableTools } from './tools.ts';
 
 // v4 risk-based exports
