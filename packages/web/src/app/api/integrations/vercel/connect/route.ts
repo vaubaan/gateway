@@ -12,6 +12,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import crypto from 'node:crypto';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 import { generateState } from '@/lib/oauth/state';
 
@@ -33,14 +34,23 @@ export async function GET(req: NextRequest) {
   }
 
   const state = generateState(guard.orgId);
+
+  const codeVerifier = crypto.randomBytes(32).toString('base64url');
+  const codeChallenge = crypto
+    .createHash('sha256')
+    .update(codeVerifier)
+    .digest('base64url');
+
   const cookieStore = await cookies();
-  cookieStore.set('vbn_oauth_state', state, {
+  const cookieOpts = {
     httpOnly: true,
-    sameSite: 'lax',
+    sameSite: 'lax' as const,
     secure: process.env.NODE_ENV === 'production',
     maxAge: 300,
     path: '/',
-  });
+  };
+  cookieStore.set('vbn_oauth_state', state, cookieOpts);
+  cookieStore.set('vbn_pkce_verifier', codeVerifier, cookieOpts);
 
   const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
   const authorizeUrl = new URL('https://vercel.com/oauth/authorize');
@@ -49,5 +59,7 @@ export async function GET(req: NextRequest) {
   authorizeUrl.searchParams.set('response_type', 'code');
   authorizeUrl.searchParams.set('scope', 'openid offline_access');
   authorizeUrl.searchParams.set('state', state);
+  authorizeUrl.searchParams.set('code_challenge', codeChallenge);
+  authorizeUrl.searchParams.set('code_challenge_method', 'S256');
   return NextResponse.redirect(authorizeUrl.toString());
 }

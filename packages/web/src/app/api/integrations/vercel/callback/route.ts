@@ -28,12 +28,14 @@ export async function GET(req: NextRequest) {
 
   const cookieStore = await cookies();
   const expectedState = cookieStore.get('vbn_oauth_state')?.value;
+  const codeVerifier = cookieStore.get('vbn_pkce_verifier')?.value;
   cookieStore.delete('vbn_oauth_state');
+  cookieStore.delete('vbn_pkce_verifier');
 
   const fallback = new URL('/dashboard', req.url);
 
-  if (!state || !code || state !== expectedState) {
-    fallback.searchParams.set('error', 'invalid OAuth state — please retry');
+  if (!state || !code || state !== expectedState || !codeVerifier) {
+    fallback.searchParams.set('error', 'invalid OAuth state or missing PKCE verifier — please retry');
     return NextResponse.redirect(fallback);
   }
 
@@ -65,6 +67,7 @@ export async function GET(req: NextRequest) {
       code,
       redirect_uri: redirectUri,
       grant_type: 'authorization_code',
+      code_verifier: codeVerifier,
     }),
   });
   if (!tokenRes.ok) {
