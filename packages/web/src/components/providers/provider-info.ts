@@ -35,6 +35,7 @@ import {
 } from '@vaubaan/providers-upstash-redis';
 import { gmailAvailableTools, gmailDataModel } from '@vaubaan/providers-gmail';
 import { stripeAvailableTools, stripeDataModel } from '@vaubaan/providers-stripe';
+import { cloudflareDnsDataModel } from '@vaubaan/providers-cloudflare-dns';
 
 /** Per-plane presentation copy. */
 export interface PlaneInfo {
@@ -276,6 +277,27 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
       'Paste a Stripe restricted API key (`sk_test_*` for test, `sk_live_*` for live) — Vaubaan stores it encrypted and the binding pins the mode. The classifier reads `environment` on the binding (`live` | `test`) and qualifies cardinal risks as `stripe[live].refund-create` etc.',
     catalogPath: 'packages/providers/stripe/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/stripe.md',
+  },
+  'cloudflare-dns': {
+    slug: 'cloudflare-dns',
+    label: 'Cloudflare DNS',
+    pitch:
+      'DNS plane — zones, records (A/AAAA/CNAME/MX/TXT/SRV/…), zone settings (SSL, TLS, cache level), DNSSEC, CDN cache purge, BIND import/export.',
+    kind: 'cloud',
+    dataModel: cloudflareDnsDataModel,
+    tools: [],
+    planes: [
+      {
+        slug: 'dns',
+        label: 'DNS',
+        pitch:
+          'A Cloudflare account — zones, DNS records, zone settings, DNSSEC posture, CDN cache, BIND import/export.',
+      },
+    ],
+    setup:
+      'Paste a Cloudflare API Token scoped to the zones you want to expose (Zone:Read + DNS:Edit minimum). Vaubaan stores the token encrypted. The binding pins the account_id; zone-level scoping is enforced by the token itself.',
+    catalogPath: 'packages/providers/cloudflare-dns/src/risk-catalog.yaml',
+    handbook: 'docs/handbook/providers/cloudflare-dns.md',
   },
 };
 

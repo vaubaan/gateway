@@ -19,7 +19,8 @@ export type Provider =
   | 'ssh'
   | 'upstash-redis'
   | 'gmail'
-  | 'stripe';
+  | 'stripe'
+  | 'cloudflare-dns';
 
 export const PROVIDERS = [
   'github',
@@ -31,6 +32,7 @@ export const PROVIDERS = [
   'upstash-redis',
   'gmail',
   'stripe',
+  'cloudflare-dns',
 ] as const satisfies readonly Provider[];
 
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';

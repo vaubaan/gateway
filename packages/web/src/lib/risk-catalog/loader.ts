@@ -30,6 +30,7 @@ import { sshRiskCatalog } from '@vaubaan/providers-ssh';
 import { upstashRedisRiskCatalog } from '@vaubaan/providers-upstash-redis';
 import { gmailRiskCatalog } from '@vaubaan/providers-gmail';
 import { stripeRiskCatalog } from '@vaubaan/providers-stripe';
+import { cloudflareDnsRiskCatalog } from '@vaubaan/providers-cloudflare-dns';
 import {
   indexCatalog,
   qualifyRiskId as engineQualifyRiskId,
@@ -49,6 +50,7 @@ const PROVIDERS: readonly Provider[] = [
   'upstash-redis',
   'gmail',
   'stripe',
+  'cloudflare-dns',
 ];
 
 /** Provider → its TS-exported risk catalog. The `bash` provider key maps
@@ -63,6 +65,7 @@ const PROVIDER_CATALOGS: Record<Provider, RiskCatalog> = {
   'upstash-redis': upstashRedisRiskCatalog,
   gmail: gmailRiskCatalog,
   stripe: stripeRiskCatalog,
+  'cloudflare-dns': cloudflareDnsRiskCatalog,
 };
 
 /** Per-provider cache, built once on first call to `getCatalog`. `undefined`

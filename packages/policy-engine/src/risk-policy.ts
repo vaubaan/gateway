@@ -43,7 +43,8 @@ export function checkAcceptableInEnv(entry: RiskEntry, env: string | null): stri
 // Catalog boot helper
 // ─────────────────────────────────────────────────────────────────────────────
 
-const RISK_ID_REGEX = /^[a-z][a-z0-9]*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
+const RISK_ID_REGEX =
+  /^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
 
 /** One-call helper combining `indexCatalog` + sanity checks (ids unique,
  *  RiskId regex, fallback risk present). Used at boot. */
