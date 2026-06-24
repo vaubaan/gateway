@@ -10,6 +10,7 @@ tracks:
   - packages/providers/supabase/tests/
   - packages/providers/railway/tests/
   - packages/providers/ssh/tests/
+  - packages/providers/resend/tests/
   - packages/mcp-gateway/tests/
   - packages/web/tests/
   - packages/web/src/lib/bash/
@@ -175,6 +176,32 @@ persistRefresh callback + validateBinding (UUID check + whoami liveness).
 (39) : forme de slice `ssh.host[X].command.R|W` + mapping rings → risk
 catalog. L'adapter SSH brut (`sshExec`, `humanizeConnError`) reste
 testé indirectement via les tests bash.
+
+**Resend** (149) — `adapter` (12) : mintUpstreamToken (decode + error),
+validateBinding (GET /domains, fallback displayName, 401 error),
+executeCall (wire-through + describe_zones metadata pass),
+classifyV4 delegation, availableTools (25 count, resend\_\_ prefix).
+`data-model` (9) : entity graph integrity — plane count, envScopable
+on account, domain hierarchy, audience/contact/broadcast hierarchy,
+synthetic markers (to-zone, recipient-count), unbounded entities,
+entity count (10).
+`risk-catalog` (63) : YAML structural validation (16 risks, required
+fields, RiskId regex, uniqueness, 6D vector validity, fallback exists,
+caps/infra_limits on broadcast-send and send-batch, irreversible risks,
+acceptable_in_envs), pattern parsing, prepareCatalog roundtrip,
+coverage lint (every tool covered by non-fallback risk), risksTouchedBy
+sanity checks.
+`risk-catalog-sync` (19) : YAML ↔ TS export sync (provider, risk count,
+ids order, per-entry label/reason/matches/vector/acceptable_in_envs/
+caps/infra_limits).
+`risk-classifier` (46) : reads (email, domains, audiences, contacts,
+broadcasts), writes (to-zone classification for internal/allowlist/
+external, worst-case mixed recipients, multi-recipient count, cc/bcc
+inclusion, batch sends with 3 slices, domains CRUD, audiences, contacts,
+broadcasts lifecycle), attachment denial (v1), describe_zones synthetic
+tool, binding propagation (prod/staging/empty resource_ref), denials
+(unknown tool, no binding, wrong provider), spec §7.2 multi-slice
+examples.
 
 ## Scénarios — MCP gateway (v4)
 

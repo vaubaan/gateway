@@ -35,6 +35,7 @@ import {
 } from '@vaubaan/providers-upstash-redis';
 import { gmailAvailableTools, gmailDataModel } from '@vaubaan/providers-gmail';
 import { stripeAvailableTools, stripeDataModel } from '@vaubaan/providers-stripe';
+import { resendAvailableTools, resendDataModel } from '@vaubaan/providers-resend';
 import { cloudflareDnsDataModel } from '@vaubaan/providers-cloudflare-dns';
 
 /** Per-plane presentation copy. */
@@ -277,6 +278,27 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
       'Paste a Stripe restricted API key (`sk_test_*` for test, `sk_live_*` for live) — Vaubaan stores it encrypted and the binding pins the mode. The classifier reads `environment` on the binding (`live` | `test`) and qualifies cardinal risks as `stripe[live].refund-create` etc.',
     catalogPath: 'packages/providers/stripe/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/stripe.md',
+  },
+  resend: {
+    slug: 'resend',
+    label: 'Resend',
+    pitch:
+      'Email plane — transactional emails, batch sends, audiences, contacts, broadcasts. Identity-zoning (to-zone) gates recipients by internal/allowlist/external classification.',
+    kind: 'cloud',
+    dataModel: resendDataModel,
+    tools: resendAvailableTools,
+    planes: [
+      {
+        slug: 'email',
+        label: 'Email',
+        pitch:
+          'A single Resend account (one API key) — transactional emails, batch sends, audiences, contacts, broadcasts, domains. To-zone and recipient-count synthetic markers gate send risks.',
+      },
+    ],
+    setup:
+      'Paste a Resend API key (`re_*`) — Vaubaan stores it encrypted. The binding pins an operator-chosen slug (e.g. `prod-email`). Configure `internal_domains`, `allowlist_domains`, `allowlist_addresses` in binding metadata to drive the to-zone classification.',
+    catalogPath: 'packages/providers/resend/src/risk-catalog.yaml',
+    handbook: 'docs/handbook/providers/resend.md',
   },
   'cloudflare-dns': {
     slug: 'cloudflare-dns',

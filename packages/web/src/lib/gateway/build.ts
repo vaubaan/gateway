@@ -11,6 +11,7 @@ import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supa
 import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
 import { UpstashRedisAdapter, upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
 import { StripeAdapter, stripeAvailableTools, stripeExecuteCall } from '@vaubaan/providers-stripe';
+import { ResendAdapter, resendAvailableTools } from '@vaubaan/providers-resend';
 import type {
   AccessTokenContext,
   Provider,
@@ -375,6 +376,17 @@ export function buildGateway(opts: {
     loadProviderAdmin,
   };
 
+  // Resend : paste-token mode (re_* API key from provider_admins).
+  const resendAdapter = new ResendAdapter();
+  upstreamByProvider.resend = {
+    provider: 'resend',
+    availableTools: resendAvailableTools,
+    classifyV4: (tool, args, bindings) => resendAdapter.classifyV4(tool, args, bindings),
+    executeCall: (admin, binding, tool, args) =>
+      resendAdapter.executeCall(admin, binding, tool, args),
+    loadProviderAdmin,
+  };
+
   // Stripe : per-project self-contained (keys in stripe_bindings, not provider_admins).
   const stripeAdapter = new StripeAdapter();
   upstreamByProvider.stripe = {
@@ -416,6 +428,7 @@ export function buildGateway(opts: {
     'ssh',
     'upstash-redis',
     'stripe',
+    'resend',
   ] as Provider[]) {
     const c = getCatalog(provider);
     if (c) catalogByProvider[provider] = c;
