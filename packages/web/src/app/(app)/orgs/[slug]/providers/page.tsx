@@ -4,6 +4,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState, type ProviderState } from '@/lib/providers/state';
 import { ProviderDisconnectButton } from '../provider-disconnect';
+import { VercelConnectButton, VercelTeamIdHint } from './vercel-connect';
 import {
   Badge,
   Banner,
@@ -204,7 +205,10 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
               provider={state.provider as 'github' | 'vercel' | 'supabase' | 'railway'}
             />
           )}
-          {!connected && (
+          {!connected && state.provider === 'vercel' && (
+            <VercelConnectButton orgSlug={orgSlug} />
+          )}
+          {!connected && state.provider !== 'vercel' && (
             <a
               href={`/api/integrations/${state.provider}/connect?org=${orgSlug}`}
               style={{ textDecoration: 'none' }}
@@ -217,7 +221,9 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
         </Row>
       </CardHeader>
       <CardBody>
-        {!connected ? (
+        {!connected && state.provider === 'vercel' ? (
+          <VercelTeamIdHint />
+        ) : !connected ? (
           <p style={{ color: 'var(--text-muted)', margin: 0 }}>
             {PROVIDER_DESCRIPTION[state.provider as OrgProvider] ?? ''}
           </p>
