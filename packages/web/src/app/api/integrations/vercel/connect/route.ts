@@ -2,10 +2,11 @@
  * POST /api/integrations/vercel/connect
  *
  * Stores a Vercel Personal Access Token (PAT) for the organization.
- * The PAT must be scoped to the target team. We validate it by calling
- * /v2/teams/:id before persisting.
+ * Auto-detects the team via GET /v2/teams. If the PAT sees exactly one
+ * team, connects immediately. If multiple, returns the list so the
+ * frontend can let the user pick (then re-POST with teamId).
  *
- * Body: { org: string (slug), token: string, teamId: string }
+ * Body: { org: string, token: string, teamId?: string }
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -14,14 +15,20 @@ import { getSupabaseServer, getSupabaseServiceClient } from '@/lib/supabase/serv
 import { encodeByteaHexRaw } from '@/lib/providers/bytea';
 import { encryptProviderSecret } from '@/lib/crypto';
 
+interface VercelTeam {
+  id: string;
+  name: string;
+  slug: string;
+}
+
 export const dynamic = 'force-dynamic';
 
 export async function POST(req: NextRequest) {
   const body = (await req.json()) as { org?: string; token?: string; teamId?: string };
   const { org: slug, token, teamId } = body;
 
-  if (!slug || !token || !teamId) {
-    return NextResponse.json({ error: 'org, token, and teamId are required' }, { status: 400 });
+  if (!slug || !token) {
+    return NextResponse.json({ error: 'org and token are required' }, { status: 400 });
   }
 
   const guard = await requireOrgMember(slug);
@@ -33,20 +40,55 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'not authenticated' }, { status: 401 });
   }
 
-  // Validate the token + team by calling the Vercel API.
-  const teamRes = await fetch(`https://api.vercel.com/v2/teams/${encodeURIComponent(teamId)}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!teamRes.ok) {
-    const detail = (await teamRes.text()).slice(0, 200);
-    return NextResponse.json(
-      {
-        error: `Vercel API rejected the token for team '${teamId}' (${teamRes.status}): ${detail}`,
-      },
-      { status: 400 },
-    );
+  const headers = { Authorization: `Bearer ${token}` };
+
+  let resolvedTeamId: string;
+  let teamName: string;
+
+  if (teamId) {
+    const teamRes = await fetch(`https://api.vercel.com/v2/teams/${encodeURIComponent(teamId)}`, {
+      headers,
+    });
+    if (!teamRes.ok) {
+      const detail = (await teamRes.text()).slice(0, 200);
+      return NextResponse.json(
+        {
+          error: `Vercel API rejected the token for team '${teamId}' (${teamRes.status}): ${detail}`,
+        },
+        { status: 400 },
+      );
+    }
+    const teamJson = (await teamRes.json()) as VercelTeam;
+    resolvedTeamId = teamId;
+    teamName = teamJson.name ?? teamJson.slug ?? teamId;
+  } else {
+    const teamsRes = await fetch('https://api.vercel.com/v2/teams', { headers });
+    if (!teamsRes.ok) {
+      const detail = (await teamsRes.text()).slice(0, 200);
+      return NextResponse.json(
+        { error: `Failed to list Vercel teams (${teamsRes.status}): ${detail}` },
+        { status: 400 },
+      );
+    }
+    const teamsJson = (await teamsRes.json()) as { teams: VercelTeam[] };
+    const teams = teamsJson.teams ?? [];
+
+    if (teams.length === 0) {
+      return NextResponse.json(
+        { error: 'This token has no team access. Create a PAT scoped to a team.' },
+        { status: 400 },
+      );
+    }
+    if (teams.length > 1) {
+      return NextResponse.json({
+        ok: false,
+        pickTeam: teams.map((t) => ({ id: t.id, name: t.name, slug: t.slug })),
+      });
+    }
+    const single = teams[0]!;
+    resolvedTeamId = single.id;
+    teamName = single.name ?? single.slug;
   }
-  const teamJson = (await teamRes.json()) as { name?: string; slug?: string };
 
   const svc = getSupabaseServiceClient();
 
@@ -55,7 +97,7 @@ export async function POST(req: NextRequest) {
       organization_id: guard.orgId,
       provider: 'vercel',
       status: 'connected',
-      team_id: teamId,
+      team_id: resolvedTeamId,
       access_token_encrypted: encodeByteaHexRaw(await encryptProviderSecret(guard.orgId, token)),
       refresh_token_encrypted: null,
       expires_at: null,
@@ -68,8 +110,5 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `persist failed: ${insertErr.message}` }, { status: 500 });
   }
 
-  return NextResponse.json({
-    ok: true,
-    teamName: teamJson.name ?? teamJson.slug ?? teamId,
-  });
+  return NextResponse.json({ ok: true, teamName });
 }

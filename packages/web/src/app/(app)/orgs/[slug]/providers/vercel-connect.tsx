@@ -2,15 +2,22 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Code } from '@/components/ui';
+import { Button } from '@/components/ui';
+
+interface TeamOption {
+  id: string;
+  name: string;
+  slug: string;
+}
 
 export function VercelConnectButton({ orgSlug }: { orgSlug: string }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [token, setToken] = useState('');
-  const [teamId, setTeamId] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [teams, setTeams] = useState<TeamOption[] | null>(null);
+  const [selectedTeamId, setSelectedTeamId] = useState('');
 
   if (!open) {
     return (
@@ -20,18 +27,32 @@ export function VercelConnectButton({ orgSlug }: { orgSlug: string }) {
     );
   }
 
-  const canSubmit = token.trim().length > 0 && teamId.trim().length > 0 && !loading;
+  const canSubmit = token.trim().length > 0 && !loading && (!teams || selectedTeamId.length > 0);
 
   async function handleSubmit() {
     setLoading(true);
     setError(null);
     try {
+      const payload: Record<string, string> = { org: orgSlug, token: token.trim() };
+      if (selectedTeamId) payload.teamId = selectedTeamId;
+
       const res = await fetch('/api/integrations/vercel/connect', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ org: orgSlug, token: token.trim(), teamId: teamId.trim() }),
+        body: JSON.stringify(payload),
       });
-      const json = (await res.json()) as { error?: string };
+      const json = (await res.json()) as {
+        ok?: boolean;
+        error?: string;
+        pickTeam?: TeamOption[];
+      };
+
+      if (json.pickTeam) {
+        setTeams(json.pickTeam);
+        setSelectedTeamId(json.pickTeam[0]?.id ?? '');
+        return;
+      }
+
       if (!res.ok) {
         setError(json.error ?? `Failed (${res.status})`);
         return;
@@ -56,25 +77,35 @@ export function VercelConnectButton({ orgSlug }: { orgSlug: string }) {
   return (
     <div style={{ display: 'grid', gap: 'var(--space-2)', maxWidth: 400 }}>
       <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
-        Team ID
-        <input
-          type="text"
-          value={teamId}
-          onChange={(e) => setTeamId(e.target.value)}
-          placeholder="team_..."
-          style={inputStyle}
-        />
-      </label>
-      <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
         Personal Access Token
         <input
           type="password"
           value={token}
-          onChange={(e) => setToken(e.target.value)}
+          onChange={(e) => {
+            setToken(e.target.value);
+            setTeams(null);
+            setSelectedTeamId('');
+          }}
           placeholder="Paste your Vercel PAT"
           style={inputStyle}
         />
       </label>
+      {teams && (
+        <label style={{ fontSize: 'var(--text-xs)', color: 'var(--text-muted)' }}>
+          Team
+          <select
+            value={selectedTeamId}
+            onChange={(e) => setSelectedTeamId(e.target.value)}
+            style={{ ...inputStyle, fontFamily: 'inherit' }}
+          >
+            {teams.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} ({t.slug})
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {error && (
         <p style={{ color: 'var(--accent-danger-fg)', fontSize: 'var(--text-sm)', margin: 0 }}>
           {error}
@@ -82,7 +113,7 @@ export function VercelConnectButton({ orgSlug }: { orgSlug: string }) {
       )}
       <div style={{ display: 'flex', gap: 'var(--space-2)', alignItems: 'center' }}>
         <Button size="sm" variant="primary" onClick={handleSubmit} disabled={!canSubmit}>
-          {loading ? 'Connecting…' : 'Connect'}
+          {loading ? 'Connecting…' : teams ? 'Connect to team' : 'Connect'}
         </Button>
         <button
           onClick={() => setOpen(false)}
@@ -113,8 +144,7 @@ export function VercelTeamIdHint() {
       >
         Personal Access Token
       </a>{' '}
-      scoped to your team, then paste it here with the Team ID (<Code>team_...</Code>, found in team
-      Settings → General).
+      scoped to your team, then paste it here. The team is detected automatically.
     </p>
   );
 }
