@@ -1,15 +1,13 @@
 /**
  * GET /api/integrations/vercel/connect?org=<slug>
  *
- * Starts the Vercel Marketplace Integration install flow. Vercel's install URL
- * (https://vercel.com/integrations/<slug>/new) shows the user their teams and
- * the per-resource scope picker, then redirects back to the configured
- * Redirect URL with `?code=...&teamId=...&configurationId=...&state=...`.
+ * Starts the Vercel Connected App OAuth flow. Redirects the user to
+ * `https://vercel.com/oauth/authorize` which shows a consent screen,
+ * then redirects back to /api/integrations/vercel/callback with `?code=...&state=...`.
  *
- * Slug here = the Integration's marketplace slug (e.g. `vaubaan`), NOT a
- * Connected App client_id. Connected Apps (cl_ prefix) are a different
- * primitive (SSO-only); we explicitly use Marketplace Integrations because
- * the upstream API tools need long-lived API access, not user identity.
+ * The Connected App token acts on behalf of the user (full API access),
+ * unlike Marketplace Integration tokens which are scoped to integration-level
+ * permissions and lack access to endpoints like runtime logs.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -26,10 +24,10 @@ export async function GET(req: NextRequest) {
   const guard = await requireOrgMember(slug);
   if (!guard.ok) return guard.response;
 
-  const integrationSlug = process.env.VERCEL_INTEGRATION_SLUG;
-  if (!integrationSlug) {
+  const clientId = process.env.VERCEL_APP_CLIENT_ID;
+  if (!clientId) {
     return NextResponse.json(
-      { error: 'server misconfigured: VERCEL_INTEGRATION_SLUG unset' },
+      { error: 'server misconfigured: VERCEL_APP_CLIENT_ID unset' },
       { status: 503 },
     );
   }
@@ -44,7 +42,12 @@ export async function GET(req: NextRequest) {
     path: '/',
   });
 
-  const installUrl = new URL(`https://vercel.com/integrations/${integrationSlug}/new`);
-  installUrl.searchParams.set('state', state);
-  return NextResponse.redirect(installUrl.toString());
+  const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
+  const authorizeUrl = new URL('https://vercel.com/oauth/authorize');
+  authorizeUrl.searchParams.set('client_id', clientId);
+  authorizeUrl.searchParams.set('redirect_uri', redirectUri);
+  authorizeUrl.searchParams.set('response_type', 'code');
+  authorizeUrl.searchParams.set('scope', 'openid offline_access');
+  authorizeUrl.searchParams.set('state', state);
+  return NextResponse.redirect(authorizeUrl.toString());
 }

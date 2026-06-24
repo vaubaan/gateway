@@ -1,11 +1,14 @@
 /**
- * GET /api/integrations/vercel/callback?code=...&state=...&teamId=...&configurationId=...
+ * GET /api/integrations/vercel/callback?code=...&state=...
  *
- * Vercel Marketplace Integration callback. Exchanges the install `code` for an
- * `access_token` + `refresh_token` via the Marketplace API POST /v1/auth/token,
- * then upserts the provider_admins row with `team_id` and the encrypted tokens
- * (app-level libsodium AEAD per-org encryption —
- * see docs/decisions/per-org-encryption-app-level.md).
+ * Vercel Connected App OAuth callback. Exchanges the authorization `code` for
+ * an `access_token` + `refresh_token` via POST /login/oauth/token, then upserts
+ * the provider_admins row with encrypted tokens.
+ *
+ * The access_token (vca_*) expires in ~1h; the adapter refreshes it
+ * pre-emptively using the refresh_token (vcr_*).
+ *
+ * Encryption: app-level libsodium AEAD per-org — see docs/decisions/per-org-encryption-app-level.md.
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
@@ -53,7 +56,7 @@ export async function GET(req: NextRequest) {
 
   const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
 
-  const tokenRes = await fetch('https://api.vercel.com/v2/oauth/access_token', {
+  const tokenRes = await fetch('https://api.vercel.com/login/oauth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
@@ -61,6 +64,7 @@ export async function GET(req: NextRequest) {
       client_secret: clientSecret,
       code,
       redirect_uri: redirectUri,
+      grant_type: 'authorization_code',
     }),
   });
   if (!tokenRes.ok) {

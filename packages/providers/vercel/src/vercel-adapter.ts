@@ -7,8 +7,8 @@
  * Vaubaan's policy engine and audit live in front ; the actual tool execution
  * is forwarded as JSON-RPC `tools/call` to https://mcp.vercel.com/.
  *
- * Auth model : Marketplace Integration OAuth (access_token + refresh_token).
- * Token exchange via POST /v1/auth/token with grant_type.
+ * Auth model : Connected App OAuth (access_token vca_* + refresh_token vcr_*).
+ * Token exchange via POST /login/oauth/token with grant_type.
  */
 
 import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
@@ -17,7 +17,7 @@ import { executeCall, type FetchImpl } from './execute.ts';
 import { classifyVercelV4, type ClassifyResult } from './risk-classifier.ts';
 import { UPSERT_ENV_FROM_VENV } from './custom-tools.ts';
 
-const TOKEN_ENDPOINT = 'https://api.vercel.com/v2/oauth/access_token';
+const TOKEN_ENDPOINT = 'https://api.vercel.com/login/oauth/token';
 const REFRESH_THRESHOLD_MS = 5 * 60 * 1000;
 
 export interface VercelRefreshedTokens {
