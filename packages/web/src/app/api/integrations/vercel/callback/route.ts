@@ -88,6 +88,22 @@ export async function GET(req: NextRequest) {
     expires_in?: number;
   };
 
+  // Validate the team_id by calling /v2/teams/:id with the fresh token.
+  const resolvedTeamId = vercelTeamFromCookie ?? teamId ?? tokenJson.team_id ?? null;
+  if (resolvedTeamId) {
+    const teamRes = await fetch(
+      `https://api.vercel.com/v2/teams/${encodeURIComponent(resolvedTeamId)}`,
+      { headers: { Authorization: `Bearer ${tokenJson.access_token}` } },
+    );
+    if (!teamRes.ok) {
+      fallback.searchParams.set(
+        'error',
+        `Vercel team '${resolvedTeamId}' not accessible with this token (${teamRes.status}). Check the Team ID and try again.`,
+      );
+      return NextResponse.redirect(fallback);
+    }
+  }
+
   const svc = getSupabaseServiceClient();
   const { data: org } = await svc
     .from('organizations')
@@ -109,7 +125,7 @@ export async function GET(req: NextRequest) {
       organization_id: orgId,
       provider: 'vercel',
       status: 'connected',
-      team_id: vercelTeamFromCookie ?? teamId ?? tokenJson.team_id ?? null,
+      team_id: resolvedTeamId,
       access_token_encrypted: encodeByteaHexRaw(
         await encryptProviderSecret(orgId, tokenJson.access_token),
       ),
