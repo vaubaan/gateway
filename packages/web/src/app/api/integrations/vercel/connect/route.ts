@@ -49,10 +49,11 @@ export async function GET(req: NextRequest) {
     maxAge: 300,
     path: '/',
   };
+  const vercelTeam = req.nextUrl.searchParams.get('vercel_team');
+
   cookieStore.set('vbn_oauth_state', state, cookieOpts);
   cookieStore.set('vbn_pkce_verifier', codeVerifier, cookieOpts);
-
-  const vercelTeam = req.nextUrl.searchParams.get('vercel_team');
+  if (vercelTeam) cookieStore.set('vbn_vercel_team', vercelTeam, cookieOpts);
 
   const redirectUri = new URL('/api/integrations/vercel/callback', req.url).toString();
   const authorizeUrl = new URL('https://vercel.com/oauth/authorize');

@@ -29,8 +29,10 @@ export async function GET(req: NextRequest) {
   const cookieStore = await cookies();
   const expectedState = cookieStore.get('vbn_oauth_state')?.value;
   const codeVerifier = cookieStore.get('vbn_pkce_verifier')?.value;
+  const vercelTeamFromCookie = cookieStore.get('vbn_vercel_team')?.value ?? null;
   cookieStore.delete('vbn_oauth_state');
   cookieStore.delete('vbn_pkce_verifier');
+  cookieStore.delete('vbn_vercel_team');
 
   const fallback = new URL('/dashboard', req.url);
 
@@ -107,7 +109,7 @@ export async function GET(req: NextRequest) {
       organization_id: orgId,
       provider: 'vercel',
       status: 'connected',
-      team_id: teamId ?? tokenJson.team_id ?? null,
+      team_id: vercelTeamFromCookie ?? teamId ?? tokenJson.team_id ?? null,
       access_token_encrypted: encodeByteaHexRaw(
         await encryptProviderSecret(orgId, tokenJson.access_token),
       ),
