@@ -12,8 +12,9 @@ interface TokenConnectConfig {
 
 const PROVIDER_CONFIG: Record<string, TokenConnectConfig> = {
   'cloudflare-dns': {
-    placeholder: 'Paste your Cloudflare API Token',
-    hint: 'Create an API Token at dash.cloudflare.com/profile/api-tokens (Zone:Read + DNS:Edit).',
+    placeholder: 'API Token or email:global_api_key',
+    hint: 'API Token (recommended): dash.cloudflare.com/profile/api-tokens (Zone:Read + DNS:Edit). Or paste email:global_api_key for a Global API Key.',
+    inputType: 'text',
   },
   'upstash-redis': {
     placeholder: 'email:api_key',

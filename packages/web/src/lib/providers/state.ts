@@ -627,8 +627,13 @@ async function loadTokenProviderState(
     if (provider === 'cloudflare-dns') {
       base.serviceUrl = 'https://dash.cloudflare.com/profile/api-tokens';
       base.scopes.push('Zone:Read + DNS:Edit (token-scoped)');
+      const colonIdx = token.indexOf(':');
+      const cfHeaders: Record<string, string> =
+        colonIdx > 0
+          ? { 'X-Auth-Email': token.slice(0, colonIdx), 'X-Auth-Key': token.slice(colonIdx + 1) }
+          : { Authorization: `Bearer ${token}` };
       const zonesRes = await fetch('https://api.cloudflare.com/client/v4/zones?per_page=50', {
-        headers: { Authorization: `Bearer ${token}` },
+        headers: cfHeaders,
       });
       if (zonesRes.ok) {
         const json = (await zonesRes.json()) as {

@@ -26,32 +26,41 @@ interface ValidationResult {
   account?: string;
 }
 
-async function validateCloudflareDns(token: string): Promise<ValidationResult> {
-  const res = await fetch('https://api.cloudflare.com/client/v4/user/tokens/verify', {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
+function cloudflareHeaders(token: string): Record<string, string> {
+  const colonIdx = token.indexOf(':');
+  if (colonIdx > 0) {
     return {
-      ok: false,
-      error: `Cloudflare rejected the token (${res.status}): ${text.slice(0, 200)}`,
+      'X-Auth-Email': token.slice(0, colonIdx),
+      'X-Auth-Key': token.slice(colonIdx + 1),
     };
   }
-  const json = (await res.json()) as { success?: boolean; result?: { status?: string } };
-  if (!json.success || json.result?.status !== 'active') {
-    return { ok: false, error: 'Token is not active.' };
-  }
+  return { Authorization: `Bearer ${token}` };
+}
+
+async function validateCloudflareDns(token: string): Promise<ValidationResult> {
+  const headers = cloudflareHeaders(token);
 
   const zonesRes = await fetch('https://api.cloudflare.com/client/v4/zones?per_page=1', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers,
   });
-  let account: string | undefined;
-  if (zonesRes.ok) {
-    const zonesJson = (await zonesRes.json()) as {
-      result?: Array<{ account?: { name?: string } }>;
+  if (!zonesRes.ok) {
+    const text = await zonesRes.text().catch(() => '');
+    const hint = token.includes(':')
+      ? ''
+      : ' — if you pasted a Global API Key, use the format email:key instead.';
+    return {
+      ok: false,
+      error: `Cloudflare rejected the credential (${zonesRes.status}): ${text.slice(0, 200)}${hint}`,
     };
-    account = zonesJson.result?.[0]?.account?.name ?? undefined;
   }
+  const zonesJson = (await zonesRes.json()) as {
+    success?: boolean;
+    result?: Array<{ account?: { name?: string } }>;
+  };
+  if (!zonesJson.success) {
+    return { ok: false, error: 'Cloudflare API call failed (success=false).' };
+  }
+  const account = zonesJson.result?.[0]?.account?.name ?? undefined;
   return { ok: true, account };
 }
 
