@@ -19,7 +19,7 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// bash / ssh / stripe are per-project, not org-level — shown as static info cards below.
+// bash / ssh / stripe / cloudflare-dns / upstash-redis / gmail / resend are per-project, not org-level — shown as static info cards below.
 const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
 type OrgProvider = (typeof ORG_PROVIDERS)[number];
 
@@ -168,6 +168,103 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
                 Stripe Dashboard
               </a>
               . Add one from the project&apos;s <strong>+ Bind a resource</strong> form.
+            </p>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader>
+            <Row gap="var(--space-3)">
+              <CardTitle>Cloudflare DNS</CardTitle>
+              <Badge tone="neutral">per-project</Badge>
+            </Row>
+            <Row gap="var(--space-2)">
+              <Link
+                href={`/orgs/${org.slug}/providers/cloudflare-dns`}
+                style={{ textDecoration: 'none' }}
+              >
+                <Button size="sm" variant="secondary">
+                  Info
+                </Button>
+              </Link>
+            </Row>
+          </CardHeader>
+          <CardBody>
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+              Paste a Cloudflare API Token scoped to the zones you want to expose (Zone:Read +
+              DNS:Edit minimum). The binding pins the <Code>account_id</Code>; zone-level scoping is
+              enforced by the token itself. Add one from the project&apos;s{' '}
+              <strong>+ Bind a resource</strong> form.
+            </p>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader>
+            <Row gap="var(--space-3)">
+              <CardTitle>Upstash Redis</CardTitle>
+              <Badge tone="neutral">per-project</Badge>
+            </Row>
+            <Row gap="var(--space-2)">
+              <Link
+                href={`/orgs/${org.slug}/providers/upstash-redis`}
+                style={{ textDecoration: 'none' }}
+              >
+                <Button size="sm" variant="secondary">
+                  Info
+                </Button>
+              </Link>
+            </Row>
+          </CardHeader>
+          <CardBody>
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+              Paste your Upstash email and Management API key as <Code>email:api_key</Code>.
+              Per-database REST tokens are fetched at runtime. Add one from the project&apos;s{' '}
+              <strong>+ Bind a resource</strong> form.
+            </p>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader>
+            <Row gap="var(--space-3)">
+              <CardTitle>Gmail</CardTitle>
+              <Badge tone="neutral">per-project</Badge>
+            </Row>
+            <Row gap="var(--space-2)">
+              <Link href={`/orgs/${org.slug}/providers/gmail`} style={{ textDecoration: 'none' }}>
+                <Button size="sm" variant="secondary">
+                  Info
+                </Button>
+              </Link>
+            </Row>
+          </CardHeader>
+          <CardBody>
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+              Connect a Gmail account via OAuth (<Code>gmail.readonly</Code> +{' '}
+              <Code>gmail.compose</Code>). Configure identity-zone classification (internal domains,
+              allowlists, sensitive labels) per binding. Add one from the project&apos;s{' '}
+              <strong>+ Bind a resource</strong> form.
+            </p>
+          </CardBody>
+        </Card>
+        <Card>
+          <CardHeader>
+            <Row gap="var(--space-3)">
+              <CardTitle>Resend</CardTitle>
+              <Badge tone="neutral">per-project</Badge>
+            </Row>
+            <Row gap="var(--space-2)">
+              <Link href={`/orgs/${org.slug}/providers/resend`} style={{ textDecoration: 'none' }}>
+                <Button size="sm" variant="secondary">
+                  Info
+                </Button>
+              </Link>
+            </Row>
+          </CardHeader>
+          <CardBody>
+            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
+              Paste a Resend API key (<Code>re_*</Code>). Configure <Code>internal_domains</Code>,{' '}
+              <Code>allowlist_domains</Code>, and <Code>allowlist_addresses</Code> in binding
+              metadata to drive the to-zone classification. Add one from the project&apos;s{' '}
+              <strong>+ Bind a resource</strong> form.
             </p>
           </CardBody>
         </Card>
