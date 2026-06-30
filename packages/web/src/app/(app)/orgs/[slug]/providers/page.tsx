@@ -5,6 +5,7 @@ import { getSupabaseServer } from '@/lib/supabase/server';
 import { loadProviderState, type ProviderState } from '@/lib/providers/state';
 import { ProviderDisconnectButton } from '../provider-disconnect';
 import { VercelConnectButton, VercelTeamIdHint } from './vercel-connect';
+import { TokenConnectButton, TokenConnectHint } from './token-connect';
 import {
   Badge,
   Banner,
@@ -19,8 +20,18 @@ import {
 
 export const dynamic = 'force-dynamic';
 
-// bash / ssh / stripe / cloudflare-dns / upstash-redis / gmail / resend are per-project, not org-level — shown as static info cards below.
-const ORG_PROVIDERS = ['github', 'vercel', 'supabase', 'railway'] as const;
+const TOKEN_CONNECT_PROVIDERS = new Set(['cloudflare-dns', 'upstash-redis', 'resend']);
+
+// bash / ssh / stripe / gmail are per-project — shown as static info cards below.
+const ORG_PROVIDERS = [
+  'github',
+  'vercel',
+  'supabase',
+  'railway',
+  'cloudflare-dns',
+  'upstash-redis',
+  'resend',
+] as const;
 type OrgProvider = (typeof ORG_PROVIDERS)[number];
 
 const PROVIDER_LABEL: Record<OrgProvider, string> = {
@@ -28,6 +39,9 @@ const PROVIDER_LABEL: Record<OrgProvider, string> = {
   vercel: 'Vercel',
   supabase: 'Supabase',
   railway: 'Railway',
+  'cloudflare-dns': 'Cloudflare DNS',
+  'upstash-redis': 'Upstash Redis',
+  resend: 'Resend',
 };
 
 const PROVIDER_DESCRIPTION: Record<OrgProvider, string> = {
@@ -38,6 +52,10 @@ const PROVIDER_DESCRIPTION: Record<OrgProvider, string> = {
   supabase:
     'Paste a Supabase Management API personal access token (PAT) to allow Vaubaan to enumerate projects.',
   railway: 'Authorize the Vaubaan Gateway Railway app to manage the projects in your workspace.',
+  'cloudflare-dns':
+    'Paste a Cloudflare API Token scoped to the zones you want to expose (Zone:Read + DNS:Edit minimum).',
+  'upstash-redis': 'Paste your Upstash email and Management API key as email:api_key.',
+  resend: 'Paste a Resend API key (re_*).',
 };
 
 export default async function OrgPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -174,57 +192,6 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
         <Card>
           <CardHeader>
             <Row gap="var(--space-3)">
-              <CardTitle>Cloudflare DNS</CardTitle>
-              <Badge tone="neutral">per-project</Badge>
-            </Row>
-            <Row gap="var(--space-2)">
-              <Link
-                href={`/orgs/${org.slug}/providers/cloudflare-dns`}
-                style={{ textDecoration: 'none' }}
-              >
-                <Button size="sm" variant="secondary">
-                  Info
-                </Button>
-              </Link>
-            </Row>
-          </CardHeader>
-          <CardBody>
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              Paste a Cloudflare API Token scoped to the zones you want to expose (Zone:Read +
-              DNS:Edit minimum). The binding pins the <Code>account_id</Code>; zone-level scoping is
-              enforced by the token itself. Add one from the project&apos;s{' '}
-              <strong>+ Bind a resource</strong> form.
-            </p>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader>
-            <Row gap="var(--space-3)">
-              <CardTitle>Upstash Redis</CardTitle>
-              <Badge tone="neutral">per-project</Badge>
-            </Row>
-            <Row gap="var(--space-2)">
-              <Link
-                href={`/orgs/${org.slug}/providers/upstash-redis`}
-                style={{ textDecoration: 'none' }}
-              >
-                <Button size="sm" variant="secondary">
-                  Info
-                </Button>
-              </Link>
-            </Row>
-          </CardHeader>
-          <CardBody>
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              Paste your Upstash email and Management API key as <Code>email:api_key</Code>.
-              Per-database REST tokens are fetched at runtime. Add one from the project&apos;s{' '}
-              <strong>+ Bind a resource</strong> form.
-            </p>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader>
-            <Row gap="var(--space-3)">
               <CardTitle>Gmail</CardTitle>
               <Badge tone="neutral">per-project</Badge>
             </Row>
@@ -241,29 +208,6 @@ export default async function OrgPage({ params }: { params: Promise<{ slug: stri
               Connect a Gmail account via OAuth (<Code>gmail.readonly</Code> +{' '}
               <Code>gmail.compose</Code>). Configure identity-zone classification (internal domains,
               allowlists, sensitive labels) per binding. Add one from the project&apos;s{' '}
-              <strong>+ Bind a resource</strong> form.
-            </p>
-          </CardBody>
-        </Card>
-        <Card>
-          <CardHeader>
-            <Row gap="var(--space-3)">
-              <CardTitle>Resend</CardTitle>
-              <Badge tone="neutral">per-project</Badge>
-            </Row>
-            <Row gap="var(--space-2)">
-              <Link href={`/orgs/${org.slug}/providers/resend`} style={{ textDecoration: 'none' }}>
-                <Button size="sm" variant="secondary">
-                  Info
-                </Button>
-              </Link>
-            </Row>
-          </CardHeader>
-          <CardBody>
-            <p style={{ margin: 0, color: 'var(--text-muted)' }}>
-              Paste a Resend API key (<Code>re_*</Code>). Configure <Code>internal_domains</Code>,{' '}
-              <Code>allowlist_domains</Code>, and <Code>allowlist_addresses</Code> in binding
-              metadata to drive the to-zone classification. Add one from the project&apos;s{' '}
               <strong>+ Bind a resource</strong> form.
             </p>
           </CardBody>
@@ -296,28 +240,30 @@ function ProviderCard({ state, orgSlug }: { state: ProviderState; orgSlug: strin
               Info
             </Button>
           </Link>
-          {connected && (
-            <ProviderDisconnectButton
-              orgSlug={orgSlug}
-              provider={state.provider as 'github' | 'vercel' | 'supabase' | 'railway'}
-            />
-          )}
+          {connected && <ProviderDisconnectButton orgSlug={orgSlug} provider={state.provider} />}
           {!connected && state.provider === 'vercel' && <VercelConnectButton orgSlug={orgSlug} />}
-          {!connected && state.provider !== 'vercel' && (
-            <a
-              href={`/api/integrations/${state.provider}/connect?org=${orgSlug}`}
-              style={{ textDecoration: 'none' }}
-            >
-              <Button size="sm" variant="primary">
-                Connect
-              </Button>
-            </a>
+          {!connected && TOKEN_CONNECT_PROVIDERS.has(state.provider) && (
+            <TokenConnectButton orgSlug={orgSlug} provider={state.provider} />
           )}
+          {!connected &&
+            state.provider !== 'vercel' &&
+            !TOKEN_CONNECT_PROVIDERS.has(state.provider) && (
+              <a
+                href={`/api/integrations/${state.provider}/connect?org=${orgSlug}`}
+                style={{ textDecoration: 'none' }}
+              >
+                <Button size="sm" variant="primary">
+                  Connect
+                </Button>
+              </a>
+            )}
         </Row>
       </CardHeader>
       <CardBody>
         {!connected && state.provider === 'vercel' ? (
           <VercelTeamIdHint />
+        ) : !connected && TOKEN_CONNECT_PROVIDERS.has(state.provider) ? (
+          <TokenConnectHint provider={state.provider} />
         ) : !connected ? (
           <p style={{ color: 'var(--text-muted)', margin: 0 }}>
             {PROVIDER_DESCRIPTION[state.provider as OrgProvider] ?? ''}

@@ -20,7 +20,15 @@ import { requireOrgMember } from '@/lib/auth/require-org-member';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const VALID_PROVIDERS = new Set(['github', 'vercel', 'supabase', 'railway']);
+const VALID_PROVIDERS = new Set([
+  'github',
+  'vercel',
+  'supabase',
+  'railway',
+  'cloudflare-dns',
+  'upstash-redis',
+  'resend',
+]);
 
 export async function DELETE(req: NextRequest, ctx: { params: Promise<{ provider: string }> }) {
   const { provider } = await ctx.params;

@@ -25,6 +25,9 @@ const REF_HINT: Record<string, string> = {
   vercel: 'prj_XXXXXXXXXXXX',
   supabase: '20-char project ref',
   railway: 'project id (UUID)',
+  'cloudflare-dns': 'zone id (32-char hex)',
+  'upstash-redis': 'database id (UUID)',
+  resend: 'domain id (UUID)',
 };
 
 /** Providers that follow the "one upstream project = one env" pattern. For

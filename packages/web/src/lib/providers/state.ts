@@ -601,6 +601,97 @@ async function loadRailwayState(admin: AdminRow): Promise<ProviderState> {
   return base;
 }
 
+async function loadTokenProviderState(
+  admin: AdminRow,
+  provider: 'cloudflare-dns' | 'upstash-redis' | 'resend',
+): Promise<ProviderState> {
+  const base: ProviderState = {
+    provider,
+    status: admin.status,
+    connectedAt: admin.connected_at,
+    connectedByEmail: await loadGranterEmail(admin.connected_by_user_id),
+    serviceUrl: null,
+    account: null,
+    scopes: [],
+    resources: [],
+    error: null,
+  };
+  const encBytes = decodeBytea(admin.access_token_encrypted);
+  if (!encBytes) {
+    base.error = 'Token missing — reconnect required.';
+    return base;
+  }
+  const token = await decryptProviderSecret(admin.organization_id, encBytes);
+
+  try {
+    if (provider === 'cloudflare-dns') {
+      base.serviceUrl = 'https://dash.cloudflare.com/profile/api-tokens';
+      base.scopes.push('Zone:Read + DNS:Edit (token-scoped)');
+      const zonesRes = await fetch('https://api.cloudflare.com/client/v4/zones?per_page=50', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (zonesRes.ok) {
+        const json = (await zonesRes.json()) as {
+          result?: Array<{ id: string; name: string; status: string; account?: { name?: string } }>;
+        };
+        base.account = json.result?.[0]?.account?.name ?? null;
+        base.resources = (json.result ?? []).map((z) => ({
+          ref: z.id,
+          name: z.name,
+          description: z.status,
+        }));
+      } else {
+        base.error = await readErrorSnippet(zonesRes);
+      }
+    } else if (provider === 'upstash-redis') {
+      base.serviceUrl = 'https://console.upstash.com';
+      base.scopes.push('Management API (full access)');
+      const basicAuth = Buffer.from(token).toString('base64');
+      const dbRes = await fetch('https://api.upstash.com/v2/redis/databases', {
+        headers: { Authorization: `Basic ${basicAuth}` },
+      });
+      if (dbRes.ok) {
+        const dbs = (await dbRes.json()) as Array<{
+          database_id: string;
+          database_name: string;
+          region?: string;
+        }>;
+        const email = token.split(':')[0] ?? null;
+        base.account = email;
+        base.resources = dbs.map((d) => ({
+          ref: d.database_id,
+          name: d.database_name,
+          description: d.region,
+          url: `https://console.upstash.com/redis/${d.database_id}`,
+        }));
+      } else {
+        base.error = await readErrorSnippet(dbRes);
+      }
+    } else if (provider === 'resend') {
+      base.serviceUrl = 'https://resend.com/api-keys';
+      base.scopes.push('API key access');
+      const domainsRes = await fetch('https://api.resend.com/domains', {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (domainsRes.ok) {
+        const json = (await domainsRes.json()) as {
+          data?: Array<{ id: string; name: string; status: string }>;
+        };
+        base.resources = (json.data ?? []).map((d) => ({
+          ref: d.id,
+          name: d.name,
+          description: d.status,
+        }));
+      } else {
+        base.error = await readErrorSnippet(domainsRes);
+      }
+    }
+  } catch (e) {
+    base.error = e instanceof Error ? e.message : String(e);
+  }
+  return base;
+}
+
 export async function loadProviderState(orgId: string, provider: Provider): Promise<ProviderState> {
   const svc = getSupabaseServiceClient();
   const { data: admin } = await svc
@@ -629,5 +720,8 @@ export async function loadProviderState(orgId: string, provider: Provider): Prom
   if (provider === 'github') return loadGitHubState(admin);
   if (provider === 'vercel') return loadVercelState(admin);
   if (provider === 'railway') return loadRailwayState(admin);
+  if (provider === 'cloudflare-dns') return loadTokenProviderState(admin, 'cloudflare-dns');
+  if (provider === 'upstash-redis') return loadTokenProviderState(admin, 'upstash-redis');
+  if (provider === 'resend') return loadTokenProviderState(admin, 'resend');
   return loadSupabaseState(admin);
 }
