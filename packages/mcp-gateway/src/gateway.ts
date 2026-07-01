@@ -287,7 +287,7 @@ export class McpGateway {
 
     const provider = this.providerFor(toolName);
     if (!provider) {
-      const reason = `tool '${toolName}' does not match any supported provider (github__/vercel__/supabase__/railway__/bash__/upstash_redis__/stripe__).`;
+      const reason = `tool '${toolName}' does not match any supported provider prefix.`;
       await this.audit(ctx, toolName, rawArgs, 'denied', null, [], reason, null);
       return rpcError(id, -32603, `Vaubaan policy denied: ${reason}`);
     }
@@ -523,8 +523,12 @@ export class McpGateway {
     if (tool.startsWith('supabase__')) return 'supabase';
     if (tool.startsWith('railway__')) return 'railway';
     if (tool.startsWith('bash__')) return 'bash';
-    if (tool.startsWith('upstash_redis__')) return 'upstash-redis';
+    if (tool.startsWith('ssh__')) return 'ssh';
     if (tool.startsWith('stripe__')) return 'stripe';
+    if (tool.startsWith('cloudflare_dns__')) return 'cloudflare-dns';
+    if (tool.startsWith('upstash_redis__')) return 'upstash-redis';
+    if (tool.startsWith('resend__')) return 'resend';
+    if (tool.startsWith('gmail__')) return 'gmail';
     return null;
   }
 

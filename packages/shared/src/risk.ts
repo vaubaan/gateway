@@ -117,7 +117,7 @@ export interface RiskVector {
  *     ex: `github.mint-install-token`, `vercel.deploy`
  *
  * Slug regex (validated at catalog load) :
- *   `^[a-z][a-z0-9]*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$`
+ *   `^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$`
  */
 export type RiskId = string;
 

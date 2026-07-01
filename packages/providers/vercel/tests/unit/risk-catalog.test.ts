@@ -46,7 +46,8 @@ const binding: ProviderBinding = {
 
 // Mirror the regex from shared/src/risk.ts so we can lint catalog ids
 // without importing a private symbol (cf. risk-policy.ts:RISK_ID_REGEX).
-const RISK_ID_REGEX = /^[a-z][a-z0-9]*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
+const RISK_ID_REGEX =
+  /^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
 
 describe('vercel risk-catalog — YAML structural validation', () => {
   test('YAML parses into a valid RiskCatalog shape', () => {

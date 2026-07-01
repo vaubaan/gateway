@@ -33,7 +33,7 @@ const binding: ProviderBinding = {
 };
 
 const RISK_ID_REGEX =
-  /^[a-z][a-z0-9]*(-[a-z][a-z0-9-]*)?(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
+  /^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
 
 describe('upstash-redis risk-catalog — YAML structural validation', () => {
   test('YAML parses into a valid RiskCatalog shape', () => {

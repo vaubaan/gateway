@@ -51,7 +51,8 @@ const binding: ProviderBinding = {
 
 // Mirror the regex from shared/src/risk.ts so we can lint catalog ids without
 // importing a private symbol.
-const RISK_ID_REGEX = /^[a-z][a-z0-9]*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
+const RISK_ID_REGEX =
+  /^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
 
 describe('resend risk-catalog — YAML structural validation', () => {
   test('YAML parses into a valid RiskCatalog shape', () => {

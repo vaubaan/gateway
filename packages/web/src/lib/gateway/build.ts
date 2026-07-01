@@ -408,9 +408,11 @@ export function buildGateway(opts: {
     'railway',
     'bash',
     'ssh',
-    'upstash-redis',
     'stripe',
+    'cloudflare-dns',
+    'upstash-redis',
     'resend',
+    'gmail',
   ] as Provider[]) {
     const c = getCatalog(provider);
     if (c) catalogByProvider[provider] = c;
