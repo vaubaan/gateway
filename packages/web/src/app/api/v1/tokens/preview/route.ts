@@ -22,7 +22,19 @@ export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const BindingSchema = z.object({
-  provider: z.enum(['github', 'vercel', 'supabase', 'railway', 'bash', 'stripe', 'resend']),
+  provider: z.enum([
+    'github',
+    'vercel',
+    'supabase',
+    'railway',
+    'bash',
+    'ssh',
+    'stripe',
+    'cloudflare-dns',
+    'upstash-redis',
+    'resend',
+    'gmail',
+  ]),
   resource_ref: z.string().min(1),
   env: z.string().min(1).optional().nullable(),
 });
