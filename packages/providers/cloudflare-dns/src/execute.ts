@@ -129,7 +129,8 @@ export async function executeCall(
     // ─── READS ─────────────────────────────────────────────────────────────
     case 'cloudflare_dns__list_zones': {
       const { page, per_page, ...rest } = args;
-      const qs: Record<string, unknown> = { 'account.id': accountId, ...rest };
+      const qs: Record<string, unknown> = { ...rest };
+      if (accountId) qs['account.id'] = accountId;
       if (page !== undefined) qs.page = page;
       if (per_page !== undefined) qs.per_page = per_page;
       return callCloudflareApi(fetchImpl, token, 'GET', '/zones', qs);
