@@ -1,9 +1,11 @@
 ---
 title: Vercel provider — modélisation v4 risk-based
 status: current
-date: 2026-06-15
+date: 2026-07-01
 tracks:
+  - packages/providers/vercel/src/custom-tools.ts
   - packages/providers/vercel/src/data-model.ts
+  - packages/providers/vercel/src/execute.ts
   - packages/providers/vercel/src/risk-catalog.ts
   - packages/providers/vercel/src/risk-catalog.yaml
   - packages/providers/vercel/src/risk-classifier.ts
@@ -17,9 +19,9 @@ risk-based v4 (`accepted_risks[] + bindings[]`). Cible :
 
 - Un **data-model** explicite pour le plane `runtime` (sert au classify + au
   pattern matching du catalogue).
-- Un **mapping tool → slice(s)** exhaustif (27 tools exposés : 18 upstream
-  rewrap de `mcp.vercel.com` + 9 custom REST).
-- Un **catalogue de risks** (≈ 12 entrées + fallback) avec vecteur 6D
+- Un **mapping tool → slice(s)** exhaustif (32 tools exposés : 18 upstream
+  rewrap de `mcp.vercel.com` + 14 custom REST).
+- Un **catalogue de risks** (16 entrées + fallback) avec vecteur 6D
   raisonné et `acceptable_in_envs` quand pertinent.
 - Une **matrice de couverture** tool × risk garantissant qu'aucun tool ne
   tombe dans le vide.
@@ -28,8 +30,8 @@ risk-based v4 (`accepted_risks[] + bindings[]`). Cible :
 - Un récap des **trous** qui demandent une décision humaine avant codage.
 
 Sourcing : spec v4 §2.4 (data-model Vercel), §3 (DSL slice), §4 (catalogue),
-classifier `classify.ts:32-67` (TOOL_KIND complet), `custom-tools.ts`
-(9 custom REST), handbook `docs/handbook/vercel-provider.md` (concepts
+classifier `risk-classifier.ts` (complet), `custom-tools.ts`
+(14 custom REST), handbook `docs/handbook/vercel-provider.md` (concepts
 supportés/non), Context7 `/llmstxt/vercel_llms-full_txt` (semantics Vercel
 "team / project / deployment / env-var", 2026-05-31).
 
@@ -59,6 +61,9 @@ flowchart TB
   project --> project-settings[project-settings<br/>framework, build cmd, node version, root dir]
   project --> deployment-protection[deployment-protection<br/>SSO + password gate]
   project --> domain[domain<br/>custom DNS attachment]
+  project --> firewall[firewall<br/>WAF toggle + managed rulesets]
+  firewall --> firewall-rule[firewall-rule<br/>custom WAF rule]
+  firewall --> ip-rule[ip-rule<br/>IP block / challenge / bypass]
 
   %% Project × env triad
   project --> env[env<br/>prod | preview | development]
@@ -86,6 +91,9 @@ flowchart TB
 | `vercel.project[X].env[E].deployment[*]`                                      | `unbounded` | Vercel garde l'historique complet, peut être très long.                                  |
 | `vercel.project[X].env[E].env-var[*]`                                         | `bounded`   | Quota Vercel ~1000 par project.                                                          |
 | `vercel.project[X].domain[*]`                                                 | `bounded`   | Quelques unités par projet en pratique.                                                  |
+| `vercel.project[X].firewall`                                                  | `one`       | Singleton WAF config par projet (toggle + managed rulesets + OWASP CRS).                 |
+| `vercel.project[X].firewall.firewall-rule[*]`                                 | `bounded`   | Custom WAF rules (condition groups + actions).                                           |
+| `vercel.project[X].firewall.ip-rule[*]`                                       | `bounded`   | IP-based block/challenge/bypass/log rules.                                               |
 | `vercel.project[X].deployment-protection`                                     | `one`       | Une seule config par projet (ssoProtection + passwordProtection comme deux sous-champs). |
 | `vercel.project[X].project-settings`                                          | `one`       | Singleton par projet (framework, build cmd, node version, …).                            |
 | `vercel.project[X].env[E].deployment[D].toolbar-thread[*]`                    | `bounded`   | Threads de feedback toolbar, ~dizaines.                                                  |
@@ -98,8 +106,9 @@ flowchart TB
 
 Le classifier actuel collapse beaucoup d'entités sous 4 levels
 (`account`, `project-settings`, `deployment`, `config`). Le data-model v4
-en distingue **8** (account, team, project, env, deployment, env-var,
-domain, deployment-protection, project-settings, toolbar-thread/-message,
+en distingue **16** (account, team, project, env, deployment, env-var,
+env-var-fan-out, domain, firewall, firewall-rule, ip-rule,
+deployment-protection, project-settings, toolbar-thread/-message,
 build-log, runtime-log, bypass-token), ce qui permet au catalogue de risks
 de discriminer finement :
 
@@ -125,13 +134,13 @@ Tous les autres reads sont vraiment des reads.
 
 ## 2. Mapping tool → slice(s)
 
-27 tools exposés. La colonne **slice** suit le DSL spec v4 §3. La colonne
+32 tools exposés (18 upstream rewrap + 14 custom REST). La colonne **slice** suit le DSL spec v4 §3. La colonne
 **env-resolution** indique comment l'env est résolu au call (`static` =
 env-less ; `runtime` = depuis `args.target`). La colonne **fan-out** signale
 les cas où une seule invocation touche plusieurs envs (cf. risk
 `vercel.env-var-fan-out`).
 
-### 2.1 Reads (15 tools)
+### 2.1 Reads (16 tools)
 
 | Tool                                               | Slice (pattern catalogue)                                                 | Env-resolution | Fan-out |
 | -------------------------------------------------- | ------------------------------------------------------------------------- | -------------- | ------- |
@@ -150,8 +159,9 @@ les cas où une seule invocation touche plusieurs envs (cf. risk
 | `vercel__get_toolbar_thread`                       | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].R`              | static         | —       |
 | `vercel__list_env_vars` _(custom)_                 | `vercel.project[P].env-var[*].R`                                          | static         | —       |
 | `vercel__list_env_vars` _(custom, `decrypt=true`)_ | `vercel.project[P].env-var[*].R[plaintext]` (sous-cas)                    | static         | —       |
+| `vercel__get_firewall_config` _(custom)_           | `vercel.project[P].firewall.R`                                            | n/a            | —       |
 
-### 2.2 Writes (12 tools)
+### 2.2 Writes (16 tools)
 
 | Tool                                           | Slice (pattern catalogue)                                                       | Env-resolution                                 | Fan-out                                          |
 | ---------------------------------------------- | ------------------------------------------------------------------------------- | ---------------------------------------------- | ------------------------------------------------ | ------------------ | --------------------------------------------- |
@@ -167,6 +177,10 @@ les cas où une seule invocation touche plusieurs envs (cf. risk
 | `vercel__reply_to_toolbar_thread`              | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message.W`    | static                                         | Non                                              |
 | `vercel__edit_toolbar_message`                 | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message[M].W` | static                                         | Non                                              |
 | `vercel__add_toolbar_reaction`                 | `vercel.project[P].env[E].deployment[D].toolbar-thread[T].toolbar-message[M].W` | static                                         | Non                                              |
+| `vercel__toggle_firewall` _(custom)_           | `vercel.project[P].firewall.W`                                                  | static                                         | Non                                              |
+| `vercel__upsert_firewall_rule` _(custom)_      | `vercel.project[P].firewall.firewall-rule[RULE_ID].W`                           | static                                         | Non                                              |
+| `vercel__remove_firewall_rule` _(custom)_      | `vercel.project[P].firewall.firewall-rule[RULE_ID].W`                           | static                                         | Non                                              |
+| `vercel__manage_ip_blocking` _(custom)_        | `vercel.project[P].firewall.ip-rule[ID].W`                                      | static                                         | Non                                              |
 
 ### 2.3 Notes sur l'env-resolution
 
@@ -188,7 +202,7 @@ les cas où une seule invocation touche plusieurs envs (cf. risk
 
 ## 3. Catalogue de risks YAML
 
-12 entrées + 1 fallback. RiskId qualifié par binding via convention
+16 entrées + 1 fallback. RiskId qualifié par binding via convention
 `vercel[<env>].<name>` quand env-scoped, `vercel.<name>` sinon
 (spec §4.4 + §16 Q2).
 
@@ -404,6 +418,71 @@ vercel:
         visibility: public
         persistence: posture
 
+    # ─── READS — FIREWALL (WAF config inspection) ────────────────────────
+
+    - id: vercel.firewall-read
+      label: 'Lire la configuration firewall / WAF'
+      reason: "Expose la posture WAF complète d'un projet : rules custom,
+        entrées IP blocking, managed rulesets, OWASP CRS, et le toggle
+        firewallEnabled. Metadata-only (pas de mutation), mais révèle
+        la surface de politique sécu — un attaquant qui voit les rules
+        peut crafter des bypasses."
+      matches: 'vercel.project[**].firewall.R'
+      vector:
+        reversibility: reversible
+        blast: single
+        data: metadata
+        cost: free
+        visibility: internal
+        persistence: stateless
+
+    # ─── WRITES — FIREWALL (WAF toggle + rules + IP blocking) ────────────
+
+    - id: vercel.firewall-write
+      label: 'Activer / désactiver le firewall du projet'
+      reason: "Couper le WAF expose le projet à tout le trafic non-filtré.
+        L'activer peut bloquer des visiteurs légitimes si les rules sont
+        mal configurées. Posture-shift affectant le trafic prod
+        immédiatement."
+      matches: 'vercel.project[**].firewall.W'
+      vector:
+        reversibility: reversible
+        blast: env
+        data: metadata
+        cost: free
+        visibility: public
+        persistence: posture
+
+    - id: vercel.firewall-rule-write
+      label: 'Créer / modifier / supprimer une custom firewall rule'
+      reason: "Une mauvaise rule peut exposer silencieusement la prod aux
+        attaques (trop permissive) ou bloquer le trafic légitime (trop
+        restrictive). Chaque rule est project-scoped et s'applique à
+        tous les deployments. Posture-shift public sur chaque requête."
+      matches: 'vercel.project[**].firewall.firewall-rule[**].W'
+      vector:
+        reversibility: reversible
+        blast: env
+        data: metadata
+        cost: free
+        visibility: public
+        persistence: posture
+
+    - id: vercel.ip-rule-write
+      label: 'Ajouter / supprimer une règle IP blocking'
+      reason: 'Les IP rules contrôlent directement quelles IPs sources
+        peuvent atteindre le projet. Un mauvais deny bloque des clients
+        payants ; un mauvais bypass laisse un attaquant entrer.
+        Posture-shift public immédiat.'
+      matches: 'vercel.project[**].firewall.ip-rule[**].W'
+      vector:
+        reversibility: reversible
+        blast: env
+        data: metadata
+        cost: free
+        visibility: public
+        persistence: posture
+
     # ─── FALLBACK générique (DOIT être présent) ────────────────────────────
 
     - id: vercel.uncategorized-write
@@ -441,47 +520,52 @@ Vérifie que **chaque tool exposé** matche au moins un risk du catalogue.
 Ligne = tool, colonne = risk-id matché. ✓ = match direct, (✓) = match via
 fallback uniquement (signal de risk manquant).
 
-### 4.1 Reads (15 tools)
+### 4.1 Reads (16 tools)
 
-| Tool                                          | read-account | read-deployment | read-env-var | read-env-var-plaintext | fetch-deployment-url |
-| --------------------------------------------- | :----------: | :-------------: | :----------: | :--------------------: | :------------------: |
-| `vercel__search_vercel_documentation`         |      ✓       |                 |              |                        |                      |
-| `vercel__list_teams`                          |      ✓       |                 |              |                        |                      |
-| `vercel__list_projects`                       |      ✓       |                 |              |                        |                      |
-| `vercel__get_project`                         |      ✓       |                 |              |                        |                      |
-| `vercel__list_project_domains`                |      ✓       |                 |              |                        |                      |
-| `vercel__check_domain_availability_and_price` |      ✓       |                 |              |                        |                      |
-| `vercel__list_deployments`                    |              |        ✓        |              |                        |                      |
-| `vercel__get_deployment`                      |              |        ✓        |              |                        |                      |
-| `vercel__get_deployment_build_logs`           |              |        ✓        |              |                        |                      |
-| `vercel__get_runtime_logs`                    |              |        ✓        |              |                        |                      |
-| `vercel__web_fetch_vercel_url`                |              |                 |              |                        |          ✓           |
-| `vercel__list_toolbar_threads`                |              |        ✓        |              |                        |                      |
-| `vercel__get_toolbar_thread`                  |              |        ✓        |              |                        |                      |
-| `vercel__list_env_vars` (decrypt=false)       |              |                 |      ✓       |                        |                      |
-| `vercel__list_env_vars` (decrypt=true)        |              |                 |      ✓       |           ✓            |                      |
+| Tool                                          | read-account | read-deployment | read-env-var | read-env-var-plaintext | fetch-deployment-url | firewall-read |
+| --------------------------------------------- | :----------: | :-------------: | :----------: | :--------------------: | :------------------: | :-----------: |
+| `vercel__search_vercel_documentation`         |      ✓       |                 |              |                        |                      |               |
+| `vercel__list_teams`                          |      ✓       |                 |              |                        |                      |               |
+| `vercel__list_projects`                       |      ✓       |                 |              |                        |                      |               |
+| `vercel__get_project`                         |      ✓       |                 |              |                        |                      |               |
+| `vercel__list_project_domains`                |      ✓       |                 |              |                        |                      |               |
+| `vercel__check_domain_availability_and_price` |      ✓       |                 |              |                        |                      |               |
+| `vercel__list_deployments`                    |              |        ✓        |              |                        |                      |               |
+| `vercel__get_deployment`                      |              |        ✓        |              |                        |                      |               |
+| `vercel__get_deployment_build_logs`           |              |        ✓        |              |                        |                      |               |
+| `vercel__get_runtime_logs`                    |              |        ✓        |              |                        |                      |               |
+| `vercel__web_fetch_vercel_url`                |              |                 |              |                        |          ✓           |               |
+| `vercel__list_toolbar_threads`                |              |        ✓        |              |                        |                      |               |
+| `vercel__get_toolbar_thread`                  |              |        ✓        |              |                        |                      |               |
+| `vercel__list_env_vars` (decrypt=false)       |              |                 |      ✓       |                        |                      |               |
+| `vercel__list_env_vars` (decrypt=true)        |              |                 |      ✓       |           ✓            |                      |               |
+| `vercel__get_firewall_config`                 |              |                 |              |                        |                      |       ✓       |
 
-### 4.2 Writes (11 tools)
+### 4.2 Writes (16 tools)
 
-| Tool                                            | deploy-preview | deploy-prod | toolbar-write | env-var-write-preview | env-var-write-prod | env-var-fan-out | project-settings-write | domain-write | mint-bypass-token | uncategorized (fallback) |
-| ----------------------------------------------- | :------------: | :---------: | :-----------: | :-------------------: | :----------------: | :-------------: | :--------------------: | :----------: | :---------------: | :----------------------: |
-| `vercel__deploy_to_vercel` (target=preview)     |       ✓        |             |               |                       |                    |                 |                        |              |                   |                          |
-| `vercel__deploy_to_vercel` (target=prod)        |                |      ✓      |               |                       |                    |                 |                        |              |                   |                          |
-| `vercel__deploy_to_vercel` (target=development) |       ✓        |             |               |                       |                    |                 |                        |              |                   |                          |
-| `vercel__upsert_env_var` (target=[preview])     |                |             |               |           ✓           |                    |                 |                        |              |                   |                          |
-| `vercel__upsert_env_var` (target=[production])  |                |             |               |                       |         ✓          |                 |                        |              |                   |                          |
-| `vercel__upsert_env_var` (target=all 3 / omis)  |                |             |               |           ✓           |         ✓          |        ✓        |                        |              |                   |                          |
-| `vercel__delete_env_var` (target=preview)       |                |             |               |           ✓           |                    |                 |                        |              |                   |                          |
-| `vercel__delete_env_var` (target=production)    |                |             |               |                       |         ✓          |                 |                        |              |                   |                          |
-| `vercel__update_project_settings`               |                |             |               |                       |                    |                 |           ✓            |              |                   |                          |
-| `vercel__add_project_domain`                    |                |             |               |                       |                    |                 |                        |      ✓       |                   |                          |
-| `vercel__verify_project_domain`                 |                |             |               |                       |                    |                 |                        |      ✓       |                   |                          |
-| `vercel__remove_project_domain`                 |                |             |               |                       |                    |                 |                        |      ✓       |                   |                          |
-| `vercel__get_access_to_vercel_url`              |                |             |               |                       |                    |                 |                        |              |         ✓         |                          |
-| `vercel__change_toolbar_thread_resolve_status`  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                          |
-| `vercel__reply_to_toolbar_thread`               |                |             |       ✓       |                       |                    |                 |                        |              |                   |                          |
-| `vercel__edit_toolbar_message`                  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                          |
-| `vercel__add_toolbar_reaction`                  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                          |
+| Tool                                            | deploy-preview | deploy-prod | toolbar-write | env-var-write-preview | env-var-write-prod | env-var-fan-out | project-settings-write | domain-write | mint-bypass-token | firewall-write | firewall-rule-write | ip-rule-write | uncategorized (fallback) |
+| ----------------------------------------------- | :------------: | :---------: | :-----------: | :-------------------: | :----------------: | :-------------: | :--------------------: | :----------: | :---------------: | :------------: | :-----------------: | :-----------: | :----------------------: |
+| `vercel__deploy_to_vercel` (target=preview)     |       ✓        |             |               |                       |                    |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__deploy_to_vercel` (target=prod)        |                |      ✓      |               |                       |                    |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__deploy_to_vercel` (target=development) |       ✓        |             |               |                       |                    |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__upsert_env_var` (target=[preview])     |                |             |               |           ✓           |                    |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__upsert_env_var` (target=[production])  |                |             |               |                       |         ✓          |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__upsert_env_var` (target=all 3 / omis)  |                |             |               |           ✓           |         ✓          |        ✓        |                        |              |                   |                |                     |               |                          |
+| `vercel__delete_env_var` (target=preview)       |                |             |               |           ✓           |                    |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__delete_env_var` (target=production)    |                |             |               |                       |         ✓          |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__update_project_settings`               |                |             |               |                       |                    |                 |           ✓            |              |                   |                |                     |               |                          |
+| `vercel__add_project_domain`                    |                |             |               |                       |                    |                 |                        |      ✓       |                   |                |                     |               |                          |
+| `vercel__verify_project_domain`                 |                |             |               |                       |                    |                 |                        |      ✓       |                   |                |                     |               |                          |
+| `vercel__remove_project_domain`                 |                |             |               |                       |                    |                 |                        |      ✓       |                   |                |                     |               |                          |
+| `vercel__get_access_to_vercel_url`              |                |             |               |                       |                    |                 |                        |              |         ✓         |                |                     |               |                          |
+| `vercel__change_toolbar_thread_resolve_status`  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__reply_to_toolbar_thread`               |                |             |       ✓       |                       |                    |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__edit_toolbar_message`                  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__add_toolbar_reaction`                  |                |             |       ✓       |                       |                    |                 |                        |              |                   |                |                     |               |                          |
+| `vercel__toggle_firewall`                       |                |             |               |                       |                    |                 |                        |              |                   |       ✓        |                     |               |                          |
+| `vercel__upsert_firewall_rule`                  |                |             |               |                       |                    |                 |                        |              |                   |                |          ✓          |               |                          |
+| `vercel__remove_firewall_rule`                  |                |             |               |                       |                    |                 |                        |              |                   |                |          ✓          |               |                          |
+| `vercel__manage_ip_blocking`                    |                |             |               |                       |                    |                 |                        |              |                   |                |                     |       ✓       |                          |
 
 **Résultat lint** : 0 tool tombe uniquement dans le fallback. Le fallback
 `vercel.uncategorized-write` reste néanmoins **obligatoire** (spec §14 anti-
@@ -544,10 +628,8 @@ granularité, splitter en Phase 2.
 
 ### 5.3 Tools custom vs natifs Vercel — risk distinct ?
 
-Les 8 tools custom REST (`add_project_domain`, `verify_project_domain`,
-`update_project_settings`, `upsert_env_var`,
-`list_env_vars`, `delete_env_var`, `list_project_domains`,
-`remove_project_domain`) sont des **augmentations sur des trous du MCP
+Les 14 tools custom REST (domains, env vars, project settings, venv push,
+firewall/WAF) sont des **augmentations sur des trous du MCP
 officiel**, pas des opérations sémantiquement différentes.
 
 **Décision** : **pas de distinction risk-side** entre custom et natif.
@@ -618,14 +700,13 @@ risk explicitement.
 
 ### 6.1 Trous data-model
 
-| Manque                         | Impact                                                                                                                                                                                        |
-| ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `firewall` (WAF rules)         | Vercel expose des Firewall rules depuis 2025 (rules par projet, IP blocking, custom challenges). Non couvert par le wrap actuel ni par le data-model. À ajouter si on expose ces tools en v2. |
-| `edge-config`                  | Volontairement hors-scope (handbook §Concepts non-supportés). Pas de risk catalogue dédié — si un jour exposé, risk `edge-config-write` à ajouter (posture).                                  |
-| `log-drain`                    | Hors-scope. Si exposé : risk `log-drain-write` (data flow externe, `data: data`, `visibility: public`, `persistence: posture`).                                                               |
-| `webhook`                      | Hors-scope. Si exposé : risk `webhook-write` (data flow externe).                                                                                                                             |
-| `alias` (custom alias mapping) | Sous-cas de `deployment` côté Vercel (un alias re-mappe le DNS d'un domaine vers une deployment précise). Si exposé, à modéliser comme entité `alias` sous `domain`.                          |
-| `marketplace billing`          | Hors-scope (Vaubaan n'est pas une Marketplace listing).                                                                                                                                       |
+| Manque                         | Impact                                                                                                                                                               |
+| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `edge-config`                  | Volontairement hors-scope (handbook §Concepts non-supportés). Pas de risk catalogue dédié — si un jour exposé, risk `edge-config-write` à ajouter (posture).         |
+| `log-drain`                    | Hors-scope. Si exposé : risk `log-drain-write` (data flow externe, `data: data`, `visibility: public`, `persistence: posture`).                                      |
+| `webhook`                      | Hors-scope. Si exposé : risk `webhook-write` (data flow externe).                                                                                                    |
+| `alias` (custom alias mapping) | Sous-cas de `deployment` côté Vercel (un alias re-mappe le DNS d'un domaine vers une deployment précise). Si exposé, à modéliser comme entité `alias` sous `domain`. |
+| `marketplace billing`          | Hors-scope (Vaubaan n'est pas une Marketplace listing).                                                                                                              |
 
 ### 6.2 Trous catalogue
 
@@ -658,7 +739,7 @@ write` au mapping actuel. Le fallback reste présent **pour le futur**.
 | Aspect classifier                  | v1 actuel (`classify.ts`)                                 | v4 proposé                                                                              |
 | ---------------------------------- | --------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | Sortie                             | `{ capability: {plane, level, action, env?} }`            | `{ slices: Slice[] }` (multi-slice quand fan-out)                                       |
-| Niveaux                            | 4 (`account`, `project-settings`, `deployment`, `config`) | 13 entités (cf. §1.1) — plus expressif                                                  |
+| Niveaux                            | 4 (`account`, `project-settings`, `deployment`, `config`) | 16 entités (cf. §1.1) — plus expressif                                                  |
 | Env-resolution                     | `static` ou `runtime` selon kind                          | identique, étendu pour gérer `target: string[]` (fan-out)                               |
 | `upsert_env_var target=[3 envs]`   | 1 capability `config:write@prod` (perd preview+dev)       | 3 slices + risk `env-var-fan-out`                                                       |
 | `delete_env_var`                   | 1 capability `config:write@<hint>`                        | 3 slices (env[*]) + risks `env-var-write-prod` + `env-var-write-preview`                |
@@ -668,6 +749,7 @@ write` au mapping actuel. Le fallback reste présent **pour le futur**.
 | `update_deployment_protection`     | `project-settings:write` (mélangé avec settings normaux)  | **supprimé** — Vercel interdit la modification via API                                  |
 | `add/verify/remove_project_domain` | `project-settings:write`                                  | risk distinct `domain-write`                                                            |
 | `toolbar-*` writes                 | `deployment:write` (env-less, mélangé avec deploy)        | risk distinct `toolbar-write`                                                           |
+| `firewall-*` (5 tools)             | non couvert                                               | 4 risks : `firewall-read`, `firewall-write`, `firewall-rule-write`, `ip-rule-write`     |
 | Décision binaire                   | gates `allow/confirm/deny` côté policy                    | `risk ∈ accepted_risks` (strict-fail au runtime, ADR unified-gates-drop-confirm)        |
 | Bypass impossible via              | `dispatch_workflow` retiré (côté GitHub, plus Vercel)     | identique                                                                               |
 
@@ -696,8 +778,12 @@ Coder Vercel — risks à cocher au mint :
   ☐ vercel.read-env-var-plaintext
   ☐ vercel.env-var-write-prod
   ☐ vercel.domain-write
+  ☐ vercel.firewall-read
+  ☐ vercel.firewall-write
+  ☐ vercel.firewall-rule-write
+  ☐ vercel.ip-rule-write
 ```
 
-6 risks cochés par défaut + 9 explicites à ajouter selon la tâche. Post
+6 risks cochés par défaut + 13 explicites à ajouter selon la tâche. Post
 drop-confirm la décision est binaire : un risk est dans
 `accepted_risks` (allow) ou non (deny). Aligné avec l'UX cible spec §0.

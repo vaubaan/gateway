@@ -74,6 +74,30 @@ export const dataModel: DataModel = {
             'attach / detach is a posture-shift visible publicly.',
         },
         {
+          name: 'firewall',
+          parent: 'project',
+          cardinalities: ['one'],
+          description:
+            'Singleton WAF / Firewall configuration per project. Controls the top-level ' +
+            'firewallEnabled toggle, managed rulesets, and OWASP CRS settings.',
+        },
+        {
+          name: 'firewall-rule',
+          parent: 'firewall',
+          cardinalities: ['bounded'],
+          description:
+            'A custom firewall rule within the project WAF. Each rule has a condition group, ' +
+            'an action (deny, challenge, rate_limit, log, bypass), and an active/inactive toggle.',
+        },
+        {
+          name: 'ip-rule',
+          parent: 'firewall',
+          cardinalities: ['bounded'],
+          description:
+            'An IP-based blocking / challenge / bypass / log rule within the project WAF. ' +
+            'Each entry targets a single IP or CIDR with a configurable action.',
+        },
+        {
           name: 'env',
           parent: 'project',
           cardinalities: ['bounded'],

@@ -9,7 +9,7 @@
  * `.yaml` files in the Lambda). Keep both in sync — a CI test in
  * `tests/unit/risk-catalog-sync.test.ts` diffs the two structures.
  *
- * 12 named risks + 1 fallback = 13 total. RiskId format follows
+ * 16 named risks + 1 fallback = 17 total. RiskId format follows
  * `<provider>.<name>` (cf. shared/src/risk.ts RISK_ID_REGEX). Env-specific
  * pairs (deploy-preview / deploy-prod, env-var-write-preview /
  * env-var-write-prod) are merged into single entries with
@@ -249,6 +249,79 @@ export const vercelRiskCatalog: RiskCatalog = {
         data: 'metadata',
         cost: 'free',
         visibility: 'internal',
+        persistence: 'posture',
+      },
+    },
+
+    // ─── READS — FIREWALL (WAF config inspection) ──────────────────────────
+    {
+      id: 'vercel.firewall-read',
+      label: 'Read firewall / WAF configuration',
+      reason:
+        'Exposes the full WAF posture of a project : custom rules, IP blocking entries, ' +
+        'managed rulesets, OWASP CRS settings, and the firewallEnabled toggle. Metadata-only ' +
+        '(no mutations), but reveals the security policy surface — an attacker who sees the ' +
+        'rules can craft bypasses.',
+      matches: 'vercel.project[**].firewall.R',
+      vector: {
+        reversibility: 'reversible',
+        blast: 'single',
+        data: 'metadata',
+        cost: 'free',
+        visibility: 'internal',
+        persistence: 'stateless',
+      },
+    },
+
+    // ─── WRITES — FIREWALL (WAF toggle + rules + IP blocking) ────────────
+    {
+      id: 'vercel.firewall-write',
+      label: 'Toggle the project firewall on/off',
+      reason:
+        'Flipping the WAF off exposes the project to all unfiltered traffic. Flipping it on ' +
+        'may block legitimate visitors if rules are misconfigured. Posture-shift affecting ' +
+        'production traffic immediately.',
+      matches: 'vercel.project[**].firewall.W',
+      vector: {
+        reversibility: 'reversible',
+        blast: 'env',
+        data: 'metadata',
+        cost: 'free',
+        visibility: 'public',
+        persistence: 'posture',
+      },
+    },
+    {
+      id: 'vercel.firewall-rule-write',
+      label: 'Create / update / remove a custom firewall rule',
+      reason:
+        'A bad rule can silently expose production to attacks (too permissive) or block ' +
+        'legitimate traffic (too restrictive). Each rule is project-scoped and applies to all ' +
+        'deployments. Posture-shift with public-facing impact on every request.',
+      matches: 'vercel.project[**].firewall.firewall-rule[**].W',
+      vector: {
+        reversibility: 'reversible',
+        blast: 'env',
+        data: 'metadata',
+        cost: 'free',
+        visibility: 'public',
+        persistence: 'posture',
+      },
+    },
+    {
+      id: 'vercel.ip-rule-write',
+      label: 'Add / remove an IP blocking rule',
+      reason:
+        'IP rules directly control which source IPs can reach the project. A wrong deny ' +
+        'blocks paying customers ; a wrong bypass lets an attacker in. Immediate public-facing ' +
+        'posture-shift.',
+      matches: 'vercel.project[**].firewall.ip-rule[**].W',
+      vector: {
+        reversibility: 'reversible',
+        blast: 'env',
+        data: 'metadata',
+        cost: 'free',
+        visibility: 'public',
         persistence: 'posture',
       },
     },

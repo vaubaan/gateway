@@ -21,6 +21,11 @@ export const ADD_DOMAIN = 'vercel__add_project_domain';
 export const VERIFY_DOMAIN = 'vercel__verify_project_domain';
 export const REMOVE_DOMAIN = 'vercel__remove_project_domain';
 export const UPSERT_ENV_FROM_VENV = 'vercel__upsert_env_from_venv';
+export const GET_FIREWALL_CONFIG = 'vercel__get_firewall_config';
+export const TOGGLE_FIREWALL = 'vercel__toggle_firewall';
+export const UPSERT_FIREWALL_RULE = 'vercel__upsert_firewall_rule';
+export const REMOVE_FIREWALL_RULE = 'vercel__remove_firewall_rule';
+export const MANAGE_IP_BLOCKING = 'vercel__manage_ip_blocking';
 
 export const customTools: readonly McpToolDeclaration[] = [
   {
@@ -288,6 +293,236 @@ export const customTools: readonly McpToolDeclaration[] = [
         },
       },
       required: ['projectId', 'venv_key'],
+    },
+  },
+
+  // ─── Firewall / WAF tools ─────────────────────────────────────────────────
+
+  {
+    name: GET_FIREWALL_CONFIG,
+    description:
+      'Read the active firewall (WAF) configuration for a Vercel project — returns firewallEnabled flag, custom rules, IP blocking rules, managed rulesets, and OWASP CRS settings. Backed by GET /v1/security/firewall/config/active.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Vercel project id (e.g. `prj_xxx`).',
+        },
+        teamId: {
+          type: 'string',
+          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
+        },
+      },
+      required: ['projectId'],
+    },
+  },
+  {
+    name: TOGGLE_FIREWALL,
+    description:
+      'Enable or disable the firewall (WAF) on a Vercel project. Backed by PATCH /v1/security/firewall/config.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Vercel project id (e.g. `prj_xxx`).',
+        },
+        teamId: {
+          type: 'string',
+          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
+        },
+        enabled: {
+          type: 'boolean',
+          description: 'Set to `true` to enable the firewall, `false` to disable it.',
+        },
+      },
+      required: ['projectId', 'enabled'],
+    },
+  },
+  {
+    name: UPSERT_FIREWALL_RULE,
+    description:
+      'Create or update a custom firewall rule on a Vercel project. When `ruleId` is provided the existing rule is updated ; otherwise a new rule is inserted. Backed by PATCH /v1/security/firewall/config with action `rules.insert` or `rules.update`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Vercel project id (e.g. `prj_xxx`).',
+        },
+        teamId: {
+          type: 'string',
+          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
+        },
+        ruleId: {
+          type: 'string',
+          description: 'Existing rule id to update. Omit to insert a new rule.',
+        },
+        name: {
+          type: 'string',
+          description: 'Human-readable rule name.',
+        },
+        description: {
+          type: 'string',
+          description: 'Optional description of the rule purpose.',
+        },
+        active: {
+          type: 'boolean',
+          description: 'Whether the rule is active (`true`) or disabled (`false`).',
+        },
+        conditionGroup: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              conditions: {
+                type: 'array',
+                items: {
+                  type: 'object',
+                  properties: {
+                    type: {
+                      type: 'string',
+                      description:
+                        'Condition type (e.g. `ip_address`, `path`, `header`, `method`, `host`, `geo`, `cookie`, `query`, `target_path`, `region`, `protocol`, `scheme`, `environment`, `ja4_digest`, `ja3_digest`).',
+                    },
+                    op: {
+                      type: 'string',
+                      description:
+                        'Operator (e.g. `eq`, `neq`, `inc`, `ninc`, `pre`, `suf`, `re`, `nre`, `ex`, `nex`, `gt`, `gte`, `lt`, `lte`, `geo`, `ngeo`, `ipmatch`, `nipmatch`).',
+                    },
+                    neg: { type: 'boolean', description: 'Negate the condition.' },
+                    key: {
+                      type: 'string',
+                      description: 'Header/cookie/query key when the type requires it.',
+                    },
+                    value: { type: 'string', description: 'Value to match against.' },
+                  },
+                  required: ['type', 'op'],
+                },
+                description: 'Array of conditions ANDed together within this group.',
+              },
+            },
+            required: ['conditions'],
+          },
+          description:
+            'Array of condition groups ORed together. Each group contains ANDed conditions.',
+        },
+        action: {
+          type: 'object',
+          properties: {
+            type: {
+              type: 'string',
+              enum: ['deny', 'challenge', 'rate_limit', 'log', 'bypass'],
+              description: 'Action to take when the rule matches.',
+            },
+            duration: {
+              type: 'string',
+              description:
+                'Duration for temporary bans (e.g. `1h`, `24h`). Only for `deny` action.',
+            },
+            rateLimit: {
+              type: 'object',
+              properties: {
+                algo: {
+                  type: 'string',
+                  enum: ['fixed_window', 'token_bucket'],
+                  description: 'Rate-limiting algorithm.',
+                },
+                window: { type: 'number', description: 'Window size in seconds.' },
+                limit: { type: 'number', description: 'Max requests per window.' },
+                action: {
+                  type: 'string',
+                  enum: ['deny', 'challenge', 'log'],
+                  description: 'Action when rate-limit is exceeded.',
+                },
+                keys: {
+                  type: 'array',
+                  items: { type: 'string' },
+                  description: 'Keys to group rate limits by (e.g. `ip`, `path`).',
+                },
+              },
+              description: 'Rate-limit parameters (only when type is `rate_limit`).',
+            },
+            actionDuration: {
+              type: ['string', 'null'],
+              description: 'How long the action lasts after rate-limit is exceeded.',
+            },
+          },
+          required: ['type'],
+          description: 'Action to execute when the rule triggers.',
+        },
+      },
+      required: ['projectId', 'name', 'active', 'conditionGroup', 'action'],
+    },
+  },
+  {
+    name: REMOVE_FIREWALL_RULE,
+    description:
+      'Remove a custom firewall rule from a Vercel project by its rule id. Backed by PATCH /v1/security/firewall/config with action `rules.remove`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Vercel project id (e.g. `prj_xxx`).',
+        },
+        teamId: {
+          type: 'string',
+          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
+        },
+        ruleId: {
+          type: 'string',
+          description: 'The id of the firewall rule to remove.',
+        },
+      },
+      required: ['projectId', 'ruleId'],
+    },
+  },
+  {
+    name: MANAGE_IP_BLOCKING,
+    description:
+      'Add or remove an IP-based blocking / challenge / bypass / log rule in the Vercel project firewall. Use `operation: "insert"` to add an IP rule, `operation: "remove"` to delete one by its id. Backed by PATCH /v1/security/firewall/config with action `ip.insert` or `ip.remove`.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        projectId: {
+          type: 'string',
+          description: 'Vercel project id (e.g. `prj_xxx`).',
+        },
+        teamId: {
+          type: 'string',
+          description: 'Team id (slug or team_xxx). Auto-injected if omitted.',
+        },
+        operation: {
+          type: 'string',
+          enum: ['insert', 'remove'],
+          description: '`insert` to add an IP rule, `remove` to delete one by id.',
+        },
+        ip: {
+          type: 'string',
+          description: 'IP address or CIDR to block/challenge/log/bypass (required for `insert`).',
+        },
+        hostname: {
+          type: 'string',
+          description: 'Optional hostname restriction for the IP rule (only for `insert`).',
+        },
+        action: {
+          type: 'string',
+          enum: ['deny', 'challenge', 'log', 'bypass'],
+          description: 'Action to take for this IP (only for `insert`). Defaults to `deny`.',
+        },
+        notes: {
+          type: 'string',
+          description:
+            'Human-readable note about why the IP is blocked/allowed (only for `insert`).',
+        },
+        id: {
+          type: 'string',
+          description: 'IP rule id to remove (required for `remove`).',
+        },
+      },
+      required: ['projectId', 'operation'],
     },
   },
 ];

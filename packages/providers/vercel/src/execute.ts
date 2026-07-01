@@ -18,11 +18,16 @@ import { isCustomTool, toUpstreamName } from './tools.ts';
 import {
   ADD_DOMAIN,
   DELETE_ENV_VAR,
+  GET_FIREWALL_CONFIG,
   LIST_DOMAINS,
   LIST_ENV_VARS,
+  MANAGE_IP_BLOCKING,
   REMOVE_DOMAIN,
+  REMOVE_FIREWALL_RULE,
+  TOGGLE_FIREWALL,
   UPDATE_PROJECT_SETTINGS,
   UPSERT_ENV_VAR,
+  UPSERT_FIREWALL_RULE,
   VERIFY_DOMAIN,
 } from './custom-tools.ts';
 
@@ -235,6 +240,77 @@ async function executeCustom(
       null,
     );
   }
+
+  // ─── Firewall / WAF tools ───────────────────────────────────────────────
+
+  if (tool === GET_FIREWALL_CONFIG) {
+    query.projectId = projectId;
+    return callRest(fetchImpl, token, 'GET', '/v1/security/firewall/config/active', query, null);
+  }
+  if (tool === TOGGLE_FIREWALL) {
+    if (typeof args.enabled !== 'boolean') {
+      throw new Error(`Vercel custom tool ${tool}: enabled (boolean) is required.`);
+    }
+    query.projectId = projectId;
+    return callRest(fetchImpl, token, 'PATCH', '/v1/security/firewall/config', query, {
+      action: 'firewallEnabled',
+      value: args.enabled,
+    });
+  }
+  if (tool === UPSERT_FIREWALL_RULE) {
+    if (typeof args.name !== 'string') {
+      throw new Error(`Vercel custom tool ${tool}: name is required.`);
+    }
+    query.projectId = projectId;
+    const ruleValue = pickDefined(args, [
+      'name',
+      'description',
+      'active',
+      'conditionGroup',
+      'action',
+    ]);
+    const ruleId = typeof args.ruleId === 'string' ? args.ruleId : null;
+    const body: Record<string, unknown> = ruleId
+      ? { action: 'rules.update', id: ruleId, value: ruleValue }
+      : { action: 'rules.insert', value: ruleValue };
+    return callRest(fetchImpl, token, 'PATCH', '/v1/security/firewall/config', query, body);
+  }
+  if (tool === REMOVE_FIREWALL_RULE) {
+    const ruleId = typeof args.ruleId === 'string' ? args.ruleId : '';
+    if (!ruleId) throw new Error(`Vercel custom tool ${tool}: ruleId is required.`);
+    query.projectId = projectId;
+    return callRest(fetchImpl, token, 'PATCH', '/v1/security/firewall/config', query, {
+      action: 'rules.remove',
+      id: ruleId,
+    });
+  }
+  if (tool === MANAGE_IP_BLOCKING) {
+    const operation = typeof args.operation === 'string' ? args.operation : '';
+    if (operation !== 'insert' && operation !== 'remove') {
+      throw new Error(`Vercel custom tool ${tool}: operation must be 'insert' or 'remove'.`);
+    }
+    query.projectId = projectId;
+    if (operation === 'insert') {
+      if (typeof args.ip !== 'string' || !args.ip) {
+        throw new Error(`Vercel custom tool ${tool}: ip is required for insert.`);
+      }
+      const value = pickDefined(args, ['hostname', 'ip', 'action', 'notes']);
+      return callRest(fetchImpl, token, 'PATCH', '/v1/security/firewall/config', query, {
+        action: 'ip.insert',
+        value,
+      });
+    }
+    // operation === 'remove'
+    const ipRuleId = typeof args.id === 'string' ? args.id : '';
+    if (!ipRuleId) {
+      throw new Error(`Vercel custom tool ${tool}: id is required for remove.`);
+    }
+    return callRest(fetchImpl, token, 'PATCH', '/v1/security/firewall/config', query, {
+      action: 'ip.remove',
+      id: ipRuleId,
+    });
+  }
+
   throw new Error(`Vercel custom tool not implemented: ${tool}`);
 }
 

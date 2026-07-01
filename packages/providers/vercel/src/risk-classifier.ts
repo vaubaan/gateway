@@ -341,6 +341,59 @@ export function classifyVercelV4(
         slices: [slice('W', [name('project'), projectSeg, name('domain'), domainIdent(args)])],
       };
 
+    // ─── Reads — firewall ────────────────────────────────────────────
+
+    case 'vercel__get_firewall_config':
+      return {
+        slices: [slice('R', [name('project'), projectSeg, name('firewall')])],
+      };
+
+    // ─── Writes — firewall ───────────────────────────────────────────
+
+    case 'vercel__toggle_firewall':
+      return {
+        slices: [slice('W', [name('project'), projectSeg, name('firewall')])],
+      };
+
+    case 'vercel__upsert_firewall_rule':
+      return {
+        slices: [
+          slice('W', [
+            name('project'),
+            projectSeg,
+            name('firewall'),
+            name('firewall-rule'),
+            firewallRuleIdent(args),
+          ]),
+        ],
+      };
+
+    case 'vercel__remove_firewall_rule':
+      return {
+        slices: [
+          slice('W', [
+            name('project'),
+            projectSeg,
+            name('firewall'),
+            name('firewall-rule'),
+            firewallRuleIdent(args),
+          ]),
+        ],
+      };
+
+    case 'vercel__manage_ip_blocking':
+      return {
+        slices: [
+          slice('W', [
+            name('project'),
+            projectSeg,
+            name('firewall'),
+            name('ip-rule'),
+            ipRuleIdent(args),
+          ]),
+        ],
+      };
+
     // ─── Writes — toolbar ────────────────────────────────────────────
 
     case 'vercel__change_toolbar_thread_resolve_status':
@@ -425,5 +478,20 @@ function toolbarMessageIdent(args: Record<string, unknown>): SliceSegment {
 function domainIdent(args: Record<string, unknown>): SliceSegment {
   const v = args.domain ?? args.name;
   if (typeof v === 'string' && v.length > 0 && /^[a-zA-Z0-9_/-]+$/.test(v)) return ident(v);
+  return ANY_IDENT;
+}
+
+/** Best-effort firewall-rule-id ident segment — wildcard if absent. */
+function firewallRuleIdent(args: Record<string, unknown>): SliceSegment {
+  const v = args.ruleId;
+  if (typeof v === 'string' && v.length > 0) return ident(v);
+  return ANY_IDENT;
+}
+
+/** Best-effort ip-rule ident segment — uses the rule `id` for remove, wildcard
+ *  for insert (no stable id yet). */
+function ipRuleIdent(args: Record<string, unknown>): SliceSegment {
+  const v = args.id;
+  if (typeof v === 'string' && v.length > 0) return ident(v);
   return ANY_IDENT;
 }
