@@ -123,14 +123,13 @@ export async function executeCall(
   token: string,
   tool: string,
   args: Record<string, unknown>,
-  accountId: string,
+  _accountId: string,
 ): Promise<unknown> {
   switch (tool) {
     // ─── READS ─────────────────────────────────────────────────────────────
     case 'cloudflare_dns__list_zones': {
       const { page, per_page, ...rest } = args;
       const qs: Record<string, unknown> = { ...rest };
-      if (accountId) qs['account.id'] = accountId;
       if (page !== undefined) qs.page = page;
       if (per_page !== undefined) qs.per_page = per_page;
       return callCloudflareApi(fetchImpl, token, 'GET', '/zones', qs);
