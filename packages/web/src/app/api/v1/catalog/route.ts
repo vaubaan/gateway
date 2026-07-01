@@ -22,6 +22,7 @@ import { sshAvailableTools } from '@vaubaan/providers-ssh';
 import { upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
 import { stripeAvailableTools } from '@vaubaan/providers-stripe';
 import { resendAvailableTools } from '@vaubaan/providers-resend';
+import { cloudflareDnsAvailableTools } from '@vaubaan/providers-cloudflare-dns';
 import { buildGateway } from '@/lib/gateway/build';
 
 export const runtime = 'nodejs';
@@ -42,6 +43,7 @@ const PROVIDERS: readonly ProviderEntry[] = [
   { slug: 'upstash-redis', displayName: 'Upstash Redis', tools: upstashRedisAvailableTools },
   { slug: 'stripe', displayName: 'Stripe', tools: stripeAvailableTools },
   { slug: 'resend', displayName: 'Resend', tools: resendAvailableTools },
+  { slug: 'cloudflare-dns', displayName: 'Cloudflare DNS', tools: cloudflareDnsAvailableTools },
 ];
 
 interface BindingDescriptor {

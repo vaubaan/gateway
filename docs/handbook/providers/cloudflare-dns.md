@@ -1,17 +1,21 @@
 ---
-title: Cloudflare DNS provider — v4 risk-based modelling
+title: Cloudflare DNS provider — v4 risk-based modelling + runtime
 status: current
 date: 2026-06-23
-last_reviewed: 2026-06-23
+last_reviewed: 2026-07-01
 tracks:
   - packages/providers/cloudflare-dns/src/data-model.ts
   - packages/providers/cloudflare-dns/src/risk-catalog.ts
   - packages/providers/cloudflare-dns/src/risk-catalog.yaml
   - packages/providers/cloudflare-dns/src/risk-classifier.ts
+  - packages/providers/cloudflare-dns/src/tools.ts
+  - packages/providers/cloudflare-dns/src/execute.ts
+  - packages/providers/cloudflare-dns/src/cloudflare-dns-adapter.ts
   - packages/providers/cloudflare-dns/src/index.ts
+  - packages/web/src/lib/gateway/build.ts
 ---
 
-# Cloudflare DNS provider — v4 risk-based modelling
+# Cloudflare DNS provider — v4 risk-based modelling + runtime
 
 Tenth Vaubaan provider. Covers DNS zone and record management for a
 single Cloudflare account. Simpler than Stripe or Gmail : 8 entities,
@@ -25,21 +29,23 @@ Research : `.vaubaan/research/providers/cloudflare-dns.md`.
 
 ## Vue d'ensemble
 
-The package lives in `packages/providers/cloudflare-dns/`. At this
-stage it contains only the v4 risk-based modelling artifacts (Phases
-B/C/D). Runtime artifacts (adapter, execute, tools) will be added
-when the Cloudflare DNS runtime is implemented.
+The package lives in `packages/providers/cloudflare-dns/`. It contains
+the v4 risk-based modelling artifacts (data-model, risk catalog,
+classifier) and the full runtime (adapter, dispatcher, 15 MCP tools).
 
 Exports from `src/index.ts`:
 
+- `CloudflareDnsAdapter` -- paste-token adapter class.
+- `cloudflareDnsAvailableTools` -- 15 `McpToolDeclaration[]` (7 reads + 8 writes).
+- `cloudflareDnsExecuteCall` -- REST dispatcher function.
 - `cloudflareDnsDataModel` -- entity graph for the `dns` plane.
 - `cloudflareDnsRiskCatalog` -- TS mirror of `risk-catalog.yaml` (10 entries).
 - `classifyCloudflareDnsV4` -- maps `(tool, args, bindings)` to slices.
 - `CloudflareDnsClassifyV4Result` -- type alias for the classify return.
 
-Auth model : API Token (Bearer) only at MVP. The operator creates a
-scoped token from the Cloudflare dashboard and pastes it into the
-binding form. No OAuth, no Global API Key.
+Auth model : API Token (Bearer) or Global API Key (`email|key` format,
+detected by `|` separator). The operator creates a token from the
+Cloudflare dashboard and pastes it into the binding form. No OAuth.
 
 ---
 
@@ -69,7 +75,7 @@ represent BIND zone file operations (bulk import POST, atomic export
 GET), not queryable REST resources.
 
 Validated by `tests/unit/data-model.test.ts` (referential integrity,
-single plane, no envScopable, 8 entities).
+single plane, no envScopable, account root, 8 entities).
 
 ### 2. Risk catalog (`src/risk-catalog.yaml` + `src/risk-catalog.ts`)
 
@@ -144,6 +150,201 @@ the operator to accept both `read-zone-metadata` and `read-records`.
 Unknown tools return `{ denied: 'unknown cloudflare-dns tool ...' }`.
 Missing binding returns `{ denied: 'no cloudflare-dns binding ...' }`.
 
+### 4. Tools (`src/tools.ts`)
+
+15 `McpToolDeclaration` entries (7 reads + 8 writes), prefixed
+`cloudflare_dns__`. Each tool declares its `inputSchema` with the
+required and optional parameters matching the Cloudflare REST API.
+
+Exports :
+
+- `availableTools` -- the full array of 15 tool declarations.
+- `WRITE_TOOL_NAMES` -- `Set<string>` of the 8 write tool names.
+
+Key input patterns :
+
+- Most tools require `zone_id`.
+- `get_record`, `update_record`, `delete_record` also require `record_id`.
+- `create_record` requires `type`, `name`, `content` ; optionally `ttl`,
+  `proxied`, `priority`.
+- `list_records` accepts optional filters : `type`, `name`, `content`,
+  `page`, `per_page`.
+- `edit_zone_settings` takes an `items` array of `{id, value}` pairs.
+- `purge_cache` takes optional `purge_everything`, `files`, `tags`,
+  `hosts`, `prefixes`.
+- `edit_dnssec` takes `status` (`"active"` or `"disabled"`).
+- `import_records` takes `file` (BIND zone file content as string).
+- `list_zones` takes no required args (account_id injected from binding).
+
+### 5. Execute dispatcher (`src/execute.ts`)
+
+`executeCall(fetchImpl, token, tool, args, accountId)` routes each of
+the 15 tools to its Cloudflare REST endpoint via a switch/case.
+
+Base URL : `https://api.cloudflare.com/client/v4`.
+
+Auth headers built by `buildAuthHeaders(token)` :
+
+- If `token` contains `|` : split into `email|key` and use
+  `X-Auth-Email` + `X-Auth-Key` headers (Global API Key format).
+- Otherwise : `Authorization: Bearer <token>` (API Token format).
+
+HTTP methods :
+
+- **GET** : query-string params via `toQueryString()`. No body.
+- **POST / PATCH** : `Content-Type: application/json`, JSON body.
+- **DELETE** : no body.
+- **import_records** : special case using `callCloudflareMultipart()` --
+  `multipart/form-data` with a `file` field containing the BIND content
+  as a `Blob`.
+
+`list_zones` injects `account.id=<accountId>` into the query string to
+scope results to the binding's Cloudflare account.
+
+### 6. Adapter (`src/cloudflare-dns-adapter.ts`)
+
+Class `CloudflareDnsAdapter` -- paste-token mode, same pattern as
+`ResendAdapter`.
+
+`mintUpstreamToken(admin)` : decodes `admin.access_token_encrypted` via
+`TextDecoder` and returns the raw token string with a far-future expiry
+(1 year). Cloudflare API Tokens do not expire on their own.
+
+`validateBinding(admin, resourceRef)` : calls
+`GET /zones?account.id=<resourceRef>` with the decoded token. If the
+response is OK, returns `{ ok: true, displayName }` where `displayName`
+is the first zone's name (or the `resourceRef` as fallback). Supports
+both Bearer and Global API Key auth detection.
+
+`executeCall(admin, binding, tool, args)` : decodes the token, extracts
+`accountId` from `binding.resource_ref`, and delegates to `execute.ts`.
+
+`classifyV4(tool, args, bindings)` : delegates to
+`classifyCloudflareDnsV4`.
+
+Constructor accepts an optional `CloudflareDnsAdapterConfig` with
+`fetchImpl` for test injection.
+
+---
+
+## Gateway wiring
+
+### `build.ts` (l. 377-386)
+
+```typescript
+const cloudflareDnsAdapter = new CloudflareDnsAdapter();
+upstreamByProvider['cloudflare-dns'] = {
+  provider: 'cloudflare-dns',
+  availableTools: cloudflareDnsAvailableTools,
+  classifyV4: (tool, args, bindings) => cloudflareDnsAdapter.classifyV4(tool, args, bindings),
+  executeCall: (admin, binding, tool, args) =>
+    cloudflareDnsAdapter.executeCall(admin, binding, tool, args),
+  loadProviderAdmin,
+};
+```
+
+Same pattern as Resend/Upstash Redis : paste-token via
+`provider_admins`, no `selfContained` flag (unlike Stripe).
+
+### `catalog/route.ts`
+
+`{ slug: 'cloudflare-dns', displayName: 'Cloudflare DNS', tools: cloudflareDnsAvailableTools }`
+added to the `PROVIDERS` array exposed by `GET /api/v1/catalog`.
+
+### `risk-catalog/loader.ts`
+
+`cloudflareDnsRiskCatalog` imported from `@vaubaan/providers-cloudflare-dns`
+and registered in `PROVIDER_CATALOGS['cloudflare-dns']`.
+
+### `provider-info.ts`
+
+Already registered with `kind: 'cloud'`, 1 plane `dns`, data model, and
+catalog path.
+
+### Zod enums (preview + mint)
+
+`'cloudflare-dns'` already present in the `z.enum()` schemas in
+`risk-preview.ts`, `tokens/preview/route.ts`, and `tokens/mint/route.ts`.
+
+---
+
+## Comment l'utiliser
+
+### Setup d'un binding Cloudflare DNS
+
+1. Create a Cloudflare API Token with `Zone:DNS:Edit` + `Zone:Zone:Read`
+   permissions, scoped to the target account.
+2. Add the API Token in `provider_admins` (via the UI or the API).
+3. Create a binding with `provider: 'cloudflare-dns'` and
+   `resource_ref` set to the Cloudflare **account_id**.
+
+```json
+{
+  "provider": "cloudflare-dns",
+  "resource_ref": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
+  "environment": "production"
+}
+```
+
+### Mint d'un token
+
+```bash
+POST /api/v1/tokens/mint
+{
+  "projectSlug": "my-project",
+  "bindings": [
+    { "provider": "cloudflare-dns", "resource_ref": "1a2b3c4d...", "env": "production" }
+  ],
+  "accepted_risks": [
+    "cloudflare-dns.read-zone-metadata",
+    "cloudflare-dns.read-records",
+    "cloudflare-dns.record-write"
+  ]
+}
+```
+
+### Appel d'un tool
+
+```bash
+POST /api/v1/tools/call
+Authorization: Bearer vbn_live_...
+{
+  "tool": "cloudflare_dns__list_records",
+  "args": {
+    "zone_id": "abc123def456"
+  }
+}
+```
+
+---
+
+## Comment debug
+
+- **Symptome : "no cloudflare-dns binding is attached"** -- the token
+  does not carry a binding `provider: 'cloudflare-dns'`. Check
+  `provider_bindings` for the project and the token.
+
+- **Symptome : "Cloudflare DNS ProviderAdmin has no access_token_encrypted"** --
+  the `provider_admins` row for `cloudflare-dns` has a null
+  `access_token_encrypted`. Re-paste the API Token.
+
+- **Symptome : "Cloudflare API GET /zones 403"** -- the API Token lacks
+  permissions or is revoked. Check the token in the Cloudflare dashboard.
+  If using Global API Key format (`email|key`), verify the `|` separator
+  and that both parts are correct.
+
+- **Symptome : "Cloudflare validation failed (403)"** -- the
+  `validateBinding` call failed. The `resource_ref` (account_id) may not
+  match the token's account scope, or the token is invalid.
+
+- **Symptome : multipart import fails** -- the `import_records` tool
+  sends the BIND file as `multipart/form-data`. Check that the `file`
+  arg contains valid BIND zone file syntax.
+
+- **Logs de classification** -- the gateway audit trail records
+  `slices_executed` and `risks_touched` for each call. Compare with the
+  YAML patterns to understand which risk matched.
+
 ---
 
 ## Tests
@@ -165,27 +366,34 @@ Missing binding returns `{ denied: 'no cloudflare-dns binding ...' }`.
 
 ---
 
-## Extension -- adding the runtime
+## Extension
 
-When the Cloudflare DNS runtime is implemented, add :
+### Ajouter un tool Cloudflare DNS
 
-1. `src/tools.ts` -- `McpToolDeclaration[]` for the 15 tools.
-2. `src/execute.ts` -- REST dispatcher to `api.cloudflare.com/client/v4/`.
-3. `src/cloudflare-dns-adapter.ts` -- paste-token adapter following the
-   Stripe/Upstash pattern.
-4. Gateway wiring in `packages/mcp-gateway/src/gateway.ts`,
-   `packages/web/src/lib/gateway/build.ts`, and
-   `packages/web/src/components/providers/provider-info.ts`.
-5. Update this handbook's `tracks:` to include the new files.
+1. Add the `McpToolDeclaration` in `tools.ts` (section READ or WRITE).
+2. Add the `case` in the switch of `execute.ts` with the REST endpoint.
+3. Add the `case` in the switch of `risk-classifier.ts` with the slices.
+4. Verify slices are covered by an existing risk or add a new risk in
+   the YAML + TS.
+5. Add unit tests in the 4 suites (tools count, classifier, execute,
+   catalog coverage).
+
+### Global API Key support
+
+The `|` separator in the token string triggers Global API Key mode.
+Format : `user@example.com|globalapikeyhere`. The adapter and execute
+dispatcher both detect this and switch from `Authorization: Bearer` to
+`X-Auth-Email` + `X-Auth-Key` headers.
 
 ---
 
 ## Reste a faire
 
-- **Runtime** (adapter, execute, tools, gateway wiring) -- not yet
-  implemented.
 - **Web UI binding form** -- Cloudflare API Token input.
 - **Web UI token mint** -- risk list for Cloudflare DNS.
+- **Adapter unit tests** -- test coverage for `CloudflareDnsAdapter`
+  (mintUpstreamToken, validateBinding, executeCall delegation).
+- **Execute unit tests** -- test coverage for the 15 tool dispatchers.
 
 ---
 
@@ -197,3 +405,5 @@ When the Cloudflare DNS runtime is implemented, add :
   [`packages/providers/cloudflare-dns/src/risk-catalog.yaml`](../../../packages/providers/cloudflare-dns/src/risk-catalog.yaml)
 - Risk catalog TS :
   [`packages/providers/cloudflare-dns/src/risk-catalog.ts`](../../../packages/providers/cloudflare-dns/src/risk-catalog.ts)
+- Resend handbook (runtime pattern reference) :
+  [`./resend.md`](./resend.md)

@@ -13,6 +13,10 @@ import { UpstashRedisAdapter, upstashRedisAvailableTools } from '@vaubaan/provid
 import { StripeAdapter, stripeAvailableTools, stripeExecuteCall } from '@vaubaan/providers-stripe';
 import { ResendAdapter, resendAvailableTools } from '@vaubaan/providers-resend';
 import {
+  CloudflareDnsAdapter,
+  cloudflareDnsAvailableTools,
+} from '@vaubaan/providers-cloudflare-dns';
+import {
   PROVIDERS,
   type AccessTokenContext,
   type Provider,
@@ -367,6 +371,17 @@ export function buildGateway(opts: {
     classifyV4: (tool, args, bindings) => resendAdapter.classifyV4(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       resendAdapter.executeCall(admin, binding, tool, args),
+    loadProviderAdmin,
+  };
+
+  // Cloudflare DNS : paste-token mode (API Token or Global API Key from provider_admins).
+  const cloudflareDnsAdapter = new CloudflareDnsAdapter();
+  upstreamByProvider['cloudflare-dns'] = {
+    provider: 'cloudflare-dns',
+    availableTools: cloudflareDnsAvailableTools,
+    classifyV4: (tool, args, bindings) => cloudflareDnsAdapter.classifyV4(tool, args, bindings),
+    executeCall: (admin, binding, tool, args) =>
+      cloudflareDnsAdapter.executeCall(admin, binding, tool, args),
     loadProviderAdmin,
   };
 
