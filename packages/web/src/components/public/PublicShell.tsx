@@ -21,14 +21,17 @@ export async function PublicShell({ children }: { children: React.ReactNode }) {
           <span>Vaubaan</span>
         </Link>
         <nav className={styles.nav}>
+          <Link href="/docs" className={styles.navLink}>
+            Docs
+          </Link>
+          <Link href="/for-agents" className={styles.navLink}>
+            For agents
+          </Link>
+          <Link href="/integrations" className={styles.navLink}>
+            Integrations
+          </Link>
           <Link href="/security" className={styles.navLink}>
             Security
-          </Link>
-          <Link href="/privacy" className={styles.navLink}>
-            Privacy
-          </Link>
-          <Link href="/terms" className={styles.navLink}>
-            Terms
           </Link>
           <a
             href="https://github.com/sbw-vaubaan/vaubaan-gateway"
@@ -66,13 +69,16 @@ export async function PublicShell({ children }: { children: React.ReactNode }) {
             <h4>Product</h4>
             <ul>
               <li>
-                <Link href="/#how-it-works">How it works</Link>
+                <Link href="/docs">Documentation</Link>
               </li>
               <li>
-                <Link href="/security">Security</Link>
+                <Link href="/for-agents">For agents</Link>
               </li>
               <li>
                 <Link href="/integrations">Integrations</Link>
+              </li>
+              <li>
+                <Link href="/security">Security</Link>
               </li>
               <li>
                 <Link href="/changelog">Changelog</Link>
