@@ -37,6 +37,19 @@ export const PROVIDERS = [
   'resend',
 ] as const satisfies readonly Provider[];
 
+/** MCP tool-name prefix for a provider: `cloudflare-dns` → `cloudflare_dns__`. */
+export function toolPrefixFor(provider: Provider): string {
+  return `${provider.replaceAll('-', '_')}__`;
+}
+
+/** Resolve a tool name to its owning provider, or `null`. */
+export function providerForTool(toolName: string): Provider | null {
+  for (const p of PROVIDERS) {
+    if (toolName.startsWith(toolPrefixFor(p))) return p;
+  }
+  return null;
+}
+
 export type ProviderAdminStatus = 'connected' | 'expired' | 'revoked';
 
 export type TokenStatus = 'active' | 'revoked';

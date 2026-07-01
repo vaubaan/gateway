@@ -12,12 +12,13 @@ import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railwa
 import { UpstashRedisAdapter, upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
 import { StripeAdapter, stripeAvailableTools, stripeExecuteCall } from '@vaubaan/providers-stripe';
 import { ResendAdapter, resendAvailableTools } from '@vaubaan/providers-resend';
-import type {
-  AccessTokenContext,
-  Provider,
-  ProviderAdmin,
-  ProviderBinding,
-  RiskId,
+import {
+  PROVIDERS,
+  type AccessTokenContext,
+  type Provider,
+  type ProviderAdmin,
+  type ProviderBinding,
+  type RiskId,
 } from '@vaubaan/shared';
 import type { IndexedRiskCatalog } from '@vaubaan/policy-engine';
 import {
@@ -401,19 +402,7 @@ export function buildGateway(opts: {
 
   // Load per-provider risk catalogs at boot (lazy / cached in the loader).
   const catalogByProvider: Partial<Record<Provider, IndexedRiskCatalog>> = {};
-  for (const provider of [
-    'github',
-    'vercel',
-    'supabase',
-    'railway',
-    'bash',
-    'ssh',
-    'stripe',
-    'cloudflare-dns',
-    'upstash-redis',
-    'resend',
-    'gmail',
-  ] as Provider[]) {
+  for (const provider of PROVIDERS) {
     const c = getCatalog(provider);
     if (c) catalogByProvider[provider] = c;
   }
