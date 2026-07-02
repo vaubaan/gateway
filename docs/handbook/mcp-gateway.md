@@ -1,13 +1,14 @@
 ---
 title: MCP gateway
 status: current
-date: 2026-06-16
+date: 2026-07-02
 tracks:
   - packages/mcp-gateway/src/
   - packages/web/src/app/mcp/route.ts
   - packages/web/src/app/.well-known/oauth-protected-resource/route.ts
   - packages/web/src/lib/gateway/build.ts
   - packages/web/src/lib/crypto/
+  - packages/shared/src/types.ts
   - supabase/migrations/0034_audit_log_delegation_chain.sql
   - supabase/migrations/0037_per_org_encryption.sql
 ---
@@ -292,6 +293,107 @@ row passent par le même chemin que les non-self-contained
   pour éviter le mint à chaque call ; cf. ADR [[redis-cache-upstash-with-memory-fallback]]).
 - Strict-fail = **pas de step-up runtime**. Un token immuable, aucune
   race condition d'approval mid-flow (spec §8).
+
+## Upstream authentication failure & token refresh
+
+Quand un provider upstream retourne HTTP 401 ou 403, le gateway
+detecte l'erreur via `UpstreamAuthError` (`@vaubaan/shared`) et
+enclenche un flow de retry/expiration. Ce mecanisme evite les echecs
+silencieux : un token expire cote provider est detecte, reessaye si
+possible, et marque comme `expired` dans `provider_admins` sinon.
+
+### Flow
+
+```
+adapter.executeCall(admin, binding, tool, args)
+  │
+  ├─ success → audit 'allowed', return result
+  │
+  └─ throws UpstreamAuthError (401/403)
+       │
+       ├─ adapter.retryAfterAuthFailure exists?
+       │    ├─ yes → adapter force-refreshes token + retries call
+       │    │    ├─ success → audit 'allowed', return result
+       │    │    └─ throws → fall through to mark expired
+       │    └─ no → fall through to mark expired
+       │
+       └─ markProviderExpired(ctx, provider)
+            ├─ cfg.onProviderAuthFailure(orgId, provider)
+            │    → UPDATE provider_admins SET status='expired'
+            │      WHERE org_id=? AND provider=? AND status='connected'
+            └─ cache.del('vaubaan:ctx:<prefix>')
+```
+
+### `UpstreamAuthError`
+
+Classe typee dans `@vaubaan/shared` (`types.ts`). Tous les provider
+packages l'importent et la lancent dans leurs helpers HTTP quand le
+status est 401 ou 403 :
+
+- **GitHub** : `app-install.ts` (mint 401/403) + `github-adapter.ts`
+  (Octokit `.status === 401 || 403` → re-throw as UpstreamAuthError)
+- **Supabase** : `execute.ts` (`mgmtFetch`, `dataApiFetch`)
+- **Railway** : `execute.ts` (`callUpstream`, `callGraphql`)
+- **Vercel** : `execute.ts` (`callUpstreamMcp`, `callRest`)
+- **Upstash Redis** : `execute.ts` (`callManagementApi`, `callDataApi`)
+- **Resend** : `execute.ts`
+- **Stripe** : `execute.ts`
+- **Cloudflare DNS** : `execute.ts`
+
+### `retryAfterAuthFailure`
+
+Methode optionnelle sur `UpstreamAdapter` (`gateway.ts:127-132`).
+Seuls les providers avec un flow OAuth supportent le refresh :
+
+- **Supabase** : `SupabaseAdapter.retryAfterAuthFailure()` — appelle
+  `refresh()` (POST `api.supabase.com/v1/oauth/token` avec Basic Auth
+  - refresh_token), persiste les nouveaux tokens via `persistRefresh`
+    callback, puis retente `executeCall` avec le nouveau access_token.
+- **Railway** : `RailwayAdapter.retryAfterAuthFailure()` — meme
+  pattern, POST `backboard.railway.com/oauth/token` avec resource
+  binding `https://mcp.railway.com`.
+
+Les providers paste-token (GitHub PAT, Vercel, Upstash Redis, Resend,
+Stripe, Cloudflare DNS) ne supportent pas le refresh — ils passent
+directement a `markProviderExpired`.
+
+### `onProviderAuthFailure` et `markProviderExpired`
+
+`GatewayConfig.onProviderAuthFailure` (`gateway.ts:154`) est un
+callback optionnel wire par `build.ts` (`l. 456-463`) :
+
+```typescript
+async onProviderAuthFailure(orgId, provider) {
+  await supabase
+    .from('provider_admins')
+    .update({ status: 'expired' })
+    .eq('organization_id', orgId)
+    .eq('provider', provider)
+    .eq('status', 'connected');
+}
+```
+
+La methode privee `markProviderExpired` (`gateway.ts:548-557`)
+orchestre le callback + l'invalidation du cache context. Elle est
+degrade-safe : un echec est log mais ne bloque pas la reponse au
+client.
+
+### Consequences cote UI
+
+Le champ `provider_admins.status` porte une CHECK constraint :
+`connected`, `expired`, `revoked`. L'UI providers affiche un badge
+rouge pour `expired` et `revoked` avec un CTA "re-connect".
+Le passage a `expired` est automatique et instantane — l'operateur
+n'a pas besoin de diagnostiquer un echec silencieux.
+
+### Providers avec refresh proactif
+
+Supabase et Railway font aussi du **refresh proactif** dans
+`mintUpstreamToken()` : quand `expires_at` est dans les 60 secondes
+du present, ils renouvellent le token AVANT l'appel upstream. Le retry
+reactif via `retryAfterAuthFailure` ne se declenche que si le refresh
+proactif a ete skip (pas d'`expires_at` stocke) ou si le token a ete
+revoque cote provider entre le mint et l'appel.
 
 ## Client compatibility — Claude Code OAuth probe
 
