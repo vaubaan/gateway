@@ -11,6 +11,7 @@
  * `railway__` prefix stripped) and parse the SSE-framed JSON response.
  */
 
+import { UpstreamAuthError } from '@vaubaan/shared';
 import { toUpstreamName } from './tools.ts';
 import {
   CUSTOM_TOOL_NAMES,
@@ -87,7 +88,9 @@ async function callUpstream(
   });
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Railway MCP upstream ${res.status}: ${errText.slice(0, 300)}`);
+    const msg = `Railway MCP upstream ${res.status}: ${errText.slice(0, 300)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   const body = await res.text();
   const frame = parseFirstJsonRpcFrame(body, id);
@@ -234,7 +237,9 @@ export async function callGraphql<T>(
   });
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Railway GraphQL ${res.status}: ${errText.slice(0, 300)}`);
+    const msg = `Railway GraphQL ${res.status}: ${errText.slice(0, 300)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   const body = (await res.json()) as { data?: T; errors?: Array<{ message: string }> };
   if (body.errors && body.errors.length > 0) {

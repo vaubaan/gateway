@@ -11,12 +11,25 @@ import { availableTools } from './tools.ts';
 import { executeCall, executeVenvTool, type FetchImpl, type VenvStoreLike } from './execute.ts';
 import { classifySupabaseV4, type ClassifyV4Result } from './risk-classifier.ts';
 
+const REFRESH_THRESHOLD_MS = 60_000;
+
+export interface SupabaseRefreshedTokens {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: Date;
+}
+
 export interface SupabaseAdapterConfig {
   /** Override fetch in tests. */
   fetchImpl?: FetchImpl;
   /** Project env var store for _to_venv tools. When absent, venv tools
    *  are still listed but throw at execution time. */
   venvStore?: VenvStoreLike | null;
+  /** OAuth client credentials for token refresh. */
+  clientId?: string;
+  clientSecret?: string;
+  /** Persist a refreshed token pair back to provider_admins. */
+  persistRefresh?: (admin: ProviderAdmin, tokens: SupabaseRefreshedTokens) => Promise<void>;
 }
 
 export interface ValidateResult {
@@ -36,10 +49,16 @@ export class SupabaseAdapter {
   readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
   private readonly fetchImpl: FetchImpl;
   private readonly venvStore: VenvStoreLike | null;
+  private readonly clientId?: string;
+  private readonly clientSecret?: string;
+  private readonly persistRefresh?: SupabaseAdapterConfig['persistRefresh'];
 
   constructor(config: SupabaseAdapterConfig = {}) {
     this.fetchImpl = config.fetchImpl ?? fetch;
     this.venvStore = config.venvStore ?? null;
+    this.clientId = config.clientId;
+    this.clientSecret = config.clientSecret;
+    this.persistRefresh = config.persistRefresh;
   }
 
   authorizationUrl(_orgId: string, _returnUrl: string, _state: string): string {
@@ -56,8 +75,68 @@ export class SupabaseAdapter {
     if (!admin.access_token_encrypted) {
       throw new Error('Supabase ProviderAdmin has no access_token_encrypted.');
     }
-    const token = new TextDecoder().decode(admin.access_token_encrypted);
-    return { token, expiresAt: new Date(Date.now() + 365 * 24 * 3600 * 1000) };
+    const current = new TextDecoder().decode(admin.access_token_encrypted);
+    const expiresAt = admin.expires_at ? new Date(admin.expires_at) : null;
+    const needsRefresh =
+      expiresAt !== null && expiresAt.getTime() - Date.now() < REFRESH_THRESHOLD_MS;
+    if (needsRefresh) {
+      const refreshed = await this.refresh(admin);
+      if (refreshed) return { token: refreshed.accessToken, expiresAt: refreshed.expiresAt };
+    }
+    return {
+      token: current,
+      expiresAt: expiresAt ?? new Date(Date.now() + 365 * 24 * 3600 * 1000),
+    };
+  }
+
+  private async refresh(admin: ProviderAdmin): Promise<SupabaseRefreshedTokens | null> {
+    if (!this.clientId || !this.clientSecret) return null;
+    if (!admin.refresh_token_encrypted) return null;
+    const refreshToken = new TextDecoder().decode(admin.refresh_token_encrypted);
+    const basicAuth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
+    const res = await this.fetchImpl('https://api.supabase.com/v1/oauth/token', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        Authorization: `Basic ${basicAuth}`,
+      },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }),
+    });
+    if (!res.ok) return null;
+    const json = (await res.json()) as {
+      access_token: string;
+      refresh_token: string;
+      expires_in: number;
+    };
+    const tokens: SupabaseRefreshedTokens = {
+      accessToken: json.access_token,
+      refreshToken: json.refresh_token,
+      expiresAt: new Date(Date.now() + json.expires_in * 1000),
+    };
+    if (this.persistRefresh) {
+      try {
+        await this.persistRefresh(admin, tokens);
+      } catch (e) {
+        console.error('[supabase] persistRefresh failed', e);
+      }
+    }
+    return tokens;
+  }
+
+  async retryAfterAuthFailure(
+    admin: ProviderAdmin,
+    binding: ProviderBinding,
+    tool: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const refreshed = await this.refresh(admin);
+    if (!refreshed) throw new Error('Supabase token refresh not available.');
+    const token = refreshed.accessToken;
+    if (VENV_TOOLS.has(tool)) {
+      if (!this.venvStore) throw new Error('venv store is not configured on this gateway.');
+      return executeVenvTool(this.fetchImpl, token, tool, args, this.venvStore, binding.project_id);
+    }
+    return executeCall(this.fetchImpl, token, tool, args);
   }
 
   async validateBinding(admin: ProviderAdmin, resourceRef: string): Promise<ValidateResult> {

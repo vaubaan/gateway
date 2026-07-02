@@ -1,4 +1,5 @@
 export { SupabaseAdapter } from './supabase-adapter.ts';
+export type { SupabaseRefreshedTokens } from './supabase-adapter.ts';
 export { availableTools as supabaseAvailableTools } from './tools.ts';
 
 // v4 risk-based exports

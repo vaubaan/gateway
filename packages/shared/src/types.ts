@@ -319,6 +319,19 @@ export interface TokenContext {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Upstream auth error (thrown by provider adapters on 401/403)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export class UpstreamAuthError extends Error {
+  readonly upstreamStatus: number;
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'UpstreamAuthError';
+    this.upstreamStatus = status;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // MCP JSON-RPC primitives
 // ─────────────────────────────────────────────────────────────────────────────
 

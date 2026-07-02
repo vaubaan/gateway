@@ -308,14 +308,34 @@ export function buildGateway(opts: {
     loadProviderAdmin,
   };
 
-  // Supabase: paste-token mode (Management API PAT).
-  const supabaseAdapter = new SupabaseAdapter({ venvStore });
+  // Supabase: OAuth or paste-token mode (Management API).
+  const supabaseAdapter = new SupabaseAdapter({
+    venvStore,
+    clientId: process.env.SUPABASE_APP_CLIENT_ID,
+    clientSecret: process.env.SUPABASE_APP_CLIENT_SECRET,
+    persistRefresh: async (admin, tokens) => {
+      await supabase
+        .from('provider_admins')
+        .update({
+          access_token_encrypted: encodeByteaHexRaw(
+            await encryptProviderSecret(admin.organization_id, tokens.accessToken),
+          ),
+          refresh_token_encrypted: encodeByteaHexRaw(
+            await encryptProviderSecret(admin.organization_id, tokens.refreshToken),
+          ),
+          expires_at: tokens.expiresAt.toISOString(),
+        })
+        .eq('id', admin.id);
+    },
+  });
   upstreamByProvider.supabase = {
     provider: 'supabase',
     availableTools: supabaseAvailableTools,
     classifyV4: (tool, args, bindings) => supabaseAdapter.classifyV4(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       supabaseAdapter.executeCall(admin, binding, tool, args),
+    retryAfterAuthFailure: (admin, binding, tool, args) =>
+      supabaseAdapter.retryAfterAuthFailure(admin, binding, tool, args),
     loadProviderAdmin,
   };
 
@@ -344,6 +364,8 @@ export function buildGateway(opts: {
     classifyV4: (tool, args, bindings) => railwayAdapter.classifyV4(tool, args, bindings),
     executeCall: (admin, binding, tool, args) =>
       railwayAdapter.executeCall(admin, binding, tool, args),
+    retryAfterAuthFailure: (admin, binding, tool, args) =>
+      railwayAdapter.retryAfterAuthFailure(admin, binding, tool, args),
     loadProviderAdmin,
   };
 
@@ -431,5 +453,13 @@ export function buildGateway(opts: {
     clientIp: opts.clientIp,
     clientUserAgent: opts.clientUserAgent,
     venvStore,
+    async onProviderAuthFailure(orgId, provider) {
+      await supabase
+        .from('provider_admins')
+        .update({ status: 'expired' })
+        .eq('organization_id', orgId)
+        .eq('provider', provider)
+        .eq('status', 'connected');
+    },
   });
 }

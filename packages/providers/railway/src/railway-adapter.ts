@@ -149,6 +149,17 @@ export class RailwayAdapter {
     }
   }
 
+  async retryAfterAuthFailure(
+    admin: ProviderAdmin,
+    _binding: ProviderBinding,
+    tool: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown> {
+    const refreshed = await this.refresh(admin);
+    if (!refreshed) throw new Error('Railway token refresh not available.');
+    return executeCall(this.fetchImpl, refreshed.accessToken, tool, args);
+  }
+
   async executeCall(
     admin: ProviderAdmin,
     _binding: ProviderBinding,

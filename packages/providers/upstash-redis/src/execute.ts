@@ -11,6 +11,7 @@
  *     against the database endpoint.
  */
 
+import { UpstreamAuthError } from '@vaubaan/shared';
 import { MANAGEMENT_TOOL_NAMES } from './tools.ts';
 
 export type FetchImpl = typeof fetch;
@@ -57,9 +58,9 @@ async function callManagementApi(
   const res = await fetchImpl(url, init);
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(
-      `Upstash Management API ${method} ${path} ${res.status}: ${text.slice(0, 300)}`,
-    );
+    const msg = `Upstash Management API ${method} ${path} ${res.status}: ${text.slice(0, 300)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   if (!text) return {};
   try {
@@ -86,7 +87,9 @@ async function callDataApi(
   });
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Upstash Data API ${res.status}: ${text.slice(0, 300)}`);
+    const msg = `Upstash Data API ${res.status}: ${text.slice(0, 300)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   try {
     return JSON.parse(text);

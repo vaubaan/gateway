@@ -12,16 +12,17 @@
  */
 
 import { injectionPlanFor, mergeInjectedArgs, stripInjectedArgs } from '@vaubaan/policy-engine';
-import type {
-  AccessTokenContext,
-  JsonRpcRequest,
-  JsonRpcResponse,
-  McpToolDeclaration,
-  Provider,
-  ProviderAdmin,
-  ProviderBinding,
-  RiskId,
-  Slice,
+import {
+  UpstreamAuthError,
+  type AccessTokenContext,
+  type JsonRpcRequest,
+  type JsonRpcResponse,
+  type McpToolDeclaration,
+  type Provider,
+  type ProviderAdmin,
+  type ProviderBinding,
+  type RiskId,
+  type Slice,
 } from '@vaubaan/shared';
 import { PROVIDERS, parseApiKey, providerForTool, verifyApiKey } from '@vaubaan/shared';
 import type { CacheClient } from './cache.ts';
@@ -118,6 +119,17 @@ export interface UpstreamAdapter {
     tool: string,
     args: Record<string, unknown>,
   ): Promise<unknown>;
+  /**
+   * Called after the first `executeCall` throws `UpstreamAuthError`. The adapter
+   * should refresh the token (if it supports OAuth refresh) and retry the call.
+   * Throws if refresh is not supported or fails.
+   */
+  retryAfterAuthFailure?(
+    admin: ProviderAdmin,
+    binding: ProviderBinding,
+    tool: string,
+    args: Record<string, unknown>,
+  ): Promise<unknown>;
 }
 
 export interface GatewayConfig {
@@ -136,6 +148,10 @@ export interface GatewayConfig {
    *  When set, `venv__*` tools are exposed and `_to_venv`/`_from_venv`
    *  tools on providers can read/write opaque secrets. */
   venvStore?: VenvStore | null;
+  /** Called when a provider returns 401/403 and all retry/refresh attempts
+   *  have failed. Marks the provider_admins row as `expired` and invalidates
+   *  related caches so subsequent requests surface the correct status. */
+  onProviderAuthFailure?(orgId: string, provider: Provider): Promise<void>;
 }
 
 export class McpGateway {
@@ -455,11 +471,31 @@ export class McpGateway {
       );
       return rpcSuccess(id, this.shapeMcpResult(result));
     } catch (e) {
+      // On upstream 401/403: attempt refresh + retry before giving up.
+      if (e instanceof UpstreamAuthError && adapter.retryAfterAuthFailure) {
+        try {
+          const retryResult = await adapter.retryAfterAuthFailure(admin, binding, toolName, args);
+          const latency = Date.now() - t0;
+          await this.audit(
+            ctx,
+            toolName,
+            args,
+            'allowed',
+            verdict.executed_slices,
+            verdict.risks_touched,
+            null,
+            latency,
+          );
+          return rpcSuccess(id, this.shapeMcpResult(retryResult));
+        } catch {
+          // Refresh failed — fall through to mark expired.
+        }
+      }
+      if (e instanceof UpstreamAuthError) {
+        await this.markProviderExpired(ctx, provider);
+      }
       const latency = Date.now() - t0;
       const message = e instanceof Error ? e.message : String(e);
-      // B1 — see comment above in the self-contained branch. The business
-      // consequence did not occur on upstream error, so we audit `denied`
-      // with `upstream-error:` denial_reason.
       await this.audit(
         ctx,
         toolName,
@@ -506,6 +542,17 @@ export class McpGateway {
       const message = e instanceof Error ? e.message : String(e);
       await this.audit(ctx, tool, args, 'denied', null, [], `venv-error: ${message}`, null);
       return rpcError(id, -32603, `venv operation failed: ${message}`);
+    }
+  }
+
+  private async markProviderExpired(ctx: AccessTokenContext, provider: Provider): Promise<void> {
+    try {
+      if (this.cfg.onProviderAuthFailure) {
+        await this.cfg.onProviderAuthFailure(ctx.organization.id, provider);
+      }
+      await this.cfg.cache.del(`vaubaan:ctx:${ctx.access_token.api_key_prefix}`);
+    } catch (e) {
+      console.error('[gateway] markProviderExpired failed', e);
     }
   }
 

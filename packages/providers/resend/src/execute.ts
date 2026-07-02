@@ -10,6 +10,8 @@
  * GET endpoints use no body. DELETE endpoints use no body.
  */
 
+import { UpstreamAuthError } from '@vaubaan/shared';
+
 const RESEND_API = 'https://api.resend.com';
 
 export type FetchImpl = typeof fetch;
@@ -52,7 +54,9 @@ async function callResendApi(
   const res = await fetchImpl(url, init);
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Resend API ${method} ${path} ${res.status}: ${text.slice(0, 500)}`);
+    const msg = `Resend API ${method} ${path} ${res.status}: ${text.slice(0, 500)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   if (!text) return {};
   try {

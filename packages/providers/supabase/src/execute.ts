@@ -8,6 +8,8 @@ export interface VenvStoreLike {
   put(projectId: string, key: string, value: string, source: string): Promise<void>;
 }
 
+import { UpstreamAuthError } from '@vaubaan/shared';
+
 export type FetchImpl = typeof fetch;
 
 const BASE = 'https://api.supabase.com/v1';
@@ -28,7 +30,9 @@ async function mgmtFetch(
   });
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Supabase ${path} → ${res.status}: ${body.slice(0, 300)}`);
+    const msg = `Supabase ${path} → ${res.status}: ${body.slice(0, 300)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   // 204 No Content
   if (res.status === 204) return null;
@@ -100,7 +104,9 @@ async function dataApiFetch(
   const res = await fetchImpl(url, requestInit);
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Supabase data-plane ${path} → ${res.status}: ${body.slice(0, 300)}`);
+    const msg = `Supabase data-plane ${path} → ${res.status}: ${body.slice(0, 300)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   if (res.status === 204) return null;
   const contentType = res.headers.get('content-type') ?? '';

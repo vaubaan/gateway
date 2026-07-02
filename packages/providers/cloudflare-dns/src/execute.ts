@@ -10,6 +10,8 @@
  * import_records.
  */
 
+import { UpstreamAuthError } from '@vaubaan/shared';
+
 const CF_API = 'https://api.cloudflare.com/client/v4';
 
 export type FetchImpl = typeof fetch;
@@ -62,7 +64,9 @@ async function callCloudflareApi(
   const res = await fetchImpl(url, init);
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Cloudflare API ${method} ${path} ${res.status}: ${text.slice(0, 500)}`);
+    const msg = `Cloudflare API ${method} ${path} ${res.status}: ${text.slice(0, 500)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   if (!text) return {};
   try {
@@ -97,7 +101,9 @@ async function callCloudflareMultipart(
   const res = await fetchImpl(url, init);
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Cloudflare API POST ${path} ${res.status}: ${text.slice(0, 500)}`);
+    const msg = `Cloudflare API POST ${path} ${res.status}: ${text.slice(0, 500)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   if (!text) return {};
   try {

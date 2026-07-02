@@ -14,6 +14,7 @@
  * are routed directly to https://api.vercel.com/v9 instead.
  */
 
+import { UpstreamAuthError } from '@vaubaan/shared';
 import { isCustomTool, toUpstreamName } from './tools.ts';
 import {
   ADD_DOMAIN,
@@ -97,7 +98,9 @@ async function callUpstreamMcp(
   });
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`Vercel MCP upstream ${res.status}: ${errText.slice(0, 300)}`);
+    const msg = `Vercel MCP upstream ${res.status}: ${errText.slice(0, 300)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   const body = await res.text();
   const frame = parseFirstJsonRpcFrame(body, id);
@@ -129,7 +132,9 @@ async function callRest(
   const res = await fetchImpl(url, init);
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Vercel REST ${method} ${path} ${res.status}: ${text.slice(0, 300)}`);
+    const msg = `Vercel REST ${method} ${path} ${res.status}: ${text.slice(0, 300)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   if (!text) return {};
   try {

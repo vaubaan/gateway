@@ -11,6 +11,8 @@
  * endpoints accept optional form params but typically need none.
  */
 
+import { UpstreamAuthError } from '@vaubaan/shared';
+
 const STRIPE_API = 'https://api.stripe.com/v1';
 
 export type FetchImpl = typeof fetch;
@@ -99,7 +101,9 @@ async function callStripeApi(
   const res = await fetchImpl(url, init);
   const text = await res.text();
   if (!res.ok) {
-    throw new Error(`Stripe API ${method} ${path} ${res.status}: ${text.slice(0, 500)}`);
+    const msg = `Stripe API ${method} ${path} ${res.status}: ${text.slice(0, 500)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   if (!text) return {};
   try {

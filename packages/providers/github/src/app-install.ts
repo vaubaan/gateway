@@ -15,6 +15,7 @@
  * `provider_admins.installation_id`.
  */
 
+import { UpstreamAuthError } from '@vaubaan/shared';
 import { SignJWT } from 'jose';
 import { createPrivateKey } from 'node:crypto';
 
@@ -92,7 +93,9 @@ export async function mintInstallationToken(
   );
   if (!res.ok) {
     const errBody = await res.text();
-    throw new Error(`GitHub App token mint failed (${res.status}): ${errBody.slice(0, 200)}`);
+    const msg = `GitHub App token mint failed (${res.status}): ${errBody.slice(0, 200)}`;
+    if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
+    throw new Error(msg);
   }
   const data = (await res.json()) as {
     token: string;

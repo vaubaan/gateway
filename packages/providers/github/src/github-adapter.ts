@@ -10,7 +10,12 @@
  */
 
 import { Octokit } from '@octokit/rest';
-import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
+import {
+  UpstreamAuthError,
+  type McpToolDeclaration,
+  type ProviderAdmin,
+  type ProviderBinding,
+} from '@vaubaan/shared';
 import { mintInstallationToken } from './app-install.ts';
 import { availableTools } from './tools.ts';
 import { classifyGithubV4, type ClassifyV4Result } from './risk-classifier.ts';
@@ -153,7 +158,21 @@ export class GitHubAdapter {
       return this.mintTokenForCaller(admin, binding, args);
     }
     const { token } = await this.mintUpstreamToken(admin);
-    return executeCall(this.config.octokitFactory ?? defaultOctokitFactory, token, tool, args);
+    try {
+      return await executeCall(
+        this.config.octokitFactory ?? defaultOctokitFactory,
+        token,
+        tool,
+        args,
+      );
+    } catch (e: unknown) {
+      const status = (e as { status?: number }).status;
+      if (status === 401 || status === 403) {
+        const msg = e instanceof Error ? e.message : String(e);
+        throw new UpstreamAuthError(msg, status);
+      }
+      throw e;
+    }
   }
 
   /**
