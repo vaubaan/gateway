@@ -1,0 +1,65 @@
+# Vaubaan Gateway — reference deployment: the gateway, its data volume and a
+# TLS-terminating reverse proxy (Caddy, automatic certificates).
+#
+#   cp deploy/config/.env.example deploy/config/.env         # then edit
+#   cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
+#   docker compose -f deploy/compose.yaml up -d
+#
+# Every value comes from deploy/config/.env or deploy/config/gateway.yaml;
+# nothing in this file is specific to one company.
+name: vaubaan
+
+services:
+  gateway:
+    build:
+      context: ..
+      dockerfile: deploy/docker/Dockerfile
+    image: vaubaan-gateway:local
+    restart: unless-stopped
+    init: true
+    env_file:
+      - ./config/.env
+    environment:
+      # The mounted YAML wins over the environment, key by key.
+      VAUBAAN_CONFIG_FILE: /config/gateway.yaml
+      VAUBAAN_STORE_PATH: /data/gateway.db
+    volumes:
+      - gateway-data:/data
+      - ./config/gateway.yaml:/config/gateway.yaml:ro
+    expose:
+      - '3000'
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+  proxy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      gateway:
+        condition: service_healthy
+    # GATEWAY_DOMAIN (host part of public_url) comes from the same .env file;
+    # Caddy obtains and renews the certificate for it (ports 80/443 reachable).
+    env_file:
+      - ./config/.env
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  gateway-data:
+  caddy-data:
+  caddy-config:

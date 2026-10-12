@@ -36,6 +36,7 @@ packages/shared/     risk types, api-key, data-model            @vaubaan/shared
 packages/policy-engine/  slice DSL, matcher, evaluator, runtime @vaubaan/policy-engine
 packages/gateway-core/   pipeline, decisions, refusals, audit   @vaubaan/gateway-core
 plugins/<provider>/  one provider plugin per folder             @vaubaan/plugin-<provider>
+deploy/              Dockerfile, compose, example configuration
 docs/                spec, decisions (ADRs), handbook, tests, workflow
 ```
 
@@ -45,6 +46,9 @@ Workspaces: `apps/*`, `packages/*`, `plugins/*` (npm). Node >= 20.
 npm ci
 npm run ci        # type-check, lint, format check, tests, build
 ```
+
+Running an instance (Docker image, Compose with TLS proxy, every
+configuration key): [`deploy/README.md`](deploy/README.md).
 
 ## Documentation
 

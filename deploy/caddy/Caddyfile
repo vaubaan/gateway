@@ -1,0 +1,12 @@
+# TLS termination in front of the gateway (spec §6 "transport").
+# GATEWAY_DOMAIN comes from deploy/config/.env through compose.yaml.
+{$GATEWAY_DOMAIN} {
+	encode zstd gzip
+
+	reverse_proxy gateway:3000 {
+		# Do not buffer streamed MCP responses (SSE frames).
+		flush_interval -1
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+	}
+}
