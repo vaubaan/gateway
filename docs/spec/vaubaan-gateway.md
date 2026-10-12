@@ -20,7 +20,7 @@ status: draft
 
 ## 0. Vocabulary
 
-Twenty-five terms, distinct and not interchangeable.
+Twenty-six terms, distinct and not interchangeable.
 
 **Deployment**
 
@@ -31,7 +31,10 @@ Twenty-five terms, distinct and not interchangeable.
 - **Operator** — the person or team that installs, configures and
   maintains the instance (identity provider, provider apps, master key,
   telemetry). The operator is not an identity of the domain; they have
-  access to the configuration, not to other people's missions.
+  access to the configuration, not to other people's missions. Until the
+  IdP is configured, the operator is whoever holds the bootstrap token.
+  Afterwards, the operator is any user matching the **admin rule** of the
+  instance configuration: an IdP group name or a list of emails.
 - **Identity provider (IdP)** — the company's authentication service, to
   which the instance delegates the identification of humans through
   OpenID Connect. The instance stores no password.
@@ -68,6 +71,15 @@ Twenty-five terms, distinct and not interchangeable.
   **is** an owner: they hold full authority over the connection, that is
   every risk of the provider's catalog, and may share, reconnect,
   transfer or revoke.
+- **Resource** — one thing reachable through a connection: a repository,
+  a database project, a hosting project, a deployment project. Discovered
+  by the plugin at connection time and refreshed on demand, kept current
+  by the owner, who may label each resource with an **environment**
+  (`prod`, `staging`…). The resource ref is what the agent cites in its
+  arguments and what the gateway checks. Environment-qualified `RiskId`s
+  (`supabase[prod].bulk-row-write`) resolve against the environment label
+  of the resource a call touches; for providers where the environment
+  lives in the arguments (the branch, for GitHub), the plugin derives it.
 - **Share** — the act by which the owner of a connection grants a target
   (user or group) a **restriction** on that connection. A share is the
   triple `(connection, target, restriction)`.
@@ -82,8 +94,10 @@ Twenty-five terms, distinct and not interchangeable.
 **Missions**
 
 - **Mission** — a named objective for which a user issues a token. A
-  mission carries one or more connections, a closed set of accepted
-  risks, a budget, an optional recurrence and an optional expiry. The
+  mission carries one or more connections and, within each, the
+  **resources it may touch** (all of the connection's resources by
+  default), a closed set of accepted risks, a budget, an optional
+  recurrence and an optional expiry. The
   creator of the mission is the only one who can enlarge it.
 - **Mission token** — the Bearer the executor of the mission (agent,
   script, human) presents to the gateway. A mission token identifies
@@ -217,8 +231,9 @@ Instance                          (one company, one trust domain)
 │     └── Delegations[]           (agent authorized to manage the user's missions; delegated token)
 ├── Groups[]                      (IdP claims or local table)
 ├── Connections[]                 (owner: User | Group; 1 provider; encrypted credentials)
+│     ├── Resources[]             (ref; env label; discovered at connect, labelled by the owner)
 │     └── Shares[]                (target: User | Group; restriction: RiskId[])
-├── Missions[]                    (creator: User; connections[]; accepted_risks[];
+├── Missions[]                    (creator: User; resources[] per connection; accepted_risks[];
 │     │                            (budget, gate) per RiskId; period; expires_at?)
 │     ├── Mission token           (1 active Bearer per mission; rotation possible)
 │     └── Session?                (created on first call; events[]; counters per RiskId)
@@ -236,9 +251,10 @@ Instance                          (one company, one trust domain)
 | **Delegation**    | Authorization given by a user to an agent to act on their behalf on the management surface. Produces short-lived delegated tokens. Revocable by the user. Never executes, never answers requests. |
 | **Group**         | Owner of connections or target of shares. Never a mission creator. Membership resolved at each login from the IdP, or kept locally.                                                                |
 | **Connection**    | Provider authenticated by a user through the provider's flow. Holds the credentials. 1 owner, user or group. Several connections possible for one provider (two GitHub accounts).                 |
+| **Resource**      | A thing reachable through a connection, with a ref and an optional environment label. Discovered by the plugin, labelled by the owner.                                                             |
 | **Share**         | `(connection, target, restriction)`. Gives the target the right to accept, in their missions, a subset of the restriction. Revocable by the owner.                                                 |
 | **Restriction**   | Enumeration of `RiskId` from the catalog of the connection's provider. Upper bound, never a wildcard.                                                                                              |
-| **Mission**       | Named objective. Carries connections, `accepted_risks`, budget, period, optional expiry, creator. Leaf of the authority chain: no parent or child mission.                                         |
+| **Mission**       | Named objective. Carries resources (a subset per connection), `accepted_risks`, budget, period, optional expiry, creator. Leaf of the authority chain: no parent or child mission.                 |
 | **Mission token** | Bearer presented to the gateway. Identifies one mission. Revealed once at issuance. Rotation without changing the mission.                                                                         |
 | **Budget**        | Per accepted `RiskId`: quota per period, rate limit per sliding window. Mandatory for every accepted risk.                                                                                         |
 | **Session**       | History of the mission. Counters per `RiskId` and per period. Created on the first call, never recreated.                                                                                          |
@@ -337,6 +353,14 @@ Rules:
   connection: `accepted_risks` is partitioned per connection, and each
   partition is checked against the creator's authority on that
   connection.
+- **Resource selection.** A mission names, per connection, the resources
+  it may touch; by default, all the connection's resources known at
+  issuance. A call whose arguments cite a resource outside the mission's
+  selection is refused with `resource-not-in-mission`, before any risk is
+  evaluated. A resource discovered on the connection later is not covered
+  until the creator adds it. This is the v4 binding, carried by the
+  mission instead of the project: least privilege by resource, not only
+  by risk.
 
 ### 3.2 The budget
 
@@ -468,15 +492,17 @@ JSON-RPC, authenticated by `Authorization: Bearer <mission token>`.
   - `approval-required`: `RiskId`, argument fingerprint, **approval
     request URL**, validity delay, and the instruction to replay the call
     identically once approved.
+  - `resource-not-in-mission`: the ref cited, the connection, and the
+    resources the mission may touch.
   - `rate-limited`: `RiskId`, limit, delay before retry.
   - `connection-unavailable`: the connection is `expired` or `revoked`;
     connection name and owner to contact.
   - `mission-inactive`: `expired`, `orphaned` or `revoked`, with the
     reason.
 - **Catalog**: a read endpoint, authenticated by the mission token,
-  returning the full tool surface, what the mission may call, the
-  resource refs of the connections carried, and the remaining budget per
-  `RiskId`. It is the agent's only source of discovery for upstream
+  returning the full tool surface, what the mission may call, the refs
+  and environment labels of the resources the mission may touch, and the
+  remaining budget per `RiskId`. It is the agent's only source of discovery for upstream
   refs, as in v4.
 - **Streaming**: the gateway forwards streamed responses unmodified; the
   decision is made before the stream starts.
@@ -530,15 +556,17 @@ each one and the missions it issued, and may revoke them in one click.
 A web interface served by the instance itself, behind the IdP. Cardinal
 pages:
 
-- **Connections** — my connections, their state, their shares. A
-  "Connect a provider" button that starts the provider's authorization
-  flow with the apps registered by the operator. A "Share" button that
-  opens the checklist of catalog `RiskId` with "select all".
+- **Connections** — my connections, their state, their resources with
+  environment labels (edit, refresh discovery), their shares. A "Connect
+  a provider" button that starts the provider's authorization flow with
+  the apps registered by the operator. A "Share" button that opens the
+  checklist of catalog `RiskId` with "select all".
 - **Shares received** — what others entrusted to me, and the exact
   restriction.
 - **Missions** — my missions, their state per risk, their session.
-  Creation: name, connections, checklist of risks within my authority,
-  budget by preset then per risk, period, expiry. After issuance: the
+  Creation: name, connections and, within each, the resources (all by
+  default), checklist of risks within my authority, budget by preset then
+  per risk, period, expiry. After issuance: the
   **bootstrap kit** (§4.4).
 - **Mission session** — event timeline, counters per risk and per
   period, gate per risk, open requests.
@@ -568,6 +596,8 @@ a mounted file, never committing anything:
   providers;
 - the operator's **bootstrap token**, usable until the IdP is
   configured;
+- the **admin rule**: an IdP group name or a list of emails that defines
+  who is operator once the bootstrap token is revoked;
 - the **telemetry opt-in** and the collector URL (default supplied,
   overridable, disableable).
 
@@ -673,6 +703,7 @@ app per provider in use and enter its secrets.
 
 A user clicks "Connect", is sent to the provider, consents, comes back to
 the instance. The connection is created, encrypted, under their name.
+The plugin discovers its resources; the owner labels their environments.
 They are its owner. They may then transfer ownership to a group they
 belong to; every member of the group becomes a full owner, and so will
 members who join the group later.
@@ -685,8 +716,8 @@ within that bound.
 
 ### 7.4 Issue a mission
 
-The creator names the mission, picks its connections, ticks the risks
-within their authority, picks a budget preset and adjusts it, sets period
+The creator names the mission, picks its connections and, within each,
+the resources it may touch, ticks the risks within their authority, picks a budget preset and adjusts it, sets period
 and expiry. The token is revealed once. The bootstrap kit is displayed.
 
 ### 7.5 Execute
@@ -783,7 +814,9 @@ automated suite. Trust comes from usage.
     ones built from the public docs; a classification error is a
     security hole;
   - authority composition (§3.1): monotonicity, union of shares,
-    partition per connection;
+    partition per connection, resource selection and
+    `resource-not-in-mission`, environment resolution against resource
+    labels;
   - the budget (§3.2, §3.3): multi-risk decrement, period rollover on
     read, atomicity on the last credit, several agents concurrent on the
     same token;
@@ -837,6 +870,11 @@ automated suite. Trust comes from usage.
 - No v4 migration; manual cutover.
 - A connection's owner is a principal, user or group; a mission always
   has a user creator.
+- Resources belong to the connection, labelled with an environment by
+  the owner; a mission selects a subset per connection (all by default)
+  and is refused outside it.
+- After bootstrap, the operator is defined by the admin rule of the
+  instance configuration.
 
 ### 11.2 Open questions
 
@@ -872,6 +910,11 @@ automated suite. Trust comes from usage.
 - **Several connections of one provider in a mission.** Allowed by the
   model; the interface must make the resource ref unambiguous in the
   bootstrap kit.
+- **Resources in shares.** A share's restriction is a list of `RiskId`.
+  Should the owner also be able to restrict a share to some resources of
+  the connection? v1 assumption: no, resource selection lives in the
+  mission; the beneficiary's missions may touch any resource of the
+  connection within the risks shared.
 - **Agent label.** How an MCP client transmits it (header, protocol
   metadata field) and whether the orchestrator can impose it on its
   sub-agents. No effect on authorization, hence decidable at
