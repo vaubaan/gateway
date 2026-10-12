@@ -1,12 +1,13 @@
 ---
 title: GitHub SSO setup
-status: current
+status: legacy
 date: 2026-05-26
 tracks:
-  - packages/web/src/app/(public)/login/page.tsx
-  - packages/web/src/app/auth/callback/route.ts
-  - scripts/configure-supabase-github-provider.sh
+  - apps/gateway/src/app/(public)/login/page.tsx
+  - apps/gateway/src/app/auth/callback/route.ts
 ---
+
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
 
 # GitHub SSO setup
 
@@ -48,7 +49,7 @@ After **Register application**:
 
 1. Copy the **Client ID**.
 2. Click **Generate a new client secret**, copy the **Client secret**.
-3. (Optional) upload the Vaubaan mark from `packages/web/public/logo-vaubaan.png`.
+3. (Optional) upload the Vaubaan mark from `apps/gateway/public/logo-vaubaan.png`.
 
 Paste both into `.env` at the repo root:
 

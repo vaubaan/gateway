@@ -1,9 +1,13 @@
 ---
 title: Per-org encryption at rest via app-level libsodium
-status: accepted
+status: partially-superseded
 date: 2026-06-16
 supersedes: per-org-encryption-pgsodium.md
+partially-superseded-by: pivot-v4-to-v5-on-prem-mission-tokens
+superseded-date: 2026-10-12
 ---
+
+> **Partially superseded on 2026-10-12** by [[pivot-v4-to-v5-on-prem-mission-tokens]], which names the parts that survive. Legacy v4 decision; body unchanged.
 
 # Per-org encryption at rest via app-level libsodium
 

@@ -85,7 +85,7 @@ flowchart TB
 
 ```ts
 // Pseudo-TypeScript — the actual DataModel declaration will live in
-// packages/providers/resend/src/data-model.ts.
+// plugins/resend/src/data-model.ts.
 
 export const dataModel: DataModel = {
   provider: 'resend',

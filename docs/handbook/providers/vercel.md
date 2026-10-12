@@ -3,13 +3,15 @@ title: Vercel provider — modélisation v4 risk-based
 status: current
 date: 2026-07-01
 tracks:
-  - packages/providers/vercel/src/custom-tools.ts
-  - packages/providers/vercel/src/data-model.ts
-  - packages/providers/vercel/src/execute.ts
-  - packages/providers/vercel/src/risk-catalog.ts
-  - packages/providers/vercel/src/risk-catalog.yaml
-  - packages/providers/vercel/src/risk-classifier.ts
+  - plugins/vercel/src/custom-tools.ts
+  - plugins/vercel/src/data-model.ts
+  - plugins/vercel/src/execute.ts
+  - plugins/vercel/src/risk-catalog.ts
+  - plugins/vercel/src/risk-catalog.yaml
+  - plugins/vercel/src/risk-classifier.ts
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Vercel provider — modélisation v4
 

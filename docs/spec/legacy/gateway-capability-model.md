@@ -1,7 +1,13 @@
+---
+status: legacy
+---
+
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+
 # Gateway — modèle de capabilities (DRAFT — SUPERSEDED)
 
 > **⚠️ 2026-06-15 — Ce document est SUPERSEDED par
-> [`gateway-risk-model.md`](./gateway-risk-model.md) (v4 risk-based).**
+> [`gateway-risk-model.md`](../gateway-risk-model.md) (v4 risk-based).**
 > Le tuple `(provider, plane, level, action, env?)` qu'il décrit a été
 > abandonné au profit de `accepted_risks: RiskId[]` qualifié par binding.
 > Conservé pour archive et pour visualiser l'historique du raisonnement

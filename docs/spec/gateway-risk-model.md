@@ -2,7 +2,7 @@
 
 > Modèle actuel implémenté dans le code (depuis 2026-06-15, commit
 > `chore(v1-drop)`). Remplace en bloc
-> [`gateway-capability-model.md`](./gateway-capability-model.md) (v1, "rings
+> [`gateway-capability-model.md`](./legacy/gateway-capability-model.md) (v1, "rings
 > concentriques") et trois itérations intermédiaires (v2 macros, v3 slices
 > capability-based) qui n'ont jamais été actées. Le modèle ci-dessous est
 > **risk-based**, pas capability-based : le token ne porte pas une liste
@@ -175,7 +175,7 @@ flowchart TB
   project --> project-settings[project-settings]
 ```
 
-> Les data-models par-provider vivent dans `packages/providers/<vendor>/
+> Les data-models par-provider vivent dans `plugins/<vendor>/
 > src/data-model.ts` et se rendent automatiquement en mermaid dans le
 > handbook du provider.
 
@@ -714,11 +714,11 @@ forensique.
 ## 13. Migration de l'existant — 8 phases
 
 1. **Phase 0 — Data-model par provider.**
-   Écrire `packages/providers/<vendor>/src/data-model.ts` pour chaque
+   Écrire `plugins/<vendor>/src/data-model.ts` pour chaque
    provider existant (5). Auto-rendu mermaid dans le handbook.
 
 2. **Phase 1 — Catalogue de risks par provider.**
-   `packages/providers/<vendor>/src/risk-catalog.yaml`. Cible ~10-15 risks
+   `plugins/<vendor>/src/risk-catalog.yaml`. Cible ~10-15 risks
    par provider, +1 fallback générique. Lint qui vérifie que chaque tool
    MCP est couvert par au moins un risk.
 

@@ -1,3 +1,9 @@
+---
+status: legacy
+---
+
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+
 # Project Env Vars (venv) — spec
 
 > **Statut :** draft (2026-06-20).

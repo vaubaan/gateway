@@ -2,15 +2,61 @@
 title: Coding workflow
 status: current
 date: 2026-05-22
-last_synced: 2026-10-12
+last_synced: 2026-10-13
 tracks:
-  - .github/workflows/
-  - vercel.json
+  - .github/
   - package.json
+  - tsconfig.base.json
+  - vitest.config.ts
+  - playwright.config.ts
+  - eslint.config.js
   - .husky/pre-commit
+  - CONTRIBUTING.md
 ---
 
 # Coding workflow
+
+> **Transition note (2026-10-13).** The sections below in French describe
+> the v4 SaaS workflow (Vercel deploys, Supabase migrations) and are being
+> replaced section by section by the v5 plan. The "Layout" and "Local CI
+> gate" sections are current. Vercel and Supabase are gone from the
+> repository since P0.1; see the ADR
+> [repository-layout-and-contribution-workflow](../decisions/repository-layout-and-contribution-workflow.md).
+
+## Layout
+
+The repository is an npm workspaces monorepo with three roots
+(ADR [repository-layout-and-contribution-workflow](../decisions/repository-layout-and-contribution-workflow.md)):
+
+```
+apps/gateway/            the deployable: server + Next.js UI       @vaubaan/gateway-app (private)
+packages/shared/         risk types, api-key, data-model            @vaubaan/shared
+packages/policy-engine/  slice DSL, matcher, evaluator, runtime     @vaubaan/policy-engine
+packages/gateway-core/   pipeline, decisions, refusals, audit       @vaubaan/gateway-core
+plugins/<provider>/      one provider plugin per folder             @vaubaan/plugin-<provider>
+docs/                    spec, decisions, handbook, tests, workflow, skills
+scripts/                 dev-only scripts (empty after P0.1)
+```
+
+- `workspaces`: `apps/*`, `packages/*`, `plugins/*`. A new library goes
+  under `packages/`, a new provider under `plugins/<provider-id>` named
+  `@vaubaan/plugin-<provider-id>`, a new deployable under `apps/`.
+- Every workspace has its own `tsconfig.json` extending
+  `../../tsconfig.base.json` and a `type-check` script; `npm run
+type-check` at the root fans out to all of them.
+- Tests: Vitest collects `apps/*/tests/{unit,integration}`,
+  `packages/*/tests/{unit,integration}`, `plugins/*/tests/unit` and
+  co-located `*.test.ts` under `apps/*/src` and `packages/*/src`.
+  Playwright runs `apps/gateway/tests/e2e`.
+- Root files for contributors: `README.md`, `LICENSE` (Apache-2.0),
+  `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`,
+  `.github/ISSUE_TEMPLATE/`, `.github/PULL_REQUEST_TEMPLATE.md`.
+- Historical v4 documents are marked `status: legacy` or moved to
+  `docs/**/legacy/` (ADR
+  [legacy-status-of-v4-adrs-and-handbooks](../decisions/legacy-status-of-v4-adrs-and-handbooks.md)).
+- Branches during the v5 build: `main` protected; `feat/<id>-<slug>`
+  branches merge (no fast-forward) into the `v5` integration branch, which
+  reaches `main` at milestones. CI runs on pushes and PRs to both.
 
 ## Environnements
 
@@ -63,14 +109,12 @@ jobs:
 
 Pas de matrix Node, pas de cross-OS. Single Linux runner Node 22.
 
-## Migrations Supabase (`.github/workflows/supabase-migrations.yml`)
+## Database migrations
 
-Trigger : push main affectant `supabase/migrations/**`.
-
-Appliquer via `psql` via Session Pooler (IPv4) en utilisant les secrets
-`SUPABASE_DB_PASSWORD`, `SUPABASE_PROJECT_REF`, `SUPABASE_POOLER_HOST`.
-
-Ledger `supabase_migrations.schema_migrations` empêche la ré-application.
+The Supabase migrations workflow was removed with P0.1 (2026-10-13). v5
+uses an embedded store whose forward-only migrations run at process boot;
+the mechanism is specified by feature P0.3 of the v5 plan and will be
+documented here when it lands.
 
 ## Local CI gate
 

@@ -11,8 +11,10 @@ tracks:
   - packages/policy-engine/src/qualify.ts
   - packages/policy-engine/src/scope-injection.ts
   - packages/policy-engine/tests/unit/
-  - packages/web/src/lib/risk-catalog/
+  - apps/gateway/src/lib/risk-catalog/
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Policy engine — `@vaubaan/policy-engine`
 
@@ -226,11 +228,11 @@ merge fill missing, caller-override wins, empty string treated as missing.
 ## Wiring côté gateway
 
 Le gateway charge les catalogues au boot via
-`packages/web/src/lib/risk-catalog/loader.ts` :
+`apps/gateway/src/lib/risk-catalog/loader.ts` :
 
 ```ts
 import { indexCatalog } from '@vaubaan/policy-engine';
-import { githubRiskCatalog, vercelRiskCatalog, ... } from '@vaubaan/providers-*';
+import { githubRiskCatalog, vercelRiskCatalog, ... } from '@vaubaan/plugin-*';
 
 // Une fois par runtime — TS imports, pas de YAML au runtime.
 const catalogs: Record<Provider, IndexedRiskCatalog> = {
@@ -242,7 +244,7 @@ const catalogs: Record<Provider, IndexedRiskCatalog> = {
 };
 ```
 
-Le YAML sibling (`packages/providers/<vendor>/src/risk-catalog.yaml`)
+Le YAML sibling (`plugins/<vendor>/src/risk-catalog.yaml`)
 reste la forme canonique reviewable ; un test
 `risk-catalog-sync.test.ts` lints que les deux restent en sync.
 
@@ -267,7 +269,7 @@ intégral et [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §8.
 
 - **Mint `400` `risks_touched empty`** → le catalogue du provider n'a
   pas de fallback ou la slice émise est hors-périmètre. Inspecter
-  `packages/providers/<vendor>/src/risk-catalog.yaml` — il faut un
+  `plugins/<vendor>/src/risk-catalog.yaml` — il faut un
   `<provider>.uncategorized-*` qui matche `**.W` ou `**.R`.
 - **`/mcp` renvoie 403 `risk-not-accepted` alors qu'on a le grant** →
   vérifier que le `RiskId` est qualifié de la même façon des deux côtés.
@@ -293,7 +295,7 @@ intégral et [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §8.
 
 ### Ajouter un risque au catalogue d'un provider
 
-Toucher `packages/providers/<vendor>/src/risk-catalog.{yaml,ts}` :
+Toucher `plugins/<vendor>/src/risk-catalog.{yaml,ts}` :
 
 ```yaml
 - id: <provider>.<name> # OU <provider>[<env>].<name> si env-scoped

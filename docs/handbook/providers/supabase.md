@@ -3,16 +3,18 @@ title: Supabase provider — modélisation v4 risk-based
 status: current
 date: 2026-06-15
 tracks:
-  - packages/providers/supabase/src/data-model.ts
-  - packages/providers/supabase/src/risk-catalog.ts
-  - packages/providers/supabase/src/risk-catalog.yaml
-  - packages/providers/supabase/src/risk-classifier.ts
+  - plugins/supabase/src/data-model.ts
+  - plugins/supabase/src/risk-catalog.ts
+  - plugins/supabase/src/risk-catalog.yaml
+  - plugins/supabase/src/risk-classifier.ts
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Supabase provider — modélisation v4 (4 planes)
 
 > Cible : spec [`docs/spec/gateway-risk-model.md`](../../spec/gateway-risk-model.md) v4 (risk-based).
-> Source code : [`packages/providers/supabase/src/`](../../../packages/providers/supabase/src/)
+> Source code : [`plugins/supabase/src/`](../../../plugins/supabase/src/)
 > (`classify.ts`, `sql-classify.ts`, `tools.ts`, `execute.ts`).
 > Statut : draft de modélisation, à intégrer en Phase 0/1/2 de la migration v4.
 
@@ -319,7 +321,7 @@ risk distinct `supabase.read-internal-catalog` si besoin (Phase 2).
 
 ## 4. Risk catalog YAML — 4 planes namespacés
 
-Format : un seul fichier `packages/providers/supabase/src/risk-catalog.yaml`,
+Format : un seul fichier `plugins/supabase/src/risk-catalog.yaml`,
 ~20 risks au total, namespacés par plane via le `RiskId`.
 
 ```yaml
@@ -1020,7 +1022,7 @@ ne les classifie. Pas un bug ; un capability pré-arrangé.
 | 1   | `execute_sql` devient **R only**, enforced par Postgres `READ ONLY`                                       | §7.2 #2           |
 | 2   | `classifySql` (300 lignes) **supprimé** ; on garde un mini-detector DML pour `apply_migration` uniquement | §7.2 #2 + §6.2    |
 | 3   | Plugin émet `Slice[]`, **plus** `Capability` mono                                                         | §7.1, §13 Phase 2 |
-| 4   | Catalog YAML versionné dans `packages/providers/supabase/src/risk-catalog.yaml`                           | §13 Phase 1       |
+| 4   | Catalog YAML versionné dans `plugins/supabase/src/risk-catalog.yaml`                                      | §13 Phase 1       |
 | 5   | RiskId qualifié par binding au mint : `supabase[<env>].<name>`                                            | §4.4, §16 Q2      |
 | 6   | `acceptable_in_envs` interdit d'accepter un risk sur prod (ex. `bulk-row-write`)                          | §4.1, §16 Q5      |
 | 7   | Tools `dispatch_workflow`-like (côté GitHub) retirés ; **pas concerné Supabase** mais cohérent            | §7.2 #1           |

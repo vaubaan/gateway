@@ -3,13 +3,13 @@ title: Bash provider — annotated-script dispatcher over SSH
 status: current
 date: 2026-06-15
 tracks:
-  - packages/providers/ssh/src/
-  - packages/web/src/lib/bash/
-  - packages/web/src/app/api/v1/bash-bindings/
-  - packages/web/src/app/(app)/orgs/[slug]/projects/[project]/bash-bindings/
-  - supabase/migrations/0020_bash_provider.sql
-  - supabase/migrations/0021_bash_bindings.sql
+  - plugins/ssh/src/
+  - apps/gateway/src/lib/bash/
+  - apps/gateway/src/app/api/v1/bash-bindings/
+  - apps/gateway/src/app/(app)/orgs/[slug]/projects/[project]/bash-bindings/
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Bash provider — adapter setup & invocation
 
@@ -29,7 +29,7 @@ déclare lui-même sa surface MCP via des commentaires `# @vaubaan:` ; le
 parser en dérive les tools MCP, le runner les exécute par SSH. SSH n'est
 qu'un transport — c'est le binding qui définit l'identité applicative.
 
-Le package `@vaubaan/providers-ssh` n'a pas été renommé (continuité storage —
+Le package `@vaubaan/plugin-ssh` n'a pas été renommé (continuité storage —
 migration `0020_bash_provider.sql:39-46`) mais le provider slug exposé
 côté MCP reste `bash` (`bash__*`).
 
@@ -58,7 +58,7 @@ par défaut est `host` ; les rings sont libres (déclarés par le script).
 > **Status `/mcp`** : à ce jour le dispatcher `/mcp` n'est pas encore wiré
 > pour `bash__*`. Les invocations passent par l'endpoint UI authentifié
 > session (`/api/v1/bash-bindings/:id/run-tool`). Cf.
-> `packages/web/src/lib/gateway/build.ts:251-254` pour le wiring en
+> `apps/gateway/src/lib/gateway/build.ts:251-254` pour le wiring en
 > attente, et [`mcp-gateway.md`](./mcp-gateway.md) §Self-contained
 > adapters pour le pattern cible.
 
@@ -95,7 +95,7 @@ unique (project_id, slug)
   les rows existantes par hash de script, déplace les colonnes script vers
   `bash_bindings`.
 
-### Parser — `packages/web/src/lib/bash/parse.ts`
+### Parser — `apps/gateway/src/lib/bash/parse.ts`
 
 `parseAnnotatedBash(content)` retourne :
 
@@ -136,7 +136,7 @@ Règles structurelles (`parse.ts:166-179`) :
 Tests : 11 unit tests dans `parse.test.ts` (happy path + chaque branche de
 rejet + branches d'argument typing).
 
-### Runner — `packages/web/src/lib/bash/{exec,args,exec-host}.ts`
+### Runner — `apps/gateway/src/lib/bash/{exec,args,exec-host}.ts`
 
 `buildToolInvocation(bashContent, functionName, args)` (`exec.ts:18`) produit
 une ligne shell `cmd` :
@@ -166,9 +166,9 @@ Deux helpers complémentaires partagent la logique entre routes REST :
   `sshExec` pour `run-tool` et le smoke `/test`. Évite de dupliquer un
   chemin authz-sensible.
 
-### SSH transport — `packages/providers/ssh/src/`
+### SSH transport — `plugins/ssh/src/`
 
-Le package `@vaubaan/providers-ssh` fournit le client SSH brut + le
+Le package `@vaubaan/plugin-ssh` fournit le client SSH brut + le
 risk classifier v4 :
 
 - `sshExec(binding, cmd, timeout_s)` → `ExecResult` (stdout / stderr /
@@ -370,7 +370,7 @@ L'`UpstreamAdapter` pour `bash` n'est pas encore implémenté
 (`build.ts:251-254`). Pour le câbler il faudra :
 
 1. Plumber `classifySshV4(tool, args, bindings)` (déjà existant dans
-   `packages/providers/ssh/src/risk-classifier.ts`) : tool MCP
+   `plugins/ssh/src/risk-classifier.ts`) : tool MCP
    `bash__<binding_slug>__<function_name>` → resolve le binding via slug,
    lookup le ring du tool, émettre un `Slice` v4
    (`ssh.host[X].command.R|W`).
@@ -407,5 +407,5 @@ Pour ajouter `boolean` ou `enum`, étendre :
   `0012_rename_vps_ssh_to_ssh.sql`, `0020_bash_provider.sql` (pivot),
   `0021_bash_bindings.sql` (split).
 - ADR template providers : [`docs/decisions/provider-onboarding-handbook-template.md`](../decisions/provider-onboarding-handbook-template.md).
-- Tests : `packages/web/src/lib/bash/{parse,exec,args,exec-host}.test.ts`
-  - `packages/providers/ssh/tests/unit/risk-{catalog,classifier}.test.ts`.
+- Tests : `apps/gateway/src/lib/bash/{parse,exec,args,exec-host}.test.ts`
+  - `plugins/ssh/tests/unit/risk-{catalog,classifier}.test.ts`.

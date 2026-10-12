@@ -4,17 +4,19 @@ status: current
 date: 2026-07-02
 last_reviewed: 2026-07-02
 tracks:
-  - packages/providers/upstash-redis/src/data-model.ts
-  - packages/providers/upstash-redis/src/risk-catalog.ts
-  - packages/providers/upstash-redis/src/risk-catalog.yaml
-  - packages/providers/upstash-redis/src/risk-classifier.ts
-  - packages/providers/upstash-redis/src/tools.ts
-  - packages/providers/upstash-redis/src/execute.ts
-  - packages/providers/upstash-redis/src/upstash-redis-adapter.ts
-  - packages/providers/upstash-redis/src/index.ts
-  - packages/web/src/lib/gateway/build.ts
-  - packages/web/src/components/providers/provider-info.ts
+  - plugins/upstash-redis/src/data-model.ts
+  - plugins/upstash-redis/src/risk-catalog.ts
+  - plugins/upstash-redis/src/risk-catalog.yaml
+  - plugins/upstash-redis/src/risk-classifier.ts
+  - plugins/upstash-redis/src/tools.ts
+  - plugins/upstash-redis/src/execute.ts
+  - plugins/upstash-redis/src/upstash-redis-adapter.ts
+  - plugins/upstash-redis/src/index.ts
+  - apps/gateway/src/lib/gateway/build.ts
+  - apps/gateway/src/components/providers/provider-info.ts
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Upstash Redis provider — modelisation v4 + runtime
 
@@ -68,7 +70,7 @@ axes inedits :
 
 ## 1. Data-model du plane `cache`
 
-Le code vit dans `packages/providers/upstash-redis/src/data-model.ts`.
+Le code vit dans `plugins/upstash-redis/src/data-model.ts`.
 
 Upstash Redis n'expose qu'**un seul plane** : `cache`. Tout vit sous
 un noeud racine `account` qui porte l'`envScopable` implicitement
@@ -104,8 +106,8 @@ flowchart TB
 ## 2. Mapping tool -> slice(s)
 
 21 tools MCP custom, definis dans
-`packages/providers/upstash-redis/src/tools.ts`. Le classifier est dans
-`packages/providers/upstash-redis/src/risk-classifier.ts`.
+`plugins/upstash-redis/src/tools.ts`. Le classifier est dans
+`plugins/upstash-redis/src/risk-classifier.ts`.
 
 ### 2.1 Management reads (3 tools)
 
@@ -163,7 +165,7 @@ Le classifier inspecte `command[0].toUpperCase()` et route :
 
 ## 3. Risk catalog
 
-Le YAML vit dans `packages/providers/upstash-redis/src/risk-catalog.yaml`,
+Le YAML vit dans `plugins/upstash-redis/src/risk-catalog.yaml`,
 le miroir TS dans `risk-catalog.ts`. Le test `risk-catalog-sync.test.ts`
 verifie l'identite entre les deux.
 
@@ -202,7 +204,7 @@ classifier fournit la granularite, le risk catalog fournit le gating.
 ## 4. Classifier
 
 Le classifier vit dans
-`packages/providers/upstash-redis/src/risk-classifier.ts`. Fonction
+`plugins/upstash-redis/src/risk-classifier.ts`. Fonction
 exportee : `classifyUpstashRedisV4(tool, args, bindings) -> ClassifyResult`.
 
 ### 4.1 Binding check
@@ -240,7 +242,7 @@ Trois `Set<string>` statiques classent les commandes Redis connues :
 ## 5. Adapter paste-token
 
 Le code vit dans
-`packages/providers/upstash-redis/src/upstash-redis-adapter.ts`.
+`plugins/upstash-redis/src/upstash-redis-adapter.ts`.
 Classe `UpstashRedisAdapter`.
 
 ### 5.1 Auth model
@@ -262,7 +264,7 @@ authentication failure).
 
 ### 5.2 Dispatch bi-couche (`execute.ts`)
 
-Le dispatcher dans `packages/providers/upstash-redis/src/execute.ts`
+Le dispatcher dans `plugins/upstash-redis/src/execute.ts`
 distingue deux chemins :
 
 **Management API** (`api.upstash.com/v2`, Basic Auth) :
@@ -326,7 +328,7 @@ Registre dans `PROVIDER_INFO['upstash-redis']` avec :
 
 ### 6.3 `risk-catalog/loader.ts`
 
-`upstashRedisCatalog` importe depuis `@vaubaan/providers-upstash-redis`
+`upstashRedisCatalog` importe depuis `@vaubaan/plugin-upstash-redis`
 et enregistre dans `PROVIDER_CATALOGS['upstash-redis']`. Le loader
 est consulte par le policy-engine au runtime.
 
@@ -339,9 +341,9 @@ ajoute au tableau `PROVIDERS` expose par `GET /api/v1/catalog`.
 
 `'upstash-redis'` ajoute aux `z.enum()` dans :
 
-- `packages/web/src/lib/mint/risk-preview.ts` (`PreviewBindingSchema`)
-- `packages/web/src/app/api/v1/tokens/preview/route.ts` (`BindingSchema`)
-- `packages/web/src/app/api/v1/tokens/mint/route.ts` (`BindingSchema`)
+- `apps/gateway/src/lib/mint/risk-preview.ts` (`PreviewBindingSchema`)
+- `apps/gateway/src/app/api/v1/tokens/preview/route.ts` (`BindingSchema`)
+- `apps/gateway/src/app/api/v1/tokens/mint/route.ts` (`BindingSchema`)
 
 ---
 

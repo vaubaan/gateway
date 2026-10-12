@@ -5,7 +5,7 @@
  * server-side by `_from_venv` tools. They are NEVER returned to
  * the MCP caller (the LLM).
  *
- * Spec : docs/spec/project-env-vars.md §4.
+ * Spec : docs/spec/legacy/project-env-vars.md §4.
  */
 
 export interface VenvEntry {

@@ -4,6 +4,8 @@ status: current
 date: 2026-06-19
 ---
 
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+
 # Provider risk-model handbooks
 
 Huit documents de modélisation v4 risk-based — un par provider Vaubaan
@@ -19,7 +21,7 @@ structure (cf. spec
 6. **Trous identifiés** — choses à creuser avant de scaler le périmètre
 
 Ces handbooks sont la **source de vérité humaine** pour comprendre la
-modélisation d'un provider. Le code (`packages/providers/<vendor>/src/`)
+modélisation d'un provider. Le code (`plugins/<vendor>/src/`)
 matérialise ce qui est ici. Le diff entre handbook et code est tracé via
 le frontmatter `tracks:` (cf. skill `drift-detector`).
 

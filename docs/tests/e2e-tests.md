@@ -4,7 +4,7 @@ status: planned
 date: 2026-05-22
 tracks:
   - playwright.config.ts
-  - packages/web/tests/e2e/
+  - apps/gateway/tests/e2e/
 ---
 
 # E2E tests — Playwright contre vrais clouds

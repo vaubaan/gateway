@@ -899,7 +899,7 @@ function capitalize(s: string): string {
 
 /** GitHub binding sub-form : narrow the fan-out of env-less grants. The two
  *  options are mutually exclusive (XOR, enforced by the DB CHECK) — see
- *  docs/spec/gateway-capability-model.md §5.1 #4. */
+ *  docs/spec/legacy/gateway-capability-model.md §5.1 #4. */
 function GithubExcludeOptions({
   mode,
   setMode,

@@ -1,6 +1,6 @@
 ---
 title: Tokens unifiés avec parent_id + delegation_chain + escalation_channel hors-gateway
-status: accepted
+status: partially-superseded
 date: 2026-06-16
 amended: 2026-06-19
 supersedes:
@@ -8,7 +8,11 @@ supersedes:
   - mint-install-token-credential
 extends:
   - pivot-to-risk-based-model
+partially-superseded-by: pivot-v4-to-v5-on-prem-mission-tokens
+superseded-date: 2026-10-12
 ---
+
+> **Partially superseded on 2026-10-12** by [[pivot-v4-to-v5-on-prem-mission-tokens]], which names the parts that survive. Legacy v4 decision; body unchanged.
 
 # Tokens unifiés avec parent_id, delegation_chain, et escalation hors-gateway
 

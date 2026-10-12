@@ -1,23 +1,25 @@
 ---
 title: Next.js web app
-status: current
+status: legacy
 date: 2026-06-16
 tracks:
-  - packages/web/src/app/
-  - packages/web/src/components/sidebar/Sidebar.tsx
-  - packages/web/src/components/providers/
-  - packages/web/src/lib/mint/
-  - packages/web/src/lib/risk-catalog/
-  - packages/web/src/lib/auth/
-  - packages/web/src/lib/oauth/
-  - packages/web/src/lib/providers/
-  - packages/web/src/lib/crypto/
-  - packages/web/src/lib/supabase/
-  - packages/web/src/lib/gateway/
-  - packages/web/next.config.ts
+  - apps/gateway/src/app/
+  - apps/gateway/src/components/sidebar/Sidebar.tsx
+  - apps/gateway/src/components/providers/
+  - apps/gateway/src/lib/mint/
+  - apps/gateway/src/lib/risk-catalog/
+  - apps/gateway/src/lib/auth/
+  - apps/gateway/src/lib/oauth/
+  - apps/gateway/src/lib/providers/
+  - apps/gateway/src/lib/crypto/
+  - apps/gateway/src/lib/supabase/
+  - apps/gateway/src/lib/gateway/
+  - apps/gateway/next.config.ts
 ---
 
-# Web app — `@vaubaan/web`
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+
+# Web app — `@vaubaan/gateway-app`
 
 Le control plane UI + le `/mcp` endpoint. Next.js 15 App Router, Supabase
 magic-link auth, server-side rendering, dynamic routes.
@@ -25,7 +27,7 @@ magic-link auth, server-side rendering, dynamic routes.
 ## Layout
 
 ```
-packages/web/
+apps/gateway/
   src/
     app/
       layout.tsx
@@ -130,7 +132,7 @@ Cf. [[flat-membership-org-owner-access-token]] (ADR).
 - Le créateur d'une org devient owner ; un trigger DB l'inscrit
   automatiquement dans `org_members` (`enforce_owner_is_member`).
 
-Guards REST (`packages/web/src/lib/auth/`) :
+Guards REST (`apps/gateway/src/lib/auth/`) :
 
 - `requireOrgMember(orgSlug)` — utilisé par toutes les mutations org-scoped.
 - `requireOrgOwner(orgSlug)` — utilisé uniquement par le transfert d'ownership.
@@ -148,7 +150,7 @@ Guards REST (`packages/web/src/lib/auth/`) :
 
 ## Sidebar contextuelle
 
-`packages/web/src/components/sidebar/Sidebar.tsx` rend une nav qui s'enrichit
+`apps/gateway/src/components/sidebar/Sidebar.tsx` rend une nav qui s'enrichit
 selon l'URL :
 
 - **General** : lien Organizations (Dashboard).
@@ -171,7 +173,7 @@ data-model en mermaid + le risk catalog YAML + la liste des tools MCP,
 en s'appuyant sur `components/providers/` et `lib/risk-catalog/`.
 
 Les listes orgs + projects sont fetched server-side dans
-`packages/web/src/app/(app)/layout.tsx` et passées en prop. La sidebar
+`apps/gateway/src/app/(app)/layout.tsx` et passées en prop. La sidebar
 re-fetch côté router quand l'URL pointe vers un projet absent du
 payload (cache stale, projet créé dans un autre onglet — `Sidebar.tsx:101-105`).
 
@@ -239,7 +241,7 @@ POST /api/v1/tokens/mint
 Le wire format est porté par `RiskId[]` plutôt que par des tuples
 capability `(provider, plane, level, action, env?)`. Le catalog
 canonique de chaque provider vit dans
-`packages/providers/<vendor>/src/risk-catalog.{yaml,ts}` et est chargé
+`plugins/<vendor>/src/risk-catalog.{yaml,ts}` et est chargé
 au boot par `lib/risk-catalog/loader.ts` (cf.
 [`policy-engine.md`](./policy-engine.md) §Wiring côté gateway).
 L'helper `computeMintPreview` (`lib/mint/preview.ts`) wraps le pur
@@ -328,7 +330,7 @@ other members and an explicit confirm dialog.
 
 ## /mcp endpoint
 
-`packages/web/src/app/mcp/route.ts` is a thin HTTP→McpGateway adapter :
+`apps/gateway/src/app/mcp/route.ts` is a thin HTTP→McpGateway adapter :
 
 - Parses JSON body, validates JSON-RPC envelope.
 - Builds the gateway via `buildGateway()` (`lib/gateway/build.ts`,

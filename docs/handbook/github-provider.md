@@ -3,12 +3,13 @@ title: GitHub provider adapter
 status: current
 date: 2026-06-15
 tracks:
-  - packages/providers/github/src/
-  - packages/web/src/app/api/integrations/github/
-  - supabase/migrations/0001_init.sql
+  - plugins/github/src/
+  - apps/gateway/src/app/api/integrations/github/
 ---
 
-# GitHub provider — `@vaubaan/providers-github`
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+
+# GitHub provider — `@vaubaan/plugin-github`
 
 > **v4 risk-based catalog added — 2026-06-15.** Le pivot
 > `chore(v1-drop)` a supprimé le classifier capability-based et le
@@ -29,7 +30,7 @@ App install + JIT installation token + tools MCP synthétisés via Octokit
 ## Layout
 
 ```
-packages/providers/github/
+plugins/github/
   src/
     adapter.ts          # ProviderAdapter contract (générique, ré-exporté)
     app-install.ts      # buildAppJwt + mintInstallationToken (RS256 JWT + POST /access_tokens)
@@ -129,7 +130,7 @@ visibles depuis le project.
 
 ## Tests
 
-`npx vitest run packages/providers/github` — 102 tests (~150ms) répartis
+`npx vitest run plugins/github` — 102 tests (~150ms) répartis
 sur les 4 suites listées en §Layout. Voir
 [`providers/github.md`](./providers/github.md) §Tests pour le détail des
 scénarios catalog/classifier.

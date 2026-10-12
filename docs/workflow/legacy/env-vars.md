@@ -1,12 +1,14 @@
 ---
 title: Env vars — où vit quoi, et pourquoi
-status: current
+status: legacy
 date: 2026-05-26
 tracks:
   - .env
   - .env.test
   - packages/web/.env.local.example
 ---
+
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
 
 # Env vars — où vit quoi, et pourquoi
 

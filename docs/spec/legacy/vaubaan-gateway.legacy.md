@@ -1,13 +1,15 @@
 ---
 title: "[LEGACY v4] MCP Proxy — spec SaaS multi-tenant"
-status: deprecated
+status: legacy
 superseded_by: vaubaan-gateway
 ---
 
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+
 > **⚠️ LEGACY.** Spec de la v4 SaaS (mai → juillet 2026), archivée le
 > 2026-10-12 lors du pivot v5 on-prem (ADR
-> [pivot-v4-to-v5-on-prem-mission-tokens](../decisions/pivot-v4-to-v5-on-prem-mission-tokens.md)).
-> Source de vérité actuelle : [vaubaan-gateway.md](./vaubaan-gateway.md).
+> [pivot-v4-to-v5-on-prem-mission-tokens](../../decisions/pivot-v4-to-v5-on-prem-mission-tokens.md)).
+> Source de vérité actuelle : [vaubaan-gateway.md](../vaubaan-gateway.md).
 > Conservée pour référence historique uniquement ; ne pas mettre à jour.
 
 # MCP Proxy — spec

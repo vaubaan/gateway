@@ -1,16 +1,18 @@
 ---
 title: Escalation — runtime channel for risk re-mint
-status: current
+status: legacy
 tracks:
-  - packages/web/src/lib/mint/child-mint.ts
+  - apps/gateway/src/lib/mint/child-mint.ts
   - packages/shared/src/risk.ts
   - packages/shared/src/types.ts
-  - packages/web/src/app/api/v1/tokens/mint/route.ts
-  - packages/web/src/app/api/v1/tokens/preview/route.ts
+  - apps/gateway/src/app/api/v1/tokens/mint/route.ts
+  - apps/gateway/src/app/api/v1/tokens/preview/route.ts
   - docs/decisions/unified-tokens-delegation-chain-and-escalation-channel.md
   - docs/decisions/unified-gates-drop-confirm.md
 last_synced: 2026-06-16
 ---
+
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
 
 # Escalation — runtime channel for risk re-mint
 
@@ -64,7 +66,7 @@ Les deux interfaces + le helper sont exportés depuis `@vaubaan/shared`.
 ## §3. Quand l'agent l'utilise
 
 Le runtime renvoie l'erreur structurée suivante quand un call touche un
-risk pas dans `accepted_risks` (cf. `packages/mcp-gateway/src/gateway.ts:309`
+risk pas dans `accepted_risks` (cf. `packages/gateway-core/src/gateway.ts:309`
 et `denyResponseBody` dans `risk-gateway.ts:111`) :
 
 ```json
@@ -146,13 +148,13 @@ Cf. ADR unified-gates-drop-confirm §1 + §2 :
 
 ## §6. Code surface
 
-- `packages/web/src/lib/mint/child-mint.ts` — `mintChildToken`,
+- `apps/gateway/src/lib/mint/child-mint.ts` — `mintChildToken`,
   `checkMintInvariants` (subset / depth / expires_at).
-- `packages/web/src/app/api/v1/tokens/mint/route.ts` — endpoint mint
+- `apps/gateway/src/app/api/v1/tokens/mint/route.ts` — endpoint mint
   (201 ou 403, plus de 202).
-- `packages/web/src/app/api/v1/tokens/preview/route.ts` — preview
+- `apps/gateway/src/app/api/v1/tokens/preview/route.ts` — preview
   (`{ acceptable, inherited }` par row, plus de `effective_gate`).
-- `packages/web/src/lib/mint/risk-preview.ts` — pure-compute de la
+- `apps/gateway/src/lib/mint/risk-preview.ts` — pure-compute de la
   preview.
 
 ## §7. Audit
