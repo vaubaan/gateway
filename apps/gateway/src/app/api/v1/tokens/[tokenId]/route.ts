@@ -13,7 +13,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { buildCacheClient } from '@vaubaan/gateway-core';
+import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 import { TOKEN_NAME_REGEX } from '@/lib/mint/token-name';
@@ -32,7 +32,7 @@ const PatchSchema = z
   });
 
 async function invalidateCache(prefix: string) {
-  await buildCacheClient().del(`vaubaan:ctx:${prefix}`);
+  await new MemoryCacheClient().del(`vaubaan:ctx:${prefix}`);
 }
 
 export async function PATCH(req: NextRequest, ctx: { params: Promise<{ tokenId: string }> }) {

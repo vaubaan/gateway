@@ -11,6 +11,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **`@vaubaan/gateway-core` speaks v5 (P0.5).** Eight typed structured
+  refusals (`risk-not-accepted`, `budget-exhausted`, `approval-required`,
+  `resource-not-in-mission`, `rate-limited`, `connection-unavailable`,
+  `mission-inactive`, `wrong-credential-kind`), each with its spec fields and
+  an agent-readable `hint`, mapped to JSON-RPC `-32603` with the refusal in
+  `data`; v5 `AuditEntry` (call and administrative entries) behind the stable
+  `AuditWriter.write(entry)` contract; `MissionContext`; door check and
+  `DoorAuthenticator`; `CallPipeline` skeleton with stage interfaces for the
+  budget (P1.3), resources, plugins and door (P1.6). `MemoryCacheClient` is
+  bounded and marked single-process only. The decision core
+  (`risks_touched ⊆ accepted_risks`) and `hashArguments` (sha256/16) are
+  unchanged. Handbook: `docs/handbook/gateway-core.md`.
 - **Repository reshaped for v5 (P0.1).** `packages/web` is now
   `apps/gateway` (`@vaubaan/gateway-app`), `packages/mcp-gateway` is
   `packages/gateway-core` (`@vaubaan/gateway-core`) and every provider moved
@@ -29,6 +41,12 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Removed
 
+- From `@vaubaan/gateway-core`: `RedisCacheClient` (Upstash),
+  `buildCacheClient`, `SupabaseAuditWriter`, the `venv` secret store and the
+  unused `@supabase/supabase-js`, `@upstash/redis`, `@vaubaan/plugin-github`
+  dependencies. The v4 `McpGateway` orchestrator moved to
+  `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` (venv tools removed)
+  until P1.6 replaces `/mcp`.
 - Supabase migrations and configuration (`supabase/`), the Supabase
   migrations workflow, `vercel.json`, the v4 operator `.env.example`, and
   the Supabase/Vercel-only scripts under `scripts/`. v5 ships as a single

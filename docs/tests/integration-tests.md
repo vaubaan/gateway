@@ -68,7 +68,12 @@ en absence des creds env vars.
 | `plugins/ssh/tests/unit/data-model.test.ts`                       |                   1 |
 | `plugins/ssh/tests/unit/risk-catalog.test.ts`                     |                  10 |
 | `plugins/ssh/tests/unit/risk-classifier.test.ts`                  |                  39 |
-| `packages/gateway-core/tests/unit/gateway.test.ts`                |                   4 |
+| `packages/gateway-core/tests/unit/errors.test.ts`                 |                  24 |
+| `packages/gateway-core/tests/unit/audit.test.ts`                  |                   6 |
+| `packages/gateway-core/tests/unit/cache.test.ts`                  |                   6 |
+| `packages/gateway-core/tests/unit/authenticate.test.ts`           |                  11 |
+| `packages/gateway-core/tests/unit/pipeline.test.ts`               |                  15 |
+| `apps/gateway/tests/unit/lib/gateway/legacy-v4-gateway.test.ts`   |                   4 |
 | `packages/gateway-core/tests/unit/risk-gateway.test.ts`           |                   6 |
 | `apps/gateway/tests/unit/api/members-post.test.ts`                |       5 (1 skipped) |
 | `apps/gateway/tests/unit/api/tokens-preview.test.ts`              |                  12 |
@@ -203,25 +208,54 @@ tool, binding propagation (prod/staging/empty resource_ref), denials
 (unknown tool, no binding, wrong provider), spec §7.2 multi-slice
 examples.
 
-## Scénarios — MCP gateway (v4)
+## Scenarios — gateway-core (v5)
 
-> Couvre : handbook [[mcp-gateway]]. Spec : `gateway-risk-model.md` §8.
+> Covers: handbook [[gateway-core]]. Spec: `vaubaan-gateway.md` §4.1, §6,
+> §8, §10 ("structured refusals", "credential separation");
+> `gateway-risk-model.md` §8. English section, written by feature P0.5;
+> the rest of this file is rewritten at P1.9.
 
-- **`unit/risk-gateway.test.ts`** (6) — `evaluateCallForToken` pure :
-  allow happy path, deny avec missing risks, classify-denied (plugin
-  rejet structurel), no-catalog (fail-closed), multi-slice union,
-  denied_risks shadow l'acceptance.
-- **`unit/gateway.test.ts`** (4) — orchestration `McpGateway.callTool` :
-  audit shape sur erreur upstream (adapter standard + self-contained →
-  audit `denied` avec reason `upstream-error`), missing binding
-  (classifier OK mais binding absent → denied avec reason
-  `binding-missing`), happy path (audit `allowed`).
+`packages/gateway-core/tests/unit/`, vitest, no network, no store.
 
-> **À étendre.** Auth + cache + single-use consume sont couverts
-> indirectement par l'E2E `scripts/e2e-mint-flow.mjs`. Plan : étoffer
-> `gateway.test.ts` pour couvrir auth (parse `Bearer`, hit/miss cache,
-> argon2id verify, expiry, single-use consume + race), audit
-> `slices_executed/risks_touched/token_accepted_risks_snapshot` shape.
+- **`risk-gateway.test.ts`** (6) — the pure decision core
+  `evaluateCallForToken`: allow, deny with missing risks, classify-denied,
+  no-catalog (fail closed), multi-slice union, denied_risks shadow.
+  Unchanged since v4.
+- **`errors.test.ts`** (24) — the eight refusal codes: exactly eight in
+  `REFUSAL_CODES`, one builder sample per code, every field of every code,
+  `hint` non-empty and serializable, `isRefusal` guard, JSON-RPC mapping
+  (`-32603`, refusal in `data`, code in the message).
+- **`audit.test.ts`** (6) — `hashArguments` is sha256 truncated to 16 hex
+  (known vector for `{}`), deterministic, null/undefined ≡ `{}`;
+  `MemoryAuditWriter` over call and administrative entries; a call entry
+  carries every spec §8 field.
+- **`cache.test.ts`** (6) — `MemoryCacheClient`: TTL expiry, delete, bound
+  evicts the oldest, re-set refreshes age, expired swept before a live
+  eviction, invalid bound rejected.
+- **`authenticate.test.ts`** (11) — credential separation: door table,
+  `checkDoor` on every mismatch (mission token at management, delegated
+  token at execution, session at either) → `wrong-credential-kind` with
+  door/presented/expected; `parseBearer`; `DoorAuthenticator` end to end;
+  unknown bearer → `AuthError`, not a refusal.
+- **`pipeline.test.ts`** (15) — `checkMissionActive` (status, passed and
+  future `expires_at`), `checkConnectionAvailable`; `CallPipeline`: happy
+  path with the full audit entry, inactive mission refused before anything
+  else, `resource-not-in-mission` before any risk evaluation, expired
+  connection, `risk-not-accepted` through the real decision core with the
+  budget untouched, structural rejections without a code, budget refusal
+  with no upstream call, approval id carried to the audit, upstream
+  failure after allow (`decision: allowed`, `upstream_error`), audit write
+  failure propagates.
+
+Legacy v4 orchestration (`McpGateway`), moved to
+`apps/gateway/tests/unit/lib/gateway/legacy-v4-gateway.test.ts` (4):
+upstream-error audit shape, missing binding, happy path. Deleted with the
+v4 app code at P1.6.
+
+> **Gaps.** The budget stage, the resource stage and the upstream stage
+> are interfaces with test stubs; their real implementations and tests are
+> P1.3, the authority feature and P1.2. Spec §10 "budget" and "approval"
+> bullets are therefore still open.
 
 ## Scénarios — Web routes & libs
 

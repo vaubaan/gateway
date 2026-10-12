@@ -9,7 +9,7 @@
 
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { buildCacheClient } from '@vaubaan/gateway-core';
+import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 
@@ -37,7 +37,7 @@ async function invalidateProject(projectId: string): Promise<void> {
     .from('tokens')
     .select('api_key_prefix')
     .eq('project_id', projectId);
-  const cache = buildCacheClient();
+  const cache = new MemoryCacheClient();
   for (const b of (bots ?? []) as Array<{ api_key_prefix: string }>) {
     await cache.del(`vaubaan:ctx:${b.api_key_prefix}`);
   }

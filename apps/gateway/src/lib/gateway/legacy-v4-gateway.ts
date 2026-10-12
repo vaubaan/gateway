@@ -1,7 +1,13 @@
 /**
- * MCP Gateway core (risk-based, v4).
+ * LEGACY v4 orchestrator — kept only so the v4 application code compiles
+ * until feature P1.6 replaces `/mcp` with the v5 door. Not part of the v5
+ * surface; `@vaubaan/gateway-core` now exposes the v5 pipeline skeleton
+ * (`CallPipeline`, `DoorAuthenticator`) instead of this class. Deleted with
+ * the rest of the v4 app code. Moved here from
+ * `packages/gateway-core/src/gateway.ts` by feature P0.5; venv tools removed
+ * (no v5 counterpart, plan §8-Q5).
  *
- * Spec : docs/spec/gateway-risk-model.md §8 (strict-fail runtime).
+ * Spec : docs/spec/legacy/vaubaan-gateway.legacy.md, gateway-risk-model.md §8.
  *
  *   auth → load context (cached) → parse RPC → route by method →
  *   classify slice(s) → intersect with risk catalog → allow/deny →
@@ -25,31 +31,48 @@ import {
   type Slice,
 } from '@vaubaan/shared';
 import { PROVIDERS, parseApiKey, providerForTool, verifyApiKey } from '@vaubaan/shared';
-import type { CacheClient } from './cache.ts';
-import { hashArguments, type AuditWriter } from './audit.ts';
-import { AuthError, rpcError, rpcSuccess } from './errors.ts';
-import { denyResponseBody, evaluateCallForToken, type V4ClassifyOutcome } from './risk-gateway.ts';
+import {
+  AuthError,
+  denyResponseBody,
+  evaluateCallForToken,
+  hashArguments,
+  rpcError,
+  rpcSuccess,
+  type CacheClient,
+  type ClassifyOutcome,
+} from '@vaubaan/gateway-core';
 import type { IndexedRiskCatalog } from '@vaubaan/policy-engine';
-import type { VenvStore } from './venv-store.ts';
+import type { AuditDecision, DelegationChainEntry } from '@vaubaan/shared';
 
-const VENV_TOOLS: McpToolDeclaration[] = [
-  {
-    name: 'venv__list',
-    description:
-      "List env var keys stored in this project's venv (names, sources, timestamps — values are NEVER returned). Use to check what secrets are already provisioned before running a _to_venv tool.",
-    inputSchema: { type: 'object', properties: {}, required: [] },
-  },
-  {
-    name: 'venv__delete',
-    description:
-      "Delete an env var from this project's venv store. The value is destroyed server-side and never returned.",
-    inputSchema: {
-      type: 'object',
-      properties: { key: { type: 'string', description: 'The env var key to delete.' } },
-      required: ['key'],
-    },
-  },
-];
+/** v4 `audit_log` row. The v5 shape is `CallAuditEntry` in gateway-core. */
+export interface LegacyAuditRow {
+  organization_id: string;
+  project_id: string | null;
+  access_token_id: string | null;
+  tool_name: string;
+  arguments_hash: string;
+  decision: AuditDecision;
+  denial_reason: string | null;
+  upstream_latency_ms: number | null;
+  client_ip: string | null;
+  client_user_agent: string | null;
+  slices_executed: Slice[] | null;
+  risks_touched: RiskId[] | null;
+  token_accepted_risks_snapshot: RiskId[] | null;
+  delegation_chain: DelegationChainEntry[] | null;
+}
+
+export interface LegacyAuditWriter {
+  write(row: LegacyAuditRow): Promise<void>;
+}
+
+/** In-memory v4 writer for the legacy tests. */
+export class MemoryLegacyAuditWriter implements LegacyAuditWriter {
+  readonly rows: LegacyAuditRow[] = [];
+  async write(row: LegacyAuditRow): Promise<void> {
+    this.rows.push(row);
+  }
+}
 
 function assertNotExpired(expiresAt: string | null | undefined): void {
   if (!expiresAt) return;
@@ -90,7 +113,7 @@ export interface UpstreamAdapter {
     tool: string,
     args: Record<string, unknown>,
     bindings: ReadonlyArray<ProviderBinding>,
-  ): V4ClassifyOutcome;
+  ): ClassifyOutcome;
   /** Execute the call against the upstream provider, using the resolved
    *  provider admin + the matched binding. Self-contained adapters (`ssh`)
    *  ignore admin / binding — they read their own credentials. */
@@ -134,7 +157,7 @@ export interface UpstreamAdapter {
 
 export interface GatewayConfig {
   cache: CacheClient;
-  audit: AuditWriter;
+  audit: LegacyAuditWriter;
   contextLoader: ContextLoader;
   upstreamByProvider: Record<Provider, UpstreamAdapter>;
   /** Per-provider indexed risk catalog (built at boot from the YAML files). */
@@ -144,10 +167,6 @@ export interface GatewayConfig {
   /** Optional request metadata captured into audit_log. */
   clientIp?: string | null;
   clientUserAgent?: string | null;
-  /** Project-scoped secret store for cross-provider secret transfer.
-   *  When set, `venv__*` tools are exposed and `_to_venv`/`_from_venv`
-   *  tools on providers can read/write opaque secrets. */
-  venvStore?: VenvStore | null;
   /** Called when a provider returns 401/403 and all retry/refresh attempts
    *  have failed. Marks the provider_admins row as `expired` and invalidates
    *  related caches so subsequent requests surface the correct status. */
@@ -269,9 +288,6 @@ export class McpGateway {
         out.push(...filtered);
       }
     }
-    if (this.cfg.venvStore) {
-      out.push(...VENV_TOOLS);
-    }
     return out;
   }
 
@@ -288,10 +304,6 @@ export class McpGateway {
     const toolName = typeof params.name === 'string' ? params.name : '';
     if (!toolName) return rpcError(id, -32602, 'tools/call requires params.name');
     const rawArgs = (params.arguments as Record<string, unknown> | undefined) ?? {};
-
-    if (toolName.startsWith('venv__')) {
-      return this.handleVenvTool(ctx, id, toolName, rawArgs);
-    }
 
     const provider = this.providerFor(toolName);
     if (!provider) {
@@ -507,41 +519,6 @@ export class McpGateway {
         latency,
       );
       return rpcError(id, -32603, `Upstream call failed: ${message}`);
-    }
-  }
-
-  private async handleVenvTool(
-    ctx: AccessTokenContext,
-    id: string | number | null,
-    tool: string,
-    args: Record<string, unknown>,
-  ): Promise<JsonRpcResponse> {
-    const store = this.cfg.venvStore;
-    if (!store) {
-      return rpcError(id, -32603, 'venv store is not configured on this gateway.');
-    }
-    const projectId = ctx.project.id;
-    try {
-      switch (tool) {
-        case 'venv__list': {
-          const entries = await store.list(projectId);
-          await this.audit(ctx, tool, args, 'allowed', null, [], null, null);
-          return rpcSuccess(id, this.shapeMcpResult(entries));
-        }
-        case 'venv__delete': {
-          const key = typeof args.key === 'string' ? args.key : '';
-          if (!key) return rpcError(id, -32602, 'venv__delete requires params.key');
-          await store.delete(projectId, key);
-          await this.audit(ctx, tool, args, 'allowed', null, [], null, null);
-          return rpcSuccess(id, this.shapeMcpResult({ key, status: 'deleted' }));
-        }
-        default:
-          return rpcError(id, -32601, `unknown venv tool '${tool}'.`);
-      }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e);
-      await this.audit(ctx, tool, args, 'denied', null, [], `venv-error: ${message}`, null);
-      return rpcError(id, -32603, `venv operation failed: ${message}`);
     }
   }
 
