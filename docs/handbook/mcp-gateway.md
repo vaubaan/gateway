@@ -12,6 +12,8 @@ tracks:
 ---
 
 > **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+> The v5 package is documented in [gateway-core](./gateway-core.md); the v4 orchestrator
+> described below now lives in `apps/gateway/src/lib/gateway/legacy-v4-gateway.ts` until P1.6.
 
 # MCP gateway — `@vaubaan/gateway-core` + `/mcp` route
 

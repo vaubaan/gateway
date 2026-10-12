@@ -1,12 +1,14 @@
 /**
- * AccessTokenContext cache.
+ * Short-lived cache behind an interface.
  *
- * Two implementations:
- *   - MemoryCacheClient   : Map<string, {value, expiresAt}>. Default for dev/test.
- *   - RedisCacheClient    : Upstash REST. Production hot-path.
+ * Used by the door to keep a verified mission context for a few seconds so
+ * the slow hash runs once per token, not once per call. The interface is the
+ * contract; `MemoryCacheClient` is the single-process implementation of ADR
+ * pivot-v4-to-v5 D1 ("cache and rate limit in memory, single process").
  *
- * Spec : docs/spec/vaubaan-gateway.md §4.3.
- * ADR  : docs/decisions/redis-cache-upstash-with-memory-fallback.md.
+ * // single-process only — a multi-replica deployment replaces
+ * // `MemoryCacheClient` with a shared implementation of `CacheClient`
+ * // (Redis-compatible store); nothing else changes.
  */
 
 export interface CacheClient {
@@ -20,13 +22,43 @@ interface MemoryEntry<T = unknown> {
   expiresAt: number;
 }
 
+export interface MemoryCacheOptions {
+  /** Upper bound on live entries. When reached, the oldest entry (by
+   *  insertion or last `set`) is evicted. Default 10 000. */
+  maxEntries?: number;
+  /** Clock, injectable for tests. */
+  now?: () => number;
+}
+
+const DEFAULT_MAX_ENTRIES = 10_000;
+
+/**
+ * Bounded in-memory cache. `Map` keeps insertion order, so re-setting a key
+ * moves it to the end and the first key is always the oldest. Expired entries
+ * are dropped lazily on read and swept when the bound is hit.
+ */
 export class MemoryCacheClient implements CacheClient {
   private readonly store = new Map<string, MemoryEntry>();
+  private readonly maxEntries: number;
+  private readonly now: () => number;
+
+  constructor(options: MemoryCacheOptions = {}) {
+    if (options.maxEntries !== undefined && options.maxEntries < 1) {
+      throw new Error('MemoryCacheClient: maxEntries must be >= 1');
+    }
+    this.maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES;
+    this.now = options.now ?? Date.now;
+  }
+
+  /** Live entry count (expired entries not yet swept are counted). */
+  get size(): number {
+    return this.store.size;
+  }
 
   async get<T = unknown>(key: string): Promise<T | null> {
     const entry = this.store.get(key);
     if (!entry) return null;
-    if (entry.expiresAt < Date.now()) {
+    if (entry.expiresAt <= this.now()) {
       this.store.delete(key);
       return null;
     }
@@ -34,76 +66,27 @@ export class MemoryCacheClient implements CacheClient {
   }
 
   async set<T = unknown>(key: string, value: T, ttlSeconds: number): Promise<void> {
-    this.store.set(key, { value, expiresAt: Date.now() + ttlSeconds * 1000 });
+    // Delete first so the key moves to the end of the insertion order.
+    this.store.delete(key);
+    if (this.store.size >= this.maxEntries) {
+      this.sweepExpired();
+      while (this.store.size >= this.maxEntries) {
+        const oldest = this.store.keys().next();
+        if (oldest.done) break;
+        this.store.delete(oldest.value);
+      }
+    }
+    this.store.set(key, { value, expiresAt: this.now() + ttlSeconds * 1000 });
   }
 
   async del(key: string): Promise<void> {
     this.store.delete(key);
   }
-}
 
-export interface UpstashConfig {
-  url: string;
-  token: string;
-  fetchImpl?: typeof fetch;
-}
-
-export class RedisCacheClient implements CacheClient {
-  private readonly url: string;
-  private readonly token: string;
-  private readonly fetchFn: typeof fetch;
-
-  constructor(config: UpstashConfig) {
-    this.url = config.url.replace(/\/$/, '');
-    this.token = config.token;
-    this.fetchFn = config.fetchImpl ?? fetch;
-  }
-
-  private async cmd(parts: string[]): Promise<unknown> {
-    const res = await this.fetchFn(this.url, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${this.token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(parts),
-    });
-    if (!res.ok) throw new Error(`Upstash command failed: ${res.status}`);
-    const json = (await res.json()) as { result?: unknown; error?: string };
-    if (json.error) throw new Error(`Upstash error: ${json.error}`);
-    return json.result;
-  }
-
-  async get<T = unknown>(key: string): Promise<T | null> {
-    const r = await this.cmd(['GET', key]);
-    if (r === null || r === undefined) return null;
-    try {
-      return JSON.parse(r as string) as T;
-    } catch {
-      return null;
+  private sweepExpired(): void {
+    const t = this.now();
+    for (const [key, entry] of this.store) {
+      if (entry.expiresAt <= t) this.store.delete(key);
     }
   }
-
-  async set<T = unknown>(key: string, value: T, ttlSeconds: number): Promise<void> {
-    await this.cmd(['SET', key, JSON.stringify(value), 'EX', String(ttlSeconds)]);
-  }
-
-  async del(key: string): Promise<void> {
-    await this.cmd(['DEL', key]);
-  }
-}
-
-/**
- * Build the right cache client from environment.
- *
- *   - UPSTASH_REDIS_REST_URL + UPSTASH_REDIS_REST_TOKEN → RedisCacheClient.
- *   - otherwise → MemoryCacheClient (per-process, fine for dev/test/fallback).
- */
-export function buildCacheClient(env: NodeJS.ProcessEnv = process.env): CacheClient {
-  const url = env.UPSTASH_REDIS_REST_URL;
-  const token = env.UPSTASH_REDIS_REST_TOKEN;
-  if (url && token) {
-    return new RedisCacheClient({ url, token });
-  }
-  return new MemoryCacheClient();
 }

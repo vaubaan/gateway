@@ -14,7 +14,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { generateApiKey, hashApiKey } from '@vaubaan/shared';
-import { buildCacheClient } from '@vaubaan/gateway-core';
+import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 
@@ -63,7 +63,7 @@ export async function POST(req: NextRequest, ctx: { params: Promise<{ tokenId: s
 
   // Drop the old prefix's cached AccessTokenContext so the rotated-out key 401s
   // immediately rather than waiting for the 60s TTL.
-  await buildCacheClient().del(`vaubaan:ctx:${token.api_key_prefix}`);
+  await new MemoryCacheClient().del(`vaubaan:ctx:${token.api_key_prefix}`);
 
   return NextResponse.json({ api_key: apiKey, api_key_prefix: apiKeyPrefix });
 }

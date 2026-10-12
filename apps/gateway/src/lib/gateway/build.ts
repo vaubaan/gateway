@@ -1,8 +1,8 @@
 /**
- * Build a configured `McpGateway` for the current Next.js runtime.
+ * LEGACY v4 wiring — build a configured v4 `McpGateway` for the Next.js
+ * runtime. Replaced by the v5 composition root (P0.4) and door (P1.6).
  *
- * Spec : docs/spec/vaubaan-gateway.md §7.
- * ADRs : docs/decisions/redis-cache-upstash-with-memory-fallback.md.
+ * Spec : docs/spec/legacy/vaubaan-gateway.legacy.md §7.
  */
 
 import { GitHubAdapter, githubAvailableTools } from '@vaubaan/plugin-github';
@@ -22,16 +22,14 @@ import {
   type RiskId,
 } from '@vaubaan/shared';
 import type { IndexedRiskCatalog } from '@vaubaan/policy-engine';
+import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import {
   McpGateway,
-  buildCacheClient,
-  SupabaseAuditWriter,
   type ContextLoader,
-  type SupabaseLike,
+  type LegacyAuditRow,
+  type LegacyAuditWriter,
   type UpstreamAdapter,
-  type VenvStore,
-  type VenvEntry,
-} from '@vaubaan/gateway-core';
+} from './legacy-v4-gateway';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeBytea, encodeByteaHexRaw } from '@/lib/providers/bytea';
 import { decryptProviderSecret, encryptProviderSecret } from '@/lib/crypto';
@@ -82,7 +80,15 @@ interface OrgRow {
   name: string;
 }
 
-class SupabaseVenvStore implements VenvStore {
+interface VenvEntry {
+  key: string;
+  source: string;
+  updated_at: string;
+}
+
+/** v4 project-scoped secret store consumed by the Vercel and Supabase
+ *  adapters (`_to_venv` / `_from_venv` tools). No v5 counterpart. */
+class SupabaseVenvStore {
   constructor(private readonly client: ReturnType<typeof getSupabaseServiceClient>) {}
 
   async put(projectId: string, key: string, value: string, source: string): Promise<void> {
@@ -134,6 +140,17 @@ class SupabaseVenvStore implements VenvStore {
       .eq('project_id', projectId)
       .eq('key', key);
     if (error) throw new Error(`venv delete failed: ${error.message}`);
+  }
+}
+
+/** v4 `audit_log` writer. Audit failures are logged, not thrown (v4 behaviour). */
+class SupabaseLegacyAuditWriter implements LegacyAuditWriter {
+  constructor(private readonly client: ReturnType<typeof getSupabaseServiceClient>) {}
+  async write(row: LegacyAuditRow): Promise<void> {
+    const { error } = await this.client.from('audit_log').insert(row);
+    if (error) {
+      console.error('[audit] failed to write row', { error: error.message, row });
+    }
   }
 }
 
@@ -442,14 +459,14 @@ export function buildGateway(opts: {
   }
 
   return new McpGateway({
-    cache: buildCacheClient(),
-    audit: new SupabaseAuditWriter(supabase as SupabaseLike),
+    // Per-request build: this cache never outlives the request (plan §3.1).
+    cache: new MemoryCacheClient(),
+    audit: new SupabaseLegacyAuditWriter(supabase),
     contextLoader,
     upstreamByProvider: upstreamByProvider as Record<Provider, UpstreamAdapter>,
     catalogByProvider,
     clientIp: opts.clientIp,
     clientUserAgent: opts.clientUserAgent,
-    venvStore,
     async onProviderAuthFailure(orgId, provider) {
       await supabase
         .from('provider_admins')

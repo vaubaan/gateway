@@ -1,6 +1,8 @@
 /**
- * Unit tests for the `McpGateway.handle` path — focused on the audit trail
- * shape on success / failure / binding-missing branches.
+ * LEGACY v4 tests for the `McpGateway.handle` path (moved from
+ * `packages/gateway-core` by P0.5, deleted with the v4 app code in P1.6) —
+ * focused on the audit trail shape on success / failure / binding-missing
+ * branches.
  *
  * What we cover here :
  *  - B1 — upstream throws after single-use consume → audit decision='denied'
@@ -20,14 +22,14 @@ import type {
 } from '@vaubaan/shared';
 import { indexCatalog } from '@vaubaan/policy-engine';
 
-import { MemoryAuditWriter } from '../../src/audit.ts';
-import { MemoryCacheClient } from '../../src/cache.ts';
+import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import {
   McpGateway,
+  MemoryLegacyAuditWriter,
   type ContextLoader,
   type GatewayConfig,
   type UpstreamAdapter,
-} from '../../src/gateway.ts';
+} from '../../../../src/lib/gateway/legacy-v4-gateway';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -138,7 +140,7 @@ function makeLoader(ctx: AccessTokenContext): ContextLoader {
 function makeGateway(opts: {
   ctx: AccessTokenContext;
   adapter: UpstreamAdapter;
-  audit: MemoryAuditWriter;
+  audit: MemoryLegacyAuditWriter;
 }): McpGateway {
   const cfg: GatewayConfig = {
     cache: new MemoryCacheClient(),
@@ -165,7 +167,7 @@ const validBinding: ProviderBinding = {
 
 describe('McpGateway.callTool — B1 upstream-error audit shape', () => {
   test('regular adapter: upstream throw → audit decision=denied with upstream-error reason', async () => {
-    const audit = new MemoryAuditWriter();
+    const audit = new MemoryLegacyAuditWriter();
     const ctx = makeContext({ bindings: [validBinding] });
     const adapter = makeAdapter({
       executeCall: async () => {
@@ -193,7 +195,7 @@ describe('McpGateway.callTool — B1 upstream-error audit shape', () => {
   });
 
   test('self-contained adapter: upstream throw → audit decision=denied with upstream-error reason', async () => {
-    const audit = new MemoryAuditWriter();
+    const audit = new MemoryLegacyAuditWriter();
     const ctx = makeContext({ bindings: [validBinding] });
     const adapter = makeAdapter({
       selfContained: true,
@@ -223,7 +225,7 @@ describe('McpGateway.callTool — B1 upstream-error audit shape', () => {
 
 describe('McpGateway.callTool — B2 missing binding', () => {
   test('classifier accepts call but no binding → audit denied with binding-missing reason', async () => {
-    const audit = new MemoryAuditWriter();
+    const audit = new MemoryLegacyAuditWriter();
     // Note: emptying bindings — the classifier still returns slices because
     // our makeAdapter() returns a hardcoded slice regardless.
     const ctx = makeContext({ bindings: [] });
@@ -249,7 +251,7 @@ describe('McpGateway.callTool — B2 missing binding', () => {
 
 describe('McpGateway.callTool — happy path', () => {
   test('successful upstream call → audit decision=allowed', async () => {
-    const audit = new MemoryAuditWriter();
+    const audit = new MemoryLegacyAuditWriter();
     const ctx = makeContext({ bindings: [validBinding] });
     const adapter = makeAdapter({ executeCall: async () => ({ rows: [] }) });
     const gw = makeGateway({ ctx, adapter, audit });
