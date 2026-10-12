@@ -20,7 +20,7 @@ status: draft
 
 ## 0. Vocabulary
 
-Twenty-six terms, distinct and not interchangeable.
+Twenty-seven terms, distinct and not interchangeable.
 
 **Deployment**
 
@@ -116,7 +116,17 @@ Twenty-six terms, distinct and not interchangeable.
 - **Budget** — the first value of a policy entry: a **quota** (number of
   actions allowed per period) and a **rate limit** (number of actions
   allowed per short sliding window). An accepted risk without an
-  explicit budget receives the default budget of its preset.
+  explicit budget receives the default budget of the preset it came
+  from.
+- **Preset** — a named policy fragment **shipped by a plugin** in its
+  catalog: a list of `RiskId`s of that provider, each with a default
+  budget and a default gate, plus a label and a one-line description
+  (`github: reviewer`, `github: developer`, `github: release manager`;
+  `supabase: read-only analyst`, `supabase: staging developer`…). A
+  preset is UI sugar: it pre-fills the policy of a mission for one
+  connection, the creator adjusts, and the persisted policy is always the
+  explicit enumeration. A preset never grants anything by itself and is
+  bounded by the creator's authority at issuance.
 - **Gate** — the second value of a policy entry: `auto` (the action
   passes within the budget with no intervention) or `approval` (each
   action is authorized but must be **approved by the mission creator**
@@ -382,11 +392,20 @@ The gate has a default value, `auto`.
   described in [gateway-risk-model](./gateway-risk-model.md) §4bis.
   There is a single speed mechanism; the mission sets its value, bounded
   by the catalog.
-- **Preset.** At issuance, the interface offers budgets by preset
-  (`exploration`, `code project`, `one-shot`…) that the creator adjusts
-  risk by risk. The `code project` preset reproduces the v4 usage "one
-  token per project" with generous values and no expiry; it is displayed
-  as wide.
+- **Presets, per plugin.** Each plugin ships its presets in its catalog;
+  every plugin ships at least one. At issuance, the creator picks one
+  preset per connection of the mission (or starts empty, or duplicates
+  an existing mission); the policy is pre-filled with the preset's risks,
+  budgets and gates, intersected with the creator's authority, and the
+  creator adjusts risk by risk. Presets are provider-specific by design:
+  what "developer" means on GitHub (write on feature branches, no merge
+  on protected ones) has no generic equivalent on Stripe. The persisted
+  policy is the explicit enumeration, never a preset reference, so a
+  preset changed in a later plugin version does not alter existing
+  missions. Every plugin's `developer`-like preset must cover the v4
+  usage "one token per code project" with generous values; the interface
+  shows the width of a preset in one line (how many risks, the most
+  severe one, the largest quota).
 - **No infinite budget.** A quota is always a number. The absence of an
   expiry is allowed; the absence of a quota is not.
 - **One budget per mission, however many agents.** An orchestrator and
@@ -522,7 +541,7 @@ What the management surface exposes, always within the delegating user's
 authority:
 
 - **Read**: my connections and those shared with me, with the exact
-  restriction; the risk catalog of each provider concerned, with budget
+  restriction; the risk catalog of each provider concerned, with its
   presets; my missions, their policy, their session and remaining
   budget.
 - **Preview** a policy: submit a draft `RiskId → (budget, gate)` on some
@@ -564,10 +583,15 @@ pages:
 - **Shares received** — what others entrusted to me, and the exact
   restriction.
 - **Missions** — my missions, their state per risk, their session.
-  Creation: name, connections and, within each, the resources (all by
-  default), checklist of risks within my authority, budget by preset then
-  per risk, period, expiry. After issuance: the
-  **bootstrap kit** (§4.4).
+  Creation, in this order and on one screen: name; connections and,
+  within each, the resources (all by default); one preset per connection
+  (or "duplicate mission X", or "paste an agent's proposal"); a
+  three-line summary of what the mission can do, cannot do, and in what
+  quantity; per-risk detail folded by default, unfolded on demand to
+  adjust budgets and gates within my authority; period, expiry. After
+  issuance: the **bootstrap kit** (§4.4). The screen must stay usable for
+  a mission on three connections without scrolling through a wall of
+  checkboxes.
 - **Mission session** — event timeline, counters per risk and per
   period, gate per risk, open requests.
 - **Request inbox** — claims and approval requests awaiting me as
@@ -631,7 +655,8 @@ command.
 - **Provider plugins** — one per provider. Two responsibilities: classify
   `(tool, arguments) → slices`, execute the tool with an ephemeral
   credential. They also declare how to obtain and refresh a credential
-  from the app registered by the company. Contribution process:
+  from the app registered by the company, how to discover resources, and
+  ship at least one **preset** in their catalog. Contribution process:
   [integrations-submission-kit](../handbook/integrations-submission-kit.md).
 - **The company's IdP** — authenticates humans, provides subject, email
   and groups. The instance trusts it for identity, never for
@@ -717,8 +742,10 @@ within that bound.
 ### 7.4 Issue a mission
 
 The creator names the mission, picks its connections and, within each,
-the resources it may touch, ticks the risks within their authority, picks a budget preset and adjusts it, sets period
-and expiry. The token is revealed once. The bootstrap kit is displayed.
+the resources it may touch, picks one preset per connection, reads the
+summary, unfolds the detail only if something needs adjusting within
+their authority, sets period and expiry. The token is revealed once. The
+bootstrap kit is displayed.
 
 ### 7.5 Execute
 
@@ -842,7 +869,9 @@ automated suite. Trust comes from usage.
   - session counters agree with the audit;
   - no configuration value is hard-coded;
   - every persisted restriction and `accepted_risks` is an enumerated
-    list, never a wildcard;
+    list, never a wildcard, never a preset reference;
+  - every plugin ships at least one preset, and every preset references
+    only `RiskId`s of its own catalog;
   - a user's authority on a connection is recomputed from their current
     group membership, never from a snapshot.
 - **Out of scope**: integration tests against real providers.
@@ -870,6 +899,8 @@ automated suite. Trust comes from usage.
 - No v4 migration; manual cutover.
 - A connection's owner is a principal, user or group; a mission always
   has a user creator.
+- Presets are shipped by plugins, one per connection at issuance, UI
+  sugar only; the persisted policy is always explicit.
 - Resources belong to the connection, labelled with an environment by
   the owner; a mission selects a subset per connection (all by default)
   and is refused outside it.
@@ -885,9 +916,13 @@ automated suite. Trust comes from usage.
   their connection to a group they do not belong to, and thus lose their
   authority? v1 assumption: no, to avoid dispossessing oneself by
   mistake; the operator can do it through `unowned`.
-- **Preset values.** Default quotas and rate limits for `exploration`,
-  `code project`, `one-shot` are to be fixed at implementation, risk by
-  risk, from the catalog's vector. ADR to plan once values stabilize.
+- **Preset values.** Each plugin's presets, their risks, default budgets
+  and gates, are fixed at implementation by the plugin author and
+  reviewed like the catalog. A structural test checks that every preset
+  references only `RiskId`s of its own catalog and that every plugin
+  ships at least one preset. Whether the gateway should also offer a
+  cross-provider "duplicate this mission" as the main shortcut is a UI
+  question for the missions feature.
 - **Quantities in shares.** A share's restriction is a list of `RiskId`
   without quantities. Should it also carry a budget ceiling per risk that
   the beneficiary's missions could not exceed? v1 assumption: no,
@@ -928,8 +963,8 @@ automated suite. Trust comes from usage.
   gesture.
 - **Automatic policy proposal.** The surface exposes reading and preview;
   composing a policy from a natural-language task is the client's job,
-  not the instance's. Instance-side help (presets named by task type) is
-  conceivable.
+  not the instance's. Plugin presets are the instance-side help; the
+  management surface exposes them.
 - **Authorization server.** The instance issues delegated tokens itself,
   relying on the IdP for identity. The alternative, accepting IdP tokens
   directly, is a technical decision for an ADR at implementation.
