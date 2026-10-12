@@ -1,147 +1,64 @@
 # Vaubaan Gateway
 
-> Policy-enforcing **MCP gateway** for coding agents. Filter and audit each
-> tool call from Claude Code / Cursor / Continue without ever giving them a
-> cloud provider token.
+> Open source, on-prem **MCP gateway** for coding agents. Agents never hold a
+> cloud credential: they hold a **mission token** with a **risk budget**, and
+> the gateway executes each tool call upstream only if the mission's policy,
+> budget and approval rules allow it, then writes an immutable audit row.
+
+**v5 is under construction on the `v5` integration branch (public product
+name: v2).** The last v4 SaaS release is tag
+[`v4-final`](https://github.com/sbw-vaubaan/vaubaan-gateway/releases/tag/v4-final).
+Nothing on `main` or `v5` is deployable yet.
+
+## What v5 is
+
+- **One instance per company**, run on your own network as a single process
+  with an embedded store. No tenant, no org, no SaaS.
+- **Humans sign in through your identity provider** (OpenID Connect).
+  Connections to providers (GitHub, Vercel, Supabase, Railway, Stripe,
+  Resend, Cloudflare DNS, Upstash Redis, Gmail, SSH) belong to users or
+  groups and can be shared with restrictions.
+- **Missions, not tokens with scopes.** A mission selects connections and
+  resources, and gives each risk of the provider catalogs a budget
+  (quota, rate, period) and a gate (`auto` or `approval`). Orchestrator and
+  sub-agents share one mission token and one budget.
+- **Structured refusals** tell the agent why a call was refused and where a
+  human can grant more; the human answers from an inbox, never from the
+  agent's terminal.
+
+The full picture is in the spec; the reasoning is in the pivot ADR.
+
+## Layout
 
 ```
-Coding Agent ──── MCP call ────▶ ┌─────────────────────────────┐
-                                  │  Vaubaan Gateway  /mcp       │
-                                  │  ┌────────────────────────┐ │
-                                  │  │ Auth (Bearer vbn_live_) │ │
-                                  │  │ Policy evaluate         │ │
-                                  │  │ Mint upstream JIT       │ │
-                                  │  │ Forward + Audit         │ │
-                                  │  └────────────────────────┘ │
-                                  └────────────┬────────────────┘
-                                               │
-                                               ▼
-                                       ┌──────────────┐
-                                       │  Provider    │
-                                       │  (GitHub …)  │
-                                       └──────────────┘
+apps/gateway/        the deployable: server + Next.js UI       @vaubaan/gateway-app
+packages/shared/     risk types, api-key, data-model            @vaubaan/shared
+packages/policy-engine/  slice DSL, matcher, evaluator, runtime @vaubaan/policy-engine
+packages/gateway-core/   pipeline, decisions, refusals, audit   @vaubaan/gateway-core
+plugins/<provider>/  one provider plugin per folder             @vaubaan/plugin-<provider>
+docs/                spec, decisions (ADRs), handbook, tests, workflow
 ```
 
-## Pitch
-
-- **L'agent ne voit jamais de cred provider.** Il s'authentifie auprès de
-  Vaubaan avec une `vbn_live_<key>`, et le gateway mint un token éphémère
-  côté provider JIT à chaque call.
-- **Une policy déclarative** filtre par tool et arguments — `github:developer`
-  peut push sur `feature/*` mais pas merger sur `main`. Default deny.
-- **Audit immutable** côté Vaubaan — 1 row par call, allow ou deny.
-
-Cf. `docs/spec/vaubaan-gateway.md` pour la spec complète.
-
-## Quick start
-
-### Prerequisites
-
-- Node ≥ 20, npm ≥ 10
-- Supabase project (anon + service_role keys)
-- GitHub App "Vaubaan Gateway" registered (one-time operator setup)
-- (optional) Upstash Redis for hot-path cache
-
-### Setup
+Workspaces: `apps/*`, `packages/*`, `plugins/*` (npm). Node >= 20.
 
 ```bash
-npm install
-cp packages/web/.env.local.example packages/web/.env.local
-# fill in NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GITHUB_APP_*
-npm run dev
-# open http://localhost:3000
-```
-
-### Apply DB schema
-
-```bash
-# via Supabase CLI (recommended)
-supabase db push
-
-# or via psql against the Session Pooler (IPv4)
-psql "postgresql://postgres.<ref>@<pooler-host>:5432/postgres" \
-  -f supabase/migrations/0001_init.sql
-```
-
-### Use an access token
-
-After UI flow (org → connect GitHub → project → binding → access token create),
-copy the api_key into your agent's `mcp.json` :
-
-```jsonc
-{
-  "mcpServers": {
-    "vauban": {
-      "url": "http://localhost:3000/mcp",
-      "headers": { "Authorization": "Bearer vbn_live_..." },
-    },
-  },
-}
-```
-
-Restart your agent. `tools/list` should now return GitHub tools filtered by
-the access token's roles.
-
-## Scripts
-
-| Script                 | Description                                      |
-| ---------------------- | ------------------------------------------------ |
-| `npm run dev`          | Next.js dev server                               |
-| `npm run build`        | Production build (Next.js)                       |
-| `npm run test`         | Vitest run (unit + integration)                  |
-| `npm run test:watch`   | Vitest file-watcher                              |
-| `npm run test:e2e`     | Playwright (smoke + real-clouds, gated by creds) |
-| `npm run lint`         | ESLint                                           |
-| `npm run format`       | Prettier write                                   |
-| `npm run format:check` | Prettier check                                   |
-| `npm run type-check`   | tsc --noEmit across workspaces                   |
-| `npm run ci`           | type-check + lint + format:check + test + build  |
-
-## Architecture
-
-```
-packages/
-  shared/              # cross-package types + api_key generation (argon2id)
-  policy-engine/       # DSL + decision flow + 7 operators + tools/list filter
-  providers/github/    # ProviderAdapter (App install, JIT JWT, Octokit dispatch)
-  mcp-gateway/         # auth, cache, audit, JSON-RPC dispatcher
-  web/                 # Next.js 15 App Router (UI + REST + /mcp)
-supabase/migrations/   # SQL schema (9 tables + RLS + builtin roles seed)
+npm ci
+npm run ci        # type-check, lint, format check, tests, build
 ```
 
 ## Documentation
 
-The 6 doc pillars (cf. `docs/spec/` is the source of truth ; the rest captures
-how that spec is realized) :
+| Pillar    | Where                                                                                                                                                                                                                     |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Spec      | [`docs/spec/vaubaan-gateway.md`](docs/spec/vaubaan-gateway.md) (v5), [`docs/spec/gateway-risk-model.md`](docs/spec/gateway-risk-model.md)                                                                                 |
+| Decisions | [`docs/decisions/`](docs/decisions/) — start with [the v4 → v5 pivot](docs/decisions/pivot-v4-to-v5-on-prem-mission-tokens.md) and [the repository layout](docs/decisions/repository-layout-and-contribution-workflow.md) |
+| Handbook  | [`docs/handbook/`](docs/handbook/) — how things actually work (v4 documents carry a legacy banner until rewritten)                                                                                                        |
+| Tests     | [`docs/tests/`](docs/tests/)                                                                                                                                                                                              |
+| Workflow  | [`docs/workflow/coding-workflow.md`](docs/workflow/coding-workflow.md)                                                                                                                                                    |
 
-| Pillar        | Path                           | Purpose                                |
-| ------------- | ------------------------------ | -------------------------------------- |
-| **Spec**      | `docs/spec/vaubaan-gateway.md` | Vision, vocabulary, hors-scope, domain |
-| **Decisions** | `docs/decisions/`              | ADRs — why we chose what we chose      |
-| **Handbook**  | `docs/handbook/`               | How features are actually implemented  |
-| **Tests**     | `docs/tests/`                  | Integration + E2E test plans           |
-| **Workflow**  | `docs/workflow/`               | CI, branches, env variants, PR process |
-| **README**    | this file                      | Pitch + quick start                    |
+Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). Security:
+[`SECURITY.md`](SECURITY.md). Changes: [`CHANGELOG.md`](CHANGELOG.md).
 
-ADRs landed for the v4 pivot :
+## Licence
 
-- [pivot-v3-to-v4-policy-gateway](docs/decisions/pivot-v3-to-v4-policy-gateway.md)
-- [rbac-org-role-bot-project](docs/decisions/rbac-org-role-bot-project.md) — superseded by `flat-membership-org-owner-access-token`
-- [flat-membership-org-owner-access-token](docs/decisions/flat-membership-org-owner-access-token.md)
-- [roles-naming-provider-scoped](docs/decisions/roles-naming-provider-scoped.md)
-- [mcp-only-mvp-scope](docs/decisions/mcp-only-mvp-scope.md)
-- [oauth-app-install-per-provider](docs/decisions/oauth-app-install-per-provider.md)
-- [trust-model-clear-at-rest-idp-style](docs/decisions/trust-model-clear-at-rest-idp-style.md)
-- [policy-dsl-declarative-jsonb](docs/decisions/policy-dsl-declarative-jsonb.md)
-- [dispatch-upstream-option-a-synthese](docs/decisions/dispatch-upstream-option-a-synthese.md)
-- [redis-cache-upstash-with-memory-fallback](docs/decisions/redis-cache-upstash-with-memory-fallback.md)
-- [api-key-format-vbn-live-argon2id](docs/decisions/api-key-format-vbn-live-argon2id.md)
-
-## Status
-
-MVP — vertical slice GitHub. 69 unit + integration tests green. Phase 5
-(Vercel + Supabase providers, custom roles UI, audit alerting) à venir.
-
-## License
-
-UNLICENSED. Vaubaan-internal.
+[Apache-2.0](LICENSE). Copyright 2026 Vaubaan contributors.

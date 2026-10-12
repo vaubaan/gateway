@@ -1,0 +1,32 @@
+name: Feature request
+description: Propose a change to what the gateway does.
+title: '[feature] '
+labels: ['enhancement']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Features are specified before they are coded (`docs/spec/`). A good request explains the problem; the design comes after.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What can you not do today, and who is affected (operator, mission creator, agent, plugin author)?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposal
+      description: How you would like it to work. Reference the spec section it would change, if you know it.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: I checked `docs/spec/vaubaan-gateway.md` and this is not already specified or explicitly out of scope.
+        - label: I checked open issues and ADRs under `docs/decisions/` for a prior decision.
