@@ -2,6 +2,7 @@
 title: Pivot v4 → v5 — gateway on-prem, identités partagées, mission tokens à budget de risque
 status: accepted
 date: 2026-10-12
+amended: 2026-10-12
 author: Renaud Pelissier
 supersedes:
   - flat-membership-org-owner-access-token
@@ -21,11 +22,94 @@ extends:
 
 > **ACCEPTED 2026-10-12** par Renaud, en session. Cadrage validé :
 > SQLite, UI web conservée, budget par `risk_id`, OIDC générique,
-> livraison Docker, budget récurrent par rechargement, licence AGPL-3.0,
+> livraison Docker, budget récurrent par rechargement, licence Apache-2.0,
 > collecteur de télémétrie sur un projet Supabase dédié, bascule manuelle
 > depuis la prod v4 (D7). Nom public du produit : **v2** ; numérotation
 > interne du repo : **v5** (tag `v4-final` posé sur le dernier commit
 > SaaS).
+
+## Amendement 2026-10-12 (même jour) — pas de délégation machine à machine
+
+> Validé par Renaud en session de rédaction de la spec v5. Précise D4 et
+> la portée de `partially-supersedes` sur
+> [[unified-tokens-delegation-chain-and-escalation-channel]].
+
+Les agents qui travaillent à une mission, orchestrateur et sous-agents,
+présentent **le même mission token** et puisent dans **le même budget**.
+Il n'y a pas de sous-mission, pas de token enfant, pas de
+`escalation_channel` posé par un parent machine. La chaîne d'autorité
+s'arrête à la mission ; tout refus qui demande plus d'autorité remonte à
+un humain (URL de réclamation pour le budget, ré-émission par le
+créateur pour un risque non accepté). Un call peut porter une étiquette
+d'agent libre, reprise dans l'audit, sans effet sur l'autorisation.
+
+Conséquence : la **chaîne de délégation** et le **canal d'escalation** de
+l'ADR unified-tokens sont entièrement supersédés ; seul le principe
+"un Bearer unique `vbn_live_*`, autorité portée par le row" survit. La
+phrase de D4 "C'est le canal d'escalation existant avec un nouveau
+déclencheur" se lit : même idée de remontée hors du call, mais vers un
+humain identifié par l'IdP, plus vers un endpoint parent.
+
+## Amendement 2026-10-12 (même jour) — gate `approval` par risque
+
+> Validé par Renaud en session de rédaction de la spec v5. Étend D4.
+
+La policy d'une mission devient `RiskId → (budget, gate)`. La gate vaut
+`auto` (défaut) ou `approval` : l'action est autorisée mais chaque
+occurrence doit être approuvée par le créateur de la mission. Le gateway
+refuse le call avec `approval-required` et une URL de demande, dépose la
+demande dans la boîte du créateur, et n'attend rien. Le créateur accorde
+une approbation liée à l'empreinte exacte des arguments, à usage unique
+et à durée courte ; l'exécutant rejoue le call à l'identique.
+
+Ce n'est pas un retour du `confirm` mint-time supprimé par
+[[unified-gates-drop-confirm]] : il n'y a ni état `pending`, ni polling,
+ni canal de notification tiers, ni validation de l'émission. Réclamation
+de budget et demande d'approbation partagent une seule primitive, la
+demande au créateur, ce qui répond à la faiblesse n°1 de cet ADR (deux
+infrastructures pour une même idée).
+
+## Amendement 2026-10-12 (même jour) — surface de gestion MCP par délégation OAuth
+
+> Validé par Renaud en session de rédaction de la spec v5. Étend D2 et D4.
+
+Composer une policy de mission à la main est laborieux ; un agent doit
+pouvoir le faire. L'instance expose une **seconde porte MCP, de
+gestion**, authentifiée par OAuth : le user consent une fois via l'IdP,
+l'agent reçoit un token délégué court et révocable, borné à l'autorité du
+user et à la gestion des missions (lire, prévisualiser, émettre, faire
+tourner, révoquer). Le créateur enregistré est toujours le user.
+
+Trois credentials qui ne traversent jamais : mission token (exécution),
+token délégué (gestion), session humaine (interface). Les demandes,
+réclamation et approbation, ne s'accordent qu'en session humaine, pour
+qu'un agent qui détient à la fois un mission token et un token délégué de
+son créateur n'ait aucun chemin pour s'approuver.
+
+## Amendement 2026-10-12 (même jour) — anglais et organisation standard du dépôt
+
+> Validé par Renaud en session. Étend D6.
+
+Open source implique anglais. À partir de la v5, **tout ce qui vit dans
+le dépôt est en anglais** : specs, ADRs, handbooks, README, commentaires,
+messages de commit, textes de l'interface par défaut, messages d'erreur
+du gateway. La spec v5 est écrite en anglais dès sa première version.
+Les documents v4 existants, en français, sont des documents historiques :
+ils ne sont pas traduits, ils sont marqués `legacy` et remplacés au fil
+de la réécriture v5. Le présent ADR, rédigé en français avant cette
+décision, reste tel quel ; les ADRs suivants sont en anglais. La
+conversation de travail avec l'assistant peut rester en français ; ce
+qui est écrit dans le dépôt ne l'est pas.
+
+L'organisation du dépôt suit les conventions qu'un contributeur open
+source attend : `README.md`, `LICENSE`, `CONTRIBUTING.md`,
+`CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md` à la racine ;
+modèles d'issues et de pull requests ; `docs/` pour la documentation ;
+un dossier par paquet publiable sous `packages/`, l'application
+déployable sous `apps/` ; les plugins providers dans un dossier qui dit
+leur nom ; les fichiers de déploiement (image, exemple de configuration)
+dans un dossier dédié. Le plan d'implémentation v5 fixe le layout exact
+et le documente dans le workflow de contribution.
 
 ## Contexte
 
@@ -157,11 +241,10 @@ elle est éteinte (D7).
 
 ### D6 — Open source
 
-- Licence **AGPL-3.0**. Une entreprise peut installer, modifier et
-  utiliser l'instance en interne sans obligation ; seul celui qui expose
-  une version modifiée en service réseau doit publier ses changements.
-  Ça garde ouverte l'option d'une offre hébergée par Vaubaan sans qu'un
-  tiers puisse la copier à façon fermée.
+- Licence **Apache-2.0**, comme Supabase. Adoption maximale, aucune
+  friction juridique en entreprise, contributions faciles, clause de
+  brevets explicite. Le modèle économique éventuel de Vaubaan repose sur
+  le service et l'hébergement, pas sur la restriction de la licence.
 - Le repo ne contient aucun secret ni ref de projet ; tout vient de la
   config d'instance ([[feedback-env-vars-canonical]]).
 - Le kit de soumission de plugins existant devient le process de
@@ -224,8 +307,9 @@ se fait ensuite, progressivement, sans contrainte de calendrier.
 - Le preset "projet de code" avec mission illimitée dans le temps
   reproduit le modèle v4 et n'apporte pas le bénéfice du budget tant que
   Renaud ne resserre pas. C'est assumé comme transitoire.
-- AGPL-3.0 freine certaines entreprises dont la politique interdit
-  toute licence copyleft, même pour un usage interne.
+- Apache-2.0 n'empêche pas un tiers de proposer le gateway en SaaS
+  fermé. Assumé : la différenciation viendra du service, pas de la
+  licence.
 - Les ADRs supersédées ne sont pas réécrites ; les handbooks
   `auth-github-sso`, `web-app`, `mcp-gateway` et `escalation` deviennent
   historiques jusqu'à réécriture.
@@ -290,11 +374,14 @@ Une nouvelle mission et une nouvelle session à chaque occurrence.
 Rejeté : multiplie les Bearers à redistribuer aux agents. Le
 rechargement périodique garde un Bearer stable et un historique continu.
 
-### Apache-2.0
+### AGPL-3.0
 
-Adoption maximale, aucune friction en entreprise. Rejeté : n'empêche pas
-un tiers de proposer le gateway en SaaS fermé, ce qui est précisément
-le marché que Vaubaan pourrait vouloir occuper.
+Protège contre le re-hosting en SaaS fermé. Rejeté par Renaud au profit
+du modèle Supabase : le copyleft réseau freine l'adoption dans les
+entreprises dont la politique l'interdit, même pour un usage interne, et
+complique les contributions. La protection contre le re-hosting ne vaut
+pas ce coût pour un produit qui vise d'abord l'installation chez le
+client.
 
 ### Collecteur de télémétrie via dépôt GitHub et Action
 
