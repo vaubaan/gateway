@@ -21,7 +21,10 @@ Pure modules around **slices** and **risk catalogs** (spec
 [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §4.1). No IO, no state :
 the gateway feeds it parsed objects (`IndexedRiskCatalog`, `Slice[]`,
 `Resource[]`) and gets a decision back. The only dependency is
-`@vaubaan/shared`.
+`@vaubaan/shared` — types from the barrel, values (`parseRiskId`,
+`formatRiskId`, `isRiskId`) from the browser-safe subpath
+`@vaubaan/shared/risk-id`, because the issuance UI bundles this package and
+the barrel drags in argon2 through `api-key.ts`.
 
 Rewritten in English at P0.2 (ADR [[plugin-contract-and-credential-spec]]
 D3, D8) : the engine now resolves environments through an `EnvResolver`

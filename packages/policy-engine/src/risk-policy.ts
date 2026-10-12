@@ -11,7 +11,8 @@
  * runtime).
  */
 
-import { isRiskId, type RiskCatalog, type RiskEntry } from '@vaubaan/shared';
+import type { RiskCatalog, RiskEntry } from '@vaubaan/shared';
+import { isRiskId } from '@vaubaan/shared/risk-id';
 
 import { indexCatalog, type IndexedRiskCatalog } from './risk-evaluator.ts';
 

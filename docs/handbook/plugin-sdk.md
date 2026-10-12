@@ -201,6 +201,13 @@ test can never reach the network.
 
 ## Shared vocabulary the SDK relies on (`@vaubaan/shared`)
 
+The barrel `@vaubaan/shared` is **server-only** : it re-exports `api-key.ts`
+(argon2, `node:crypto`). Code the UI bundles — and `@vaubaan/policy-engine`,
+which the issuance form imports — takes _values_ from the subpaths
+`@vaubaan/shared/risk-id` and `@vaubaan/shared/api-key` ; type imports from
+the barrel are erased and always safe. The SDK itself is server-side
+(`node:fs` for the YAML) and imports the barrel.
+
 - `domain.ts` — v5 domain : `Resource { provider, ref, env?, displayName,
 metadata? }`, `ConnectionResource`, `Credential` (encrypted envelope),
   `CredentialKind`, `Connection`, `Share`, `Restriction`, `Mission`,
