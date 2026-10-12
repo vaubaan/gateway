@@ -1,1 +1,3 @@
-npm run ci
+# Fast pre-commit: lint + format on staged files only.
+# Type-check, tests and build run in CI (.github/workflows/ci.yml).
+npx lint-staged

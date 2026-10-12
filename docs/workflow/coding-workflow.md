@@ -2,6 +2,7 @@
 title: Coding workflow
 status: current
 date: 2026-05-22
+last_synced: 2026-10-12
 tracks:
   - .github/workflows/
   - vercel.json
@@ -73,15 +74,21 @@ Ledger `supabase_migrations.schema_migrations` empêche la ré-application.
 
 ## Local CI gate
 
-`.husky/pre-commit` lance `npm run ci` à chaque commit. Tout commit qui ne
-passe pas localement ne sera pas push.
+> Updated 2026-10-12 (in English per the v5 repository rule).
 
-Pour bypass en cas d'urgence (à ne pas abuser) : `git commit --no-verify`.
+`.husky/pre-commit` runs `lint-staged` on staged files only: ESLint
+(`--max-warnings=0`) and Prettier check on `.ts/.tsx/.js`, Prettier check
+on `.md/.json/.yaml/.css/.html`. It takes seconds. Type-check, tests and
+the production build are **not** run locally anymore; they run in CI on
+every push and pull request (`.github/workflows/ci.yml`). `npm run ci`
+still exists to reproduce the full CI gate by hand.
+
+Emergency bypass (do not abuse): `git commit --no-verify`.
 
 ## Dépendances
 
 - `npm` workspaces (pas de pnpm/yarn). Node ≥ 20.
-- `husky` pour le pre-commit hook.
+- `husky` + `lint-staged` pour le pre-commit hook.
 - `tsx` pour les ops scripts.
 - Tests : `vitest` (unit + integration), `@playwright/test` (E2E, planifié).
 

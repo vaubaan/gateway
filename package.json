@@ -38,6 +38,7 @@
     "eslint-config-prettier": "10.1.8",
     "globals": "17.6.0",
     "husky": "^9.1.7",
+    "lint-staged": "17.6.0",
     "prettier": "3.8.3",
     "tsx": "4.20.0",
     "typescript": "5.9.3",
@@ -50,5 +51,14 @@
   },
   "optionalDependencies": {
     "@sbw-vaubaan/harness": "1.1.1"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs,cjs}": [
+      "eslint --max-warnings=0",
+      "prettier --check"
+    ],
+    "*.{md,json,yaml,yml,css,html}": [
+      "prettier --check"
+    ]
   }
 }
