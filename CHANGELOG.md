@@ -37,6 +37,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - `@vaubaan/shared`: v5 domain types (connections, resources, shares,
   missions, sessions, requests, approvals, delegations), the eight
   `RefusalCode` values, `parseRiskId` / `formatRiskId`.
+- **Embedded store and schema v1 (P0.3).** SQLite via `better-sqlite3`
+  under `apps/gateway/src/server/store/`, forward-only migrations in
+  `apps/gateway/migrations/` applied at boot, `STRICT` tables, WAL,
+  repository interfaces with SQLite implementations (users, groups,
+  connections and resources, shares, missions with policy and tokens,
+  sessions with the atomic `decideAndDecrement` primitive, requests,
+  approvals, delegations, audit, instance config), an append-only audit
+  enforced by triggers with a retention purge path and a `SqliteAuditWriter`
+  implementing `@vaubaan/gateway-core`'s `AuditWriter`, encrypted blobs
+  behind the crypto module's `Encryptor` port, a `:memory:` mode for tests,
+  and a `Store` that satisfies the composition root's store port. ADR
+  `embedded-store-sqlite-and-migrations`, handbook `store`.
 
 ### Changed
 
