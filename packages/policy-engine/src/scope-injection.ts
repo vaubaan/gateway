@@ -1,35 +1,43 @@
 /**
- * Scope injection — hide and auto-fill arguments the access token has no choice over.
+ * QUARANTINED — scope injection (v4), kept behind a flag that defaults to off.
  *
- * Spec : docs/spec/vaubaan-gateway.md §7.2 (filtered tools/list) + spec §6.4
- *        (resource_ref resolution).
+ * Plan §8-Q4 leaves open whether v5 keeps auto-filling arguments the
+ * mission has no choice over (owner/repo when the mission touches one
+ * repository, project id when it touches one project). Two reasons to
+ * doubt it : the v4 implementation is hard-coded to four SaaS providers and
+ * to `vercelTeamId`, and v5 missions may select several resources of one
+ * connection, which makes the "exactly one binding" premise rare.
  *
- * Premise : if an access token's Project has exactly one ProviderBinding for a given
- * provider, then any tool argument that identifies that resource (owner+repo
- * for GitHub, project_id for Vercel, project_ref for Supabase, projectId for
- * Railway, teamId for Vercel team) is already fully determined. Exposing it to the agent is
- * worse than useless :
- *   - the agent might pass the wrong value (which we'd deny via policy
- *     anyway, but with confusing feedback),
- *   - it leaks resource identifiers that the agent didn't need to know.
+ * Until the question is settled the module compiles, its tests run, and
+ * `injectionPlanFor` returns `null` unless the caller passes
+ * `{ enabled: true }`. The v5 replacement, if any, is the plugin hook
+ * `normalizeArgs(args, resources)` in `@vaubaan/plugin-sdk`, itself behind
+ * the host flag `argNormalization` (also default off). Nothing else in v5
+ * may depend on this module.
  *
- * Solution : at `tools/list` time, strip those args from each tool's
- * inputSchema. At `tools/call` time, auto-inject them server-side before
- * forwarding to the upstream adapter.
- *
- * The mapping is keyed by `<provider>` + `<arg-name>` — kept here as a
- * single source of truth instead of scattered across each adapter.
+ * Premise of the v4 behaviour : if a token's project has exactly one
+ * binding for a provider, then any tool argument that identifies that
+ * resource is fully determined. At `tools/list` time the args are stripped
+ * from each tool's inputSchema ; at `tools/call` time they are auto-injected
+ * server-side before forwarding.
  */
 
 import type { McpToolDeclaration, Provider, ProviderBinding } from '@vaubaan/shared';
 
-interface InjectionPlan {
+/** The quarantine flag. Defaults to off (plan §8-Q4 undecided). */
+export interface ScopeInjectionFlags {
+  readonly enabled: boolean;
+}
+
+export const SCOPE_INJECTION_DEFAULT_FLAGS: ScopeInjectionFlags = { enabled: false };
+
+export interface InjectionPlan {
   /** owner + repo built from `binding.resource_ref` shaped as `owner/repo`. */
   owner?: string;
   repo?: string;
   /** Vercel + Railway project id (both upstreams name the arg `projectId`). */
   projectId?: string;
-  /** Vercel team id (lives on `provider_admins.team_id` ; the caller passes it). */
+  /** Vercel team id (lives on the connection's credential metadata ; the caller passes it). */
   teamId?: string;
   /** Supabase project ref. */
   project_ref?: string;
@@ -37,16 +45,21 @@ interface InjectionPlan {
 
 export interface ScopeContext {
   bindings: ProviderBinding[];
-  /** team_id of the matching ProviderAdmin row, when available. */
+  /** Vercel team id, when the connection carries one. */
   vercelTeamId?: string | null;
 }
 
 /**
- * Compute which arguments are determined for a given provider in this access token's
- * project. Returns null if the args are NOT fully determined (zero or 2+
- * bindings) — in which case the agent must keep providing them.
+ * Compute which arguments are determined for a given provider. Returns null
+ * when the flag is off, or when the args are NOT fully determined (zero or
+ * 2+ bindings) — in which case the agent must keep providing them.
  */
-export function injectionPlanFor(provider: Provider, scope: ScopeContext): InjectionPlan | null {
+export function injectionPlanFor(
+  provider: Provider,
+  scope: ScopeContext,
+  flags: ScopeInjectionFlags = SCOPE_INJECTION_DEFAULT_FLAGS,
+): InjectionPlan | null {
+  if (!flags.enabled) return null;
   const matching = scope.bindings.filter((b) => b.provider === provider);
   if (matching.length !== 1) return null;
   const binding = matching[0]!;
@@ -101,7 +114,7 @@ export function stripInjectedArgs(
 
 /**
  * Merge the injection plan into the call arguments. Caller-provided values
- * take precedence (so an admin can still override in MCP Inspector while
+ * take precedence (so a human can still override in MCP Inspector while
  * normal agents get the auto-fill).
  */
 export function mergeInjectedArgs(

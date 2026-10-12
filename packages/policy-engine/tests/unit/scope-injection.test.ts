@@ -4,7 +4,11 @@ import {
   injectionPlanFor,
   mergeInjectedArgs,
   stripInjectedArgs,
+  type ScopeInjectionFlags,
 } from '../../src/scope-injection.ts';
+
+/** The quarantined module only acts when explicitly enabled (plan §8-Q4). */
+const ON: ScopeInjectionFlags = { enabled: true };
 
 const ghBinding: ProviderBinding = {
   id: 'b-gh',
@@ -34,8 +38,13 @@ const supaBinding: ProviderBinding = {
 };
 
 describe('injectionPlanFor', () => {
+  test('quarantine: returns null by default (flag off), whatever the bindings', () => {
+    expect(injectionPlanFor('github', { bindings: [ghBinding] })).toBeNull();
+    expect(injectionPlanFor('github', { bindings: [ghBinding] }, { enabled: false })).toBeNull();
+  });
+
   test('github: owner + repo from owner/repo binding', () => {
-    expect(injectionPlanFor('github', { bindings: [ghBinding] })).toEqual({
+    expect(injectionPlanFor('github', { bindings: [ghBinding] }, ON)).toEqual({
       owner: 'acme',
       repo: 'app',
     });
@@ -43,29 +52,29 @@ describe('injectionPlanFor', () => {
 
   test('vercel: projectId + teamId (when admin has team_id)', () => {
     expect(
-      injectionPlanFor('vercel', { bindings: [vercelBinding], vercelTeamId: 'team_z' }),
+      injectionPlanFor('vercel', { bindings: [vercelBinding], vercelTeamId: 'team_z' }, ON),
     ).toEqual({ projectId: 'prj_xxx', teamId: 'team_z' });
   });
 
   test('supabase: project_ref', () => {
-    expect(injectionPlanFor('supabase', { bindings: [supaBinding] })).toEqual({
+    expect(injectionPlanFor('supabase', { bindings: [supaBinding] }, ON)).toEqual({
       project_ref: 'abcdefghijklmnopqrst',
     });
   });
 
   test('null when zero bindings for the provider', () => {
-    expect(injectionPlanFor('github', { bindings: [] })).toBeNull();
+    expect(injectionPlanFor('github', { bindings: [] }, ON)).toBeNull();
   });
 
   test('null when 2+ bindings for the provider (ambiguous)', () => {
     expect(
-      injectionPlanFor('github', { bindings: [ghBinding, { ...ghBinding, id: 'b2' }] }),
+      injectionPlanFor('github', { bindings: [ghBinding, { ...ghBinding, id: 'b2' }] }, ON),
     ).toBeNull();
   });
 
   test('github: malformed binding resource_ref → null', () => {
     expect(
-      injectionPlanFor('github', { bindings: [{ ...ghBinding, resource_ref: 'no-slash' }] }),
+      injectionPlanFor('github', { bindings: [{ ...ghBinding, resource_ref: 'no-slash' }] }, ON),
     ).toBeNull();
   });
 });

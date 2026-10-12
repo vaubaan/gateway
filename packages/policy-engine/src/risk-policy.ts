@@ -1,24 +1,24 @@
 /**
  * Risk catalog validation + acceptance-time env restriction.
  *
- * Spec : docs/spec/gateway-risk-model.md §6, §9.
+ * Spec : docs/spec/gateway-risk-model.md §4, §9.
  * ADR  : docs/decisions/unified-gates-drop-confirm.md.
  *
- * Post drop-confirm, the policy layer collapses to a single structural
- * guardrail : `acceptable_in_envs` on a catalog entry restricts which
- * binding envs can ever accept the risk. There is no project-level override
- * and no 3-gate resolution — a risk is either in `accepted_risks` (allow)
- * or it isn't (deny at runtime).
+ * The policy layer has a single structural guardrail : `acceptable_in_envs`
+ * on a catalog entry restricts which resource environments can ever accept
+ * the risk. There is no project-level override and no 3-gate resolution — a
+ * risk is either accepted by the mission (allow) or it isn't (deny at
+ * runtime).
  */
 
-import type { RiskCatalog, RiskEntry } from '@vaubaan/shared';
+import { isRiskId, type RiskCatalog, type RiskEntry } from '@vaubaan/shared';
 
 import { indexCatalog, type IndexedRiskCatalog } from './risk-evaluator.ts';
 
 /**
- * Acceptance-time guard — refuse to accept a risk at mint time if the
- * catalog declares `acceptable_in_envs` and the requested binding env is
- * not in that list.
+ * Acceptance-time guard — refuse to accept a risk at issuance if the
+ * catalog declares `acceptable_in_envs` and the resource's environment
+ * label is not in that list.
  *
  * Returns `null` if OK to accept, or a denial reason string.
  */
@@ -27,7 +27,7 @@ export function checkAcceptableInEnv(entry: RiskEntry, env: string | null): stri
   if (env === null) {
     return (
       `risk '${entry.id}' restricts acceptance to envs ` +
-      `[${entry.acceptable_in_envs.join(', ')}] but the binding has no env (account-scope)`
+      `[${entry.acceptable_in_envs.join(', ')}] but the resource has no environment label`
     );
   }
   if (!entry.acceptable_in_envs.includes(env)) {
@@ -43,12 +43,30 @@ export function checkAcceptableInEnv(entry: RiskEntry, env: string | null): stri
 // Catalog boot helper
 // ─────────────────────────────────────────────────────────────────────────────
 
-const RISK_ID_REGEX =
-  /^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*(\[[a-z][a-z0-9-]*\])?(\.[a-z][a-z0-9-]+)+$/;
+export interface PrepareCatalogOptions {
+  /** Receives non-fatal findings (missing fallback). Defaults to `console.warn`. */
+  readonly warn?: (message: string) => void;
+}
+
+/** Id prefix of the catch-all entry every catalog should declare. */
+export function fallbackRiskPrefix(provider: string): string {
+  return `${provider}.uncategorized`;
+}
+
+/** True iff the catalog declares at least one `<provider>.uncategorized-*` entry. */
+export function hasFallbackRisk(catalog: RiskCatalog): boolean {
+  const prefix = fallbackRiskPrefix(catalog.provider);
+  return catalog.risks.some((entry) => entry.id.startsWith(prefix));
+}
 
 /** One-call helper combining `indexCatalog` + sanity checks (ids unique,
- *  RiskId regex, fallback risk present). Used at boot. */
-export function prepareCatalog(catalog: RiskCatalog): IndexedRiskCatalog {
+ *  RiskId grammar, fallback risk present). Used at boot by the plugin SDK's
+ *  catalog loader. */
+export function prepareCatalog(
+  catalog: RiskCatalog,
+  options: PrepareCatalogOptions = {},
+): IndexedRiskCatalog {
+  const warn = options.warn ?? ((message: string) => console.warn(message));
   const indexed = indexCatalog(catalog);
   const ids = new Set<string>();
   for (const { entry } of indexed.entries) {
@@ -56,21 +74,18 @@ export function prepareCatalog(catalog: RiskCatalog): IndexedRiskCatalog {
       throw new Error(`Duplicate risk id '${entry.id}' in catalog '${catalog.provider}'`);
     }
     ids.add(entry.id);
-    if (!RISK_ID_REGEX.test(entry.id)) {
+    if (!isRiskId(entry.id)) {
       throw new Error(
         `Risk id '${entry.id}' in catalog '${catalog.provider}' does not match expected format ` +
           `'<provider>[<env>].<name>' or '<provider>.<name>'`,
       );
     }
   }
-  // A catalog SHOULD have a fallback risk. We don't enforce hard (some
-  // providers may opt out and have an empty fallback risk surface), but
-  // emit a console warning when missing — lint at CI.
-  const hasFallback = indexed.entries.some((e) =>
-    e.entry.id.startsWith(`${catalog.provider}.uncategorized`),
-  );
-  if (!hasFallback) {
-    console.warn(
+  // A catalog SHOULD have a fallback risk. The SDK loader turns this into a
+  // hard error ; here it stays a warning so partial catalogs can be indexed
+  // in tests and tooling.
+  if (!hasFallbackRisk(catalog)) {
+    warn(
       `[risk-policy] catalog '${catalog.provider}' has no '<provider>.uncategorized-*' fallback ` +
         `risk — concrete slices not matching any catalog entry will silently produce empty ` +
         `risks_touched, which the runtime treats as 'deny' (safe-by-default). Add a fallback.`,

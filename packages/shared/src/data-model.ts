@@ -46,14 +46,14 @@ export interface DataModelPlane {
  *   - `description`     : one-liner shown in tooltips / handbook diagrams.
  *   - `envScopable`     : when true, this entity is the carrier of the
  *                         provider's "env" layer (spec §2.1 + §4 : env is a
- *                         calque par-data, not an orthogonal axis). The exact
+ *                         per-datum layer, not an orthogonal axis). The exact
  *                         convention is provider-specific :
  *                           - github : `branch` carries the env layer ;
  *                           - vercel : `env` entity ({prod, preview, dev}) ;
  *                           - supabase : `project` (one project_ref per env) ;
  *                           - railway : `environment` (Railway-native node) +
- *                                       `project` (binding-level slug) ;
- *                           - ssh : `host` (one binding = one host = one env).
+ *                                       `project` (resource-level slug) ;
+ *                           - ssh : `host` (one resource = one host = one env).
  *                         Rendered as a small `env` tag next to the entity
  *                         name in the data-model diagram & per-plane lists.
  */
@@ -72,7 +72,7 @@ export type DataModelCardinality = 'one' | 'bounded' | 'unbounded';
  * existing entity in the same plane. Returns the list of errors (empty
  * array when the data-model is internally consistent). Pure — no IO.
  *
- * W7 from the v4 clean-code report : the TS type `parent: string | null`
+ * The TS type `parent: string | null`
  * does not enforce referential integrity. A typo silently turns the
  * mermaid renderer into a graph with orphan nodes. This function lets the
  * provider unit tests assert the invariant in CI.
