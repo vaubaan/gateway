@@ -1,0 +1,55 @@
+name: Bug report
+description: Something does not behave as the spec or the handbook says.
+title: '[bug] '
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. If this is a security issue, do **not** file it here; see `SECURITY.md`.
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Output of `git rev-parse --short HEAD`, or the image tag you run.
+      placeholder: 2.0.0-alpha.0 / abc1234
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got. Redact tokens and credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Issue a mission with …
+        2. Call tool … with arguments …
+        3. Observe refusal …
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      multiple: true
+      options:
+        - apps/gateway (UI, doors, store)
+        - packages/gateway-core
+        - packages/policy-engine
+        - packages/shared
+        - plugins/<provider>
+        - deploy (Docker, config)
+        - docs
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or audit entries
+      description: Paste with secrets removed. Token prefixes are fine; full tokens are not.
+      render: text

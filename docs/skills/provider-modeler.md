@@ -91,7 +91,7 @@ Sections obligatoires (mêmes que celles du handbook final — cf. Phase E) :
 (`mcp__context7__resolve-library-id` puis `mcp__context7__query-docs`).
 N'utilise pas WebFetch ad-hoc sauf si Context7 n'a pas le provider.
 
-### Phase B — Data-model TS (`packages/providers/<vendor>/src/data-model.ts`)
+### Phase B — Data-model TS (`plugins/<vendor>/src/data-model.ts`)
 
 **But** : matérialiser le graphe d'entités de la Phase A en TypeScript
 typé, utilisable par le runtime et les lints.
@@ -102,9 +102,9 @@ Référence du type : `packages/shared/src/data-model.ts` (interface
 
 Exemples canoniques :
 
-- `packages/providers/vercel/src/data-model.ts` (1 plane, 15 entités).
-- `packages/providers/supabase/src/data-model.ts` (4 planes).
-- `packages/providers/github/src/data-model.ts` (entité synthétique
+- `plugins/vercel/src/data-model.ts` (1 plane, 15 entités).
+- `plugins/supabase/src/data-model.ts` (4 planes).
+- `plugins/github/src/data-model.ts` (entité synthétique
   `agent-session` — étudie le pattern).
 
 Règles :
@@ -116,11 +116,11 @@ Règles :
 - Le fichier exporte une const `dataModel: DataModel` typée — pas de
   `as DataModel`, on veut le check structurel à la compile.
 
-**Test obligatoire** : créer `packages/providers/<vendor>/tests/unit/data-model.test.ts`
+**Test obligatoire** : créer `plugins/<vendor>/tests/unit/data-model.test.ts`
 qui appelle `validateDataModel(dataModel)` (depuis `@vaubaan/shared`) et
-asserte zero erreur. Copie le pattern de `packages/providers/vercel/tests/unit/data-model.test.ts`.
+asserte zero erreur. Copie le pattern de `plugins/vercel/tests/unit/data-model.test.ts`.
 
-### Phase C — Risk catalog YAML (`packages/providers/<vendor>/src/risk-catalog.yaml`)
+### Phase C — Risk catalog YAML (`plugins/<vendor>/src/risk-catalog.yaml`)
 
 **But** : déclarer les ~10-15 intentions métier que le manager peut
 accepter sur ce provider.
@@ -131,10 +131,10 @@ note "bible" ci-dessus).
 
 Exemples canoniques :
 
-- `packages/providers/vercel/src/risk-catalog.yaml` (15 + fallback).
-- `packages/providers/github/src/risk-catalog.yaml` (focus permissions
+- `plugins/vercel/src/risk-catalog.yaml` (15 + fallback).
+- `plugins/github/src/risk-catalog.yaml` (focus permissions
   scopes GitHub App).
-- `packages/providers/supabase/src/risk-catalog.yaml` (le plus dense,
+- `plugins/supabase/src/risk-catalog.yaml` (le plus dense,
   multi-plane).
 
 Règles :
@@ -192,8 +192,8 @@ j'accepte ça ?") change avec l'amplitude, c'est deux risks. Sinon,
 c'est un seul risk + caps. La duplication précoce alourdit le catalog
 sans gain.
 
-**Test obligatoire** : `packages/providers/<vendor>/tests/unit/risk-catalog.test.ts`.
-Copie le pattern de `packages/providers/railway/tests/unit/risk-catalog.test.ts`.
+**Test obligatoire** : `plugins/<vendor>/tests/unit/risk-catalog.test.ts`.
+Copie le pattern de `plugins/railway/tests/unit/risk-catalog.test.ts`.
 Le test doit vérifier :
 
 - Nombre d'entrées attendu (count des risks + fallback).
@@ -206,15 +206,15 @@ Le test doit vérifier :
 **Synchro TS ↔ YAML** : la plupart des providers shippent aussi un
 `risk-catalog.ts` qui ré-exporte le YAML en const typée. Si tu en
 écris un, ajoute un test `risk-catalog-sync.test.ts` qui asserte
-l'équivalence (cf. `packages/providers/vercel/tests/unit/risk-catalog-sync.test.ts`).
+l'équivalence (cf. `plugins/vercel/tests/unit/risk-catalog-sync.test.ts`).
 
-### Phase D — Classifier (`packages/providers/<vendor>/src/risk-classifier.ts`)
+### Phase D — Classifier (`plugins/<vendor>/src/risk-classifier.ts`)
 
 **But** : pour chaque tool MCP exposé par le provider, retourner les
 slices que le call touche. C'est la pièce qui rend la Phase C
 opérationnelle.
 
-Référence : `packages/providers/vercel/src/risk-classifier.ts` (le
+Référence : `plugins/vercel/src/risk-classifier.ts` (le
 plus pédagogique : ~300 lignes, helpers `slice/name/ident`, fonction
 unique `classifyVercelV4`).
 
@@ -231,8 +231,8 @@ ClassifyResult` où `ClassifyResult = { slices: Slice[] } | { denied: string }`.
   `get_access_to_vercel_url`), classifier comme `W` — la sémantique
   prime sur le verbe HTTP.
 
-**Test obligatoire** : `packages/providers/<vendor>/tests/unit/risk-classifier.test.ts`.
-Copie le pattern de `packages/providers/vercel/tests/unit/` — un test
+**Test obligatoire** : `plugins/<vendor>/tests/unit/risk-classifier.test.ts`.
+Copie le pattern de `plugins/vercel/tests/unit/` — un test
 par tool MCP, vérifiant la / les slice(s) émises sur des args
 représentatifs.
 
@@ -258,10 +258,10 @@ title: <Vendor> provider — modélisation v4 risk-based
 status: current
 date: <YYYY-MM-DD>
 tracks:
-  - packages/providers/<vendor>/src/data-model.ts
-  - packages/providers/<vendor>/src/risk-catalog.yaml
-  - packages/providers/<vendor>/src/risk-catalog.ts # si présent
-  - packages/providers/<vendor>/src/risk-classifier.ts
+  - plugins/<vendor>/src/data-model.ts
+  - plugins/<vendor>/src/risk-catalog.yaml
+  - plugins/<vendor>/src/risk-catalog.ts # si présent
+  - plugins/<vendor>/src/risk-classifier.ts
 ---
 ```
 
@@ -278,7 +278,7 @@ le nouveau provider, lien, planes, count risks).
    **avant** de passer en B (la research est l'étape où les
    désaccords structurels sont les moins chers à corriger).
 4. **Phases B → C → D** : code + tests en parallèle. Run
-   `npm test -w @vaubaan/providers-<vendor>` au moindre changement.
+   `npm test -w @vaubaan/plugin-<vendor>` au moindre changement.
 5. **Phase E** : handbook + maj du README providers.
 6. **Output final** : un résumé au human listant chaque fichier créé,
    le run test passing, et les open questions restantes (à
@@ -298,7 +298,7 @@ le nouveau provider, lien, planes, count risks).
 
 - `npm run typecheck` passe (TS types corrects).
 - `npm run lint` passe.
-- `npm test -w @vaubaan/providers-<vendor>` passe.
+- `npm test -w @vaubaan/plugin-<vendor>` passe.
 - `validateDataModel(dataModel)` → zero erreur.
 - Catalog coverage : chaque tool MCP émet ≥ 1 slice matchée par ≥ 1 risk.
 - Frontmatter `tracks:` du handbook pointe vers les 3-4 fichiers code
@@ -334,22 +334,22 @@ Provider <vendor> — modélisation terminée
 
 Fichiers créés :
   - .vaubaan/research/providers/<vendor>.md   (Phase A, validé <date>)
-  - packages/providers/<vendor>/src/data-model.ts
-  - packages/providers/<vendor>/src/risk-catalog.yaml
-  - packages/providers/<vendor>/src/risk-catalog.ts    (optionnel)
-  - packages/providers/<vendor>/src/risk-classifier.ts
-  - packages/providers/<vendor>/tests/unit/data-model.test.ts
-  - packages/providers/<vendor>/tests/unit/risk-catalog.test.ts
-  - packages/providers/<vendor>/tests/unit/risk-classifier.test.ts
+  - plugins/<vendor>/src/data-model.ts
+  - plugins/<vendor>/src/risk-catalog.yaml
+  - plugins/<vendor>/src/risk-catalog.ts    (optionnel)
+  - plugins/<vendor>/src/risk-classifier.ts
+  - plugins/<vendor>/tests/unit/data-model.test.ts
+  - plugins/<vendor>/tests/unit/risk-catalog.test.ts
+  - plugins/<vendor>/tests/unit/risk-classifier.test.ts
   - docs/handbook/providers/<vendor>.md
 
 Stats :
   - N planes, M entités, R risks (+ fallback), T tools couverts.
-  - Tests : npm test -w @vaubaan/providers-<vendor> → X passing.
+  - Tests : npm test -w @vaubaan/plugin-<vendor> → X passing.
 
 Reste à faire (hors-scope de cette skill, pour le coding agent) :
   - adapter / execute / tools wire (handbook indique les surfaces).
-  - intégration dans le routeur MCP (`packages/mcp-gateway`).
+  - intégration dans le routeur MCP (`packages/gateway-core`).
   - tests E2E / intégration runtime.
 
 Open questions :

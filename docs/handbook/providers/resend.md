@@ -4,17 +4,19 @@ status: current
 date: 2026-06-24
 last_reviewed: 2026-06-24
 tracks:
-  - packages/providers/resend/src/data-model.ts
-  - packages/providers/resend/src/risk-catalog.ts
-  - packages/providers/resend/src/risk-catalog.yaml
-  - packages/providers/resend/src/risk-classifier.ts
-  - packages/providers/resend/src/tools.ts
-  - packages/providers/resend/src/execute.ts
-  - packages/providers/resend/src/resend-adapter.ts
-  - packages/providers/resend/src/index.ts
-  - packages/web/src/lib/gateway/build.ts
-  - packages/web/src/components/providers/provider-info.ts
+  - plugins/resend/src/data-model.ts
+  - plugins/resend/src/risk-catalog.ts
+  - plugins/resend/src/risk-catalog.yaml
+  - plugins/resend/src/risk-classifier.ts
+  - plugins/resend/src/tools.ts
+  - plugins/resend/src/execute.ts
+  - plugins/resend/src/resend-adapter.ts
+  - plugins/resend/src/index.ts
+  - apps/gateway/src/lib/gateway/build.ts
+  - apps/gateway/src/components/providers/provider-info.ts
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Resend provider — modelisation v4 + runtime
 
@@ -90,7 +92,7 @@ inedits** :
 
 ## 1. Data-model du plane `email`
 
-Le code vit dans `packages/providers/resend/src/data-model.ts`.
+Le code vit dans `plugins/resend/src/data-model.ts`.
 
 Resend n'expose qu'**un seul plane** : `email`. Tout vit sous un
 noeud racine `account` qui porte l'`envScopable` (un binding = un
@@ -157,8 +159,8 @@ existent uniquement pour la classification slice-level.
 ## 2. Mapping tool -> slice(s)
 
 25 tools MCP wraps sur Resend REST, definis dans
-`packages/providers/resend/src/tools.ts`. Le classifier est dans
-`packages/providers/resend/src/risk-classifier.ts`.
+`plugins/resend/src/tools.ts`. Le classifier est dans
+`plugins/resend/src/risk-classifier.ts`.
 
 ### 2.1 Reads (9 tools)
 
@@ -210,7 +212,7 @@ existent uniquement pour la classification slice-level.
 
 ## 3. Risk catalog
 
-Le YAML vit dans `packages/providers/resend/src/risk-catalog.yaml`,
+Le YAML vit dans `plugins/resend/src/risk-catalog.yaml`,
 le miroir TS dans `risk-catalog.ts`. Le test
 `risk-catalog-sync.test.ts` verifie l'identite entre les deux.
 
@@ -284,7 +286,7 @@ humaine out-of-band.
 ## 4. Classifier — identity-zoning
 
 Le classifier vit dans
-`packages/providers/resend/src/risk-classifier.ts`. Fonction exportee :
+`plugins/resend/src/risk-classifier.ts`. Fonction exportee :
 `classifyResendV4(tool, args, bindings) -> ClassifyResult`.
 
 ### 4.1 Flow de classification d'un send
@@ -357,7 +359,7 @@ domain read (metadata-level, pas de PII, pas de side-effect).
 
 ## 5. Adapter paste-token
 
-Le code vit dans `packages/providers/resend/src/resend-adapter.ts`.
+Le code vit dans `plugins/resend/src/resend-adapter.ts`.
 Classe `ResendAdapter`.
 
 ### 5.1 Auth model
@@ -382,7 +384,7 @@ binding est utilise comme fallback.
 ### 5.3 Execute
 
 L'adapter delegue a `executeCall` dans
-`packages/providers/resend/src/execute.ts`. Le dispatcher route les
+`plugins/resend/src/execute.ts`. Le dispatcher route les
 25 tools vers les endpoints REST Resend :
 
 - **GET** : pas de body, query-string pour les params.
@@ -429,7 +431,7 @@ Registre dans `PROVIDER_INFO.resend` avec :
 
 ### 6.3 `risk-catalog/loader.ts`
 
-`resendRiskCatalog` importe depuis `@vaubaan/providers-resend` et
+`resendRiskCatalog` importe depuis `@vaubaan/plugin-resend` et
 enregistre dans `PROVIDER_CATALOGS.resend`. Le loader est consulte
 par le policy-engine au runtime.
 
@@ -442,9 +444,9 @@ ajoute au tableau `PROVIDERS` expose par `GET /api/v1/catalog`.
 
 `'resend'` ajoute aux `z.enum()` dans :
 
-- `packages/web/src/lib/mint/risk-preview.ts` (`PreviewBindingSchema`)
-- `packages/web/src/app/api/v1/tokens/preview/route.ts` (`BindingSchema`)
-- `packages/web/src/app/api/v1/tokens/mint/route.ts` (`BindingSchema`)
+- `apps/gateway/src/lib/mint/risk-preview.ts` (`PreviewBindingSchema`)
+- `apps/gateway/src/app/api/v1/tokens/preview/route.ts` (`BindingSchema`)
+- `apps/gateway/src/app/api/v1/tokens/mint/route.ts` (`BindingSchema`)
 
 ---
 

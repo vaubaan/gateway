@@ -4,18 +4,20 @@ status: current
 date: 2026-06-19
 last_reviewed: 2026-06-19
 tracks:
-  - packages/providers/stripe/src/data-model.ts
-  - packages/providers/stripe/src/risk-catalog.ts
-  - packages/providers/stripe/src/risk-catalog.yaml
-  - packages/providers/stripe/src/risk-classifier.ts
-  - packages/providers/stripe/src/tools.ts
-  - packages/providers/stripe/src/execute.ts
-  - packages/providers/stripe/src/stripe-adapter.ts
-  - packages/providers/stripe/src/index.ts
-  - packages/mcp-gateway/src/gateway.ts
-  - packages/web/src/lib/gateway/build.ts
-  - packages/web/src/components/providers/provider-info.ts
+  - plugins/stripe/src/data-model.ts
+  - plugins/stripe/src/risk-catalog.ts
+  - plugins/stripe/src/risk-catalog.yaml
+  - plugins/stripe/src/risk-classifier.ts
+  - plugins/stripe/src/tools.ts
+  - plugins/stripe/src/execute.ts
+  - plugins/stripe/src/stripe-adapter.ts
+  - plugins/stripe/src/index.ts
+  - packages/gateway-core/src/gateway.ts
+  - apps/gateway/src/lib/gateway/build.ts
+  - apps/gateway/src/components/providers/provider-info.ts
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Stripe provider — modélisation v4 + runtime
 
@@ -342,9 +344,9 @@ fallback) et Gmail (14 + fallback). Un seul risk porte `caps` +
 | `stripe.uncategorized-write` _(fallback)_ | W      | —                  | —                                                                           | Catch-all `stripe.[**].W`. Fail-loud quand un tool W non-catégorisé est ajouté.                                  |
 
 Pour le détail (label, reason, vector 6D), cf.
-[`packages/providers/stripe/src/risk-catalog.yaml`](../../../packages/providers/stripe/src/risk-catalog.yaml)
+[`plugins/stripe/src/risk-catalog.yaml`](../../../plugins/stripe/src/risk-catalog.yaml)
 et son miroir TS
-[`risk-catalog.ts`](../../../packages/providers/stripe/src/risk-catalog.ts).
+[`risk-catalog.ts`](../../../plugins/stripe/src/risk-catalog.ts).
 
 ### 3.1 Scope caps — pourquoi seulement sur `refund-create` ?
 
@@ -628,7 +630,7 @@ traduire en erreur lisible. Phase 2 : detection + alerte automatique.
 
 ### 7.1 `tools.ts` — 25 `McpToolDeclaration` entries
 
-`packages/providers/stripe/src/tools.ts` declares 10 read tools and 15
+`plugins/stripe/src/tools.ts` declares 10 read tools and 15
 write tools, each prefixed `stripe__`. The `inputSchema` properties are
 aligned with the Stripe REST v1 parameters. Exports `availableTools`
 (the full array) and `WRITE_TOOL_NAMES` (a `Set<string>` of the 15
@@ -636,7 +638,7 @@ write tool names).
 
 ### 7.2 `execute.ts` — REST dispatcher
 
-`packages/providers/stripe/src/execute.ts` routes each tool call to the
+`plugins/stripe/src/execute.ts` routes each tool call to the
 correct Stripe REST endpoint via a `switch` statement. Key details :
 
 - **Auth** : `Authorization: Bearer <token>` on every request.
@@ -654,7 +656,7 @@ correct Stripe REST endpoint via a `switch` statement. Key details :
 
 ### 7.3 `stripe-adapter.ts` — paste-token adapter
 
-`packages/providers/stripe/src/stripe-adapter.ts` follows the
+`plugins/stripe/src/stripe-adapter.ts` follows the
 `UpstashRedisAdapter` pattern :
 
 - `provider = 'stripe' as const`
@@ -673,16 +675,16 @@ correct Stripe REST endpoint via a `switch` statement. Key details :
 
 Three files updated for gateway integration :
 
-- **`packages/mcp-gateway/src/gateway.ts`** —
+- **`packages/gateway-core/src/gateway.ts`** —
   `providerFor()` gains the `stripe__` prefix check. `listTools()` now
   iterates `stripe` in its provider loop. Error message includes
   `stripe__` in the supported-provider hint.
-- **`packages/web/src/lib/gateway/build.ts`** —
+- **`apps/gateway/src/lib/gateway/build.ts`** —
   imports `StripeAdapter` + `stripeAvailableTools`, instantiates the
   adapter, and registers `upstreamByProvider.stripe`. Adds `'stripe'` to
   the `catalogByProvider` loader loop. No OAuth, no `teamId` — paste-
   token mode like Upstash Redis.
-- **`packages/web/src/components/providers/provider-info.ts`** —
+- **`apps/gateway/src/components/providers/provider-info.ts`** —
   `tools: []` placeholder replaced with `tools: stripeAvailableTools`.
 
 ---
@@ -697,7 +699,7 @@ complete. Remaining chantiers :
 2. ~~**tools.ts**~~ — done (25 `McpToolDeclaration` entries).
 
 3. **Web UI binding form** —
-   `packages/web/src/app/(app)/orgs/[slug]/projects/[project]/bindings/new/binding-form.tsx`
+   `apps/gateway/src/app/(app)/orgs/[slug]/projects/[project]/bindings/new/binding-form.tsx`
    gagne un sous-formulaire Stripe-specific avec :
    - Input clé API restricted (texte masqué, validation regex
      `^sk_(test|live)_[A-Za-z0-9_]{20,}$`).
@@ -707,7 +709,7 @@ complete. Remaining chantiers :
      pré-remplir `resource_ref`.
 
 4. **Web UI token mint** —
-   `packages/web/src/app/(app)/orgs/[slug]/projects/[project]/tokens/new/`
+   `apps/gateway/src/app/(app)/orgs/[slug]/projects/[project]/tokens/new/`
    gagne la prise en compte du provider `stripe`. Cap UI : pour le
    risk capé (`refund-create`), afficher les caps effectifs (3/min,
    20/session) + leur source (catalog). `refund-create` décoché par
@@ -869,20 +871,20 @@ signing secret" est explicite — pas d'ambiguïté.
 Toutes les 10 questions cardinales du research Phase A ont été tranchées
 (Q1-Q10). Le code matérialise les décisions :
 
-- `packages/providers/stripe/src/data-model.ts` — 1 plane, 21 entités
+- `plugins/stripe/src/data-model.ts` — 1 plane, 21 entités
   (19 Stripe-natives + 2 synthétiques `customer.pii` et
   `webhook-endpoint.secret`).
-- `packages/providers/stripe/src/risk-catalog.yaml` + `.ts` — 15 risks
+- `plugins/stripe/src/risk-catalog.yaml` + `.ts` — 15 risks
   (14 nommés + 1 fallback), 1 entrée avec `caps` + `infra_limits`
   (`refund-create`).
-- `packages/providers/stripe/src/risk-classifier.ts` — 25 tools
+- `plugins/stripe/src/risk-classifier.ts` — 25 tools
   classifiés (10 reads + 15 writes), mode propagation depuis le binding.
-- `packages/providers/stripe/src/tools.ts` — 25 `McpToolDeclaration`
+- `plugins/stripe/src/tools.ts` — 25 `McpToolDeclaration`
   entries (10 reads + 15 writes) with input schemas.
-- `packages/providers/stripe/src/execute.ts` — REST dispatcher, routes
+- `plugins/stripe/src/execute.ts` — REST dispatcher, routes
   each tool to `api.stripe.com/v1/`, `application/x-www-form-urlencoded`
   for POST/DELETE, query params for GET.
-- `packages/providers/stripe/src/stripe-adapter.ts` — paste-token
+- `plugins/stripe/src/stripe-adapter.ts` — paste-token
   adapter, validates via `GET /v1/account`, delegates classify to
   `classifyStripeV4`.
 - Gateway wired : `gateway.ts` routing, `build.ts` instantiation,

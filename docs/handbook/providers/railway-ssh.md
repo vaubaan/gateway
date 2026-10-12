@@ -3,13 +3,15 @@ title: Railway + SSH providers — modélisation v4 risk-based
 status: current
 date: 2026-06-15
 tracks:
-  - packages/providers/railway/src/data-model.ts
-  - packages/providers/railway/src/risk-catalog.ts
-  - packages/providers/railway/src/risk-classifier.ts
-  - packages/providers/ssh/src/data-model.ts
-  - packages/providers/ssh/src/risk-catalog.ts
-  - packages/providers/ssh/src/risk-classifier.ts
+  - plugins/railway/src/data-model.ts
+  - plugins/railway/src/risk-catalog.ts
+  - plugins/railway/src/risk-classifier.ts
+  - plugins/ssh/src/data-model.ts
+  - plugins/ssh/src/risk-catalog.ts
+  - plugins/ssh/src/risk-classifier.ts
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Railway & SSH — modélisation v4 (data-model, slices, risk catalog)
 
@@ -20,7 +22,7 @@ tracks:
 > applique le même gabarit que GitHub / Supabase / Vercel.
 >
 > État courant — Railway : classifier v1 toujours en `{ provider, plane,
-level, action, env? }` (`packages/providers/railway/src/classify.ts`).
+level, action, env? }` (`plugins/railway/src/classify.ts`).
 > SSH : classifier legacy `ssh__exec` + `policy.ts:isReadAllowed()` (regex
 > whitelist). Le provider `bash` (annotated scripts, cf.
 > `docs/handbook/bash-provider.md`) sort du périmètre de ce doc — il sera

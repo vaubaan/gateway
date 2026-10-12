@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 const rootDir = dirname(fileURLToPath(import.meta.url));
-const webSrc = resolve(rootDir, 'packages/web/src');
+const appSrc = resolve(rootDir, 'apps/gateway/src');
 
 export default defineConfig({
   esbuild: {
@@ -12,7 +12,7 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      '@/': `${webSrc}/`,
+      '@/': `${appSrc}/`,
     },
   },
   test: {
@@ -20,20 +20,24 @@ export default defineConfig({
     globals: false,
     env: { SKIP_LIVE: '1' },
     include: [
+      'apps/*/tests/unit/**/*.test.ts',
+      'apps/*/tests/unit/**/*.test.tsx',
+      'apps/*/tests/integration/**/*.test.ts',
       'packages/*/tests/unit/**/*.test.ts',
       'packages/*/tests/unit/**/*.test.tsx',
       'packages/*/tests/integration/**/*.test.ts',
-      'packages/providers/*/tests/unit/**/*.test.ts',
+      'plugins/*/tests/unit/**/*.test.ts',
       'packages/*/src/**/*.test.ts',
+      'apps/*/src/**/*.test.ts',
     ],
-    exclude: ['node_modules', 'dist', '.next', 'packages/*/tests/e2e/**'],
-    environmentMatchGlobs: [['packages/web/tests/unit/components/**', 'jsdom']],
+    exclude: ['node_modules', 'dist', '.next', 'apps/*/tests/e2e/**'],
+    environmentMatchGlobs: [['apps/gateway/tests/unit/components/**', 'jsdom']],
     passWithNoTests: false,
     reporters: ['default'],
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],
-      exclude: ['**/*.d.ts', '**/tests/**', '**/*.config.*', 'packages/*/dist/**'],
+      exclude: ['**/*.d.ts', '**/tests/**', '**/*.config.*', '**/dist/**'],
     },
   },
 });

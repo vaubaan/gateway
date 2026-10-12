@@ -3,12 +3,13 @@ title: Railway provider adapter
 status: current
 date: 2026-06-15
 tracks:
-  - packages/providers/railway/src/
-  - packages/web/src/app/api/integrations/railway/
-  - supabase/migrations/0004_add_railway_provider.sql
+  - plugins/railway/src/
+  - apps/gateway/src/app/api/integrations/railway/
 ---
 
-# Railway provider — `@vaubaan/providers-railway`
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+
+# Railway provider — `@vaubaan/plugin-railway`
 
 > **v4 risk-based catalog added — 2026-06-15.** Le pivot
 > `chore(v1-drop)` a supprimé le classifier capability-based + le
@@ -33,7 +34,7 @@ ADR : `docs/decisions/railway-rewrap-remote-mcp.md`.
 ## Layout
 
 ```
-packages/providers/railway/
+plugins/railway/
   src/
     railway-adapter.ts       # RailwayAdapter — mint (+ refresh), executeCall, classifyV4
     risk-classifier.ts       # classifyRailwayV4 → Slice[] (cf. providers/railway-ssh.md §1)
@@ -122,7 +123,7 @@ classifications v4 vit dans
 
 ## Tests
 
-`npx vitest run packages/providers/railway` — 51 tests (~50ms). Voir
+`npx vitest run plugins/railway` — 51 tests (~50ms). Voir
 [`providers/railway-ssh.md`](./providers/railway-ssh.md) §1 §Tests pour
 le détail des scénarios catalog/classifier.
 

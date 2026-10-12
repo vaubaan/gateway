@@ -20,7 +20,7 @@
  *     qualified ids stored on the token's `accepted_risks` snapshot.
  *
  * History : these used to be defined in
- * `packages/web/src/lib/risk-catalog/loader.ts` and re-implemented
+ * `apps/gateway/src/lib/risk-catalog/loader.ts` and re-implemented
  * client-side in `mint-form.tsx`. Centralizing here removed the
  * drift-by-copy hazard flagged in the v4 clean-code report (B3).
  */

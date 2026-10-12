@@ -5,6 +5,8 @@ date: 2026-06-14
 context: source de référence du pivot v4 risk-based (cf. [[gateway-risk-model]])
 ---
 
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+
 ---
 
 title: Permission & Threat Model — State of the Art

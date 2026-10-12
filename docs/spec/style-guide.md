@@ -1,7 +1,7 @@
 # Style Guide — spec
 
 > **Statut :** spec greenfield draft. Aucun style guide n'existait avant
-> ce document. La codebase frontend (`packages/web`) accumule des
+> ce document. La codebase frontend (`apps/gateway`) accumule des
 > conventions Tailwind locales contradictoires — cards blanches sur fond
 > noir, palette `neutral-100..950` utilisée en vrac, accents `red-400` /
 > `yellow-900` / `green-100` ad-hoc — que cette spec vise à remplacer

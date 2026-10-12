@@ -1,0 +1,51 @@
+name: Plugin request
+description: Ask for a new provider plugin, or offer to write one.
+title: '[plugin] '
+labels: ['plugin']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Plugins live under `plugins/<provider>` and are published as `@vaubaan/plugin-<provider>`. See `plugins/README.md` and `CONTRIBUTING.md`.
+  - type: input
+    id: provider
+    attributes:
+      label: Provider
+      placeholder: e.g. Linear, Datadog, AWS IAM
+    validations:
+      required: true
+  - type: input
+    id: docs
+    attributes:
+      label: Link to the provider's API documentation
+    validations:
+      required: true
+  - type: dropdown
+    id: credential
+    attributes:
+      label: How does the provider authenticate?
+      options:
+        - API key or personal token
+        - OAuth 2.0 (user consent)
+        - App installation (GitHub App style)
+        - SSH key
+        - Other / several (explain below)
+    validations:
+      required: true
+  - type: textarea
+    id: tools
+    attributes:
+      label: Tools and risks
+      description: Which operations should agents be able to perform, and which ones are dangerous (destructive, costly, data-exfiltrating)?
+    validations:
+      required: true
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Are you offering to write it?
+      options:
+        - 'Yes, I will open a PR'
+        - 'Yes, with guidance'
+        - 'No, this is a request'
+    validations:
+      required: true

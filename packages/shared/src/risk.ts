@@ -123,7 +123,7 @@ export type RiskId = string;
 
 /**
  * One entry in a provider's risk catalog (statically declared in
- * `packages/providers/<vendor>/src/risk-catalog.yaml`).
+ * `plugins/<vendor>/src/risk-catalog.yaml`).
  *
  * Each entry represents a named business intent ("write env vars on prod",
  * "merge to a protected branch", ...). The `matches` pattern is a slice

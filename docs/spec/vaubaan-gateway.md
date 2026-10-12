@@ -6,7 +6,7 @@ status: draft
 # Vaubaan Gateway — spec
 
 > **Status:** draft v5, complete rewrite. Replaces the v4 spec
-> (multi-tenant SaaS), archived as [vaubaan-gateway.legacy.md](./vaubaan-gateway.legacy.md).
+> (multi-tenant SaaS), archived as [vaubaan-gateway.legacy.md](./legacy/vaubaan-gateway.legacy.md).
 > Founding decision: ADR [pivot-v4-to-v5-on-prem-mission-tokens](../decisions/pivot-v4-to-v5-on-prem-mission-tokens.md).
 > The risk model (plugins, catalogs, slices, scope caps) is not rewritten
 > here: it lives in [gateway-risk-model](./gateway-risk-model.md) and
@@ -657,7 +657,7 @@ command.
   credential. They also declare how to obtain and refresh a credential
   from the app registered by the company, how to discover resources, and
   ship at least one **preset** in their catalog. Contribution process:
-  [integrations-submission-kit](../handbook/integrations-submission-kit.md).
+  [integrations-submission-kit](../handbook/legacy/integrations-submission-kit.md).
 - **The company's IdP** — authenticates humans, provides subject, email
   and groups. The instance trusts it for identity, never for
   authorization: shares and missions are local.

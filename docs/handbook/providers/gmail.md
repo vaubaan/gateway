@@ -3,12 +3,14 @@ title: Gmail provider — modélisation v4 risk-based
 status: current
 date: 2026-06-18
 tracks:
-  - packages/providers/gmail/src/data-model.ts
-  - packages/providers/gmail/src/risk-catalog.ts
-  - packages/providers/gmail/src/risk-catalog.yaml
-  - packages/providers/gmail/src/risk-classifier.ts
-  - packages/providers/gmail/src/q-parser.ts
+  - plugins/gmail/src/data-model.ts
+  - plugins/gmail/src/risk-catalog.ts
+  - plugins/gmail/src/risk-catalog.yaml
+  - plugins/gmail/src/risk-classifier.ts
+  - plugins/gmail/src/q-parser.ts
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Gmail provider — modélisation v4
 
@@ -255,9 +257,9 @@ un peu en dessous de Supabase (23 + fallback).
 | `gmail.uncategorized-write` _(fallback)_ | W      | —                  | —                                                                        | Catch-all `gmail.[**].W`. Fail-loud quand un tool W non-catégorisé est ajouté (`send`, `delete`, `filter`...). |
 
 Pour le détail (label, reason, vector 6D), cf.
-[`packages/providers/gmail/src/risk-catalog.yaml`](../../../packages/providers/gmail/src/risk-catalog.yaml)
+[`plugins/gmail/src/risk-catalog.yaml`](../../../plugins/gmail/src/risk-catalog.yaml)
 et son miroir TS
-[`risk-catalog.ts`](../../../packages/providers/gmail/src/risk-catalog.ts).
+[`risk-catalog.ts`](../../../plugins/gmail/src/risk-catalog.ts).
 
 ### 3.1 Scope caps — pourquoi seulement deux risks ?
 
@@ -473,28 +475,28 @@ type GmailBindingMetadata = {
 La modélisation v4 (Phases B/C/D/E) est terminée. Le coding agent qui prend
 la suite a 5 chantiers principaux, à ordonnancer selon les besoins :
 
-1. **Adapter Gmail** (`packages/providers/gmail/src/gmail-adapter.ts`)
+1. **Adapter Gmail** (`plugins/gmail/src/gmail-adapter.ts`)
    suivant le pattern de `vercel-adapter.ts`. Wrap du MCP officiel
    `gmailmcp.googleapis.com` via fetch authentifié + injection du Bearer
    OAuth. Le tool synthétique `gmail__describe_zones` s'exécute côté
    gateway (pas de fetch upstream), il renvoie juste un read du binding
    metadata.
 
-2. **OAuth wire** — `packages/web/src/app/api/v1/providers/gmail/`
+2. **OAuth wire** — `apps/gateway/src/app/api/v1/providers/gmail/`
    routes (callback OAuth Google, refresh token storage chiffré dans
    `provider_admins` côté Supabase). Scopes : `gmail.readonly` +
    `gmail.compose` (cf. §5). Aligner sur l'OAuth Vercel existant (refresh
    token + access token rotation per-call).
 
 3. **Web UI binding form** —
-   `packages/web/src/app/(app)/orgs/[slug]/projects/[project]/bindings/new/binding-form.tsx`
+   `apps/gateway/src/app/(app)/orgs/[slug]/projects/[project]/bindings/new/binding-form.tsx`
    gagne un sous-formulaire Gmail-specific avec :
    - Auto-suggestion `internal_domains` depuis l'email connecté (Q11).
    - Bouton "Pré-remplir sensitive labels FINANCIAL, LEGAL, HR, PERSONAL" (Q4).
    - Liste éditable `allowlist_addresses` / `allowlist_domains`.
 
 4. **Web UI token mint** —
-   `packages/web/src/app/(app)/orgs/[slug]/projects/[project]/tokens/new/`
+   `apps/gateway/src/app/(app)/orgs/[slug]/projects/[project]/tokens/new/`
    gagne la prise en compte du provider `gmail`. Cap UI : pour les 2 risks
    capés (`bulk-read`, `read-from-zone-unknown`), afficher les caps
    effectifs + leur source (catalog vs org vs binding). `bulk-read`
@@ -618,11 +620,11 @@ posture documenté (ADR + binding form séparé).
 Toutes les 11 questions cardinales du research Phase A ont été tranchées
 (Q1-Q11). Le code matérialise les décisions :
 
-- `packages/providers/gmail/src/data-model.ts` — 1 plane, 11 entités (7
+- `plugins/gmail/src/data-model.ts` — 1 plane, 11 entités (7
   Gmail-natives + 4 synthétiques).
-- `packages/providers/gmail/src/risk-catalog.yaml` + `.ts` — 15 risks
+- `plugins/gmail/src/risk-catalog.yaml` + `.ts` — 15 risks
   (14 nommés + 1 fallback), 2 entrées avec `caps` + `infra_limits`.
-- `packages/providers/gmail/src/risk-classifier.ts` + `q-parser.ts` —
+- `plugins/gmail/src/risk-classifier.ts` + `q-parser.ts` —
   classifier identité-based + parser `q` 50 LoC.
 - Tests : 5 fichiers, ~110 tests passants au total.
 

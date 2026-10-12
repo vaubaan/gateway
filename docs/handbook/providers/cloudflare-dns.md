@@ -4,16 +4,18 @@ status: current
 date: 2026-06-23
 last_reviewed: 2026-07-01
 tracks:
-  - packages/providers/cloudflare-dns/src/data-model.ts
-  - packages/providers/cloudflare-dns/src/risk-catalog.ts
-  - packages/providers/cloudflare-dns/src/risk-catalog.yaml
-  - packages/providers/cloudflare-dns/src/risk-classifier.ts
-  - packages/providers/cloudflare-dns/src/tools.ts
-  - packages/providers/cloudflare-dns/src/execute.ts
-  - packages/providers/cloudflare-dns/src/cloudflare-dns-adapter.ts
-  - packages/providers/cloudflare-dns/src/index.ts
-  - packages/web/src/lib/gateway/build.ts
+  - plugins/cloudflare-dns/src/data-model.ts
+  - plugins/cloudflare-dns/src/risk-catalog.ts
+  - plugins/cloudflare-dns/src/risk-catalog.yaml
+  - plugins/cloudflare-dns/src/risk-classifier.ts
+  - plugins/cloudflare-dns/src/tools.ts
+  - plugins/cloudflare-dns/src/execute.ts
+  - plugins/cloudflare-dns/src/cloudflare-dns-adapter.ts
+  - plugins/cloudflare-dns/src/index.ts
+  - apps/gateway/src/lib/gateway/build.ts
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # Cloudflare DNS provider — v4 risk-based modelling + runtime
 
@@ -29,7 +31,7 @@ Research : `.vaubaan/research/providers/cloudflare-dns.md`.
 
 ## Vue d'ensemble
 
-The package lives in `packages/providers/cloudflare-dns/`. It contains
+The package lives in `plugins/cloudflare-dns/`. It contains
 the v4 risk-based modelling artifacts (data-model, risk catalog,
 classifier) and the full runtime (adapter, dispatcher, 15 MCP tools).
 
@@ -253,7 +255,7 @@ added to the `PROVIDERS` array exposed by `GET /api/v1/catalog`.
 
 ### `risk-catalog/loader.ts`
 
-`cloudflareDnsRiskCatalog` imported from `@vaubaan/providers-cloudflare-dns`
+`cloudflareDnsRiskCatalog` imported from `@vaubaan/plugin-cloudflare-dns`
 and registered in `PROVIDER_CATALOGS['cloudflare-dns']`.
 
 ### `provider-info.ts`
@@ -402,8 +404,8 @@ dispatcher both detect this and switch from `Authorization: Bearer` to
 - Spec : `docs/spec/gateway-risk-model.md`
 - Research : `.vaubaan/research/providers/cloudflare-dns.md`
 - Risk catalog YAML :
-  [`packages/providers/cloudflare-dns/src/risk-catalog.yaml`](../../../packages/providers/cloudflare-dns/src/risk-catalog.yaml)
+  [`plugins/cloudflare-dns/src/risk-catalog.yaml`](../../../plugins/cloudflare-dns/src/risk-catalog.yaml)
 - Risk catalog TS :
-  [`packages/providers/cloudflare-dns/src/risk-catalog.ts`](../../../packages/providers/cloudflare-dns/src/risk-catalog.ts)
+  [`plugins/cloudflare-dns/src/risk-catalog.ts`](../../../plugins/cloudflare-dns/src/risk-catalog.ts)
 - Resend handbook (runtime pattern reference) :
   [`./resend.md`](./resend.md)

@@ -1,19 +1,19 @@
 ---
 title: MCP gateway
-status: current
+status: legacy
 date: 2026-07-02
 tracks:
-  - packages/mcp-gateway/src/
-  - packages/web/src/app/mcp/route.ts
-  - packages/web/src/app/.well-known/oauth-protected-resource/route.ts
-  - packages/web/src/lib/gateway/build.ts
-  - packages/web/src/lib/crypto/
+  - packages/gateway-core/src/
+  - apps/gateway/src/app/mcp/route.ts
+  - apps/gateway/src/app/.well-known/oauth-protected-resource/route.ts
+  - apps/gateway/src/lib/gateway/build.ts
+  - apps/gateway/src/lib/crypto/
   - packages/shared/src/types.ts
-  - supabase/migrations/0034_audit_log_delegation_chain.sql
-  - supabase/migrations/0037_per_org_encryption.sql
 ---
 
-# MCP gateway — `@vaubaan/mcp-gateway` + `/mcp` route
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+
+# MCP gateway — `@vaubaan/gateway-core` + `/mcp` route
 
 Le hot-path produit du modèle v4 risk-based (spec
 [`gateway-risk-model.md`](../spec/gateway-risk-model.md) §8). Chaque
@@ -35,7 +35,7 @@ l'orchestration côté gateway.
 ## Layout
 
 ```
-packages/mcp-gateway/
+packages/gateway-core/
   src/
     cache.ts          # MemoryCacheClient + RedisCacheClient (Upstash)
     audit.ts          # AuditWriter interface + Memory/Supabase impls + hashArguments
@@ -50,7 +50,7 @@ packages/mcp-gateway/
 Et côté Next.js :
 
 ```
-packages/web/src/
+apps/gateway/src/
   app/mcp/route.ts                                   # POST handler /mcp
   app/.well-known/oauth-protected-resource/route.ts  # RFC 9728 probe
   lib/gateway/build.ts                               # buildGateway() — wires adapters + catalogs + cache + audit
@@ -188,7 +188,7 @@ Cf. [`policy-engine.md`](./policy-engine.md) §Wiring côté gateway.
 
 ## Cache
 
-`packages/mcp-gateway/src/cache.ts` exporte :
+`packages/gateway-core/src/cache.ts` exporte :
 
 - `MemoryCacheClient` — `Map<string, {value, expiresAt}>`. Per-process. Default fallback.
 - `RedisCacheClient` — Upstash REST over fetch (no SDK dep). Production hot-path.
@@ -403,7 +403,7 @@ serveur OAuth. Sur 404 (notre état initial), Claude Code régresse côté
 client : il n'envoie plus le `Authorization: Bearer vbn_live_*` configuré
 dans `.mcp.json` — cf. [anthropics/claude-code#59467](https://github.com/anthropics/claude-code/issues/59467).
 
-Pour court-circuiter : `packages/web/src/app/.well-known/oauth-protected-resource/route.ts`
+Pour court-circuiter : `apps/gateway/src/app/.well-known/oauth-protected-resource/route.ts`
 répond 200 en RFC 9728 avec `authorization_servers: []` et
 `bearer_methods_supported: ["header"]`. Le client lit "pas d'OAuth, juste
 des bearers" et retombe sur le header statique.
@@ -422,7 +422,7 @@ des bearers" et retombe sur le header statique.
 
 ## Tests
 
-- Unit (`packages/mcp-gateway/tests/unit/risk-gateway.test.ts`, 6 tests) —
+- Unit (`packages/gateway-core/tests/unit/risk-gateway.test.ts`, 6 tests) —
   `evaluateCallForToken` pure : allow, deny missing risks,
   classify-denied (plugin rejet), no-catalog (fail-closed), multi-slice
   union, denied_risks shadow.

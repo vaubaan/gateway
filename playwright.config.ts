@@ -1,19 +1,19 @@
 import { defineConfig, devices } from '@playwright/test';
 
 /**
- * Playwright E2E config — packages/web is the Next.js app under test.
+ * Playwright E2E config — apps/gateway is the Next.js app under test.
  *
- *   - `smoke`            : smoke spec (packages/web/tests/e2e/smoke.spec.ts)
+ *   - `smoke`            : smoke spec (apps/gateway/tests/e2e/smoke.spec.ts)
  *                          checks Playwright is wired. No creds needed.
  *
  *   - `e2e-real-clouds`  : real-providers scenarios under
- *                          packages/web/tests/e2e/real-clouds/.
+ *                          apps/gateway/tests/e2e/real-clouds/.
  *                          Spec §14.3 mandates "no mock". Reads creds from
  *                          .env.test (gitignored) or from the GH Actions
  *                          secrets injected by the nightly workflow.
  */
 export default defineConfig({
-  testDir: './packages/web/tests/e2e',
+  testDir: './apps/gateway/tests/e2e',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -37,14 +37,14 @@ export default defineConfig({
   projects: [
     {
       name: 'smoke',
-      testDir: './packages/web/tests/e2e',
+      testDir: './apps/gateway/tests/e2e',
       testMatch: 'smoke.spec.ts',
       testIgnore: ['**/real-clouds/**'],
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'e2e-real-clouds',
-      testDir: './packages/web/tests/e2e/real-clouds',
+      testDir: './apps/gateway/tests/e2e/real-clouds',
       testMatch: /.*\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] },
     },

@@ -5,16 +5,16 @@ date: 2026-06-16
 tracks:
   - vitest.config.ts
   - packages/policy-engine/tests/
-  - packages/providers/github/tests/
-  - packages/providers/vercel/tests/
-  - packages/providers/supabase/tests/
-  - packages/providers/railway/tests/
-  - packages/providers/ssh/tests/
-  - packages/providers/resend/tests/
-  - packages/mcp-gateway/tests/
-  - packages/web/tests/
-  - packages/web/src/lib/bash/
-  - packages/web/src/lib/crypto/
+  - plugins/github/tests/
+  - plugins/vercel/tests/
+  - plugins/supabase/tests/
+  - plugins/railway/tests/
+  - plugins/ssh/tests/
+  - plugins/resend/tests/
+  - packages/gateway-core/tests/
+  - apps/gateway/tests/
+  - apps/gateway/src/lib/bash/
+  - apps/gateway/src/lib/crypto/
   - packages/shared/src/
 ---
 
@@ -27,7 +27,7 @@ Vercel / Supabase / Railway / SSH. La discovery est centralisée dans
 ```
 packages/*/tests/unit/**/*.test.ts
 packages/*/tests/integration/**/*.test.ts
-packages/providers/*/tests/unit/**/*.test.ts
+plugins/*/tests/unit/**/*.test.ts
 packages/*/src/**/*.test.ts
 ```
 
@@ -37,53 +37,53 @@ en absence des creds env vars.
 
 ## Coverage
 
-| Suite                                                              |               Tests |
-| ------------------------------------------------------------------ | ------------------: |
-| `packages/policy-engine/tests/unit/slice-dsl.test.ts`              |                  23 |
-| `packages/policy-engine/tests/unit/slice-matcher.test.ts`          |                  26 |
-| `packages/policy-engine/tests/unit/risk-evaluator.test.ts`         |                  11 |
-| `packages/policy-engine/tests/unit/risk-policy.test.ts`            |                   7 |
-| `packages/policy-engine/tests/unit/risk-runtime.test.ts`           |                  12 |
-| `packages/policy-engine/tests/unit/scope-injection.test.ts`        |                  12 |
-| `packages/policy-engine/tests/unit/qualify.test.ts`                |                  15 |
-| `packages/providers/github/tests/unit/adapter.test.ts`             |                  18 |
-| `packages/providers/github/tests/unit/data-model.test.ts`          |                   1 |
-| `packages/providers/github/tests/unit/risk-catalog.test.ts`        |                  35 |
-| `packages/providers/github/tests/unit/risk-classifier.test.ts`     |                  31 |
-| `packages/providers/github/tests/unit/risk-catalog-sync.test.ts`   |                  18 |
-| `packages/providers/vercel/tests/unit/adapter.test.ts`             |                  23 |
-| `packages/providers/vercel/tests/unit/data-model.test.ts`          |                   1 |
-| `packages/providers/vercel/tests/unit/risk-catalog.test.ts`        |                  57 |
-| `packages/providers/vercel/tests/unit/risk-classifier.test.ts`     |                  32 |
-| `packages/providers/vercel/tests/unit/risk-catalog-sync.test.ts`   |                  19 |
-| `packages/providers/supabase/tests/unit/adapter.test.ts`           |                  30 |
-| `packages/providers/supabase/tests/unit/data-model.test.ts`        |                   1 |
-| `packages/providers/supabase/tests/unit/risk-catalog.test.ts`      |                  32 |
-| `packages/providers/supabase/tests/unit/risk-classifier.test.ts`   |                  30 |
-| `packages/providers/supabase/tests/unit/risk-catalog-sync.test.ts` |                  28 |
-| `packages/providers/railway/tests/unit/adapter.test.ts`            |                  15 |
-| `packages/providers/railway/tests/unit/data-model.test.ts`         |                   1 |
-| `packages/providers/railway/tests/unit/risk-catalog.test.ts`       |                  15 |
-| `packages/providers/railway/tests/unit/risk-classifier.test.ts`    |                  20 |
-| `packages/providers/ssh/tests/unit/data-model.test.ts`             |                   1 |
-| `packages/providers/ssh/tests/unit/risk-catalog.test.ts`           |                  10 |
-| `packages/providers/ssh/tests/unit/risk-classifier.test.ts`        |                  39 |
-| `packages/mcp-gateway/tests/unit/gateway.test.ts`                  |                   4 |
-| `packages/mcp-gateway/tests/unit/risk-gateway.test.ts`             |                   6 |
-| `packages/web/tests/unit/api/members-post.test.ts`                 |       5 (1 skipped) |
-| `packages/web/tests/unit/api/tokens-preview.test.ts`               |                  12 |
-| `packages/web/tests/unit/api/tokens-rotate.test.ts`                |         2 (skipped) |
-| `packages/web/tests/unit/lib/mint/preview.test.ts`                 |                   4 |
-| `packages/web/tests/unit/lib/risk-catalog/loader.test.ts`          |                  12 |
-| `packages/web/tests/unit/providers/data-model-to-mermaid.test.ts`  |                   8 |
-| `packages/web/tests/unit/providers/plane-filters.test.ts`          |                   5 |
-| `packages/web/src/lib/bash/parse.test.ts`                          |                  11 |
-| `packages/web/src/lib/bash/exec.test.ts`                           |                   4 |
-| `packages/web/src/lib/bash/args.test.ts`                           |                   9 |
-| `packages/web/src/lib/bash/exec-host.test.ts`                      |                   7 |
-| `packages/web/src/lib/crypto/provider-secrets.test.ts`             |                   9 |
-| `packages/shared/src/api-key.test.ts`                              |                   6 |
-| **TOTAL**                                                          | **664 (3 skipped)** |
+| Suite                                                             |               Tests |
+| ----------------------------------------------------------------- | ------------------: |
+| `packages/policy-engine/tests/unit/slice-dsl.test.ts`             |                  23 |
+| `packages/policy-engine/tests/unit/slice-matcher.test.ts`         |                  26 |
+| `packages/policy-engine/tests/unit/risk-evaluator.test.ts`        |                  11 |
+| `packages/policy-engine/tests/unit/risk-policy.test.ts`           |                   7 |
+| `packages/policy-engine/tests/unit/risk-runtime.test.ts`          |                  12 |
+| `packages/policy-engine/tests/unit/scope-injection.test.ts`       |                  12 |
+| `packages/policy-engine/tests/unit/qualify.test.ts`               |                  15 |
+| `plugins/github/tests/unit/adapter.test.ts`                       |                  18 |
+| `plugins/github/tests/unit/data-model.test.ts`                    |                   1 |
+| `plugins/github/tests/unit/risk-catalog.test.ts`                  |                  35 |
+| `plugins/github/tests/unit/risk-classifier.test.ts`               |                  31 |
+| `plugins/github/tests/unit/risk-catalog-sync.test.ts`             |                  18 |
+| `plugins/vercel/tests/unit/adapter.test.ts`                       |                  23 |
+| `plugins/vercel/tests/unit/data-model.test.ts`                    |                   1 |
+| `plugins/vercel/tests/unit/risk-catalog.test.ts`                  |                  57 |
+| `plugins/vercel/tests/unit/risk-classifier.test.ts`               |                  32 |
+| `plugins/vercel/tests/unit/risk-catalog-sync.test.ts`             |                  19 |
+| `plugins/supabase/tests/unit/adapter.test.ts`                     |                  30 |
+| `plugins/supabase/tests/unit/data-model.test.ts`                  |                   1 |
+| `plugins/supabase/tests/unit/risk-catalog.test.ts`                |                  32 |
+| `plugins/supabase/tests/unit/risk-classifier.test.ts`             |                  30 |
+| `plugins/supabase/tests/unit/risk-catalog-sync.test.ts`           |                  28 |
+| `plugins/railway/tests/unit/adapter.test.ts`                      |                  15 |
+| `plugins/railway/tests/unit/data-model.test.ts`                   |                   1 |
+| `plugins/railway/tests/unit/risk-catalog.test.ts`                 |                  15 |
+| `plugins/railway/tests/unit/risk-classifier.test.ts`              |                  20 |
+| `plugins/ssh/tests/unit/data-model.test.ts`                       |                   1 |
+| `plugins/ssh/tests/unit/risk-catalog.test.ts`                     |                  10 |
+| `plugins/ssh/tests/unit/risk-classifier.test.ts`                  |                  39 |
+| `packages/gateway-core/tests/unit/gateway.test.ts`                |                   4 |
+| `packages/gateway-core/tests/unit/risk-gateway.test.ts`           |                   6 |
+| `apps/gateway/tests/unit/api/members-post.test.ts`                |       5 (1 skipped) |
+| `apps/gateway/tests/unit/api/tokens-preview.test.ts`              |                  12 |
+| `apps/gateway/tests/unit/api/tokens-rotate.test.ts`               |         2 (skipped) |
+| `apps/gateway/tests/unit/lib/mint/preview.test.ts`                |                   4 |
+| `apps/gateway/tests/unit/lib/risk-catalog/loader.test.ts`         |                  12 |
+| `apps/gateway/tests/unit/providers/data-model-to-mermaid.test.ts` |                   8 |
+| `apps/gateway/tests/unit/providers/plane-filters.test.ts`         |                   5 |
+| `apps/gateway/src/lib/bash/parse.test.ts`                         |                  11 |
+| `apps/gateway/src/lib/bash/exec.test.ts`                          |                   4 |
+| `apps/gateway/src/lib/bash/args.test.ts`                          |                   9 |
+| `apps/gateway/src/lib/bash/exec-host.test.ts`                     |                   7 |
+| `apps/gateway/src/lib/crypto/provider-secrets.test.ts`            |                   9 |
+| `packages/shared/src/api-key.test.ts`                             |                   6 |
+| **TOTAL**                                                         | **664 (3 skipped)** |
 
 ## Run
 
@@ -227,7 +227,7 @@ examples.
 
 > Couvre : handbook [[web-app]].
 
-`packages/web/tests/unit/`. Les routes Next.js sont importées directement
+`apps/gateway/tests/unit/`. Les routes Next.js sont importées directement
 (pas de fetch), les supabase clients mockés.
 
 - **`api/members-post.test.ts`** (5) — `POST /api/v1/members` : unauth
@@ -264,7 +264,7 @@ examples.
 
 > Couvre : handbook [[bash-provider]].
 
-`packages/web/src/lib/bash/` (les `.test.ts` vivent à côté du
+`apps/gateway/src/lib/bash/` (les `.test.ts` vivent à côté du
 code) :
 
 - **`parse.test.ts`** (11) — `parseAnnotatedBash` : happy path
@@ -293,10 +293,10 @@ code) :
 
 ## Scénarios — Crypto (app-level encryption)
 
-> Couvre : `packages/web/src/lib/crypto/provider-secrets.ts`,
+> Couvre : `apps/gateway/src/lib/crypto/provider-secrets.ts`,
 > ADR [[per-org-encryption-app-level]].
 
-- **`packages/web/src/lib/crypto/provider-secrets.test.ts`** (9) —
+- **`apps/gateway/src/lib/crypto/provider-secrets.test.ts`** (9) —
   round-trip encrypt/decrypt, nonce uniqueness (deux chiffrements du
   même plaintext produisent des ciphertexts différents), cross-org AEAD
   rejection (orgA chiffre, orgB ne peut pas déchiffrer), tamper
@@ -316,7 +316,7 @@ code) :
   cas d'usage l'exige.
 - **UI rendering** (composants React) — pas wiré (config
   `environmentMatchGlobs: jsdom` prête côté `vitest.config.ts:30`
-  pour `packages/web/tests/unit/components/**`).
+  pour `apps/gateway/tests/unit/components/**`).
 
 ## Trous connus
 

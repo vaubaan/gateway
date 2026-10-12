@@ -3,11 +3,13 @@ title: GitHub provider — modélisation v4 risk-based
 status: current
 date: 2026-06-15
 tracks:
-  - packages/providers/github/src/data-model.ts
-  - packages/providers/github/src/risk-catalog.ts
-  - packages/providers/github/src/risk-catalog.yaml
-  - packages/providers/github/src/risk-classifier.ts
+  - plugins/github/src/data-model.ts
+  - plugins/github/src/risk-catalog.ts
+  - plugins/github/src/risk-catalog.yaml
+  - plugins/github/src/risk-classifier.ts
 ---
+
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
 
 # GitHub provider — modélisation v4 (risk-based)
 
@@ -130,7 +132,7 @@ indépendants des entités primaires touchées.
 ## 2. Mapping tool → slice(s)
 
 Tous les ~27 tools MCP GitHub actuellement définis dans
-[`tools.ts`](../../../packages/providers/github/src/tools.ts), avec leur
+[`tools.ts`](../../../plugins/github/src/tools.ts), avec leur
 slice(s) émise(s) au call et leur env-resolution.
 
 Notation : `slices` = liste de patterns DSL (spec v4 §3) émis par le
@@ -666,7 +668,7 @@ est `OK` ssi au moins une cellule est cochée.
 ### 4.1 Pseudo-code du test de couverture
 
 ```ts
-// packages/providers/github/tests/unit/risk-catalog.coverage.test.ts (à créer)
+// plugins/github/tests/unit/risk-catalog.coverage.test.ts (à créer)
 import { availableTools } from '../../src/tools';
 import { classifyGithub } from '../../src/classify';
 import { catalog } from '../../src/risk-catalog'; // YAML loadé
@@ -852,9 +854,9 @@ du `availableTools` :
 - `github__rerun_workflow_run`
 
 Ils existent encore aujourd'hui dans
-[`tools.ts:272-308`](../../../packages/providers/github/src/tools.ts) et
+[`tools.ts:272-308`](../../../plugins/github/src/tools.ts) et
 sont mappés dans
-[`risk-classifier.ts`](../../../packages/providers/github/src/risk-classifier.ts).
+[`risk-classifier.ts`](../../../plugins/github/src/risk-classifier.ts).
 Le PR de Phase 6 doit :
 
 1. Supprimer ces entrées de `availableTools`.
@@ -964,11 +966,11 @@ Le refacto nécessaire :
 
 ## Annexe — pseudo-data-model TypeScript (Phase 0)
 
-À écrire dans `packages/providers/github/src/data-model.ts` lors de
+À écrire dans `plugins/github/src/data-model.ts` lors de
 Phase 0 :
 
 ```ts
-// packages/providers/github/src/data-model.ts
+// plugins/github/src/data-model.ts
 import type { DataModel } from '@vaubaan/shared';
 
 export const githubDataModel: DataModel = {

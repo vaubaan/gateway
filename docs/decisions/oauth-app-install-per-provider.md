@@ -1,8 +1,12 @@
 ---
 title: Connect Provider via OAuth / App install — jamais de paste-token
-status: accepted
+status: partially-superseded
 date: 2026-05-22
+partially-superseded-by: pivot-v4-to-v5-on-prem-mission-tokens
+superseded-date: 2026-10-12
 ---
+
+> **Partially superseded on 2026-10-12** by [[pivot-v4-to-v5-on-prem-mission-tokens]], which names the parts that survive. Legacy v4 decision; body unchanged.
 
 # Connect Provider via OAuth / App install — jamais de paste-token
 

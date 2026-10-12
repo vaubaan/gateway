@@ -3,11 +3,13 @@ title: Vercel provider adapter
 status: current
 date: 2026-06-15
 tracks:
-  - packages/providers/vercel/src/
-  - packages/web/src/app/api/integrations/vercel/
+  - plugins/vercel/src/
+  - apps/gateway/src/app/api/integrations/vercel/
 ---
 
-# Vercel provider — `@vaubaan/providers-vercel`
+> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+
+# Vercel provider — `@vaubaan/plugin-vercel`
 
 > **v4 risk-based catalog added — 2026-06-15.** Le pivot
 > `chore(v1-drop)` a supprimé le classifier capability-based + le
@@ -39,7 +41,7 @@ ADRs opérantes : `docs/decisions/rewrap-official-mcps.md`,
 ## Layout
 
 ```
-packages/providers/vercel/
+plugins/vercel/
   src/
     vercel-adapter.ts        # VercelAdapter — mint (long-lived), executeCall, classifyV4, toolSlices
     risk-classifier.ts       # classifyVercelV4 → Slice[] (cf. providers/vercel.md)
@@ -147,7 +149,7 @@ tool → slice.
 
 ## Tests
 
-`npx vitest run packages/providers/vercel` — 132 tests (~80ms). Voir
+`npx vitest run plugins/vercel` — 132 tests (~80ms). Voir
 [`providers/vercel.md`](./providers/vercel.md) §Tests pour le détail.
 
 ## Refresh procedure (rewrap)
@@ -159,13 +161,13 @@ détecter un drift entre `upstream-tools.json` et la version live :
    `{"jsonrpc":"2.0","method":"tools/list","id":1}` (Authorization: Bearer
    `<token>`, Accept: application/json + text/event-stream).
 2. Parser le SSE frame, extraire `result.tools[]`.
-3. Diff vs `packages/providers/vercel/src/upstream-tools.json`. Si nouveaux
+3. Diff vs `plugins/vercel/src/upstream-tools.json`. Si nouveaux
    tools → préfixer `vercel__` et merge.
 4. Si Vercel publie nativement un tool qui fait
    `update_project_settings` ou `upsert_env_var` → retirer le custom REST
    correspondant (cf. ADR `vercel-augment-with-rest-tools.md`).
 5. Mettre à jour le risk catalog YAML/TS et exécuter
-   `npx vitest run packages/providers/vercel/tests/unit/risk-catalog-sync.test.ts`.
+   `npx vitest run plugins/vercel/tests/unit/risk-catalog-sync.test.ts`.
 
 ## Limitations connues / dette
 
