@@ -32,7 +32,7 @@
   "devDependencies": {
     "@eslint/js": "9.39.4",
     "@playwright/test": "1.60.0",
-    "@sbw-vaubaan/harness": "^0.8.0",
+    "@sbw-vaubaan/harness": "1.1.1",
     "@types/node": "20.19.41",
     "eslint": "9.39.4",
     "eslint-config-prettier": "10.1.8",
@@ -49,6 +49,6 @@
     "pg": "^8.21.0"
   },
   "optionalDependencies": {
-    "@sbw-vaubaan/harness": "^0.4.2"
+    "@sbw-vaubaan/harness": "1.1.1"
   }
 }
