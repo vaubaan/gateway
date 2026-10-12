@@ -1,27 +1,38 @@
 import type { NextConfig } from 'next';
 import { execSync } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-// Build-time stamp surfaced in the sidebar footer so we can confirm at a glance
-// which revision is live. Vercel exposes VERCEL_GIT_COMMIT_SHA on every build;
-// for local builds we fall back to `git rev-parse`. BUILD_TIME is captured here
-// (module evaluation = build time) so the value is frozen into the bundle.
+// Build-time stamps frozen into the bundle: shown in the UI footer and by
+// `/healthz`. Docker builds pass GIT_COMMIT_SHA (no .git in the image);
+// local builds fall back to `git rev-parse`.
 function resolveCommitSha(): string {
   if (process.env.GIT_COMMIT_SHA) return process.env.GIT_COMMIT_SHA.slice(0, 7);
-  if (process.env.VERCEL_GIT_COMMIT_SHA) return process.env.VERCEL_GIT_COMMIT_SHA.slice(0, 7);
   try {
     return execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
   } catch {
-    return '';
+    return 'unknown';
   }
 }
+
+function resolveVersion(): string {
+  try {
+    const pkg = JSON.parse(readFileSync(resolve(__dirname, '../../package.json'), 'utf8')) as {
+      version?: string;
+    };
+    return pkg.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
 const commitSha = resolveCommitSha();
-const buildTime = new Date().toISOString();
 
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_COMMIT_SHA: commitSha,
-    NEXT_PUBLIC_BUILD_TIME: buildTime,
+    NEXT_PUBLIC_GATEWAY_VERSION: resolveVersion(),
+    NEXT_PUBLIC_BUILD_TIME: new Date().toISOString(),
   },
   // apps/gateway imports TS source directly from sibling workspace packages.
   // Tell Next.js to transpile those packages on the server side.
@@ -35,13 +46,31 @@ const nextConfig: NextConfig = {
     '@vaubaan/gateway-core',
     '@vaubaan/plugin-ssh',
   ],
-  // ssh2 uses a native .node addon — must NOT be bundled by webpack.
+  // One image, one process: the standalone server.js (ADR docker-image-and-config-format).
   output: 'standalone',
   outputFileTracingRoot: resolve(__dirname, '../../'),
+  // Native addons must not be bundled. argon2 and better-sqlite3 are in Next's
+  // default external list; ssh2 is not. Their prebuilt .node binaries are
+  // traced explicitly because nft does not follow node-gyp-build lookups.
   serverExternalPackages: ['ssh2'],
+  outputFileTracingIncludes: {
+    '/*': [
+      '../../node_modules/argon2/prebuilds/**',
+      '../../node_modules/better-sqlite3/build/Release/*.node',
+    ],
+  },
+  // Same build id on every replica of one image (hosted deployments need it).
+  generateBuildId: () => commitSha,
+  // The TLS terminator compresses (see deploy/caddy/Caddyfile); keeping Next's
+  // gzip off avoids buffering streamed MCP responses.
+  compress: false,
   experimental: {
     serverActions: {
-      allowedOrigins: process.env.ALLOWED_ORIGINS?.split(',') ?? ['localhost:3000', 'vaubaan.com'],
+      // Behind a reverse proxy, Next compares Origin with X-Forwarded-Host; an
+      // explicit list is only needed for unusual setups.
+      allowedOrigins: process.env.ALLOWED_ORIGINS
+        ? process.env.ALLOWED_ORIGINS.split(',')
+        : undefined,
     },
   },
 };

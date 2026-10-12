@@ -12,6 +12,8 @@ tracks:
   - eslint.config.js
   - .husky/pre-commit
   - CONTRIBUTING.md
+  - deploy/docker/Dockerfile
+  - deploy/docker/smoke.sh
 ---
 
 # Coding workflow
@@ -108,6 +110,18 @@ jobs:
 ```
 
 Pas de matrix Node, pas de cross-OS. Single Linux runner Node 22.
+
+### Docker job (added by P0.4, 2026-10-13)
+
+A second job, `docker`, runs after `check` on every push and PR to `main`
+and `v5`: `docker/build-push-action` builds `deploy/docker/Dockerfile`
+(`push: false`, `load: true`, GitHub Actions layer cache, build arg
+`GIT_COMMIT_SHA=${{ github.sha }}`), then `deploy/docker/smoke.sh` runs the
+container smoke test described in
+[`docs/tests/e2e-tests.md`](../tests/e2e-tests.md) (fail-fast exit naming
+the key, https rule, `/healthz`, redaction, native addons, non-root). The
+image is not published; that is the release pipeline's job (P3.2).
+Locally: `npm run docker:build && npm run docker:smoke`.
 
 ## Database migrations
 

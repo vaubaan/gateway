@@ -9,6 +9,24 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Added
+
+- **Instance configuration, crypto, composition root and Docker image
+  (P0.4).** The gateway starts from `VAUBAAN_*` environment variables
+  and/or a mounted YAML file (`VAUBAAN_CONFIG_FILE`, file wins key by
+  key; `${NAME}` / `${file:/path}` secret references, `*_FILE` variables)
+  validated into one typed `InstanceConfig`; any missing or invalid key
+  stops the process with exit code 78 and a message naming every key and
+  its variable. Credentials at rest use XChaCha20-Poly1305 with a key
+  derived per connection and a `key_version` for rotation
+  (`npm run gen-master-key`). The composition root is built once per
+  process (`getRoot()`), `GET /healthz` answers, logs are JSON lines with
+  token-prefix and secret redaction. `deploy/docker/Dockerfile`
+  (debian-slim, non-root, `/data` volume, HEALTHCHECK), `deploy/compose.yaml`
+  with a Caddy TLS proxy, documented `deploy/config/gateway.example.yaml`
+  and `.env.example`, and a CI job that builds the image and runs the
+  container smoke test. ADR `docker-image-and-config-format`.
+
 ### Changed
 
 - **`@vaubaan/gateway-core` speaks v5 (P0.5).** Eight typed structured

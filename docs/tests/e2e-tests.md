@@ -5,6 +5,8 @@ date: 2026-05-22
 tracks:
   - playwright.config.ts
   - apps/gateway/tests/e2e/
+  - deploy/docker/smoke.sh
+  - .github/workflows/ci.yml
 ---
 
 # E2E tests — Playwright contre vrais clouds
@@ -111,6 +113,27 @@ le **plan de test** validé en spec ; ils seront codés en Phase 5
 8. Force expires_at dans le passé → next call déclenche un refresh (provider_admins
    access_token muté) → call OK
 ```
+
+## v5 — Container smoke (P0.4, automated in CI)
+
+> Covers: plan P0.4 DoD ("`docker compose up` serves the UI stub on the
+> configured port; container exits with a named variable when config is
+> incomplete"), spec §4.3, §6. Script `deploy/docker/smoke.sh <image>`, run
+> by the `docker` job of `.github/workflows/ci.yml` after the image build
+> and locally with `npm run docker:build && npm run docker:smoke`.
+
+1. **Incomplete configuration** — `docker run` with only `VAUBAAN_PUBLIC_URL`
+   exits non-zero (78) and stderr names `encryption.master_key` with
+   `VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE`, `store.path` and
+   `bootstrap_token`.
+2. **http public URL** — a complete configuration with `http://` exits
+   non-zero; stderr contains `public_url: must use https`.
+3. **Complete configuration** — the container stays up and
+   `GET /healthz` answers 200 `{"status":"ok",...}` within 30 s; the logs
+   contain neither the master key nor the bootstrap token.
+4. **Native addons** — `argon2` hashes and `libsodium-wrappers` loads inside
+   the image (file tracing of prebuilt binaries).
+5. **Non-root** — the process runs as uid 10001.
 
 ## Sweeper
 

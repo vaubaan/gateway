@@ -1,0 +1,120 @@
+# Vaubaan Gateway — instance configuration (spec §4.3).
+#
+# Mount this file and point VAUBAAN_CONFIG_FILE at it, or set the VAUBAAN_*
+# environment variables listed next to each key (.env.example), or mix both:
+# the file wins over the environment, key by key.
+#
+# Secrets: write `${NAME}` to read the environment variable NAME, or
+# `${file:/run/secrets/name}` to read a file (Docker / Kubernetes secret).
+# Never commit a filled-in copy of this file.
+#
+# Every key below is either required (marked) or shown with its default.
+
+# REQUIRED. Public origin of the instance: provider callbacks, request URLs
+# and the bootstrap kit are built from it. Must be https (TLS is terminated
+# by your reverse proxy, see deploy/caddy/Caddyfile). A sub-path is allowed.
+# env: VAUBAAN_PUBLIC_URL
+public_url: https://gateway.example.com
+
+# Reverse proxies whose X-Forwarded-For header is trusted for client IPs
+# (surface rate limits, audit). IP addresses or CIDR blocks. Default: none.
+# env: VAUBAAN_TRUSTED_PROXIES (comma-separated)
+trusted_proxies:
+  - 172.16.0.0/12
+
+store:
+  # REQUIRED. SQLite database file; its directory must be writable and
+  # persistent (the /data volume in the image).
+  # env: VAUBAAN_STORE_PATH
+  path: /data/gateway.db
+
+encryption:
+  # REQUIRED. 32 random bytes, base64 (`npm run gen-master-key`). Every
+  # connection credential is encrypted with a key derived from it.
+  # env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE
+  master_key: ${file:/run/secrets/vaubaan_master_key}
+  # Version stamped on new blobs. Increase it when you rotate the key.
+  # env: VAUBAAN_MASTER_KEY_VERSION
+  key_version: 1
+  # Older keys still needed to open blobs written before a rotation.
+  # env: VAUBAAN_MASTER_KEY_PREVIOUS ("1=<base64>,2=<base64>") or _FILE
+  # previous_keys:
+  #   1: ${file:/run/secrets/vaubaan_master_key_v1}
+
+# OpenID Connect provider (spec D2). Optional at first boot: until it is set,
+# the operator signs in with bootstrap_token. Once present, all four keys of
+# the block are validated and bootstrap_token becomes optional.
+# idp:
+#   # env: VAUBAAN_IDP_ISSUER
+#   issuer: https://login.example.com/realms/acme
+#   # env: VAUBAAN_IDP_CLIENT_ID
+#   client_id: vaubaan-gateway
+#   # env: VAUBAAN_IDP_CLIENT_SECRET or VAUBAAN_IDP_CLIENT_SECRET_FILE
+#   client_secret: ${VAUBAAN_IDP_CLIENT_SECRET}
+#   # Claim names in the ID token / userinfo. Defaults shown.
+#   # env: VAUBAAN_IDP_CLAIM_SUB, VAUBAAN_IDP_CLAIM_EMAIL, VAUBAAN_IDP_CLAIM_GROUPS
+#   claims:
+#     sub: sub
+#     email: email
+#     groups: groups
+#   # Only users whose email domain is listed may sign in. Default: any.
+#   # env: VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS (comma-separated)
+#   allowed_email_domains:
+#     - example.com
+
+# REQUIRED (one of the two). Who is operator once bootstrap_token is revoked:
+# members of an IdP group, and/or an explicit list of emails.
+admin:
+  # env: VAUBAAN_ADMIN_GROUP
+  group: gateway-admins
+  # env: VAUBAAN_ADMIN_EMAILS (comma-separated)
+  emails:
+    - ops@example.com
+
+# Apps your company registered at each provider, keyed by plugin id. Which
+# fields a provider needs is declared by its plugin (plugins/<id>/README.md);
+# allowed fields: client_id, client_secret, app_id, app_slug, private_key.
+# env: VAUBAAN_PROVIDER_<ID>_<FIELD>, e.g. VAUBAAN_PROVIDER_GITHUB_APP_ID,
+#      VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET_FILE
+# providers:
+#   github:
+#     app_id: '12345'
+#     app_slug: acme-gateway
+#     private_key: ${file:/run/secrets/github_app_key.pem}
+#   vercel:
+#     client_id: ${VERCEL_CLIENT_ID}
+#     client_secret: ${VERCEL_CLIENT_SECRET}
+
+# REQUIRED while idp is not configured. At least 32 characters; lets the
+# operator sign in and configure the instance. Revoke it once the IdP works.
+# env: VAUBAAN_BOOTSTRAP_TOKEN or VAUBAAN_BOOTSTRAP_TOKEN_FILE
+bootstrap_token: ${file:/run/secrets/vaubaan_bootstrap_token}
+
+# Community telemetry (spec §9): anonymous plugin success/failure counts.
+# Off by default; the collector URL has a built-in default and may be
+# pointed at your own collector.
+telemetry:
+  # env: VAUBAAN_TELEMETRY_ENABLED
+  enabled: false
+  # env: VAUBAAN_TELEMETRY_COLLECTOR_URL
+  # collector_url: https://collector.example.net/v1/reports
+
+# Audit and event retention in days before the sweeper purges them.
+# env: VAUBAAN_RETENTION_DAYS
+retention_days: 90
+
+# How long a claim request stays answerable (spec §3.4). Durations: 30s, 10m, 24h, 7d.
+# env: VAUBAAN_REQUEST_EXPIRY
+requests:
+  expiry: 24h
+
+# How long an approval request stays answerable (spec §3.5).
+# env: VAUBAAN_APPROVAL_EXPIRY
+approvals:
+  expiry: 10m
+
+# Log verbosity: debug, info, warn, error. Logs are JSON lines; secrets and
+# mission token secrets are redacted.
+# env: VAUBAAN_LOG_LEVEL
+log:
+  level: info

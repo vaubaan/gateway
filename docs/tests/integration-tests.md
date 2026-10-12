@@ -14,7 +14,7 @@ tracks:
   - packages/gateway-core/tests/
   - apps/gateway/tests/
   - apps/gateway/src/lib/bash/
-  - apps/gateway/src/lib/crypto/
+  - apps/gateway/src/server/
   - packages/shared/src/
 ---
 
@@ -86,7 +86,8 @@ en absence des creds env vars.
 | `apps/gateway/src/lib/bash/exec.test.ts`                          |                   4 |
 | `apps/gateway/src/lib/bash/args.test.ts`                          |                   9 |
 | `apps/gateway/src/lib/bash/exec-host.test.ts`                     |                   7 |
-| `apps/gateway/src/lib/crypto/provider-secrets.test.ts`            |                   9 |
+| `apps/gateway/src/server/**/*.test.ts` (v5, P0.4)                 |                  61 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`  |                  32 |
 | `packages/shared/src/api-key.test.ts`                             |                   6 |
 | **TOTAL**                                                         | **664 (3 skipped)** |
 
@@ -325,18 +326,66 @@ code) :
 - **`api-key.test.ts`** (6) — `generateApiKey` / `parseApiKey` /
   `hashApiKey` / `verifyApiKey` ; preserve le prefix.
 
-## Scénarios — Crypto (app-level encryption)
+## v5 — Instance configuration, crypto, composition root (P0.4)
 
-> Couvre : `apps/gateway/src/lib/crypto/provider-secrets.ts`,
-> ADR [[per-org-encryption-app-level]].
+> Covers: spec §4.3 (instance configuration, admin rule), §6 (encryption
+> at rest, no secret in logs), §10 structural "no configuration value is
+> hard-coded". Handbook [[configuration]], ADR
+> [[docker-image-and-config-format]]. Co-located under
+> `apps/gateway/src/server/**` (English, v5).
 
-- **`apps/gateway/src/lib/crypto/provider-secrets.test.ts`** (9) —
-  round-trip encrypt/decrypt, nonce uniqueness (deux chiffrements du
-  même plaintext produisent des ciphertexts différents), cross-org AEAD
-  rejection (orgA chiffre, orgB ne peut pas déchiffrer), tamper
-  detection (flip un byte → échec), too-short ciphertext, missing
-  `ENCRYPTION_MASTER_KEY` → erreur explicite, wrong key length (16
-  bytes au lieu de 32), empty plaintext, unicode plaintext.
+- **`config/load.test.ts`** (27) — minimal env-only configuration with
+  defaults; every missing required key named at once with its variable(s);
+  `public_url` http refused, non-URL and query string refused, trailing
+  slash stripped, sub-path kept; master key length / base64; bootstrap
+  token length; trusted proxies IP/CIDR; durations, integers, booleans,
+  log level; **admin rule** (group alone, emails alone lower-cased, both,
+  neither → error naming both variables, non-email); IdP block optional
+  → bootstrap required, configured → bootstrap optional with default
+  claim mapping, partial block names the missing sub-keys, https issuer,
+  claim mapping and allowed domains; provider apps from
+  `VAUBAAN_PROVIDER_<ID>_<FIELD>[_FILE]` including hyphenated ids, unknown
+  field refused in env and YAML; YAML `${VAR}` / `${file:}` resolution,
+  **file wins over env key by key**, unset reference and missing secret
+  file named, missing / invalid / non-mapping file, empty file,
+  `previous_keys` duplicate version, `*_FILE` alone and both-set error.
+- **`config/duration.test.ts`** (2) — `30s 10m 24h 7d`; rejects the rest.
+- **`crypto/aead.test.ts`** (12) — round trip and `keyVersion` stamp, fresh
+  nonce, **AD mismatch** (other connection id) fails, tampered blob,
+  short blob, unknown format byte, empty and unicode plaintext, empty
+  connection id; **`key_version` honoured**: v2 encryptor opens v1 blobs
+  through `previous_keys`, seals with v2, v1 cannot open v2, unknown
+  version names `encryption.previous_keys`, right version wrong key fails;
+  `deriveConnectionKey` deterministic and distinct per id and per master
+  key.
+- **`logging/logging.test.ts`** (5) — mission token prefix kept, secret
+  dropped; configured secrets replaced longest-first and JSON-escaped;
+  JSON line shape with bindings; level threshold and stderr routing.
+- **`compose/compose.test.ts`** (12) — `buildRoot` from configuration
+  alone; injected store/registry and warning for an unknown provider id;
+  no secret in the boot log; `getRoot` builds once and shares the promise,
+  forgets a failed build; `bootOrExit` exits 78 naming the key, 1 on other
+  failures, nothing on success; `MemoryRateLimiter` window and reset,
+  `MemoryCache` TTL and eviction, `MemorySessionStore`, `EmptyPluginRegistry`.
+- **`http/healthz.test.ts`** (3) — 200 with build stamps and store kind and
+  no configuration value, 503 degraded on store ping failure, 503
+  unavailable when the root cannot be built.
+- **`apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`**
+  (one test per scanned file, 32 at P0.4) — no literal URL, Supabase ref, GitHub /
+  Stripe / mission token, private key or JWT in `apps/gateway/src/server`,
+  `instrumentation.ts`, `app/healthz`, `next.config.ts`, `deploy/`,
+  `scripts/`, `.github/workflows`; only `telemetry-default.ts` and
+  `deploy/config/*.example*` are exempt. Scope widens as v4 code is deleted.
+
+Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
+[`e2e-tests.md`](./e2e-tests.md).
+
+## Scénarios — Crypto (app-level encryption) — legacy v4
+
+> The v4 `provider-secrets.test.ts` moved to
+> `apps/gateway/src/server/crypto/aead.test.ts` (P0.4) and tests the v5
+> per-connection scheme; `apps/gateway/src/lib/crypto/index.ts` is now a
+> shim over it. ADR [[per-org-encryption-app-level]] is legacy.
 
 ## Hors-scope ces tests
 
