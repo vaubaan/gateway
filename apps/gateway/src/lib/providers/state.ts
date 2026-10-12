@@ -9,8 +9,8 @@
  *   - Bindings/new wizard            → dropdown of selectable resources
  */
 
-import { buildAppJwt, mintInstallationToken } from '@vaubaan/providers-github';
-import { RailwayAdapter } from '@vaubaan/providers-railway';
+import { buildAppJwt, mintInstallationToken } from '@vaubaan/plugin-github';
+import { RailwayAdapter } from '@vaubaan/plugin-railway';
 import type {
   Provider,
   ProviderAdmin,

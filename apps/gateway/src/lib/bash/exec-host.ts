@@ -14,7 +14,7 @@
  * routes still own status code mapping and audit logging.
  */
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { sshExec, type ExecResult } from '@vaubaan/providers-ssh';
+import { sshExec, type ExecResult } from '@vaubaan/plugin-ssh';
 import { decodeBytea } from '@/lib/providers/bytea';
 
 /**

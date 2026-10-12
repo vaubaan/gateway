@@ -13,7 +13,7 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { buildCacheClient } from '@vaubaan/mcp-gateway';
+import { buildCacheClient } from '@vaubaan/gateway-core';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 

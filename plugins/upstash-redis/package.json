@@ -1,5 +1,5 @@
 {
-  "name": "@vaubaan/providers-upstash-redis",
+  "name": "@vaubaan/plugin-upstash-redis",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -1,5 +1,5 @@
 {
-  "name": "@vaubaan/providers-ssh",
+  "name": "@vaubaan/plugin-ssh",
   "version": "0.1.0",
   "private": true,
   "type": "module",

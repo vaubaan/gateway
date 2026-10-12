@@ -19,7 +19,7 @@ import { type NextRequest, NextResponse } from 'next/server';
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
-import { AuthError } from '@vaubaan/mcp-gateway';
+import { AuthError } from '@vaubaan/gateway-core';
 import { buildGateway } from '@/lib/gateway/build';
 
 export const runtime = 'nodejs';

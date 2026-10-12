@@ -23,17 +23,17 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_COMMIT_SHA: commitSha,
     NEXT_PUBLIC_BUILD_TIME: buildTime,
   },
-  // packages/web imports TS source directly from sibling workspace packages.
+  // apps/gateway imports TS source directly from sibling workspace packages.
   // Tell Next.js to transpile those packages on the server side.
   transpilePackages: [
     '@vaubaan/shared',
     '@vaubaan/policy-engine',
-    '@vaubaan/providers-github',
-    '@vaubaan/providers-vercel',
-    '@vaubaan/providers-supabase',
-    '@vaubaan/providers-railway',
-    '@vaubaan/mcp-gateway',
-    '@vaubaan/providers-ssh',
+    '@vaubaan/plugin-github',
+    '@vaubaan/plugin-vercel',
+    '@vaubaan/plugin-supabase',
+    '@vaubaan/plugin-railway',
+    '@vaubaan/gateway-core',
+    '@vaubaan/plugin-ssh',
   ],
   // ssh2 uses a native .node addon — must NOT be bundled by webpack.
   output: 'standalone',

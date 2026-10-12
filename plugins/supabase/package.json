@@ -1,5 +1,5 @@
 {
-  "name": "@vaubaan/providers-supabase",
+  "name": "@vaubaan/plugin-supabase",
   "version": "0.0.0",
   "private": true,
   "type": "module",

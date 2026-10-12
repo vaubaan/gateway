@@ -3,7 +3,7 @@
 Static assets served from `vaubaan.com/marketing/...`. Used by OAuth
 marketplaces (GitHub App, Vercel, Supabase Partner) and the press kit.
 
-See [`docs/handbook/integrations-submission-kit.md`](../../../../docs/handbook/integrations-submission-kit.md)
+See [`docs/handbook/legacy/integrations-submission-kit.md`](../../../../docs/handbook/legacy/integrations-submission-kit.md)
 for the field-by-field checklist.
 
 ## Contents
@@ -14,7 +14,7 @@ for the field-by-field checklist.
 
 ## How to capture screenshots
 
-1. `npm --workspace @vaubaan/web run dev` (with `.env.test` providers wired).
+1. `npm --workspace @vaubaan/gateway-app run dev` (with `.env.test` providers wired).
 2. Devtools → device toolbar → set viewport to **1440 × 900**.
 3. Visit the listed routes.
 4. Take a full-viewport screenshot (Cmd-Shift-P → "Capture full size screenshot"

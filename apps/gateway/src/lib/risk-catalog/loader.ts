@@ -13,7 +13,7 @@
  *    earlier `readFileSync`-based loader broke at runtime in production
  *    (all mints returned `risk catalog for provider 'X' is not loaded`).
  *    The TS exports are bundled like any other code path.
- *  - The YAML siblings (`packages/providers/<vendor>/src/risk-catalog.yaml`)
+ *  - The YAML siblings (`plugins/<vendor>/src/risk-catalog.yaml`)
  *    remain the canonical reviewable form ; a per-provider unit test
  *    (`tests/unit/risk-catalog-sync.test.ts`) lints that the two stay in
  *    sync.
@@ -22,16 +22,16 @@
  *    runtimes can build their own loader.
  */
 
-import { githubRiskCatalog } from '@vaubaan/providers-github';
-import { vercelRiskCatalog } from '@vaubaan/providers-vercel';
-import { supabaseRiskCatalog } from '@vaubaan/providers-supabase';
-import { railwayRiskCatalog } from '@vaubaan/providers-railway';
-import { sshRiskCatalog } from '@vaubaan/providers-ssh';
-import { upstashRedisRiskCatalog } from '@vaubaan/providers-upstash-redis';
-import { gmailRiskCatalog } from '@vaubaan/providers-gmail';
-import { stripeRiskCatalog } from '@vaubaan/providers-stripe';
-import { resendRiskCatalog } from '@vaubaan/providers-resend';
-import { cloudflareDnsRiskCatalog } from '@vaubaan/providers-cloudflare-dns';
+import { githubRiskCatalog } from '@vaubaan/plugin-github';
+import { vercelRiskCatalog } from '@vaubaan/plugin-vercel';
+import { supabaseRiskCatalog } from '@vaubaan/plugin-supabase';
+import { railwayRiskCatalog } from '@vaubaan/plugin-railway';
+import { sshRiskCatalog } from '@vaubaan/plugin-ssh';
+import { upstashRedisRiskCatalog } from '@vaubaan/plugin-upstash-redis';
+import { gmailRiskCatalog } from '@vaubaan/plugin-gmail';
+import { stripeRiskCatalog } from '@vaubaan/plugin-stripe';
+import { resendRiskCatalog } from '@vaubaan/plugin-resend';
+import { cloudflareDnsRiskCatalog } from '@vaubaan/plugin-cloudflare-dns';
 import {
   indexCatalog,
   qualifyRiskId as engineQualifyRiskId,

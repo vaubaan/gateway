@@ -1,5 +1,5 @@
 {
-  "name": "@vaubaan/providers-gmail",
+  "name": "@vaubaan/plugin-gmail",
   "version": "0.0.0",
   "private": true,
   "type": "module",

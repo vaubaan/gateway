@@ -9,7 +9,7 @@
  * faire").
  *
  * For now we export an empty array so the web provider-info registry
- * (`packages/web/src/components/providers/provider-info.ts`) can compile.
+ * (`apps/gateway/src/components/providers/provider-info.ts`) can compile.
  * The catalog coverage lint runs on the classifier directly via a hard-
  * coded list of supported tool names — it does not depend on this array.
  */

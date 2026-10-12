@@ -1,5 +1,5 @@
 {
-  "name": "@vaubaan/providers-stripe",
+  "name": "@vaubaan/plugin-stripe",
   "version": "0.0.0",
   "private": true,
   "type": "module",

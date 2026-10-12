@@ -2,7 +2,7 @@
  * Unit tests for the RiskId qualify / unqualify helpers.
  *
  * Mirrors and supersedes the older copy in
- * `packages/web/tests/unit/lib/risk-catalog/loader.test.ts` (the loader now
+ * `apps/gateway/tests/unit/lib/risk-catalog/loader.test.ts` (the loader now
  * re-exports from `@vaubaan/policy-engine`).
  *
  * The "round-trip" tests are the load-bearing ones : if `qualifyRiskId`

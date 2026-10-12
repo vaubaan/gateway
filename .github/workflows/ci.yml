@@ -2,17 +2,17 @@ name: ci
 
 on:
   push:
-    branches: [main]
+    branches: [main, v5]
   pull_request:
-    branches: [main]
+    branches: [main, v5]
   workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
-# @sbw-vaubaan/harness is optionalDependencies — npm install skips it gracefully
-# when NPM_READ_TOKEN is absent. Only Vercel and local dev need it.
+# @sbw-vaubaan/harness is an optionalDependency served from a private registry;
+# npm skips it when NPM_READ_TOKEN is absent (see CONTRIBUTING.md).
 permissions:
   contents: read
 

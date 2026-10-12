@@ -1,5 +1,5 @@
 {
-  "name": "@vaubaan/providers-railway",
+  "name": "@vaubaan/plugin-railway",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -7,7 +7,7 @@ export function getServerEnv() {
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
     throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY — see packages/web/.env.local.example.',
+      'Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY — see apps/gateway/.env.local.example.',
     );
   }
   return { url, anon };
@@ -41,7 +41,7 @@ export function getSupabaseServiceClient() {
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !serviceKey) {
     throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY (server-only). See packages/web/.env.local.example.',
+      'Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY (server-only). See apps/gateway/.env.local.example.',
     );
   }
   return createClient(url, serviceKey, {

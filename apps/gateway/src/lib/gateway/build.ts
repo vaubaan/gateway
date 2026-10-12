@@ -5,17 +5,14 @@
  * ADRs : docs/decisions/redis-cache-upstash-with-memory-fallback.md.
  */
 
-import { GitHubAdapter, githubAvailableTools } from '@vaubaan/providers-github';
-import { VercelAdapter, vercelAvailableTools } from '@vaubaan/providers-vercel';
-import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/providers-supabase';
-import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/providers-railway';
-import { UpstashRedisAdapter, upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
-import { StripeAdapter, stripeAvailableTools, stripeExecuteCall } from '@vaubaan/providers-stripe';
-import { ResendAdapter, resendAvailableTools } from '@vaubaan/providers-resend';
-import {
-  CloudflareDnsAdapter,
-  cloudflareDnsAvailableTools,
-} from '@vaubaan/providers-cloudflare-dns';
+import { GitHubAdapter, githubAvailableTools } from '@vaubaan/plugin-github';
+import { VercelAdapter, vercelAvailableTools } from '@vaubaan/plugin-vercel';
+import { SupabaseAdapter, supabaseAvailableTools } from '@vaubaan/plugin-supabase';
+import { RailwayAdapter, railwayAvailableTools } from '@vaubaan/plugin-railway';
+import { UpstashRedisAdapter, upstashRedisAvailableTools } from '@vaubaan/plugin-upstash-redis';
+import { StripeAdapter, stripeAvailableTools, stripeExecuteCall } from '@vaubaan/plugin-stripe';
+import { ResendAdapter, resendAvailableTools } from '@vaubaan/plugin-resend';
+import { CloudflareDnsAdapter, cloudflareDnsAvailableTools } from '@vaubaan/plugin-cloudflare-dns';
 import {
   PROVIDERS,
   type AccessTokenContext,
@@ -34,7 +31,7 @@ import {
   type UpstreamAdapter,
   type VenvStore,
   type VenvEntry,
-} from '@vaubaan/mcp-gateway';
+} from '@vaubaan/gateway-core';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { decodeBytea, encodeByteaHexRaw } from '@/lib/providers/bytea';
 import { decryptProviderSecret, encryptProviderSecret } from '@/lib/crypto';

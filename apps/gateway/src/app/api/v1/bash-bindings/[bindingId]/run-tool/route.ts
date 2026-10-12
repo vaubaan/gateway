@@ -13,7 +13,7 @@
 import { type NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { hashArguments } from '@vaubaan/mcp-gateway';
+import { hashArguments } from '@vaubaan/gateway-core';
 import { getSupabaseServiceClient } from '@/lib/supabase/server';
 import { requireOrgMember } from '@/lib/auth/require-org-member';
 import { buildToolInvocation } from '@/lib/bash/exec';

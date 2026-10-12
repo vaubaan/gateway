@@ -20,23 +20,20 @@
 
 import type { DataModel, McpToolDeclaration, Provider, RiskEntry } from '@vaubaan/shared';
 
-import { githubAvailableTools, githubDataModel } from '@vaubaan/providers-github';
-import { vercelAvailableTools, vercelDataModel } from '@vaubaan/providers-vercel';
+import { githubAvailableTools, githubDataModel } from '@vaubaan/plugin-github';
+import { vercelAvailableTools, vercelDataModel } from '@vaubaan/plugin-vercel';
 import {
   supabaseAvailableTools,
   supabaseDataModel,
   supabaseToolPlanes,
-} from '@vaubaan/providers-supabase';
-import { railwayAvailableTools, railwayDataModel } from '@vaubaan/providers-railway';
-import { sshAvailableTools, sshDataModel } from '@vaubaan/providers-ssh';
-import {
-  upstashRedisAvailableTools,
-  upstashRedisDataModel,
-} from '@vaubaan/providers-upstash-redis';
-import { gmailAvailableTools, gmailDataModel } from '@vaubaan/providers-gmail';
-import { stripeAvailableTools, stripeDataModel } from '@vaubaan/providers-stripe';
-import { resendAvailableTools, resendDataModel } from '@vaubaan/providers-resend';
-import { cloudflareDnsDataModel } from '@vaubaan/providers-cloudflare-dns';
+} from '@vaubaan/plugin-supabase';
+import { railwayAvailableTools, railwayDataModel } from '@vaubaan/plugin-railway';
+import { sshAvailableTools, sshDataModel } from '@vaubaan/plugin-ssh';
+import { upstashRedisAvailableTools, upstashRedisDataModel } from '@vaubaan/plugin-upstash-redis';
+import { gmailAvailableTools, gmailDataModel } from '@vaubaan/plugin-gmail';
+import { stripeAvailableTools, stripeDataModel } from '@vaubaan/plugin-stripe';
+import { resendAvailableTools, resendDataModel } from '@vaubaan/plugin-resend';
+import { cloudflareDnsDataModel } from '@vaubaan/plugin-cloudflare-dns';
 
 /** Per-plane presentation copy. */
 export interface PlaneInfo {
@@ -95,7 +92,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Install the Vaubaan Gateway GitHub App on the org or user account that owns the repos you want to expose. Vaubaan mints short-lived installation tokens at runtime — no long-lived PAT is stored.',
-    catalogPath: 'packages/providers/github/src/risk-catalog.yaml',
+    catalogPath: 'plugins/github/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/github.md',
   },
   vercel: {
@@ -116,7 +113,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Install the Vaubaan Marketplace Integration on the team that owns the projects you want to expose. Vaubaan stores the integration access token (refreshable) and proxies tool calls.',
-    catalogPath: 'packages/providers/vercel/src/risk-catalog.yaml',
+    catalogPath: 'plugins/vercel/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/vercel.md',
   },
   supabase: {
@@ -152,7 +149,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Paste a Supabase Management API personal access token (PAT, `sbp_…`) — Vaubaan never sees the service_role key. Each project_ref the binding pins is reachable; everything else is denied at the runtime layer.',
-    catalogPath: 'packages/providers/supabase/src/risk-catalog.yaml',
+    catalogPath: 'plugins/supabase/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/supabase.md',
   },
   railway: {
@@ -172,7 +169,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Authorize the Vaubaan Gateway Railway app to manage the projects in your workspace. Vaubaan stores the OAuth refresh token and rotates the access token at each call.',
-    catalogPath: 'packages/providers/railway/src/risk-catalog.yaml',
+    catalogPath: 'plugins/railway/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/railway-ssh.md',
   },
   bash: {
@@ -193,7 +190,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Bash bindings live per-project (not org-level). Each binding pairs an annotated bash script with one or more SSH hosts. Hosts are registered via the `ssh_binding` form; commands are dispatched through `ssh__exec`.',
-    catalogPath: 'packages/providers/ssh/src/risk-catalog.yaml',
+    catalogPath: 'plugins/ssh/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/railway-ssh.md',
   },
   ssh: {
@@ -213,7 +210,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'SSH bindings live per-project. Each binding registers a single host (address, port, user, key). Commands are dispatched through the ssh__exec tool.',
-    catalogPath: 'packages/providers/ssh/src/risk-catalog.yaml',
+    catalogPath: 'plugins/ssh/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/railway-ssh.md',
   },
   'upstash-redis': {
@@ -234,7 +231,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Paste your Upstash email and Management API key concatenated as `email:api_key`. Vaubaan stores the credential encrypted and uses Basic Auth for the Management API. Per-database REST tokens are fetched at runtime.',
-    catalogPath: 'packages/providers/upstash-redis/src/risk-catalog.yaml',
+    catalogPath: 'plugins/upstash-redis/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/upstash-redis.md',
   },
   gmail: {
@@ -255,7 +252,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Connect a Gmail account via OAuth (scopes `gmail.readonly` + `gmail.compose`). Configure per-binding `internal_domains`, `allowlist_addresses`, `allowlist_domains`, and `sensitive_labels` to drive the identity-zone classification.',
-    catalogPath: 'packages/providers/gmail/src/risk-catalog.yaml',
+    catalogPath: 'plugins/gmail/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/gmail.md',
   },
   stripe: {
@@ -276,7 +273,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Paste a Stripe restricted API key (`sk_test_*` for test, `sk_live_*` for live) — Vaubaan stores it encrypted and the binding pins the mode. The classifier reads `environment` on the binding (`live` | `test`) and qualifies cardinal risks as `stripe[live].refund-create` etc.',
-    catalogPath: 'packages/providers/stripe/src/risk-catalog.yaml',
+    catalogPath: 'plugins/stripe/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/stripe.md',
   },
   resend: {
@@ -297,7 +294,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Paste a Resend API key (`re_*`) — Vaubaan stores it encrypted. The binding pins an operator-chosen slug (e.g. `prod-email`). Configure `internal_domains`, `allowlist_domains`, `allowlist_addresses` in binding metadata to drive the to-zone classification.',
-    catalogPath: 'packages/providers/resend/src/risk-catalog.yaml',
+    catalogPath: 'plugins/resend/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/resend.md',
   },
   'cloudflare-dns': {
@@ -318,7 +315,7 @@ export const PROVIDER_INFO: Record<Provider, ProviderInfo> = {
     ],
     setup:
       'Paste a Cloudflare API Token scoped to the zones you want to expose (Zone:Read + DNS:Edit minimum). Vaubaan stores the token encrypted. The binding pins the account_id; zone-level scoping is enforced by the token itself.',
-    catalogPath: 'packages/providers/cloudflare-dns/src/risk-catalog.yaml',
+    catalogPath: 'plugins/cloudflare-dns/src/risk-catalog.yaml',
     handbook: 'docs/handbook/providers/cloudflare-dns.md',
   },
 };

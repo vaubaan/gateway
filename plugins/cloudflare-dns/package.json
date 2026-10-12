@@ -1,5 +1,5 @@
 {
-  "name": "@vaubaan/providers-cloudflare-dns",
+  "name": "@vaubaan/plugin-cloudflare-dns",
   "version": "0.0.0",
   "private": true,
   "type": "module",

@@ -1,5 +1,5 @@
 {
-  "name": "@vaubaan/providers-github",
+  "name": "@vaubaan/plugin-github",
   "version": "0.0.0",
   "private": true,
   "type": "module",

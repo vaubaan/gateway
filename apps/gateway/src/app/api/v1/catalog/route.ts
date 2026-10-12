@@ -12,17 +12,17 @@
  */
 
 import { type NextRequest, NextResponse } from 'next/server';
-import { AuthError } from '@vaubaan/mcp-gateway';
+import { AuthError } from '@vaubaan/gateway-core';
 import { parseApiKey, type McpToolDeclaration, type Provider } from '@vaubaan/shared';
-import { githubAvailableTools } from '@vaubaan/providers-github';
-import { vercelAvailableTools } from '@vaubaan/providers-vercel';
-import { supabaseAvailableTools } from '@vaubaan/providers-supabase';
-import { railwayAvailableTools } from '@vaubaan/providers-railway';
-import { sshAvailableTools } from '@vaubaan/providers-ssh';
-import { upstashRedisAvailableTools } from '@vaubaan/providers-upstash-redis';
-import { stripeAvailableTools } from '@vaubaan/providers-stripe';
-import { resendAvailableTools } from '@vaubaan/providers-resend';
-import { cloudflareDnsAvailableTools } from '@vaubaan/providers-cloudflare-dns';
+import { githubAvailableTools } from '@vaubaan/plugin-github';
+import { vercelAvailableTools } from '@vaubaan/plugin-vercel';
+import { supabaseAvailableTools } from '@vaubaan/plugin-supabase';
+import { railwayAvailableTools } from '@vaubaan/plugin-railway';
+import { sshAvailableTools } from '@vaubaan/plugin-ssh';
+import { upstashRedisAvailableTools } from '@vaubaan/plugin-upstash-redis';
+import { stripeAvailableTools } from '@vaubaan/plugin-stripe';
+import { resendAvailableTools } from '@vaubaan/plugin-resend';
+import { cloudflareDnsAvailableTools } from '@vaubaan/plugin-cloudflare-dns';
 import { buildGateway } from '@/lib/gateway/build';
 
 export const runtime = 'nodejs';
