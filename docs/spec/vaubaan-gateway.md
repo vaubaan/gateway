@@ -518,6 +518,10 @@ JSON-RPC, authenticated by `Authorization: Bearer <mission token>`.
     connection name and owner to contact.
   - `mission-inactive`: `expired`, `orphaned` or `revoked`, with the
     reason.
+  - `wrong-credential-kind`: the bearer is not a mission token (a
+    delegated token or a human session presented at the execution door),
+    with the door that would accept it. The same code is returned by the
+    management door to a mission token (§6).
 - **Catalog**: a read endpoint, authenticated by the mission token,
   returning the full tool surface, what the mission may call, the refs
   and environment labels of the resources the mission may touch, and the
