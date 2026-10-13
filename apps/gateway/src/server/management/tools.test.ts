@@ -5,12 +5,17 @@
  * the real services, authority and store is
  * `tests/integration/management/management-door.test.ts`.
  */
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import type { RiskId } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import { silentLogger } from '../logging';
-import type { MissionDraft, MissionOverview, MissionPreview } from '../missions';
-import { previewDraft } from '../missions/preview';
+import type { MissionDetail, MissionDraft, MissionOverview, MissionPreview } from '../missions';
+import { explainOrphan } from '../missions/orphan-reason';
+import { expandPreset, previewDraft } from '../missions/preview';
 import { ACME_CATALOG, acmeConnection } from '../missions/testing';
 import { enumerateCatalog } from '../missions/catalog-view';
 import { MANAGEMENT_TOOLS } from './definitions';
@@ -19,6 +24,7 @@ import type { ManagementActor, ManagementCatalog, ManagementMissions } from './p
 import {
   MANAGEMENT_MUTATION_WINDOW_MS,
   MANAGEMENT_MUTATIONS_PER_WINDOW,
+  MANAGEMENT_REFUSAL_CODES,
   ManagementTools,
 } from './tools';
 import { catalogView, connectionView, missionView, previewView, uncoveredOfPreview } from './views';
@@ -51,7 +57,14 @@ interface Call {
   readonly args: readonly unknown[];
 }
 
-function rig(options: { shared?: boolean; mutationsAllowed?: number } = {}) {
+function rig(
+  options: {
+    shared?: boolean;
+    mutationsAllowed?: number;
+    /** Replaces methods of the recorded mission port. */
+    missions?: Partial<ManagementMissions>;
+  } = {},
+) {
   const calls: Call[] = [];
   const rateKeys: string[] = [];
   const connection = acmeConnection(
@@ -78,6 +91,7 @@ function rig(options: { shared?: boolean; mutationsAllowed?: number } = {}) {
       record('revoke', [user, id, revokeOptions], { ok: false, reason: 'not-found' } as const),
     list: (user) => record('list', [user], [] as MissionOverview[]),
     get: (user, id) => record('get', [user, id], null),
+    ...options.missions,
   };
   const catalog: ManagementCatalog = {
     providers: () => ['acme'],
@@ -203,6 +217,98 @@ describe('ManagementTools — every act is the delegating user’s', () => {
     expect(calls.some((call) => call.method === 'rotate' || call.method === 'revoke')).toBe(false);
   });
 
+  describe('the mission service decides last: its answer after the door’s own check stands', () => {
+    const within: MissionDraft = {
+      ...DRAFT,
+      connections: [{ connection_id: 'conn-acme', preset: 'reader' }],
+    };
+    /** A mission of the user that serves calls, as `get` returns it. */
+    const active = {
+      mission: { id: 'm1', name: 'M', connections: [], policy: [], periodSeconds: null },
+      state: { kind: 'active', period: { start: NOW.toISOString(), end: null }, remaining: {} },
+      orphan: null,
+      token: null,
+      issuedVia: null,
+      connections: [],
+      policy: [],
+    } as unknown as MissionDetail;
+
+    it('issue refuses a draft the preview accepted (the authority changed in between): draft-refused, with the service’s preview', async () => {
+      // The recorded `issue` answers `refused`, although `preview` said the draft passes.
+      const { tools, calls, rateKeys } = rig();
+      const outcome = await tools.issueMission(ACTOR, within);
+      expect(calls.map((call) => call.method)).toEqual(['preview', 'issue']);
+      expect(outcome).toMatchObject({
+        ok: false,
+        refusal: { code: 'draft-refused', uncovered: [], preview: { name: within.name } },
+      });
+      // The act was attempted: it counts against the mutation budget.
+      expect(rateKeys).toHaveLength(1);
+    });
+
+    it('an issuance outcome the door does not know is a failure, not an answer made up here', async () => {
+      const { tools } = rig({
+        missions: { issue: async () => ({ ok: false, reason: 'not-found' }) },
+      });
+      await expect(tools.issueMission(ACTOR, within)).rejects.toThrow(
+        /unexpected issuance outcome "not-found"/,
+      );
+    });
+
+    it('rotate answers not-found or inactive for a mission `get` saw active: the refusal is the service’s', async () => {
+      const gone = rig({
+        missions: {
+          get: async () => active,
+          rotate: async () => ({ ok: false, reason: 'not-found' }),
+        },
+      });
+      expect(await gone.tools.rotateMissionToken(ACTOR, { mission_id: 'm1' })).toMatchObject({
+        ok: false,
+        refusal: { code: 'mission-not-found', mission_id: 'm1' },
+      });
+
+      const revokedMeanwhile = rig({
+        missions: {
+          get: async () => active,
+          rotate: async () => ({ ok: false, reason: 'inactive', state: 'revoked' }),
+        },
+      });
+      const outcome = await revokedMeanwhile.tools.rotateMissionToken(ACTOR, { mission_id: 'm1' });
+      expect(outcome).toMatchObject({
+        ok: false,
+        refusal: { code: 'mission-inactive', mission_id: 'm1', state: 'revoked' },
+      });
+      if (!outcome.ok) expect(outcome.refusal).not.toHaveProperty('orphan');
+      // Both attempts reached the service: both spent the budget.
+      expect(gone.rateKeys).toHaveLength(1);
+      expect(revokedMeanwhile.rateKeys).toHaveLength(1);
+    });
+
+    it('revoke answers not-found for a mission `get` saw: mission-not-found', async () => {
+      const { tools } = rig({ missions: { get: async () => active } });
+      expect(await tools.revokeMission(ACTOR, { mission_id: 'm1' })).toMatchObject({
+        ok: false,
+        refusal: { code: 'mission-not-found' },
+      });
+    });
+  });
+
+  it('every refusal code is in the handbook’s table, and the table names no other', () => {
+    const handbook = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../../../../docs/handbook/management-door.md',
+      ),
+      'utf8',
+    );
+    const table = handbook.slice(handbook.indexOf('| `error.code`'));
+    const documented = [...table.slice(0, table.indexOf('\n\n')).matchAll(/^\| `([a-z-]+)`/gm)]
+      .map((match) => match[1])
+      .filter((code) => code !== 'error.code');
+    // `internal-error` is the door's own (a method that threw), not a tool's refusal.
+    expect(documented.sort()).toEqual([...MANAGEMENT_REFUSAL_CODES, 'internal-error'].sort());
+  });
+
   it('get_catalog names the providers when asked for one that does not exist', async () => {
     const { tools } = rig();
     expect(await tools.getCatalog(ACTOR, { provider: 'nope' })).toMatchObject({
@@ -236,6 +342,96 @@ describe('views', () => {
     expect(presets.developer?.outside_authority).toEqual(['acme[staging].bulk-delete']);
     // `writer` names the base id `acme.write`: held in one environment, it is covered.
     expect(presets.writer?.within_authority).toBe(true);
+  });
+
+  it('a preset is judged with the mission module’s own expansion, on what the user holds', () => {
+    // Nothing of `acme.write` is held: the base id expands to nothing and is outside.
+    const readOnly = connectionView(acmeConnection({ basis: 'share', authority: ['acme.read'] }));
+    const presets = Object.fromEntries(readOnly.presets.map((preset) => [preset.id, preset]));
+    expect(presets.reader).toMatchObject({ within_authority: true, outside_authority: [] });
+    expect(presets.writer).toMatchObject({
+      within_authority: false,
+      outside_authority: ['acme.write'],
+    });
+    expect(presets.developer?.outside_authority).toEqual([
+      'acme[staging].write',
+      'acme[staging].bulk-delete',
+    ]);
+
+    // The same answer as `expandPreset` over the held part of the catalog, for every preset.
+    for (const authority of [SHARED, ['acme.read'], ['acme[prod].write'], []] as RiskId[][]) {
+      const connection = acmeConnection({ basis: 'share', authority });
+      const held = new Set(authority);
+      for (const [index, preset] of connection.presets.entries()) {
+        const { lines } = expandPreset(
+          preset,
+          { risks: connection.risks.filter((r) => held.has(r.risk_id)), derives_env: true },
+          [],
+        );
+        expect(connectionView(connection).presets[index]?.outside_authority).toEqual(
+          lines.map((line) => line.risk_id).filter((id) => !held.has(id)),
+        );
+      }
+    }
+  });
+
+  it('env usability is `isResolvable` on the resources a mission can select: a stale label does not count', () => {
+    const onlyStaleProd = acmeConnection({
+      resources: [
+        {
+          id: 'r1',
+          ref: 'app-staging',
+          display_name: 'App (staging)',
+          env: 'staging',
+          hidden: false,
+          stale: false,
+        },
+        {
+          id: 'r2',
+          ref: 'app-prod',
+          display_name: 'App (prod)',
+          env: 'prod',
+          hidden: false,
+          stale: true,
+        },
+      ],
+    });
+    const view = connectionView(onlyStaleProd).env_qualified_risks;
+    expect(view.labelled_envs).toEqual(['staging']);
+    expect(view.usable_risk_ids).toEqual(['acme[staging].write', 'acme[staging].bulk-delete']);
+    expect(view.unusable_risk_ids).toEqual(['acme[prod].write']);
+  });
+
+  it('whether an orphaned mission can come back is the mission module’s answer, for every cause', () => {
+    const overview = (cause: string): MissionOverview =>
+      ({
+        mission: {
+          id: 'm1',
+          name: 'M',
+          periodSeconds: null,
+          expiresAt: null,
+          createdAt: NOW.toISOString(),
+          connections: [],
+          policy: [],
+        },
+        state: { kind: 'orphaned' },
+        orphan: { cause, connection_id: 'conn-acme', uncovered: ['acme.read'] },
+        token: null,
+        issuedVia: null,
+      }) as unknown as MissionOverview;
+    const causes = [
+      'creator-removed',
+      'connection-missing',
+      'connection-revoked',
+      'authority-lost',
+    ] as const;
+    const answers = causes.map((cause) => {
+      const view = missionView(overview(cause), ACTOR.clientId, (prefix) => prefix);
+      const orphan = { cause, connection_id: 'conn-acme', uncovered: ['acme.read' as RiskId] };
+      expect(view.orphan?.can_come_back, cause).toBe(explainOrphan(orphan, []).reversible);
+      return view.orphan?.can_come_back;
+    });
+    expect(answers).toEqual([true, false, false, true]);
   });
 
   it('with no labelled resource, env-qualified ids are unusable unless the provider derives the environment', () => {

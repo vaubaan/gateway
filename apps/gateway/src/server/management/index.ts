@@ -60,6 +60,7 @@ export {
   toolResultOf,
   type ManagementDoorDeps,
 } from './door';
+export { MANAGEMENT_OUTPUT_SCHEMAS } from './output-schemas';
 export {
   MANAGEMENT_DEPENDENCIES,
   MANAGEMENT_MISSION_METHODS,

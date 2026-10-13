@@ -119,7 +119,13 @@ export {
 } from './mission-service';
 export type * from './model';
 export { PREVIEW_ISSUE_CODES, PREVIEW_NOTICE_CODES, SEVERITY_LEVELS } from './model';
-export { budgetProblem, previewConnection, previewDraft, uncoveredOf } from './preview';
+export {
+  budgetProblem,
+  expandPreset,
+  previewConnection,
+  previewDraft,
+  uncoveredOf,
+} from './preview';
 export { explainOrphan, type OrphanExplanation } from './orphan-reason';
 export { summarize } from './summary';
 export {

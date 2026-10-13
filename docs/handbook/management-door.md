@@ -68,8 +68,9 @@ apps/gateway/src/server/management/      host-agnostic, never imports `next`
   index.ts                    createManagementModule(ports) → { tools, door, handlers }
   ports.ts                    ManagementModuleDeps: the four ports the door is built from — the hard deny
   definitions.ts              MANAGEMENT_TOOLS: names, input schemas, the descriptions an agent reads; MANAGEMENT_INSTRUCTIONS
+  output-schemas.ts           MANAGEMENT_OUTPUT_SCHEMAS: the shape of each tool's successful answer, loose at every level
   tools.ts                    ManagementTools: the seven acts as typed methods, refusals, the mutation budget
-  views.ts                    snake_case answers: connection, catalog, mission, preview
+  views.ts                    snake_case answers: connection, catalog, mission, preview — over the mission module's own rules
   door.ts                     ManagementDoor: admit → surface rate limit → MCP server with the seven tools
 apps/gateway/src/server/compose/
   management.ts               wireManagementDoor(): builds the gate and narrows the services to the ports
@@ -612,7 +613,7 @@ ManagementDoor.handle(request)                                   door.ts
   admit(request)                      → 401 challenge | 403 wrong-credential-kind | the delegation
   rateLimit.take(`delegation:<id>`, 120, 60 s)                    → 429, JSON-RPC -32002, Retry-After
   one McpServer for the request, instructions = MANAGEMENT_INSTRUCTIONS
-    registerTool × MANAGEMENT_TOOLS, bound to the actor
+    registerTool × MANAGEMENT_TOOLS (input schema, output schema, annotations), bound to the actor
       { userId: delegation.user_id, delegationId, clientId: delegation.client_id }
   tools/call → definition.run(tools, actor, args) → toolResultOf(outcome)
 ```
@@ -644,7 +645,8 @@ validated by the SDK before the method runs; unknown keys are refused
 creation form parses, with the descriptions an agent reads.
 
 **Answers** (`toolResultOf`) are `structuredContent`, repeated as JSON text
-for clients that only read text. A "no" is a tool error — `isError: true`
+for clients that only read text, in the shape the tool's `outputSchema`
+advertises (next section). A "no" is a tool error — `isError: true`
 with `structuredContent: { error: { code, message, hint, … } }` — so the
 model reads it and corrects itself:
 
@@ -660,20 +662,71 @@ model reads it and corrects itself:
 
 A call that fails the input schema is a tool error whose text is the SDK's
 validation message; a tool name that does not exist is the JSON-RPC error
-`Tool <name> not found`.
+`Tool <name> not found`. `MANAGEMENT_REFUSAL_CODES` is the list of the first
+six codes; `tools.test.ts` holds it to this table, both ways.
+
+### Output schemas (`output-schemas.ts`)
+
+Each of the seven tools advertises an `outputSchema` in `tools/list`: the
+JSON Schema of `MANAGEMENT_OUTPUT_SCHEMAS[<tool>]`, the shape of its
+`structuredContent` when it answers "yes". A refusal is not described: the
+SDK validates the answer of a successful call only (`isError` skips it), and
+so does a client, so `{ error }` travels as before.
+
+**The schema is checked after the tool ran.** `@modelcontextprotocol/server`
+2.3.1 validates `structuredContent` against the advertised schema once the
+handler returned, and answers a bare `Output validation error …` tool error
+when it does not match. For `issue_mission` and `rotate_mission_token` that
+would lose a token shown once, _after_ the mission was written or the
+previous token revoked. Three things keep that from happening:
+
+- **Every object is loose** (`z.looseObject`, JSON Schema
+  `additionalProperties: {}`), at every level. A key the schema does not name
+  never fails an answer, on the server or in a client that validates: a field
+  added to a view is not a regression of the door.
+  `output-schemas.test.ts` walks each schema and refuses a level that is not.
+- **Thin where the shape is not the door's.** What the mission service or a
+  catalog owns — policy lines, preview issues and notices, the summary,
+  presets, the bootstrap kit — names the keys an agent reads and leaves the
+  rest open; a value whose set is owned elsewhere (a state, a gate, a level,
+  an orphan cause, `basis`) is a string, with the set in its description.
+- **Every real answer is parsed in a test.**
+  `tests/integration/management/output-schemas.test.ts` drives each success
+  path of each tool through the real door with the official MCP client (which
+  validates against the advertised JSON Schema once it listed the tools) and
+  parses the answer with the Zod schema: an owner, a beneficiary and somebody
+  who holds nothing; every provider's catalog; previews that pass, exceed,
+  skip, cannot resolve an environment or name an unknown risk; issuance from
+  a policy and from a preset; the list and the detail of active, orphaned,
+  revoked and expired missions; rotation; revocation, twice. It also holds
+  that each top-level key of an answer is named by its schema, and that every
+  tool was covered.
+
+If an answer nevertheless departs from its schema, the door logs `management
+tool answer does not match its advertised schema` at `error`, with the tool,
+the delegation and the paths and codes of the mismatches — never a value —
+before the SDK replaces the answer (`ManagementDoor.checkAnswer`;
+`door.test.ts` shows the whole sequence on a tool that reveals nothing).
+
+A new field in an answer needs nothing here to keep working. Add it to the
+schema when an agent should be able to rely on it. The TypeScript interfaces
+of `views.ts` and `tools.ts` remain the full contract.
 
 What each answer contains (`views.ts`):
 
 - **`list_my_connections`** — per connection the user owns or was shared:
-  `authority.basis` (`owner` | `share`) and `authority.risk_ids`, **the exact
+  its `status`; `authority.basis` (`owner` | `share`) and `authority.risk_ids`, **the exact
   restriction** (`IssuanceConnection.authority`: the whole catalog for an
-  owner, the union of the shares otherwise); `resources` (ref, display name,
+  owner — `authority.whole_catalog` — the union of the shares otherwise); `resources` (ref, display name,
   `env` label, `hidden`; stale ones are left out); `env_qualified_risks` —
   `derives_env`, `labelled_envs`, `unlabelled_resources`, and the
   env-qualified ids of the authority split into `usable_risk_ids` and
   `unusable_risk_ids` (no resource carries their environment: a draft naming
   one is refused `unresolvable-env`); `presets` with `within_authority` and
-  `outside_authority`. Connections of experimental plugins are left out
+  `outside_authority` — about authority only: an entry naming an env-scoped
+  risk is covered when the user holds it in at least one environment, and
+  what a given selection of resources leaves out of a preset is the preview's
+  `skipped_from_preset`. Connections of experimental plugins are left out
   unless `include_experimental` (`hidden_experimental` counts them).
 - **`get_catalog`** — `risks` as explicit ids, one per environment for an
   env-scoped entry (`enumerateCatalog`), with label, reason, level,
@@ -685,7 +738,7 @@ What each answer contains (`views.ts`):
   read; `policy` with `remaining` per risk; `session` (current period);
   `exhausted`; `issued_via` (`client_id`, `client_name`, `this_client`);
   the masked `token_prefix`. Revoked and expired missions are left out
-  unless `include_closed`. With `mission_id`: plus `connections` with the
+  unless `include_closed` (`hidden_closed` counts them). With `mission_id`: plus `connections` with the
   resources reached and `policy_details` (label, `gate_open_until`).
 - **`preview_policy`** — the mission preview: `ok`, `issues`, `notices`,
   `uncovered` (per connection, the accepted risks outside the authority),
@@ -703,6 +756,21 @@ The mission token appears in the answer of `issue_mission` and
 `rotate_mission_token` and nowhere else: the door logs the tool name, the
 outcome code and the ids of user, delegation and client — never arguments or
 answers.
+
+**The views restate no mission rule.** Three answers depend on a rule the
+mission module owns, and each calls it instead of writing it again, so the
+agent's tools and the web pages cannot disagree:
+
+| Answer                                      | Rule, in `server/missions`                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------- |
+| `orphan.can_come_back`                      | `explainOrphan(orphan, []).reversible` (`orphan-reason.ts`)               |
+| `env_qualified_risks.usable_risk_ids` / un… | `isResolvable(risk, connection, resources)` (`catalog-view.ts`)           |
+| `presets[].outside_authority`               | `expandPreset` (`preview.ts`) over the part of the catalog the user holds |
+
+For the third, the preset is expanded against the risks the user holds, with
+the environment taken as derivable: an entry that expands to nothing held
+comes back as itself and is outside. What `preview_policy` then reports for
+a real selection of resources is the same function on the whole catalog.
 
 ### `issued_via`: the mission, the audit, the interface
 
@@ -942,6 +1010,12 @@ refused` carries the error code and the client id; the description in the
   plugin is experimental (`include_experimental`).
 - **`mission-inactive` on a rotation.** `error.state` says which; for
   `orphaned`, `error.orphan` gives the cause and the uncovered risks.
+- **A tool answers `Output validation error …`.** The answer departed from the
+  schema the tool advertises, and the SDK replaced it — after the tool ran:
+  for a mutation, read the state again (`list_my_missions`) before retrying.
+  The log line `management tool answer does not match its advertised schema`
+  names the tool and the fields. It is a defect of `output-schemas.ts`: the
+  integration test should have caught it.
 - **Which client issued a mission.** `SELECT m.name, c.client_id, c.name FROM
 missions m JOIN delegations d ON d.id = m.delegation_id JOIN oauth_clients c
 ON c.id = d.client_id`, or the `mission-issued` audit entry
@@ -952,8 +1026,11 @@ ON c.id = d.client_id`, or the `mission-issued` audit entry
 
 ## Extension
 
-- A new tool: a method on `ManagementTools`, an entry in `MANAGEMENT_TOOLS`
-  and its name in `MANAGEMENT_TOOL_NAMES`. If it needs something the ports do
+- A new tool: a method on `ManagementTools`, an entry in `MANAGEMENT_TOOLS`,
+  its name in `MANAGEMENT_TOOL_NAMES` and its schema in
+  `MANAGEMENT_OUTPUT_SCHEMAS` (the table does not compile without one), with
+  its success paths in `tests/integration/management/output-schemas.test.ts`
+  (the last test of the file fails for a tool it never saw answer). If it needs something the ports do
   not give, the port's type changes first (`ports.ts`), then
   `compose/management.ts` — and `hard-deny.test.ts` must still pass. A
   mutation is classified in `tests/integration/audit/admin-mutations.test.ts`.
@@ -1012,10 +1089,21 @@ the rollback the driver performs, not a stub's.
 
 The door's tools, beside the code (`src/server/management/`):
 `tools.test.ts` — every act carries the delegating user and, for mutations,
-the delegation; refusal before issuance with the uncovered list; the mutation
-budget; the views (exact restriction, env usability, presets against the
-authority, masked token); the descriptions state the rules of issuance; the
-schemas refuse unknown keys. `hard-deny.test.ts` — types, imports, tool table.
+the delegation; refusal before issuance with the uncovered list; **the
+mission service decides last** (an issuance refused after the preview passed,
+an unknown outcome, a rotation answered not-found or inactive after `get` saw
+the mission active); the mutation budget; every refusal code against the
+handbook's table; the views (exact restriction, env usability, presets
+against the authority, masked token) **and that each is the mission module's
+rule** (`expandPreset`, `isResolvable`, `explainOrphan` for every cause); the
+descriptions state the rules of issuance; the schemas refuse unknown keys.
+`door.test.ts` — a method that throws is `internal-error` and logged without
+its cause reaching the agent; `GET` and `DELETE` of a stateless client are
+405; an answer that departs from its schema is replaced by the SDK and
+traced without a value; a matching answer passes with its extra keys.
+`output-schemas.test.ts` — one schema per tool, an object at the root, loose
+at every level; a refusal matches none. `hard-deny.test.ts` — types, imports,
+tool table.
 
 Integration (`tests/integration/management/`, the real root, the simulated
 IdP, the official MCP client with a token obtained through the real flow):
@@ -1026,8 +1114,10 @@ client, the token on `/mcp`**; **refusal beyond with the uncovered list**; a
 share narrowed after consent; rotate, revoke, an orphaned mission (not
 rotated, restored with the share, revocable), another user's mission; the
 forbidden families neither listed nor callable; `wrong-credential-kind` for a
-mission token and a session; both rate limits. `hard-deny.test.ts` — the
-object graph.
+mission token and a session; both rate limits. `output-schemas.test.ts` —
+every real answer of every tool against its advertised schema, and refusals
+unaffected (see [Output schemas](#output-schemas-output-schemasts)).
+`hard-deny.test.ts` — the object graph.
 
 Integration (`tests/integration/oauth-as/`, the real root on the `:memory:`
 store with the simulated IdP): `mcp-client-flow.test.ts` — the official

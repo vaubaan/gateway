@@ -16,6 +16,7 @@
 import { z } from 'zod';
 
 import { missionDraftSchema } from '../missions';
+import { MANAGEMENT_OUTPUT_SCHEMAS } from './output-schemas';
 import type { ManagementActor } from './ports';
 import type { ManagementTools, ToolOutcome } from './tools';
 
@@ -39,6 +40,11 @@ export interface ManagementToolDefinition {
   readonly description: string;
   readonly kind: ManagementToolKind;
   readonly inputSchema: z.ZodType;
+  /**
+   * The shape of a successful answer's `structuredContent`, advertised by
+   * `tools/list` and checked by the SDK after the tool ran (`output-schemas.ts`).
+   */
+  readonly outputSchema: z.ZodType;
   /** MCP behaviour hints for the client's own confirmation prompts. */
   readonly annotations: {
     readonly readOnlyHint: boolean;
@@ -71,6 +77,7 @@ function define<Schema extends z.ZodType>(definition: {
     description: definition.description,
     kind: definition.kind,
     inputSchema,
+    outputSchema: MANAGEMENT_OUTPUT_SCHEMAS[definition.name],
     annotations: {
       readOnlyHint: definition.kind !== 'mutation',
       destructiveHint: definition.destructive === true,

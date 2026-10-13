@@ -11,16 +11,25 @@
  * A mission's state is the mission service's: `orphaned` is derived there
  * from the creator's current authority at every read (spec §2.3), with the
  * reason in `MissionOverview.orphan`. Nothing here reads a stored status.
+ *
+ * **No mission rule is restated here.** What a preset stands for on a
+ * connection is `expandPreset`, whether an env-qualified id can be reached is
+ * `isResolvable`, whether an orphaned mission can serve again is
+ * `explainOrphan` — the functions the interface and the preview use, so the
+ * agent's tools and the web pages cannot answer differently.
  */
 import type { Gate, Preset, RiskId } from '@vaubaan/shared';
 
-import type {
-  DraftPeriod,
-  IssuanceConnection,
-  MissionDetail,
-  MissionIssuer,
-  MissionOverview,
-  MissionPreview,
+import {
+  expandPreset,
+  explainOrphan,
+  isResolvable,
+  type DraftPeriod,
+  type IssuanceConnection,
+  type MissionDetail,
+  type MissionIssuer,
+  type MissionOverview,
+  type MissionPreview,
 } from '../missions';
 import type { ProviderCatalog } from './ports';
 
@@ -55,9 +64,18 @@ export interface PresetSummaryView {
   readonly label: string;
   readonly description: string;
   readonly risks: number;
-  /** True when every entry of the preset is inside the user's authority here. */
+  /**
+   * True when every entry of the preset is inside the user's authority here.
+   * About authority only: whether a resource carries the environment an entry
+   * needs is `env_qualified_risks`, and `preview_policy` says what a selection
+   * leaves out (`skipped_from_preset`).
+   */
   readonly within_authority: boolean;
-  /** The preset entries the user's authority does not cover on this connection. */
+  /**
+   * The preset entries the user's authority does not cover on this connection.
+   * An entry naming an env-scoped risk is covered when the user holds it in at
+   * least one environment (the preset is then issued for those).
+   */
   readonly outside_authority: readonly RiskId[];
 }
 
@@ -82,18 +100,19 @@ export interface ConnectionView {
   readonly presets: readonly PresetSummaryView[];
 }
 
+/** The resources a new mission can select: the ones discovery still returns. */
+function selectable(connection: IssuanceConnection): IssuanceConnection['resources'] {
+  return connection.resources.filter((r) => !r.stale);
+}
+
 function presetSummary(preset: Preset, connection: IssuanceConnection): PresetSummaryView {
   const held = new Set(connection.authority);
-  // A preset entry may name the base id of an env-scoped risk: it is covered
-  // when at least one of its environment rows is held.
-  const outside = preset.entries
-    .map((entry) => entry.risk_id)
-    .filter(
-      (id) =>
-        !connection.risks.some(
-          (risk) => (risk.risk_id === id || risk.base_id === id) && held.has(risk.risk_id),
-        ),
-    );
+  // Authority: the preset expanded over the part of the catalog the user holds,
+  // whatever the labels. An entry that expands to nothing held comes back as
+  // itself, and is outside. The expansion is the mission module's.
+  const heldRisks = connection.risks.filter((risk) => held.has(risk.risk_id));
+  const { lines } = expandPreset(preset, { risks: heldRisks, derives_env: true }, []);
+  const outside = lines.map((line) => line.risk_id).filter((id) => !held.has(id));
   return {
     id: preset.id,
     label: preset.label,
@@ -105,18 +124,18 @@ function presetSummary(preset: Preset, connection: IssuanceConnection): PresetSu
 }
 
 function envUsability(connection: IssuanceConnection): EnvUsabilityView {
-  const resources = connection.resources.filter((r) => !r.stale);
+  const resources = selectable(connection);
   const labelled = [...new Set(resources.flatMap((r) => (r.env === null ? [] : [r.env])))];
   const held = new Set(connection.authority);
   const envQualified = connection.risks.filter((r) => r.env !== null && held.has(r.risk_id));
-  const reachable = (env: string | null): boolean =>
-    connection.derives_env || (env !== null && labelled.includes(env));
+  const reachable = (risk: (typeof envQualified)[number]): boolean =>
+    isResolvable(risk, connection, resources);
   return {
     derives_env: connection.derives_env,
     labelled_envs: labelled,
     unlabelled_resources: resources.filter((r) => r.env === null).map((r) => r.ref),
-    usable_risk_ids: envQualified.filter((r) => reachable(r.env)).map((r) => r.risk_id),
-    unusable_risk_ids: envQualified.filter((r) => !reachable(r.env)).map((r) => r.risk_id),
+    usable_risk_ids: envQualified.filter(reachable).map((r) => r.risk_id),
+    unusable_risk_ids: envQualified.filter((r) => !reachable(r)).map((r) => r.risk_id),
   };
 }
 
@@ -133,9 +152,12 @@ export function connectionView(connection: IssuanceConnection): ConnectionView {
       risk_ids: connection.authority,
       whole_catalog: connection.authority.length === connection.risks.length,
     },
-    resources: connection.resources
-      .filter((r) => !r.stale)
-      .map((r) => ({ ref: r.ref, display_name: r.display_name, env: r.env, hidden: r.hidden })),
+    resources: selectable(connection).map((r) => ({
+      ref: r.ref,
+      display_name: r.display_name,
+      env: r.env,
+      hidden: r.hidden,
+    })),
     env_qualified_risks: envUsability(connection),
     presets: connection.presets.map((preset) => presetSummary(preset, connection)),
   };
@@ -225,7 +247,8 @@ function orphanView(orphan: NonNullable<MissionOverview['orphan']>): OrphanView 
     cause: orphan.cause,
     connection_id: orphan.connection_id,
     uncovered: orphan.uncovered,
-    can_come_back: orphan.cause !== 'connection-revoked' && orphan.cause !== 'connection-missing',
+    // The mission module's answer (`explainOrphan`), not a second list of causes.
+    can_come_back: explainOrphan(orphan, []).reversible,
   };
 }
 
