@@ -1,56 +1,40 @@
 /**
- * Stripe data-model — declarative entity graph for the v4 risk-based engine.
+ * Data model of the `stripe` provider — the `billing` plane.
  *
- * Spec     : docs/spec/gateway-risk-model.md §2.
- * Research : .vaubaan/research/providers/stripe.md §1.
+ * Spec : docs/spec/gateway-risk-model.md §2.
  *
- * Stripe exposes a single plane (`billing`) — there is no parallel split
- * across plumbing surfaces ; Stripe Connect / Terminal / Identity / Issuing
- * are excluded from MVP scope (research §0). The data-model's unique-feature
- * vs the 7 prior providers is the **`mode` (test/live) calque** acting as
- * `envScopable` — a Stripe binding is one API key, and an API key is one
- * mode. Test and live are disjoint namespaces upstream ; the runtime
- * qualifies env-scopable RiskIds as `stripe[live].refund-create` vs
- * `stripe[test].refund-create` based on the binding's `env`.
+ * One plane : Stripe Connect / Terminal / Identity / Issuing are out of
+ * scope. The distinctive feature is the **`mode` (test/live) layer** marked
+ * `envScopable` : a Stripe API key speaks to exactly one mode, the two
+ * namespaces are disjoint upstream (`cus_*`, `prod_*`, `ch_*` never cross),
+ * and the connection exposes one resource per mode (`acct_123/test`,
+ * `acct_123/live`) whose `env` is that mode. The runtime qualifies
+ * env-scoped risks as `stripe[live].refund-create` vs `stripe[test].refund-create`.
  *
- * Two synthetic entities encode features that Stripe's REST surface does
- * NOT expose as queryable resources but that the catalog needs to gate
- * distinctly :
+ * Two synthetic entities encode features Stripe does not expose as
+ * queryable resources but the catalog gates distinctly :
  *
- *   - `webhook-endpoint.secret` : the `whsec_*` signing secret returned ONLY
- *     at endpoint creation (research §1.5 / §5.8). Not queryable post-hoc.
- *     Aligns with `vercel.bypass-token` (credential mint as side effect of
- *     an atomic operation).
+ *   - `webhook-endpoint.secret` : the `whsec_*` signing secret returned only
+ *     at endpoint creation (rotation = delete + recreate) ;
+ *   - `customer.pii` : an overlay on the customer carrying the GDPR/CCPA
+ *     fields (email, name, address, phone, shipping). The same REST call
+ *     returns both payloads ; the classifier emits two slices so identity
+ *     reads are accepted distinctly from anonymised business stats.
  *
- *   - `customer.pii` : an *overlay* on the customer entity carrying the
- *     RGPD/CCPA-sensitive fields (email, name, address, phone, shipping).
- *     The same REST call (`GET /v1/customers/:id`) returns both the business
- *     payload AND the PII payload ; the classifier emits both `customer.R`
- *     and `customer.pii.R` so the operator can gate "stats anonymisées"
- *     separately from "lire identités" (research Q3, §5.3).
- *
- * Cardinalities follow the research table §1.2 verbatim. `envScopable` is
- * set on the `mode` entity (not the plane root `account`) because mode is
- * the level where the test/live disjointness lives — a Stripe binding pins
- * one mode at provisioning time and never crosses.
- *
- * This data-model is the canonical source for :
- *   - the mermaid diagram rendered into the handbook (handbook §1.1),
- *   - the catalog's `matches` patterns (each pattern refers to entity slugs
- *     declared here — verified by the catalog-coverage lint),
- *   - the lint that every MCP tool exposed by this provider classifies into
- *     at least one slice rooted at a declared entity.
+ * Verb leaves (`cancel`, `finalize`, `void`, `delete`) are not entities :
+ * they are name segments the classifier appends so the catalog can tell an
+ * irreversible verb from an update on the same entity.
  */
 
-import type { DataModel } from '@vaubaan/shared';
+import type { DataModel } from '@vaubaan/plugin-sdk';
 
-export const dataModel: DataModel = {
+export const stripeDataModel: DataModel = {
   provider: 'stripe',
   planes: [
     {
       slug: 'billing',
       description:
-        'The only Stripe plane Vaubaan exposes at MVP — the authenticated Stripe ' +
+        'The only Stripe plane Vaubaan exposes — the authenticated Stripe ' +
         'account (one API key = one account) and all the billing artifacts under it ' +
         '(catalog, customers, subscriptions, invoices, payments, monitoring, webhook ' +
         'integration). Stripe Connect / Terminal / Identity / Issuing are out of scope.',
@@ -60,9 +44,8 @@ export const dataModel: DataModel = {
           parent: null,
           cardinalities: ['one'],
           description:
-            'The Stripe account / API-key-authenticated merchant backing the bearer ' +
-            'used by Vaubaan. Singleton per binding (one binding = one Stripe account ' +
-            '= one API key).',
+            'The Stripe merchant account. The ref of a resource is `<account id>/<mode>` ; ' +
+            'a connection holds one account and up to two modes.',
         },
         {
           name: 'mode',
@@ -70,11 +53,11 @@ export const dataModel: DataModel = {
           cardinalities: ['bounded'],
           envScopable: true,
           description:
-            'Test / live namespace. Bounded triad {test, live} — a binding pins ' +
-            'exactly one mode via its API key prefix (`sk_test_*` / `sk_live_*`). ' +
-            'Cardinal envScopable axis : Stripe IDs (cus_*, prod_*, ch_*) are disjoint ' +
-            'between modes ; no cross-mode addressing is possible upstream. The ' +
-            'runtime qualifies env-scopable risks as `stripe[live].refund-create` etc.',
+            'Test / live namespace, bounded pair. One resource per mode, pinned by the ' +
+            'key prefix (`sk_test_*` / `sk_live_*`). Cardinal envScopable axis : Stripe ids ' +
+            '(cus_*, prod_*, ch_*) are disjoint between modes ; no cross-mode addressing is ' +
+            'possible upstream. The runtime qualifies env-scoped risks as ' +
+            '`stripe[live].refund-create` etc.',
         },
         // ─── Catalog cluster ──────────────────────────────────────────────────
         {
@@ -117,18 +100,18 @@ export const dataModel: DataModel = {
             'The billing identity of an end-user. Unbounded — a SaaS customer base can ' +
             'grow to millions. Carries business fields (currency, balance, default ' +
             'payment method, metadata) AT THIS LEVEL ; PII fields are split into the ' +
-            '`pii` synthetic overlay (cf. research §5.3).',
+            '`pii` synthetic overlay .',
         },
         {
           name: 'pii',
           parent: 'customer',
           cardinalities: ['one'],
           description:
-            'Synthetic overlay on customer carrying the RGPD/CCPA-sensitive fields ' +
+            'Synthetic overlay on customer carrying the GDPR/CCPA-sensitive fields ' +
             '(email, name, address, phone, shipping). The same REST call returns both ' +
             'the customer business payload AND this PII payload ; the classifier emits ' +
             'two slices so the operator can gate identity reads distinctly from ' +
-            'anonymised business stats (research Q3, §5.3). NOT a real Stripe resource ' +
+            'anonymised business stats . NOT a real Stripe resource ' +
             '— marker for slice-matching.',
         },
         {
@@ -201,6 +184,14 @@ export const dataModel: DataModel = {
             'classifier emits a long containment path so a future cap on "refund per ' +
             'charge of amount ≥ X" stays expressible.',
         },
+        {
+          name: 'payout',
+          parent: 'mode',
+          cardinalities: ['unbounded'],
+          description:
+            'A transfer from the Stripe balance to the merchant bank account or card. ' +
+            'Unbounded history. Real money out in live mode ; cancellable only while pending.',
+        },
         // ─── Monitoring cluster ───────────────────────────────────────────────
         {
           name: 'balance',
@@ -243,7 +234,7 @@ export const dataModel: DataModel = {
           description:
             'Synthetic singleton overlay on a webhook endpoint carrying the `whsec_*` ' +
             'signing secret. The secret is returned ONLY at endpoint creation ' +
-            '(research §1.5) ; rotation = delete + recreate. NOT a queryable Stripe ' +
+            ' ; rotation = delete + recreate. NOT a queryable Stripe ' +
             'resource — marker so the catalog can gate the credential mint distinctly ' +
             'from the endpoint config update (aligns with vercel.bypass-token).',
         },

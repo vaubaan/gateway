@@ -1,18 +1,102 @@
 /**
- * Stripe provider package — v4 risk-based modelling + runtime.
+ * `@vaubaan/plugin-stripe` — Stripe billing for SaaS operators, on the v5 SDK.
  *
- * Exposes the data-model + risk catalog + classifier needed by the
- * web/risk-catalog loader and the policy-engine runtime, plus the runtime
- * adapter + execute + tools.ts that fan out to the Stripe REST v1.
+ * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
+ * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
+ * Handbook : docs/handbook/providers/stripe.md ; guide : plugins/stripe/README.md.
+ *
+ * Credential : `api-key` with two optional secret fields, the test-mode key
+ * and the live-mode key. Each key present yields one resource
+ * (`acct_123/test`, `acct_123/live`) whose `env` is the mode, so env-scoped
+ * risks resolve as `stripe[live].refund-create`. The YAML catalog is loaded
+ * here, once, at import (that is, at gateway boot).
  */
 
-// Runtime exports
-export { StripeAdapter } from './stripe-adapter.ts';
-export { availableTools as stripeAvailableTools } from './tools.ts';
-export { executeCall as stripeExecuteCall } from './execute.ts';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-// v4 risk-based exports
-export { dataModel as stripeDataModel } from './data-model.ts';
-export { stripeRiskCatalog } from './risk-catalog.ts';
+import { definePlugin, loadCatalogFile, type RiskCatalog } from '@vaubaan/plugin-sdk';
+
+import { classifyStripe } from './classify.ts';
+import { stripeDataModel } from './data-model.ts';
+import { discoverStripeResources, executeStripe } from './execute.ts';
+import { stripeTools } from './tools.ts';
+
+// The path is built from `import.meta.url` with `node:path`, not with
+// `new URL('./risk-catalog.yaml', import.meta.url)` : a bundler (Turbopack in
+// `apps/gateway`) rewrites that literal into a static asset URL and the YAML
+// can no longer be read from disk at boot.
+export const stripeCatalog = loadCatalogFile(
+  join(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml'),
+);
+
+const KEY_HELP =
+  'A restricted key (rk_…) limited to the objects you expect the agent to touch is preferable ' +
+  'to the full secret key (sk_…).';
+
+export const stripePlugin = definePlugin({
+  id: 'stripe',
+  displayName: 'Stripe',
+  version: '0.1.0',
+  description:
+    'Billing operations on a Stripe account : catalog, customers, subscriptions, invoices, ' +
+    'refunds, payouts, webhooks — test and live modes as separate resources.',
+  tools: stripeTools,
+  dataModel: stripeDataModel,
+  catalog: stripeCatalog.catalog,
+  credential: {
+    kind: 'api-key',
+    createUrl: 'https://dashboard.stripe.com/apikeys',
+    fields: [
+      {
+        name: 'test_key',
+        label: 'Test-mode key',
+        secret: true,
+        required: false,
+        placeholder: 'sk_test_… or rk_test_…',
+        pattern: '^(sk|rk)_test_[A-Za-z0-9]+$',
+        help: `Key of the sandbox. Leave empty for a live-only connection. ${KEY_HELP}`,
+      },
+      {
+        name: 'live_key',
+        label: 'Live-mode key',
+        secret: true,
+        required: false,
+        placeholder: 'sk_live_… or rk_live_…',
+        pattern: '^(sk|rk)_live_[A-Za-z0-9]+$',
+        help: `Key of the live account (real money). Leave empty for a test-only connection. ${KEY_HELP}`,
+      },
+    ],
+  },
+  classify: classifyStripe,
+  execute: executeStripe,
+  discoverResources: discoverStripeResources,
+});
+
+export default stripePlugin;
+
+export { classifyStripe, stripeDataModel, stripeTools };
+export { STRIPE_API_BASE, discoverStripeResources, executeStripe } from './execute.ts';
+export {
+  KEY_FIELD_BY_MODE,
+  STRIPE_MODES,
+  modeOf,
+  resolveStripeResource,
+  stripeResourceRef,
+  type StripeMode,
+} from './resources.ts';
+
+// ─── Legacy v4 surface — kept so apps/gateway compiles until P1.6 ────────────
+
+/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin`. */
+export { StripeAdapter } from './stripe-adapter.ts';
+/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin.tools`. */
+export { availableTools as stripeAvailableTools } from './tools.ts';
+/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin.execute`. */
+export { executeCall as stripeExecuteCall } from './execute.ts';
+/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin.catalog` (loaded from the YAML). */
+export const stripeRiskCatalog: RiskCatalog = stripeCatalog.catalog;
+/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin.classify`. */
 export { classifyStripeV4 } from './risk-classifier.ts';
+/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome`. */
 export type { ClassifyResult as StripeClassifyV4Result } from './risk-classifier.ts';

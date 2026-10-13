@@ -1,18 +1,44 @@
 /**
- * Stripe MCP tools — all custom, no upstream MCP server to rewrap.
+ * Stripe MCP tools — thin wrappers over the Stripe REST API v1.
  *
- * 25 tools total :
- *   - 10 reads (GET endpoints against api.stripe.com/v1)
- *   - 15 writes (POST/DELETE endpoints against api.stripe.com/v1)
+ * 27 tools : 10 reads (GET) and 17 writes (POST / DELETE). Names follow the
+ * `<provider>__<verb>_<noun>` convention of the SDK (prefix `stripe__`).
  *
- * Names are prefixed `stripe__` to match the Vaubaan policy DSL
- * provider scoping convention.
+ * Every tool accepts an optional `account` argument : the ref of the Stripe
+ * resource the call targets (`acct_123/test` or `acct_123/live`, as listed in
+ * the mission). It is optional when the mission touches a single Stripe
+ * resource ; the classifier refuses the call otherwise. The argument is
+ * consumed by the gateway and never forwarded to Stripe.
  *
- * Research : .vaubaan/research/providers/stripe.md §2.
- * Spec     : docs/spec/gateway-risk-model.md §7.
+ * Spec : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §5.
  */
 
-import type { McpToolDeclaration } from '@vaubaan/shared';
+import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
+
+/** Argument shared by every tool ; added by `withAccountArg` below. */
+const ACCOUNT_ARG = {
+  account: {
+    type: 'string',
+    description:
+      'Stripe resource ref as listed in the mission (`acct_…/test` or `acct_…/live`). ' +
+      'Optional when the mission touches a single Stripe resource.',
+  },
+} as const;
+
+function withAccountArg(tool: McpToolDeclaration): McpToolDeclaration {
+  return {
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: { ...ACCOUNT_ARG, ...(tool.inputSchema.properties ?? {}) },
+    },
+  };
+}
+
+const V5_ONLY_TOOLS: ReadonlySet<string> = new Set([
+  'stripe__create_payout',
+  'stripe__delete_customer',
+]);
 
 // ─── Read tools ─────────────────────────────────────────────────────────────
 
@@ -722,9 +748,80 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
       required: ['url', 'enabled_events'],
     },
   },
+  {
+    name: 'stripe__create_payout',
+    description:
+      'Send funds from the Stripe balance to the bank account or debit card on file (real money ' +
+      'out in live mode). Backed by POST /v1/payouts.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        amount: {
+          type: 'number',
+          description: 'Positive integer in the smallest currency unit (cents).',
+        },
+        currency: {
+          type: 'string',
+          description: 'Three-letter ISO currency code, lowercase.',
+        },
+        description: {
+          type: 'string',
+          description: 'Arbitrary string attached to the payout.',
+        },
+        statement_descriptor: {
+          type: 'string',
+          description: 'Text shown on the bank statement (22 characters max).',
+        },
+        destination: {
+          type: 'string',
+          description:
+            'Id of the bank account or card to send funds to (default external account when absent).',
+        },
+        method: {
+          type: 'string',
+          description: '`standard` (default) or `instant`.',
+        },
+        metadata: {
+          type: 'object',
+          description: 'Arbitrary key-value metadata.',
+        },
+      },
+      required: ['amount', 'currency'],
+    },
+  },
+  {
+    name: 'stripe__delete_customer',
+    description:
+      'Permanently delete a customer. Cannot be undone ; immediately cancels every active ' +
+      'subscription of the customer. Backed by DELETE /v1/customers/:id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: {
+          type: 'string',
+          description: 'Customer id (cus_xxx).',
+        },
+      },
+      required: ['id'],
+    },
+  },
 ];
 
-export const availableTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS];
+/** Every tool of the plugin, each accepting the optional `account` ref. */
+export const stripeTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS].map(
+  withAccountArg,
+);
 
-/** The set of write tool names (used by execute.ts and test coverage). */
-export const WRITE_TOOL_NAMES = new Set(WRITE_TOOLS.map((t) => t.name));
+/** Tools that write ; everything else reads. */
+export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(WRITE_TOOLS.map((t) => t.name));
+
+/**
+ * The 25 tools the v4 gateway listed, in their v4 shape (no `account`
+ * argument). `stripe__create_payout` and `stripe__delete_customer` are v5
+ * additions and never reach the v4 pipeline.
+ *
+ * @deprecated legacy v4, deleted in P1.6 — use `stripeTools`.
+ */
+export const availableTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS].filter(
+  (t) => !V5_ONLY_TOOLS.has(t.name),
+);

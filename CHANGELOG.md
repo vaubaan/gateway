@@ -11,6 +11,14 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Stripe plugin on the v5 SDK (P1.2e).** `@vaubaan/plugin-stripe` implements
+  `definePlugin()`: one `api-key` credential with optional test and live keys,
+  one resource per mode (`acct_…/test`, `acct_…/live`) so `stripe[live].*`
+  risks resolve, every catalog risk env-scoped on `[test, live]`, new
+  `create_payout` and `delete_customer` tools behind their own irreversible
+  risks, presets `read-only` / `test-mode-developer` / `finance-operator`
+  (approval on live money-out and irreversible entries); the TypeScript
+  catalog twin and its sync test are gone. v4 exports stay `@deprecated` until P1.6.
 - **Instance configuration, crypto, composition root and Docker image
   (P0.4).** The gateway starts from `VAUBAAN_*` environment variables
   and/or a mounted YAML file (`VAUBAAN_CONFIG_FILE`, file wins key by
