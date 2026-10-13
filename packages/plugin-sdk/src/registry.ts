@@ -32,6 +32,8 @@ export interface ProviderLabel {
   readonly displayName: string;
   readonly version: string;
   readonly description: string | null;
+  /** `ProviderPlugin.summary` : the plain-words paragraph of the provider reference. */
+  readonly summary: string | null;
   /** `ProviderPlugin.experimental`, normalised to a boolean. */
   readonly experimental: boolean;
 }
@@ -149,6 +151,7 @@ export class PluginRegistry {
       displayName: plugin.displayName,
       version: plugin.version,
       description: plugin.description ?? null,
+      summary: plugin.summary ?? null,
       experimental: plugin.experimental ?? false,
     }));
   }

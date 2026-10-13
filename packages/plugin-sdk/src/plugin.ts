@@ -94,6 +94,14 @@ export interface ExecuteContext extends ConnectionContext {
   readonly emitPart?: ToolResultPartSink;
 }
 
+/** One tool that hands a provider token to the agent, and the risks that gate it. */
+export interface TokenHandout {
+  /** A tool of this plugin (`github__mint_install_token`). */
+  readonly tool: string;
+  /** Unqualified ids of this plugin's catalog ; at least one. */
+  readonly riskIds: readonly string[];
+}
+
 export interface ProviderPlugin {
   /** Provider id : lowercase slug (`github`, `cloudflare-dns`). Prefixes every tool name. */
   readonly id: string;
@@ -103,6 +111,24 @@ export interface ProviderPlugin {
   readonly version: string;
   /** One-line description for the providers page. */
   readonly description?: string;
+  /**
+   * A short paragraph in plain words for the provider reference of the web
+   * interface (`/providers/<id>`) : what one connection is, what one
+   * resource is, and where the environment of a call comes from. Two to
+   * four sentences, no markup. Optional in the contract ; every plugin
+   * shipped with the gateway fills it (structural test).
+   */
+  readonly summary?: string;
+  /**
+   * The tools whose very purpose is to hand the agent a short-lived,
+   * narrowly scoped provider token (spec vaubaan-gateway §2.4, the one
+   * deliberate exception to "the executor never sees a provider
+   * credential"), each with the catalog risks such a call touches. A
+   * declaration for the reader : the provider reference marks these tools
+   * and risks ; the host decides nothing from it. Absent for a plugin
+   * that hands no token.
+   */
+  readonly tokenHandouts?: readonly TokenHandout[];
   /** URL of the plugin's modelling handbook, when published. */
   readonly docsUrl?: string;
   /**

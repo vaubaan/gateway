@@ -28,6 +28,8 @@ export const supabasePlugin = definePlugin({
   version: '2.0.0',
   description:
     'Postgres, storage, auth and edge functions of Supabase projects, through the Management API.',
+  summary:
+    "One connection is your company's Supabase OAuth app authorised on an organisation; one resource is one project (database, storage, auth and edge functions). Supabase runs one project per environment, so the connection owner labels each project (staging, prod, …) and the environment-scoped risks apply to the projects carrying that label.",
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/supabase.md',
   tools: supabaseTools,

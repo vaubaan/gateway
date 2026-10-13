@@ -50,6 +50,37 @@ describe('definePlugin', () => {
     );
   });
 
+  test('summary is optional, and a paragraph when present', () => {
+    expect(pluginIssues({ ...acmePlugin, summary: 'One connection is one Acme account.' })).toEqual(
+      [],
+    );
+    expect(pluginIssues({ ...acmePlugin, summary: '   ' })).toEqual([
+      'summary: expected a non-empty string when present',
+    ]);
+    expect(pluginIssues({ ...acmePlugin, summary: 'x'.repeat(601) })).toEqual([
+      'summary: expected at most 600 characters',
+    ]);
+  });
+
+  test('a token handout names a declared tool and risks of the catalog', () => {
+    const [tool] = acmePlugin.tools;
+    const [risk] = acmePlugin.catalog.risks;
+    const withHandout = (tokenHandouts: unknown): ProviderPlugin =>
+      ({ ...acmePlugin, tokenHandouts }) as ProviderPlugin;
+    expect(pluginIssues(withHandout([{ tool: tool!.name, riskIds: [risk!.id] }]))).toEqual([]);
+    expect(pluginIssues(withHandout('yes'))).toEqual([
+      'tokenHandouts: expected a list when present',
+    ]);
+    expect(pluginIssues(withHandout([{ tool: 'acme__nope', riskIds: [] }, 3]))).toEqual([
+      "tokenHandouts[0].tool 'acme__nope' is not a tool of this plugin",
+      'tokenHandouts[0].riskIds: expected at least one risk',
+      'tokenHandouts[1]: expected { tool, riskIds }',
+    ]);
+    expect(pluginIssues(withHandout([{ tool: tool!.name, riskIds: ['acme.unknown'] }]))).toEqual([
+      "tokenHandouts[0].riskIds: 'acme.unknown' is not a risk of the catalog",
+    ]);
+  });
+
   test('catalog rules apply (presets, fallback) through the definition', () => {
     const noPresets: ProviderPlugin = {
       ...acmePlugin,

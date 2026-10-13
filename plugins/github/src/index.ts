@@ -30,8 +30,18 @@ export const githubPlugin = definePlugin({
   version: '2.0.0',
   description:
     'Repositories, branches, files, pull requests, issues, releases and workflows of the GitHub App installation.',
+  summary:
+    "One connection is one installation of your company's GitHub App on an organisation; one resource is one repository. A mission picks repositories and the risks it accepts on them. GitHub has no environment label: protected branches (main, master, release-*) and working branches (feature/*, fix/*, …) are told apart by two different risks.",
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/github.md',
+  // The one tool that hands the agent a provider token (spec §2.4) : a short-lived
+  // installation token scoped to the mission's repositories, for git itself.
+  tokenHandouts: [
+    {
+      tool: 'github__mint_install_token',
+      riskIds: ['github.mint-install-token-clone', 'github.mint-install-token-push'],
+    },
+  ],
   tools: githubTools,
   dataModel: githubDataModel,
   catalog: githubCatalog.catalog,

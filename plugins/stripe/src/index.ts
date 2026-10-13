@@ -34,6 +34,8 @@ export const stripePlugin = definePlugin({
   description:
     'Billing operations on a Stripe account : catalog, customers, subscriptions, invoices, ' +
     'refunds, payouts, webhooks — test and live modes as separate resources.',
+  summary:
+    'One connection is one Stripe account, given as a test key, a live key, or both; each mode is its own resource, labelled test or live by the plugin. Every risk is accepted per mode, so a mission can work freely in test mode and touch live billing only under its budget and your approval.',
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/stripe.md',
   tools: stripeTools,
