@@ -126,6 +126,13 @@ requests:
 approvals:
   expiry: 10m
 
+# Surface rate limit of the execution MCP door: requests per minute, per
+# mission, all agents of the mission together (spec §6). Separate from the
+# per-risk rate limits of a mission's budget.
+# env: VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE
+mcp:
+  rate_limit_per_minute: 600
+
 # Log verbosity: debug, info, warn, error. Logs are JSON lines; secrets and
 # mission token secrets are redacted.
 # env: VAUBAAN_LOG_LEVEL

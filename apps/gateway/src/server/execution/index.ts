@@ -1,0 +1,152 @@
+/**
+ * Execution MCP door (feature P1.6; spec §4.1, §2.4, §6, §7.5): the pipeline
+ * of `@vaubaan/gateway-core` with its real stages, the bearer dispatch, the
+ * verified-token and upstream-credential caches, `tools/list`, `tools/call`
+ * and the catalog endpoint. Built once by the composition root as
+ * `root.execution`. Handbook: docs/handbook/execution-door.md.
+ */
+import { CallPipeline, type CacheClient } from '@vaubaan/gateway-core';
+import type { PluginRegistry } from '@vaubaan/plugin-sdk';
+
+import type { AuthModule } from '../auth';
+import { createBudgetStage, type SessionService } from '../budget';
+import type { BuildInfo } from '../compose/root';
+import type { RateLimiter } from '../compose/ports';
+import type { InstanceConfig } from '../config';
+import type { ConnectionsModule } from '../connections';
+import type { Logger } from '../logging';
+import type { MissionsModule } from '../missions';
+import type { Store } from '../store';
+import { systemClock, type Clock } from '../store/clock';
+import { ConnectionCredentialCache } from './credential-cache';
+import { ExecutionDoor, type DelegatedTokenResolver } from './door';
+import { createResourceStage } from './resource-stage';
+import { createRiskStage } from './risk-stage';
+import { TokenVerifier } from './token-verifier';
+import { createUpstreamStage } from './upstream-stage';
+
+export interface ExecutionModuleDeps {
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'mcp'>;
+  readonly store: Store;
+  readonly registry: PluginRegistry;
+  readonly auth: Pick<AuthModule, 'sessions'>;
+  readonly missions: Pick<MissionsModule, 'service'>;
+  readonly connections: Pick<ConnectionsModule, 'credentials'>;
+  /** The budget's session service (quota, rate windows, gate) — one per process. */
+  readonly budget: SessionService;
+  readonly cache: CacheClient;
+  readonly rateLimiter: RateLimiter;
+  readonly logger: Logger;
+  readonly build: BuildInfo;
+  readonly clock?: Clock;
+  /** Recognises delegated tokens so they are refused by kind; arrives with P2.3. */
+  readonly delegations?: DelegatedTokenResolver;
+}
+
+export interface ExecutionHandlers {
+  /** `/mcp` — MCP Streamable HTTP. */
+  readonly mcp: (request: Request) => Promise<Response>;
+  /** `GET /mcp/catalog`. */
+  readonly catalog: (request: Request) => Promise<Response>;
+}
+
+export interface ExecutionModule {
+  readonly pipeline: CallPipeline;
+  readonly credentialCache: ConnectionCredentialCache;
+  readonly door: ExecutionDoor;
+  readonly handlers: ExecutionHandlers;
+}
+
+export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModule {
+  const clock = deps.clock ?? systemClock;
+  const logger = deps.logger.child({ component: 'execution-door' });
+  const credentialCache = new ConnectionCredentialCache(deps.cache);
+
+  const pipeline = new CallPipeline({
+    resources: createResourceStage({
+      registry: deps.registry,
+      connections: deps.store.connections,
+    }),
+    risks: createRiskStage({ registry: deps.registry }),
+    budget: createBudgetStage({ service: deps.budget, missions: deps.store.missions }),
+    upstream: createUpstreamStage({
+      credentials: deps.connections.credentials,
+      credentialCache,
+      logger,
+    }),
+    audit: deps.store.auditWriter,
+    now: () => clock.now(),
+  });
+
+  const door = new ExecutionDoor({
+    config: deps.config,
+    store: deps.store,
+    registry: deps.registry,
+    tokens: new TokenVerifier({
+      missions: deps.missions.service,
+      tokens: deps.store.missions,
+      cache: deps.cache,
+      rateLimiter: deps.rateLimiter,
+    }),
+    webSessions: deps.auth.sessions,
+    budget: deps.budget,
+    pipeline,
+    rateLimiter: deps.rateLimiter,
+    logger,
+    build: deps.build,
+    clock,
+    delegations: deps.delegations,
+  });
+
+  return {
+    pipeline,
+    credentialCache,
+    door,
+    handlers: {
+      mcp: (request) => door.handleMcp(request),
+      catalog: (request) => door.handleCatalog(request),
+    },
+  };
+}
+
+export { ConnectionCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
+export {
+  CALL_REJECTED_RPC_CODE,
+  ExecutionDoor,
+  MCP_SERVER_INFO_NAME,
+  SURFACE_RATE_LIMITED_RPC_CODE,
+  SURFACE_RATE_WINDOW_MS,
+  type DelegatedTokenResolver,
+  type ExecutionDoorDeps,
+} from './door';
+export { loadMissionContext, missionResourceOf, periodOf } from './mission-context';
+export {
+  AGENT_LABEL_HEADER,
+  AGENT_LABEL_MAX_LENGTH,
+  AGENT_LABEL_META_KEY,
+  agentLabelOf,
+  cleanAgentLabel,
+  clientOriginOf,
+  trustedProxyList,
+} from './request-meta';
+export { citedRefs, createResourceStage } from './resource-stage';
+export { createRiskStage } from './risk-stage';
+export {
+  TokenVerifier,
+  VERIFIED_TOKEN_TTL_SECONDS,
+  VERIFY_ATTEMPTS_PER_WINDOW,
+  VERIFY_WINDOW_MS,
+  verifiedTokenCacheKey,
+  type VerifyOutcome,
+} from './token-verifier';
+export {
+  buildCatalog,
+  callableProviders,
+  callableTools,
+  type CatalogBudgetLine,
+  type CatalogConnection,
+  type CatalogResource,
+  type CatalogTool,
+  type MissionCatalog,
+} from './tools';
+export { createUpstreamStage } from './upstream-stage';

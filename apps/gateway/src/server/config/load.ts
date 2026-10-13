@@ -47,6 +47,7 @@ const DEFAULTS = {
   retentionDays: 90,
   requestExpiry: '24h',
   approvalExpiry: '10m',
+  mcpRateLimitPerMinute: 600,
 } as const;
 
 export interface LoadOptions {
@@ -207,6 +208,7 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
   const retentionDays = r.int('retention_days', DEFAULTS.retentionDays);
   const requestExpiry = r.duration('requests.expiry', DEFAULTS.requestExpiry);
   const approvalExpiry = r.duration('approvals.expiry', DEFAULTS.approvalExpiry);
+  const mcpRateLimit = r.int('mcp.rate_limit_per_minute', DEFAULTS.mcpRateLimitPerMinute);
   const level = readLogLevel(r);
 
   if (issues.items.length > before) return null;
@@ -225,6 +227,7 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
     retentionDays,
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },
+    mcp: { rateLimitPerMinute: mcpRateLimit },
     log: { level },
   };
 }

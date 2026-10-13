@@ -33,7 +33,8 @@ export interface CallAuditEntry {
   readonly connection_id: string | null;
   readonly resource_ref: string | null;
   readonly tool: string;
-  /** `hashArguments(args)`: sha256 truncated to 16 hex characters. Never the
+  /** `fingerprintArguments(args)`: sha256 (64 hex) of the canonical JSON of
+   *  the arguments — the same value that binds approvals. Never the
    *  arguments themselves. */
   readonly arguments_hash: string;
   /** Slices the plugin emitted for the call (empty when refused before

@@ -12,7 +12,7 @@
  *
  *   authenticate(bearer, door)      wrong-credential-kind  (this module)
  *   mission state                   mission-inactive       (this module)
- *   resource resolution             resource-not-in-mission (ResourceStage, P1.x authority)
+ *   resource resolution             resource-not-in-mission (ResourceStage, execution door)
  *   connection availability         connection-unavailable (this module)
  *   classify + risk decision        risk-not-accepted      (RiskStage over risk-gateway.ts)
  *   budget / rate / gate            budget-exhausted, rate-limited, approval-required (BudgetStage, P1.3)
@@ -21,17 +21,21 @@
  *
  * A refused call decrements nothing and still produces an audit entry. An
  * allowed call that fails upstream keeps `decision: 'allowed'` and records
- * `upstream_error` (the decision is what the gateway did). An audit write
- * that fails propagates: no call completes without its entry.
+ * `upstream_error` (the decision is what the gateway did) — including when
+ * the failure is the provider rejecting the connection's credential for
+ * good: the upstream stage then throws `UpstreamRefusalError` and the
+ * outcome carries the `connection-unavailable` refusal the agent reads. An
+ * audit write that fails propagates: no call completes without its entry.
  *
  * What is deliberately NOT here: JSON-RPC routing, `tools/list` filtering,
- * the catalog endpoint, streaming — that is the door (P1.6), which calls
- * `authenticate` then `CallPipeline.execute` and serializes the outcome with
- * `refusalToRpcError` / `rpcSuccess`.
+ * the catalog endpoint, streaming — that is the door
+ * (`apps/gateway/src/server/execution`), which calls `authenticate` then
+ * `CallPipeline.execute` and serializes a refusal as the JSON-RPC error
+ * `refusalToRpcError` describes (code, message, the whole refusal as `data`).
  */
 
 import { acceptedRisksOf, type MissionStatus, type RiskId } from '@vaubaan/shared';
-import { hashArguments, type AuditWriter, type CallAuditEntry } from './audit.ts';
+import type { AuditWriter, CallAuditEntry } from './audit.ts';
 import {
   AuthError,
   isRefusal,
@@ -39,6 +43,7 @@ import {
   refuse,
   type Refusal,
 } from './errors.ts';
+import { fingerprintArguments } from './fingerprint.ts';
 import type { CallVerdict } from './risk-gateway.ts';
 import type {
   BearerKind,
@@ -202,14 +207,21 @@ export interface CallTarget {
 /**
  * Resolves the target of a call from its arguments and the mission's
  * selection, refusing `resource-not-in-mission` for a ref outside it
- * (spec §3.1). Implemented by the authority feature over the plugin's
- * knowledge of which argument carries the ref.
+ * (spec §3.1). Implemented by the execution door over the plugin registry
+ * and the classifier's slices.
+ *
+ * A call that has no target at all — a tool no registered plugin owns, a
+ * provider the mission holds no connection for — is a structural rejection
+ * (`reason`, no refusal code): the pipeline audits it as `refused` with
+ * `refusal_code: null` and returns `rejected`.
  */
+export type ResourceResolution =
+  | { readonly ok: true; readonly target: CallTarget }
+  | { readonly ok: false; readonly refusal: Refusal }
+  | { readonly ok: false; readonly reason: string };
+
 export interface ResourceStage {
-  resolve(
-    ctx: MissionContext,
-    call: CallRequest,
-  ): Promise<{ ok: true; target: CallTarget } | { ok: false; refusal: Refusal }>;
+  resolve(ctx: MissionContext, call: CallRequest): Promise<ResourceResolution>;
 }
 
 /**
@@ -246,9 +258,32 @@ export interface BudgetStage {
 }
 
 /** Mint or decrypt the ephemeral upstream credential, forward, return the
- *  provider's result. The executor never sees the credential (spec §2.4). */
+ *  provider's result. The executor never sees the credential (spec §2.4).
+ *  Throws `UpstreamRefusalError` when the provider rejected the credential
+ *  and it could not be refreshed (spec §2.3 connection `expired`); any other
+ *  throw is a plain upstream failure. */
 export interface UpstreamStage {
   execute(ctx: MissionContext, call: CallRequest, target: CallTarget): Promise<unknown>;
+}
+
+/**
+ * Thrown by an `UpstreamStage` when the call was allowed and counted, but the
+ * connection turned out to be unusable while forwarding: the provider
+ * rejected the credential and the refresh failed, or the connection was
+ * revoked between the decision and the forward. The pipeline keeps the audit
+ * entry `decision: 'allowed'` with `upstream_error` (the budget decision
+ * stands, the credit is not refunded — ADR atomic-budget-accounting) and
+ * returns the refusal on the `failed` outcome so the door answers
+ * `connection-unavailable` instead of an opaque provider error.
+ */
+export class UpstreamRefusalError extends Error {
+  constructor(
+    readonly refusal: Refusal,
+    message?: string,
+  ) {
+    super(message ?? refusal.hint);
+    this.name = 'UpstreamRefusalError';
+  }
 }
 
 export interface CallPipelineDeps {
@@ -272,9 +307,12 @@ export type CallOutcome =
       readonly audit: CallAuditEntry;
     }
   | {
-      /** Allowed, then the provider failed. */
+      /** Allowed, then the provider failed. `refusal` is set when the failure
+       *  is a structured one the agent must read (`connection-unavailable`
+       *  after a rejected refresh). */
       readonly kind: 'failed';
       readonly error: string;
+      readonly refusal: Refusal | null;
       readonly audit: CallAuditEntry;
     };
 
@@ -297,7 +335,11 @@ export class CallPipeline {
     if (inactive) return this.refused(base, inactive);
 
     const resolved = await this.deps.resources.resolve(ctx, call);
-    if (!resolved.ok) return this.refused(base, resolved.refusal);
+    if (!resolved.ok) {
+      return 'refusal' in resolved
+        ? this.refused(base, resolved.refusal)
+        : this.rejected(base, resolved.reason);
+    }
     const { target } = resolved;
     const targeted: CallAuditEntry = {
       ...base,
@@ -361,14 +403,16 @@ export class CallPipeline {
       await this.deps.audit.write(entry);
       return { kind: 'allowed', result, audit: entry };
     } catch (e) {
-      const error = e instanceof Error ? e.message : String(e);
+      const refusal = e instanceof UpstreamRefusalError ? e.refusal : null;
+      const message = e instanceof Error ? e.message : String(e);
+      const error = refusal ? `${refusal.code}: ${message}` : message;
       const entry: CallAuditEntry = {
         ...decided,
         upstream_latency_ms: this.now().getTime() - t0,
         upstream_error: error,
       };
       await this.deps.audit.write(entry);
-      return { kind: 'failed', error, audit: entry };
+      return { kind: 'failed', error, refusal, audit: entry };
     }
   }
 
@@ -381,7 +425,7 @@ export class CallPipeline {
       connection_id: null,
       resource_ref: null,
       tool: call.tool,
-      arguments_hash: hashArguments(call.args),
+      arguments_hash: fingerprintArguments(call.args),
       slices_executed: [],
       risks_touched: [],
       accepted_risks_snapshot: acceptedRisksOf(ctx),

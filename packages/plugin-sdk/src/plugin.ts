@@ -56,12 +56,32 @@ export interface ConnectionContext {
   readonly logger?: PluginLogger;
 }
 
+/**
+ * A small key/value cache the host scopes to ONE connection and hands to
+ * `execute`, for the short-lived upstream credential a plugin derives on
+ * every call (a GitHub installation token minted from the App key). The
+ * plugin chooses the key inside its connection (`installation-token:<repo>`)
+ * and the lifetime ; the host namespaces the entries per connection, drops
+ * them as soon as the provider rejects a call or the connection stops being
+ * `active`, and never persists them. Absent : derive on every call.
+ *
+ * Only what `execute` itself needs goes in : a credential that is the
+ * RESULT of a tool (handed to the executor) must be minted fresh, never
+ * served from here.
+ */
+export interface UpstreamCredentialCache {
+  get<T>(key: string): Promise<T | null>;
+  set<T>(key: string, value: T, ttlSeconds: number): Promise<void>;
+}
+
 /** The context of one allowed `tools/call`. */
 export interface ExecuteContext extends ConnectionContext {
   /** The resources of this connection the mission may touch. */
   readonly resources: readonly Resource[];
   /** Free-form agent label carried by the call ; attribution only. */
   readonly agentLabel?: string | null;
+  /** Connection-scoped cache for derived upstream credentials ; see `UpstreamCredentialCache`. */
+  readonly credentialCache?: UpstreamCredentialCache;
 }
 
 export interface ProviderPlugin {

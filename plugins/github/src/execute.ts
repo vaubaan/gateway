@@ -5,9 +5,11 @@
  *        decrypted in the context, is used for one call, and is never
  *        returned to the executor.
  *
- * Every call mints a fresh installation token (`credential.ts`) scoped to
- * the repository named in the arguments, then dispatches over Octokit with
- * the injected `fetch`. 401 / 403 from GitHub → `UpstreamAuthError`.
+ * Every call uses an installation token scoped to the repository named in
+ * the arguments — minted (`credential.ts`) or, when the host provides a
+ * connection-scoped cache, reused for a few minutes (`token-cache.ts`) — then
+ * dispatches over Octokit with the injected `fetch`. 401 / 403 from GitHub →
+ * `UpstreamAuthError`.
  *
  * `github__mint_install_token` is the one tool whose result IS a credential :
  * it returns a token scoped to the mission's repositories and to the
@@ -29,6 +31,7 @@ import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
 import { MINT_TOOL, githubRepoRefs } from './classify.ts';
 import { installationTokenFor } from './credential.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
+import { installationTokenForCall } from './token-cache.ts';
 
 const PROVIDER = 'github';
 
@@ -62,7 +65,8 @@ export async function executeGithub(
   const repo = typeof args.repo === 'string' && args.repo.length > 0 ? args.repo : undefined;
   // Least privilege : the per-call token only sees the repository the call
   // names ; account-shaped tools (search) get an installation-wide token.
-  const { token } = await installationTokenFor(ctx, repo ? { repositories: [repo] } : {});
+  // Reused across calls when the host provides a connection-scoped cache.
+  const token = await installationTokenForCall(ctx, repo);
   const octokit: OctokitLike = new Octokit({
     auth: token,
     request: { fetch: ctx.fetch, ...(ctx.signal ? { signal: ctx.signal } : {}) },

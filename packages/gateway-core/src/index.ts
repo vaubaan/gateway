@@ -6,6 +6,7 @@
 export * from './types.ts';
 export * from './errors.ts';
 export * from './audit.ts';
+export * from './fingerprint.ts';
 export * from './cache.ts';
 export * from './risk-gateway.ts';
 export * from './pipeline.ts';

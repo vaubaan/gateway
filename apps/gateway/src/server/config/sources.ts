@@ -59,6 +59,7 @@ export const KEYS: readonly KeySpec[] = [
   { path: 'retention_days', env: 'VAUBAAN_RETENTION_DAYS', kind: 'int' },
   { path: 'requests.expiry', env: 'VAUBAAN_REQUEST_EXPIRY', kind: 'string' },
   { path: 'approvals.expiry', env: 'VAUBAAN_APPROVAL_EXPIRY', kind: 'string' },
+  { path: 'mcp.rate_limit_per_minute', env: 'VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE', kind: 'int' },
   { path: 'log.level', env: 'VAUBAAN_LOG_LEVEL', kind: 'string' },
 ];
 
