@@ -47,6 +47,37 @@ packages/*/src/**/*.test.ts            apps/*/src/**/*.test.ts
 reaches a provider: the v4 suites that could (and the `SKIP_LIVE` switch
 that guarded them) were deleted with the v4 application.
 
+## Map — spec §10 to this file
+
+The scenarios below are grouped by v5 subsystem, one section per package or
+server module, each appended to by the feature that built it. Spec
+[vaubaan-gateway](../spec/vaubaan-gateway.md) §10 lists what must be tested;
+this table says where each requirement lives, and what is not written yet.
+
+| Spec §10                                                                 | Section                                                                                                                                                                                           |
+| ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit — each plugin's classifier                                          | [Provider plugins](#scenarios--provider-plugins-v5-sdk)                                                                                                                                           |
+| Unit — authority composition, resource selection, environment resolution | [Policy engine](#scenarios--policy-engine-v4-model-v5-runtime), [Missions](#v5--missions-authority-issuance-tokens-bootstrap-kit-p15), [Execution door](#v5--execution-door-p16)                  |
+| Unit — the budget                                                        | [Budget and sessions](#scenarios--budget-and-sessions-v5-p13)                                                                                                                                     |
+| Unit — the approval                                                      | [Budget and sessions](#scenarios--budget-and-sessions-v5-p13) (fingerprint, lookup, consumption); the creator's decision is not built (P2.1)                                                      |
+| Unit — structured refusals                                               | [gateway-core](#scenarios--gateway-core-v5), [Execution door](#v5--execution-door-p16)                                                                                                            |
+| Unit — credential separation                                             | [gateway-core](#scenarios--gateway-core-v5), [Execution door](#v5--execution-door-p16); the management surface is not built (P2.3)                                                                |
+| Integration — connection                                                 | [Connections](#v5--connections-resources-provider-apps-p14)                                                                                                                                       |
+| Integration — share                                                      | [Store](#scenarios--store-v5-embedded-sqlite) (rows and restrictions only); the flow is not built (P2.2)                                                                                          |
+| Integration — issuance                                                   | [Missions](#v5--missions-authority-issuance-tokens-bootstrap-kit-p15)                                                                                                                             |
+| Integration — claim and replay                                           | [Requests](#v5--requests-claims-the-request-url-the-inbox-p17), [Execution door](#v5--execution-door-p16)                                                                                         |
+| Integration — approval and replay                                        | not written (P2.1)                                                                                                                                                                                |
+| Integration — revocation flows, `orphaned` states                        | [Missions](#v5--missions-authority-issuance-tokens-bootstrap-kit-p15), [Budget and sessions](#scenarios--budget-and-sessions-v5-p13), [Connections](#v5--connections-resources-provider-apps-p14) |
+| Integration — OAuth delegation, issuance by an MCP client                | not written (P2.3)                                                                                                                                                                                |
+| Integration — simulated IdP                                              | [Human authentication](#v5--human-authentication-oidc-web-session-bootstrap-admin-rule-p11)                                                                                                       |
+| Structural — telemetry report without forbidden fields                   | not written (P2.5)                                                                                                                                                                                |
+| Structural — session counters agree with the audit                       | [Execution door](#v5--execution-door-p16), [Budget and sessions](#scenarios--budget-and-sessions-v5-p13)                                                                                          |
+| Structural — no configuration value hard-coded                           | [Instance configuration](#v5--instance-configuration-crypto-composition-root-p04)                                                                                                                 |
+| Structural — enumerated lists, never a wildcard or a preset reference    | [Plugin SDK](#scenarios--plugin-sdk-v5), [Store](#scenarios--store-v5-embedded-sqlite), [Missions](#v5--missions-authority-issuance-tokens-bootstrap-kit-p15)                                     |
+| Structural — every plugin ships a preset of its own catalog              | [Plugin SDK](#scenarios--plugin-sdk-v5), [Provider plugins](#scenarios--provider-plugins-v5-sdk)                                                                                                  |
+| Structural — authority recomputed from current membership                | [Human authentication](#v5--human-authentication-oidc-web-session-bootstrap-admin-rule-p11), [Missions](#v5--missions-authority-issuance-tokens-bootstrap-kit-p15)                                |
+| End to end — the cutover acceptance scenario                             | [`e2e-tests.md`](./e2e-tests.md): manual, with an automated browser smoke before it                                                                                                               |
+
 ## Coverage
 
 | Suite                                                                  |    Tests |
@@ -1387,10 +1418,11 @@ Not covered here: call entries written by the real execution door (P1.6).
 
 ## Known gaps
 
-- **Claude Code against a running instance** — the definition of done of
-  the execution door is checked by hand ([[execution-door]], "Manual
-  check"); the automated suite drives the door with the official MCP client
-  instead.
+- **Claude Code against a running instance** — never done, by a human or an
+  agent. The automated suites drive the door with the official MCP client
+  instead (here against the handler, in the browser smoke over HTTP); the
+  first session with Claude Code is step 6 of the cutover acceptance
+  scenario ([`e2e-tests.md`](./e2e-tests.md)).
 - **A ref the connection never discovered** is rejected with the
   classifier's sentence, not with `resource-not-in-mission`; only the
   rejection is tested.

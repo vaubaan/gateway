@@ -56,6 +56,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Cutover acceptance scenario and its automated smoke (P1.9).** `docs/tests/e2e-tests.md`
+  states the manual scenario that gates the cutover from v4 — connect every provider in use,
+  one mission per code project, a day of Claude Code work with no unexpected refusal — with
+  its refusal log and an outcome still to be filled in by the instance owner;
+  `docs/handbook/cutover-from-v4.md` is the checklist to tick, with what to prepare, the four
+  live checks and the decisions to confirm. A Playwright smoke walks the same path on an
+  ephemeral instance (simulated IdP, mocked GitHub, an MCP client on `/mcp`: connect, issue,
+  call, exhaust, claim, replay, audit) and runs with the other browser tests in a new CI job,
+  `e2e`.
 - **The execution MCP door (P1.6).** `POST /mcp` now serves v5: an agent presents its
   mission token, `tools/list` shows the tools of the providers its mission holds a
   connection and an accepted risk for, and `tools/call` goes through the whole decision —

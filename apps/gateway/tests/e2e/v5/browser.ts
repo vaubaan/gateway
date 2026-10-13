@@ -7,11 +7,14 @@
  * every request for the public origin to the local listener and hands the
  * response back unchanged: the page lives on `https://gateway.e2e.test`, with
  * real cookies and a real `Origin` header, exactly as behind a TLS
- * terminator. The simulated IdP's consent screen is answered the same way.
+ * terminator. The pages a browser is sent to outside the instance — the
+ * simulated IdP's consent screen, the mocked provider's installation page —
+ * are answered by the launcher's control endpoints: the "user" consents and
+ * the browser is sent back with what the real page would hand over.
  */
 import type { APIRequestContext, BrowserContext, Route } from '@playwright/test';
 
-import { CONTROL_PREFIX, E2E_USER, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
+import { CONTROL_PREFIX, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
 
 /** Headers that describe the browser's connection, not the request. */
 const HOP_HEADERS = new Set(['host', 'connection', 'content-length', 'accept-encoding']);
@@ -93,6 +96,20 @@ export async function routeToInstance(context: BrowserContext): Promise<void> {
     const { callback } = (await consent.json()) as { callback: string };
     await fulfillRedirect(route, callback, []);
   });
+
+  // The provider pages of the connect flows (which ones is the launcher's to say).
+  const listed = await context.request.get(`${localOrigin()}${CONTROL_PREFIX}/provider-pages`);
+  const { pages } = (await listed.json()) as { pages: string[] };
+  for (const page of pages) {
+    await context.route(`${page}**`, async (route) => {
+      const visited = encodeURIComponent(route.request().url());
+      const step = await route.fetch({
+        url: `${localOrigin()}${CONTROL_PREFIX}/provider-page?url=${visited}`,
+      });
+      const { callback } = (await step.json()) as { callback: string };
+      await fulfillRedirect(route, callback, []);
+    });
+  }
 }
 
 export interface TokenCheck {
@@ -109,46 +126,58 @@ export async function checkToken(request: APIRequestContext, token: string): Pro
   return (await response.json()) as TokenCheck;
 }
 
-/** Chooses who the simulated IdP signs in at the next consent. */
+/**
+ * Chooses who the simulated IdP signs in at the next consent. There is no
+ * default user: every spec calls this in its `beforeEach` (and again when a
+ * scenario changes hands).
+ */
 export async function signInAs(
   request: APIRequestContext,
-  user: { readonly sub: string; readonly email: string; readonly name: string } = E2E_USER,
+  user: { readonly sub: string; readonly email: string; readonly name: string },
 ): Promise<void> {
-  await request.post(`${localOrigin()}${CONTROL_PREFIX}/idp/next-user`, { data: user });
+  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/idp/next-user`, {
+    data: user,
+  });
+  if (!response.ok()) throw new Error(`idp/next-user answered ${response.status()}`);
 }
 
-export interface ExhaustedMission {
+export interface SmallMission {
   readonly mission_id: string;
-  /** The `budget-exhausted` refusal the executor received. */
-  readonly refusal: { readonly code: string; readonly claim_url: string; readonly hint: string };
+  /** The mission token, as the creator would paste it into the agent's environment. */
+  readonly token: string;
 }
 
 /**
- * The executor's side of "exhaust and claim": issues a mission of the default
- * user with a two-action quota and calls it until the budget refuses.
+ * Issues a mission of Ada on her GitHub connection with a two-action quota on
+ * `github.read-code` and hands back its token. The calls are the spec's to
+ * make, over HTTP on `/mcp` (`agent.ts`).
  */
-export async function exhaustMission(
+export async function issueSmallMission(
   request: APIRequestContext,
   name: string,
-): Promise<ExhaustedMission> {
-  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/exhaust`, {
+): Promise<SmallMission> {
+  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/small-mission`, {
     data: { name },
   });
-  return (await response.json()) as ExhaustedMission;
+  if (!response.ok()) throw new Error(`small-mission answered ${response.status()}`);
+  return (await response.json()) as SmallMission;
 }
 
-/** The executor replays its call with the same token. */
-export async function replayCall(
-  request: APIRequestContext,
-  missionId: string,
-): Promise<{ outcome: 'allowed' | 'refused'; refusal: { code: string } | null }> {
-  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/replay`, {
-    data: { mission_id: missionId },
-  });
-  return (await response.json()) as {
-    outcome: 'allowed' | 'refused';
-    refusal: { code: string } | null;
-  };
+export interface UpstreamLog {
+  /** The installation token the mocked GitHub minted for the gateway. */
+  readonly installation_token: string;
+  readonly calls: readonly {
+    readonly method: string;
+    readonly url: string;
+    readonly with_installation_token: boolean;
+  }[];
+}
+
+/** What the mocked provider received since the instance started. */
+export async function upstreamLog(request: APIRequestContext): Promise<UpstreamLog> {
+  const response = await request.get(`${localOrigin()}${CONTROL_PREFIX}/upstream`);
+  if (!response.ok()) throw new Error(`upstream answered ${response.status()}`);
+  return (await response.json()) as UpstreamLog;
 }
 
 export interface SeededDay {
@@ -157,7 +186,11 @@ export interface SeededDay {
   readonly approval_id: string;
 }
 
-/** Issues a mission for the signed-in user and leaves a day of calls on it. */
+/**
+ * Issues a mission for the audit user and leaves a day of calls on it. The one
+ * fixture recorded below the door (through the root's budget and audit
+ * writer): it holds gated and refused calls no mocked provider could answer.
+ */
 export async function seedDay(request: APIRequestContext): Promise<SeededDay> {
   const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/seed-day`);
   if (!response.ok()) throw new Error(`seed-day answered ${response.status()}`);
