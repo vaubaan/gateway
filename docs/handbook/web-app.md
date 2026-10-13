@@ -15,6 +15,7 @@ tracks:
   - apps/gateway/src/components/auth/NeedsUser.tsx
   - apps/gateway/src/lib/auth/session.ts
   - apps/gateway/src/lib/connections/session.ts
+  - apps/gateway/next.config.ts
 ---
 
 # Web app — route map, layouts, shell, UI primitives
@@ -40,11 +41,13 @@ endpoints behind them, and the agent-facing MCP door from the same process.
   are all `dynamic = 'force-dynamic'`, and render HTML. No page loads its data
   from the browser.
 - **Client components are the exception** (`'use client'`): the mission
-  creation form and its per-risk table, the mission actions, the bootstrap kit
-  view, `RevokeConnection`, `DangerConfirm` and `LocalDate`. The only `fetch`
-  calls from the browser are the mission form (`POST /api/missions`,
-  `POST /api/missions/preview`) and the mission actions
-  (`POST /api/missions/<id>/rotate|revoke`).
+  creation form and its per-risk table, the mission actions, the gate control
+  of the mission page (`GateControl`), the bootstrap kit view, the share form
+  (`ShareForm`), `RevokeConnection`, `DangerConfirm` and `LocalDate`. The only
+  `fetch` calls from the browser are the mission form (`POST /api/missions`,
+  `POST /api/missions/preview`), the mission actions
+  (`POST /api/missions/<id>/rotate|revoke`) and the gate control
+  (`POST /api/missions/<id>/gate`).
 - **Everything that decides lives under `src/server/`**, host-agnostic (it
   never imports `next`). A `route.ts` is a one-line adapter:
   `(await getRoot()).<module>.handlers.<name>(request, …)`.
@@ -70,7 +73,7 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 | `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`                                              | `(app)/connections/connect/`, `(app)/connections/callback/`          | [connections](connections.md)         |
 | `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                                                     | `(app)/connections/[id]/**/route.ts`                                 | [connections](connections.md)         |
 | `/missions`, `/missions/new`, `/missions/<id>`                                                                              | `(app)/missions/**/page.tsx`                                         | [missions](missions.md)               |
-| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`                                       | `api/missions/**/route.ts`                                           | [missions](missions.md)               |
+| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`, `/gate`                              | `api/missions/**/route.ts`                                           | [missions](missions.md)               |
 | `GET /agent-bootstrap.md`                                                                                                   | `agent-bootstrap.md/route.ts`                                        | [missions](missions.md)               |
 | `/missions/<id>/session`                                                                                                    | `(app)/missions/[id]/session/page.tsx`                               | [audit](audit.md)                     |
 | `/audit`                                                                                                                    | `(app)/audit/page.tsx`                                               | [audit](audit.md)                     |
@@ -107,8 +110,9 @@ and anyone else to `/login`.
 - **`(app)/layout.tsx`** — the human surface: `currentPrincipal()`; no
   principal → `redirect('/login')`; otherwise `<AppShell principal>`.
 - **`admin/(guarded)/layout.tsx`** — the Administration bar (Identity provider,
-  Provider apps, Telemetry) and the "Not an operator" explanation; rules in
-  [authentication](authentication.md). `/admin/bootstrap` is outside it.
+  Provider apps, Groups, Connections, Telemetry, OAuth clients) and the "Not an
+  operator" explanation; rules in [authentication](authentication.md).
+  `/admin/bootstrap` is outside it.
 
 A layout is navigation, never the authorization boundary: the App Router can
 render a page segment without its layout. Every page and every route
@@ -128,19 +132,26 @@ authority is recomputed on every request.
 | `requireOperator()`  | every page under `admin/(guarded)`                                | redirect to the admin sign-in | the principal while the token is active   | the principal if operator, else "not found" |
 
 - `currentUser()` is the single answer to "the bootstrap operator opened a page
-  that needs a user": Missions, the mission session, Connections and Requests
-  all render `NeedsUser` (`components/auth/NeedsUser.tsx`), one warning banner
+  that needs a user": Missions, the mission session, Connections (the share
+  page included), Shares received, Requests and Delegations all render
+  `NeedsUser` (`components/auth/NeedsUser.tsx`), one warning banner
   that says the bootstrap token owns no mission, connection or request and
   links to Administration → Identity provider. No page redirects the bootstrap
   operator elsewhere.
 - `currentActor()` (`lib/connections/session.ts`) is `currentUser()` plus the
-  `Actor` (`{ user, groups }`) the connection service expects; the Connections
-  pages use it. The same file holds `firstParam`, `PageSearchParams` and
-  `takeNotice`.
-- A `route.ts` under `(app)` calls no helper: it delegates to a handler of
-  `src/server/connections/handlers.ts`, which checks the origin, then the
-  session, then that the principal is a user (the provider callback, a
-  top-level GET, checks the session and the single-use `state`).
+  `Actor` (`{ user, groups }`) the connection service expects; the Connections,
+  share and Shares received pages use it. The same file holds `firstParam`,
+  `PageSearchParams` and `takeNotice`.
+- `adminDecision()` is the undecorated answer behind `requireOperator()`
+  (`{ root, decision }`): the `admin/(guarded)` layout uses it to render the
+  bar or the "Not an operator" explanation without redirecting.
+- A `route.ts` under `(app)` calls no helper: it delegates to a handler of its
+  module — `src/server/connections/handlers.ts` (connect, callback, discover,
+  revoke, resource edit, transfer), `src/server/shares/handlers.ts` (share,
+  revoke a share) or `src/server/oauth-as/handlers.ts` (`revokeDelegation`) —
+  which checks the origin, then the session, then that the principal is a user
+  (the provider callback, a top-level GET, checks the session and the
+  single-use `state`).
 
 ## The shell — `components/shell/`
 
@@ -163,7 +174,7 @@ requests awaiting the signed-in user as creator, nothing at zero and nothing
 for the bootstrap operator ([requests](requests.md)).
 
 Seeing a link is not the authorisation. Each page decides for its principal
-with a session helper: the Connections, Missions, Requests and Delegations pages render
+with a session helper: the Connections, Shares received, Missions, Requests and Delegations pages render
 `NeedsUser` for the bootstrap operator (`currentUser()`), `/audit` is open to
 both (`requirePrincipal()`) and widens what it shows for an operator.
 
@@ -212,9 +223,41 @@ an `aria-label` (the mission form, the inline resource cells).
 
 `components/LocalDate.tsx` (client) renders a timestamp: the ISO form on the
 server, the browser's locale after hydration, without a hydration mismatch.
-`dateOnly` drops the time. The Missions, session, Requests, Audit and
-Administration pages use it; the Connections pages still print the UTC day
-(`iso.slice(0, 10)`).
+`dateOnly` drops the time. The Missions, session, Requests, Audit, Delegations
+and Administration pages use it; the Connections and Shares received pages
+still print the UTC day (`iso.slice(0, 10)`).
+
+## What the standalone output carries
+
+The image runs `.next/standalone/apps/gateway/server.js` and copies the standalone tree
+whole (`deploy/docker/Dockerfile`), so what the build traces into it is what ships.
+`next.config.ts` adds what the tracer cannot see (`outputFileTracingIncludes`: the native
+addons, the migrations, the plugin catalogs) and removes what must never ship
+(`outputFileTracingExcludes`, the list `NEVER_SHIPPED`: `tests/**`, every `*.test.ts(x)`
+under `src/`, `tsconfig.tsbuildinfo`).
+
+The second list exists because of one line of the plugin SDK: `catalogPathNextTo`
+(`packages/plugin-sdk/src/catalog-path.ts`) joins a path computed at run time, and
+Turbopack answers a computed filesystem path by tracing the whole application directory
+into every entry that reaches it (the build prints "Dynamic filesystem access causes
+tracing of the whole project"). Every route reaches the plugins through the composition
+root, so every route trace named the tests.
+
+**Known limit.** Turbopack applies `outputFileTracingExcludes` to route traces only. The
+trace of the boot hook (`src/instrumentation.ts` →
+`.next/server/instrumentation.js.nft.json`) is not a route's: no key of the option reaches
+it, and it still carries the whole application directory, tests included, into the
+standalone tree. The exclusion list therefore cleans the route traces but not the image.
+The remedy is at the source — a `/* turbopackIgnore: true */` comment on that `join` (the
+catalogs are already listed in `outputFileTracingIncludes`), after which the build prints
+no warning and the standalone application directory holds `server.js`, `package.json`,
+`migrations/` and the one traced content file. `tests/integration/standalone-plugin-catalogs.test.ts`
+asserts that no route trace names a test file and that a test file in the standalone tree
+got there through the boot hook's trace only.
+
+Nothing at run time needs those files: the browser suite starts the standalone server
+from the repository's sources and copies `public/` and `.next/static` beside it itself,
+as the Dockerfile does.
 
 ## Adding a page
 
@@ -267,9 +310,11 @@ a page as a function, naming a redirect or a "not found").
 
 The other primitives and the shell have no unit test of their own. They are
 exercised by the Playwright suite `apps/gateway/tests/e2e/v5/` (`npm run test:e2e:v5`,
-three specs): navigation through the bar (`navigation` named "Main"), the open
+seven specs): navigation through the bar (`navigation` named "Main"), the open
 request count (`data-testid="open-request-count"`), forms, tables and dialogs of
-the Missions, Requests and Audit pages. What a page decides is tested without
+the Missions, Requests, Audit, Connections (shares) and Delegations pages. The
+suite runs the standalone server of the build, the one the image starts
+([e2e tests](../tests/e2e-tests.md)). What a page decides is tested without
 Next, in the unit and integration suites of its `src/server/**` module (`npm
 test`); see each feature handbook.
 
@@ -277,7 +322,8 @@ test`); see each feature handbook.
 
 - Spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2.
 - Handbooks: [authentication](authentication.md),
-  [connections](connections.md), [missions](missions.md),
-  [requests](requests.md), [audit](audit.md),
-  [execution-door](execution-door.md), [configuration](configuration.md).
+  [connections](connections.md), [authority](authority.md),
+  [missions](missions.md), [requests](requests.md), [audit](audit.md),
+  [execution-door](execution-door.md), [management-door](management-door.md),
+  [telemetry](telemetry.md), [configuration](configuration.md).
 - v4 text: [legacy/web-app.md](legacy/web-app.md).

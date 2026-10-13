@@ -7,12 +7,14 @@ import { instancePort, localOrigin, PUBLIC_URL } from './instance';
 
 /**
  * Browser tests of the v5 human surface against an ephemeral instance:
- * `ephemeral-instance.ts` serves the built app on a root with the `:memory:`
- * store and the simulated IdP. No credential, no network: run with
- * `npm run test:e2e:v5` (which builds first).
+ * `ephemeral-instance.ts` starts the standalone server of the build (the
+ * `server.js` the image runs) on a root with the `:memory:` store and the
+ * simulated IdP. No credential, no network: run with `npm run test:e2e:v5`
+ * (which builds first). The launcher takes two ports: `E2E_V5_PORT` for the
+ * app and the next one for its control endpoints.
  *
- * Kept apart from the root `playwright.config.ts`, whose projects target a
- * deployed v4 instance.
+ * The only Playwright configuration of the repository; the v4 one was
+ * deleted with the v4 application.
  */
 const HERE = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(HERE, '../../../../..');

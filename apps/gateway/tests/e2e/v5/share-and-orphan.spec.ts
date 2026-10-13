@@ -3,12 +3,12 @@
  * simulated IdP (spec §7.3, §7.8, §4.2 "Connections" / "Shares received" /
  * "Administration", §2.3 "orphaned" / "unowned").
  *
- * Hedy owns a GitHub connection. She shares two risks of it with Joan through
+ * Ines owns a GitHub connection. She shares two risks of it with Joan through
  * the Share dialog; Joan finds the share under "Shares received", issues a
  * mission on it — her creation screen offers nothing beyond the restriction —
  * and an MCP client holding that mission's token reads a file through the
- * door. Hedy revokes the share: the same client is refused
- * `mission-inactive` (orphaned), and Joan sees why her mission stopped. Hedy
+ * door. Ines revokes the share: the same client is refused
+ * `mission-inactive` (orphaned), and Joan sees why her mission stopped. Ines
  * shares again: the state was derived, never stored, so the same client with
  * the same token is served again and Joan's mission reads active.
  *
@@ -62,52 +62,52 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   browser,
   request,
 }) => {
-  const connectionName = 'hedy-org';
+  const connectionName = 'ines-org';
   const { connection_id: connectionId } = await seedShareScenario(request, connectionName);
 
   // ── The owner shares ────────────────────────────────────────────────────
-  const hedy = await browserOf(browser, request, E2E_SHARE_OWNER, `/connections/${connectionId}`);
-  await expect(hedy.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
-  await expect(hedy.getByText('Not shared.')).toBeVisible();
-  await hedy.getByRole('link', { name: 'Share', exact: true }).click();
-  await expect(hedy.getByRole('heading', { name: `Share ${connectionName}` })).toBeVisible();
+  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/connections/${connectionId}`);
+  await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
+  await expect(ines.getByText('Not shared.')).toBeVisible();
+  await ines.getByRole('link', { name: 'Share', exact: true }).click();
+  await expect(ines.getByRole('heading', { name: `Share ${connectionName}` })).toBeVisible();
 
   // The dialog is a target and one folded checklist behind a one-line summary.
-  const summary = hedy.getByTestId('restriction-summary');
-  const submit = hedy.getByRole('button', { name: 'Share', exact: true });
+  const summary = ines.getByTestId('restriction-summary');
+  const submit = ines.getByRole('button', { name: 'Share', exact: true });
   await expect(summary).toHaveText('No risk selected: the share would authorize nothing.');
   await expect(submit).toBeDisabled();
-  await expect(hedy.locator('details[open]')).toHaveCount(0);
-  await expect(hedy.getByLabel(`Share risk ${READ_CODE}`)).toBeHidden();
-  await snap(hedy, 'share-dialog-folded');
+  await expect(ines.locator('details[open]')).toHaveCount(0);
+  await expect(ines.getByLabel(`Share risk ${READ_CODE}`)).toBeHidden();
+  await snap(ines, 'share-dialog-folded');
 
-  await hedy.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
-  await hedy.getByText(/^Risks \(\d+\)$/).click();
+  await ines.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
+  await ines.getByText(/^Risks \(\d+\)$/).click();
   // "Select all" ticks the boxes one by one: every risk but the fallback.
-  await hedy.getByRole('button', { name: 'Select all' }).click();
+  await ines.getByRole('button', { name: 'Select all' }).click();
   await expect(summary).toContainText('14 of 15 risks');
-  await expect(hedy.getByLabel('Share risk github.uncategorized-write')).not.toBeChecked();
-  await expect(hedy.getByLabel('Share risk github.merge-protected')).toBeChecked();
-  await snap(hedy, 'share-dialog-select-all');
+  await expect(ines.getByLabel('Share risk github.uncategorized-write')).not.toBeChecked();
+  await expect(ines.getByLabel('Share risk github.merge-protected')).toBeChecked();
+  await snap(ines, 'share-dialog-select-all');
   // This share is narrower: two reads.
-  await hedy.getByRole('button', { name: 'Clear' }).click();
-  await hedy.getByLabel(`Share risk ${READ_CODE}`).check();
-  await hedy.getByLabel(`Share risk ${READ_META}`).check();
+  await ines.getByRole('button', { name: 'Clear' }).click();
+  await ines.getByLabel(`Share risk ${READ_CODE}`).check();
+  await ines.getByLabel(`Share risk ${READ_META}`).check();
   await expect(summary).toContainText('2 of 15 risks');
   await submit.click();
 
-  await expect(hedy).toHaveURL(new RegExp(`/connections/${connectionId}\\?notice=`));
-  await expect(hedy.getByText('Shared', { exact: true })).toBeVisible();
+  await expect(ines).toHaveURL(new RegExp(`/connections/${connectionId}\\?notice=`));
+  await expect(ines.getByText('Shared', { exact: true })).toBeVisible();
   await expect(
-    hedy.getByText(`${E2E_SHARE_TARGET.email} may now accept 2 risks of this connection`),
+    ines.getByText(`${E2E_SHARE_TARGET.email} may now accept 2 risks of this connection`),
   ).toBeVisible();
-  const shareRow = hedy.getByRole('row').filter({ hasText: E2E_SHARE_TARGET.email });
+  const shareRow = ines.getByRole('row').filter({ hasText: E2E_SHARE_TARGET.email });
   await expect(shareRow).toContainText('2 risks');
   await shareRow.getByText('2 risks').click();
   await expect(shareRow).toContainText(READ_CODE);
   await expect(shareRow).toContainText(READ_META);
   await expect(shareRow).not.toContainText('github.merge-protected');
-  await snap(hedy, 'connection-shares');
+  await snap(ines, 'connection-shares');
 
   // ── The beneficiary reads what she received ─────────────────────────────
   const joan = await browserOf(browser, request, E2E_SHARE_TARGET, '/shares');
@@ -129,14 +129,14 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
 
   // ── …and issues a mission within it ─────────────────────────────────────
   await joan.goto('/missions/new');
-  await joan.getByLabel('Mission name').fill('Read hedy-org');
+  await joan.getByLabel('Mission name').fill('Read ines-org');
   await joan.getByTestId('risks-github').locator(':scope > summary').click();
   // The detail offers what she holds; the rest of the catalog cannot be ticked.
   await expect(joan.getByLabel('Accept risk github.merge-protected')).toHaveCount(0);
   await joan.getByLabel(`Accept risk ${READ_CODE}`).check();
   await joan.getByRole('button', { name: 'Issue mission' }).click();
   const dialog = joan.getByRole('dialog');
-  await expect(dialog).toContainText('Mission “Read hedy-org” issued');
+  await expect(dialog).toContainText('Mission “Read ines-org” issued');
   const token = TOKEN.exec(await dialog.getByTestId('kit-env').innerText())?.[0];
   if (!token) throw new Error('no token in the bootstrap kit');
 
@@ -146,15 +146,15 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   expect(await read()).toMatchObject({ outcome: 'allowed' });
 
   // ── The owner revokes the share ─────────────────────────────────────────
-  await hedy.goto(`/connections/${connectionId}`);
-  await hedy.getByRole('button', { name: `Revoke the share to ${E2E_SHARE_TARGET.email}` }).click();
-  await expect(hedy.getByText('Share revoked', { exact: true })).toBeVisible();
+  await ines.goto(`/connections/${connectionId}`);
+  await ines.getByRole('button', { name: `Revoke the share to ${E2E_SHARE_TARGET.email}` }).click();
+  await expect(ines.getByText('Share revoked', { exact: true })).toBeVisible();
   await expect(
-    hedy.getByText(
+    ines.getByText(
       '1 mission that depended on it is now orphaned and refuses every call, until a share covers it again.',
     ),
   ).toBeVisible();
-  await expect(hedy.getByText('Not shared.')).toBeVisible();
+  await expect(ines.getByText('Not shared.')).toBeVisible();
 
   // ── The executor is refused, with the reason ────────────────────────────
   const after = await read();
@@ -164,14 +164,14 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
 
   // ── The beneficiary sees it ─────────────────────────────────────────────
   await joan.goto('/missions');
-  await expect(joan.getByRole('row').filter({ hasText: 'Read hedy-org' })).toContainText(
+  await expect(joan.getByRole('row').filter({ hasText: 'Read ines-org' })).toContainText(
     'orphaned',
   );
   await joan.goto('/shares');
   await expect(joan.getByText('Nobody has shared a connection with you yet.')).toBeVisible();
   // Her mission page says why, that it can come back, and still lets her close it.
   await joan.goto('/missions');
-  await joan.getByRole('link', { name: 'Read hedy-org' }).click();
+  await joan.getByRole('link', { name: 'Read ines-org' }).click();
   await expect(
     joan.getByText('Orphaned: you no longer hold the authority this mission was issued under'),
   ).toBeVisible();
@@ -187,14 +187,14 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   const missionUrl = joan.url();
 
   // ── The owner shares again: the mission is restored ─────────────────────
-  await hedy.getByRole('link', { name: 'Share', exact: true }).click();
-  await hedy.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
-  await hedy.getByText(/^Risks \(\d+\)$/).click();
-  await hedy.getByLabel(`Share risk ${READ_CODE}`).check();
-  await hedy.getByRole('button', { name: 'Share', exact: true }).click();
-  await expect(hedy.getByText('Shared', { exact: true })).toBeVisible();
+  await ines.getByRole('link', { name: 'Share', exact: true }).click();
+  await ines.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
+  await ines.getByText(/^Risks \(\d+\)$/).click();
+  await ines.getByLabel(`Share risk ${READ_CODE}`).check();
+  await ines.getByRole('button', { name: 'Share', exact: true }).click();
+  await expect(ines.getByText('Shared', { exact: true })).toBeVisible();
   await expect(
-    hedy.getByText(
+    ines.getByText(
       '1 orphaned mission is covered again and serves calls from now on, with its session and counters as they were.',
     ),
   ).toBeVisible();
@@ -203,7 +203,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   expect(await read()).toMatchObject({ outcome: 'allowed' });
 
   await joan.goto('/missions');
-  const restored = joan.getByRole('row').filter({ hasText: 'Read hedy-org' });
+  const restored = joan.getByRole('row').filter({ hasText: 'Read ines-org' });
   await expect(restored).toContainText('active');
   await expect(restored).not.toContainText('orphaned');
   await joan.goto(missionUrl);
@@ -223,8 +223,8 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   browser,
   request,
 }) => {
-  const connectionName = 'hedy-team-org';
-  const group = 'hedy-team';
+  const connectionName = 'ines-team-org';
+  const group = 'ines-team';
   const { connection_id: connectionId } = await seedShareScenario(request, connectionName);
 
   // ── The operator keeps a local group ────────────────────────────────────
@@ -239,11 +239,11 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   await snap(ops, 'admin-groups');
 
   // ── The owner transfers her connection to it ────────────────────────────
-  const hedy = await browserOf(browser, request, E2E_SHARE_OWNER, `/connections/${connectionId}`);
-  await hedy.getByLabel('Group to transfer to').selectOption({ label: group });
-  await hedy.getByRole('button', { name: 'Transfer' }).click();
-  await expect(hedy.getByText(`Transferred to group ${group}`)).toBeVisible();
-  await expect(hedy.getByText(`group ${group}`, { exact: true })).toBeVisible();
+  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/connections/${connectionId}`);
+  await ines.getByLabel('Group to transfer to').selectOption({ label: group });
+  await ines.getByRole('button', { name: 'Transfer' }).click();
+  await expect(ines.getByText(`Transferred to group ${group}`)).toBeVisible();
+  await expect(ines.getByText(`group ${group}`, { exact: true })).toBeVisible();
 
   // ── The group loses its only member ─────────────────────────────────────
   await ops.goto('/admin/groups');
@@ -251,8 +251,8 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   await expect(ops.getByText('1 connection has no owner left', { exact: false })).toBeVisible();
 
   // Nobody owns it: it left the former owner's list.
-  await hedy.goto('/connections');
-  await expect(hedy.getByText(connectionName)).toHaveCount(0);
+  await ines.goto('/connections');
+  await expect(ines.getByText(connectionName)).toHaveCount(0);
 
   // ── The operator names a new owner ──────────────────────────────────────
   await ops.goto('/admin/connections');
@@ -265,8 +265,8 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   await expect(ops.getByText(`${connectionName}: owner reassigned`)).toBeVisible();
   await expect(ops.getByText('Every connection has an owner.')).toBeVisible();
 
-  await hedy.goto(`/connections/${connectionId}`);
-  await expect(hedy.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
-  await expect(hedy.getByText(E2E_SHARE_OWNER.email, { exact: true }).first()).toBeVisible();
-  await expect(hedy.getByRole('link', { name: 'Share', exact: true })).toBeVisible();
+  await ines.goto(`/connections/${connectionId}`);
+  await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
+  await expect(ines.getByText(E2E_SHARE_OWNER.email, { exact: true }).first()).toBeVisible();
+  await expect(ines.getByRole('link', { name: 'Share', exact: true })).toBeVisible();
 });

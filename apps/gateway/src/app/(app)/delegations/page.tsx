@@ -23,7 +23,6 @@ import { currentUser } from '@/lib/auth/session';
 import { firstParam, type PageSearchParams } from '@/lib/connections/session';
 import {
   DELEGATIONS_PAGE,
-  MANAGEMENT_DOOR_PATH,
   redirectDestination,
   type DelegationState,
   type DelegationView,
@@ -174,7 +173,7 @@ export default async function DelegationsPage({
   if (!session) return <NeedsUser />;
   const params = await searchParams;
   const views = await session.root.oauth.delegations.listFor(session.user);
-  const door = `${session.root.oauth.endpoints.issuer}${MANAGEMENT_DOOR_PATH}`;
+  const door = session.root.oauth.endpoints.resource;
 
   return (
     <Stack gap="var(--space-4)">

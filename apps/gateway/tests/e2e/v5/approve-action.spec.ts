@@ -237,6 +237,13 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await expect(hedy.getByText('refused', { exact: true })).toBeVisible();
   await expect(hedy.getByTestId('open-request-count')).toHaveCount(0);
 
+  // ── While the gate is open, the session page says so too ────────────────
+  await hedy.goto(`/missions/${issued.mission_id}/session`);
+  const sessionGate = hedy.getByTestId(`gate-${GATED}`);
+  await expect(sessionGate).toContainText('approval');
+  await expect(sessionGate).toContainText('open until');
+  await snap(hedy, 'session-gate-open');
+
   // ── The gate, edited on the mission page after issuance ─────────────────
   await hedy.goto(`/missions/${issued.mission_id}`);
   const gateCell = hedy.getByTestId(`gate-${GATED}`);
@@ -273,10 +280,30 @@ test('a gated action of the developer preset: refused, approved by its creator o
 
   // …and the session: the decisions are on the timeline, without the arguments.
   await hedy.goto(`/missions/${issued.mission_id}/session`);
-  const timeline = hedy.locator('table').last();
-  await expect(timeline.locator('tr', { hasText: 'gate-opened' })).toHaveCount(1);
-  await expect(timeline.locator('tr', { hasText: 'gate-changed' })).toHaveCount(2);
-  await expect(timeline.locator('tr', { hasText: 'call-allowed' })).toHaveCount(4);
+  // The gate was set back to `approval` on the mission: the opening is over.
+  await expect(hedy.getByTestId(`gate-${GATED}`)).toHaveText('approval');
+  const timeline = hedy.getByTestId('timeline');
+  const events = (kind: string) =>
+    timeline.locator('tbody tr').filter({ has: hedy.getByText(kind, { exact: true }) });
+  await expect(events('gate-opened')).toHaveCount(1);
+  await expect(events('gate-changed')).toHaveCount(2);
+  await expect(events('call-allowed')).toHaveCount(4);
+  // …and each says what it did, not only its kind.
+  await expect(events('gate-opened')).toContainText('gate open until');
+  await expect(events('gate-changed').first()).toContainText('gate set to approval (was auto)');
+  await expect(events('gate-changed').last()).toContainText('gate set to auto (was approval)');
+  await expect(events('approval')).toContainText('one call approved, usable until');
+  await expect(events('call-allowed').filter({ hasText: 'approval consumed' })).toHaveCount(1);
+  await expect(
+    events('request').filter({ hasText: 'approval request refused by the creator' }),
+  ).toHaveCount(1);
+  // The widest details of a timeline are on this one: the Detail column is on screen.
+  const table = await hedy
+    .getByTestId('timeline-table')
+    .evaluate((el) => ({ content: el.scrollWidth, box: el.clientWidth }));
+  expect(table.content).toBeLessThanOrEqual(table.box);
+  expect(await hedy.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
+  await snap(hedy, 'session-timeline-details');
   expect(await hedy.content()).not.toContain(MARKER);
   await hedy.context().close();
 });

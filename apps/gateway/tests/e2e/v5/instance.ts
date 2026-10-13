@@ -8,7 +8,12 @@
 export const PUBLIC_URL = 'https://gateway.e2e.test';
 /** The simulated identity provider (P1.1's `FakeIdp`). */
 export const IDP_ISSUER = 'https://idp.e2e.test';
-/** Test-only control endpoints of the launcher, served next to the app. */
+/**
+ * Test-only control endpoints of the launcher. They are served by the launcher's
+ * own listener, on the port after the app's (`controlUrl`): the app's port
+ * belongs to the standalone server the image ships, which the launcher starts
+ * unmodified.
+ */
 export const CONTROL_PREFIX = '/__e2e';
 
 const DEFAULT_PORT = 3105;
@@ -26,6 +31,22 @@ export function instancePort(): number {
 
 export function localOrigin(): string {
   return `http://127.0.0.1:${instancePort()}`;
+}
+
+const MAX_PORT = 65_535;
+
+/** Local port of the launcher's control endpoints: the one after the app's. */
+export function controlPort(): number {
+  const port = instancePort() + 1;
+  if (port > MAX_PORT) {
+    throw new Error(`E2E_V5_PORT must leave the next port free for the control endpoints`);
+  }
+  return port;
+}
+
+/** The URL of a control endpoint, `path` starting with `/` (`/seed-day`, `/upstream`…). */
+export function controlUrl(path: string): string {
+  return `http://127.0.0.1:${controlPort()}${CONTROL_PREFIX}${path}`;
 }
 
 /**
@@ -58,14 +79,14 @@ export const E2E_CUTOVER_USER = {
 } as const;
 
 /**
- * The share spec's cast: Hedy owns a GitHub connection of her own, Joan receives a share
+ * The share spec's cast: Ines owns a GitHub connection of her own, Joan receives a share
  * of it, and the operator (the instance's admin rule names their email) keeps the local
  * groups. None of them appears in another spec.
  */
 export const E2E_SHARE_OWNER = {
-  sub: 'idp|hedy',
-  email: 'hedy@example.com',
-  name: 'Hedy',
+  sub: 'idp|ines',
+  email: 'ines@example.com',
+  name: 'Ines',
 } as const;
 export const E2E_SHARE_TARGET = {
   sub: 'idp|joan',
