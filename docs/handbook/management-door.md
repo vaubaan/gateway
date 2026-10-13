@@ -618,17 +618,17 @@ delegated token by kind rather than as an unknown bearer.
 
 `ManagementGate.admit(request)` → `{ delegation, client } | Response`:
 
-| Presented                                                                      | Answer                                                                                        |
-| ------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| a browser `Origin` other than the instance                                     | 403                                                                                           |
-| nothing                                                                        | 401, `WWW-Authenticate: Bearer realm, resource_metadata, scope` (no `error`: RFC 6750 §3.1)   |
-| a live delegated access token                                                  | admitted                                                                                      |
-| a live delegated access token whose scopes lack `mgmt`                         | 401 with the challenge and `error="invalid_token"`                                            |
-| a delegated access token of a client that is not approved as of now            | 401 with the challenge and `error="invalid_token"`                                            |
-| a mission token (identified by the execution door's throttled `TokenVerifier`) | 403 `wrong-credential-kind` (`presented: mission-token`), no challenge                        |
-| a mission-token-shaped bearer while its identification is throttled            | 429, JSON-RPC `-32002`, `Retry-After` (the execution door's throttle, per prefix and address) |
-| a web session, as a cookie with no bearer or as the bearer                     | 403 `wrong-credential-kind` (`presented: human-session`), no challenge                        |
-| anything else (unknown, expired, revoked, a refresh token, a look-alike)       | 401 with the challenge and `error="invalid_token"`                                            |
+| Presented                                                                                                    | Answer                                                                                        |
+| ------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| a browser `Origin` other than the instance                                                                   | 403                                                                                           |
+| nothing                                                                                                      | 401, `WWW-Authenticate: Bearer realm, resource_metadata, scope` (no `error`: RFC 6750 §3.1)   |
+| a live delegated access token                                                                                | admitted                                                                                      |
+| a live delegated access token whose scopes lack `mgmt`                                                       | 401 with the challenge and `error="invalid_token"`                                            |
+| a delegated access token of a client that is not approved as of now                                          | 401 with the challenge and `error="invalid_token"`                                            |
+| a mission token (identified by the execution door's `TokenVerifier`)                                         | 403 `wrong-credential-kind` (`presented: mission-token`), no challenge                        |
+| a bearer on the prefix of a mission token an earlier build stored as argon2id, while that check is throttled | 429, JSON-RPC `-32002`, `Retry-After` (the execution door's throttle, per prefix and address) |
+| a web session, as a cookie with no bearer or as the bearer                                                   | 403 `wrong-credential-kind` (`presented: human-session`), no challenge                        |
+| anything else (unknown, expired, revoked, a refresh token, a look-alike)                                     | 401 with the challenge and `error="invalid_token"`                                            |
 
 The refusal bodies are the execution door's (`refusalToRpcError`,
 `rpcError`). A string that merely has the shape of a mission token is an

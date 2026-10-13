@@ -785,6 +785,11 @@ command.
   single-use nonce, return URL limited to the instance's public URL.
 - **Surface rate limits** on the MCP endpoint per mission, on connection
   flows per user, on the request page per IP.
+- **Mission tokens at rest.** The instance stores a SHA-256 digest of each
+  mission token and never the token. The secret part is long and drawn at
+  random by the instance, so a digest cannot be searched; a slow password
+  hash would protect nothing and is not used. A token issued while tokens
+  were stored otherwise keeps working unchanged.
 - **No secret in logs.** Mission tokens are logged by prefix. Call
   arguments are never logged in clear, only hashed.
 - **Immutable audit.** No update or delete from the application. Purge by

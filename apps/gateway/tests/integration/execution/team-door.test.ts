@@ -9,7 +9,7 @@
  *   - the holder is the token's, whatever the caller declares;
  *   - a token whose member was removed or deactivated, or that was rotated or
  *     revoked on its own, is refused 401 with the reason at the very next call
- *     — warm verified-token cache included — while the others keep working;
+ *     while the others keep working;
  *   - the mission's own state still rules every holder: revoked or orphaned is
  *     `mission-inactive` for all of them.
  */
@@ -300,8 +300,8 @@ describe('execution door: one mission, several token holders', () => {
 
   // ── A token that stops working ────────────────────────────────────────────
 
-  it('refuses a removed member at the next call, warm cache included; the others keep working', async () => {
-    // Warm the verified-token cache of every holder.
+  it('refuses a removed member at the next call; the others keep working', async () => {
+    // Every holder has called once: nothing of those calls is remembered.
     for (const token of [adaToken, bobToken, ciToken]) {
       expect(allowed((await call(token)).body)).toBe(true);
     }

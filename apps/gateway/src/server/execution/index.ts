@@ -1,7 +1,7 @@
 /**
  * Execution MCP door (feature P1.6; spec §4.1, §2.4, §6, §7.5): the pipeline
  * of `@vaubaan/gateway-core` with its real stages, the bearer dispatch, the
- * verified-token and upstream-credential caches, `tools/list`, `tools/call`
+ * token verifier and the upstream-credential cache, `tools/list`, `tools/call`
  * and the catalog endpoint. Built once by the composition root as
  * `root.execution`. Handbook: docs/handbook/execution-door.md.
  */
@@ -112,7 +112,6 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
 
   const tokens = new TokenVerifier({
     missions: deps.missions.service,
-    cache: deps.cache,
     rateLimiter: deps.rateLimiter,
   });
   const door = new ExecutionDoor({
@@ -176,10 +175,8 @@ export { citedRefs, createResourceStage } from './resource-stage';
 export { createRiskStage } from './risk-stage';
 export {
   TokenVerifier,
-  VERIFIED_TOKEN_TTL_SECONDS,
   VERIFY_ATTEMPTS_PER_WINDOW,
   VERIFY_WINDOW_MS,
-  verifiedTokenCacheKey,
   verifyThrottleKey,
   type VerifyOutcome,
 } from './token-verifier';

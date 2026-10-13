@@ -113,8 +113,9 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      so the address-keyed limits are shared by all callers)
      with `key`, `env` (`VAUBAAN_TRUSTED_PROXIES`), `affected` (the
      request page's per-IP window, the execution door's token-verification
-     window per token prefix — a flood of wrong secrets on a known prefix
-     holds a not-yet-verified agent at 429 —, the authorization server's
+     window per prefix of a token an earlier build stored as argon2id — a
+     flood of wrong secrets on such a prefix holds its agent at 429 until the
+     token has been used once —, the authorization server's
      registration window and token window, one each for everybody — one
      caller can hold every delegated client at 429 when it renews its
      token —, `client_ip` absent from the audit) and `remedy`. Nothing is bypassed and the boot continues: the
@@ -491,21 +492,20 @@ Management door:
 Execution door, requests and approvals (`mcp.*`, `requests.*` and
 `approvals.*` have one key each):
 
-| What                                                                     | Value          | Constant                                                 | Module                                  |
-| ------------------------------------------------------------------------ | -------------- | -------------------------------------------------------- | --------------------------------------- |
-| Window of `mcp.rate_limit_per_minute`                                    | 1 min          | `SURFACE_RATE_WINDOW_MS`                                 | `execution/door.ts`                     |
-| A verified-token proof is kept after its last use                        | 15 min         | `VERIFIED_TOKEN_TTL_SECONDS`                             | `execution/token-verifier.ts`           |
-| Token verifications per token prefix and client address (`mcp-verify:…`) | 30 per minute  | `VERIFY_ATTEMPTS_PER_WINDOW`, `VERIFY_WINDOW_MS`         | `execution/token-verifier.ts`           |
-| Longest time a derived upstream credential is cached                     | 55 min         | `MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS`                    | `execution/credential-cache.ts`         |
-| Longest agent label                                                      | 64 characters  | `AGENT_LABEL_MAX_LENGTH`                                 | `missions/bootstrap-kit.ts`             |
-| Longest `User-Agent` kept in the audit                                   | 256 characters | `USER_AGENT_MAX_LENGTH`                                  | `execution/request-meta.ts`             |
-| Longest upstream error summary kept in the audit                         | 200 characters | `UPSTREAM_ERROR_SUMMARY_MAX_LENGTH`                      | `packages/gateway-core/src/pipeline.ts` |
-| Longest structural rejection reason kept in the audit                    | 500 characters | `AUDIT_REASON_MAX_LENGTH`                                | `packages/gateway-core/src/pipeline.ts` |
-| Stack frames logged when a decision stage fails                          | 12             | `STACK_FRAMES_LOGGED`                                    | `execution/index.ts`                    |
-| A token's "last used" is written at most once per                        | 60 s           | `TOKEN_LAST_USED_GRANULARITY_SECONDS`                    | `execution/door.ts`                     |
-| Request page `/r/<id>` per client address (`request-page:ip:…`)          | 30 per minute  | `REQUEST_PAGE_RATE_LIMIT`, `REQUEST_PAGE_RATE_WINDOW_MS` | `requests/handlers.ts`                  |
-| Expiry sweep of claims and approval requests                             | every minute   | `REQUEST_SWEEP_INTERVAL_MS`                              | `requests/sweeper.ts`                   |
-| Session events shown on the request page                                 | 20             | `SESSION_EVENTS_SHOWN`                                   | `requests/request-service.ts`           |
+| What                                                                                    | Value          | Constant                                                 | Module                                  |
+| --------------------------------------------------------------------------------------- | -------------- | -------------------------------------------------------- | --------------------------------------- |
+| Window of `mcp.rate_limit_per_minute`                                                   | 1 min          | `SURFACE_RATE_WINDOW_MS`                                 | `execution/door.ts`                     |
+| argon2id verifications of a legacy token per prefix and client address (`mcp-verify:…`) | 30 per minute  | `VERIFY_ATTEMPTS_PER_WINDOW`, `VERIFY_WINDOW_MS`         | `execution/token-verifier.ts`           |
+| Longest time a derived upstream credential is cached                                    | 55 min         | `MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS`                    | `execution/credential-cache.ts`         |
+| Longest agent label                                                                     | 64 characters  | `AGENT_LABEL_MAX_LENGTH`                                 | `missions/bootstrap-kit.ts`             |
+| Longest `User-Agent` kept in the audit                                                  | 256 characters | `USER_AGENT_MAX_LENGTH`                                  | `execution/request-meta.ts`             |
+| Longest upstream error summary kept in the audit                                        | 200 characters | `UPSTREAM_ERROR_SUMMARY_MAX_LENGTH`                      | `packages/gateway-core/src/pipeline.ts` |
+| Longest structural rejection reason kept in the audit                                   | 500 characters | `AUDIT_REASON_MAX_LENGTH`                                | `packages/gateway-core/src/pipeline.ts` |
+| Stack frames logged when a decision stage fails                                         | 12             | `STACK_FRAMES_LOGGED`                                    | `execution/index.ts`                    |
+| A token's "last used" is written at most once per                                       | 60 s           | `TOKEN_LAST_USED_GRANULARITY_SECONDS`                    | `execution/door.ts`                     |
+| Request page `/r/<id>` per client address (`request-page:ip:…`)                         | 30 per minute  | `REQUEST_PAGE_RATE_LIMIT`, `REQUEST_PAGE_RATE_WINDOW_MS` | `requests/handlers.ts`                  |
+| Expiry sweep of claims and approval requests                                            | every minute   | `REQUEST_SWEEP_INTERVAL_MS`                              | `requests/sweeper.ts`                   |
+| Session events shown on the request page                                                | 20             | `SESSION_EVENTS_SHOWN`                                   | `requests/request-service.ts`           |
 
 The execution door has no request-body size limit and no upstream call
 timeout of its own: no such constant exists.
@@ -594,13 +594,13 @@ bindings. `silentLogger` is for tests.
 
 ## Ports and their single-process implementations
 
-| Port             | Today                                                                                                                                                                                          | Hosted replacement                                                       |
-| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                           | Postgres behind the same repositories                                    |
-| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS` (`compose/shipped-plugins.ts`)                                                                                                         | same (static)                                                            |
-| `RateLimiter`    | `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)): the same instance holds the budget's windows; `MemoryRateLimiter` remains for tests | one Redis sorted set per key                                             |
-| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded): verified-token proofs and the plugins' derived upstream credentials ([execution-door](execution-door.md))             | Redis for the proofs; upstream credentials stay per replica or encrypted |
-| `SessionStore`   | `store.webSessions` (`server/store/repositories/web-sessions.ts`, table `web_sessions`, migration 0003, rows keyed by SHA-256 of the id); `MemorySessionStore` remains for unit tests          | Redis, or Postgres rows behind the same port                             |
+| Port             | Today                                                                                                                                                                                          | Hosted replacement                                 |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- |
+| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                           | Postgres behind the same repositories              |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS` (`compose/shipped-plugins.ts`)                                                                                                         | same (static)                                      |
+| `RateLimiter`    | `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)): the same instance holds the budget's windows; `MemoryRateLimiter` remains for tests | one Redis sorted set per key                       |
+| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded): the plugins' derived upstream credentials ([execution-door](execution-door.md))                                       | upstream credentials stay per replica or encrypted |
+| `SessionStore`   | `store.webSessions` (`server/store/repositories/web-sessions.ts`, table `web_sessions`, migration 0003, rows keyed by SHA-256 of the id); `MemorySessionStore` remains for unit tests          | Redis, or Postgres rows behind the same port       |
 
 `GatewayRoot.store` is the full store with its repositories
 (`StoreLiveness` of `ports.ts` is only the slice `/healthz` and `close()`

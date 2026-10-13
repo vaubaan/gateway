@@ -94,7 +94,7 @@ change that removes it.
 
 - **Single process.** The state marked `// single-process only` in the code
   lives in the memory of one Node process: the rate-limit windows (the
-  budget's and the surfaces'), the verified-token proofs and their throttle,
+  budget's and the surfaces', the one on the argon2id check of legacy tokens),
   the cache of derived provider credentials, the one-at-a-time credential
   refresh per connection, the single use of a pending connection attempt and
   of a pending consent, the identity provider's discovery cache, the telemetry

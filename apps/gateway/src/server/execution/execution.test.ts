@@ -10,7 +10,7 @@ import { parseSlice } from '@vaubaan/policy-engine';
 import { describe, expect, it, vi } from 'vitest';
 
 import { API_KEY_SPEC, fixturePlugin } from '../connections/testing';
-import type { TokenVerification, VerifiedToken } from '../missions';
+import type { LegacyHashGate, MissionService, TokenVerification, VerifiedToken } from '../missions';
 import { UNKNOWN_CLIENT } from '../http/client-ip';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import type { MissionRecord } from '../store/types';
@@ -25,13 +25,7 @@ import {
 } from './request-meta';
 import { citedRefs } from './resource-stage';
 import { depotPlugin } from './testing';
-import {
-  TokenVerifier,
-  VERIFIED_TOKEN_TTL_SECONDS,
-  VERIFY_ATTEMPTS_PER_WINDOW,
-  verifiedTokenCacheKey,
-  verifyThrottleKey,
-} from './token-verifier';
+import { TokenVerifier, VERIFY_ATTEMPTS_PER_WINDOW, verifyThrottleKey } from './token-verifier';
 import { callableProviders, callableTools } from './tools';
 
 describe('agent label', () => {
@@ -213,7 +207,7 @@ describe('tool discovery', () => {
   });
 });
 
-describe('verified-token cache', () => {
+describe('token verifier', () => {
   const BEARER = `vbn_live_AbCd1234_${'s'.repeat(32)}`;
   const token: VerifiedToken = {
     id: 'tok-1',
@@ -223,180 +217,80 @@ describe('verified-token cache', () => {
   const mission = { id: 'mis-1', status: 'active' } as MissionRecord;
   const verified: TokenVerification = { outcome: 'verified', token, mission };
 
+  type Verify = MissionService['verifyToken'];
+
   /**
-   * `verifyToken` computes the hash; `provenToken` answers for a cached proof.
-   * `standing` is what the mission service would say of the token right now.
+   * A mission service whose token row is stored as `stored`. Like the real one, it
+   * asks the gate only for a legacy row, before it would compute the slow hash.
+   * `standing` is what the store says of the token at this instant.
    */
-  function setup(verification: TokenVerification = verified) {
-    let standing: TokenVerification = verification;
-    const verifyToken = vi.fn(async () => verification);
-    const provenToken = vi.fn(
-      async (_prefix: string, tokenId: string): Promise<TokenVerification> =>
-        standing.outcome !== 'unknown' && standing.token.id === tokenId
-          ? standing
-          : { outcome: 'unknown' },
-    );
-    const cache = new MemoryCacheClient();
+  function setup(stored: 'sha256' | 'argon2id', answer: (bearer: string) => TokenVerification) {
+    const slowChecks = vi.fn();
+    const verifyToken = vi.fn(async (bearer: string, gate?: LegacyHashGate) => {
+      if (stored === 'argon2id' && gate) {
+        const decision = await gate();
+        if (!decision.allowed) {
+          return { outcome: 'throttled' as const, retryAfterMs: decision.retryAfterMs };
+        }
+        slowChecks();
+      }
+      return answer(bearer);
+    });
     const verifier = new TokenVerifier({
-      missions: { verifyToken, provenToken },
-      cache,
+      missions: { verifyToken: verifyToken as unknown as Verify },
       rateLimiter: new SlidingWindowRateLimiter(),
     });
-    return {
-      verifier,
-      verifyToken,
-      provenToken,
-      cache,
-      /** What the store says of the token from now on. */
-      now(next: TokenVerification) {
-        standing = next;
-      },
-    };
+    return { verifier, verifyToken, slowChecks };
   }
 
-  it('computes the hash once, then asks what the token is worth now on every call', async () => {
-    const { verifier, verifyToken, provenToken, now } = setup();
+  it('remembers nothing: every call asks what the token is worth now', async () => {
+    let standing: TokenVerification = verified;
+    const { verifier, verifyToken } = setup('sha256', () => standing);
     expect((await verifier.verify(BEARER)).outcome).toBe('verified');
     expect((await verifier.verify(BEARER)).outcome).toBe('verified');
-    expect(verifyToken).toHaveBeenCalledTimes(1);
-    expect(provenToken).toHaveBeenCalledWith('AbCd1234', 'tok-1');
 
-    now({ outcome: 'retired', reason: 'revoked', token, mission });
+    standing = { outcome: 'retired', reason: 'revoked', token, mission };
     expect(await verifier.verify(BEARER)).toMatchObject({ outcome: 'retired', reason: 'revoked' });
-    now({ outcome: 'retired', reason: 'rotated', token, mission });
-    expect(await verifier.verify(BEARER)).toMatchObject({ outcome: 'retired', reason: 'rotated' });
-    expect(verifyToken).toHaveBeenCalledTimes(1);
-  });
-
-  it('a cached proof never outlives the holder: removed or deactivated is refused on the next call, with no hash', async () => {
-    const { verifier, verifyToken, now } = setup();
-    expect((await verifier.verify(BEARER)).outcome).toBe('verified');
-
-    now({ outcome: 'retired', reason: 'holder-removed', token, mission });
+    standing = { outcome: 'retired', reason: 'holder-removed', token, mission };
     expect(await verifier.verify(BEARER)).toMatchObject({
       outcome: 'retired',
       reason: 'holder-removed',
     });
-    now({ outcome: 'retired', reason: 'holder-deactivated', token, mission });
+    standing = { outcome: 'retired', reason: 'holder-deactivated', token, mission };
     expect(await verifier.verify(BEARER)).toMatchObject({
       outcome: 'retired',
       reason: 'holder-deactivated',
     });
-    // The member is back (added again, reactivated): the same proof serves, by the same read.
-    now(verified);
+    // The member is back (added again, reactivated): the same token serves, by the same read.
+    standing = verified;
     expect((await verifier.verify(BEARER)).outcome).toBe('verified');
-    expect(verifyToken).toHaveBeenCalledTimes(1);
+    expect(verifyToken).toHaveBeenCalledTimes(6);
   });
 
-  it('keeps one proof per token: two holders of one mission never share a cache entry or a throttle window', async () => {
-    const OTHER = `vbn_live_ZyXw9876_${'t'.repeat(32)}`;
-    const other: VerifiedToken = {
-      id: 'tok-2',
-      prefix: 'ZyXw9876',
-      holder: { kind: 'named', name: 'CI runner' },
-    };
-    const standing = new Map<string, TokenVerification>([
-      ['tok-1', verified],
-      ['tok-2', { outcome: 'verified', token: other, mission }],
-    ]);
-    const verifyToken = vi.fn(
-      async (bearer: string): Promise<TokenVerification> =>
-        standing.get(bearer === BEARER ? 'tok-1' : 'tok-2') ?? { outcome: 'unknown' },
-    );
-    const cache = new MemoryCacheClient();
-    const verifier = new TokenVerifier({
-      missions: {
-        verifyToken,
-        provenToken: async (_prefix, tokenId) => standing.get(tokenId) ?? { outcome: 'unknown' },
-      },
-      cache,
-      rateLimiter: new SlidingWindowRateLimiter(),
-    });
-    const first = await verifier.verify(BEARER);
-    const second = await verifier.verify(OTHER);
-    expect(first.outcome === 'verified' && first.token.holder).toEqual(token.holder);
-    expect(second.outcome === 'verified' && second.token.holder).toEqual(other.holder);
-    expect(verifiedTokenCacheKey(BEARER)).not.toBe(verifiedTokenCacheKey(OTHER));
-    expect(verifyThrottleKey('AbCd1234', '198.51.100.9')).not.toBe(
-      verifyThrottleKey('ZyXw9876', '198.51.100.9'),
-    );
-
-    // Bob's token is revoked: the CI runner's proof is untouched.
-    standing.set('tok-1', { outcome: 'retired', reason: 'revoked', token, mission });
-    expect((await verifier.verify(BEARER)).outcome).toBe('retired');
-    expect((await verifier.verify(OTHER)).outcome).toBe('verified');
-    expect(verifyToken).toHaveBeenCalledTimes(2);
+  it('never throttles a token stored as a sha256 digest, however many wrong secrets are replayed', async () => {
+    const { verifier, verifyToken } = setup('sha256', () => ({ outcome: 'unknown' }));
+    for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW * 3; i++) {
+      expect((await verifier.verify(BEARER, '203.0.113.7')).outcome).toBe('unknown');
+    }
+    expect(verifyToken).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW * 3);
   });
 
-  it('keys the proof by a hash of the bearer, never by the bearer', async () => {
-    const { verifier, cache } = setup();
-    await verifier.verify(BEARER);
-    const key = verifiedTokenCacheKey(BEARER);
-    expect(key).not.toContain(BEARER.slice(-32));
-    expect(await cache.get(key)).toBe('tok-1');
-    expect(verifiedTokenCacheKey(`  ${BEARER} `)).toBe(key);
-  });
-
-  it('voids a proof whose token row is gone or replaced, and verifies again', async () => {
-    const { verifier, verifyToken, now } = setup();
-    await verifier.verify(BEARER);
-    now({ outcome: 'verified', token: { ...token, id: 'tok-2' }, mission });
-    await verifier.verify(BEARER);
-    expect(verifyToken).toHaveBeenCalledTimes(2);
-  });
-
-  it('collapses concurrent first calls into one verification', async () => {
-    const { verifier, verifyToken } = setup();
-    const results = await Promise.all(Array.from({ length: 20 }, () => verifier.verify(BEARER)));
-    expect(results.every((r) => r.outcome === 'verified')).toBe(true);
-    expect(verifyToken).toHaveBeenCalledTimes(1);
-  });
-
-  it('never caches an unknown bearer, and throttles misses per prefix', async () => {
-    const { verifier, verifyToken } = setup({ outcome: 'unknown' });
+  it('throttles the argon2id check of a legacy token: past the window, nothing is computed', async () => {
+    const { verifier, slowChecks } = setup('argon2id', () => ({ outcome: 'unknown' }));
     for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW; i++) {
       expect((await verifier.verify(BEARER)).outcome).toBe('unknown');
     }
-    expect(verifyToken).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW);
+    expect(slowChecks).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW);
     const throttled = await verifier.verify(BEARER);
     expect(throttled.outcome).toBe('throttled');
     expect(throttled.outcome === 'throttled' && throttled.retryAfterMs).toBeGreaterThan(0);
-    expect(verifyToken).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW);
-  });
-
-  it('slides the proof on every hit: an agent that keeps calling never verifies again', async () => {
-    let nowMs = Date.parse('2026-10-13T09:00:00.000Z');
-    const verifyToken = vi.fn(
-      async (): Promise<TokenVerification> => ({ outcome: 'verified', token, mission }),
-    );
-    const verifier = new TokenVerifier({
-      missions: { verifyToken, provenToken: async () => verified },
-      cache: new MemoryCacheClient({ now: () => nowMs }),
-      rateLimiter: new SlidingWindowRateLimiter({ now: () => nowMs }),
-    });
-    const twoThirdsOfTheTtl = ((VERIFIED_TOKEN_TTL_SECONDS * 2) / 3) * 1000;
-    for (let call = 0; call < 6; call++) {
-      expect((await verifier.verify(BEARER)).outcome).toBe('verified');
-      nowMs += twoThirdsOfTheTtl;
-    }
-    expect(verifyToken).toHaveBeenCalledTimes(1);
-
-    // Silent for longer than the TTL: the proof is gone, one more verification.
-    nowMs += VERIFIED_TOKEN_TTL_SECONDS * 1000;
-    expect((await verifier.verify(BEARER)).outcome).toBe('verified');
-    expect(verifyToken).toHaveBeenCalledTimes(2);
+    expect(slowChecks).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW);
   });
 
   it('throttles per prefix AND client address: a flood of wrong secrets locks out only its sender', async () => {
-    const verifyToken = vi.fn(
-      async (bearer: string): Promise<TokenVerification> =>
-        bearer === BEARER ? { outcome: 'verified', token, mission } : { outcome: 'unknown' },
+    const { verifier } = setup('argon2id', (bearer) =>
+      bearer === BEARER ? verified : { outcome: 'unknown' },
     );
-    const verifier = new TokenVerifier({
-      missions: { verifyToken, provenToken: async () => verified },
-      cache: new MemoryCacheClient(),
-      rateLimiter: new SlidingWindowRateLimiter(),
-    });
     const wrong = (i: number) => `vbn_live_AbCd1234_${String(i).padStart(32, 'x')}`;
     const ATTACKER = '203.0.113.7';
     for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW; i++) {
@@ -404,17 +298,21 @@ describe('verified-token cache', () => {
     }
     expect((await verifier.verify(wrong(99), ATTACKER)).outcome).toBe('throttled');
 
-    // The real agent, cold cache, another address: verified, not 429.
+    // The real agent, another address: verified, not 429.
     expect((await verifier.verify(BEARER, '198.51.100.9')).outcome).toBe('verified');
     // From the flooding address itself the window is still closed...
     expect((await verifier.verify(wrong(100), ATTACKER)).outcome).toBe('throttled');
     // ...and callers whose address cannot be resolved share one window of their own.
     expect((await verifier.verify(wrong(101))).outcome).toBe('unknown');
     expect((await verifier.verify(wrong(102), UNKNOWN_CLIENT)).outcome).toBe('unknown');
+    // Another legacy prefix has a window of its own.
+    expect(verifyThrottleKey('AbCd1234', ATTACKER)).not.toBe(
+      verifyThrottleKey('ZyXw9876', ATTACKER),
+    );
   });
 
   it('does not look anything up for a bearer that is not a mission token', async () => {
-    const { verifier, verifyToken } = setup();
+    const { verifier, verifyToken } = setup('sha256', () => verified);
     expect(await verifier.verify('some-session-id')).toEqual({ outcome: 'unknown' });
     expect(verifyToken).not.toHaveBeenCalled();
   });

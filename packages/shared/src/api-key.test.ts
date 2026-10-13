@@ -1,5 +1,12 @@
 import { describe, expect, test } from 'vitest';
-import { generateApiKey, hashApiKey, parseApiKey, verifyApiKey } from './api-key.ts';
+import {
+  apiKeyMatchesDigest,
+  digestApiKey,
+  generateApiKey,
+  hashApiKeyArgon2id,
+  parseApiKey,
+  verifyApiKeyArgon2id,
+} from './api-key.ts';
 
 describe('api-key', () => {
   test('generateApiKey("live") produces a vbn_live_ prefixed key', () => {
@@ -26,11 +33,46 @@ describe('api-key', () => {
     expect(parseApiKey('vbn_mgmt_abcdefgh_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz')).toBeNull();
   });
 
-  test('hash + verify roundtrip works for live keys', async () => {
+  test('the digest is the sha256 of the whole key, in lowercase hex', () => {
+    // RFC 6234 test vector for "abc".
+    expect(digestApiKey('abc')).toBe(
+      'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad',
+    );
     const { apiKey } = generateApiKey('live');
-    const hash = await hashApiKey(apiKey);
-    expect(await verifyApiKey(hash, apiKey)).toBe(true);
-    expect(await verifyApiKey(hash, apiKey + 'X')).toBe(false);
+    expect(digestApiKey(apiKey)).toMatch(/^[0-9a-f]{64}$/);
+    expect(digestApiKey(apiKey)).toBe(digestApiKey(apiKey));
+  });
+
+  test('digest + match roundtrip works, and one changed character does not match', () => {
+    const { apiKey } = generateApiKey('live');
+    const digest = digestApiKey(apiKey);
+    expect(apiKeyMatchesDigest(digest, apiKey)).toBe(true);
+    expect(apiKeyMatchesDigest(digest, apiKey + 'X')).toBe(false);
+    expect(apiKeyMatchesDigest(digest, apiKey.slice(0, -1))).toBe(false);
+    expect(apiKeyMatchesDigest(digest, '')).toBe(false);
+  });
+
+  test('a stored value that is not a sha256 in lowercase hex matches nothing', () => {
+    const { apiKey } = generateApiKey('live');
+    const digest = digestApiKey(apiKey);
+    for (const stored of [
+      '',
+      'not-a-digest',
+      digest.slice(0, 62),
+      digest.toUpperCase(),
+      `${digest}\n`,
+      `${digest}00`,
+      apiKey,
+    ]) {
+      expect(apiKeyMatchesDigest(stored, apiKey), stored).toBe(false);
+    }
+  });
+
+  test('argon2id hash + verify roundtrip still works (tokens of an earlier build)', async () => {
+    const { apiKey } = generateApiKey('live');
+    const hash = await hashApiKeyArgon2id(apiKey);
+    expect(await verifyApiKeyArgon2id(hash, apiKey)).toBe(true);
+    expect(await verifyApiKeyArgon2id(hash, apiKey + 'X')).toBe(false);
   });
 
   test('parseApiKey rejects wrong lengths', () => {
@@ -52,10 +94,11 @@ describe('api-key', () => {
     expect(parseApiKey(`vbn_test_abcdefgh_${'z'.repeat(31)}\n`)).toBeNull();
   });
 
-  test('verifyApiKey answers false on a hash it cannot read', async () => {
+  test('verifyApiKeyArgon2id answers false on a hash it cannot read', async () => {
     const { apiKey } = generateApiKey('live');
-    expect(await verifyApiKey('not-an-argon2-hash', apiKey)).toBe(false);
-    expect(await verifyApiKey('', apiKey)).toBe(false);
+    expect(await verifyApiKeyArgon2id('not-an-argon2-hash', apiKey)).toBe(false);
+    expect(await verifyApiKeyArgon2id('', apiKey)).toBe(false);
+    expect(await verifyApiKeyArgon2id(digestApiKey(apiKey), apiKey)).toBe(false);
   });
 
   test('parseApiKey rejects unknown prefix', () => {

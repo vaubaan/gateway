@@ -5,7 +5,15 @@ date: 2026-10-13
 extends:
   - unified-gates-drop-confirm
   - api-key-format-vbn-live-argon2id
+amended-by:
+  - mission-token-sha256-digest
 ---
+
+> **Amended 2026-10-13** by
+> [mission-token-sha256-digest](./mission-token-sha256-digest.md): mission
+> tokens are stored as a SHA-256 digest, so the verification throttle and the
+> shared window accepted here concern only tokens an earlier build stored as
+> argon2id, until their first use. The verified-token cache is removed.
 
 # Execution door — arguments must be JSON values; a repeated `approval` ends an opening; the shared verification window is accepted
 

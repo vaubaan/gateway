@@ -1997,8 +1997,11 @@ included` equals the catalog; where the environment comes from (Vercel: the
   `curl … tools/list` check; masked prefix on a revisited
   page; sub-path of the public URL; `/agent-bootstrap.md` documents every
   refusal code and names no instance.
-- **`token.test.ts`** (8) — `vbn_live_<8>_<32>`, argon2id hash, clear prefix;
-  verification; uniqueness; prefix of a live token only; the draft schema
+- **`token.test.ts`** (10) — `vbn_live_<8>_<32>`, SHA-256 digest, clear
+  prefix; verification against the digest and nothing else; a hash an
+  earlier build stored as argon2id still verifies; a hash is never read
+  under the wrong algorithm nor under an unknown one; uniqueness; prefix of
+  a live token only; the draft schema
   (unknown keys refused, every malformed field named).
 - **`src/app/(app)/missions/new/form-state.test.ts`** (36) — initial state
   (nothing included, hidden and stale resources unticked, daily period, no
@@ -2106,7 +2109,7 @@ connections and resources seeded through the repositories (36):
   - **the secret of a member token belongs to the member alone**: everything
     the creator can read (detail, list, team, session, audit search) and every
     column of every table hold the prefix and never the secret, and the row
-    is an argon2id hash; over HTTP the secret is in the answer to the member
+    is a SHA-256 digest; over HTTP the secret is in the answer to the member
     and in no answer to the creator's own mutations;
   - **handlers**: each refusal with its status and a sentence; no session,
     another origin.
@@ -2152,9 +2155,9 @@ connections and resources seeded through the repositories (36):
   **`store/missions.test.ts`** — migration `0010` and the repository (the
   check inside the insert, the stale token revoked when a member is added):
   see "Scenarios — Store".
-- **`src/server/execution/execution.test.ts`** — the verified-token cache asks
-  the mission service on every hit: a cached proof never outlives a removed or
-  deactivated holder; one proof and one throttle window per token.
+- **`src/server/execution/execution.test.ts`** — the token verifier remembers
+  nothing: every call asks the mission service, so a removed or deactivated
+  holder is refused on the next one.
 - **`tests/unit/structural/telemetry-report-shape.test.ts`** — the calls of
   the property are made with three holders, and the member's id, subject and
   email, the token name, every token id, prefix and secret are among what must
@@ -2197,13 +2200,12 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   chain, a hop with a port or in brackets, an invalid `trusted_proxies`
   entry skipped — the one rule of `http/client-ip`); `citedRefs` over
   identifier and list segments; tool filter (needs a connection **and** an
-  accepted risk, nothing of an experimental plugin); verified-token cache
-  (hash computed once, state re-read on every call, proof keyed by a hash of
-  the bearer, **the proof slides on every hit** so an agent that keeps
-  calling never verifies again, a replaced row voids the proof, concurrent
-  first calls share one verification, unknown bearers never cached and
-  **throttled per prefix and client address** — a flood of wrong secrets
-  locks out only its sender —, a non-token bearer costs nothing); upstream
+  accepted risk, nothing of an experimental plugin); token verifier (nothing
+  remembered: the state is read again on every call; a token stored as a
+  SHA-256 digest is never throttled, however many wrong secrets are
+  replayed; the argon2id check of a legacy token is **throttled per prefix
+  and client address** — a flood of wrong secrets locks out only its sender
+  —, a non-token bearer costs nothing); upstream
   credential cache (scoped per connection, dropped on demand, unreachable
   after the connection row changed, lifetime capped).
 - **`integration/execution/pipeline.test.ts`** (24)
@@ -2270,17 +2272,23 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
     bearer and a delegated token (injected resolver) are 403
     `wrong-credential-kind` naming door, presented and expected; a foreign
     `Origin` is 403;
-  - argon2 once for a burst and a series, yet a revocation is seen on the
-    next call; wrong secrets on a real prefix end in 429 for their sender,
-    while a verified agent is not locked out when another address floods its
-    prefix, nor when no client address can be resolved; the surface limit
-    is per mission, whatever the agent label, with `Retry-After`;
-  - **the accepted cold-agent 429** (ADR
+  - **token verification** (ADR [[mission-token-sha256-digest]]): the row
+    holds the SHA-256 digest of the Bearer; a revocation is seen on the next
+    call; wrong secrets on a real prefix are each 401, never 429, and the
+    agent is never held, proxy or not; the surface limit is per mission,
+    whatever the agent label, with `Retry-After`;
+  - **a token an earlier build stored as argon2id**: the same Bearer still
+    authenticates and its first call replaces the stored hash by the digest
+    (same row, same prefix, still active); a wrong secret moves nothing; a
+    legacy token of a revoked mission is refused by its reason; wrong secrets
+    on a legacy prefix end in 429 for their sender while the agent, from
+    another address, passes — after which the flood is answered 401 again;
+  - **the accepted 429, legacy tokens only** (ADR
     [[execution-door-json-faithful-arguments-and-shared-throttle]]): with no
-    trusted proxy, thirty wrong secrets on a known prefix are each 401, and
-    the real token, not verified yet, is then answered 429 with
-    `Retry-After`; nothing was learnt or changed — the mission and its token
-    stand — and the agent is served again once the window has passed;
+    trusted proxy, thirty wrong secrets on a legacy prefix are each 401, and
+    the real token, never used since the upgrade, is then answered 429 with
+    `Retry-After`; nothing was learnt or changed — the mission, its token and
+    its stored hash stand;
   - **arguments JSON cannot carry**: a `tools/call` whose body carries
     `"per_page":1e999` is answered `-32602` naming `argument 'per_page' is
 Infinity`; nothing reaches GitHub, and the audit entry is `refused` with

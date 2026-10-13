@@ -32,7 +32,10 @@ policy on selected resources — and receives its token once. Spec:
 [vaubaan-gateway](../spec/vaubaan-gateway.md) §0 (Mission, Mission policy,
 Budget, Gate, Preset, Resource), §3.1, §3.2, §4.2 "Missions", §4.4, §7.4,
 §7.8. Decisions: pivot ADR D4 (nullable expiry, mandatory budget),
-[api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md),
+[api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md)
+(the token format),
+[mission-token-sha256-digest](../decisions/mission-token-sha256-digest.md)
+(what is stored),
 [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md),
 [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)
 (a repeated `approval` ends an opening),
@@ -115,7 +118,7 @@ apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [i
 only from `@vaubaan/shared/risk-id`, `@vaubaan/shared/domain` and
 `@vaubaan/policy-engine`): the creation
 form imports them directly and runs the same decision as the server. The
-`index.ts` barrel is server-only (argon2 through `token.ts`).
+`index.ts` barrel is server-only (`node:crypto` and argon2 through `token.ts`).
 
 The pages live in the `(app)` route group and take its layout: a web
 session gets the `AppShell` (`components/shell/AppShell.tsx`), where "Missions"
@@ -392,9 +395,9 @@ Defaults the form adds: period **daily reload** (`DEFAULT_PERIOD`), expiry
    read.
 4. Token: `issueTokenTo` (`token-issuer.ts`) for the creator as holder
    (`{ kind: 'member', userId: creatorUserId }`): `mintMissionToken()` →
-   `vbn_live_<8>_<32>`, argon2id hash; a prefix already taken is re-drawn (up
-   to 5 times); `missions.issueToken` stores prefix + hash + `hashAlg:
-'argon2id'` + the holder + `createdBy`, after checking in its own
+   `vbn_live_<8>_<32>` and its SHA-256 digest; a prefix already taken is
+   re-drawn (up to 5 times); `missions.issueToken` stores prefix + digest +
+   `hashAlg: 'sha256'` + the holder + `createdBy`, after checking in its own
    transaction that the mission is active and the holder on it ("The token
    insert checks again" below).
 5. Admin audit `mission-issued`; log line with the prefix. The `after` payload
@@ -474,9 +477,13 @@ preference of the owner); a stale one is dropped by all three.
 - **`revoke`** — creator only, idempotent; status `revoked`, every active
   token of every holder `revoked`; audit `mission-revoked`; `revocation`
   session event.
-- **`verifyToken(bearer)`** — `prefixOfBearer` (a `vbn_live_` key only) →
-  `missions.findTokenByPrefix` → `bearerMatches` (argon2 verify) →
-  `standingOf`: `{ outcome: 'verified', mission, token }`, `{ outcome:
+- **`verifyToken(bearer, legacyGate?)`** — `prefixOfBearer` (a `vbn_live_`
+  key only) → `missions.findTokenByPrefix` → `bearerMatches` (the stored
+  SHA-256 digest, compared in constant time; argon2id for a row an earlier
+  build stored, after asking `legacyGate` when one is given, and then
+  `rehashToken` to move the row to the digest — see
+  [execution-door, "Token verification"](execution-door.md#token-verification-token-verifierts))
+  → `standingOf`: `{ outcome: 'verified', mission, token }`, `{ outcome:
 'retired', reason, mission, token }` or `{ outcome: 'unknown' }` (malformed,
   unknown prefix and wrong secret are one answer). `token` is a `VerifiedToken`
   — `{ id, prefix, holder }`: the token record and its hash do not leave the
@@ -598,7 +605,7 @@ every holder at once, same tokens.
 
 **The creator never sees a member's secret.** `generateToken` returns it to
 the member who called, and `issueTokenTo` (`token-issuer.ts`) hands the store
-a prefix and an argon2id hash. No method of either service, no handler answer
+a prefix and a SHA-256 digest. No method of either service, no handler answer
 to the creator, no audit entry and no row carries it; a test reads everything
 the creator can read, and every column of every table, and looks for it.
 
@@ -662,9 +669,10 @@ reversibly.
 ### The token insert checks again — `MissionsRepo.issueToken`, `TokenNotIssuableError`
 
 Every token goes through `issueTokenTo` → `store.missions.issueToken`. The
-services check the mission and the caller **before** they compute the argon2id
-hash, which takes tens of milliseconds: a revocation, a removal or a
-deactivation committed meanwhile must not be undone by the insert. So
+services check the mission and the caller **before** they mint the token, and
+other requests run between that check and the insert (the mint and the
+prefix lookup are awaited): a revocation, a removal or a deactivation
+committed meanwhile must not be undone by the insert. So
 `issueToken` reads the mission's stored status and, for a member token, the
 holder's user status and member row (`membershipOf`) in the same
 `BEGIN IMMEDIATE` transaction that retires the holder's previous token and

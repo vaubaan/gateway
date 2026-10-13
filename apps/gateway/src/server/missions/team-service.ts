@@ -58,7 +58,7 @@ export interface MissionTeamDeps {
   readonly missions: Pick<MissionService, 'access' | 'stateOf' | 'stateAfterRefusal' | 'kitOf'>;
   readonly clock: Clock;
   readonly logger: Logger;
-  /** Tests inject a deterministic minter; production hashes with argon2id. */
+  /** Tests inject a deterministic minter; production stores the SHA-256 digest. */
   readonly mint?: TokenMinter;
 }
 

@@ -35,6 +35,15 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   checked against the services recorded for the mission's project at discovery; a
   project discovered by an earlier build has none recorded, and a call that names
   a service is refused until its owner refreshes the connection.
+- **Mission tokens are stored as a SHA-256 digest; tokens you already issued keep
+  working.** Nothing to do, and no schema migration. A token issued by an earlier
+  build is stored as an argon2id hash: it still authenticates with the same Bearer,
+  and its first successful call replaces the stored hash by the digest (one `info`
+  log line, `mission token moved to its sha256 digest`). Until that first call, and
+  only for such a token, wrong secrets replayed on its prefix are still throttled
+  (429). **Do not go back to an older image after this one has served calls**: it
+  reads argon2id only and would refuse every token that has been moved or issued
+  since.
 - **Supabase: reading `auth`, `vault` or `storage` through SQL is a risk of its
   own.** `supabase__execute_sql` now needs `supabase[<env>].read-managed-schemas`
   on top of `supabase.read-data` when the query names a schema Supabase manages, and
@@ -83,7 +92,7 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   agent wrote. Issuance refuses anything beyond the owner's authority, and the preview
   warns when a selected resource has no usable environment label.
 - **Mission tokens, members and the bootstrap kit.** A mission has one or more tokens
-  (`vbn_live_…`, stored as an argon2id hash), each with one holder. The creator adds
+  (`vbn_live_…`, stored as a SHA-256 digest), each with one holder. The creator adds
   colleagues as **members**; each generates their own token, shown once with the
   bootstrap kit — the creator never sees it — and the creator creates **named tokens**
   for a CI runner or a shared machine. Every token shares the mission's resources, policy
@@ -433,7 +442,7 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   sign-in and connect flows cannot leave the instance.
 - **Sessions and tokens at rest.** The session cookie is `__Host-vbn_session`, which a
   sibling subdomain cannot plant; session rows are keyed by the SHA-256 of the session
-  id and mission tokens by an argon2id hash, so a copy of the database holds no usable
+  id and mission tokens by a SHA-256 digest, so a copy of the database holds no usable
   credential.
 - **The management door checks the client on every request.** A delegated token stops
   working as soon as its client is disabled or no longer approved under the registration
@@ -441,10 +450,13 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   knowing a `client_id` is not enough to exhaust a client's budget. Client ID Metadata
   Documents are never fetched from private, loopback, link-local or site-local
   addresses.
-- **Token verification throttle keyed on prefix and client address.** A flood of wrong
-  secrets on `/mcp` locks out its sender, not the agent that holds the token. Behind a
-  proxy, set `trusted_proxies`, or every caller shares one address; the instance warns
-  at start when it is empty.
+- **Wrong secrets on a token's prefix never hold its agent.** A mission token is stored
+  as a SHA-256 digest: a wrong secret on `/mcp` is answered 401 at once, nothing is
+  throttled and nothing about a verification is remembered, so a rotation or a
+  revocation is seen by the next call. The one exception is a token issued by an earlier
+  build and not used since (see the upgrade notes): its check is throttled per prefix
+  and client address. Behind a proxy, set `trusted_proxies`, or every caller shares one
+  address for the address-keyed limits; the instance warns at start when it is empty.
 - **No telemetry reaches the placeholder collector, whatever is appended to its URL**,
   and a call its caller abandoned is not reported at all.
 - **The image and the pipeline.** The image holds what the server needs and nothing

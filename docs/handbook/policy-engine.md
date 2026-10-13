@@ -26,7 +26,7 @@ the gateway feeds it parsed objects (`IndexedRiskCatalog`, `Slice[]`,
 `@vaubaan/shared` — types from the barrel, values (`parseRiskId`,
 `formatRiskId`, `isRiskId`) from the browser-safe subpath
 `@vaubaan/shared/risk-id`, because the issuance UI bundles this package and
-the barrel drags in argon2 through `api-key.ts`.
+the barrel drags in `node:crypto` and argon2 through `api-key.ts`.
 
 Rewritten in English at P0.2 (ADR
 [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)

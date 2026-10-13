@@ -222,7 +222,7 @@ function warnWithoutTrustedProxies(logger: Logger, config: InstanceConfig): void
     env: 'VAUBAAN_TRUSTED_PROXIES',
     affected: [
       'request page: one per-IP window for everybody',
-      'execution door: one token-verification window per token prefix (a flood of wrong secrets on a known prefix holds a not-yet-verified agent at 429)',
+      'execution door, tokens issued by an earlier build only: one argon2id verification window per token prefix (a flood of wrong secrets on such a prefix holds its agent at 429 until the token has been used once)',
       'authorization server: one registration window and one token window for everybody (one caller can hold every delegated client at 429 when it renews its token)',
       'audit: client_ip is not recorded',
     ],
