@@ -318,7 +318,10 @@ hidden resources selected on purpose.
 and a `RiskId` starts with its provider: two GitHub connections in one mission
 would share one partition and one budget, and the execution door could not tell
 which one a tool call targets. The draft is refused (`duplicate-provider`); the
-creator issues a second mission.
+creator issues a second mission. The message names the two connections, says
+that risks and budget are counted per provider, and says to keep one and issue
+a second mission for the other. Kept for now (product owner, 2026-10-13):
+lifting it needs the connection in the key of the policy and of the counters.
 
 **Env-qualified ids.** `isResolvable(risk, connection, selected)`: an
 account-scoped id always resolves; an env-qualified id resolves when a selected
@@ -374,7 +377,11 @@ whose resources carry every environment label of the catalog, and expects no
 issue and nothing skipped.
 
 Defaults the form adds: period **daily reload** (`DEFAULT_PERIOD`), expiry
-**never** (`DEFAULT_EXPIRY`), gate `auto` when a line names none.
+**never** (`DEFAULT_EXPIRY`), gate `auto` when a line names none. "Never"
+is decided, not an oversight (product owner, 2026-10-13, ADR
+[owner-decisions-of-2026-10-13](../decisions/owner-decisions-of-2026-10-13.md)):
+a mission is bounded by its budget, its gates and its revocation, and a
+default date would stop scheduled agents at a moment nobody chose.
 
 ## Issuance — `MissionService.issue(user, draft)`
 
@@ -1000,7 +1007,9 @@ After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
     kit, as at issuance) and "Revoke my token";
   - **Members** — email, role, added, whether they generated a token; for the
     creator, "Remove" and a select of the active users not on the mission yet
-    ("Add member");
+    ("Add member"). The select lists every active user's email on purpose
+    (product owner, 2026-10-13; threat model, A25): the instance is one
+    company's, and a free-text field would confirm or deny any address typed;
   - **Tokens that work now** — holder, kind, masked prefix, created (and by
     whom, for a named token), last used; for the creator, "Revoke" on each and
     a name field ("Create named token").

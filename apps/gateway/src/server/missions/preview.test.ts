@@ -194,6 +194,13 @@ describe('previewDraft — partition per connection', () => {
       [acmeConnection(), second],
     );
     expect(codes(sameProvider)).toEqual(['duplicate-provider']);
+    // The refusal names both connections, says why, and says what to do instead.
+    const [issue] = sameProvider.issues;
+    expect(issue?.message).toContain('one connection per provider');
+    expect(issue?.message).toContain(acmeConnection().display_name);
+    expect(issue?.message).toContain(second.display_name);
+    expect(issue?.message).toContain('counted per provider');
+    expect(issue?.message).toContain('issue a second mission for the other');
   });
 
   it('resolves a connection named by provider, and refuses an ambiguous one', () => {

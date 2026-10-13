@@ -418,7 +418,10 @@ Rules:
 - **A multi-connection mission** composes its authority connection by
   connection: `accepted_risks` is partitioned per connection, and each
   partition is checked against the creator's authority on that
-  connection.
+  connection. A mission carries **at most one connection per provider**:
+  a `RiskId` names the provider, so two connections of one provider would
+  share one partition and one budget. A draft that names two is refused
+  with a message that names both and says to issue a second mission.
 - **Resource selection.** A mission names, per connection, the resources
   it may touch; by default, all the connection's resources known at
   issuance. A call whose arguments cite a resource outside the mission's
@@ -878,8 +881,9 @@ only once the owner has confirmed that list.
 The creator names the mission, picks its connections and, within each,
 the resources it may touch, picks one preset per connection, reads the
 summary, unfolds the detail only if something needs adjusting within
-their authority, sets period and expiry. The token is revealed once. The
-bootstrap kit is displayed.
+their authority, sets period and expiry. A mission has no expiry unless
+its creator gives it one: the form's default is "never". The token is
+revealed once. The bootstrap kit is displayed.
 
 ### 7.5 Execute
 
@@ -1113,9 +1117,6 @@ automated suite. Trust comes from usage.
   risks for the beneficiary's missions, with approval by the connection
   owner rather than the creator? v1 assumption: no, the gate lives in the
   mission, like quantities.
-- **Several connections of one provider in a mission.** Allowed by the
-  model; the interface must make the resource ref unambiguous in the
-  bootstrap kit.
 - **Resources in shares.** A share's restriction is a list of `RiskId`.
   Should the owner also be able to restrict a share to some resources of
   the connection? v1 assumption: no, resource selection lives in the

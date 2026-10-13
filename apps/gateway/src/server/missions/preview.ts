@@ -655,7 +655,7 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
       // connections of one provider would share one partition and one budget.
       issues.push({
         code: 'duplicate-provider',
-        message: `"${connection.display_name}" and "${sameProvider}" are both ${connection.provider_label} connections; a mission carries one connection per provider. Issue a second mission for the other one.`,
+        message: `A mission carries one connection per provider, and "${sameProvider}" and "${connection.display_name}" are both ${connection.provider_label} connections. The risks and the budget of a mission are counted per provider, so a call could not say which of the two it means. Keep one of them in this mission and issue a second mission for the other.`,
         ...where,
       });
       return;

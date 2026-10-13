@@ -56,9 +56,12 @@ change that removes it.
   written and its Node scripts are tested, but no `v2.*` tag exists: no image was
   published, signed or attested by it. →
   [coding workflow, "Release"](../workflow/coding-workflow.md#release)
-- **The telemetry collector is not deployed.** The built-in collector URL is a
-  placeholder to which nothing is sent, and the collector's SQL under
-  `deploy/collector/` was applied to a local database only. →
+- **Telemetry is postponed until after the pilot.** It is off by default
+  (`telemetry.enabled: false`) and stays so; the collector is not deployed: the
+  built-in collector URL is a placeholder to which nothing is sent even when
+  telemetry is enabled, and the collector's SQL under `deploy/collector/` was
+  applied to a local database only. Nothing in the collector is being worked
+  on before the pilot has run (product owner's decision of 2026-10-13). →
   [telemetry, "Pointing an instance at a collector"](telemetry.md#pointing-an-instance-at-a-collector)
 
 ## Not enforced, or enforced more coarsely than one would expect

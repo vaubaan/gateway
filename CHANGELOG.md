@@ -86,6 +86,7 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   is refused at load. GitHub is unchanged: the Developer preset still hands the clone
   token (read-only) automatically and the push token after approval. The provider
   reference says "hands a read-only token" or "hands a write token".
+- **Two connections of one provider in a mission: the refusal says why.** The rule is unchanged (one connection per provider); the message now names both connections, says that risks and budget are counted per provider, and says to issue a second mission.
 - **The Share dialog lists the orphaned missions a share would bring back.** Sharing
   again to someone whose missions were orphaned restores those missions at once, with
   the token their agent still holds. The dialog now names them, with who issued each,

@@ -144,6 +144,13 @@ to the request's own id.
   window are the door's, the limit is `InstanceConfig.mcp.rateLimitPerMinute`
   ([configuration](configuration.md)). It is not the `rate-limited` refusal:
   that one is per risk, decided by the budget, and carries a `risk_id`.
+  **It stays per mission** (product owner's decision of 2026-10-13, ADR
+  [owner-decisions-of-2026-10-13](../decisions/owner-decisions-of-2026-10-13.md)):
+  it bounds what one mission sends to the instance and to the provider, and a
+  window per token would multiply that ceiling by the number of tokens. One
+  holder can therefore use up the window for the others (threat model, A26);
+  the audit names the holder of each call, and the creator revokes that token
+  alone.
 
 ### Token holders: who is calling, and when a token stops
 
