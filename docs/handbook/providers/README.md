@@ -34,7 +34,7 @@ le frontmatter `tracks:` (cf. skill `drift-detector`).
 | Supabase       | [`supabase.md`](./supabase.md)          | `db`, `storage`, `auth`, `functions` | 23 + fallback |
 | Railway        | [`railway.md`](./railway.md) (v5 SDK)   | `runtime`                            | 9 + fallback  |
 | SSH (bash)     | [`railway-ssh.md`](./railway-ssh.md) §2 | `host`                               | 5 + fallback  |
-| Gmail          | [`gmail.md`](./gmail.md)                | `mailbox`                            | 14 + fallback |
+| Gmail          | [`gmail.md`](./gmail.md) (v5 SDK, exp.) | `mailbox`                            | 15 + fallback |
 | Upstash Redis  | _handbook à rédiger_                    | `cache`                              | _à rédiger_   |
 | Stripe         | [`stripe.md`](./stripe.md)              | `billing`                            | 14 + fallback |
 | Resend         | [`resend.md`](./resend.md)              | `email`                              | 15 + fallback |

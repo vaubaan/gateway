@@ -1,8 +1,8 @@
 /**
- * Gmail data-model — declarative entity graph for the v4 risk-based engine.
+ * Gmail data-model — declarative entity graph of the `mailbox` plane.
  *
  * Spec     : docs/spec/gateway-risk-model.md §2.
- * Research : .vaubaan/research/providers/gmail.md §1.
+ * Handbook : docs/handbook/providers/gmail.md.
  *
  * Gmail exposes a single plane (`mailbox`) — there is no parallel split into
  * inbox / sent / drafts ; those are *labels* in Gmail's own model, not
@@ -14,10 +14,10 @@
  * NOT real Gmail entities, they are markers emitted by the classifier when
  * a call's args reveal a zone.
  *
- * Cardinalities follow the research table §1.2 verbatim. `envScopable` is
- * set on the plane root (`mailbox`) : a Gmail binding can carry an `env`
- * tag (e.g. `prod` for the company-wide mailbox vs `staging` for a test
- * mailbox), even though Gmail itself has no native env concept.
+ * Cardinalities follow the handbook table. `envScopable` is
+ * set on the plane root (`mailbox`) : a Gmail mailbox resource can carry an
+ * `env` label (e.g. `prod` for the company-wide mailbox vs `staging` for a
+ * test mailbox), even though Gmail itself has no native env concept.
  *
  * This data-model is the canonical source for :
  *   - the mermaid diagram rendered into the handbook (spec §2),
@@ -27,9 +27,9 @@
  *     into at least one slice rooted at a declared entity.
  */
 
-import type { DataModel } from '@vaubaan/shared';
+import type { DataModel } from '@vaubaan/plugin-sdk';
 
-export const dataModel: DataModel = {
+export const gmailDataModel: DataModel = {
   provider: 'gmail',
   planes: [
     {
@@ -46,8 +46,8 @@ export const dataModel: DataModel = {
           cardinalities: ['one'],
           description:
             'The Gmail account / OAuth-authenticated user backing the bearer used by ' +
-            'Vaubaan. Singleton per binding (one binding = one Gmail account at MVP — ' +
-            'multi-account is Phase 2, cf. research Q9).',
+            'Vaubaan. Singleton per connection (one connection = one Gmail account ; a mission ' +
+            'with several mailboxes is denied until multi-account is decided).',
         },
         {
           name: 'mailbox',
@@ -56,8 +56,8 @@ export const dataModel: DataModel = {
           envScopable: true,
           description:
             'Singleton implicit per account — Gmail does not expose multiple "mailboxes" ' +
-            'per account. Carries the env tag of the binding (e.g. an org may want ' +
-            'separate bindings for the legal team mailbox vs the support inbox).',
+            'per account. Carries the env label of the resource (e.g. a company may want ' +
+            'separate connections for the legal team mailbox vs the support inbox).',
         },
         {
           name: 'label',
@@ -109,8 +109,8 @@ export const dataModel: DataModel = {
             'Synthetic marker emitted by the classifier when a read call reveals the ' +
             'sender of a message. The bracketed identifier carries the zone name : ' +
             '`automated` / `internal` / `known-external` / `unknown`. Classification ' +
-            'rule lives in `risk-classifier.ts` and reads `binding.metadata.' +
-            'internal_domains` + `allowlist_domains` + `allowlist_addresses`.',
+            'rule lives in `classify.ts` and reads the resource metadata ' +
+            '`internal_domains` + `allowlist_domains` + `allowlist_addresses`.',
         },
         {
           name: 'to-zone',
@@ -120,7 +120,7 @@ export const dataModel: DataModel = {
             'Synthetic marker emitted by the classifier on draft / send calls. The ' +
             'bracketed identifier carries the zone name : `self` / `internal` / ' +
             '`allowlist` / `external-unbounded`. Computed from the union of to+cc+bcc ' +
-            'recipients vs the binding metadata.',
+            'recipients vs the resource metadata.',
         },
         {
           name: 'bulk-marker',
@@ -139,7 +139,7 @@ export const dataModel: DataModel = {
           description:
             'Synthetic marker emitted by the classifier when a read call targets a ' +
             'thread/message carrying a label listed in ' +
-            '`binding.metadata.sensitive_labels` (e.g. FINANCIAL, LEGAL, HR, ' +
+            'the resource metadata `sensitive_labels` (e.g. FINANCIAL, LEGAL, HR, ' +
             'PERSONAL). Overrides the from-zone classification — a sensitive label ' +
             'gates the read regardless of who the sender is.',
         },
