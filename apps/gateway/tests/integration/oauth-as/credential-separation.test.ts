@@ -79,7 +79,7 @@ describe('the three credentials never cross over', () => {
     it('the delegated token opens the management door', async () => {
       const { response, body } = await rpc(MANAGEMENT_URL, bearer(delegated.tokens.access_token));
       expect(response.status).toBe(200);
-      expect(body.result?.tools).toEqual([]);
+      expect(body.result?.tools).toHaveLength(7);
     });
   });
 

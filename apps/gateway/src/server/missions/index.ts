@@ -95,7 +95,7 @@ export {
   severityOf,
   type PresetWidth,
 } from './catalog-view';
-export { parseMissionDraft, type ParsedDraft } from './draft-schema';
+export { missionDraftSchema, parseMissionDraft, type ParsedDraft } from './draft-schema';
 export { createMissionHandlers, type MissionHandlers } from './handlers';
 export {
   MissionService,

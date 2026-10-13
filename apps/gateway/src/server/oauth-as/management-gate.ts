@@ -1,8 +1,8 @@
 /**
  * Admission to the management door (spec §4.1 bis, §6 "separation of the three
  * credentials") — the resource-server half of the authorization server. The
- * door itself (its MCP tools) is feature P2.4; whatever serves `/mcp/manage`
- * calls `admit()` first.
+ * door itself (its MCP tools) is `server/management`, which calls `admit()`
+ * before anything else.
  *
  * Order of a request, the mirror image of the execution door's:
  *

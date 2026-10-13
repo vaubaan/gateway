@@ -69,6 +69,7 @@ import type {
   IssuanceConnection,
   IssuanceResource,
   MissionDraft,
+  MissionIssuer,
   MissionPreview,
   ResolvedDraftConnection,
   SeverityLevel,
@@ -103,7 +104,12 @@ export interface MissionServiceDeps {
   readonly budget?: Pick<SessionService, 'stateOf'>;
 }
 
-/** Set when the act comes through the management door (P2.4). */
+/**
+ * Set when the act comes through the management door (spec §4.1 bis): the
+ * delegation the agent acts under. The user stays the actor and, for an
+ * issuance, the creator; the mission records the delegation (`issued_via`) and
+ * the audit entry names the client (`delegated_client_id`, spec §8).
+ */
 export interface IssueOptions {
   readonly delegation?: { readonly id: string; readonly clientId: string };
 }
@@ -196,6 +202,8 @@ export interface MissionOverview {
   readonly orphan: MissionOrphanReason | null;
   /** The active token's public part; `null` once revoked. */
   readonly token: { readonly prefix: string; readonly createdAt: string } | null;
+  /** The client that issued it by delegation; `null` for a mission issued in the interface. */
+  readonly issuedVia: MissionIssuer | null;
 }
 
 export interface MissionDetailConnection {
@@ -324,7 +332,7 @@ export class MissionService {
     const registered = this.deps.registry.get(connection.provider);
     if (!registered) return null;
     const authority = await this.deps.authority.authorityOf(user, connection);
-    if (authority.riskIds.length === 0) return null;
+    if (authority.basis === 'none' || authority.riskIds.length === 0) return null;
     const resources = await this.deps.store.connections.listResources(connection.id);
     const { plugin } = registered;
     return {
@@ -332,6 +340,7 @@ export class MissionService {
       provider_label: plugin.displayName,
       experimental: plugin.experimental === true,
       derives_env: typeof plugin.envOf === 'function',
+      basis: authority.basis,
       resources: resources.map(toIssuanceResource),
       risks: this.risksOf(connection.provider),
       authority: authority.riskIds,
@@ -394,6 +403,7 @@ export class MissionService {
       connections: mission.connections.length,
       risks: mission.policy.length,
       token_prefix: token.prefix,
+      delegated_client_id: options.delegation?.clientId ?? null,
     });
 
     return {
@@ -489,7 +499,11 @@ export class MissionService {
   }
 
   /** New token, same mission, same session, same budget (spec §7.8). */
-  async rotate(user: AuthoritySubject, missionId: string): Promise<RotateResult> {
+  async rotate(
+    user: AuthoritySubject,
+    missionId: string,
+    options: IssueOptions = {},
+  ): Promise<RotateResult> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
     const state = await this.stateOf(mission);
@@ -505,7 +519,7 @@ export class MissionService {
       object: { type: 'mission', id: mission.id },
       before: previous ? { token_prefix: previous.prefix } : null,
       after: { token_prefix: token.prefix },
-      delegated_client_id: null,
+      delegated_client_id: options.delegation?.clientId ?? null,
     });
     await this.recordEvent(mission.id, user.id, {
       kind: 'rotation',
@@ -514,6 +528,7 @@ export class MissionService {
     this.deps.logger.info('mission token rotated', {
       mission_id: mission.id,
       token_prefix: token.prefix,
+      delegated_client_id: options.delegation?.clientId ?? null,
     });
     return { ok: true, mission, token, kit: await this.kitFor(mission, { secret: token.secret }) };
   }
@@ -523,7 +538,11 @@ export class MissionService {
    * Idempotent. An orphaned mission is revoked like any other: this is how its
    * creator closes it for good (the stored status goes `active` → `revoked`).
    */
-  async revoke(user: AuthoritySubject, missionId: string): Promise<RevokeResult> {
+  async revoke(
+    user: AuthoritySubject,
+    missionId: string,
+    options: IssueOptions = {},
+  ): Promise<RevokeResult> {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
     if (mission.status === 'revoked') return { ok: true, mission, tokensRevoked: 0 };
@@ -538,13 +557,16 @@ export class MissionService {
       object: { type: 'mission', id: mission.id },
       before: { status: mission.status },
       after: { status: revoked.status, tokens_revoked: tokensRevoked },
-      delegated_client_id: null,
+      delegated_client_id: options.delegation?.clientId ?? null,
     });
     await this.recordEvent(mission.id, user.id, {
       kind: 'revocation',
       details: { tokens_revoked: tokensRevoked },
     });
-    this.deps.logger.info('mission revoked', { mission_id: mission.id });
+    this.deps.logger.info('mission revoked', {
+      mission_id: mission.id,
+      delegated_client_id: options.delegation?.clientId ?? null,
+    });
     return { ok: true, mission: revoked, tokensRevoked };
   }
 
@@ -626,9 +648,15 @@ export class MissionService {
 
   async list(user: AuthoritySubject): Promise<MissionOverview[]> {
     const missions = await this.deps.store.missions.listForCreator(user.id);
+    const issuers = await this.issuersOf(missions);
     const overviews: MissionOverview[] = [];
     for (const mission of missions) {
-      overviews.push(await this.overviewOf(await this.deps.grounds.inspect(mission)));
+      overviews.push(
+        await this.overviewOf(
+          await this.deps.grounds.inspect(mission),
+          issuers.get(mission.id) ?? null,
+        ),
+      );
     }
     // Newest first: the mission just issued is the one the creator looks for.
     return overviews.reverse();
@@ -638,7 +666,8 @@ export class MissionService {
     const inspected = await this.ownInspected(user, missionId);
     if (!inspected) return null;
     const { mission } = inspected;
-    const overview = await this.overviewOf(inspected);
+    const issuers = await this.issuersOf([mission]);
+    const overview = await this.overviewOf(inspected, issuers.get(mission.id) ?? null);
     const connections = await this.detailConnections(mission);
     const remaining = overview.state.kind === 'active' ? overview.state.remaining : null;
     const rows = this.catalogRowsOf(connections);
@@ -686,7 +715,10 @@ export class MissionService {
     return open;
   }
 
-  private async overviewOf({ mission, orphan }: InspectedMission): Promise<MissionOverview> {
+  private async overviewOf(
+    { mission, orphan }: InspectedMission,
+    issuedVia: MissionIssuer | null,
+  ): Promise<MissionOverview> {
     const token = await this.activeToken(mission.id);
     return {
       mission,
@@ -697,7 +729,27 @@ export class MissionService {
         uncovered: [...orphan.uncovered],
       },
       token: token ? { prefix: token.prefix, createdAt: token.createdAt } : null,
+      issuedVia,
     };
+  }
+
+  /**
+   * The clients behind the missions issued by delegation, read from the store
+   * (the mission names its delegation, the delegation its client): one read,
+   * and none at all when no mission of the list was delegated.
+   */
+  private async issuersOf(missions: readonly MissionRecord[]): Promise<Map<string, MissionIssuer>> {
+    const delegated = missions.filter((m) => m.delegationId !== null).map((m) => m.id);
+    const issuers = new Map<string, MissionIssuer>();
+    if (delegated.length === 0) return issuers;
+    for (const [missionId, issuer] of await this.deps.store.missions.issuersOf(delegated)) {
+      issuers.set(missionId, {
+        delegation_id: issuer.delegationId,
+        client_id: issuer.clientId,
+        client_name: issuer.clientName,
+      });
+    }
+    return issuers;
   }
 
   private stateOf(mission: MissionRecord): Promise<MissionState> {

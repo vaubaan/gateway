@@ -176,8 +176,8 @@ null`: what is persisted is the explicit enumeration, never a preset reference.
 
 Pure; `context` is `{ connections: IssuanceConnection[], now }` where each
 `IssuanceConnection` carries the connection's resources, the catalog as explicit
-rows (`CatalogRisk`), the creator's `authority`, the plugin's presets,
-`experimental` and `derives_env`. It never throws on a refusable draft: every
+rows (`CatalogRisk`), the creator's `authority` and its `basis` (`owner` or
+`share`), the plugin's presets, `experimental` and `derives_env`. It never throws on a refusable draft: every
 reason is a `PreviewIssue { code, message, connection_index?, connection_id?,
 risk_ids?, resource_refs? }`, so everything is fixed in one pass.
 
@@ -226,7 +226,8 @@ callable, complete `MissionPolicyEntry` lines), `exceeds`, `unknown`,
 `unresolvable`, `missing_budget`, `skipped_from_preset`, the explicit
 `resources` and `resources_total`. `resolved` is the passing part of the draft
 with every alias resolved; the form loads it after a proposal or a duplicate.
-The same shape is what the management door will expose (P2.4).
+The management door answers `preview_policy` with this shape
+(`management/views.ts` `previewView`; handbook [management-door](management-door.md)).
 
 **Notices — what passes but the creator should know.** `notices` is a list of
 `PreviewNotice { code, message, connection_index?, connection_id?,
@@ -356,10 +357,15 @@ length_seconds? }, expires_at, token_prefix }`. Never the secret.
 Mission creation and token insertion are two transactions; a failure between
 them leaves a mission without a token, which `rotate` repairs.
 
-`issue` and `duplicate` take an optional `IssueOptions { delegation: { id,
-clientId } }`: the mission is stored with that `delegationId` and the audit
-entry carries `delegated_client_id` (reserved for the management door, P2.4;
-no caller sets it today). `duplicate` also takes `overrides` for `name`,
+`issue`, `duplicate`, `rotate` and `revoke` take an optional `IssueOptions {
+delegation: { id, clientId } }`, set by the management door
+([management-door](management-door.md)): an issued mission is stored with
+that `delegationId`, and the `mission-issued`, `mission-rotated` and
+`mission-revoked` entries carry `delegated_client_id`. The user stays the
+actor and the creator. `MissionOverview.issuedVia` (`MissionIssuer`:
+`delegation_id`, `client_id`, `client_name`) names the client behind a
+delegated mission, read at every listing through `store.missions.issuersOf`;
+it is `null` for a mission issued in the interface. `duplicate` also takes `overrides` for `name`,
 `period` and `expires_at`, and answers `not-found` for a mission that is not
 the creator's.
 
@@ -567,8 +573,11 @@ ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    env labels), accepted risks with quota per period, rate limit and gate,
    reload and expiry, "the budget is shared, not multiplied", then one line per
    refusal code from `REFUSAL_GUIDANCE` (a `Record<RefusalCode, string>`, so a
-   new code fails to compile until it has its line) and "Never work around a
-   refusal… give that URL to the human as is";
+   new code fails to compile until it has its line), "Never work around a
+   refusal… give that URL to the human as is", and a closing section "The
+   management door" (`managementDoorSection`): the URL of `/mcp/manage`, that
+   the mission token does not open it, and that nothing behind it lifts a
+   refusal;
 4. `verify` — `curl -sS '<endpoint>' … -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`.
 
 The kit also carries `endpoint` (`<public_url>/mcp`) and `reveals_secret`.

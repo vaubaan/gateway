@@ -59,29 +59,29 @@ server module, each appended to by the feature that built it. Spec
 [vaubaan-gateway](../spec/vaubaan-gateway.md) §10 lists what must be tested;
 this table says where each requirement lives, and what is not written yet.
 
-| Spec §10                                                                 | Section                                                                                                                                                                 |
-| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Unit — each plugin's classifier                                          | [Provider plugins](#scenarios--provider-plugins)                                                                                                                        |
-| Unit — authority composition, resource selection, environment resolution | [Policy engine](#scenarios--policy-engine), [Missions](#scenarios--missions), [Execution door](#scenarios--execution-door)                                              |
-| Unit — the budget                                                        | [Budget and sessions](#scenarios--budget-and-sessions)                                                                                                                  |
-| Unit — the approval                                                      | [Budget and sessions](#scenarios--budget-and-sessions) (fingerprint, lookup, consumption), [Approval gate](#scenarios--approval-gate) (decision, gate opening, erasure) |
-| Unit — structured refusals                                               | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door)                                                                                  |
-| Unit — credential separation                                             | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door), [Authorization server](#scenarios--authorization-server-of-the-management-door) |
-| Integration — connection                                                 | [Connections](#scenarios--connections-resources-provider-apps)                                                                                                          |
-| Integration — share                                                      | [Authority, shares, groups](#scenarios--authority-shares-groups)                                                                                                        |
-| Integration — issuance                                                   | [Missions](#scenarios--missions)                                                                                                                                        |
-| Integration — claim and replay                                           | [Requests](#scenarios--requests), [Execution door](#scenarios--execution-door)                                                                                          |
-| Integration — approval and replay                                        | [Approval gate](#scenarios--approval-gate)                                                                                                                              |
-| Integration — revocation flows, `orphaned` states                        | [Authority, shares, groups](#scenarios--authority-shares-groups), [Missions](#scenarios--missions), [Connections](#scenarios--connections-resources-provider-apps)      |
-| Integration — OAuth delegation, issuance by an MCP client                | [Authorization server](#scenarios--authorization-server-of-the-management-door) (delegation by the official MCP client); issuance through the door is not built (P2.4)  |
-| Integration — simulated IdP                                              | [Human authentication](#scenarios--human-authentication)                                                                                                                |
-| Structural — telemetry report without forbidden fields                   | [Community telemetry](#scenarios--community-telemetry)                                                                                                                  |
-| Structural — session counters agree with the audit                       | [Execution door](#scenarios--execution-door), [Budget and sessions](#scenarios--budget-and-sessions)                                                                    |
-| Structural — no configuration value hard-coded                           | [Instance configuration](#scenarios--instance-configuration-crypto-composition-root)                                                                                    |
-| Structural — enumerated lists, never a wildcard or a preset reference    | [Plugin SDK](#scenarios--plugin-sdk), [Store](#scenarios--store), [Missions](#scenarios--missions)                                                                      |
-| Structural — every plugin ships a preset of its own catalog              | [Plugin SDK](#scenarios--plugin-sdk), [Provider plugins](#scenarios--provider-plugins)                                                                                  |
-| Structural — authority recomputed from current membership                | [Authority, shares, groups](#scenarios--authority-shares-groups), [Human authentication](#scenarios--human-authentication)                                              |
-| End to end — the cutover acceptance scenario                             | [`e2e-tests.md`](./e2e-tests.md): manual, with an automated browser smoke before it                                                                                     |
+| Spec §10                                                                 | Section                                                                                                                                                                                                                             |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Unit — each plugin's classifier                                          | [Provider plugins](#scenarios--provider-plugins)                                                                                                                                                                                    |
+| Unit — authority composition, resource selection, environment resolution | [Policy engine](#scenarios--policy-engine), [Missions](#scenarios--missions), [Execution door](#scenarios--execution-door)                                                                                                          |
+| Unit — the budget                                                        | [Budget and sessions](#scenarios--budget-and-sessions)                                                                                                                                                                              |
+| Unit — the approval                                                      | [Budget and sessions](#scenarios--budget-and-sessions) (fingerprint, lookup, consumption), [Approval gate](#scenarios--approval-gate) (decision, gate opening, erasure)                                                             |
+| Unit — structured refusals                                               | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door)                                                                                                                                              |
+| Unit — credential separation                                             | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door), [Authorization server](#scenarios--authorization-server-of-the-management-door)                                                             |
+| Integration — connection                                                 | [Connections](#scenarios--connections-resources-provider-apps)                                                                                                                                                                      |
+| Integration — share                                                      | [Authority, shares, groups](#scenarios--authority-shares-groups)                                                                                                                                                                    |
+| Integration — issuance                                                   | [Missions](#scenarios--missions)                                                                                                                                                                                                    |
+| Integration — claim and replay                                           | [Requests](#scenarios--requests), [Execution door](#scenarios--execution-door)                                                                                                                                                      |
+| Integration — approval and replay                                        | [Approval gate](#scenarios--approval-gate)                                                                                                                                                                                          |
+| Integration — revocation flows, `orphaned` states                        | [Authority, shares, groups](#scenarios--authority-shares-groups), [Missions](#scenarios--missions), [Connections](#scenarios--connections-resources-provider-apps)                                                                  |
+| Integration — OAuth delegation, issuance by an MCP client                | [Authorization server](#scenarios--authorization-server-of-the-management-door) (delegation by the official MCP client); [Management door tools](#scenarios--management-door-tools) (issuance within the authority, refusal beyond) |
+| Integration — simulated IdP                                              | [Human authentication](#scenarios--human-authentication)                                                                                                                                                                            |
+| Structural — telemetry report without forbidden fields                   | [Community telemetry](#scenarios--community-telemetry)                                                                                                                                                                              |
+| Structural — session counters agree with the audit                       | [Execution door](#scenarios--execution-door), [Budget and sessions](#scenarios--budget-and-sessions)                                                                                                                                |
+| Structural — no configuration value hard-coded                           | [Instance configuration](#scenarios--instance-configuration-crypto-composition-root)                                                                                                                                                |
+| Structural — enumerated lists, never a wildcard or a preset reference    | [Plugin SDK](#scenarios--plugin-sdk), [Store](#scenarios--store), [Missions](#scenarios--missions)                                                                                                                                  |
+| Structural — every plugin ships a preset of its own catalog              | [Plugin SDK](#scenarios--plugin-sdk), [Provider plugins](#scenarios--provider-plugins)                                                                                                                                              |
+| Structural — authority recomputed from current membership                | [Authority, shares, groups](#scenarios--authority-shares-groups), [Human authentication](#scenarios--human-authentication)                                                                                                          |
+| End to end — the cutover acceptance scenario                             | [`e2e-tests.md`](./e2e-tests.md): manual, with an automated browser smoke before it                                                                                                                                                 |
 
 ## Coverage
 
@@ -2244,8 +2244,7 @@ tells an explicit `telemetry.enabled` from an unset one.
 > delegated tokens", §8 (delegation granted or revoked), §10 "credential
 > separation" and "OAuth delegation … by an MCP client". Handbook
 > [[management-door]]. ADR [[management-door-authorization-server]]. The
-> door's tools (issuance by an MCP client within the user's authority) are
-> feature P2.4: the door behind the gate lists no tool here.
+> door's tools are the next section.
 
 Unit, beside the code (`apps/gateway/src/server/oauth-as/`):
 
@@ -2370,6 +2369,116 @@ Delegations and OAuth clients pages and their routes;
 `tests/integration/audit/admin-mutations.test.ts` classifies every public
 method of the module's classes and drives the four that leave an entry.
 
+## Scenarios — Management door tools
+
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §2.4 (a
+> delegated token issues missions within the user's authority, executes
+> nothing, grants nothing; "every mission issued this way is visible to the
+> user and marked as delegated"), §4.1 bis (what the management surface
+> exposes and never exposes), §6 (three credentials, traceable delegated
+> tokens, surface rate limits), §7.10, §8 (the delegated client in the audit),
+> §10 "OAuth delegation then issuance of a mission by an MCP client within the
+> user's authority and refusal beyond it". Handbook [[management-door]].
+
+Unit, beside the code (`apps/gateway/src/server/management/`):
+
+- **`tools.test.ts`** — **every act is the delegating user's**: each of the
+  seven methods calls the mission service with `{ id: actor.userId }`;
+  `issue` carries `{ delegation: { id, clientId } }`. **A draft beyond the
+  authority is refused before anything is issued, with the uncovered list**,
+  and does not spend the mutation budget; a draft refused for another reason
+  says so. The mutations share one budget per delegation
+  (`delegation:<id>:mutations`); reads and previews take none. A mission that
+  is not the user's is `mission-not-found` for read, rotate and revoke.
+  **Views**: the exact restriction of an owner and of a beneficiary; which
+  env-qualified ids are usable (labelled resources, none, a provider that
+  derives the environment); stale resources left out, hidden ones flagged;
+  presets against the authority (a base id of an env-scoped risk counts when
+  one environment is held); the catalog flagged per connection; a mission view
+  with its orphan reason and never more of the token than the masked prefix.
+  **Descriptions** state the rules of issuance (explicit RiskIds only, one
+  connection per provider, a budget for every risk, labelled resources for
+  env-qualified ids, the user is the creator and answers every request); the
+  schemas refuse unknown keys; an answer is structured content and text, a
+  refusal a tool error with its code.
+- **`hard-deny.test.ts`** — **structural**: the module's dependency type has
+  exactly `admit`, `missions`, `catalog`, `rateLimit`, `build`, `logger`; no
+  member of it is a service, module or repository of requests, budget,
+  execution, connections, shares, groups, authority or the store
+  (`Extract<Handed, Forbidden>` is `never`, with two controls that are not);
+  the mission port has seven methods and no `setGate`, `duplicate`,
+  `draftFrom`, `verifyToken`; no source file of the module imports a
+  forbidden module, and the wiring imports only config, logging, management,
+  missions and oauth-as; the tool table is the seven tools, none named after
+  an act of a forbidden family; `ManagementTools` has one public method per
+  tool; mutations are exactly issue, rotate, revoke.
+
+Integration (`apps/gateway/tests/integration/management/`, the real
+composition root on the `:memory:` store with the shipped plugins and the
+simulated IdP; the agent is the official MCP client holding a delegated token
+obtained through registration, sign-in, consent and code exchange):
+
+- **`management-door.test.ts`**
+  - The door lists exactly the seven tools, each with a description and a
+    strict input schema; the server instructions carry the rules.
+  - **Reading**: an owner sees their connections with the whole catalog,
+    resources and presets, experimental plugins hidden unless asked; which
+    env-qualified risks are usable on a labelled connection, an unlabelled
+    one and a provider that derives the environment; **a beneficiary sees the
+    shared connection with the exact restriction, and nothing else of the
+    owner**; someone who holds nothing sees nothing; `get_catalog` with and
+    without a connection, refused for an unknown provider or a connection
+    that is not the user's.
+  - **Preview**: what passes, nothing written; what exceeds as an answer;
+    a preset alone bounded by the authority; an env-qualified id with no
+    labelled resource; an unknown key, a missing budget and a wildcard.
+  - **Issue within the authority**: the delegating user is the creator, the
+    mission records the delegation, `issuedVia` names the client, the token
+    is revealed once with the kit (which names both doors), the Delegations
+    listing shows it, **the audit entry names the user and the client**, the
+    secret is in no log and no entry, **the token opens `/mcp` and is refused
+    `wrong-credential-kind` at `/mcp/manage`**, and the agent reads the
+    mission back marked as its own.
+  - **Refusal beyond the authority**, whole, with the uncovered list; nothing
+    issued, no entry. A share narrowed after the consent narrows what the
+    agent may issue. Another user's connection cannot be named by id or by
+    provider.
+  - **Rotate and revoke**: the old token stops, entries name the client; a
+    second revocation changes and writes nothing; a revoked mission is not
+    rotated. **An orphaned mission** is shown `orphaned` with its cause and
+    `can_come_back`, is not rotated, serves again when the share is made
+    again, and can be revoked. Another user's mission is not found, not
+    rotated, not revoked. A revoked delegation stops the agent at its next
+    call.
+  - **Never exposed**: for each family of spec §4.1 bis — answering a
+    request, gates, budgets, connections, shares, groups, tool execution —
+    plausible tool names are neither listed nor callable; a real provider
+    tool of the execution door is not callable here, and a delegated token is
+    refused at `/mcp`. A mission token and a human session get
+    `wrong-credential-kind` with no challenge.
+  - **Rate limits**: the surface limit is per delegation, through the
+    `RateLimiter` port, on `mgmt:`-prefixed keys, and does not slow another
+    delegation; mutations have their own budget, which a refused draft does
+    not spend.
+- **`hard-deny.test.ts`** — **structural, on the object graph**: from the
+  door, its tools and its handler of the real root, no module, service,
+  handler table or repository of the instance is reachable (the same walk
+  finds the token verifier from the gate, which does hold it); the mission
+  port is a frozen object of exactly seven bound methods; the catalog port is
+  data with no function and no plugin; the rate-limit port only reaches
+  prefixed keys.
+
+Also: `tests/integration/audit/admin-mutations.test.ts` classifies the
+public methods of `ManagementTools` and `ManagementDoor` and drives the three
+mutations, each of which must leave its entry in the user's name **with**
+`delegated_client_id` (acts of the interface must leave it null);
+`tests/integration/store/delegations.test.ts` covers `issuersOf` and
+`rotateSuccessorOf`; `src/server/oauth-as/token-service.test.ts` and
+`tests/integration/oauth-as/http-surface.test.ts` the refresh reuse window
+(the token rotated last inside the window, its bounds, older generations, a
+second reuse, another client, a window of 0, two simultaneous renewals over
+HTTP).
+
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).
@@ -2395,10 +2504,14 @@ method of the module's classes and drives the four that leave an entry.
   plugin's failures end in (two of them return provider failures as
   `isError` results, reported `classification-error`).
 
-- **The management door has no tool yet** — the OAuth flow ends on a
-  placeholder MCP server that lists nothing; reading, previewing and issuing
-  missions by delegation, within the user's authority and refused beyond it,
-  arrive with P2.4.
+- **Group shares through the management door** — `list_my_connections` and
+  issuance are driven for an owner and for the target of a direct share; the
+  union with a group share reaches the door through the same
+  `AuthorityService` and is tested there ([Authority, shares,
+  groups](#scenarios--authority-shares-groups)), not once more through MCP.
+- **Output schemas of the tools** — answers are structured content, but no
+  `outputSchema` is advertised, so a client does not validate them; their
+  shape is held by the tests of `views.ts` and of the door.
 - **The production fetcher of Client ID Metadata Documents over a real TLS
   connection** — the address filter, the lookup and the document rules are
   tested; a successful fetch from a public host is not (no test reaches a

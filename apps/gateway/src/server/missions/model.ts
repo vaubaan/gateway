@@ -131,12 +131,31 @@ export interface IssuanceConnection {
    * env-qualified risks need no labelled resource to be reachable.
    */
   readonly derives_env: boolean;
+  /**
+   * Why the creator holds authority here (spec §3.1): `owner` — theirs, or their
+   * group's — or `share`, the union of the shares they receive. `authority` is
+   * the exact restriction either way.
+   */
+  readonly basis: 'owner' | 'share';
   readonly resources: readonly IssuanceResource[];
   /** The whole catalog as explicit ids, catalog order. */
   readonly risks: readonly CatalogRisk[];
   /** The creator's authority on this connection: explicit ids, a subset of `risks`. */
   readonly authority: readonly RiskId[];
   readonly presets: readonly Preset[];
+}
+
+/**
+ * The client that issued a mission through the management door, on behalf of
+ * its creator (spec §2.4, §7.10 "marked as delegated"). `null` everywhere a
+ * mission was issued in the interface.
+ */
+export interface MissionIssuer {
+  readonly delegation_id: string;
+  /** The OAuth client's public id, as the audit names it (`delegated_client_id`). */
+  readonly client_id: string;
+  /** The name the client gave itself: a claim, not verified. */
+  readonly client_name: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

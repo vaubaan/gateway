@@ -49,7 +49,7 @@ export default async function MissionPage({ params }: Props) {
   const { id } = await params;
   const detail = await session.root.missions.service.get(session.user, id);
   if (!detail) notFound();
-  const { mission, state, token, orphan } = detail;
+  const { mission, state, token, orphan, issuedVia } = detail;
   // A revoked or orphaned mission refuses every call: its gates are not edited. `orphaned`
   // is derived on this very read, so the control is back as soon as the authority is.
   const gatesEditable = mission.status !== 'revoked' && mission.status !== 'orphaned';
@@ -114,6 +114,20 @@ export default async function MissionPage({ params }: Props) {
             <dd>
               <LocalDate ts={mission.createdAt} />
             </dd>
+            {issuedVia && (
+              <>
+                <dt>Issued by</dt>
+                <dd data-testid="issued-via">
+                  <Badge tone="info">delegated</Badge> {issuedVia.client_name}, on your behalf —{' '}
+                  <Link href={`/delegations#${issuedVia.delegation_id}`}>its delegation</Link>
+                  <div className={styles.muted}>
+                    Client <Code>{issuedVia.client_id}</Code>. The name is the one the application
+                    gave itself; it is not verified. You are the creator of this mission and the
+                    only one who answers its requests.
+                  </div>
+                </dd>
+              </>
+            )}
           </dl>
         </CardBody>
       </Card>

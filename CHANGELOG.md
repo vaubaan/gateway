@@ -19,8 +19,26 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   with PKCE `S256` only; opaque access tokens (`oauth.access_token_ttl`, 15 minutes, at
   most 1 hour) and single-use rotating refresh tokens (`oauth.refresh_token_ttl`, 30 days),
   stored as digests; `/oauth/token`, `/oauth/revoke`. A refresh token or an authorization
-  code presented twice revokes the whole delegation, with an audit entry. The door itself
-  lists no tool yet.
+  code presented twice revokes the whole delegation, with an audit entry — except the
+  refresh token rotated last, presented again by the same client within
+  `oauth.refresh_reuse_window_seconds` (30 by default, at most 60, 0 to disable): two
+  sessions of one agent that share a stored token and renew together both succeed.
+- **An agent prepares a mission by itself.** Behind that consent, `/mcp/manage` offers seven
+  tools: `list_my_connections` (the connections the user owns or was shared, with the exact
+  list of acceptable risks, resources and their environment labels, presets),
+  `get_catalog`, `list_my_missions` (state, policy, what is left of each quota),
+  `preview_policy`, `issue_mission`, `rotate_mission_token` and `revoke_mission`. Every
+  tool acts as the delegating user within their current authority: a draft that exceeds it
+  is refused whole with the list of what is not covered. The user is the creator of a
+  mission issued this way; the answer contains the mission token, once, and the bootstrap
+  kit. The door cannot answer a request, open a gate, extend a budget, touch a connection,
+  a share or a group, or call a provider tool — it is not given the means to. Rate-limited
+  per delegation.
+- **Delegated missions are marked.** Missions and the mission page show the application
+  that issued a mission on the user's behalf; the audit entries of an issuance, a rotation
+  and a revocation made through the management door name that client next to the user.
+- **The bootstrap kit and `/agent-bootstrap.md` describe the management door**: what it is
+  for, that a mission token does not open it, and that it lifts no refusal.
 - **Delegations page.** A user sees the applications they authorized, where each sends its
   access, the missions it issued, and revokes one in a click; a revocation by the gateway
   says why. Grants and revocations are audited under the user's name and visible in their

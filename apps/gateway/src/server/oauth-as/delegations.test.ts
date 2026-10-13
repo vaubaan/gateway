@@ -155,6 +155,8 @@ describe('DelegationService', () => {
     const refresh = (token: string) =>
       rig.tokens.refresh(client, rig.form({ grant_type: 'refresh_token', refresh_token: token }));
     await refresh(tokens.refresh_token);
+    // Past the reuse window, the same token again is a replay.
+    rig.clock.advance(61_000);
     await expect(refresh(tokens.refresh_token)).rejects.toMatchObject({ code: 'invalid_grant' });
     const [view] = await rig.delegations.listFor(rig.ada);
     expect(view).toMatchObject({

@@ -166,3 +166,59 @@ Rules of a draft:
 - an env-qualified risk (`supabase[staging].…`) needs a selected resource
   carrying that environment label;
 - ask for the least that does the job. A narrow proposal is approved faster.
+
+## 7. The management door
+
+An instance has a **second MCP server**, `<instance URL>/mcp/manage`, for an
+agent that acts **on behalf of a user** instead of executing a mission. It
+is how an agent prepares a mission by itself, without the paste of §6.
+
+- **Endpoint**: `<instance URL>/mcp/manage`.
+- **Auth**: OAuth, the standard authorization of MCP servers. Your MCP client
+  discovers the server, registers itself and opens the user's browser; the
+  user signs in and consents.
+- **Token**: a short-lived **delegated token** your client renews by itself.
+  The door is opened by that token and never by a mission token, which it
+  refuses (`wrong-credential-kind`).
+
+In Claude Code: `claude mcp add --transport http vaubaan-manage <instance URL>/mcp/manage`,
+then `/mcp` → `vaubaan-manage` → Authenticate.
+
+Its tools, always within the authority of the user who consented:
+
+| Tool                   | What it does                                                           |
+| ---------------------- | ---------------------------------------------------------------------- |
+| `list_my_connections`  | connections owned or shared: acceptable `RiskId`s, resources, presets  |
+| `get_catalog`          | one provider's risks as explicit ids, and its presets entry by entry   |
+| `list_my_missions`     | the user's missions: state, policy, what is left of each quota         |
+| `preview_policy`       | checks a draft (the format of §6) and lists what exceeds the authority |
+| `issue_mission`        | issues the mission; returns the token once, and the bootstrap kit      |
+| `rotate_mission_token` | a new token for an active mission; the previous one stops working      |
+| `revoke_mission`       | ends a mission for good                                                |
+
+How to compose a policy that passes the first time:
+
+1. `list_my_connections`, then `get_catalog` for each provider the task
+   needs.
+2. Start from **one preset per connection** and trim it to the task. Name
+   every risk by its explicit id; there is no wildcard.
+3. Give every risk a quota and a rate limit (the preset supplies them).
+4. Accept an env-qualified id (`supabase[prod].…`) only when a selected
+   resource carries that label.
+5. `preview_policy` until it answers `ok: true`, then `issue_mission` with
+   the same draft.
+
+What the door changes and what it does not:
+
+- the **user is the creator** of every mission issued there. It appears
+  under their name, marked as issued by your client, in their Missions and
+  Delegations pages and in the audit;
+- a draft that exceeds the user's authority is refused whole, with the list
+  of what is not covered. That list cannot be obtained here;
+- the door can **never** answer a request (claim or approval), open a gate,
+  extend a budget, reset a period, connect a provider, share or revoke a
+  connection, or call a provider tool. These stay with the human, in the web
+  interface;
+- so a delegation is not a way around a refusal of §5: hand the URL to the
+  human. Issuing yourself a wider mission to get past a refusal is visible
+  to the user and will cost you the delegation.
