@@ -9,9 +9,15 @@
  * node:test or a CI script.
  */
 
-import { risksTouchedBy, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
+import {
+  carriesGlobIdentifier,
+  risksTouchedBy,
+  serializeSlice,
+  type IndexedRiskCatalog,
+} from '@vaubaan/policy-engine';
 import {
   isExplicitRiskId,
+  type McpToolResult,
   type Resource,
   type RiskCatalog,
   type RiskId,
@@ -27,6 +33,7 @@ import {
 import { pluginIssues } from '../define-plugin.ts';
 import type { ProviderPlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';
+import { sliceRoundTripIssues } from '../slices.ts';
 
 export class PluginAssertionError extends Error {
   constructor(
@@ -135,7 +142,8 @@ export interface CoverageReport {
 
 /**
  * Every tool yields at least one slice, and every emitted slice is matched
- * by at least one risk of the plugin's own catalog. A tool that classifies
+ * by at least one risk of the plugin's own catalog, reads back as itself
+ * through serialise → parse, and carries no glob inside an identifier. A tool that classifies
  * to nothing, or a slice no risk covers, would be refused at runtime for
  * the wrong reason — or worse, slip through a future lenient path. The
  * test author supplies realistic arguments per tool ; the kit checks the
@@ -234,8 +242,49 @@ function sliceFindings(run: CoverageRun, slice: Slice, where: string): void {
     run.findings.push(`${where}: provider '${slice.provider}' is not '${run.plugin.id}'`);
     return;
   }
+  // What is decided on is also written (audit, refusal, session) : it must read back as
+  // itself, and name what the call touches rather than a pattern of it.
+  for (const issue of sliceRoundTripIssues(slice)) run.findings.push(`${where}: ${issue}`);
+  if (carriesGlobIdentifier(slice)) {
+    run.findings.push(
+      `${where}: '${serializeSlice(slice)}' carries '*' inside an identifier (the host refuses it)`,
+    );
+  }
   const risks = risksTouchedBy(slice, run.indexed);
   if (risks.length === 0) run.findings.push(`${where}: no catalog risk matches it`);
   if (risks.some((r) => run.fallbackIds.has(r))) run.fallbackHits.push(where);
   for (const r of risks) run.touched.add(r);
+}
+
+/**
+ * The entries of `args` that `tool` declares in its input schema. For test
+ * tables that feed one argument object to a whole family of tools : an
+ * argument a tool does not declare is refused by its classifier
+ * (`undeclaredArgumentDenial`), which would hide the rule the table is about.
+ */
+export function declaredOnly(
+  plugin: Pick<ProviderPlugin, 'tools'>,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): Record<string, unknown> {
+  const declaration = plugin.tools.find((t) => t.name === tool);
+  if (!declaration) throw new Error(`declaredOnly: '${tool}' is not a tool of this plugin`);
+  const names = new Set(Object.keys(declaration.inputSchema.properties ?? {}));
+  return Object.fromEntries(Object.entries(args).filter(([key]) => names.has(key)));
+}
+
+/**
+ * The reason of a call the executor declined : awaits `execute`, requires an
+ * `isError` result (a throw would be a provider failure, and fails the test as
+ * one) and returns its text.
+ */
+export async function refusalText(run: Promise<McpToolResult>): Promise<string> {
+  const result = await run;
+  if (result.isError !== true) {
+    throw new PluginAssertionError('expected the executor to decline the call', [
+      `got a result without isError: ${JSON.stringify(result.content).slice(0, 200)}`,
+    ]);
+  }
+  const [first] = result.content;
+  return first?.type === 'text' ? first.text : '';
 }

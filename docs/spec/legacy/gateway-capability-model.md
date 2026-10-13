@@ -29,6 +29,7 @@ status: legacy
 > traverse.
 >
 > **Décisions actées (2026-06-08)** :
+>
 > 1. `/mgmt/tokens` prend `capabilities[]`, plus de `roleIds[]`. On casse, pas de
 >    rétro-compat.
 > 2. **Les roles disparaissent.** La classification `(tool, args) → capability` est
@@ -70,8 +71,8 @@ status: legacy
 ## 1. La frontière : deux domaines qui ne se connaissent pas
 
 La gateway n'est pas un flux temporel comme le runner — c'est une **couche de
-traduction**. Le runner sait *quoi il fait* ; la gateway sait *quels droits elle
-accorde*. Le seul vocabulaire autorisé à traverser : la **capability**.
+traduction**. Le runner sait _quoi il fait_ ; la gateway sait _quels droits elle
+accorde_. Le seul vocabulaire autorisé à traverser : la **capability**.
 
 ```mermaid
 flowchart LR
@@ -113,20 +114,20 @@ Le runner compile `étape → capabilities[]` **dans son domaine** (invisible de
 gateway) ; la gateway vérifie `classify(tool, args) ∈ caps accordées` **dans le
 sien**.
 
-**Litmus de non-contamination** : un vocabulaire traverse la frontière *s'il est
-porteur de sens pour n'importe quel agent actionnant une surface* (humain, CI, autre
+**Litmus de non-contamination** : un vocabulaire traverse la frontière _s'il est
+porteur de sens pour n'importe quel agent actionnant une surface_ (humain, CI, autre
 runner — pas seulement coding). `vercel:runtime/deployment:write@prod` passe.
 `token-pour-l-étape-review` échoue → c'est ce qui interdit à
 `plan/implement/merge/validate` de fuiter côté gateway.
 
 ## 2. La fondation : un provider est du state en pelures concentriques
 
-Un provider ne « stocke » pas des tools, et il ne *transforme* rien qu'on pourrait
+Un provider ne « stocke » pas des tools, et il ne _transforme_ rien qu'on pourrait
 lire en sortie. Il expose du **state organisé en pelures emboîtées**, et tout ce
 qu'on peut faire dessus, c'est **du CRUD — `read` ou `write`** — pelure par pelure.
 La « fonction » du provider est inobservable ; on n'observe que les niveaux qui la
 définissent. (Les logs / metrics / status d'un runtime ne sont pas un « output » :
-c'est la pelure la plus interne, *read-only car émergente*.)
+c'est la pelure la plus interne, _read-only car émergente_.)
 
 ```mermaid
 flowchart TB
@@ -153,14 +154,14 @@ table à son schéma ; le code à la branch protection. Donc le **rang** ordonne
 fonde le least-privilege (§7). Le plugin **doit** numéroter dans cet ordre.
 
 Le nombre de pelures **n'est pas fixe** (pas forcément 4) et il n'y a **pas
-d'archetype universel** : chaque plane déclare *ses* niveaux, avec un **slug métier**
+d'archetype universel** : chaque plane déclare _ses_ niveaux, avec un **slug métier**
 que l'utilisateur voit. Une pile (= un plane) :
 
-| plane | niv1 (content) | niv2 (structure) | niv3 (gouvernance) | niv4 (access) |
-|---|---|---|---|---|
-| **repo** (github) | `code` — fichiers, commits | `ci` — workflows Actions | `rules` — branch protection, reviews | `access` — repo, collaborateurs, install token, secrets |
-| **runtime** (vercel) | `deployment` — build servi, logs *(R)* | `config` — env vars, build settings | `project-settings` — domaines, protection | `account` — projet, team, tokens |
-| **db** (supabase) | `rows` — données (`execute_sql`) | `tables` — tables, colonnes, migrations | `rls` — policies, roles, advisors | `project` — projet, clés, conn string |
+| plane                | niv1 (content)                         | niv2 (structure)                        | niv3 (gouvernance)                        | niv4 (access)                                           |
+| -------------------- | -------------------------------------- | --------------------------------------- | ----------------------------------------- | ------------------------------------------------------- |
+| **repo** (github)    | `code` — fichiers, commits             | `ci` — workflows Actions                | `rules` — branch protection, reviews      | `access` — repo, collaborateurs, install token, secrets |
+| **runtime** (vercel) | `deployment` — build servi, logs _(R)_ | `config` — env vars, build settings     | `project-settings` — domaines, protection | `account` — projet, team, tokens                        |
+| **db** (supabase)    | `rows` — données (`execute_sql`)       | `tables` — tables, colonnes, migrations | `rls` — policies, roles, advisors         | `project` — projet, clés, conn string                   |
 
 > Les noms de colonnes `content/structure/gouvernance/access` sont un **commentaire
 > de lecture**, pas une couche du modèle. Le moteur ne connaît que `(provider, plane)`,
@@ -168,17 +169,17 @@ que l'utilisateur voit. Une pile (= un plane) :
 
 ### 2.1 Un `plane` = une pile ; un provider en expose plusieurs
 
-Un **plane** est *une* pile concentrique. Un **provider** est un vendor qui peut
+Un **plane** est _une_ pile concentrique. Un **provider** est un vendor qui peut
 exposer **plusieurs piles indépendantes** — c'est pour ça que `plane ≠ provider`.
 
 **Supabase** le montre bien : un seul provider, plusieurs piles parallèles.
 
-| plane (pile) | niveaux (interne → externe) |
-|---|---|
-| **db** | `rows` → `tables` → `rls` |
-| **storage** | `objects` → `buckets` → `storage-config` |
-| **auth** | `users` → `providers` → `auth-config` |
-| **functions** *(un runtime !)* | `deployment` → `config` |
+| plane (pile)                   | niveaux (interne → externe)              |
+| ------------------------------ | ---------------------------------------- |
+| **db**                         | `rows` → `tables` → `rls`                |
+| **storage**                    | `objects` → `buckets` → `storage-config` |
+| **auth**                       | `users` → `providers` → `auth-config`    |
+| **functions** _(un runtime !)_ | `deployment` → `config`                  |
 
 > Le `project` (clés, facturation, conn string) est la **racine partagée** par toutes
 > les piles — une pile `account` à part, la plus externe de toutes.
@@ -200,13 +201,13 @@ le plane est précisément l'unité dans laquelle le rang — et donc le least-p
 Une capability = `{ provider, plane, level, action, env? }`, notée
 **`provider:plane/level:action@env`**.
 
-| Axe | Valeurs | Sens |
-|---|---|---|
-| **provider** | `github` · `vercel` · `supabase` · `railway`… | le vendor ; routing + namespace des planes |
-| **plane** | une **pile** déclarée par le provider (`repo`, `runtime`, `db`, `storage`…) | quelle pile concentrique ; l'unité où le rang est défini |
-| **level** | un **slug** rangé niv1→nivN *dans cette pile* (`code`, `rows`, `rls`…) | quelle pelure de state |
-| **action** | `read` · `write` | observer / muter cette pelure |
-| **env** | un slug d'instance/variante (`prod`, `staging`, `feature-x`…), **dynamique** | quel calque ; absent = data non calqué |
+| Axe          | Valeurs                                                                      | Sens                                                     |
+| ------------ | ---------------------------------------------------------------------------- | -------------------------------------------------------- |
+| **provider** | `github` · `vercel` · `supabase` · `railway`…                                | le vendor ; routing + namespace des planes               |
+| **plane**    | une **pile** déclarée par le provider (`repo`, `runtime`, `db`, `storage`…)  | quelle pile concentrique ; l'unité où le rang est défini |
+| **level**    | un **slug** rangé niv1→nivN _dans cette pile_ (`code`, `rows`, `rls`…)       | quelle pelure de state                                   |
+| **action**   | `read` · `write`                                                             | observer / muter cette pelure                            |
+| **env**      | un slug d'instance/variante (`prod`, `staging`, `feature-x`…), **dynamique** | quel calque ; absent = data non calqué                   |
 
 Il n'y a **que deux verbes**. Ce que l'ancien modèle appelait `propose` / `apply`
 n'était qu'un `write` visant un env plus ou moins exposé ; `provision` n'était qu'un
@@ -216,16 +217,16 @@ autre branche** (cf. §4).
 
 Exemples :
 
-| forme écrite | sens natif |
-|---|---|
-| `github:repo/code:read` | lire le code / un diff |
-| `github:repo/code:write@main` | écrire sur la branche protégée (= merge) |
-| `vercel:runtime/deployment:write@prod` | déployer en prod |
-| `vercel:runtime/deployment:read@prod` | lire logs/status prod *(émergent, bénin)* |
-| `vercel:runtime/config:write@prod` | poser un env var prod *(secrets — haut blast)* |
-| `supabase:db/rows:read@staging` | lire des rows sur le projet staging |
-| `supabase:storage/objects:write` | écrire un objet dans un bucket |
-| `github:repo/access:write` | provisionner / muter le repo, minter un token |
+| forme écrite                           | sens natif                                     |
+| -------------------------------------- | ---------------------------------------------- |
+| `github:repo/code:read`                | lire le code / un diff                         |
+| `github:repo/code:write@main`          | écrire sur la branche protégée (= merge)       |
+| `vercel:runtime/deployment:write@prod` | déployer en prod                               |
+| `vercel:runtime/deployment:read@prod`  | lire logs/status prod _(émergent, bénin)_      |
+| `vercel:runtime/config:write@prod`     | poser un env var prod _(secrets — haut blast)_ |
+| `supabase:db/rows:read@staging`        | lire des rows sur le projet staging            |
+| `supabase:storage/objects:write`       | écrire un objet dans un bucket                 |
+| `github:repo/access:write`             | provisionner / muter le repo, minter un token  |
 
 ## 4. L'env est un calque — par data, pas par niveau
 
@@ -237,8 +238,8 @@ env-scopé, celui-là non » : la sensibilité à l'env est une propriété **pa
 résolue par le classifieur.
 
 Preuve que ce n'est pas par-niveau : chez Vercel un env var (niveau `config`) peut
-être posé **« for all environments »** (non calqué) **ou** par-env (calqué) — *même
-niveau, même action, sensibilité différente*. Seul le data tranche, pas son rang.
+être posé **« for all environments »** (non calqué) **ou** par-env (calqué) — _même
+niveau, même action, sensibilité différente_. Seul le data tranche, pas son rang.
 
 ```mermaid
 flowchart LR
@@ -268,18 +269,18 @@ flowchart LR
   non-calquée** : `vercel:runtime/config:write@prod` (var par-env) et
   `vercel:runtime/config:write` (var all-env) sont **deux capabilities distinctes**.
   Un token qui porte l'une n'autorise pas l'autre (filtre défensif, §7). ⚠️ Le cas
-  *all-env* « fane out » vers **tous** les envs, prod compris — voir §5.1 (policy par
+  _all-env_ « fane out » vers **tous** les envs, prod compris — voir §5.1 (policy par
   défaut) pour pourquoi il ne doit pas être plus laxiste que le plus strict des envs
   couverts.
 - Les envs sont **créés dynamiquement** (comme des branches git) : le plugin les
-  *résout*, ne les énumère pas. La policy (§5) matche donc des **patterns** de slug,
+  _résout_, ne les énumère pas. La policy (§5) matche donc des **patterns** de slug,
   pas une liste figée.
 
-| provider:plane | envs exemples | où s'accroche le calque (par-data) |
-|---|---|---|
-| **github:repo** | `main`, `feature/*` | le code lui-même (la branche **est** l'env) ; `ci` / `rules` / `access` non |
-| **vercel:runtime** | `prod`, `preview`, `development` | un deployment, un env var *par-env* ; un env var *all-env* / `project-settings` / `account` non |
-| **supabase:db** | `staging`, `prod` | tout ce qui pend au projet ciblé (résolu par le binding) |
+| provider:plane     | envs exemples                    | où s'accroche le calque (par-data)                                                              |
+| ------------------ | -------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **github:repo**    | `main`, `feature/*`              | le code lui-même (la branche **est** l'env) ; `ci` / `rules` / `access` non                     |
+| **vercel:runtime** | `prod`, `preview`, `development` | un deployment, un env var _par-env_ ; un env var _all-env_ / `project-settings` / `account` non |
+| **supabase:db**    | `staging`, `prod`                | tout ce qui pend au projet ciblé (résolu par le binding)                                        |
 
 > Ton code actuel le fait **déjà par-data** : Vercel renvoie `env` pour
 > `upsert_env_var` mais pas pour `update_project_settings` — c'est `classify` qui
@@ -288,7 +289,7 @@ flowchart LR
 ## 5. Deux couches étanches : plugin mécanique vs policy client
 
 C'est le cœur de la décision #6. **L'env ne porte aucune sensibilité intrinsèque.**
-Le provider sait *quel* env un call touche ; le **client** décide *ce que ça vaut*.
+Le provider sait _quel_ env un call touche ; le **client** décide _ce que ça vaut_.
 
 ```mermaid
 flowchart LR
@@ -341,7 +342,7 @@ Le couple `…:write@prod` (par-env) vs `…:write` (env-less) pose la question 
 
 1. **Default-deny.** La policy est une **allow-list**. En l'absence d'une règle
    qui matche, une capability tombe sur **`deny`** (403 final). Prod n'est jamais
-   ouvert « par oubli » : pour que l'IA écrive prod, il faut une règle *explicite*
+   ouvert « par oubli » : pour que l'IA écrive prod, il faut une règle _explicite_
    `write@prod → allow` — qu'on n'écrit pas.
 2. **`*` est un glob de matching, pas « tout est ouvert ».** `@ *` dans une règle =
    « cette règle s'applique à n'importe quel slug d'env ». Combiné au default-deny, un
@@ -349,7 +350,7 @@ Le couple `…:write@prod` (par-env) vs `…:write` (env-less) pose la question 
    **refuse au mint** un `(action='write', env_pattern='*', gate='allow')` via la CHECK
    constraint SQL (anti-pattern). On scope toujours (`feature/* → allow`), jamais
    `* → allow` en écriture.
-3. **L'env-less *grant* = fan-out réel.** Une grant `vercel:runtime/config:write`
+3. **L'env-less _grant_ = fan-out réel.** Une grant `vercel:runtime/config:write`
    sans `@` couvre **n'importe quel env requis** au runtime (`@prod` compris).
    `covers()` autorise donc une grant env-less à matcher un required `@X` quel
    que soit X — c'est ça, le fan-out. Combiné au default-deny côté policy : pour
@@ -357,7 +358,7 @@ Le couple `…:write@prod` (par-env) vs `…:write` (env-less) pose la question 
    accepté l'écriture all-env (en pratique seed `*:*:*:write:* → confirm` → toute
    grant env-less write pop pour confirmation humaine).
 4. **Exclusion par binding (opt-in, github-only en MVP).** Chaque binding
-   `provider_bindings` peut déclarer un *exclude set* qui retire des envs du
+   `provider_bindings` peut déclarer un _exclude set_ qui retire des envs du
    fan-out d'une grant env-less. Sur GitHub :
    - `env_less_exclude_branch text` : un nom de branche unique à exclure (typiquement
      `main`) ; **ou**
@@ -368,7 +369,7 @@ Le couple `…:write@prod` (par-env) vs `…:write` (env-less) pose la question 
      enforcé par CHECK constraint SQL).
 
    L'adapter provider expose `resolveExcludeEnvs(admin, binding) →
-   Promise<string[]>` ; le gateway l'appelle juste après `loadProviderAdmin`,
+Promise<string[]>` ; le gateway l'appelle juste après `loadProviderAdmin`,
    avant `evaluateCapability`. Le coût hot-path : un GET cache (hit la plupart
    du temps) ou un GitHub API call par minute par repo (miss).
 
@@ -389,11 +390,11 @@ Le couple `…:write@prod` (par-env) vs `…:write` (env-less) pose la question 
 
 ```ts
 type Capability = {
-  provider: string;         // 'github' | 'vercel' | 'supabase' | … (routing + namespace)
-  plane: string;            // pile : 'repo' | 'runtime' | 'db' | 'storage' | …
-  level: string;            // slug du niveau DANS cette pile : 'code' | 'rows' | …
+  provider: string; // 'github' | 'vercel' | 'supabase' | … (routing + namespace)
+  plane: string; // pile : 'repo' | 'runtime' | 'db' | 'storage' | …
+  level: string; // slug du niveau DANS cette pile : 'code' | 'rows' | …
   action: 'read' | 'write';
-  env?: string;             // slug d'env (dynamique) ; absent ⟺ data non calqué
+  env?: string; // slug d'env (dynamique) ; absent ⟺ data non calqué
 };
 
 interface ProviderModel {
@@ -420,13 +421,13 @@ interface ProviderModel {
 
 **Règle d'or — sémantique native :**
 
-| Au lieu de (house-style hardcodé) | Le classifieur dit (sémantique provider) |
-|---|---|
-| `branch ∈ {feature/*, fix/*}` | écrire branche **non protégée** → `github:repo/code:write@<branche>` |
-| merge / write `main` | écrire branche **protégée** → `github:repo/code:write@main` |
-| deploy `target: production` | `vercel:runtime/deployment:write@prod` |
-| set env var prod | `vercel:runtime/config:write@prod` |
-| `get_advisors` (lint sécu) | `supabase:db/rls:read` |
+| Au lieu de (house-style hardcodé) | Le classifieur dit (sémantique provider)                             |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `branch ∈ {feature/*, fix/*}`     | écrire branche **non protégée** → `github:repo/code:write@<branche>` |
+| merge / write `main`              | écrire branche **protégée** → `github:repo/code:write@main`          |
+| deploy `target: production`       | `vercel:runtime/deployment:write@prod`                               |
+| set env var prod                  | `vercel:runtime/config:write@prod`                                   |
+| `get_advisors` (lint sécu)        | `supabase:db/rls:read`                                               |
 
 ## 7. Le moteur : stateless + filtre env + least-privilege
 
@@ -472,9 +473,9 @@ tools qui 403 à `tools/call`. Or la surface statique d'un tool est toujours
 énumérée **sans env** (le calque dépend des args). Pour réconcilier les deux
 couches, chaque tool porte un tag `EnvResolution` :
 
-| mode | sémantique | filtre statique | runtime |
-|---|---|---|---|
-| `static` | le classifieur émet une capability **non calquée** quels que soient les args (ex: `vercel__list_deployments` → `vercel:deployment:read`). | grant `@X` denied (env-less requis), grant env-less ALLOW. | `covers()` autorise grant env-less ↔ required env-less ; grant `@X` ne couvre pas un required env-less. |
+| mode      | sémantique                                                                                                                                                                | filtre statique                                                                                                                           | runtime                                                                                                                                                            |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `static`  | le classifieur émet une capability **non calquée** quels que soient les args (ex: `vercel__list_deployments` → `vercel:deployment:read`).                                 | grant `@X` denied (env-less requis), grant env-less ALLOW.                                                                                | `covers()` autorise grant env-less ↔ required env-less ; grant `@X` ne couvre pas un required env-less.                                                            |
 | `runtime` | le classifieur résout `env` depuis les args ou le binding matché (ex: `vercel__upsert_env_var` lit `args.target` ; les tools Supabase lisent l'`environment` du binding). | un grant matche dès que le 4-tuple `(provider, plane, level, action)` coïncide — n'importe quel `@env` côté grant est un match potentiel. | `covers()` re-mord avec : grant `@X` couvre required `@X` exact ; grant env-less couvre required `@*` (fan-out §5.1 #3) modulo `excludeEnvs` du binding (§5.1 #4). |
 
 Le mode est **par-tool**, pas par-cap : chaque provider expose un
@@ -521,7 +522,7 @@ sequenceDiagram
 ```
 
 - **Token jetable** : `singleUse: true` + TTL de quelques secondes. Le moteur
-  *consomme* le token au premier call qui matche. ⟹ « approuver le mint » ≡
+  _consomme_ le token au premier call qui matche. ⟹ « approuver le mint » ≡
   « approuver l'acte » : on récupère le grain par-acte **sans** rendre `/mcp`
   stateful.
 - **Canal d'approbation pluggable** :
@@ -530,7 +531,7 @@ sequenceDiagram
   interface ApprovalChannel {
     requestApproval(req: {
       capabilities: Capability[];
-      requester: string;           // qui demande (runner, étape, projet)
+      requester: string; // qui demande (runner, étape, projet)
       context: Record<string, unknown>; // commit, target, diff résumé…
     }): Promise<{ approved: boolean; by: string }>;
   }
@@ -546,15 +547,15 @@ sequenceDiagram
 > que le rang rend possible : Implement ne touche **pas** `config` (secrets) ; Deploy
 > écrit `deployment@prod` mais **pas** `config@prod` (changer la config prod).
 
-| Étape runner | Capabilities requises |
-|---|---|
-| Plan | `github:repo/code:read` |
-| Implement | `github:repo/code:write@<branche>`, `supabase:db/rows:read@staging` |
-| Test | `vercel:runtime/deployment:write@staging`, `vercel:runtime/deployment:read@staging`, `supabase:db/rows:read@staging` |
-| Review | `github:repo/code:read`, `vercel:runtime/deployment:read@staging` |
-| Merge | `github:repo/code:write@main` |
-| Deploy | `vercel:runtime/deployment:write@prod`, `supabase:db/rows:write@prod` *(gate='confirm' par défaut)* |
-| Validate | `vercel:runtime/deployment:read@prod`, `supabase:db/rows:read@prod`, `github:repo/code:read` |
+| Étape runner | Capabilities requises                                                                                                |
+| ------------ | -------------------------------------------------------------------------------------------------------------------- |
+| Plan         | `github:repo/code:read`                                                                                              |
+| Implement    | `github:repo/code:write@<branche>`, `supabase:db/rows:read@staging`                                                  |
+| Test         | `vercel:runtime/deployment:write@staging`, `vercel:runtime/deployment:read@staging`, `supabase:db/rows:read@staging` |
+| Review       | `github:repo/code:read`, `vercel:runtime/deployment:read@staging`                                                    |
+| Merge        | `github:repo/code:write@main`                                                                                        |
+| Deploy       | `vercel:runtime/deployment:write@prod`, `supabase:db/rows:write@prod` _(gate='confirm' par défaut)_                  |
+| Validate     | `vercel:runtime/deployment:read@prod`, `supabase:db/rows:read@prod`, `github:repo/code:read`                         |
 
 ## 10. Impact data model (greenfield, on casse tout)
 
@@ -572,7 +573,7 @@ sequenceDiagram
 - **`audit_log`** : remplacer `role_matched` par `capability_matched` (notation courte
   aplatie `vercel:runtime/deployment:write@prod`, filtrable au dashboard).
 - **Nouveau — policy client** : table/JSONB `(provider, plane, level, action,
-  env_pattern, gate)` par projet (ou org), **default-deny**. Lue au **mint**
+env_pattern, gate)` par projet (ou org), **default-deny**. Lue au **mint**
   uniquement (cf. §5.1).
 - **Nouveau — approbations** : table `approval_requests` (caps, requester, context,
   channel, status, decided_by, decided_at) + config canal (`telegram_chat_id`,

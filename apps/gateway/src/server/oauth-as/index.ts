@@ -10,7 +10,7 @@
  */
 import type { Authenticator, SessionService as WebSessionService } from '../auth';
 import type { RateLimiter, SessionStore } from '../compose/ports';
-import type { InstanceConfig } from '../config';
+import type { BuildInfo, InstanceConfig } from '../config';
 import type { TokenVerifier } from '../execution/token-verifier';
 import { clientIpResolver } from '../http/client-ip';
 import type { Logger } from '../logging';
@@ -44,6 +44,8 @@ export interface OAuthAsModuleDeps {
   readonly clock?: Clock;
   /** Outbound fetch of Client ID Metadata Documents (tests inject a fake). */
   readonly fetchClientDocument?: ClientDocumentFetcher;
+  /** The running build, for the footer of the consent screen. */
+  readonly build?: BuildInfo;
 }
 
 export interface OAuthAsModule {
@@ -130,6 +132,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     tokens,
     delegations,
     logger,
+    build: deps.build,
   });
   const discovery = {
     executionResource: async (request: Request) =>

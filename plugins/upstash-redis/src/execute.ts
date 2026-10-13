@@ -43,6 +43,7 @@
  */
 
 import {
+  ExecutorRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
   type ConnectionContext,
@@ -67,18 +68,6 @@ export const REDACTED_DATABASE_FIELDS: readonly string[] = [
   'read_only_rest_token',
   'password',
 ];
-
-/**
- * A call this executor declines itself : nothing failed at the provider. The
- * only error `executeUpstashRedis` turns into an `isError` result ; everything
- * else it lets through, so the host records a provider failure as one.
- */
-class ExecutorRefusal extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ExecutorRefusal';
-  }
-}
 
 /** What one upstream call needs, built from the context. */
 interface UpstashCall {
@@ -295,16 +284,64 @@ async function databaseConnection(
   const db: Partial<DatabaseDto> = isDatabaseDto(answer) ? answer : {};
   const text = (value: unknown): string | undefined =>
     typeof value === 'string' && value.length > 0 ? value : undefined;
-  const host = text(db.endpoint);
-  const endpoint = text(db.rest_url) ?? (host ? `https://${host}` : undefined);
+  const named = text(db.rest_url) ?? text(db.endpoint);
   const restToken = text(db.rest_token);
-  if (!endpoint || !restToken) {
+  if (!named || !restToken) {
     throw new Error(
       `Upstash database ${databaseId} does not expose a REST endpoint/token. ` +
         'Ensure the database is active and its REST API is enabled.',
     );
   }
+  const endpoint = restEndpointOf(named);
+  if (endpoint === null) {
+    // The token is the database's own credential: it goes to Upstash or nowhere.
+    throw new Error(
+      `Upstash database ${databaseId}: the Management API named a host that is not an Upstash REST endpoint ` +
+        `(expected https://<name>${UPSTASH_REST_HOST_SUFFIX}); the call was not sent.`,
+    );
+  }
   return { endpoint, restToken };
+}
+
+/** Where every per-database REST endpoint lives. A fact about the provider. */
+export const UPSTASH_REST_HOST_SUFFIX = '.upstash.io';
+
+/** One DNS label: the database's name at Upstash (`us1-merry-cat-32748`). */
+const REST_HOST_LABEL = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+/**
+ * The REST endpoint of a database, pinned to Upstash: `https://<label>.upstash.io`,
+ * rebuilt from the label alone. The Management API names it as a URL (`rest_url`),
+ * a host or a bare slug (`endpoint`); the database token is posted there, so the
+ * answer is not trusted to choose the destination — any other scheme, host, port,
+ * path, query or userinfo is `null` and nothing is sent.
+ */
+export function restEndpointOf(named: string): string | null {
+  let host: string;
+  if (named.includes('://')) {
+    let url: URL;
+    try {
+      url = new URL(named);
+    } catch {
+      return null;
+    }
+    const bare =
+      url.protocol === 'https:' &&
+      url.port === '' &&
+      url.username === '' &&
+      url.password === '' &&
+      (url.pathname === '/' || url.pathname === '') &&
+      url.search === '' &&
+      url.hash === '';
+    if (!bare) return null;
+    host = url.hostname;
+  } else {
+    host = named.toLowerCase();
+  }
+  const label = host.endsWith(UPSTASH_REST_HOST_SUFFIX)
+    ? host.slice(0, -UPSTASH_REST_HOST_SUFFIX.length)
+    : host;
+  return REST_HOST_LABEL.test(label) ? `https://${label}${UPSTASH_REST_HOST_SUFFIX}` : null;
 }
 
 async function executeDataTool(

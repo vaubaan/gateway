@@ -36,8 +36,11 @@ const PROJECT = '00000000-0000-4000-8000-000000000001';
 const SERVICE = '00000000-0000-4000-8000-000000000002';
 const ENV_ID = '00000000-0000-4000-8000-000000000003';
 
-/** What discovery stores on a project : the classifier binds `environmentId` to it. */
-const DISCOVERED = { environments: [{ id: ENV_ID, name: 'main' }] };
+/** What discovery stores on a project : the classifier binds `environmentId` and `serviceId` to it. */
+const DISCOVERED = {
+  environments: [{ id: ENV_ID, name: 'main' }],
+  services: [{ id: SERVICE, name: 'api' }],
+};
 
 function stagingResource(): Resource {
   return {

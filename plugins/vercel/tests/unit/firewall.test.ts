@@ -111,7 +111,7 @@ describe('executeVercel — request shapes of the firewall tools', () => {
     expect(fetch.calls).toHaveLength(1);
   });
 
-  test('upsert_firewall_rule inserts without ruleId and updates with one, body whitelisted', async () => {
+  test('upsert_firewall_rule inserts without ruleId and updates with one', async () => {
     const fetch = mockFetch([{ method: 'PATCH', url: CONFIG_URL, body: { ok: true } }]);
     const rule = {
       name: 'block-admin',
@@ -122,8 +122,6 @@ describe('executeVercel — request shapes of the firewall tools', () => {
     };
     await vercelPlugin.execute(ctx(fetch), 'vercel__upsert_firewall_rule', {
       ...rule,
-      // a field outside the whitelist must be dropped
-      sneaky: 'dropped',
     });
     expect(fetch.calls[0]!.json).toEqual({ action: 'rules.insert', value: rule });
 
@@ -160,7 +158,6 @@ describe('executeVercel — request shapes of the firewall tools', () => {
       hostname: 'app.example.com',
       action: 'deny',
       notes: 'scanner',
-      sneaky: 'dropped',
     });
     expect(fetch.calls[0]!.json).toEqual({
       action: 'ip.insert',

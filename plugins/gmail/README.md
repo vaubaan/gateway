@@ -63,9 +63,12 @@ refuses the call:
   (`from:support`), or no `from:` at all (`to:` only, `label:` only,
   `-from:`) is `read-from-zone-unknown` + `bulk-read`. A negation or an
   operator the parser does not model adds `read-from-zone-unknown`.
-- **Automated senders.** A sender is `automated` when the local part of its
-  full address _is_ a no-reply name (`no-reply@`, `notifications@`…), before
-  any domain match. `supportive.ceo@myorg.com` is `internal`.
+- **Automated senders.** A sender is `automated` when it is on an internal
+  or allowlisted domain (or is an allowlisted address) **and** the local
+  part of its full address _is_ a no-reply name (`no-reply@`,
+  `notifications@`…). On a domain nobody listed the local part is chosen by
+  the sender and decides nothing: `noreply@unlisted.example` is `unknown`.
+  `supportive.ceo@myorg.com` is `internal`.
 - **Sensitive labels.** On a mailbox that declares some, `get_thread` always
   carries the marker and a search carries it for each label it does not
   exclude with `-label:<name>` in a plain conjunction.
@@ -98,11 +101,12 @@ server (`gmailmcp.googleapis.com`).
 env-scoped (Gmail has no environment). No entry declares `caps` or
 `infra_limits`: the door enforces no stateless cap (ADR
 `scope-caps-not-enforced-in-v5-0`), so `gmail.read-from-zone-unknown` and
-`gmail.bulk-read` are bounded by the mission's quota and rate limit only. Two
-entries are new in v5 because the SDK coverage kit showed the v4 catalog
-left slices to the fallback: `read-mailbox` also matches the thread
-containment slice of `get_thread`, and `draft-write` covers the containment
-slice of a draft (the zone risk carries the exfiltration axis).
+`gmail.bulk-read` are bounded by the mission's quota and rate limit only. The
+SDK coverage kit showed the v4 catalog left two slices uncovered or on the
+fallback: `draft-write` is the one id v5 adds, for the containment slice of
+a draft (the zone risk carries the exfiltration axis), and `read-mailbox`,
+an existing id, also matches the thread containment slice of `get_thread`.
+Plugin version 0.3.0.
 
 | Preset      | Grants                                                                                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -141,6 +145,6 @@ standard `refresh_token` grant the host performs from the spec.
 ## Development
 
 ```
-npx vitest run plugins/gmail       # 214 tests, no network
+npx vitest run plugins/gmail       # 406 tests, no network
 npx tsc -p plugins/gmail/tsconfig.json --noEmit
 ```

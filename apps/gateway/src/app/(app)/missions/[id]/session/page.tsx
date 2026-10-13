@@ -608,10 +608,10 @@ function EventRow({
         <LocalDate ts={event.ts} />
       </Td>
       <Td>
-        <Badge tone={toneOf(event.kind)}>{event.kind}</Badge>
-        {event.refusal_code && (
-          <div className={`${styles.mono} ${styles.nowrap}`}>{event.refusal_code}</div>
-        )}
+        <span className={styles.nowrap}>
+          <Badge tone={toneOf(event.kind)}>{event.kind}</Badge>
+        </span>
+        {event.refusal_code && <div className={styles.mono}>{event.refusal_code}</div>}
       </Td>
       <Td className={`${styles.mono} ${styles.tool}`}>
         {event.tool ? <Slug kind="tool">{event.tool}</Slug> : '—'}

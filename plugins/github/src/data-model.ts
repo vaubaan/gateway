@@ -48,7 +48,7 @@ export const githubDataModel: DataModel = {
           envScopable: true,
           description:
             'A named ref (branch). Acts as the *env* for files and commits ' +
-            '(spec §2.1) : `branch[main]` ≠ `branch[feature/x]`. Cardinality ' +
+            '(risk-model spec §2.3) : `branch[main]` ≠ `branch[feature/x]`. Cardinality ' +
             'emerges from the selector — `[main]` is `one`, `[feature/*]` is ' +
             '`unbounded`.',
         },
@@ -84,6 +84,14 @@ export const githubDataModel: DataModel = {
           description:
             'A GitHub release record (notes, assets, draft/prerelease flags). ' +
             'References a tag.',
+        },
+        {
+          name: 'delete',
+          parent: 'release',
+          cardinalities: ['one'],
+          description:
+            'Synthetic verb leaf — deletion of a release. Distinct from publishing one : ' +
+            'the notes and assets are lost, and consumers of their URLs get 404s.',
         },
         {
           name: 'pull_request',

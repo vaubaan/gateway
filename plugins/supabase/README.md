@@ -12,7 +12,7 @@ Contract : `@vaubaan/plugin-sdk` (`definePlugin`, see
 ```
 plugins/supabase/
   src/
-    risk-catalog.yaml     24 risks + fallback, 3 presets (loaded at boot)
+    risk-catalog.yaml     23 risks + 1 deprecated + fallback, 3 presets (loaded at boot)
     data-model.ts         4 planes : db, storage, auth, functions
     tools.ts              44 MCP tools, prefix `supabase__`
     classify.ts           (tool, args, resources) → slices ; security-critical
@@ -21,7 +21,8 @@ plugins/supabase/
     credential.ts         oauth2 spec (the host runs the flow and the refresh)
     index.ts              definePlugin() — default export `supabasePlugin`
   tests/unit/             plugin.test.ts (kit), classify, execute, risk-catalog,
-                          mission-evaluation (engine decisions, presets), data-model
+                          mission-evaluation (engine decisions, presets),
+                          identifier-injection (hostile identifiers, both sides), data-model
 ```
 
 ## Data model
@@ -57,15 +58,16 @@ Rules a reviewer must know (`src/classify.ts`) :
 - **One project resolution.** `resolveProjectRef(args, resources)` is the
   only code that decides the target project. `classify` and `execute` both
   call it ; `execute` builds every URL from its answer and returns an error
-  result, without any request, on a denial. `project_ref` must be a string
-  matching `[a-zA-Z0-9_-]+` : an array, an object or an unsafe string is
-  denied, never coerced. The camelCase `projectRef` is refused outright.
+  result, without any request, on a denial. `project_ref` must be a host
+  label (lowercase letters, digits and inner hyphens, 63 characters at
+  most) : an array, an object or an unsafe string is denied, never coerced.
+  The camelCase `projectRef` is refused outright.
   Never read `args.project_ref` anywhere else.
 - **Cardinality markers.** The slice DSL has no cardinality, so the
-  classifier emits literal identifiers : `row[one]` / `row[bulk]`,
+  classifier emits literal identifiers : `row[bulk]`,
   `object[one]` / `object[bulk]`, `user[one]` / `user[bulk]`. The catalog
-  patterns use the same literals, which makes `row-write-one` and
-  `bulk-row-write` mutually exclusive. A single-user or single-object write
+  patterns use the same literals, which makes `storage.object-write-one` and
+  `storage.bulk-object-write` mutually exclusive. A single-user or single-object write
   emits the marker slice alone (`user[one].W`, `object[one].W`) : the id or
   path is validated but is not a slice segment, so the call never lands on
   the fallback.
@@ -74,22 +76,35 @@ Rules a reviewer must know (`src/classify.ts`) :
   Management API **read-only query endpoint**
   (`POST /v1/projects/{ref}/database/query/read-only`), where Postgres
   refuses any mutation. `list_tables` and `list_migrations` use the same
-  endpoint. Consequence : no tool writes rows one by one today, so
-  `supabase.row-write-one` is in the catalog (for a future tool) but no
-  preset carries it.
+  endpoint. Consequence : no tool writes rows one by one, so
+  `supabase.row-write-one` matches no call ; it is `deprecated: true`, kept
+  so the id resolves where a share or a mission names it.
 - **`apply_migration` reads its SQL against an allow-list**
   (`src/migration-sql.ts`). Always `schema[any].table[any].W`
-  (→ `migration-write`) ; plus `row[bulk].W` for DML, `DROP TABLE` or a
-  dropped column, `policy[any].W` for RLS statements, `db-role[any].W` for
+  (→ `migration-write`) ; plus `row[bulk].W` for DML, `DROP TABLE`, a
+  dropped column or a column type change (`ALTER COLUMN … TYPE` / `USING`
+  rewrites every row), `policy[any].W` for RLS statements, `db-role[any].W` for
   grants and roles, `extension[any].W` for extensions. **One statement that
   is not recognised** — a `DO` block or any `$$` body, a function, trigger
   or view, a CTE, a bare `SELECT`, `SET`, `COPY`, a write on a
   Supabase-managed schema, text it cannot tokenise — **and all five slices
   are emitted.** It fails closed ; widening the allow-list needs a test in
   `classify.test.ts`. A `query` that is not a non-blank string is denied.
+  A line comment ends at `\n` or `\r`, as PostgreSQL reads it.
 - **Cascades.** `delete_bucket` emits the bucket write and the bulk object
-  write (the objects go with it) ; `deploy_function` with a non-empty
-  `files` bundle emits the body write on top of the deployment.
+  write (the objects go with it) ; `deploy_function` always emits the
+  deployment and the body write, with or without `files` (a deployment
+  changes what runs and how it is exposed) ; a `files` that is not an array
+  is denied.
+- **Only declared arguments.** `execute` builds most request bodies from the
+  arguments, so an argument the tool's schema does not declare is denied by
+  the classifier (`undeclaredArgumentDenial` of the SDK) and therefore
+  refused by `execute`, which classifies first. To add an argument, declare
+  it in `tools.ts` and classify it.
+- **Identifiers the slice grammar cannot carry** (a bucket id, a secret name
+  or an e-mail address holding `@`, `+` or `:`) are written `[*]` in the
+  slice : the call is classified on every instance of the entity. The
+  request still carries the value itself.
 - **Identifiers** have one grammar per kind, read by `readIdentifiers`
   for the classifier and the executor alike, so the request names what the
   slices named. Opaque ids and slugs (`user_id`, `provider_id`, `tpa_id`,
@@ -99,8 +114,10 @@ Rules a reviewer must know (`src/classify.ts`) :
   dot-only ; an email has one `@` and a dotted domain ; `project_ref` is a
   host label ; `list_tables` schemas are unquoted SQL identifiers ;
   `list_users` pages are positive integers ; `content_type` is a media
-  type ; the `type` of `get_advisors` is `security` or `performance`. Anything else, or a missing required identifier, is a denial and an
-  `isError` refusal before any request — never escaped, never a broad slice.
+  type ; `content_base64` is base64 text (required : the bytes stored) ; the
+  `type` of `get_advisors` is `security` or `performance`. Anything else, or
+  a missing required identifier, is a denial and an `isError` refusal before
+  any request — never escaped, never a broad slice.
 
 `supabase__get_anon_key` returns the project URL and the anon key ;
 `service_role` is fetched gateway-side for the data-plane tools and never
@@ -108,7 +125,8 @@ surfaced.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, `catalog_version: 2`, 24 named risks + the fallback
+`src/risk-catalog.yaml`, `catalog_version: 3`, 24 named risks — 23 live and
+the deprecated `supabase.row-write-one` — + the fallback
 `supabase.uncategorized-write` (`supabase.**.W`). A risk is never renamed or
 deleted, only deprecated.
 
@@ -127,8 +145,8 @@ is not dropped. So :
 - the three bulk risks (`bulk-row-write`, `storage.bulk-object-write`,
   `auth.bulk-user-write`) list `preview` and `staging` only, so **a bulk
   write is refused on a prod project whatever the mission accepted** : a
-  migration that writes rows or drops a table or a column, a migration the
-  reader does not recognise, a bucket delete.
+  migration that writes rows, drops a table or a column or changes a column
+  type, a migration the reader does not recognise, a bucket delete.
 
 The fallback counts only when no specific entry matched the write
 (policy-engine rule). Presets never carry it ; a creator who
@@ -177,9 +195,9 @@ provisional until the `mission-presets-default-values` ADR.
    `auth`, `storage`, `edge_functions`, `environment`, `organizations` and
    `projects` scopes for the corresponding tools and for discovery.
 4. Enter the **client id** and **client secret** in the instance
-   configuration (Admin → Provider apps). The plugin reads them as
-   `appConfig.client_id` / `appConfig.client_secret` at refresh time only ;
-   nothing else from the environment.
+   configuration (Admin → Provider apps). The host uses them for the
+   authorization-code flow and for refresh ; the plugin reads neither, and
+   nothing from the environment.
 
 Connecting is then one click : the host runs the authorization-code flow
 from the spec above and stores the token pair encrypted. Access tokens live
@@ -206,8 +224,10 @@ the credential spec, `execute` and `discoverResources` against `mockFetch`,
 and the presets ; `risk-catalog.test.ts` lints the loaded catalog and binds
 tools to their exact risks ; `classify.test.ts` is the classifier's security
 suite (expected slices per tool family, the adversarial SQL table, the
-denials) ; `execute.test.ts` pins the request shapes and the target-project
-resolution ; `mission-evaluation.test.ts` runs the engine's `evaluateCall`
-on the real catalog (unlabelled project, bulk writes on prod, each preset).
-No test ever
-reaches Supabase.
+denials) ; `execute.test.ts` pins the request shapes, the target-project
+resolution and the body built from declared arguments only ;
+`mission-evaluation.test.ts` runs the engine's `evaluateCall` on the real
+catalog (unlabelled project, bulk writes on prod, each preset) ;
+`identifier-injection.test.ts` feeds hostile values to every identifier
+position of `classify` and `execute`. 1613 tests ; none ever reaches
+Supabase.

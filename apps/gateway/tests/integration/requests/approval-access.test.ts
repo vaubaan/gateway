@@ -39,6 +39,7 @@ describe('the arguments of an approval request are for the creator only', () => 
     const { root, seeded } = rig;
     // A connection owned by a group: Ada and Carol both own it.
     carol = await root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
       subject: 'idp|carol',
       email: 'carol@example.com',
     });

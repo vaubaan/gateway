@@ -14,7 +14,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { serializeSlice, type ExecuteContext, type Resource } from '@vaubaan/plugin-sdk';
-import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch, type MockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyResend } from '../../src/classify.ts';
 import { RESEND_API_BASE } from '../../src/execute.ts';
@@ -107,7 +107,7 @@ async function expectRefused(
 ): Promise<void> {
   expect(classify(tool, args, resources)).toEqual({ denied: reason });
   const fetch = permissiveFetch();
-  await expect(resendPlugin.execute(ctx(fetch, resources), tool, args)).rejects.toThrow(
+  expect(await refusalText(resendPlugin.execute(ctx(fetch, resources), tool, args))).toMatch(
     `resend: ${reason}`,
   );
   expect(fetch.calls).toHaveLength(0);
@@ -316,9 +316,13 @@ describe('`domain` — a mission resource ; the path carries its `domain_id`', (
       ]) {
         const poisoned: Resource = { ...prodDomain, metadata: { kind: 'domain', domain_id } };
         const fetch = permissiveFetch();
-        await expect(
-          resendPlugin.execute(ctx(fetch, [poisoned]), tool, { domain: 'notifications.acme.com' }),
-        ).rejects.toThrow(/domain_id/);
+        expect(
+          await refusalText(
+            resendPlugin.execute(ctx(fetch, [poisoned]), tool, {
+              domain: 'notifications.acme.com',
+            }),
+          ),
+        ).toMatch(/domain_id/);
         expect(fetch.calls).toHaveLength(0);
       }
     });

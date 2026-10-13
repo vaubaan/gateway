@@ -77,7 +77,9 @@ export const GMAIL_METADATA_KEYS = [
 
 /**
  * Well-known no-reply local parts — a sender whose local part **is** one of
- * them is `automated` before any domain match. Deliberately narrow : the
+ * them, on an internal or allowlisted domain (or an allowlisted address), is
+ * `automated`. On any other domain the local part is chosen by the sender and
+ * decides nothing. Deliberately narrow : the
  * universe of automated senders is not enumerable, and a substring match
  * would turn `supportive.ceo@` into an automated sender.
  */
@@ -128,10 +130,15 @@ export function classifyFromAddress(address: string, md: GmailMailboxMetadata): 
 }
 
 function fromZoneOf(sender: EmailAddress, md: GmailMailboxMetadata): FromZone {
-  if (KNOWN_AUTOMATED_LOCAL_PARTS.has(sender.local)) return 'automated';
-  if (md.internal_domains.includes(sender.domain)) return 'internal';
-  if (md.allowlist_domains.includes(sender.domain)) return 'known-external';
-  if (md.allowlist_addresses.includes(sender.address)) return 'known-external';
+  const internal = md.internal_domains.includes(sender.domain);
+  const known =
+    md.allowlist_domains.includes(sender.domain) || md.allowlist_addresses.includes(sender.address);
+  // `automated` is a zone of senders the owner already knows. Anybody can name a mailbox
+  // `support@` or `noreply@` on a domain of their own: on an unknown domain the local
+  // part says nothing, and the sender stays `unknown`.
+  if ((internal || known) && KNOWN_AUTOMATED_LOCAL_PARTS.has(sender.local)) return 'automated';
+  if (internal) return 'internal';
+  if (known) return 'known-external';
   return 'unknown';
 }
 

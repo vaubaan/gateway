@@ -89,17 +89,20 @@ describe('classifyVercel — bug-fix #4 : decrypt=true emits plaintext slice', (
 });
 
 describe('classifyVercel — writes (deploy)', () => {
-  test('deploy_to_vercel target=production → env[prod].deployment.W', () => {
-    expect(
-      classify('vercel__deploy_to_vercel', { projectId: 'prj_abc', target: 'production' }),
-    ).toEqual(['vercel.project[prj_abc].env[prod].deployment.W']);
+  test('deploy_to_vercel → env[prod].deployment.W : the upstream tool has no target', () => {
+    expect(classify('vercel__deploy_to_vercel', { projectId: 'prj_abc' })).toEqual([
+      'vercel.project[prj_abc].env[prod].deployment.W',
+    ]);
   });
 
-  test('deploy_to_vercel target=preview or development → still env[prod] : the upstream tool has no target', () => {
-    for (const target of ['preview', 'development', 'staging', ['preview'], 42]) {
-      expect(classify('vercel__deploy_to_vercel', { projectId: 'prj_abc', target })).toEqual([
-        'vercel.project[prj_abc].env[prod].deployment.W',
-      ]);
+  test('deploy_to_vercel with a `target` is refused : the tool takes none, and a deploy that reads "preview" would still go to prod', () => {
+    for (const target of ['production', 'preview', 'development', 'staging', ['preview'], 42]) {
+      expect(
+        classifyVercel('vercel__deploy_to_vercel', { projectId: 'prj_abc', target }, [resource]),
+      ).toEqual({
+        denied:
+          "target: not an argument of 'vercel__deploy_to_vercel' — nothing classifies it, so it is not sent.",
+      });
     }
   });
 
@@ -274,10 +277,12 @@ describe('classifyVercel — toolbar surface', () => {
 });
 
 describe('classifyVercel — one spelling per argument, the one of the schema', () => {
-  test('project_id is not read : the mission project applies, a foreign value changes nothing', () => {
-    expect(classify('vercel__get_project', { project_id: 'prj_other' })).toEqual([
-      'vercel.project[prj_abc].project-settings.R',
-    ]);
+  test('project_id is not an argument : it names no project, and the call that carries it is refused', () => {
+    expect(classifyVercel('vercel__get_project', { project_id: 'prj_other' }, [resource])).toEqual({
+      denied:
+        "project_id: not an argument of 'vercel__get_project' — nothing classifies it, so it is not sent.",
+    });
+    // The project is resolved first : with two projects the missing `projectId` is what is said.
     expect(
       classifyVercel('vercel__get_project', { project_id: 'prj_abc' }, [
         resource,

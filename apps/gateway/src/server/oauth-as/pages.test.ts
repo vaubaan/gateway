@@ -147,6 +147,33 @@ describe('message pages', () => {
   });
 });
 
+describe('the build footer', () => {
+  const build = { version: '2.0.0-alpha.1', commit: 'abc1234' };
+
+  it('is on the consent screen and on a message page, with the two stamps of /healthz', async () => {
+    const consent = await consentPage(view({ build })).text();
+    const message = await messagePage(400, 'Invalid request', 'No.', build).text();
+    for (const html of [consent, message]) {
+      expect(html).toContain('data-testid="build-footer"');
+      expect(html).toContain('<span data-testid="gateway-version">2.0.0-alpha.1</span>');
+      expect(html).toContain('<span data-testid="gateway-commit">abc1234</span>');
+    }
+  });
+
+  it('escapes the stamps and adds nothing the content policy would have to allow', async () => {
+    const response = consentPage(view({ build: { version: '<b>', commit: '"x"' } }));
+    const html = await response.text();
+    expect(html).toContain('&lt;b&gt;');
+    expect(html).not.toContain('<b>');
+    expect(html).not.toContain('<script');
+    expect(response.headers.get('content-security-policy')).toContain("default-src 'none'");
+  });
+
+  it('is absent when the handlers were given no build', async () => {
+    expect(await consentPage(view()).text()).not.toContain('build-footer');
+  });
+});
+
 describe('escapeHtml', () => {
   it('escapes the five characters that change the meaning of HTML', () => {
     expect(escapeHtml(`<a href="x" title='y'>&</a>`)).toBe(

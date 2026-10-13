@@ -37,7 +37,7 @@ anybody, without a password. It is a development tool, never deployed: see
 ```console
 $ npm run demo
 DEMO — simulated identity provider and providers, no data leaves this machine
-Building the web application (DEMO_SKIP_BUILD=1 serves the existing build)…
+Building the web application…
   … building the composition root
   … seeding people, connections, missions and calls
   … starting the web application
@@ -46,11 +46,11 @@ Open        http://localhost:3210
 …
 ```
 
-| Variable            | Effect                                                                                      |
-| ------------------- | ------------------------------------------------------------------------------------------- |
-| `DEMO_PORT=<port>`  | listen on another port (default 3210; `0` lets the system pick one, as the smoke test does) |
-| `DEMO_KEEP=1`       | keep the SQLite file and the instance log on exit, and say where they are                   |
-| `DEMO_SKIP_BUILD=1` | serve the build already under `apps/gateway/.next` instead of running `next build` first    |
+| Variable            | Effect                                                                                                                       |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `DEMO_PORT=<port>`  | listen on another port (default 3210; `0` lets the system pick one, as the smoke test does)                                  |
+| `DEMO_KEEP=1`       | keep the SQLite file and the instance log on exit, and say where they are                                                    |
+| `DEMO_SKIP_BUILD=1` | serve the build already under `apps/gateway/.next` as it is, whatever it was built from (it still builds when there is none) |
 
 - **Browser.** Chrome and Firefox accept the session cookie — marked `Secure`,
   as on a real instance — on `http://localhost`. Safari does not: use Chrome
@@ -63,22 +63,51 @@ Open        http://localhost:3210
 - **Stop.** `Ctrl-C`. The data directory is deleted unless `DEMO_KEEP=1`.
   Every run starts from the same seeded state.
 
-The command prints a tour: the URL, the accounts, three mission tokens with
+The command prints a tour: the URL, the accounts, the tokens of three seeded
+missions and of the named token "CI runner", with
 ready-made `curl` commands, and the list below with this run's request URLs.
+
+### Starting it
+
+The application is built on the first start, and again only when a file a
+build reads has changed since (`build-stamp.ts`). After a build the command
+writes a stamp, `demo-build-stamp`, inside `apps/gateway/.next`: the SHA-256
+of the path and the contents of every build input (`BUILD_INPUTS`: the
+application's `src`, `public`, `migrations`, `next.config.ts`,
+`package.json` and `tsconfig.json`, the whole of `packages/` and `plugins/`,
+and the root `package.json`, `package-lock.json` and `tsconfig.base.json`),
+directories named `node_modules`, `.next`, `dist`, `tests` or `.turbo` left
+out. At the next start the digest is computed again, before anything is
+built:
+
+| What is under `apps/gateway/.next`       | The command says                                                          | And does                 |
+| ---------------------------------------- | ------------------------------------------------------------------------- | ------------------------ |
+| a build whose stamp equals the digest    | `The web application is already built from these sources.`                | serves it                |
+| a build with another stamp, or with none | `The sources changed since the last build: building the web application…` | builds, stamps, serves   |
+| no build                                 | `Building the web application…`                                           | builds, stamps, serves   |
+| a build, and `DEMO_SKIP_BUILD=1`         | `Serving the existing build as it is (DEMO_SKIP_BUILD=1).`                | serves it, digest unread |
+
+The digest is over contents, not dates: a checkout that rewrites a file with
+the same bytes costs no build, an edit always does, and so does a file added
+or renamed. A build made by anything else (`npm run build`, the CI) carries
+no stamp and is rebuilt once. The stamp lives in the build directory, so it
+goes away with the build. The digest is taken before the build starts: a
+file edited while it runs makes the next start build again.
 
 ## Accounts
 
 No password. The sign-in page of the application redirects to the demo
 identity provider, which shows an account picker.
 
-| Account | Who                                 | Sees                                                                                                                                       |
-| ------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Alice   | owner and operator                  | her connections, missions in every state, two open requests, a share received from Carol, the audit of the whole instance, the Admin pages |
-| Bob     | teammate (share beneficiary)        | no connection of his own, one share received from Alice, one mission issued within it                                                      |
-| Carol   | member of the "GitHub admins" group | the GitHub connection owned by that group, her own Stripe connection (test and live as two resources), whose test mode she shares to Alice |
+| Account | Who                                 | Sees                                                                                                                                                   |
+| ------- | ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Alice   | owner and operator                  | her connections, missions in every state, two open requests, a share received from Carol, the audit of the whole instance, the Admin pages             |
+| Bob     | teammate (share beneficiary)        | no connection of his own, one share received from Alice, one mission issued within it, and Alice's "Ship the billing page" shared with him as a member |
+| Carol   | member of the "GitHub admins" group | the GitHub connection owned by that group, her own Stripe connection (test and live as two resources), whose test mode she shares to Alice             |
 
-Alice is the operator because the demo's admin rule lists her email. "Sign
-out" in the top bar returns to the picker.
+Alice is the operator because the demo's admin rule lists her email. To
+switch account, open the account button at the end of the bar and "Sign
+out": it returns to the picker.
 
 ## What is seeded
 
@@ -100,71 +129,89 @@ Audit entries are the ones those acts and calls wrote.
 
 ## The tour
 
-1. **Sign in as Alice.** Missions lists every state: active, quota spent,
-   waiting for an approval, expired, revoked, issued by an agent.
-2. **Connect a provider**: Connections → Connect a provider. Stripe (test key
-   `sk_test_demo`, live key `sk_live_demo`), Cloudflare DNS (API token
-   `demo-cloudflare-token-0123456789`), Resend (`re_demo_key`), Upstash Redis
-   (any email, any key), GitHub (a simulated installation page: pick an
-   organisation). Any value of the right shape is accepted. Vercel has no
-   simulation: connecting it fails with a message that says so, and nothing
-   is sent.
+The list the command prints (`tour.ts`), without the values of the run
+(port, tokens, request URLs):
+
+1. **Sign in as Alice.** Missions lists the seeded missions in every state:
+   active, quota spent, waiting for an approval, expired, revoked, issued by
+   an agent.
+2. **Connect a provider**: Connections → Connect a provider.
+
+   | Provider   | What to type                                              |
+   | ---------- | --------------------------------------------------------- |
+   | Stripe     | test key `sk_test_demo`, live key `sk_live_demo`          |
+   | Cloudflare | API token `demo-cloudflare-token-0123456789`              |
+   | Resend     | API key `re_demo_key`                                     |
+   | Upstash    | any email address, API key `demo-key`                     |
+   | Vercel     | token `demo-vercel-token`, team id `team_demo`            |
+   | GitHub     | opens a simulated installation page: pick an organisation |
+
+   Any value of the right shape is accepted. Supabase and Railway connect
+   through an OAuth app the demo does not configure: the picker says so.
+
 3. **Read what a provider is**: Providers → GitHub. What the plugin connects
    to, then four tabs: its presets side by side against the risks, each risk
-   with the reason it is a risk and its six-cell profile, its data model as an
-   outline, its tools. Supabase adds a plane control (db, storage, auth,
-   functions).
+   with the reason it is a risk and its six-cell profile, its data model, its
+   tools. Supabase adds a plane control (db, storage, auth, functions).
 4. **Issue a mission on one screen**: Missions → New mission. Include a
    connection and pick a preset: the block says what it allows, what waits
    for your approval and what it leaves out. Switch to **Custom** to accept
-   risks one by one — every risk is listed with its quota, rate limit and
-   gate, "Start from preset…" pre-fills, and going back to Preset after an
-   edit asks first.
+   risks one by one, each with its quota, rate limit and gate; then Issue.
 5. **Open the bootstrap kit** shown right after issuing: the token (shown
    once), the MCP client configuration, the instructions for the agent, a
    `curl`.
 6. **Call `tools/list` on `/mcp`** with a mission token: the kit's own
-   command, or the one the tour prints for the seeded mission
-   (`$VAUBAAN_MISSION_TOKEN`).
-7. **Exhaust a quota**: the printed loop reads a file four times with
-   `$VAUBAAN_QUOTA_TOKEN`; the fourth answer is a refusal `budget-exhausted`
-   carrying a `claim_url`. Open it as Alice (or Requests), grant a reset or an
-   extension, run the loop again.
-8. **Approve the pending action**: Requests shows the merge of pull request
-   #128 with its arguments. Approve it, then replay the call with exactly the
-   same arguments (the printed `curl`, `$VAUBAAN_APPROVAL_TOKEN`): it now
-   executes.
+   command, or the one the tour prints for the seeded mission "Ship the
+   billing page" (`$VAUBAAN_MISSION_TOKEN`).
+7. **Exhaust a quota.** The mission "Tour: a tiny quota to exhaust" allows
+   three file reads: the printed loop reads a file four times with
+   `$VAUBAAN_QUOTA_TOKEN`, and the last answer is a refusal
+   `budget-exhausted` carrying a `claim_url`. Open it as Alice (or Requests),
+   grant a reset or an extension, run the loop again. An older claim is
+   already waiting; the tour prints its URL.
+8. **Approve the pending action**: Requests shows a merge of pull request
+   #128 with its arguments (the tour prints the request's URL). Approve it,
+   then replay the call with exactly the same arguments (the printed `curl`,
+   `$VAUBAAN_APPROVAL_TOKEN`).
 9. **Share to Bob**: Connections → "Acme product repositories" → Share. Bob
-   already holds a share of it; sign in as Bob to see Shares received and his
-   mission.
-10. **Revoke that share** as Alice: Bob's mission reads `orphaned` and every
-    call with its token is refused. **Share again**: the same mission comes
-    back, same token, same counters.
+   already holds a share of it; sign out, sign in as Bob: Shares received,
+   and his mission.
+10. **Revoke that share** as Alice; as Bob, his mission now reads `orphaned`
+    and every call with its token is refused. **Share again** as Alice: the
+    same mission comes back, same token, same counters.
 11. **Work on a mission as a team.** Alice added Bob as a member of "Ship the
     billing page" and created the named token "CI runner". Sign in as Bob:
     Missions → "Shared with me" → that mission. He reads it and cannot change
     it. In "Members and tokens", **Rotate my token**: his new token is shown
-    once, to him, with the bootstrap kit; Alice never sees it. Ask the gateway
-    whose token it is (`curl …/mcp/catalog`, printed by the tour): the answer
-    reads `"token": { "kind": "member", "holder": "bob@…" }`; the machine's
-    token (`$VAUBAAN_CI_TOKEN`) answers with its name. As Alice, the same
+    once, to him, with the bootstrap kit; Alice never sees it. Copy the
+    export line of the dialog, then ask the gateway whose token it is
+    (`curl …/mcp/catalog` with `$VAUBAAN_MISSION_TOKEN`, printed by the
+    tour): the answer reads
+    `"token": { "kind": "member", "holder": "bob@…" }`. The machine's token
+    (`$VAUBAAN_CI_TOKEN`) answers with its name. Sign in as Alice: the same
     section lists Bob and "CI runner" with when each token was last used;
-    "Session" has "Calls per token holder" and each call names its holder.
-    Remove Bob: his token is refused at once (401, reason `holder-removed`),
-    the others keep working.
-12. **Audit**: every call and administrative act, with filters (mission, token
-    holder, agent label, decision). On a mission, "Session" shows the calls of
-    the current period per token holder and per agent label.
-13. **Admin**, as Alice: Identity provider, Provider apps, Groups, Connections
-    without owner, OAuth clients, Telemetry.
-14. **Sign in as Carol**: the group-owned GitHub connection and her Stripe
-    account.
+    "Session" has "Calls per token holder", and each call of the timeline
+    names its holder. Remove Bob: his token is refused at once (401, reason
+    `holder-removed`), the others keep working.
+12. **Audit**: every call and every administrative act, with filters
+    (mission, token holder, agent label, decision). On a mission, "Session"
+    shows the calls of the current period per token holder and per agent
+    label (`planner`, `coder`).
+13. **Admin**, as Alice (she is the operator): Identity provider, Provider
+    apps (the GitHub App), Groups ("GitHub admins", "Contractors"),
+    Connections without owner, OAuth clients ("Claude Code (demo)"),
+    Telemetry (off).
+14. **Sign in as Carol**: she sees the GitHub connection owned by the group
+    "GitHub admins", which Alice transferred to it, and her own Stripe
+    account (test and live mode as two resources), whose test mode she shares
+    to Alice.
 
 ## How it is built
 
 ```
 apps/gateway/tests/demo/
-  main.ts            the command: guards, build, global-fetch guard, start, tour, shutdown
+  main.ts            the command: guards, build when the sources changed, global-fetch guard, start, tour, shutdown
+  build-stamp.ts     sourceDigest(), buildIsFresh(), writeBuildStamp(): is the build that of the sources as they are
   guards.ts          assertDemoAllowed(env), demoPort(env), DemoRefusal
   demo-instance.ts   startDemo(): listener, configuration, composition root, seed, Next
   demo-idp.ts        DemoIdp (FakeIdp over HTTP under /__demo/idp), the account picker, demoPage()
@@ -175,6 +222,8 @@ apps/gateway/tests/demo/
 apps/gateway/tests/integration/demo/
   demo-smoke.test.ts   spawns the command, signs in over HTTP, reads the pages, calls /mcp, stops it
   demo-safety.test.ts  the guards; no demo file in the build; no demo seam in the application
+  demo-vercel.test.ts  the shipped Vercel plugin against the simulated Vercel: discovery, a REST tool, a rewrapped tool
+  build-stamp.test.ts  the stamp: fresh while no input changed, stale once one changed or a file was added
 ```
 
 `startDemo()` (`demo-instance.ts`), in order:
@@ -183,7 +232,7 @@ apps/gateway/tests/integration/demo/
    rest is ready. The port is known first because it is part of the public
    URL.
 2. **Configuration**, in memory. `loadInstanceConfig` is called with an
-   environment built here — a master key generated for the run, a store path
+   environment built here — a master key and a bootstrap token generated for the run (the token is never printed), a store path
    under a fresh `mkdtemp` directory of the OS temp dir, `ALICE`'s email as
    the admin rule, `telemetry.enabled: false`, the `providers.github` block of
    a GitHub App whose RSA key pair and secrets are generated for the run — and
@@ -236,7 +285,7 @@ a code bound to that person's claims (`sub`, `email`, `name`,
 `createDemoProviders()` returns one `fetch` built on the SDK's `mockFetch`
 with routes for GitHub (the user verification of an installation, installation
 tokens, the repositories of two installations, the REST endpoints of the
-common tools), Stripe, Cloudflare DNS, Resend and Upstash Redis. Every URL is
+common tools), Stripe, Cloudflare DNS, Resend, Upstash Redis and Vercel. Every URL is
 read off the plugin that calls it (credential spec, exported API base). A
 request no route answers throws `DemoProviderError` — "demo mode: no simulated
 answer for `<METHOD> <URL>` — nothing was sent to the real provider" — which
@@ -251,6 +300,25 @@ organisations and redirects back to `/connections/callback/github` with an
 installation id, a code and the state. The rest of the flow is the shipped
 code against the simulated API: the code exchange, the check that the
 installation is among the user's, the installation token, discovery.
+
+**Vercel** is one team (`acme`) and two projects, `acme-storefront` and
+`acme-docs`, each with a production and a preview deployment and two
+environment variables. A connection made with the token `demo-vercel-token`
+and the team id `team_demo` (any team id is answered: the demo has one team)
+discovers the two projects, each with the environments `prod`, `preview` and
+`development`. The routes answer the team and project listing of discovery,
+the environment-variable endpoints of the REST API (list, create, delete),
+the deployment lookup that binds a deployment to its project, and the remote
+MCP server the plugin rewraps: one JSON-RPC exchange answered as one SSE
+frame of canned text (teams, projects, a project, deployments, build and
+runtime logs; any other tool answers `{ "simulated": true }`).
+
+**Upstash Redis**: the REST endpoint of a simulated database is a host under
+the plugin's pinned REST suffix (`<database name>.upstash.io`, built from
+the plugin's `UPSTASH_REST_HOST_SUFFIX`). The plugin posts a database's token
+to a host of that domain and to no other, so a simulated host anywhere else
+would be refused by the plugin itself. Like every provider URL here it is
+answered from memory and never dialled.
 
 The SSH plugin is left out of the demo's registry: its calls do not go through
 `fetch` but open connections to the host the user names, which no simulation
@@ -291,7 +359,7 @@ the named token of the team mission, the two request URLs, the names).
 | Refuses a real environment         | `assertDemoAllowed`: `NODE_ENV=production`, `VAUBAAN_CONFIG_FILE` or `VAUBAAN_PUBLIC_URL` set → exit 2 before anything is opened                                                                                                                     | `demo-safety.test.ts`               |
 | Nothing leaves the machine         | provider calls go to `providers.ts`; the SSH plugin is not registered; telemetry and client-document fetches refuse; the command also replaces the global `fetch` with one that refuses any host but the loopback, and disables Next's own telemetry | `providers.ts`, `main.ts`           |
 | Not reachable from the network     | the listener binds `127.0.0.1`                                                                                                                                                                                                                       | `demo-instance.ts`                  |
-| No lasting secret, no lasting data | master key, GitHub App key pair, IdP signing key and client secrets are generated per run and kept in memory; the SQLite file is in a `mkdtemp` directory deleted on exit                                                                            | `demo-smoke.test.ts` (deletion)     |
+| No lasting secret, no lasting data | master key, bootstrap token, GitHub App key pair, IdP signing key and client secrets are generated per run and kept in memory; the SQLite file is in a `mkdtemp` directory deleted on exit                                                           | `demo-smoke.test.ts` (deletion)     |
 | Said on every surface              | the banner "DEMO — simulated identity provider and providers, no data leaves this machine" is printed at start and shown on the picker and the installation page                                                                                     | `demo-smoke.test.ts`                |
 
 The first line needed a fix outside the demo: the plugins' computed catalog
@@ -315,8 +383,9 @@ unmodified.
   was sent. Add the route.
 - **A page shows an error**: `DEMO_KEEP=1 npm run demo`, then read
   `gateway.log` in the printed directory (the instance's structured log).
-- **Stale pages after pulling**: the command rebuilds unless
-  `DEMO_SKIP_BUILD=1`.
+- **Stale pages after pulling**: the command rebuilds when a build input
+  changed, unless `DEMO_SKIP_BUILD=1`, which serves whatever build is there.
+  To force a build, delete `apps/gateway/.next/demo-build-stamp`.
 - **A connect attempt is refused as rate-limited**: the real per-user connect
   limit (10 per minute) applies after the seed.
 
@@ -324,17 +393,42 @@ unmodified.
 
 `apps/gateway/tests/integration/demo/` ([integration-tests](../tests/integration-tests.md),
 "Demo mode"). `demo-smoke.test.ts` needs a build and is skipped without one;
-`npm run ci` builds first.
+`npm run ci` builds first. Two files need neither a build nor a listener:
+`demo-vercel.test.ts` runs the shipped Vercel plugin against the demo's
+`fetch` (a connection made with the tour's values discovers the team's two
+projects with their three environments; a REST tool and a rewrapped tool
+answer; discovery sent `GET` requests only, all to simulated routes), and
+`build-stamp.test.ts` holds the stamp on a temporary tree (an unstamped
+build is not fresh; fresh while no input changed, whatever the file dates;
+stale once an application source, a workspace package, a plugin catalog or
+the lockfile changed; another digest when a file is added; tests,
+dependencies and the build itself ignored; not fresh without a build even
+with a matching stamp; the stamp inside the build directory, the input list
+naming the application sources and the plugins).
 
 ## Limits
 
 - One process, one run: every start is the seeded state again. `DEMO_KEEP=1`
   keeps the files for inspection; it does not resume from them.
-- Simulated answers are canned: a write changes nothing a later read shows.
-- Vercel is listed and not simulated: connecting it fails with the message
-  above. Supabase, Railway and Gmail need a company app, which the demo does
+- Simulated answers are canned: a write changes nothing a later read shows
+  (an environment variable created on the simulated Vercel is not in the
+  next listing).
+- Vercel's rewrapped tools answer canned text from one team and two
+  projects; a tool the simulation has no answer for returns
+  `{ "simulated": true }` with its name.
+- Supabase, Railway and Gmail need a company app, which the demo does
   not register; registering one in Admin → Provider apps does not make the
   provider real, the code exchange is still refused. SSH is absent.
+- **The Administration overview says "build dev" while the page footer shows
+  the stamped version.** The footer is rendered by the built application,
+  where the version and the commit were frozen at build time; the overview
+  reads the build of the composition root, and the demo composes the root in
+  its own process, outside the built application, where nothing is stamped.
+  Whatever else reads the root's build says `dev` in the demo for the same
+  reason (`/healthz`, the footer of the authorization server's pages). An
+  instance started from the image has one process and one stamp.
+- The build stamp sees the build inputs listed above and nothing else: a
+  change to a file outside them does not trigger a build.
 - The identity provider settings are read-only in Admin, as with a mounted
   configuration.
 

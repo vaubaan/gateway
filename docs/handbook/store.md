@@ -22,7 +22,9 @@ The store is the gateway's only persistence: one SQLite file on the mounted volu
 opened by the process, migrated at boot, accessed through repository interfaces.
 Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §2 (domain), §3 (budget,
 requests, approvals), §6 (encryption at rest, immutable audit), §8 (audit). Decisions:
-[embedded-store-sqlite-and-migrations](../decisions/embedded-store-sqlite-and-migrations.md).
+[embedded-store-sqlite-and-migrations](../decisions/embedded-store-sqlite-and-migrations.md),
+[users-keyed-by-issuer-and-subject](../decisions/users-keyed-by-issuer-and-subject.md),
+[one-membership-rule-checked-in-the-token-insert](../decisions/one-membership-rule-checked-in-the-token-insert.md).
 
 ## Layout
 
@@ -46,6 +48,9 @@ apps/gateway/migrations/
   0010_mission_members_and_token_holders.sql
                                   `mission_members`; `mission_tokens` rebuilt with one holder per
                                   token; who called on `audit` and `events` (schema version 10)
+  0011_users_keyed_by_issuer_and_subject.sql
+                                  users: `subject` renamed `identity_key` (still the unique column),
+                                  `issuer` and `subject` added, index `users_issuer` (schema version 11)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -57,7 +62,9 @@ apps/gateway/src/server/store/
   encryptor.ts                    re-exports the crypto module's Encryptor port + sealText/openText helpers
   catalog-index.ts                CatalogIndex interface, SetCatalogIndex, assertKnownRiskIds
   audit-writer.ts                 SqliteAuditWriter implementing @vaubaan/gateway-core's AuditWriter
-  errors.ts                       StoreError, NotFoundError, UnknownRiskIdError, InvariantError, MigrationError
+  errors.ts                       StoreError, NotFoundError, UnknownRiskIdError, InvariantError, MigrationError,
+                                  TokenNotIssuableError + TOKEN_NOT_ISSUABLE_REASONS
+  membership.ts                   membershipOf(), isOnMission(), MEMBERSHIPS — who a user is to a mission
   types.ts                        record types (UserRecord, MissionRecord, …)
   testing.ts                      StubEncryptor, TEST_RISK_IDS, openTestStore(), and four fixtures that
                                   reach a state the way production does (grantApprovalRequest,
@@ -143,12 +150,14 @@ five-id catalog).
   understand stops the read instead of flowing into a decision. This covers
   `users.status`, `connections.status`, `connection_resources.env_source`,
   `shares.status`, `missions.status`, `mission_connections.resource_scope`,
-  `mission_policy.gate`, `mission_tokens.status`, `requests.kind` / `state`,
+  `mission_policy.gate`, `mission_tokens.status` / `kind`, `requests.kind` / `state`,
   `delegations.status` / `revoke_reason` (no schema `CHECK` either: the list is its only guard),
   `oauth_clients.registration` / `token_endpoint_auth_method` / `operator_decision`,
   `oauth_codes.code_challenge_method` and `audit.kind` / `decision` /
   `act` / `object_type` (the last two have no schema `CHECK`: the list is their only
-  guard) and `groups.source`: no enum column is cast any more. The lists of the unions defined outside the store are in
+  guard), `audit.token_kind` (`isMissionTokenKind`, no schema `CHECK` either) and `groups.source`:
+  no enum column is cast any more. `MISSION_TOKEN_KINDS` already lives next to its type, in
+  `@vaubaan/shared` (`domain.ts`). The lists of the other unions defined outside the store are in
   `repositories/enums.ts`, written from the union through `membersOf`, which fails to
   compile when a member is added to or removed from the union; they are meant to move
   next to their types in `@vaubaan/shared` and `@vaubaan/gateway-core`.
@@ -188,9 +197,9 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0010_mission_members_and_token_holders.sql`)
+## Schema (`0001_schema.sql` … `0011_users_keyed_by_issuer_and_subject.sql`)
 
-Schema version 10. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 11. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
@@ -207,17 +216,18 @@ nullable `ADD COLUMN`, no default, no backfill): the instant of the user's last
 deactivation, kept after a reactivation — `removed_at` cannot carry it, since it is
 cleared when the user is active again (handbook [authentication](authentication.md),
 "Deactivating a user"); `0010` adds mission members and gives every mission token one
-holder (see "Mission members and token holders" below).
+holder (see "Mission members and token holders" below); `0011` makes a user the pair
+(issuer, subject) (see "Users: (issuer, subject)" below).
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Instance    | `instance_config`, `schema_migrations`                                                                                     | key → clear `value` **or** `secret_blob`+`key_version`, never both                                                                                                                                                                                                                                                                                                            |
 | Web session | `web_sessions`                                                                                                             | `id` = SHA-256 (hex) of the session key — the cookie value is a bearer and is never stored; `value_json`, `expires_at`; repository `store.webSessions` (`repositories/web-sessions.ts`), which is the composition root's `SessionStore` port (handbook [authentication](authentication.md)); expired rows swept on write                                                      |
-| Identities  | `users`, `groups`, `group_members`                                                                                         | `users.subject` unique (IdP), `status active\|removed` (set by an operator's deactivation, never by a sign-in), `sessions_ended_at` (migration `0009`); `groups.source idp\|local`                                                                                                                                                                                            |
+| Identities  | `users`, `groups`, `group_members`                                                                                         | `users.identity_key` unique = `<issuer> <subject>`, with `issuer` (NULL until bound) and `subject` as plain columns (migration `0011`, below), `status active\|removed` (set by an operator's deactivation, never by a sign-in), `sessions_ended_at` (migration `0009`); `groups.source idp\|local`                                                                           |
 | Delegations | `oauth_clients`, `oauth_client_redirect_uris`, `delegations`, `oauth_codes`, `oauth_refresh_tokens`, `oauth_access_tokens` | all secrets stored as hashes by the caller; codes single-use; refresh tokens chain through `replaced_by_id`; `oauth_clients.operator_decision` (`approved`\|`disabled`, NULL while the registration policy decides), `registration` (`dynamic`\|`metadata-document`); `delegations.revoke_reason`; repository and its replay lookups in [management-door](management-door.md) |
 | Connections | `connections`, `connection_resources`                                                                                      | owner = `owner_kind` + `owner_user_id`/`owner_group_id` with a CHECK; status `active\|expired\|revoked\|unowned`; resources unique per `(connection_id, ref)` with an `env` label, its `env_source` (`owner`\|`plugin`), `metadata_json` (provider facts) and `owner_metadata_json` (owner edits), `display_name_edited`, `hidden`, `stale_since` (see Connections below)     |
 | Shares      | `shares`, `share_restrictions`                                                                                             | target principal like owner; one `risk_id` row per restriction entry                                                                                                                                                                                                                                                                                                          |
-| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`, `mission_members`              | status `active\|expired\|revoked` (`orphaned` is derived, `0007` refuses it; `exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; partial unique index = one `active` token per mission                                                            |
+| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`, `mission_members`              | status `active\|expired\|revoked` (`orphaned` is derived, `0007` refuses it; `exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; two partial unique indexes = one `active` token per member and per token name (`0010`, below)                    |
 | Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details; `events.agent_label` (`0008`) is a copy of the label of a call event, made at insert, for the per-label timeline                                                                                                             |
 | Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, encrypted `args_blob` (NULL on decision and on expiry); one approval per request, keyed `(mission, risk, tool, fingerprint)`, consumed via `consumed_at`                                                                                                      |
 | Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                                                                                                                     |
@@ -307,6 +317,66 @@ every reader derives the state (`MissionGrounds.inspect`, handbook
 derived value once it went through `inspect`. `closed_at` is set by `revoked` and
 `expired` only.
 
+## Users: (issuer, subject) (migration `0011`)
+
+OpenID Connect makes a subject unique within its issuer only, so a user is the pair
+(issuer, subject), never the subject alone (ADR
+[users-keyed-by-issuer-and-subject](../decisions/users-keyed-by-issuer-and-subject.md);
+the sign-in side is in [authentication](authentication.md)).
+
+| Column         | Holds                                                                                                                                                                   |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `identity_key` | the column `0001` created as `subject`, renamed: it keeps the `UNIQUE` constraint. `<issuer> <subject>`, or `unbound <subject>` for an account no sign-in has bound yet |
+| `issuer`       | the `iss` of the ID token the account signs in with, exactly as issued; `NULL` only for an account created before the migration and not bound yet                       |
+| `subject`      | the `sub` claim (`NOT NULL DEFAULT ''`, filled from the old column by the migration); not unique on its own                                                             |
+
+The migration is a `RENAME COLUMN`, two `ADD COLUMN`s, one `UPDATE` and the index
+`users_issuer` on `(issuer)`: no table is rebuilt and no row copied (other tables reference
+`users`). One derived key carries the one unique constraint: an issuer is a URL and holds
+no whitespace, so the first space splits the two parts and the constraint is exactly
+`UNIQUE (issuer, subject)`; `unbound` is not a URL, so no issuer-qualified key can equal
+the key of an unbound account.
+
+- `identityKeyOf(issuer, subject)` (exported by `repositories/users.ts`) builds the key and
+  is the one check of both parts: the issuer must have a scheme and no whitespace
+  (`^[A-Za-z][A-Za-z0-9+.-]*:\S+$`), the subject must not be empty; `InvariantError`
+  otherwise.
+- `UpsertUserInput` requires `issuer` next to `subject`. `upsertFromIdp` inserts or, on a
+  conflict on `identity_key`, refreshes email, display name and last login; it never
+  changes the status.
+- `getByIdentity(issuer, subject)` reads the account of this subject **at this issuer**; the
+  same subject at another issuer is another user, and an unbound account matches no
+  sign-in.
+- `bindUnboundTo(issuer)` binds every account that has no issuer to `issuer` in one
+  `BEGIN IMMEDIATE` transaction and returns how many it bound; a no-op afterwards. An
+  account whose key would collide with one already bound to that issuer is left unbound,
+  and therefore unreachable, instead of failing the sign-in that triggered the bind. The
+  sign-in calls it with the validated `iss`, before it looks the user up
+  (`server/auth/login.ts`).
+- `UserRecord` carries `issuer: string | null` and `subject`.
+
+## Mission membership (`membership.ts`)
+
+`membershipOf(mission, userId, user, row)` is the one statement of who a user is to a
+mission (ADR
+[one-membership-rule-checked-in-the-token-insert](../decisions/one-membership-rule-checked-in-the-token-insert.md)).
+It is pure and takes the mission's creator, the user's row (`null` when unknown) and their
+member row on the mission, removed or not (`null` when there is none):
+
+| `Membership`  | When                                                                                           |
+| ------------- | ---------------------------------------------------------------------------------------------- |
+| `creator`     | the user created the mission: a member by construction, with no row, whatever their own status |
+| `member`      | an active user with a member row that is not removed                                           |
+| `deactivated` | the user is not `active` (or unknown) and holds or held a row; told before removal             |
+| `removed`     | an active user whose row was removed                                                           |
+| `none`        | no row (and not the creator)                                                                   |
+
+`isOnMission(membership)` is true for `creator` and `member` only. `MEMBERSHIPS` is the
+closed list. The function lives in the store because three decisions read it: who may read
+the mission, whose Bearer authenticates at the execution door (both in the mission
+service, handbook [missions](missions.md)), and for whom a token may be inserted —
+`MissionsRepo.issueToken`, inside its transaction, which no service can reach into.
+
 ## Audit
 
 `store.audit.append(entry)` takes `@vaubaan/gateway-core`'s `AuditEntry` (P0.5 owns
@@ -355,6 +425,21 @@ holder** — `(token_kind, token_holder)`, the calls written before tokens had a
 search takes `tokenHolders: { kind, holders[] }` (calls only; an empty list matches
 nothing, and a kind is never crossed: a token named like a user's id is not that member).
 
+Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks` aborts;
+a `DELETE` on `audit` or on `audit_risks` aborts unless `audit_purge_guard` holds a
+cutoff newer than the entry (migration `0002` made the `audit_risks` trigger look up
+its parent entry's `ts`; in `0001` any risk row could go while a window was open).
+`store.audit.purgeOlderThan(cutoff)` is the only path that opens the window, inside
+its own transaction;
+`purgeByRetention(days = DEFAULT_AUDIT_RETENTION_DAYS)` (90, exported) computes the
+cutoff from the clock.
+`countAllowedTouches(mission, risk, since, until)` serves the structural check
+"session counters agree with the audit" (spec §10).
+
+`store.auditWriter` is a `SqliteAuditWriter` implementing gateway-core's
+`AuditWriter`; `write()` throws on failure (audit is not best-effort: the pipeline
+treats a rejected write as an internal error).
+
 ### Mission members and token holders (migration `0010`)
 
 Spec §0 "Mission member", "Mission token"; ADR
@@ -390,14 +475,31 @@ userId }` | `{ kind: 'named', name }`, so a holder is never half of each), `crea
 
 Repository (`MissionsRepo`): `issueToken({ …, holder, createdBy })` → `{ token, replaced }`
 retires the **same member's** active token in the transaction and leaves every other
-holder's alone; a named token whose name an active token carries is an `InvariantError`.
+holder's alone. The caller checks the mission and the holder before it computes the hash
+of the secret, which takes tens of milliseconds; a revocation, a removal or a deactivation
+committed meanwhile must not be undone by the insert, so the same `BEGIN IMMEDIATE`
+transaction that writes the row checks again and throws
+`TokenNotIssuableError(reason, missionId)`, with nothing written:
+
+| `reason` (`TOKEN_NOT_ISSUABLE_REASONS`) | When                                                                                                               |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `mission-not-active`                    | the stored status of the mission is not `active`                                                                   |
+| `holder-not-a-member`                   | a member token whose holder is not on the mission now (`membershipOf` over the user's status and their member row) |
+| `name-taken`                            | a named token whose name an active token of the mission already carries                                            |
+
+`TokenNotIssuableError` is a `StoreError` of its own, apart from `InvariantError` (which a
+corrupt row raises too), so the mission services answer each reason in their own words.
 `revokeToken(id)` revokes one active token (`null` otherwise); `revokeTokens(missionId)`
 all of a mission's; `revokeMemberTokensOf(userId)` every active member token the user
 holds on a mission they did **not** create (deactivation; their own missions follow the
 derived `orphaned` rule and keep their tokens). `markTokenUsed(id, granularitySeconds)`
 is one conditional `UPDATE` (written only when the stored instant is older).
-`addMember`, `removeMember` (the row and the member's token in one transaction; `null`
-when not a member), `getMember`, `listMembers`, `listForMember`.
+`addMember` → `AddedMember { member, tokenRevoked }`: a member starts with no token, so a
+working member token of that user found on the mission (it should not exist: removal
+revokes, and `issueToken` refuses a holder who is not on the mission) is revoked in the
+same transaction and returned, `null` otherwise. `removeMember` (the row and the member's
+token in one transaction; `null` when not a member), `getMember`, `listMembers`,
+`listForMember`.
 
 ### The timeline of one agent label
 
@@ -414,21 +516,6 @@ migration `0008`. The details stay the source: the column is never returned in a
 `EventRecord`. The labelled and the unlabelled reads are separate statements, for the
 same Postgres reason as above. `RecentEventsOptions`, `CALL_EVENT_KINDS` and
 `agentLabelColumn` are exported by `repositories/sessions.ts`.
-
-Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks` aborts;
-a `DELETE` on `audit` or on `audit_risks` aborts unless `audit_purge_guard` holds a
-cutoff newer than the entry (migration `0002` made the `audit_risks` trigger look up
-its parent entry's `ts`; in `0001` any risk row could go while a window was open).
-`store.audit.purgeOlderThan(cutoff)` is the only path that opens the window, inside
-its own transaction;
-`purgeByRetention(days = DEFAULT_AUDIT_RETENTION_DAYS)` (90, exported) computes the
-cutoff from the clock.
-`countAllowedTouches(mission, risk, since, until)` serves the structural check
-"session counters agree with the audit" (spec §10).
-
-`store.auditWriter` is a `SqliteAuditWriter` implementing gateway-core's
-`AuditWriter`; `write()` throws on failure (audit is not best-effort: the pipeline
-treats a rejected write as an internal error).
 
 ## The decision primitive
 
@@ -500,7 +587,8 @@ Additive, for the approval gate (handbook [requests](requests.md), "Approvals"):
   = now (idempotent on the status; the instants move). `store.users.reactivate(id)` —
   `removed` → `active`, `removed_at` cleared, `sessions_ended_at` kept; `null` when the user
   is unknown or was not removed (nothing written). `upsertFromIdp` refreshes email, display
-  name and last login and never changes the status.
+  name and last login and never changes the status (the key it upserts on: "Users:
+  (issuer, subject)" above).
 - `store.groups.removeAllMemberships(userId)` — removes the user from every group, local
   and IdP-sourced, in one transaction, and returns the groups they were in.
 - `store.audit.latestCall({ missionId, tool, argumentsHash, refusalCode? })` — the most
@@ -525,12 +613,13 @@ take a counter below zero), `setMissionExpiry(iso)` (a mission stored `expired` 
 everything back.
 
 `sessions`, `session_counters` and `events` have one writer, `repositories/sessions.ts`.
-The requests repository does not prepare statements on those tables: its claim context
-and its sweeper call `createSessionPrimitives(ctx)` (`sessionOfMission`, `recordEvent`,
-`countersOfPeriod`, `resetPeriod`, `creditCounter`), synchronous functions with no
-transaction of their own that run inside the caller's `BEGIN IMMEDIATE`. An event is
-therefore inserted and mapped by the same code whether it comes from a call decision, a
-claim decision or the sweeper, and `recordEvent` always returns the stored row.
+The requests and missions repositories do not prepare statements on those tables: the
+claim context, the sweeper and `MissionsRepo.setGate` (its `gate-changed` event) call
+`createSessionPrimitives(ctx)` (`sessionOfMission`, `recordEvent`, `countersOfPeriod`,
+`resetPeriod`, `creditCounter`, `riskEvents`), synchronous functions with no transaction of
+their own that run inside the caller's `BEGIN IMMEDIATE`. An event is therefore inserted and
+mapped by the same code whether it comes from a call decision, a claim decision, a gate
+change or the sweeper, and `recordEvent` always returns the stored row.
 
 `store.requests.sweepExpired()` flips every overdue open request to `expired`, erases
 its argument blob and records a `request` event (`state: 'expired'`) on the mission's
@@ -572,7 +661,7 @@ request or an approval is born inside a decision transaction and a share through
 
 | Repository                        | Methods                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | --------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `users` (`UsersRepo`)             | `upsertFromIdp`, `getById`, `getBySubject`, `findByEmail`, `list`, `markRemoved`, `reactivate`                                                                                                                                                                                                                                                                                                                                               |
+| `users` (`UsersRepo`)             | `upsertFromIdp`, `getById`, `getByIdentity`, `findByEmail`, `list`, `bindUnboundTo`, `markRemoved`, `reactivate`                                                                                                                                                                                                                                                                                                                             |
 | `groups` (`GroupsRepo`)           | `getOrCreate`, `createLocal`, `getById`, `getByName`, `list`, `setMembers`, `syncIdpMemberships`, `addMember`, `removeMember`, `removeAllMemberships`, `listMembers`, `memberCount`, `groupsOf`                                                                                                                                                                                                                                              |
 | `connections` (`ConnectionsRepo`) | `create`, `getById`, `list`, `listOwnedBy`, `getCredential`, `transferOwner`, `assignOwnerlessTo`, `markOwnerlessUnowned`, `listOwnerless`, `setMetadata`, `listResources`, `getResource`, `setResourceEnv`, `reconnect`, `refreshCredential`, `markExpired`, `revoke`, `syncDiscoveredResources`, `setResourceDisplayName`, `setResourceHidden`, `setResourceOwnerMetadata`                                                                 |
 | `shares` (`SharesRepo`)           | `create`, `getById`, `listForConnection`, `listActiveForTargets`, `replaceForTarget`, `revoke`                                                                                                                                                                                                                                                                                                                                               |
@@ -606,9 +695,19 @@ capture both files atomically are also fine.
   uniqueness.
 - `tests/unit/server/store/migrate.test.ts` — file naming, ordering, duplicate
   versions, idempotent re-run, incremental apply, checksum immutability, rollback of a
-  failing file, downgrade refused (a recorded migration with no file), the nine shipped
+  failing file, downgrade refused (a recorded migration with no file), the eleven shipped
   files.
 - `tests/unit/server/store/db.test.ts` — `isSqliteVersionAtLeast`.
+- `src/server/store/membership.test.ts` (12) — `membershipOf` over every combination of
+  creator, user status and member row (deactivation told before removal, an unknown user,
+  a creator with a stray row), and `isOnMission` over the five values.
+- `tests/integration/store/users-issuer.test.ts` (14) — migration `0011`: the same subject at
+  another issuer is another user; a deactivated account of one issuer says nothing about
+  the same subject elsewhere; the key is injective; an empty subject refused; a database an
+  earlier image wrote keeps every row with its subject and no issuer, and what referenced
+  the user still does; an unbound account matches no sign-in; `bindUnboundTo` binds all of
+  them at once and only once, a returning user finds their own account, and an account that
+  would collide with one already bound stays unbound.
 - `tests/integration/store/schema.test.ts` — all 30 tables, every table `STRICT`,
   the composition `StoreLiveness` port (`kind`, `ping`, `close`), boot against an empty file
   (WAL, foreign keys, `NORMAL`), reopen without re-migrating, two writers on one file
@@ -634,11 +733,13 @@ capture both files atomically are also fine.
   earlier image wrote (every token a member token of its creator, unchanged otherwise; no
   member row; the audit entry left without a holder; the new indexes), `holderColumns`,
   the timeline of one holder by keyset with `tokenHolderActivity`, the search by holder.
-  `missions.test.ts` (15) holds the repository's side: one active token per member, a
+  `missions.test.ts` (17) holds the repository's side: one active token per member, a
   rotation that retires its holder's token only, one token revoked on its own, a name
-  identifying one active token, the schema's CHECKs, the columns of a token row (a hash,
-  no secret), `markTokenUsed`, members added, removed with their token and added again,
-  `revokeMemberTokensOf`.
+  identifying one active token, a token inserted only for a mission that serves and a
+  holder who is on it (`TokenNotIssuableError`, checked in the insert), the schema's
+  CHECKs, the columns of a token row (a hash, no secret), `markTokenUsed`, members added
+  (a working token that predates the membership revoked), removed with their token and
+  added again, `revokeMemberTokensOf`.
 - `tests/integration/store/approval-decisions.test.ts` (17) — migration 0005 (column and
   index), `decideApproval` (decision, erasure and approval in one transaction; a thrown
   apply writes nothing; already decided; overdue; a claim; unknown), `getArguments` on an

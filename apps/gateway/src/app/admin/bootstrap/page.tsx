@@ -7,6 +7,7 @@ import { redirect } from 'next/navigation';
 
 import { LocalDate } from '@/components/LocalDate';
 import styles from '@/components/auth/auth.module.css';
+import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Banner, Button, Card, CardBody, Field, Input } from '@/components/ui';
 import { currentPrincipal } from '@/lib/auth/session';
 import { isLoginErrorCode, LOGIN_ERROR_MESSAGES } from '@/server/auth';
@@ -24,6 +25,20 @@ export default async function BootstrapPage({ searchParams }: Props) {
   if (principal?.kind === 'bootstrap') redirect('/admin');
   const state = await root.auth.bootstrap.state();
 
+  return (
+    <>
+      <BootstrapCard error={error} state={state} />
+      {/* Outside every layout: the page carries the build footer itself. */}
+      <BuildFooter />
+    </>
+  );
+}
+
+type BootstrapState = Awaited<
+  ReturnType<Awaited<ReturnType<typeof currentPrincipal>>['root']['auth']['bootstrap']['state']>
+>;
+
+function BootstrapCard({ error, state }: { error: string | null; state: BootstrapState }) {
   return (
     <div className={styles.wrap}>
       <h1 className={styles.title}>Operator bootstrap</h1>

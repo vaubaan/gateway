@@ -129,7 +129,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
       /^__Host-vbn_session=[^;]+; Path=\/; Max-Age=\d+; HttpOnly; Secure; SameSite=Lax/,
     );
 
-    const user = await root.store.users.getBySubject('idp|ada');
+    const user = await root.store.users.getByIdentity(idp.iss, 'idp|ada');
     expect(user).toMatchObject({ email: 'ada@example.com', displayName: 'Ada', status: 'active' });
     const groups = await root.store.groups.groupsOf(user!.id);
     expect(groups.map((g) => [g.name, g.source])).toEqual([
@@ -152,7 +152,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     await configureIdp();
     const b: Browser = { cookies: new Map() };
     await signIn(b, { sub: 'idp|bob', email: 'bob@example.com', groups: ['dev', 'ops'] });
-    const bob = (await root.store.users.getBySubject('idp|bob'))!;
+    const bob = (await root.store.users.getByIdentity(idp.iss, 'idp|bob'))!;
     const local = await root.store.groups.getOrCreate('local-reviewers', 'local');
     await root.store.groups.addMember(local.id, bob.id);
 
@@ -172,7 +172,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     await root.store.groups.getOrCreate('finance', 'local');
     const b: Browser = { cookies: new Map() };
     await signIn(b, { sub: 'idp|eve', email: 'eve@example.com', groups: ['finance'] });
-    const eve = (await root.store.users.getBySubject('idp|eve'))!;
+    const eve = (await root.store.users.getByIdentity(idp.iss, 'idp|eve'))!;
     expect(await root.store.groups.groupsOf(eve.id)).toEqual([]);
     expect(lines.join('\n')).toContain('collides with a local group');
   });
@@ -185,7 +185,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     expect(first).toMatchObject({ kind: 'user', isOperator: true });
 
     const admins = (await root.store.groups.getByName(ADMIN_GROUP))!;
-    const cat = (await root.store.users.getBySubject('idp|cat'))!;
+    const cat = (await root.store.users.getByIdentity(idp.iss, 'idp|cat'))!;
     await root.store.groups.removeMember(admins.id, cat.id);
 
     const second = await root.auth.authenticator.authenticate(headersOf(b));
@@ -375,7 +375,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     const b: Browser = { cookies: new Map() };
     const outside = await signIn(b, { sub: 'idp|o', email: 'o@elsewhere.test' });
     expect(outside.headers.get('location')).toBe('/login?error=email-domain-not-allowed');
-    expect(await root.store.users.getBySubject('idp|o')).toBeNull();
+    expect(await root.store.users.getByIdentity(idp.iss, 'idp|o')).toBeNull();
     const noEmail = await signIn(b, { sub: 'idp|n' });
     expect(noEmail.headers.get('location')).toBe('/login?error=claims-missing');
   });
@@ -391,7 +391,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     });
     expect(res.headers.get('location')).toBe('/login?error=email-not-verified');
     expect(b.cookies.has(SESSION_COOKIE)).toBe(false);
-    expect(await root.store.users.getBySubject('idp|mallory')).toBeNull();
+    expect(await root.store.users.getByIdentity(idp.iss, 'idp|mallory')).toBeNull();
     expect(await root.auth.bootstrap.state()).toEqual({ status: 'active' });
 
     const verified = await signIn(b, {
@@ -406,7 +406,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     await configureIdp();
     const b: Browser = { cookies: new Map() };
     await signIn(b, { sub: 'idp|ada', email: 'ada@example.com', groups: ['team-a', ADMIN_GROUP] });
-    const ada = await root.store.users.getBySubject('idp|ada');
+    const ada = await root.store.users.getByIdentity(idp.iss, 'idp|ada');
     expect(ada).not.toBeNull();
     if (!ada) return;
     const before = (await root.store.groups.groupsOf(ada.id)).map((g) => g.name).sort();
@@ -442,7 +442,7 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
       },
     );
     expect(res2.headers.get('location')).toBe('/login?error=groups-overage');
-    expect(await root.store.users.getBySubject('idp|grace')).toBeNull();
+    expect(await root.store.users.getByIdentity(idp.iss, 'idp|grace')).toBeNull();
   });
 
   it('a sign-in replaces the session the browser already had', async () => {
@@ -527,10 +527,173 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     await configureIdp();
     const b: Browser = { cookies: new Map() };
     await signIn(b, { sub: 'idp|ui', email: 'ui@example.com', groups: [ADMIN_GROUP] });
-    const ui = (await root.store.users.getBySubject('idp|ui'))!;
+    const ui = (await root.store.users.getByIdentity(idp.iss, 'idp|ui'))!;
     expect(ui.email).toBe('ui@example.com');
     expect((await root.store.groups.groupsOf(ui.id)).map((g) => g.name)).toEqual([ADMIN_GROUP]);
     expect(withUserinfo.requests).toContain('GET /userinfo');
+  });
+
+  it('refuses the sign-in when the groups come from userinfo and userinfo is down: unknown groups are not "no groups"', async () => {
+    const groupsFromUserinfo = new FakeIdp({ ...CLIENT, userinfoOnly: ['groups'] });
+    await root.close();
+    root = await buildRoot({
+      loadConfig: () =>
+        loadInstanceConfig({
+          env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL, VAUBAAN_ADMIN_GROUP: ADMIN_GROUP }),
+        }),
+      logWrite: (_lvl, line) => lines.push(line),
+      oidc: { fetch: groupsFromUserinfo.fetch, allowInsecureIssuer: true },
+      ...memoryStoreDeps,
+    });
+    idp = groupsFromUserinfo;
+    await configureIdp();
+    const claims = { sub: 'idp|ada', email: 'ada@example.com', groups: ['dev', ADMIN_GROUP] };
+    const first: Browser = { cookies: new Map() };
+    expect((await signIn(first, claims)).headers.get('location')).toBe('/admin');
+    const ada = (await root.store.users.getByIdentity(idp.iss, 'idp|ada'))!;
+    const groupsOf = async (): Promise<string[]> =>
+      (await root.store.groups.groupsOf(ada.id)).map((g) => g.name).sort();
+    const before = await groupsOf();
+    expect(before).toEqual(['dev', ADMIN_GROUP].sort());
+
+    idp.userinfoDown = true;
+    const second: Browser = { cookies: new Map() };
+    const refused = await signIn(second, claims);
+
+    expect(refused.status).toBe(303);
+    expect(refused.headers.get('location')).toBe('/login?error=groups-unavailable');
+    expect(second.cookies.has(SESSION_COOKIE)).toBe(false);
+    // Nothing was synced: an empty list would have taken Ada out of both groups.
+    expect(await groupsOf()).toEqual(before);
+    // The session she already had keeps its operator marker.
+    const principal = await root.auth.authenticator.authenticate(headersOf(first));
+    expect(principal?.kind === 'user' && principal.isOperator).toBe(true);
+    expect(lines.some((line) => line.includes('groups-unavailable'))).toBe(true);
+    // Somebody never seen before is not created without their groups either.
+    const stranger = await signIn(
+      { cookies: new Map() },
+      { sub: 'idp|new', email: 'new@example.com', groups: ['dev'] },
+    );
+    expect(stranger.headers.get('location')).toBe('/login?error=groups-unavailable');
+    expect(await root.store.users.getByIdentity(idp.iss, 'idp|new')).toBeNull();
+
+    idp.userinfoDown = false;
+    expect((await signIn({ cookies: new Map() }, claims)).headers.get('location')).toBe('/admin');
+  });
+
+  it('userinfo down does not refuse a sign-in whose ID token carries the groups', async () => {
+    await configureIdp();
+    idp.userinfoDown = true;
+    const b: Browser = { cookies: new Map() };
+    const res = await signIn(b, { sub: 'idp|ada', email: 'ada@example.com', groups: ['dev'] });
+    expect(res.headers.get('location')).toBe('/admin');
+    const ada = (await root.store.users.getByIdentity(idp.iss, 'idp|ada'))!;
+    expect((await root.store.groups.groupsOf(ada.id)).map((g) => g.name)).toEqual(['dev']);
+    expect(lines.some((line) => line.includes('userinfo request failed'))).toBe(true);
+  });
+
+  describe('a user is (issuer, subject)', () => {
+    const OTHER_ISSUER = 'http://other-idp.test';
+    let other: FakeIdp;
+
+    beforeEach(async () => {
+      other = new FakeIdp({ ...CLIENT, issuer: OTHER_ISSUER });
+      const first = idp;
+      await root.close();
+      root = await buildRoot({
+        loadConfig: () => loadInstanceConfig({ env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL }) }),
+        logWrite: (_lvl, line) => lines.push(line),
+        oidc: {
+          // Both identity providers are reachable; the instance talks to the configured one.
+          fetch: (url, options) =>
+            new URL(url).origin === other.issuer.origin
+              ? other.fetch(url, options)
+              : first.fetch(url, options),
+          allowInsecureIssuer: true,
+        },
+        ...memoryStoreDeps,
+      });
+    });
+
+    it('after the operator points the instance at another IdP, the same subject is a new person', async () => {
+      await configureIdp();
+      const adaBrowser: Browser = { cookies: new Map() };
+      await signIn(adaBrowser, { sub: '1042', email: 'ada@example.com', groups: ['owners'] });
+      const ada = (await root.store.users.getByIdentity(idp.iss, '1042'))!;
+      const firstIdp = idp;
+
+      // The new provider numbers its users from 1000 too.
+      idp = other;
+      await configureIdp();
+      const eveBrowser: Browser = { cookies: new Map() };
+      const res = await signIn(eveBrowser, { sub: '1042', email: 'eve@example.com' });
+      expect(res.headers.get('location')).toBe('/admin');
+
+      const eve = (await root.store.users.getByIdentity(other.iss, '1042'))!;
+      expect(eve.id).not.toBe(ada.id);
+      expect(eve).toMatchObject({ issuer: OTHER_ISSUER, email: 'eve@example.com' });
+      // Ada's account is as she left it: not refreshed, not signed into, groups intact.
+      expect(await root.store.users.getById(ada.id)).toMatchObject({
+        issuer: firstIdp.iss,
+        email: 'ada@example.com',
+        lastLoginAt: ada.lastLoginAt,
+      });
+      expect((await root.store.groups.groupsOf(ada.id)).map((g) => g.name)).toEqual(['owners']);
+      expect(await root.store.groups.groupsOf(eve.id)).toEqual([]);
+      const principal = await root.auth.authenticator.authenticate(headersOf(eveBrowser));
+      expect(principal?.kind === 'user' && principal.user.id).toBe(eve.id);
+      expect(await root.store.users.list()).toHaveLength(2);
+    });
+
+    it('an account deactivated here stays closed to its issuer, and does not close the same subject elsewhere', async () => {
+      await configureIdp();
+      await signIn({ cookies: new Map() }, { sub: '7', email: 'ada@example.com' });
+      const ada = (await root.store.users.getByIdentity(idp.iss, '7'))!;
+      await root.store.users.markRemoved(ada.id);
+      const again = await signIn({ cookies: new Map() }, { sub: '7', email: 'ada@example.com' });
+      expect(again.headers.get('location')).toBe('/login?error=account-deactivated');
+
+      idp = other;
+      await configureIdp();
+      const res = await signIn({ cookies: new Map() }, { sub: '7', email: 'zoe@example.com' });
+      expect(res.headers.get('location')).toBe('/admin');
+      expect((await root.store.users.getById(ada.id))?.status).toBe('removed');
+    });
+
+    it('accounts from before the issuer was recorded are bound by the first sign-in, all of them, once', async () => {
+      await configureIdp();
+      // Two accounts as migration 0011 leaves them: Ada, and Bob whom an operator deactivated.
+      const legacy = root.store.db.prepare(
+        `INSERT INTO users (id, identity_key, issuer, subject, email, status, created_at)
+         VALUES (?, ?, NULL, ?, ?, ?, '2026-10-01T00:00:00.000Z')`,
+      );
+      legacy.run('usr_ada', 'unbound idp|ada', 'idp|ada', 'ada@example.com', 'active');
+      legacy.run('usr_bob', 'unbound idp|bob', 'idp|bob', 'bob@example.com', 'removed');
+
+      const b: Browser = { cookies: new Map() };
+      const res = await signIn(b, { sub: 'idp|ada', email: 'ada@example.com' });
+      expect(res.headers.get('location')).toBe('/admin');
+
+      // Ada is back in her own account, not a new one.
+      const principal = await root.auth.authenticator.authenticate(headersOf(b));
+      expect(principal?.kind === 'user' && principal.user.id).toBe('usr_ada');
+      expect(await root.store.users.list()).toHaveLength(2);
+      expect(lines.some((line) => line.includes('existing accounts bound'))).toBe(true);
+      // Bob did not sign in and is bound too: his deactivation still holds at this issuer…
+      const bob = await signIn(
+        { cookies: new Map() },
+        { sub: 'idp|bob', email: 'bob@example.com' },
+      );
+      expect(bob.headers.get('location')).toBe('/login?error=account-deactivated');
+
+      // …and nothing is left for another issuer to take.
+      idp = other;
+      await configureIdp();
+      await signIn({ cookies: new Map() }, { sub: 'idp|ada', email: 'mallory@example.com' });
+      const mallory = (await root.store.users.getByIdentity(other.iss, 'idp|ada'))!;
+      expect(mallory.id).not.toBe('usr_ada');
+      expect((await root.store.users.getById('usr_ada'))?.email).toBe('ada@example.com');
+    });
   });
 
   it('logout requires the origin check, then destroys the server-side session', async () => {

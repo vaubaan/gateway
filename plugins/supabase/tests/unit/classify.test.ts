@@ -16,7 +16,7 @@
 
 import { describe, expect, test } from 'vitest';
 
-import { serializeSlice } from '@vaubaan/policy-engine';
+import { parseSlice, serializeSlice } from '@vaubaan/policy-engine';
 import type { Resource } from '@vaubaan/plugin-sdk';
 
 import { classifySupabase } from '../../src/classify.ts';
@@ -307,6 +307,56 @@ describe('classifySupabase — apply_migration SQL reading', () => {
 
   test('a comment-only migration is a schema write', () => {
     expect(migrate('-- nothing yet\n')).toEqual([SCHEMA]);
+    expect(migrate('-- nothing yet')).toEqual([SCHEMA]);
+    expect(migrate('-- nothing yet\r')).toEqual([SCHEMA]);
+  });
+
+  // PostgreSQL ends a `--` comment at a line feed OR a carriage return (scan.l:
+  // `non_newline [^\n\r]`). A reader that waits for `\n` alone never sees what follows a
+  // bare `\r`, and the server runs it.
+  test.each<[string, string]>([
+    ['a bare carriage return', '--\r'],
+    ['text, then a carriage return', '-- harmless note\r'],
+    ['CR LF', '--\r\n'],
+    ['a line feed', '--\n'],
+    ['a carriage return after a first full comment line', '-- a\n-- b\r'],
+  ])('what follows a line comment ended by %s is read', (_label, comment) => {
+    expect(
+      migrate(
+        `create table public.a (id int); ${comment}drop table public.orders; alter role anon superuser;`,
+      ),
+    ).toEqual([SCHEMA, BULK, ROLE]);
+    expect(migrate(`create table public.a (id int); ${comment}do $$ begin null; end $$;`)).toEqual(
+      EVERY_CLASS,
+    );
+  });
+
+  test('a carriage return inside a block comment or a string hides nothing either', () => {
+    expect(migrate('/* --\r */ delete from public.t;')).toEqual([SCHEMA, BULK]);
+    expect(migrate("comment on table t is '--\r'; delete from public.t;")).toEqual([SCHEMA, BULK]);
+  });
+
+  // `ALTER COLUMN … TYPE … [USING expr]` rewrites the column in every row: with a
+  // `USING` expression it overwrites the values, exactly what `DROP COLUMN` is priced for.
+  test.each<[string, string]>([
+    ['type … using a constant', "alter table public.users alter column email type text using 'x';"],
+    ['type … using an expression', 'alter table t alter column n type int using n::int / 0;'],
+    ['a plain type change', 'alter table t alter column n type bigint;'],
+    ['set data type', 'alter table t alter n set data type text;'],
+    ['among other actions', 'alter table t add column a int, alter column n type text using null;'],
+    ['a quoted column', 'alter table t alter column "type" type text;'],
+  ])('a column type change adds the bulk row write : %s', (_label, query) => {
+    expect(migrate(query)).toEqual([SCHEMA, BULK]);
+  });
+
+  test.each<[string, string]>([
+    ['a column named like the keyword, quoted', 'alter table t alter column "type" set not null;'],
+    ['set default', 'alter table t alter column n set default 0;'],
+    ['drop not null', 'alter table t alter column n drop not null;'],
+    ['rename', 'alter table t rename column n to m;'],
+    ['a new column of some type', 'alter table t add column kind text;'],
+  ])('other column alterations stay on the schema write : %s', (_label, query) => {
+    expect(migrate(query)).toEqual([SCHEMA]);
   });
 
   test.each<[string, unknown]>([
@@ -455,7 +505,59 @@ describe('classifySupabase — plane auth', () => {
         email: 'bob@example.com',
         type: 'magiclink',
       }),
-    ).toEqual([`supabase.project[${STAGING_REF}].user[bob@example.com].link[magiclink].W`]);
+    ).toEqual([`supabase.project[${STAGING_REF}].user[*].link[magiclink].W`]);
+  });
+
+  // The slice grammar has no `@`, `+` or `:` : an identifier holding one is emitted as
+  // "any identifier", so the slice the audit stores can be read back as itself.
+  test.each<[string, string, Record<string, unknown>]>([
+    [
+      'an e-mail address',
+      'supabase__generate_link',
+      { email: 'bob+ci@example.com', type: 'magiclink' },
+    ],
+    ['a bucket id with `@` and `:`', 'supabase__delete_bucket', { id: 'team@acme:assets' }],
+    ['a bucket id with `+`', 'supabase__list_objects', { bucket: 'a+b' }],
+    [
+      'a secret name with `:`',
+      'supabase__delete_function_secrets',
+      { names: ['STRIPE:KEY', 'OK_KEY'] },
+    ],
+    [
+      'a secret name with `@`',
+      'supabase__create_function_secrets',
+      { secrets: [{ name: 'A@B', value: 'v' }] },
+    ],
+  ])(
+    '%s is not written into the slice, and every slice reads back as itself',
+    (_label, tool, args) => {
+      const out = classifySupabase(tool, { project_ref: STAGING_REF, ...args }, [staging]);
+      if (!('slices' in out)) throw new Error(`unexpected denial: ${out.denied}`);
+      expect(out.slices.length).toBeGreaterThan(0);
+      for (const slice of out.slices) {
+        const text = serializeSlice(slice);
+        expect(text).not.toMatch(/[@+:]/);
+        expect(serializeSlice(parseSlice(text))).toBe(text);
+      }
+    },
+  );
+
+  test('an identifier the grammar can carry is still written as given', () => {
+    expect(
+      classifySerialized('supabase__delete_function_secrets', {
+        project_ref: STAGING_REF,
+        names: ['STRIPE:KEY', 'OK_KEY'],
+      }),
+    ).toEqual([
+      `supabase.project[${STAGING_REF}].function-secret[*].W`,
+      `supabase.project[${STAGING_REF}].function-secret[OK_KEY].W`,
+    ]);
+    expect(
+      classifySerialized('supabase__delete_bucket', {
+        project_ref: STAGING_REF,
+        id: 'my.bucket-1',
+      }),
+    ).toContain(`supabase.project[${STAGING_REF}].bucket[my.bucket-1].W`);
   });
 
   test('update_auth_config → auth-config.W', () => {
@@ -525,17 +627,43 @@ describe('classifySupabase — plane functions', () => {
     ]);
   });
 
-  test('deploy_function with no files → function-deployment.W only', () => {
-    expect(
+  test('deploy_function without files is still a body write : it changes what runs and how it is exposed', () => {
+    const both = [
+      `supabase.project[${STAGING_REF}].edge-function[webhook].function-deployment[any].W`,
+      `supabase.project[${STAGING_REF}].edge-function[webhook].W`,
+    ];
+    for (const extra of [
+      { files: [] },
+      {},
+      { verify_jwt: false },
+      { entrypoint_path: 'other.ts', import_map_path: 'map.json' },
+    ]) {
+      expect(
+        classifySerialized('supabase__deploy_function', {
+          project_ref: STAGING_REF,
+          slug: 'webhook',
+          entrypoint_path: 'index.ts',
+          ...extra,
+        }),
+        JSON.stringify(extra),
+      ).toEqual(both);
+    }
+  });
+
+  test('deploy_function refuses `files` in another shape, and an argument its schema does not declare', () => {
+    const deploy = (extra: Record<string, unknown>) =>
       classifySerialized('supabase__deploy_function', {
         project_ref: STAGING_REF,
         slug: 'webhook',
-        entrypoint_path: 'index.ts',
-        files: [],
-      }),
-    ).toEqual([
-      `supabase.project[${STAGING_REF}].edge-function[webhook].function-deployment[any].W`,
-    ]);
+        ...extra,
+      });
+    expect(deploy({ files: { 0: { name: 'index.ts', content: 'x' } } })).toBe(
+      'files: missing or malformed.',
+    );
+    expect(deploy({ files: 'index.ts' })).toBe('files: missing or malformed.');
+    expect(deploy({ bundle: [{ name: 'index.ts', content: 'x' }] })).toBe(
+      "bundle: not an argument of 'supabase__deploy_function' — nothing classifies it, so it is not sent.",
+    );
   });
 
   test('create_function_secrets → function-secret[<name>].W per secret', () => {

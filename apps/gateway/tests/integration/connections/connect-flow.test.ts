@@ -144,7 +144,11 @@ describe('connections: provider app, connect, resources, revoke', () => {
   });
 
   async function signIn(email: string): Promise<Session> {
-    const user = await root.store.users.upsertFromIdp({ subject: email, email });
+    const user = await root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: email,
+      email,
+    });
     const issued = await root.auth.sessions.create({
       kind: 'user',
       userId: user.id,

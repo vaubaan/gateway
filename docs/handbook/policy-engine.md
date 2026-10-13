@@ -45,15 +45,15 @@ application.
 | `risk-policy.ts`    | `checkAcceptableInEnv` (issuance-time structural restriction) + `prepareCatalog` (boot checks, injectable `warn`).                                                                          | SDK catalog loader and registry, issuance                                |
 | `budget.ts`         | `budgetIssues` — the one rule for a quota, a rate limit and a gate (spec §3.2), with `isValidBudget`, `ratePerMinute`, `exceedsRateCeiling`.                                                | SDK catalog loader and `presetIssues`; the issuance preview              |
 | `qualify.ts`        | Env-qualify a `RiskId` (`provider.name` → `provider[env].name`) and back; `EnvResolver` + `resourceEnvResolver` + `envResolverFor` (plugin `envOf` first, then the label); `resolveVector`. | `risk-runtime`, issuance UI, SDK                                         |
-| `risk-runtime.ts`   | `evaluateCall` — the pure risk step of the call decision: strict-fail if `risks_touched ⊄ accepted`.                                                                                        | gateway-core `risk-gateway.ts` (with `envResolver`)                      |
+| `risk-runtime.ts`   | `evaluateCall` — the pure risk step of the call decision: strict-fail if `risks_touched ⊄ accepted`; `carriesGlobIdentifier`, the test for a `*` inside an executed identifier.             | gateway-core `risk-gateway.ts` (with `envResolver`); the SDK test kit    |
 
 The barrel `src/index.ts` re-exports all seven. The listing below names
 functions; the exported types travel with them (`SliceSegment` lives in
 `@vaubaan/shared`, plus `IndexedRiskCatalog`, `QualifiableRiskEntry`,
 `PrepareCatalogOptions`, `EvaluateCallInput`, `EnvResolver`, `EnvDeriver`,
 `BudgetInput`, `ValidBudget`, `BudgetField`, `BudgetIssue` and the
-`BRACKET_IDENT_CHAR_CLASS`, `UNQUALIFIED` and `SECONDS_PER_MINUTE`
-constants).
+`BRACKET_IDENT_CHAR_CLASS`, `UNQUALIFIED`, `NO_SINGLE_ENV` and
+`SECONDS_PER_MINUTE` constants).
 
 ```
 packages/policy-engine/
@@ -68,11 +68,11 @@ packages/policy-engine/
                           exceedsRateCeiling
     qualify.ts            isEnvScopedEntry / isAcceptableInEnv / qualifyRiskId / unqualifyRiskId /
                           EnvResolver / noEnvResolver / resourceEnvResolver / envResolverFor /
-                          EnvDeriver / resolveVector
-    risk-runtime.ts       evaluateCall / evaluateCallSimple / UNQUALIFIED
+                          EnvDeriver / NO_SINGLE_ENV / resolveVector
+    risk-runtime.ts       evaluateCall / evaluateCallSimple / carriesGlobIdentifier / UNQUALIFIED
   tests/unit/
     slice-dsl (23)  slice-matcher (29)  risk-evaluator (20)  risk-policy (9)
-    qualify (29)    risk-runtime (25)   budget (25)
+    qualify (33)    risk-runtime (33)   budget (25)
 ```
 
 ## Decision flow
@@ -227,22 +227,40 @@ them).
 - `EnvResolver { resolveEnv(slice): string | null }` — the runtime's only
   notion of "which environment does this slice fall under".
   `noEnvResolver` resolves every slice to `null`; it is an ordinary
-  resolver, not a mode switch (see `evaluateCall`). `resourceEnvResolver(resources)`
-  applies the v4 rule to v5 `Resource`s: same provider, first `ident`
-  segment equal to a `ref` wins; no ref in the path and exactly one
-  resource of the provider → that resource's env; several resources and no
-  ref → `null` (ambiguous).
-- `EnvDeriver` = `(slice, resources) → env | null | undefined` — the shape
-  of the SDK's `ProviderPlugin.envOf`, declared here so this package does
-  not import the SDK. `envResolverFor(resources, derive?)` is the composed
-  default resolver (ADR
+  resolver, not a mode switch (see `evaluateCall`).
+- `resourceEnvResolver(resources)` reads the environment from the owner's
+  labels. It keeps the resources of the slice's provider and compares
+  **every** identifier of the slice path — each `ident` segment and each
+  value of a `list` segment — with their `ref`s; it cannot know which
+  segment is the resource, so an identifier the caller chose (a table, a
+  key, a branch) that equals the ref of another resource counts too. The
+  environments of the resources so named are collected (an unlabelled
+  resource counts as `null`):
+  - they all agree → that environment (or `null` when the one resource
+    named is unlabelled);
+  - they disagree — two labels, or a labelled and an unlabelled resource →
+    `null`: no environment, so every env-scoped risk the slice touches is
+    refused. The first match never wins;
+  - no ref in the path and exactly one resource of the provider → that
+    resource's env; no ref and several resources → `null` (ambiguous); no
+    resource of the provider → `null`.
+- `EnvDeriver` is the shape of the SDK's `ProviderPlugin.envOf`, declared
+  here so this package does not import the SDK:
+  `(slice, resources) → env | null | undefined | NO_SINGLE_ENV`. `NO_SINGLE_ENV` is a
+  symbol (`Symbol.for('@vaubaan/policy-engine/no-single-env')`, re-exported
+  by the SDK): the answer of a deriver for a slice that names its
+  environment but not exactly one (`env[*]`, `env[prod,preview]`,
+  `env[prod*]`). It has a value of its own because `null` and `undefined`
+  both mean "this slice says nothing about its environment, use the label".
+- `envResolverFor(resources, derive?)` is the composed default resolver
+  (ADR
   [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md)
-  D4;
-  spec vaubaan-gateway §0 "Resource"): the plugin's derivation when it
-  returns a non-empty string (Vercel's `env[prod]` segment — the only
-  shipped plugin with one), else the resource label
-  (`resourceEnvResolver`), else `null`.
-  Without a deriver it is exactly `resourceEnvResolver(resources)`.
+  D4; spec vaubaan-gateway §0 "Resource"), in this order: `NO_SINGLE_ENV`
+  from the deriver → `null`, and the resource label is **not** consulted;
+  a non-empty string from the deriver → that environment (Vercel's
+  `env[prod]` segment — the only shipped plugin with one); anything else →
+  the resource label (`resourceEnvResolver`), else `null`. Without a
+  deriver it is exactly `resourceEnvResolver(resources)`.
 - `resolveVector(entry, env)` — base vector with `vector_overrides[env]`
   applied.
 
@@ -260,12 +278,27 @@ evaluateCall({
 
 ```
 executed_slices empty                                → denied (classification gap)
+a slice carries `*` inside an identifier             → denied (a value read as a pattern)
 one slice matches no catalog entry                   → denied (catalog gap — add a fallback)
 an env-scoped risk touched outside its envs          → denied (not acceptable here)
 any touched risk ∈ token_denied_risks                → denied (explicit deny, legacy input)
 risks_touched ⊄ token_accepted_risks                 → denied (missing_risks)
 otherwise                                            → allowed (risks_touched)
 ```
+
+**An executed slice names what the call touches.** `carriesGlobIdentifier(slice)`
+is true when an `ident` segment holds a `*` without being exactly `*`, or
+when a value of a `list` segment holds one. Such a `*` can only be a
+caller's value that a classifier passed through, and the matcher would read
+it as a glob, pricing the call on whatever it happens to match.
+`evaluateCall` denies the call before any catalog lookup — `risks_touched`
+and `missing_risks` empty, the hint quoting the slices. The whole-segment
+wildcards (`[*]`, `[**]`) and the identifier `*` remain: they are how a
+classifier says "every instance" (the SDK's `ANY_IDENT`,
+[plugin-sdk](./plugin-sdk.md)). The SDK test kit runs the same function on
+every sample slice (ADR
+[decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md)
+D2–D4, which also covers the two environment rules above).
 
 **Every slice must be covered, not the union.** Each slice is something the
 call does. A slice that no entry of the catalog matches — or a slice of
@@ -294,10 +327,12 @@ object is passed:
   working. New code names the mode.
 
 `token_denied_risks` is the v4 explicit-deny input. Spec §4.1 has no
-explicit deny and the execution door always passes an empty list; the
-branch stays while callers still pass the field (the application's risk
-stage and one plugin test do, with `[]`). Removing it means dropping the
-field from those callers first.
+explicit deny and a v5 mission carries none: the application's risk stage
+leaves `denied_risks` out, and gateway-core's `evaluateCallForToken` hands
+the engine an empty set. The branch stays while a caller still passes the
+field (one plugin test does, with `[]`:
+`plugins/railway/tests/unit/policy.test.ts`). Removing it means dropping the
+field from that caller and from `evaluateCallForToken` first.
 
 Every denial is built by one `denied(...)` helper and carries
 `code: 'risk-not-accepted'` (the only code this step emits) and a `hint`
@@ -368,6 +403,16 @@ application.
   catalog entry excludes, or on an unlabelled resource. No mission can
   hold that risk there; label the resource if the label is what is
   missing, otherwise the operation is structurally refused.
+- **Denied with "an executed slice may not carry '\*' inside an
+  identifier"** — a classifier put a caller's value holding `*` into an
+  identifier or a list. The plugin must refuse the value in its grammar, or
+  emit the whole-segment placeholder (`identSegment` / `ANY_IDENT` of the
+  SDK).
+- **An env-scoped risk refused on a labelled resource** — the slice names
+  several resources of the mission whose labels differ (or one of them is
+  unlabelled), or the plugin's `envOf` answered `NO_SINGLE_ENV` (a wildcard,
+  a list or a glob where one environment is expected). Both resolve to no
+  environment; the label is not used as a substitute.
 - **`indexCatalog` / `prepareCatalog` throws at boot** — a `matches` pattern
   is malformed or names another provider; the message includes the risk id.
   With the SDK loader every issue is listed at once.
@@ -393,6 +438,7 @@ application.
 - ADRs:
   [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md),
   [unified-gates-drop-confirm](../decisions/unified-gates-drop-confirm.md),
+  [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md),
   [scope-caps-amplification-axis](../decisions/scope-caps-amplification-axis.md).
 - Neighbours: [plugin-sdk](./plugin-sdk.md), [`providers/README.md`](./providers/README.md).
-- Tests: `npx vitest run packages/policy-engine` — 160 tests.
+- Tests: `npx vitest run packages/policy-engine` — 172 tests.

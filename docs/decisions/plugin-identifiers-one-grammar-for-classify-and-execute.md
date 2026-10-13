@@ -92,9 +92,9 @@ classified resource.
   Cloudflare DNS). The slice grammar of the policy engine keeps its wider
   identifier class: it describes what a slice may name, not what a URL may
   carry.
-- `plugins/README.md` and the plugin kit should state these rules for
-  contributors — **reported to P3.1's owner, not edited here**. The
-  [plugin-sdk](../handbook/plugin-sdk.md) handbook states them.
+- [`plugins/README.md`](../../plugins/README.md) (steps 4, 6 and 8) and the
+  [plugin-sdk](../handbook/plugin-sdk.md) handbook state these rules for
+  contributors.
 - Not closed, and listed in the threat model: Railway `serviceId` and
   `get-logs deploymentId` are shape-checked, but discovery stores only a
   project's environments, so the plugin cannot verify that a service or a

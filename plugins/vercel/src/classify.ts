@@ -44,9 +44,17 @@
  * mint (`W`) ; `list_env_vars decrypt=true` adds the plaintext slice.
  */
 
-import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
+import {
+  NO_SINGLE_ENV,
+  declaredArgumentsOf,
+  undeclaredArgumentDenial,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+  type SliceSegment,
+} from '@vaubaan/plugin-sdk';
 
-import { isCustomTool, toolDeclaresProperty, toolRequiresProperty } from './tools.ts';
+import { isCustomTool, toolDeclaresProperty, toolRequiresProperty, vercelTools } from './tools.ts';
 
 export const PROVIDER = 'vercel';
 
@@ -195,15 +203,23 @@ export function toVercelEnv(target: unknown): VercelEnv | null {
  * firewall, env-less deployment reads). Offered to the host as the resolver
  * for env-qualified Vercel risks : the project resource's owner label does
  * **not** carry the Vercel environment, the arguments do.
+ *
+ * `NO_SINGLE_ENV` for a slice whose `env` segment is followed by anything but
+ * one label of the triad (`env[*]`, `env[prod,preview]`, `env[staging]`) :
+ * such a slice reaches several environments, or one the provider does not
+ * have. No env-scoped risk can be priced on it, and the owner's label must
+ * not stand in — the host refuses. This classifier emits no such slice ; the
+ * rule is what keeps a future one from failing open.
  */
-export function vercelEnvOf(slice: Slice): VercelEnv | null {
+export function vercelEnvOf(slice: Slice): VercelEnv | null | typeof NO_SINGLE_ENV {
   if (slice.provider !== PROVIDER) return null;
   for (let i = 0; i < slice.path.length - 1; i++) {
     const seg = slice.path[i]!;
+    if (seg.kind !== 'name' || seg.value !== 'env') continue;
     const next = slice.path[i + 1]!;
-    if (seg.kind === 'name' && seg.value === 'env' && next.kind === 'ident') {
-      return toVercelEnv(next.value);
-    }
+    if (next.kind === 'name') return null;
+    const env = next.kind === 'ident' ? toVercelEnv(next.value) : null;
+    return env ?? NO_SINGLE_ENV;
   }
   return null;
 }
@@ -355,10 +371,43 @@ export function resolveProject(
   };
 }
 
+const DECLARED_ARGUMENTS = declaredArgumentsOf(vercelTools);
+/** Checked here, then dropped and written again by `execute` (`pinArgs`) : never forwarded as given. */
+const ROUTING_ARGUMENTS: ReadonlySet<string> = new Set(['teamId', 'projectId']);
+
 /**
  * Classify a Vercel tool call into the slice(s) it touches.
+ *
+ * The arguments the rules below read are judged by those rules, in their own
+ * words. Then the surface is closed : the rewrapped tools forward their
+ * arguments whole, so one the tool's schema does not declare is refused here
+ * rather than left to the upstream schema to reject (two upstream schemas are
+ * open : `deploy_to_vercel`, `list_teams`).
  */
 export function classifyVercel(
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+  resources: readonly Resource[],
+): ClassifyOutcome {
+  const outcome = classifyDeclaredArguments(tool, args, resources);
+  if ('denied' in outcome) return outcome;
+  const undeclared = undeclaredArgument(tool, args);
+  return undeclared === null ? outcome : { denied: undeclared };
+}
+
+/**
+ * The refusal for an argument `tool` does not declare, `null` when there is none :
+ * the one rule `classify` and `execute` both apply, so neither side sends what the
+ * other never read.
+ */
+export function undeclaredArgument(
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): string | null {
+  return undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args, ROUTING_ARGUMENTS);
+}
+
+function classifyDeclaredArguments(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],

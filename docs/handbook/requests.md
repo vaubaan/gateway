@@ -96,10 +96,14 @@ execution door as `budget`.
 A request is addressed to the creator of its mission
 (`missions.creator_user_id`). `RequestService.own(user, id)` is the only
 check, used by every read and every decision: unknown id, another user, a
-beneficiary of a share on the same connection, a co-owner of the connection
-through its owner group, an operator — all get `forbidden`, the same answer
-whether the request exists or not. The bootstrap operator is not a user and
-is refused before the service is asked.
+**member of the mission** (spec §0 "Mission member": they read the mission
+and its session, never its requests), a beneficiary of a share on the same
+connection, a co-owner of the connection through its owner group, an
+operator — all get `forbidden`, the same answer whether the request exists
+or not. The inbox (`listOpenForCreator`) and the badge are keyed on the
+creator the same way, so a member's inbox stays empty whichever holder's
+token caused the request. The bootstrap operator is not a user and is
+refused before the service is asked.
 
 ## `GET /r/<id>` — the gate of the forwarded URL
 
@@ -153,6 +157,7 @@ const requests = new RequestService({
   approvalValiditySeconds, // config.approvals.expirySeconds
   clock,
   logger,
+  // budget — optional: Pick<SessionService, 'usageOf'>; defaults to missionUsageReader(store.sessions)
 });
 
 await requests.inbox(user); // RequestSummary[] — open, unexpired, oldest first
@@ -172,7 +177,8 @@ catalog through the registry (`enumerateCatalog`), the id itself when the
 plugin or the entry is gone.
 
 `view()` for a claim returns a `ClaimView`: the summary, `mission { id, name,
-state, expires_at }` (`deriveMissionState`), the current `period`, `risk`
+state, expires_at }` (the budget's `usageOf` read, which derives the state
+with `deriveMissionState`), the current `period`, `risk`
 (`{ risk_id, label, quota, consumed, remaining }`, `null` when the risk left
 the policy), `other_risks`, `events` (the last `SESSION_EVENTS_SHOWN` = 20
 session events, most recent first, each with a one-line `summary` from
@@ -311,6 +317,17 @@ mission`…). The mission
 token does not change; the executor replays its call. Once a claim is decided
 or expired, the next refused call drops a new one (budget handbook).
 
+**Token holders.** A request is the mission's, not a holder's: the row, the
+summary and the `request` event of the drop name no holder, and the two
+pages show none. Who caused it is on the refused call's own event
+(`call-refused`: `token_id`, `token_kind`, `holder`, with the `request_id`),
+which the mission's session page shows per holder ([audit](audit.md)); the
+one-line `describeEvent` of a call names the tool, the refusal code and the
+agent label only. A `rotation` event reads "A mission token was issued" for
+a holder's first token and "A mission token was rotated" otherwise; a
+`revocation` event reads "One token of the mission was revoked" when it
+names a token, "The mission was revoked" otherwise.
+
 `DecideResult`: `{ ok: true, request }` or `{ ok: false, reason: 'forbidden' |
 'not-open' (+ state) | 'unsupported-kind' (+ kind) | 'invalid' (+ problem) }`.
 `decide()` parses the body with the parser of the request's kind, so a claim
@@ -416,7 +433,8 @@ amount)` (one conditional `UPDATE … WHERE consumed >= amount`; `false` and
 - `OpenRequestLookup.tool`: an approval request is looked up by risk, tool
   and fingerprint (both mandatory for that kind, `InvariantError` otherwise).
 - `ApprovalsRepo`: the key is `ApprovalKey { riskId, tool, fingerprint }`
-  (`create`, `consume`, `DecideContext.findApproval` / `consumeApproval`);
+  (`create`; `DecideContext.findApproval` / `consumeApproval`, which run
+  `findApprovalSync` / `consumeApprovalSync` inside the decision transaction);
   `getByRequest(requestId)`. Migration `0005_approval_bound_to_tool.sql` adds
   `approvals.tool` (`NOT NULL DEFAULT ''`: a row older than the migration
   matches no call) and recreates `approvals_lookup` on `(mission_id, risk_id,
@@ -564,14 +582,21 @@ to run. An edit of the gate on the mission page (`gate-changed`,
 on an equal timestamp the edit wins. So does `approval` asked again through
 `POST /api/missions/<id>/gate` on a risk that is gated and open for the
 period: the stored gate does not move, and the `gate-changed` event is
-recorded all the same. The request page and the mission page
+recorded all the same. Both hold on an **expired** mission, whose gates stay
+editable: the edit looks for the opening in the period that runs now, whatever
+the mission's state, so an `extend-expiry` granted later in that period brings
+the mission back with the gate asking again, not with the opening the creator
+closed ([missions](missions.md) "Editing a gate"; ADR
+[one-membership-rule-checked-in-the-token-insert](../decisions/one-membership-rule-checked-in-the-token-insert.md),
+D5). The request page and the mission page
 show `open until <period end>` from the same derivation.
 
 ### The page
 
 For an approval request `/requests/<id>` shows, top to bottom: _What is
 asked_ (mission and its state, tool, **arguments** as pretty-printed JSON —
-or "erased when the request was decided; only their fingerprint remains" —,
+or "erased when the request was decided; only their fingerprint remains",
+"closed" in place of "decided" for an expired request —,
 fingerprint, slices touched, gated risk, gate, period end, asked, expiry or
 outcome with what became of the approval), _Your decision_ (one plain
 `method="post"` form per option with its consequence line), _What this call
@@ -627,7 +652,7 @@ it once the request is decided.
   parser, `formatDelay`),
   `client-ip.test.ts` (2: the page uses the shared client-address rule,
   itself tested in `src/server/http/client-ip.test.ts`, 11), `events.test.ts`
-  (6), `sweeper.test.ts` (4). The gate openings are
+  (7), `sweeper.test.ts` (4). The gate openings are
   `tests/unit/server/budget/gates.test.ts` (9).
 - Integration, `tests/integration/requests/`: `request-service.test.ts`
   (34, `:memory:` store with a manual clock; the mission checked as the store

@@ -50,7 +50,11 @@ describe('provider-app handler: audit failure and malformed bodies', () => {
       },
       ...memoryStoreDeps,
     });
-    operator = await root.store.users.upsertFromIdp({ subject: 'idp|ops', email: OPERATOR_EMAIL });
+    operator = await root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'idp|ops',
+      email: OPERATOR_EMAIL,
+    });
   });
   afterEach(async () => {
     vi.restoreAllMocks();

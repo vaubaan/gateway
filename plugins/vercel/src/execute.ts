@@ -59,6 +59,7 @@ import {
   resolveProject,
   unboundToolDenial,
   UNBOUND_TOOLS,
+  undeclaredArgument,
   VERCEL_ENVS,
 } from './classify.ts';
 import { vercelAuth } from './credential.ts';
@@ -265,6 +266,9 @@ function pinArgs(
   }
   const project = resolveProject(args, resources, !isAccountTool(tool));
   if ('denied' in project) return { refused: project.denied };
+  // Everything else is forwarded as given : only what the tool declares may be there.
+  const undeclared = undeclaredArgument(tool, args);
+  if (undeclared !== null) return { refused: undeclared };
 
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(args)) {

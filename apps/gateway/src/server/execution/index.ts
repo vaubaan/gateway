@@ -5,7 +5,7 @@
  * and the catalog endpoint. Built once by the composition root as
  * `root.execution`. Handbook: docs/handbook/execution-door.md.
  */
-import { CallPipeline, type CacheClient } from '@vaubaan/gateway-core';
+import { CallPipeline, upstreamErrorClassName, type CacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { AuthModule } from '../auth';
@@ -65,6 +65,18 @@ export interface ExecutionModule {
   readonly handlers: ExecutionHandlers;
 }
 
+const STACK_FRAMES_LOGGED = 12;
+
+/** The `at …` lines of an error's stack — where it was thrown, without its message. */
+function stackFramesOf(error: unknown): string[] {
+  if (!(error instanceof Error) || typeof error.stack !== 'string') return [];
+  return error.stack
+    .split('\n')
+    .map((frame) => frame.trim())
+    .filter((frame) => frame.startsWith('at '))
+    .slice(0, STACK_FRAMES_LOGGED);
+}
+
 export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModule {
   const clock = deps.clock ?? systemClock;
   const logger = deps.logger.child({ component: 'execution-door' });
@@ -85,6 +97,17 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     }),
     audit: deps.store.auditWriter,
     now: () => clock.now(),
+    // A decision stage threw: the pipeline refuses and audits the call; this is the
+    // operator's trace. The error's message is left out on purpose — a classifier's
+    // error text can quote the arguments, which no log line carries — so the class
+    // and the frames are what locate the fault.
+    onStageError: (stage, error, call) =>
+      logger.error('call refused: a decision stage failed', {
+        stage,
+        tool: call.tool,
+        error_class: upstreamErrorClassName(error),
+        stack_frames: stackFramesOf(error),
+      }),
   });
 
   const tokens = new TokenVerifier({

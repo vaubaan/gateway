@@ -45,7 +45,7 @@ export interface DataModelPlane {
  *                         finite list / glob ; `unbounded` = wildcard.
  *   - `description`     : one-liner shown in tooltips / handbook diagrams.
  *   - `envScopable`     : when true, this entity is the carrier of the
- *                         provider's "env" layer (spec §2.1 + §4 : env is a
+ *                         provider's "env" layer (risk-model spec §2.3 + §4 : env is a
  *                         per-datum layer, not an orthogonal axis). The exact
  *                         convention is provider-specific :
  *                           - github : `branch` carries the env layer ;

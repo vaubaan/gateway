@@ -30,7 +30,7 @@ const KEY_HELP =
 export const stripePlugin = definePlugin({
   id: 'stripe',
   displayName: 'Stripe',
-  version: '0.3.0',
+  version: '0.4.0',
   description:
     'Billing operations on a Stripe account : catalog, customers, subscriptions, invoices, ' +
     'refunds, payouts, webhooks — test and live modes as separate resources.',

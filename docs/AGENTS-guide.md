@@ -113,7 +113,7 @@ linked.
 apps/gateway/                    the deployable (@vaubaan/gateway-app)
   src/app/                       pages and route handlers (Next.js App Router)
     (app)/                       signed-in pages: connections, shares, missions,
-                                 requests, delegations, audit
+                                 requests, delegations, audit, providers
     (public)/                    sign-in
     admin/                       operator pages
     mcp/                         the two MCP doors (/mcp, /mcp/manage)
@@ -124,9 +124,9 @@ apps/gateway/                    the deployable (@vaubaan/gateway-app)
   src/server/                    everything that is not a page
     config/ compose/             configuration, composition root
     store/ crypto/               embedded database, migrations, encryption at rest
-    auth/ groups/ authority/     sign-in, groups, who may accept what
+    auth/ users/ groups/ authority/  sign-in, deactivation, groups, who may accept what
     connections/ provider-apps/  connections, resources, the company's provider apps
-    shares/ missions/            shares, issuance and its preview
+    shares/ missions/ providers/ shares, issuance and its preview, the provider reference
     execution/ budget/           the execution door, counters and rate windows
     requests/                    claims and approvals
     management/ oauth-as/        the management door and its authorization server
@@ -135,7 +135,7 @@ apps/gateway/                    the deployable (@vaubaan/gateway-app)
   tests/                         unit, integration, e2e (Playwright), demo, manual
 packages/
   shared/                        domain types, RiskId, risk and catalog types
-  policy-engine/                 slices, matching, the risk decision, the budget rule
+  policy-engine/                 slices, matching, the risk decision, the validity rule of a budget
   gateway-core/                  the call pipeline, refusals, the audit entry shape
   plugin-sdk/                    plugin contract, catalog loader, registry, test kit
   telemetry/                     report shape, queue, client
@@ -144,7 +144,7 @@ plugins/
   _template/                     the starting point for a new plugin
 deploy/                          Dockerfile, Compose file, proxy and example configuration
 docs/                            the five documentation folders, and skills/
-scripts/                         gen-master-key, the release scripts
+scripts/                         gen-master-key, the dependency audit gate, the release scripts
 ```
 
 Where to read first, by task:

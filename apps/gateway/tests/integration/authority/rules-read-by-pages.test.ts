@@ -55,6 +55,8 @@ describe('the predicates, on every status', () => {
     );
     expect(blocked).toEqual({
       active: null,
+      // An expired mission serves again once its creator extends the expiry (a claim's
+      // `extend-expiry`): its gates stay theirs to set meanwhile.
       expired: null,
       orphaned: 'orphaned',
       revoked: 'revoked',

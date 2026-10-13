@@ -4,6 +4,7 @@ import { assertEmailDomainAllowed, mapClaims, parseGroupsClaim } from './claims'
 import { LoginError } from './errors';
 
 const MAPPING = { sub: 'sub', email: 'email', groups: 'groups' };
+const ISS = 'https://idp.example.com';
 
 describe('parseGroupsClaim', () => {
   it('reads an array of strings, trimmed and de-duplicated', () => {
@@ -23,19 +24,41 @@ describe('parseGroupsClaim', () => {
 describe('mapClaims', () => {
   it('maps the default claim names and lower-cases the email', () => {
     expect(
-      mapClaims({ sub: 'idp|1', email: 'Ada@Example.COM', name: 'Ada', groups: ['dev'] }, MAPPING),
-    ).toEqual({ subject: 'idp|1', email: 'ada@example.com', displayName: 'Ada', groups: ['dev'] });
+      mapClaims(
+        { iss: ISS, sub: 'idp|1', email: 'Ada@Example.COM', name: 'Ada', groups: ['dev'] },
+        MAPPING,
+      ),
+    ).toEqual({
+      issuer: ISS,
+      subject: 'idp|1',
+      email: 'ada@example.com',
+      displayName: 'Ada',
+      groups: ['dev'],
+    });
   });
   it('honours a custom mapping (Entra ID style)', () => {
     const mapping = { sub: 'oid', email: 'preferred_username', groups: 'roles' };
     expect(
-      mapClaims({ oid: 'o-1', preferred_username: 'x@y.z', roles: 'a b', sub: 'ignored' }, mapping),
-    ).toEqual({ subject: 'o-1', email: 'x@y.z', displayName: null, groups: ['a', 'b'] });
+      mapClaims(
+        { iss: ISS, oid: 'o-1', preferred_username: 'x@y.z', roles: 'a b', sub: 'ignored' },
+        mapping,
+      ),
+    ).toEqual({
+      issuer: ISS,
+      subject: 'o-1',
+      email: 'x@y.z',
+      displayName: null,
+      groups: ['a', 'b'],
+    });
   });
   it('fails closed naming the missing claims', () => {
-    expect(() => mapClaims({ sub: 'x' }, MAPPING)).toThrowError(/claims-missing.*'email'/);
-    expect(() => mapClaims({ email: 'x@y' }, MAPPING)).toThrowError(/'sub'/);
-    expect(() => mapClaims({ sub: '  ', email: '' }, MAPPING)).toThrowError(/'sub', 'email'/);
+    expect(() => mapClaims({ iss: ISS, sub: 'x' }, MAPPING)).toThrowError(
+      /claims-missing.*'email'/,
+    );
+    expect(() => mapClaims({ iss: ISS, email: 'x@y' }, MAPPING)).toThrowError(/'sub'/);
+    expect(() => mapClaims({ iss: ISS, sub: '  ', email: '' }, MAPPING)).toThrowError(
+      /'sub', 'email'/,
+    );
     try {
       mapClaims({}, MAPPING);
     } catch (err) {
@@ -43,10 +66,62 @@ describe('mapClaims', () => {
       expect((err as LoginError).code).toBe('claims-missing');
     }
   });
+
+  it('requires the issuer: a user is (issuer, subject), and `iss` is not a mappable claim', () => {
+    expect(() => mapClaims({ sub: 'x', email: 'x@y' }, MAPPING)).toThrowError(
+      /claims-missing.*'iss'/,
+    );
+    expect(() => mapClaims({ iss: '  ', sub: 'x', email: 'x@y' }, MAPPING)).toThrowError(/'iss'/);
+    // The subject may be read from another claim; the issuer never is.
+    const mapping = { sub: 'oid', email: 'email', groups: 'groups' };
+    expect(mapClaims({ iss: ISS, oid: 'o-1', email: 'x@y' }, mapping)).toMatchObject({
+      issuer: ISS,
+      subject: 'o-1',
+    });
+  });
+});
+
+describe('mapClaims when the userinfo request failed', () => {
+  const idToken = { iss: ISS, sub: 'idp|1', email: 'ada@example.com' };
+  const failed = { userinfoFailed: true };
+
+  it('refuses when the groups are not in the ID token either: unknown is not "none"', () => {
+    let thrown: unknown;
+    try {
+      mapClaims(idToken, MAPPING, failed);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(LoginError);
+    expect((thrown as LoginError).code).toBe('groups-unavailable');
+    expect((thrown as LoginError).message).toContain("'groups'");
+  });
+
+  it('follows the configured groups claim', () => {
+    const mapping = { sub: 'sub', email: 'email', groups: 'roles' };
+    expect(() => mapClaims({ ...idToken, groups: ['dev'] }, mapping, failed)).toThrowError(
+      /groups-unavailable.*'roles'/,
+    );
+    expect(mapClaims({ ...idToken, roles: ['dev'] }, mapping, failed).groups).toEqual(['dev']);
+  });
+
+  it('signs in when the ID token itself carries the groups, even an empty list', () => {
+    expect(mapClaims({ ...idToken, groups: ['dev'] }, MAPPING, failed).groups).toEqual(['dev']);
+    expect(mapClaims({ ...idToken, groups: [] }, MAPPING, failed).groups).toEqual([]);
+  });
+
+  it('a missing identity claim is reported first: it names what to configure', () => {
+    expect(() => mapClaims({ iss: ISS, sub: 'x' }, MAPPING, failed)).toThrowError(/claims-missing/);
+  });
+
+  it('without a failure, an absent groups claim is an IdP that sends none', () => {
+    expect(mapClaims(idToken, MAPPING).groups).toEqual([]);
+    expect(mapClaims(idToken, MAPPING, { userinfoFailed: false }).groups).toEqual([]);
+  });
 });
 
 describe('mapClaims and email_verified', () => {
-  const claims = { sub: 'idp|1', email: 'ops@example.com' };
+  const claims = { iss: ISS, sub: 'idp|1', email: 'ops@example.com' };
 
   it('refuses an email the IdP marks as unverified, with its own closed code', () => {
     for (const unverified of [false, 'false', 'False', 0]) {
@@ -70,13 +145,16 @@ describe('mapClaims and email_verified', () => {
   it('refuses the unverified flag whatever claim the email is mapped from', () => {
     const mapping = { sub: 'oid', email: 'preferred_username', groups: 'roles' };
     expect(() =>
-      mapClaims({ oid: 'o-1', preferred_username: 'x@y.z', email_verified: false }, mapping),
+      mapClaims(
+        { iss: ISS, oid: 'o-1', preferred_username: 'x@y.z', email_verified: false },
+        mapping,
+      ),
     ).toThrowError(/email-not-verified/);
   });
 });
 
 describe('mapClaims and the group overage claim (Entra ID)', () => {
-  const claims = { sub: 'idp|1', email: 'ops@example.com' };
+  const claims = { iss: ISS, sub: 'idp|1', email: 'ops@example.com' };
   const refusal = (raw: Record<string, unknown>, mapping = MAPPING): LoginError => {
     let thrown: unknown;
     try {

@@ -7,20 +7,21 @@ only.
 
 - Contract: ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md),
   handbook [`plugin-sdk`](../../docs/handbook/plugin-sdk.md).
+- Plugin version 2.0.1, catalog version 4.
 - Modelling: handbook [`providers/upstash-redis`](../../docs/handbook/providers/upstash-redis.md)
   (data model, tool → slice mapping, catalog, edge cases).
 
 ## Layout
 
-| File                    | Role                                                                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                                   |
-| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 3`. Loaded at boot by the SDK; the only catalog artefact.                |
-| `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                           |
-| `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                                  |
-| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; the command table of `execute`. |
-| `src/credential.ts`     | `api-key` spec: account email + Management API key; `upstashAuth()` narrows the secret.                                        |
-| `src/execute.ts`        | Management API (Basic auth) and Data API (per-database Bearer), redaction, `discoverResources`.                                |
+| File                    | Role                                                                                                                                                       |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                                                               |
+| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 4`. Loaded at boot by the SDK; the only catalog artefact.                                            |
+| `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                                                       |
+| `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                                                              |
+| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; the command table of `execute`.                             |
+| `src/credential.ts`     | `api-key` spec: account email + Management API key; `upstashAuth()` narrows the secret.                                                                    |
+| `src/execute.ts`        | Management API (Basic auth) and Data API (per-database Bearer, on a REST endpoint pinned to `https://<label>.upstash.io`), redaction, `discoverResources`. |
 
 `src/index.ts` resolves the YAML path with the SDK helper
 `catalogPathNextTo(import.meta.url)`, not with
@@ -64,6 +65,11 @@ through a dedicated tool and through `execute`.
 | script, administration, unknown or unreadable command             | `write-data` + `execute-arbitrary`           |
 | a pipeline or MULTI / EXEC body                                   | the union over its commands                  |
 
+`write-data` alone cannot run a deletion command, a FLUSH or an arbitrary
+command. It can still make a key go away without them: a positive TTL
+(`EXPIRE`, `SET … EX`) removes the key when it elapses, and `RENAME`,
+`LMOVE` or `SMOVE` take a key or an element out of its source.
+
 A command the classifier cannot read is never cheaper than the catch-all.
 The executor sends exactly what was classified (`redisCommandOf`) and
 refuses a pipeline-shaped `command`: no pipeline endpoint is wired. To add a
@@ -86,9 +92,17 @@ the console to end the connection.
 The per-database REST tokens (Data API) are **not** part of the credential:
 `execute` reads them from `GET /v2/redis/database/{id}` at call time and
 never returns them — Management API answers are redacted of `rest_token`,
-`read_only_rest_token` and `password` before reaching the agent. A connection
+`read_only_rest_token` and `password` before reaching the agent. The token
+is posted to `https://<label>.upstash.io` only: the endpoint the Management
+API names (`rest_url`, or `endpoint`) is reduced to its label and rebuilt
+(`restEndpointOf`), and a database answer naming any other host, scheme,
+port or path makes the call fail before anything is sent. A connection
 made of per-database REST tokens was considered and rejected: it could
 neither discover its databases nor reach the management tools.
+
+What `execute` declines itself (a database outside the mission, a malformed
+argument, a pipeline-shaped `command`) is an `isError` result; a provider
+failure is thrown.
 
 ## Catalog and presets
 
@@ -145,5 +159,6 @@ unreadable commands, pipelines); `policy.test.ts` runs the shipped catalog
 and presets through the engine (`evaluateCall` with the gateway's env
 resolver): refusal on an unlabelled database, what each preset allows and
 refuses. `risk-catalog.test.ts` lints the loaded catalog and its coverage of
-every tool, and `execute.test.ts` pins the request shapes sent upstream. No
-test reaches the network.
+every tool, `execute.test.ts` pins the request shapes sent upstream and the
+pinned REST endpoint, and `identifiers.test.ts` feeds hostile database refs
+to `classify` and `execute`. 293 tests; none reaches the network.

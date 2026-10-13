@@ -51,7 +51,13 @@ export async function openBudgetFixture(
 ): Promise<BudgetFixture> {
   const t = openTestStore();
   const { store } = t;
-  const creatorId = (await store.users.upsertFromIdp({ subject: 'creator', email: 'c@x' })).id;
+  const creatorId = (
+    await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'creator',
+      email: 'c@x',
+    })
+  ).id;
   const connectionId = (
     await store.connections.create({
       provider: 'github',

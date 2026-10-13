@@ -109,7 +109,9 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       try {
         const finished = await deps.relyingParties.for(current.settings).finish(url, pending);
         for (const warning of finished.warnings) logger.warn('sign-in warning', { warning });
-        const identity = mapClaims(finished.claims, current.settings.claims);
+        const identity = mapClaims(finished.claims, current.settings.claims, {
+          userinfoFailed: finished.userinfoFailed,
+        });
         assertEmailDomainAllowed(identity.email, current.settings.allowedEmailDomains);
         const outcome = await completeLogin(deps.login, identity);
         // A sign-in replaces the session the browser already had, it does not add one.

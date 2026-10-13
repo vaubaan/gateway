@@ -51,6 +51,13 @@ export type UserStatus = (typeof USER_STATUSES)[number];
 
 export interface UserRecord {
   readonly id: string;
+  /**
+   * The identity provider that vouches for the account: the `iss` of its sign-ins. A
+   * user is `(issuer, subject)`. `null` only for an account created before migration
+   * 0011 that no sign-in has bound yet; such an account matches no sign-in.
+   */
+  readonly issuer: string | null;
+  /** The subject claim, unique within `issuer` only. */
   readonly subject: string;
   readonly email: string;
   readonly displayName: string | null;

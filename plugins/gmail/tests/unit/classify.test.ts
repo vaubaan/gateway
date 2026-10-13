@@ -71,8 +71,8 @@ describe('classifyGmail — describe_zones (synthetic Vaubaan tool)', () => {
 });
 
 describe('classifyGmail — search_threads bounded by a positive from:', () => {
-  test('from:no-reply@github.com → from-zone[automated] only', () => {
-    expect(search('from:no-reply@github.com')).toEqual([LABEL_R, fromZone('automated')]);
+  test('from:no-reply@vendor.com → from-zone[automated] only', () => {
+    expect(search('from:no-reply@vendor.com')).toEqual([LABEL_R, fromZone('automated')]);
   });
 
   test('from:colleague@myorg.com → from-zone[internal] only', () => {
@@ -113,12 +113,12 @@ describe('classifyGmail — search_threads the parser cannot bound (unknown zone
   test.each([
     ['no clause at all', ''],
     ['non-discriminating operator', 'is:unread'],
-    ['union with a time window', 'from:no-reply@github.com OR newer_than:3650d'],
-    ['union with to:', 'from:no-reply@github.com OR to:me@myorg.com'],
-    ['union of two senders', 'from:no-reply@github.com OR from:colleague@myorg.com'],
-    ['lower-case or', 'from:no-reply@github.com or newer_than:3650d'],
-    ['grouping in parentheses', 'from:(no-reply@github.com colleague@myorg.com)'],
-    ['grouping in braces', '{from:no-reply@github.com from:colleague@myorg.com}'],
+    ['union with a time window', 'from:no-reply@vendor.com OR newer_than:3650d'],
+    ['union with to:', 'from:no-reply@vendor.com OR to:me@myorg.com'],
+    ['union of two senders', 'from:no-reply@vendor.com OR from:colleague@myorg.com'],
+    ['lower-case or', 'from:no-reply@vendor.com or newer_than:3650d'],
+    ['grouping in parentheses', 'from:(no-reply@vendor.com colleague@myorg.com)'],
+    ['grouping in braces', '{from:no-reply@vendor.com from:colleague@myorg.com}'],
     ['a from: inside a quoted phrase', 'subject:"x from:colleague@myorg.com y"'],
     ['negated sender only', '-from:boss@myorg.com'],
     ['to: only', 'to:me@myorg.com'],
@@ -136,7 +136,7 @@ describe('classifyGmail — search_threads the parser cannot bound (unknown zone
   });
 
   test('a union never yields less than the zones it names', () => {
-    const sl = search('from:no-reply@github.com OR from:colleague@myorg.com');
+    const sl = search('from:no-reply@vendor.com OR from:colleague@myorg.com');
     expect(sl).toEqual([
       LABEL_R,
       fromZone('automated'),
@@ -434,9 +434,16 @@ describe('classifyGmail — automated senders (exact local part of a full addres
     expect(search('from:notifications@myorg.com')).toEqual([LABEL_R, fromZone('automated')]);
   });
 
-  test('from:alerts@somewhere.io → automated', () => {
-    expect(search('from:alerts@somewhere.io')).toEqual([LABEL_R, fromZone('automated')]);
+  test('from:alerts@vendor.com → automated on an allowlisted domain', () => {
+    expect(search('from:alerts@vendor.com')).toEqual([LABEL_R, fromZone('automated')]);
   });
+
+  test.each(['alerts@somewhere.io', 'support@attacker.example', 'no-reply@github.com'])(
+    'from:%s — an automated local part on a domain nobody listed is chosen by the sender → unknown',
+    (address) => {
+      expect(search(`from:${address}`)).toEqual([LABEL_R, fromZone('unknown')]);
+    },
+  );
 
   test.each([
     'supportive.ceo@myorg.com',
@@ -463,7 +470,8 @@ describe('classifyGmail — automated senders (exact local part of a full addres
     expect(classifyFromAddress('support', md)).toBe('unknown');
     expect(classifyFromAddress('support@', md)).toBe('unknown');
     expect(classifyFromAddress('evil@evil.ru,boss@myorg.com', md)).toBe('unknown');
-    expect(classifyFromAddress('Support@GitHub.com', md)).toBe('automated');
+    expect(classifyFromAddress('Support@Vendor.com', md)).toBe('automated');
+    expect(classifyFromAddress('Support@GitHub.com', md)).toBe('unknown');
     expect(classifyFromAddress('Boss@MyOrg.com', md)).toBe('internal');
   });
 });

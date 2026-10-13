@@ -78,6 +78,20 @@ const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
 const STANDALONE_APP = resolve(APP_DIR, '.next/standalone/apps/gateway');
 /** What the image runs: `CMD ["node", "apps/gateway/server.js"]`. */
 const STANDALONE_SERVER = resolve(STANDALONE_APP, 'server.js');
+/**
+ * How long the two listeners keep an idle connection open: longer than a test
+ * may last (`playwright.config.ts`, 120 s).
+ *
+ * The browser's requests are forwarded by Playwright's own HTTP client
+ * (`route.fetch`), which keeps its connections alive and reuses them, and does
+ * not retry a reset unless asked to. A Node server closes an idle connection
+ * after 5 s by default. A test that leaves the page alone for about that long —
+ * a form being filled, a hand changing — can then send its next request on a
+ * connection the server is closing at that instant: `route.fetch: socket hang
+ * up`, once in a great many runs. With this, the server never closes a
+ * connection a running test may still reuse.
+ */
+const IDLE_SOCKET_MS = 180_000;
 const LOOPBACK = '127.0.0.1';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
@@ -287,6 +301,7 @@ async function issueDeveloperMission(
   name: string,
 ): Promise<{ mission_id: string; token: string }> {
   const user = await root.store.users.upsertFromIdp({
+    issuer: IDP_ISSUER,
     subject: E2E_APPROVER_USER.sub,
     email: E2E_APPROVER_USER.email,
     displayName: E2E_APPROVER_USER.name,
@@ -345,7 +360,8 @@ async function main(): Promise<void> {
     claims: { sub: 'sub', email: 'email', groups: 'groups' },
     allowedEmailDomains: [],
   });
-  const seeded = await seedInstance(root);
+  // Seeded under the issuer their ID tokens will carry: the same people sign in below.
+  const seeded = await seedInstance(root, idp.iss);
   // Ada's GitHub connection is an installation of the mocked GitHub, so her
   // missions' calls go all the way through the door to the mocked provider.
   await root.store.connections.reconnect(
@@ -429,6 +445,7 @@ async function main(): Promise<void> {
         const [owner] = await Promise.all(
           [E2E_SHARE_OWNER, E2E_SHARE_TARGET, E2E_OPERATOR].map((user) =>
             root.store.users.upsertFromIdp({
+              issuer: IDP_ISSUER,
               subject: user.sub,
               email: user.email,
               displayName: user.name,
@@ -467,6 +484,7 @@ async function main(): Promise<void> {
         // A user of their own, with their own GitHub connection: the open
         // requests this leaves behind are in nobody else's inbox.
         const user = await root.store.users.upsertFromIdp({
+          issuer: IDP_ISSUER,
           subject: E2E_AUDIT_USER.sub,
           email: E2E_AUDIT_USER.email,
           displayName: E2E_AUDIT_USER.name,
@@ -494,6 +512,7 @@ async function main(): Promise<void> {
   });
   // Up before the app: Playwright waits for the app's `/healthz`, so a spec never
   // reaches a control endpoint that is not listening yet.
+  control.keepAliveTimeout = IDLE_SOCKET_MS;
   await new Promise<void>((ready, failed) => {
     control.once('error', failed);
     control.listen(controlPort(), LOOPBACK, ready);
@@ -510,6 +529,8 @@ async function main(): Promise<void> {
   // second line the server would listen on that address.
   process.env.PORT = String(port);
   process.env.HOSTNAME = LOOPBACK;
+  // The third variable server.js reads: how long it keeps an idle connection open.
+  process.env.KEEP_ALIVE_TIMEOUT = String(IDLE_SOCKET_MS);
   // The image's own entry point, unmodified. It changes the working directory to its
   // own; every path of this file is absolute. The root is already where its
   // `getRoot()` looks.

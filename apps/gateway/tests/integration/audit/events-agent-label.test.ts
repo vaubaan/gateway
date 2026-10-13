@@ -34,7 +34,11 @@ describe('events.agent_label', () => {
   });
 
   async function openSession(): Promise<string> {
-    const user = await t.store.users.upsertFromIdp({ subject: 's', email: 'ada@example.com' });
+    const user = await t.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 's',
+      email: 'ada@example.com',
+    });
     const connection = await t.store.connections.create({
       provider: 'github',
       owner: { kind: 'user', id: user.id },

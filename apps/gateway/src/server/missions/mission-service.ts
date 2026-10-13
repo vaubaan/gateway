@@ -42,6 +42,7 @@ import type {
 } from '../authority';
 import {
   budgetMissionOf,
+  currentPeriod,
   GATE_EVENT_KINDS,
   isStale,
   missionUsageReader,
@@ -49,12 +50,15 @@ import {
   policyEntryOf,
   policyEntryRecordOf,
   statedPeriodOf,
+  type CurrentPeriod,
   type MissionState,
   type SessionService,
 } from '../budget';
 import { connectionSummaryOf } from '../connections/mapping';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
+import { TokenNotIssuableError } from '../store/errors';
+import { isOnMission, membershipOf, type Membership } from '../store/membership';
 import { toIso, type Clock } from '../store/clock';
 import type {
   ConnectionRecord,
@@ -269,10 +273,12 @@ export interface MissionDetailRisk extends MissionPolicyEntry {
 }
 
 /**
- * The statuses on which a mission's gates are not edited: it refuses every call
- * (spec §2.3). `status` is the derived one, so the edit is open again as soon as an
- * orphaned mission's authority is back. `setGate` refuses on it and the mission page
- * reads it from `MissionDetail.gates_editable`.
+ * The statuses on which a mission's gates are not edited: the ones from which it does
+ * not come back by itself (spec §2.3). `status` is the derived one, so the edit is
+ * open again as soon as an orphaned mission's authority is back. An EXPIRED mission is
+ * not in the list: its creator can extend the expiry (a claim's `extend-expiry`), and
+ * the gates they set meanwhile are the ones it serves with again. `setGate` refuses on
+ * it and the mission page reads it from `MissionDetail.gates_editable`.
  */
 export function gateEditBlockedBy(
   mission: Pick<MissionRecord, 'status'>,
@@ -581,13 +587,22 @@ export class MissionService {
     const state = await this.stateOf(mission);
     if (state.kind !== 'active') return { ok: false, reason: 'inactive', state: state.kind };
 
-    const token = await this.issueCreatorToken(mission);
+    let token: IssuedSecret;
+    try {
+      token = await this.issueCreatorToken(mission);
+    } catch (err) {
+      // Revoked while the hash was computed: the store refused the insert.
+      if (!(err instanceof TokenNotIssuableError)) throw err;
+      return { ok: false, reason: 'inactive', state: await this.stateAfterRefusal(mission.id) };
+    }
     const previous = token.replaced;
     await this.deps.store.auditWriter.write({
       kind: 'admin',
       ts: toIso(this.deps.clock.now()),
       user_id: user.id,
-      act: 'mission-rotated',
+      // The same rule as `MissionTeamService.generateToken`, the other way a creator gets
+      // a token of their own: a first token is issued, a replacement is a rotation.
+      act: previous ? 'mission-rotated' : 'mission-token-issued',
       object: { type: 'mission', id: mission.id },
       before: previous ? { token_prefix: previous.prefix } : null,
       after: { token_prefix: token.prefix, token_kind: 'member', holder: user.id },
@@ -673,9 +688,16 @@ export class MissionService {
     if (blocked) return { ok: false, reason: 'inactive', state: blocked };
     // "Ask me again" on a risk that is gated but open for the period must end the
     // opening: the stored gate would not move, so the store is told what was found.
+    // The opening is looked for in the period that runs NOW, whether or not the mission
+    // serves at this instant: an expired mission whose expiry is then extended in the
+    // same period would otherwise come back with the opening the creator just closed.
+    //
+    // single-process only: the read and the write are two store calls, so an opening
+    // granted between them is missed. Not reachable while every store call is
+    // synchronous in one process; with a second process, decide inside
+    // `MissionsRepo.setGate`'s transaction (it owns the session's events).
     const openNow =
-      gate === 'approval' &&
-      (await this.openGatesOf(mission, await this.stateOf(mission))).has(riskId);
+      gate === 'approval' && (await this.openGatesIn(mission, this.periodNow(mission))).has(riskId);
     const changed = await this.deps.store.missions.setGate(mission.id, riskId, gate, user.id, {
       closeOpening: openNow,
     });
@@ -786,13 +808,13 @@ export class MissionService {
     };
     // The holder is judged first: a member who was removed is told so whatever
     // became of their token or of the mission since (they are no longer told the
-    // mission's state).
-    if (record.holder.kind === 'member' && record.holder.userId !== mission.creatorUserId) {
-      if (user?.status !== 'active') {
+    // mission's state). The membership rule is the one `access` reads.
+    if (record.holder.kind === 'member') {
+      const membership = await this.membershipOf(mission, record.holder.userId, user);
+      if (membership === 'deactivated') {
         return { outcome: 'retired', reason: 'holder-deactivated', mission, token };
       }
-      const member = await this.deps.store.missions.getMember(mission.id, record.holder.userId);
-      if (!member || member.removedAt !== null) {
+      if (!isOnMission(membership)) {
         return { outcome: 'retired', reason: 'holder-removed', mission, token };
       }
     }
@@ -823,6 +845,10 @@ export class MissionService {
       ['member', shared],
     ] as const) {
       for (const mission of missions) {
+        // The listing's SQL selects the current member rows; the rule has the last word.
+        if (role === 'member' && (await this.membershipOf(mission, user.id)) !== 'member') {
+          continue;
+        }
         overviews.push(
           await this.overviewOf(
             { ...(await this.deps.grounds.inspect(mission)), role },
@@ -890,16 +916,31 @@ export class MissionService {
     mission: MissionRecord,
     state: MissionState,
   ): Promise<Map<RiskId, Iso8601>> {
+    // What the page shows: a mission that serves no call has no gate "open" to show.
+    return state.kind === 'active' ? this.openGatesIn(mission, state.period) : new Map();
+  }
+
+  /** The period that runs at this instant, whatever the mission's state. */
+  private periodNow(mission: MissionRecord): CurrentPeriod {
+    return currentPeriod(budgetMissionOf(mission).period, this.deps.clock.now());
+  }
+
+  /** The gates opened for `period`, read from the session's gate events since it started. */
+  private async openGatesIn(
+    mission: MissionRecord,
+    period: CurrentPeriod,
+  ): Promise<Map<RiskId, Iso8601>> {
     const open = new Map<RiskId, Iso8601>();
-    if (state.kind !== 'active' || state.period.end === null) return open;
+    // A one-off mission has no period end: a gate is never opened "for the period" on it.
+    if (period.end === null) return open;
     if (!mission.policy.some((entry) => entry.gate === 'approval')) return open;
     const session = await this.deps.store.sessions.getByMission(mission.id);
     if (!session) return open;
     const events = await this.deps.store.sessions.listEvents(session.id, {
       kinds: GATE_EVENT_KINDS,
-      since: state.period.start,
+      since: period.start,
     });
-    for (const riskId of openedGatesOf(events, state.period)) open.set(riskId, state.period.end);
+    for (const riskId of openedGatesOf(events, period)) open.set(riskId, period.end);
     return open;
   }
 
@@ -944,6 +985,18 @@ export class MissionService {
     return issuers;
   }
 
+  /**
+   * The state to report when the store refused a token insert because the mission
+   * stopped serving between the check and the write: what it reads now, `revoked`
+   * if it somehow reads active again (the refusal itself is the fact).
+   */
+  async stateAfterRefusal(missionId: string): Promise<Exclude<MissionState['kind'], 'active'>> {
+    const mission = await this.deps.store.missions.getById(missionId);
+    if (!mission) return 'revoked';
+    const state = await this.stateOf((await this.deps.grounds.inspect(mission)).mission);
+    return state.kind === 'active' ? 'revoked' : state.kind;
+  }
+
   /** The mission's state at this instant (the budget's single derivation). */
   stateOf(mission: MissionRecord): Promise<MissionState> {
     return this.budget.stateOf(budgetMissionOf(mission), this.deps.clock.now());
@@ -972,13 +1025,25 @@ export class MissionService {
   async access(user: Reader, missionId: string): Promise<MissionAccess | null> {
     const mission = await this.deps.store.missions.getById(missionId);
     if (!mission) return null;
-    if (mission.creatorUserId === user.id) {
-      return { ...(await this.deps.grounds.inspect(mission)), role: 'creator' };
-    }
-    const member = await this.deps.store.missions.getMember(mission.id, user.id);
-    if (!member || member.removedAt !== null) return null;
-    if (!(await this.isActiveUser(user.id))) return null;
-    return { ...(await this.deps.grounds.inspect(mission)), role: 'member' };
+    const membership = await this.membershipOf(mission, user.id);
+    if (membership !== 'creator' && membership !== 'member') return null;
+    return { ...(await this.deps.grounds.inspect(mission)), role: membership };
+  }
+
+  /**
+   * What `userId` is to the mission right now (`membershipOf`, the store's one
+   * statement of the rule). The creator costs no read; anyone else costs their
+   * user row (unless the caller already holds it) and their member row.
+   */
+  private async membershipOf(
+    mission: MissionRecord,
+    userId: string,
+    known?: UserRecord | null,
+  ): Promise<Membership> {
+    if (mission.creatorUserId === userId) return membershipOf(mission, userId, null, null);
+    const user = known === undefined ? await this.deps.store.users.getById(userId) : known;
+    const row = await this.deps.store.missions.getMember(mission.id, userId);
+    return membershipOf(mission, userId, user, row);
   }
 
   /**

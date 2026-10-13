@@ -170,14 +170,9 @@ const OTHER_WRITES: readonly Row[] = [
     ['create-pr', FALLBACK],
   ],
   ['add_issue_comment', 'on an issue', { ...repo, issue_number: 1, body: 'b' }, ['comment-write']],
-  // `create-release` and `delete-release` both match `release[**].W`.
-  [
-    'create_release',
-    'release and tag',
-    { ...repo, tag_name: 'v1.0.0' },
-    ['create-release', 'delete-release'],
-  ],
-  ['delete_release', 'one', { ...repo, release_id: 1 }, ['create-release', 'delete-release']],
+  // Publishing and deleting are two risks with two patterns : neither requires the other.
+  ['create_release', 'release and tag', { ...repo, tag_name: 'v1.0.0' }, ['create-release']],
+  ['delete_release', 'one', { ...repo, release_id: 1 }, ['delete-release']],
   ['update_branch_protection', 'of main', { ...repo, branch: 'main' }, ['branch-protection-write']],
   [
     'mint_install_token',

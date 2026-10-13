@@ -10,8 +10,7 @@
  */
 import Link from 'next/link';
 
-import { OperatorBadge, SignOutButton } from '@/components/auth/PrincipalCard';
-import styles from '@/components/auth/auth.module.css';
+import { AdminShell } from '@/components/shell/AppShell';
 import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Banner, Container } from '@/components/ui';
 import { adminDecision } from '@/lib/auth/session';
@@ -25,43 +24,20 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   if (!decision.ok && decision.status === 401) redirect(await adminSignInPage(root.auth));
   if (!decision.ok) {
     return (
-      <Container>
-        <h1>Administration</h1>
-        <Banner tone="warning" title="Not an operator">
-          You are signed in, but you do not match the admin rule of this instance (
-          {describeRule(root.config.admin.group, root.config.admin.emails.length)}). Ask an
-          operator, or <Link href="/login">return to your account</Link>.
-        </Banner>
-      </Container>
+      <>
+        <Container>
+          <h1>Administration</h1>
+          <Banner tone="warning" title="Not an operator">
+            You are signed in, but you do not match the admin rule of this instance (
+            {describeRule(root.config.admin.group, root.config.admin.emails.length)}). Ask an
+            operator, or <Link href="/login">return to your account</Link>.
+          </Banner>
+        </Container>
+        <BuildFooter />
+      </>
     );
   }
-  const { principal } = decision;
-  const who = principal.kind === 'user' ? principal.user.email : 'bootstrap token';
-  return (
-    <div className={styles.adminShell}>
-      <header className={styles.adminBar}>
-        <nav className={styles.adminNav}>
-          <Link href="/admin" className={styles.brand}>
-            Vaubaan · Administration
-          </Link>
-          <Link href="/admin/identity-provider">Identity provider</Link>
-          <Link href="/admin/provider-apps">Provider apps</Link>
-          <Link href="/admin/users">Users</Link>
-          <Link href="/admin/groups">Groups</Link>
-          <Link href="/admin/connections">Connections</Link>
-          <Link href="/admin/telemetry">Telemetry</Link>
-          <Link href="/admin/oauth-clients">OAuth clients</Link>
-        </nav>
-        <div className={styles.actions}>
-          <span className={styles.muted}>{who}</span>
-          <OperatorBadge principal={principal} />
-          <SignOutButton />
-        </div>
-      </header>
-      <Container>{children}</Container>
-      <BuildFooter />
-    </div>
-  );
+  return <AdminShell principal={decision.principal}>{children}</AdminShell>;
 }
 
 function describeRule(group: string | null, emailCount: number): string {

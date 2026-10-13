@@ -25,9 +25,16 @@
   height: 32px;
 }
 .s_sm {
+  position: relative;
   padding: 4px 10px;
   font-size: var(--text-sm);
   height: 26px;
+}
+/* 26 px to the eye, 32 px to the pointer (style guide §5): 3 px more above and below. */
+.s_sm::after {
+  content: '';
+  position: absolute;
+  inset: -3px 0;
 }
 
 .v_primary {

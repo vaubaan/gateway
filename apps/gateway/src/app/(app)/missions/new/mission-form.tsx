@@ -741,16 +741,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * The one line of a notice; its full sentence (consequence, remedy) unfolds
- * below it. A resource is named as its owner named it; its ref follows only
- * when the name is something else (a database is a UUID at the provider).
+ * below it. A resource is named as its owner named it, as on every page; its
+ * ref (a UUID at some providers) is on the connection's page.
  */
 function noticeHeadline(notice: PreviewNotice, context: readonly IssuanceConnection[]): string {
   const resources = context.find((c) => c.id === notice.connection_id)?.resources ?? [];
   const refs = notice.resource_refs
-    .map((ref) => {
-      const name = resources.find((r) => r.ref === ref)?.display_name;
-      return name && name !== ref ? `${name} (${ref})` : ref;
-    })
+    .map((ref) => resources.find((r) => r.ref === ref)?.display_name || ref)
     .join(', ');
   switch (notice.code) {
     case 'resource-without-env':

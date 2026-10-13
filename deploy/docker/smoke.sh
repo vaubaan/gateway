@@ -82,7 +82,7 @@ for _ in $(seq 1 30); do
   fi
   sleep 1
 done
-curl -fsS "http://127.0.0.1:${PORT}/healthz" >/dev/null || fail "/healthz never answered"
+body="$(curl -fsS "http://127.0.0.1:${PORT}/healthz")" || fail "/healthz never answered"
 if [ -n "${SMOKE_EXPECT_VERSION:-}" ]; then
   grep -qF "\"version\":\"${SMOKE_EXPECT_VERSION}\"" <<<"$body" \
     || fail "/healthz does not answer version ${SMOKE_EXPECT_VERSION}: $body"

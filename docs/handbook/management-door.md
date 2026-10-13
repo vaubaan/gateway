@@ -62,7 +62,7 @@ apps/gateway/src/server/oauth-as/        host-agnostic, never imports `next`
   delegations.ts              DelegationService: a user's delegations with client and missions; revoke, revokeAllOf. endDelegation(): the one revoke-and-audit; missionsToReview()
   verifier.ts                 DelegatedTokenVerifier: resolve(bearer)
   management-gate.ts          ManagementGate.admit(request): the resource-server check of /mcp/manage
-  pages.ts                    the consent screen and the message pages, as self-contained HTML
+  pages.ts                    the consent screen and the message pages, as self-contained HTML, with the build footer
   handlers.ts                 Request → Response handlers of the nine endpoints; the execution door's discovery document
   errors.ts                   OAuthProtocolError (slowDown), AuthorizationPageError, AuthorizationRedirectError
   testing.ts                  openOAuthRig(): the services on the :memory: store (tests only)
@@ -371,6 +371,16 @@ revoke any of your missions" — and can never do (spec §4.1 bis), and where
 the access goes with a warning per kind. The form carries the consent id and nothing of the request; "Deny" is
 the first button.
 
+Every page the authorization endpoint renders — the consent screen and the
+message pages — ends with the build footer of the application's pages:
+`Vaubaan Gateway <version> · <commit>`, the two stamps `/healthz` answers,
+escaped, under the same `data-testid` names as `components/shell/BuildFooter`.
+The root hands the running `BuildInfo` to `createOAuthAsModule` (`build`),
+`createOAuthHandlers` passes it to `consentPage` and `messagePage`; without
+one (a test that builds the handlers alone) the pages have no footer. It is
+plain text styled by the nonce'd style block: the content policy is
+unchanged.
+
 `POST /oauth/authorize/decision` (`handlers.decide` →
 `AuthorizationService.decide`): `guardMutation(…, 'user')` (origin, session,
 a user), then the pending consent is **taken** — deleted whether or not the
@@ -491,7 +501,9 @@ whatever its state.
 client signing out), `DelegationService.revoke` (the user),
 `DelegationService.revokeAllOf(userId, by)` (every active delegation of one
 user, each with its own entry: an operator deactivating that user, handbook
-[authentication](authentication.md), "Deactivating a user") and, through
+[authentication](authentication.md), "Deactivating a user"; each delegation
+is tried whatever happened to the one before, and the first failure is
+thrown once all were tried) and, through
 `recordDelegationEnded`, `ClientRegistry.decide` (the operator, whose
 revocations are part of the `disableClient` transaction). The store's
 `revokeIfActive` answers only to the call that actually revoked, so a
@@ -663,8 +675,9 @@ or the union of their direct and group shares (handbook
 
 **Rotation reaches only what the delegation issued** (ADR
 [management-door-rotation-scope-and-replay-trace](../decisions/management-door-rotation-scope-and-replay-trace.md)).
-`rotate_mission_token` answers with the new token, so rotating a mission is
-obtaining its token. A mission the user issued in the interface, or that
+`rotate_mission_token` answers with a new token of the delegating user on
+that mission (their own member token; the other holders' tokens are not
+touched), so rotating a mission is obtaining a token of it. A mission the user issued in the interface, or that
 another client or an earlier delegation of the same client issued, is refused
 `mission-not-issued-here` before anything is read of its state and before the
 mutation budget is touched: `mission.delegationId` must equal the delegation
@@ -701,7 +714,7 @@ model reads it and corrects itself:
 A call that fails the input schema is a tool error whose text is the SDK's
 validation message; a tool name that does not exist is the JSON-RPC error
 `Tool <name> not found`. `MANAGEMENT_REFUSAL_CODES` is the list of the first
-six codes; `tools.test.ts` holds it to this table, both ways.
+seven codes (all but `internal-error`, which the door produces); `tools.test.ts` holds it to this table, both ways.
 
 ### Output schemas (`output-schemas.ts`)
 
@@ -1133,7 +1146,8 @@ table, the lookup that fails on one private address, the document's rules,
 cache lifetimes, name cleaning); the discovery documents, the execution
 door's one, and the scope and resource rules by name; the consent screen
 (content — what the delegation can and can never do —, escaping of hostile
-values, headers, nonce, Deny first); the client
+values, headers, nonce, Deny first) and the build footer (on the consent
+screen and on a message page, its stamps escaped, absent without a build); the client
 registry (registration and its refusals, the three policies, policy evaluated
 at every use, operator decisions and their audit, disabling revokes
 delegations, **disabling interrupted by a store fault changes nothing**,

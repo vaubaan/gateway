@@ -12,7 +12,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { serializeSlice, type ExecuteContext, type Resource } from '@vaubaan/plugin-sdk';
-import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch, type MockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyStripe } from '../../src/classify.ts';
 import { stripePlugin } from '../../src/index.ts';
@@ -145,7 +145,7 @@ describe('`id` — a segment of the request path', () => {
       for (const id of HOSTILE) {
         expect(classify(tool, { id })).toEqual({ denied: 'id: malformed identifier' });
         const fetch = permissiveFetch();
-        await expect(stripePlugin.execute(ctx(fetch), tool, { id })).rejects.toThrow(
+        expect(await refusalText(stripePlugin.execute(ctx(fetch), tool, { id }))).toMatch(
           'stripe: id: missing or malformed',
         );
         expect(fetch.calls).toHaveLength(0);
@@ -155,7 +155,7 @@ describe('`id` — a segment of the request path', () => {
     test(`${tool} : an empty or absent id never becomes the collection endpoint`, async () => {
       for (const id of ['', undefined, null]) {
         const fetch = permissiveFetch();
-        await expect(stripePlugin.execute(ctx(fetch), tool, { id })).rejects.toThrow(
+        expect(await refusalText(stripePlugin.execute(ctx(fetch), tool, { id }))).toMatch(
           'stripe: id: missing or malformed',
         );
         expect(fetch.calls).toHaveLength(0);
@@ -187,7 +187,7 @@ describe('identifiers that travel in the query string or the form body', () => {
           denied: `${arg}: malformed identifier`,
         });
         const fetch = permissiveFetch();
-        await expect(stripePlugin.execute(ctx(fetch), tool, { [arg]: value })).rejects.toThrow(
+        expect(await refusalText(stripePlugin.execute(ctx(fetch), tool, { [arg]: value }))).toMatch(
           `stripe: ${arg}: malformed identifier`,
         );
         expect(fetch.calls).toHaveLength(0);
@@ -246,9 +246,9 @@ describe('`account` — the resource the call runs on', () => {
         denied: 'account: malformed ref',
       });
       const fetch = permissiveFetch();
-      await expect(
-        stripePlugin.execute(ctx(fetch), 'stripe__get_balance', { account }),
-      ).rejects.toThrow('stripe: account: malformed ref');
+      expect(
+        await refusalText(stripePlugin.execute(ctx(fetch), 'stripe__get_balance', { account })),
+      ).toMatch('stripe: account: malformed ref');
       expect(fetch.calls).toHaveLength(0);
     }
   });
@@ -267,9 +267,11 @@ describe('`account` — the resource the call runs on', () => {
       denied: "account: 'acct_2/test' is not a Stripe resource of this mission",
     });
     const fetch = permissiveFetch();
-    await expect(
-      stripePlugin.execute(ctx(fetch), 'stripe__get_balance', { account: 'acct_2/test' }),
-    ).rejects.toThrow('not a Stripe resource of this mission');
+    expect(
+      await refusalText(
+        stripePlugin.execute(ctx(fetch), 'stripe__get_balance', { account: 'acct_2/test' }),
+      ),
+    ).toMatch('not a Stripe resource of this mission');
     expect(fetch.calls).toHaveLength(0);
   });
 });

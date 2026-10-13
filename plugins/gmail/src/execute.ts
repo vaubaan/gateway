@@ -13,6 +13,7 @@
 
 import {
   UpstreamAuthError,
+  UpstreamHttpError,
   expectCredentialKind,
   type ConnectionContext,
   type ExecuteContext,
@@ -77,7 +78,12 @@ export async function discoverGmailResources(ctx: ConnectionContext): Promise<re
       res.status,
     );
   }
-  if (!res.ok) throw new Error(`gmail profile endpoint failed with HTTP ${res.status}`);
+  if (!res.ok) {
+    throw new UpstreamHttpError(
+      `gmail profile endpoint failed with HTTP ${res.status}`,
+      res.status,
+    );
+  }
 
   const profile = (await res.json()) as ProfileDto;
   if (typeof profile.emailAddress !== 'string' || !profile.emailAddress.includes('@')) {

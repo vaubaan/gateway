@@ -17,8 +17,11 @@ tracks:
 
 # Cloudflare DNS provider — modelling and runtime
 
-`@vaubaan/plugin-cloudflare-dns` on the v5 Plugin SDK (feature P1.2g).
-Contract : ADR [[plugin-contract-and-credential-spec]] ; spec
+`@vaubaan/plugin-cloudflare-dns` (version 3.0.0) on the v5 Plugin SDK
+(feature P1.2g). Contract : ADR [[plugin-contract-and-credential-spec]] ;
+the closed argument surface and what the executor declines : ADR
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md) ;
+spec
 [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §3.2, §5 and
 [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2, §4, §7.
 Contributor-facing details (fields, tools list, preset table) :
@@ -47,13 +50,14 @@ ported to `classifyCloudflareDns` (`tests/unit/classify.test.ts`).
 ```
 plugins/cloudflare-dns/src/
   resources.ts              CLOUDFLARE_DNS_PROVIDER, PATH_IDENT, pathIdent, DNS_NAME, dnsName,
-                            RECORD_TYPE, recordType, resolveZoneResource, accountIdOf,
-                            zoneNameOf, isCriticalRecord, recordSensitivity
+                            RECORD_TYPE, recordType, CRITICAL_RECORD_TYPES, resolveZoneResource,
+                            accountIdOf, zoneNameOf, isCriticalRecord, recordSensitivity
   tools.ts                  15 McpToolDeclaration (update_record requires type + name ;
                             delete_record takes them as optional)
-  classify.ts               classifyCloudflareDns — pure, (tool, args, resources) → slices | denied
+  classify.ts               classifyCloudflareDns — pure, (tool, args, resources) → slices | denied ;
+                            undeclaredArgument, the argument rule `execute` shares
   execute.ts                executeCloudflareDns, discoverCloudflareDnsResources, CLOUDFLARE_API_BASE,
-                            MAX_DISCOVERED_ZONES
+                            MAX_DISCOVERED_ZONES, API_TOKEN_FIELD
   data-model.ts             plane `dns`, 10 entities (critical + delete overlays under record)
   risk-catalog.yaml         11 risks + fallback, 3 presets, catalog_version 2
   index.ts                  definePlugin(...) → cloudflareDnsPlugin (default export)
@@ -131,6 +135,19 @@ every deletion as critical would leave no way to delete an ordinary record
 without holding `critical-record-write`. A declaration is never trusted on
 its own : see the guard under "Execute".
 
+## Only declared arguments
+
+`execute` builds its query string and its JSON body from the arguments it
+was given, so the argument surface of a tool is closed in the classifier :
+after the zone is resolved, `undeclaredArgument(tool, args)` (over the SDK's
+`undeclaredArgumentDenial` and the tools' input schemas) denies a call
+carrying an argument the tool does not declare:
+`<name>: not an argument of '<tool>' — nothing classifies it, so it is not sent.`
+A field of Cloudflare's own API that no tool declares is therefore refused,
+not forwarded. A call wrong on both counts is told about the zone first. `execute` applies
+the same function again before it builds anything, as an `isError` refusal :
+a caller that did not go through `classify` cannot widen the call either.
+
 ## Identifiers
 
 One grammar function per kind of identifier, all in `resources.ts`, read by
@@ -193,8 +210,10 @@ the resolved resource's ref ; `zone_id` and `record_id` are removed from
 the forwarded arguments. Bearer auth only. A provider failure is thrown:
 401/403 → `UpstreamAuthError`, any other failed status → `UpstreamHttpError`.
 What the executor declines itself — an unknown tool, a zone that is not
-resolved, a malformed identifier, the record guard below — is an `isError`
-result (`ExecutorRefusal` in `src/execute.ts`): nothing failed at
+resolved, an argument the tool does not declare, a malformed identifier,
+the record guard below — is an `isError` result (the SDK's
+`ExecutorRefusal`, thrown inside the executor and turned into the result at
+its entry point ; the unknown tool is answered directly): nothing failed at
 Cloudflare, so the audit entry carries no `upstream_error`.
 
 Three guards beyond routing :
@@ -210,9 +229,10 @@ Three guards beyond routing :
   is refused before any call, as an `isError` result (`record_id: missing or
 malformed identifier`, `zone_id: malformed zone id`).
 
-Discovery : `GET /zones` paginated, 50 per page, stops at
-`result_info.total_pages` or at `MAX_DISCOVERED_ZONES` (500). An answer
-whose `result` is not a list fails discovery.
+Discovery : `GET /zones` paginated, 50 per page, stops at a page shorter than 50, at
+`result_info.total_pages` (the current page when the answer carries none) or at
+`MAX_DISCOVERED_ZONES` (500). An answer whose `result` is neither a list nor absent
+fails discovery ; an absent or `null` `result` is an empty page.
 
 ## How to debug
 
@@ -236,6 +256,9 @@ whose `result` is not a list fails discovery.
 - **`record_id: malformed identifier`** / **`zone_id: malformed zone id`**
   — the identifier is not a single path-safe segment (letters, digits, `_`,
   `-`, at most 64 characters). Cloudflare ids are 32 hex characters.
+- **`<name>: not an argument of 'cloudflare_dns__…'`** — the call carries
+  an argument the tool's schema does not declare. Remove it ; to support it,
+  declare it in `tools.ts` and decide how it is classified.
 - **`list_zones` returns fewer zones than the dashboard** — expected : only
   the mission's zones are returned.
 - **Discovery ends with `UpstreamAuthError 401`** — the token is invalid or
@@ -243,8 +266,9 @@ whose `result` is not a list fails discovery.
 
 ## Tests
 
-`npx vitest run plugins/cloudflare-dns` — 181 : `plugin.test.ts` (42 : kit,
-classifier zone resolution and record writes, execute including the
+`npx vitest run plugins/cloudflare-dns` — 189 : `plugin.test.ts` (50 : kit,
+classifier zone resolution and record writes, the undeclared arguments
+refused by `classify` and by `execute`, execute including the
 update / delete guard and the path-unsafe identifiers, discovery,
 credential, presets), `classify.test.ts` (33 : the per-tool security suite
 of `classifyCloudflareDns`, the deletion overlay, the identifiers that

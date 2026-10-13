@@ -18,6 +18,7 @@
  */
 
 import type { Octokit as OctokitType } from '@octokit/rest';
+import { ExecutorRefusal } from '@vaubaan/plugin-sdk';
 
 import { branchName, type GithubCall, type MINT_TOOL, type RepoCall } from './call.ts';
 
@@ -311,7 +312,8 @@ async function assertPullRequestTargetsDeclaredBase(
     );
   }
   if (actual !== declared) {
-    throw new Error(
+    // Declined, not failed : the pull request is not the one the call was classified on.
+    throw new ExecutorRefusal(
       `github__merge_pull_request: pull request #${pullNumber} targets '${actual}', not the declared base '${declared}'. Call again with base '${actual}'.`,
     );
   }

@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   InvariantError,
+  TokenNotIssuableError,
   UnknownRiskIdError,
   type MissionPolicyEntry,
   type Store,
@@ -36,7 +37,13 @@ describe('missions repository', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    creator = (await store.users.upsertFromIdp({ subject: 'c', email: 'c@x' })).id;
+    creator = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'c',
+        email: 'c@x',
+      })
+    ).id;
     connection = (
       await store.connections.create({
         provider: 'github',
@@ -193,7 +200,13 @@ describe('missions repository', () => {
 
   it('issues one active token per member; a member rotating retires their own token only', async () => {
     const m = await create();
-    const bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'b@x' })).id;
+    const bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'b@x',
+      })
+    ).id;
     await store.missions.addMember({ missionId: m.id, userId: bob, addedBy: creator });
 
     const first = await issue(m.id, 'vbn_live_aaaa', member(creator));
@@ -255,7 +268,9 @@ describe('missions repository', () => {
   it('a name identifies one active named token: a second one is refused, and nothing is retired', async () => {
     const m = await create();
     await issue(m.id, 'p-ci', named('CI runner'));
-    await expect(issue(m.id, 'p-ci-2', named('CI runner'))).rejects.toBeInstanceOf(InvariantError);
+    await expect(issue(m.id, 'p-ci-2', named('CI runner'))).rejects.toBeInstanceOf(
+      TokenNotIssuableError,
+    );
     expect((await store.missions.findTokenByPrefix('p-ci'))?.token.status).toBe('active');
     expect(await store.missions.findTokenByPrefix('p-ci-2')).toBeNull();
     // Another mission may use the same name.
@@ -338,8 +353,20 @@ describe('missions repository', () => {
 
   it('adds, lists and removes members; the creator is never a row', async () => {
     const m = await create();
-    const bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'b@x' })).id;
-    const carol = (await store.users.upsertFromIdp({ subject: 'k', email: 'k@x' })).id;
+    const bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'b@x',
+      })
+    ).id;
+    const carol = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'k',
+        email: 'k@x',
+      })
+    ).id;
     expect(await store.missions.listMembers(m.id)).toEqual([]);
     await expect(
       store.missions.addMember({ missionId: m.id, userId: creator, addedBy: creator }),
@@ -351,11 +378,15 @@ describe('missions repository', () => {
       addedBy: creator,
     });
     expect(added).toEqual({
-      missionId: m.id,
-      userId: bob,
-      addedBy: creator,
-      addedAt: t.clock.now().toISOString(),
-      removedAt: null,
+      member: {
+        missionId: m.id,
+        userId: bob,
+        addedBy: creator,
+        addedAt: t.clock.now().toISOString(),
+        removedAt: null,
+      },
+      // A member starts with no token, and there was none to revoke.
+      tokenRevoked: null,
     });
     t.clock.advance(1000);
     await store.missions.addMember({ missionId: m.id, userId: carol, addedBy: creator });
@@ -368,7 +399,13 @@ describe('missions repository', () => {
 
   it('removing a member revokes their token in the same step, and only theirs', async () => {
     const m = await create();
-    const bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'b@x' })).id;
+    const bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'b@x',
+      })
+    ).id;
     await store.missions.addMember({ missionId: m.id, userId: bob, addedBy: creator });
     const mine = await issue(m.id, 'p-mine', member(creator));
     const bobs = await issue(m.id, 'p-bob', member(bob));
@@ -393,14 +430,101 @@ describe('missions repository', () => {
       userId: bob,
       addedBy: creator,
     });
-    expect(again).toMatchObject({ removedAt: null, addedAt: t.clock.now().toISOString() });
+    expect(again.member).toMatchObject({ removedAt: null, addedAt: t.clock.now().toISOString() });
+    expect(again.tokenRevoked).toBeNull();
     expect((await store.missions.getToken(bobs.token.id))?.status).toBe('revoked');
     const removedAgain = await store.missions.removeMember(m.id, bob);
     expect(removedAgain?.tokenRevoked).toBeNull();
   });
 
+  it('a token is inserted only for a mission that serves and a holder who is on it, checked in the insert', async () => {
+    const m = await create();
+    const user = async (subject: string): Promise<string> =>
+      (
+        await store.users.upsertFromIdp({
+          issuer: 'http://idp.test',
+          subject,
+          email: `${subject}@x`,
+        })
+      ).id;
+    const bob = await user('bob');
+    const refusal = async (run: Promise<unknown>): Promise<string> => {
+      try {
+        await run;
+      } catch (err) {
+        if (err instanceof TokenNotIssuableError) return err.reason;
+        throw err;
+      }
+      return 'issued';
+    };
+    const tokensOf = async (): Promise<number> => (await store.missions.listTokens(m.id)).length;
+
+    // Never added.
+    expect(await refusal(issue(m.id, 'p-1', member(bob)))).toBe('holder-not-a-member');
+    // Added, then removed.
+    await store.missions.addMember({ missionId: m.id, userId: bob, addedBy: creator });
+    await store.missions.removeMember(m.id, bob);
+    expect(await refusal(issue(m.id, 'p-2', member(bob)))).toBe('holder-not-a-member');
+    // A member again, then deactivated by an operator.
+    await store.missions.addMember({ missionId: m.id, userId: bob, addedBy: creator });
+    await store.users.markRemoved(bob);
+    expect(await refusal(issue(m.id, 'p-3', member(bob)))).toBe('holder-not-a-member');
+    // A user the instance does not know.
+    expect(await refusal(issue(m.id, 'p-4', member('ghost')))).toBe('holder-not-a-member');
+    expect(await tokensOf()).toBe(0);
+
+    // Reactivated and still a member: issued. The creator needs no row.
+    await store.users.reactivate(bob);
+    expect(await refusal(issue(m.id, 'p-5', member(bob)))).toBe('issued');
+    expect(await refusal(issue(m.id, 'p-6', member(creator)))).toBe('issued');
+    // A name a working token carries.
+    expect(await refusal(issue(m.id, 'p-7', { kind: 'named', name: 'ci' }))).toBe('issued');
+    expect(await refusal(issue(m.id, 'p-8', { kind: 'named', name: 'ci' }))).toBe('name-taken');
+
+    // The mission no longer serves: nobody gets a token, the creator included.
+    await store.missions.setStatus(m.id, 'revoked');
+    for (const holder of [
+      member(bob),
+      member(creator),
+      { kind: 'named', name: 'other' } as const,
+    ]) {
+      expect(await refusal(issue(m.id, 'p-9', holder))).toBe('mission-not-active');
+    }
+    expect(await tokensOf()).toBe(3);
+  });
+
+  it('adding a member revokes a working token of theirs that predates the membership', async () => {
+    const m = await create();
+    const bob = (
+      await store.users.upsertFromIdp({ issuer: 'http://idp.test', subject: 'b', email: 'b@x' })
+    ).id;
+    // A row no current path writes: a working member token of somebody who is not a member.
+    store.db
+      .prepare(
+        `INSERT INTO mission_tokens (id, mission_id, prefix, hash, hash_alg, status, kind,
+           holder_user_id, name, created_by, created_at)
+         VALUES ('stale', ?, 'p-stale', 'h', 'argon2id', 'active', 'member', ?, NULL, ?, ?)`,
+      )
+      .run(m.id, bob, bob, t.clock.now().toISOString());
+
+    const added = await store.missions.addMember({
+      missionId: m.id,
+      userId: bob,
+      addedBy: creator,
+    });
+
+    expect(added.tokenRevoked).toMatchObject({ id: 'stale', status: 'revoked' });
+    expect((await store.missions.getToken('stale'))?.status).toBe('revoked');
+  });
+
   it('revokes the member tokens of a user on the missions they did not create, and leaves their own missions alone', async () => {
-    const bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'b@x' })).id;
+    const bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'b@x',
+      })
+    ).id;
     const shared = await create({ name: 'Shared with Bob' });
     const other = await create({ name: 'Also shared' });
     const bobsOwn = await create({ name: 'Bob created this', creatorUserId: bob });

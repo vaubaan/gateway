@@ -434,10 +434,14 @@ function issuesOf(
  * risk is acceptable in, refuses the call (`risk-not-accepted`), whatever the
  * mission accepts. Nothing to say when the plugin derives the environment
  * from the call itself, or when the catalog has no env-scoped risk.
+ *
+ * The sentence names a resource as the pages do, by its display name; the
+ * refs are in `resource_refs`, for whoever reads the notice as data.
  */
 export function envNotices(
   connection: Pick<IssuanceConnection, 'risks' | 'derives_env' | 'display_name' | 'provider_label'>,
-  selected: readonly Pick<IssuanceResource, 'ref' | 'env'>[],
+  selected: readonly (Pick<IssuanceResource, 'ref' | 'env'> &
+    Partial<Pick<IssuanceResource, 'display_name'>>)[],
   passes: readonly Pick<MissionPolicyEntry, 'risk_id'>[],
   where: Where,
 ): PreviewNotice[] {
@@ -454,12 +458,13 @@ export function envNotices(
   const remedy = `Label the resource on the connection's page (${list(envs)}) or leave it out.`;
 
   const notices: PreviewNotice[] = [];
-  const unlabelled = selected.filter((r) => r.env === null).map((r) => r.ref);
+  const called = (r: (typeof selected)[number]): string => r.display_name || r.ref;
+  const unlabelled = selected.filter((r) => r.env === null);
   if (unlabelled.length > 0) {
     notices.push({
       code: 'resource-without-env',
-      message: `No environment label on ${list(unlabelled)} ("${name}"). ${consequence} ${remedy}`,
-      resource_refs: unlabelled,
+      message: `No environment label on ${list(unlabelled.map(called))} ("${name}"). ${consequence} ${remedy}`,
+      resource_refs: unlabelled.map((r) => r.ref),
       risk_ids: accepted,
       ...where,
     });
@@ -468,7 +473,7 @@ export function envNotices(
   if (foreign.length > 0) {
     notices.push({
       code: 'resource-env-not-in-catalog',
-      message: `${list(foreign.map((r) => `${r.ref} (labelled "${r.env}")`))} on "${name}": no ${connection.provider_label} risk is acceptable in that environment. ${consequence} ${remedy}`,
+      message: `${list(foreign.map((r) => `${called(r)} (labelled "${r.env}")`))} on "${name}": no ${connection.provider_label} risk is acceptable in that environment. ${consequence} ${remedy}`,
       resource_refs: foreign.map((r) => r.ref),
       risk_ids: accepted,
       ...where,

@@ -40,6 +40,7 @@ import {
   type RefusalWording,
 } from '../auth';
 import type { RateLimiter } from '../compose/ports';
+import type { BuildInfo } from '../config/build-info';
 import type { OAuthConfig } from '../config/types';
 import type { Logger } from '../logging';
 import { EXECUTION_DOOR_PATH } from '../missions';
@@ -65,7 +66,13 @@ import {
   slowDown,
   type OAuthErrorCode,
 } from './errors';
-import { CONSENT_FIELD, consentPage, DECISION_FIELD, messagePage } from './pages';
+import {
+  CONSENT_FIELD,
+  consentPage as renderConsentPage,
+  DECISION_FIELD,
+  messagePage as renderMessagePage,
+  type ConsentView,
+} from './pages';
 import { redirectDestination } from './redirect-uri';
 import { clientCredentialsOf, type TokenService } from './token-service';
 
@@ -132,6 +139,8 @@ export interface OAuthHandlerDeps {
   readonly tokens: TokenService;
   readonly delegations: DelegationService;
   readonly logger: Logger;
+  /** The running build, shown in the footer of the pages rendered here. */
+  readonly build?: BuildInfo;
 }
 
 export interface OAuthHandlers {
@@ -266,6 +275,11 @@ export function executionResourceMetadataResponse(
 
 export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
   const { endpoints, logger } = deps;
+  // Every page of the authorization endpoint carries the build footer.
+  const messagePage = (status: number, title: string, message: string): Response =>
+    renderMessagePage(status, title, message, deps.build);
+  const consentPage = (view: ConsentView): Response =>
+    renderConsentPage({ ...view, build: deps.build });
 
   /** `null` when the request may go on, else the 429 that stops it. */
   async function limited(key: string, limit: number, windowMs: number): Promise<Response | null> {

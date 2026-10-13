@@ -43,19 +43,19 @@ import type { AuthoritySubject } from '../authority';
 import type { MissionState } from '../budget';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
-import { InvariantError } from '../store/errors';
+import { TokenNotIssuableError } from '../store/errors';
 import { toIso, type Clock } from '../store/clock';
 import type { MissionRecord, MissionTokenRecord, UserRecord } from '../store/types';
 import type { BootstrapKit } from './bootstrap-kit';
 import type { MissionAccess, MissionRole, MissionService, RevealedToken } from './mission-service';
 import { mintMissionToken, type TokenMinter } from './token';
-import { issueTokenTo } from './token-issuer';
+import { issueTokenTo, type IssuedSecret } from './token-issuer';
 import { parseTokenName } from './token-name';
 
 export interface MissionTeamDeps {
   readonly store: Pick<Store, 'missions' | 'users' | 'sessions' | 'auditWriter'>;
   /** Who may read a mission, its state at this instant, and its kit. */
-  readonly missions: Pick<MissionService, 'access' | 'stateOf' | 'kitOf'>;
+  readonly missions: Pick<MissionService, 'access' | 'stateOf' | 'stateAfterRefusal' | 'kitOf'>;
   readonly clock: Clock;
   readonly logger: Logger;
   /** Tests inject a deterministic minter; production hashes with argon2id. */
@@ -163,7 +163,12 @@ export type RevokeTokenResult =
   | { readonly ok: true; readonly token_id: string; readonly already: boolean }
   | NotFound;
 
-/** Why one token was revoked on its own, as the audit entry says it. */
+/**
+ * Why one token was revoked on its own, as the audit entry says it. `member-removed`
+ * is the token of somebody who was not a member when it was found working (revoked
+ * as they are added again); the token a removal revokes is recorded on the
+ * `mission-member-removed` entry itself.
+ */
 type RevocationReason = 'by-holder' | 'by-creator' | 'member-removed' | 'holder-deactivated';
 
 export class MissionTeamService {
@@ -260,7 +265,7 @@ export class MissionTeamService {
     const existing = await this.deps.store.missions.getMember(mission.id, member.id);
     if (existing && existing.removedAt === null) return { ok: false, reason: 'already-member' };
 
-    const added = await this.deps.store.missions.addMember({
+    const { member: added, tokenRevoked } = await this.deps.store.missions.addMember({
       missionId: mission.id,
       userId: member.id,
       addedBy: user.id,
@@ -269,6 +274,12 @@ export class MissionTeamService {
       member_user_id: member.id,
       member_email: member.email,
     });
+    // A member starts with no token: a working row that predated this membership was
+    // revoked by the store with the same write, and is recorded like any revocation.
+    if (tokenRevoked) {
+      await this.auditRevocation(user.id, tokenRevoked, 'member-removed');
+      await this.recordRevocation(mission.id, user.id, tokenRevoked);
+    }
     this.deps.logger.info('mission member added', {
       mission_id: mission.id,
       member_user_id: member.id,
@@ -337,10 +348,18 @@ export class MissionTeamService {
     const state = await this.deps.missions.stateOf(mission);
     if (state.kind !== 'active') return { ok: false, reason: 'inactive', state: state.kind };
 
-    const issued = await issueTokenTo(
-      { missions: this.deps.store.missions, mint: this.mint },
-      { missionId: mission.id, holder: { kind: 'member', userId: user.id }, createdBy: user.id },
-    );
+    let issued: IssuedSecret;
+    try {
+      issued = await issueTokenTo(
+        { missions: this.deps.store.missions, mint: this.mint },
+        { missionId: mission.id, holder: { kind: 'member', userId: user.id }, createdBy: user.id },
+      );
+    } catch (err) {
+      // Removed, deactivated, or the mission revoked, while the hash was computed: the
+      // store refused the insert, and the answer is what `access` would say now.
+      if (!(err instanceof TokenNotIssuableError)) throw err;
+      return this.notIssued(mission.id, err);
+    }
     const previous = issued.replaced;
     await this.audit(
       user.id,
@@ -386,7 +405,7 @@ export class MissionTeamService {
     if (state.kind !== 'active') return { ok: false, reason: 'inactive', state: state.kind };
     if (await this.activeNamed(mission.id, name.value)) return { ok: false, reason: 'name-taken' };
 
-    let issued;
+    let issued: IssuedSecret;
     try {
       issued = await issueTokenTo(
         { missions: this.deps.store.missions, mint: this.mint },
@@ -397,9 +416,10 @@ export class MissionTeamService {
         },
       );
     } catch (err) {
+      if (!(err instanceof TokenNotIssuableError)) throw err;
       // Two creations of one name at the same instant: the store kept one.
-      if (err instanceof InvariantError) return { ok: false, reason: 'name-taken' };
-      throw err;
+      if (err.reason === 'name-taken') return { ok: false, reason: 'name-taken' };
+      return this.notIssued(mission.id, err);
     }
     await this.audit(user.id, 'mission-token-issued', mission.id, null, {
       token_prefix: issued.prefix,
@@ -485,6 +505,19 @@ export class MissionTeamService {
   // ───────────────────────────────────────────────────────────────────────────
   // Internals
   // ───────────────────────────────────────────────────────────────────────────
+
+  /** What the caller is told when the store refused the insert (`TokenNotIssuableError`). */
+  private async notIssued(
+    missionId: string,
+    refusal: TokenNotIssuableError,
+  ): Promise<NotFound | Inactive> {
+    if (refusal.reason !== 'mission-not-active') return { ok: false, reason: 'not-found' };
+    return {
+      ok: false,
+      reason: 'inactive',
+      state: await this.deps.missions.stateAfterRefusal(missionId),
+    };
+  }
 
   /** The mission when `user` created it; `null` for anyone else, a member included. */
   private async creatorMission(

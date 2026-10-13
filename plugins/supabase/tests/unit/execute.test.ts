@@ -451,3 +451,79 @@ describe('executeSupabase — the target project is resolved like the classifier
     expect((call.json as { query: string }).query).toContain("in ('app')");
   });
 });
+
+describe('executeSupabase — the body is built from declared arguments only', () => {
+  const refusal = (tool: string, name: string): string =>
+    `${name}: not an argument of '${tool}' — nothing classifies it, so it is not sent.`;
+
+  test.each<[string, Record<string, unknown>, string]>([
+    // Real fields of the provider's API that no rule of the classifier reads.
+    [
+      'supabase__deploy_function',
+      { slug: 'api', entrypoint_path: 'index.ts', static_patterns: ['*'] },
+      'static_patterns',
+    ],
+    ['supabase__create_user', { email: 'a@example.com', password_hash: 'x' }, 'password_hash'],
+    [
+      'supabase__update_user',
+      { user_id: '6f1c2a3e-9b7d-4c5a-8e21-0d3f4a5b6c7d', role: 'service_role' },
+      'role',
+    ],
+    ['supabase__create_bucket', { id: 'avatars', owner: 'x' }, 'owner'],
+    ['supabase__execute_sql', { query: 'select 1', read_only: false }, 'read_only'],
+  ])('%s %j is refused, and nothing is sent', async (tool, args, name) => {
+    const fetch = mockFetch([]);
+    const result = await supabasePlugin.execute(execCtx(fetch), tool, {
+      project_ref: REF,
+      ...args,
+    });
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toContain(refusal(tool, name));
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('upload_object without content, or with content that is not base64 text, is refused before any request', async () => {
+    for (const content_base64 of [
+      undefined,
+      null,
+      42,
+      { toString: () => 'AA==' },
+      ['AA=='],
+      'not base64!',
+      'A',
+    ]) {
+      const fetch = mockFetch([]);
+      const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__upload_object', {
+        project_ref: REF,
+        bucket: 'avatars',
+        path: 'logo.png',
+        upsert: true,
+        content_base64,
+      });
+      expect(result.isError, String(content_base64)).toBe(true);
+      expect((result.content[0] as { text: string }).text).toContain(
+        'content_base64: missing or malformed.',
+      );
+      expect(fetch.calls).toHaveLength(0);
+    }
+  });
+
+  test('upload_object sends the decoded bytes of a base64 text, padded or not, empty included', async () => {
+    for (const [content_base64, bytes] of [
+      ['aGVsbG8=', 'hello'],
+      ['aGVsbG8', 'hello'],
+      ['', ''],
+    ] as const) {
+      const { call } = await runData(
+        {
+          method: 'POST',
+          url: /\/storage\/v1\/object\/avatars\/logo\.png$/,
+          body: { Key: 'avatars/logo.png' },
+        },
+        'supabase__upload_object',
+        { bucket: 'avatars', path: 'logo.png', content_base64 },
+      );
+      expect(call.body ?? '').toBe(bytes);
+    }
+  });
+});

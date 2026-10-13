@@ -152,16 +152,16 @@ parentheses, plain redirections (`>`, `>>`, `>|`, `&>`, `<`, `<>`, `>&file`),
 descriptor duplications (`2>&1`, `>&-`), `$name` and `${name}`. Everything else
 is named in `opaque` rather than guessed:
 
-| Reason                | Construct                                                                                                                        |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `substitution`        | `$(…)`, backticks, `<(…)`, `>(…)`, `$[…]`                                                                                        |
-| `ansi-c-quoting`      | `$'…'`, `$"…"`                                                                                                                   |
-| `here-document`       | `<<`, `<<-`, `<<<`                                                                                                               |
-| `parameter-expansion` | a `${…}` holding more than a name and a plain operator                                                                           |
-| `control-character`   | any C0 control character but tab and newline, DEL (a shell does not treat them as blanks)                                        |
-| `line-continuation`   | a backslash-newline glued to a token or inside double quotes (the shell deletes it first, so `$\<newline>'…'` is ANSI-C quoting) |
-| `redirection`         | `<&word`, and `>&` followed by anything but a whole descriptor (`>&2file`; bash reads `>&--rf` as `>&-` then `-rf`)              |
-| `malformed`           | an unterminated quote or `${`, a trailing backslash, a redirection without a target                                              |
+| Reason                | Construct                                                                                                                                                                                                       |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `substitution`        | `$(…)`, backticks, `<(…)`, `>(…)`, `$[…]`                                                                                                                                                                       |
+| `ansi-c-quoting`      | `$'…'`, `$"…"`                                                                                                                                                                                                  |
+| `here-document`       | `<<`, `<<-`, `<<<`                                                                                                                                                                                              |
+| `parameter-expansion` | a `${…}` holding more than a name and a plain operator                                                                                                                                                          |
+| `control-character`   | any C0 control character but tab and newline, DEL (a shell does not treat them as blanks)                                                                                                                       |
+| `line-continuation`   | a backslash-newline glued to a token or inside double quotes (the shell deletes it first, so `$\<newline>'…'` is ANSI-C quoting)                                                                                |
+| `redirection`         | `<&word`; `>&` followed by a descriptor that is not the whole word (`>&2file`); `>&` or `<&` followed by `-` and more text (bash reads `>&--rf` as `>&-` then `-rf`). `>&file` is a plain redirection to a file |
+| `malformed`           | an unterminated quote or `${`, a trailing backslash, a redirection without a target                                                                                                                             |
 
 The lexer was checked against `bash` with a differential fuzzer (random lines
 over the shell's special characters, a `command_not_found_handle` recording
@@ -197,6 +197,8 @@ not a command on the line:
 | `another-host`     | `systemctl -H` / `-M` / `--root`, a container client with a global option (`docker -H`), `rsync -e`                                                                                            |
 | `container-exec`   | `docker` / `podman` / `nerdctl` `exec` or `run`, `compose exec` / `run`, `kubectl exec`                                                                                                        |
 | `unseen-arguments` | arguments that are not on the line (`$X`, a brace, `xargs`) for a command whose arguments decide its sight: `systemctl`, `docker`, `find`, `tar`, `npm`…                                       |
+| `wrapper-option`   | a wrapper carrying an option its table does not list (`sudo -i`, `env -S`), or an option written with an expansion, a glob or a brace                                                          |
+| `wrapper-depth`    | more than 12 wrappers nested in front of the command (`MAX_WRAPPER_DEPTH`)                                                                                                                     |
 
 For other commands, arguments that are not on the line give the classes the
 command could reach: `rm $FLAGS` and `… | xargs rm` are `destructive`,
@@ -225,20 +227,20 @@ the quotes removed: every argument must be a known option, the value of a
 known option, or an operand of the expected shape. There is no prefix
 matching.
 
-| Command                                              | Accepted                                                                                                                                                                                                                                              |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `journalctl`                                         | filtering and output options (`-u`, `-n`, `-p`, `-b`, `-f`, `-k`, `-g`, `-o`, `--since`, `--until`, `--no-pager`…), matches (`FIELD=value`). Not `--vacuum-*`, `--rotate`, `--flush`, `--sync`, `--setup-keys`, `--cursor-file`, `-D`, `--file`, `-M` |
-| `cat <path>`, `md5sum <file>`, `stat <file>`         | exactly one operand, no option                                                                                                                                                                                                                        |
-| `ls`                                                 | option clusters and at most one path                                                                                                                                                                                                                  |
-| `tail`, `head`                                       | option clusters with their counts and exactly one file (`tail -n 50` alone reads stdin and would hang)                                                                                                                                                |
-| `grep`                                               | its matching, output and context options; a recursive `grep` adds `secret-file` unless every path is under `/var/log`                                                                                                                                 |
-| `pgrep`                                              | its selection options and one pattern                                                                                                                                                                                                                 |
-| `ps`, `df`, `free`                                   | at most one option cluster                                                                                                                                                                                                                            |
-| `uptime`, `who`                                      | no argument                                                                                                                                                                                                                                           |
-| `ss -tlnp`                                           | exactly that                                                                                                                                                                                                                                          |
-| `docker ps`, `docker logs <c>`, `docker inspect <c>` | their long options (`--all`, `--format`, `--tail`, `--since`…); `docker inspect` adds `secret-file` (it prints the container environment)                                                                                                             |
-| `systemctl status \| is-active \| list-units`        | the verb first, then `--no-pager`, `-l`, `-n`, `-o`, `--type`, `--state`, `--failed`…, unit names. Not `-H`, `-M`, `--root`                                                                                                                           |
-| `sudo` + `journalctl`, `systemctl …`, `ss -tlnp`     | `sudo` with no option                                                                                                                                                                                                                                 |
+| Command                                              | Accepted                                                                                                                                                                                                                                                                                      |
+| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `journalctl`                                         | filtering and output options (`-u`, `-n`, `-p`, `-b`, `-f`, `-k`, `-g`, `-o`, `--since`, `--until`, `--no-pager`…), matches (`FIELD=value`). Not `--vacuum-*`, `--rotate`, `--flush`, `--sync`, `--setup-keys`, `--cursor-file`, `-D`, `--file`, `-M`                                         |
+| `cat <path>`, `md5sum <file>`, `stat <file>`         | exactly one operand, no option                                                                                                                                                                                                                                                                |
+| `ls`                                                 | option clusters and at most one path                                                                                                                                                                                                                                                          |
+| `tail`, `head`                                       | option clusters with their counts and exactly one file (`tail -n 50` alone reads stdin and would hang)                                                                                                                                                                                        |
+| `grep`                                               | its matching, output and context options; a recursive `grep` adds `secret-file` unless every path is under `/var/log`                                                                                                                                                                         |
+| `pgrep`                                              | its selection options and at most one pattern; at least one argument                                                                                                                                                                                                                          |
+| `ps`, `df`, `free`                                   | at most one option cluster                                                                                                                                                                                                                                                                    |
+| `uptime`, `who`                                      | no argument                                                                                                                                                                                                                                                                                   |
+| `ss -tlnp`                                           | exactly that                                                                                                                                                                                                                                                                                  |
+| `docker ps`, `docker logs <c>`, `docker inspect <c>` | `docker ps`: long options only (`--all`, `--format`, `--filter`…), no operand; `docker logs`: long options (`--tail`, `--since`, `--follow`…) and exactly one container; `docker inspect`: exactly one operand and no option, and it adds `secret-file` (it prints the container environment) |
+| `systemctl status \| is-active \| list-units`        | the verb first, then `--no-pager`, `-l`, `-n`, `-o`, `--type`, `--state`, `--failed`…, unit names. Not `-H`, `-M`, `--root`                                                                                                                                                                   |
+| `sudo` + `journalctl`, `systemctl …`, `ss -tlnp`     | `sudo` with no option                                                                                                                                                                                                                                                                         |
 
 A command is eligible only when the shell passes it exactly what the line
 says: the command word is the bare name (`/bin/ls` and `./ls` are writes), no
@@ -256,12 +258,16 @@ of the path does not matter:
 
 - a directory `.ssh`, `.aws`, `.gnupg`, `.kube`, `.docker` anywhere
   (`.ssh/id_ed25519`, `/home/u//.ssh/x`, `~/.aws/credentials`);
-- a file `.env*`, `id_rsa*` / `id_ed25519*`, `*.pem`, `*.key`, `*.p12`,
-  `ssh_host_*_key`, `authorized_keys`, `shadow`, `gshadow`, `passwd`,
-  `sudoers*`, `.netrc`, `.pgpass`, `.npmrc`, `.git-credentials`, `environ`;
-- `/root`, `~root`, `/etc/ssl/private`, `/proc/…/mem`, and anything under
-  `/dev` but `null`, `zero`, `random`, `stdin`… (a disk, memory, or bash's
-  `/dev/tcp/<host>/<port>`);
+- a file `.env*`, `id_rsa*` / `id_dsa*` / `id_ecdsa*` / `id_ed25519*`, `*.pem`,
+  `*.key`, `*.p12`, `*.pfx`, `*.kdbx`, `ssh_host_*_key`, `authorized_keys`
+  (and `authorized_keys2`), `shadow`, `gshadow`, `passwd`, `sudoers` (each
+  also with a `.` or `-` suffix : `shadow-`, `sudoers.d`), `.netrc`,
+  `.pgpass`, `.npmrc`, `.pypirc`, `.git-credentials`, `.htpasswd`, `.my.cnf`,
+  `environ`;
+- `/root`, `~root`, `/etc/ssl/private`, `/proc/…/mem` (and `kcore`, `kmem`),
+  and anything under `/dev` but `null`, `zero`, `full`, `random`, `urandom`,
+  `stdin`, `stdout`, `stderr`, `tty` and `/dev/fd/<n>` (a disk, memory, or
+  bash's `/dev/tcp/<host>/<port>`);
 - a path that cannot be seen: a `..` segment (resolving it would need the
   symlinks), an expansion (`$HOME/…`, `$FILE`), a brace, a glob that can match
   one of the names above (`/etc/shad?w`, `certs/*.pem`, `/srv/app/*`).
@@ -276,7 +282,8 @@ not a proof: a credential kept in `config.yml` is not on it.
 (`exec-read`, `exec-read-secret-files`, `exec-write`, `uncategorized-write`);
 four added (`exec-destructive`, `exec-package-install`, `exec-service-control`,
 `exec-sudo`). Write risks: `acceptable_in_envs: [dev, staging, prod]`;
-`exec-write` and `exec-destructive` escalate `data` / `cost` on `prod`,
+`exec-write` and `exec-destructive` escalate `data` / `cost` on `prod`
+(`exec-write` also becomes `reversibility: irreversible` there),
 `exec-service-control` becomes `visibility: public` on `prod`. Reads are
 account-scoped (the same read is the same risk on every host).
 
@@ -445,7 +452,9 @@ design is in [`bash-provider.md`](../legacy/bash-provider.md). Until then
   credential name (`/srv/app/*`), or the line uses `xargs`, a recursive
   `grep` outside `/var/log`, or `docker inspect`. Name the path literally.
 - **`host '…' is not a host of this mission`** — the agent named a ref that
-  is not among the mission's selected resources, or used `user@host`.
+  is not among the mission's selected resources. A value that is not a
+  hostname or an IPv4 address (`user@host`, `host:22`) is refused earlier,
+  with `host: malformed ref`.
 
 ## References
 

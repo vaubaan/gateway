@@ -33,9 +33,11 @@
  *     denied, never escaped. `execute` resolves the call with the same
  *     `resolveTarget` and `readVariableWrite`, and sends the ids they return :
  *     what is classified is what is sent.
- *   - `serviceId` and `deploymentId` are checked for their shape only :
- *     discovery stores the environments of a project, not its services or
- *     deployments, so the classifier cannot tell which project owns them.
+ *   - `deploymentId` is checked for its shape only : discovery stores the
+ *     environments and the services of a project, not its deployments, so
+ *     nothing here can tell which project owns one. A `serviceId` is bound
+ *     to the project from the services discovery stored (`servicesOf`,
+ *     `readService`, through `resolveTarget`), here and in `execute`.
  *
  * Crucial cases :
  *   1. Variable writes emit `service-var[K1,K2,…].W`, which matches
@@ -53,7 +55,16 @@
  *      project.
  */
 
-import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
+import {
+  declaredArgumentsOf,
+  undeclaredArgumentDenial,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+  type SliceSegment,
+} from '@vaubaan/plugin-sdk';
+
+import { railwayTools } from './tools.ts';
 
 export const PROVIDER = 'railway';
 
@@ -159,13 +170,33 @@ export function isProjectScopedTool(tool: string): boolean {
 // Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
+const DECLARED_ARGUMENTS = declaredArgumentsOf(railwayTools);
+/** Checked by `resolveTarget` ; `execute` writes it again where the tool takes it and drops it elsewhere. */
+const ROUTING_ARGUMENTS: ReadonlySet<string> = new Set(['projectId']);
+
+/**
+ * The refusal for an argument `tool` does not declare, `null` when there is none :
+ * the one rule `classify` and `execute` both apply, so neither side sends what the
+ * other never read.
+ */
+export function undeclaredArgument(
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): string | null {
+  return undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args, ROUTING_ARGUMENTS);
+}
+
 export function classifyRailway(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ClassifyOutcome {
-  const kind = TOOL_KIND[tool];
+  const kind = Object.hasOwn(TOOL_KIND, tool) ? TOOL_KIND[tool] : undefined;
   if (!kind) return { denied: `unknown railway tool '${tool}'.` };
+  // The rewrapped tools forward their arguments whole: one the schema does not
+  // declare is refused here rather than left to the upstream schema to reject.
+  const undeclared = undeclaredArgument(tool, args);
+  if (undeclared !== null) return { denied: undeclared };
 
   if (isAccountKind(kind)) return classifyAccountOnly(kind);
 
@@ -201,7 +232,12 @@ export const AMBIGUOUS_RAILWAY_TARGET = 'ambiguous railway target: specify proje
 /**
  * What a project-scoped call runs on, as `classify` and `execute` both read
  * it. Every id went through `railwayId` ; `project` is a resource of the
- * mission and `environmentId`, when given, one of its discovered environments.
+ * mission, and `environmentId` and `serviceId`, when given, are one of its
+ * discovered environments and one of its discovered services.
+ *
+ * `deploymentId` is the exception : a deployment cannot be listed ahead of the
+ * call, so it is held to the id grammar only and Railway decides what the
+ * token may read of it (threat model, accepted risk A18).
  */
 export interface RailwayTarget {
   readonly project: Resource;
@@ -231,8 +267,9 @@ export function resolveTarget(
   const environment = readEnvironment(tool, args, project);
   if ('denied' in environment) return environment;
 
-  const serviceId = optionalId(args.serviceId, 'serviceId');
-  if (typeof serviceId === 'object' && serviceId !== null) return serviceId;
+  const service = readService(args, project);
+  if ('denied' in service) return service;
+  const serviceId = service.id;
   const deploymentId = optionalId(args.deploymentId, 'deploymentId');
   if (typeof deploymentId === 'object' && deploymentId !== null) return deploymentId;
 
@@ -267,6 +304,67 @@ export function environmentsOf(resource: Resource): readonly RailwayEnvironmentR
     }
   }
   return out;
+}
+
+/** `{ id, name }` pairs the discovery stores under `metadata.services`. */
+export interface RailwayServiceRef {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * The discovered services of a project resource ; `null` when the resource carries no
+ * list at all (it was discovered before services were recorded), which is not the same
+ * as a project with no service.
+ */
+export function servicesOf(resource: Resource): readonly RailwayServiceRef[] | null {
+  const raw = resource.metadata?.services;
+  if (!Array.isArray(raw)) return null;
+  const out: RailwayServiceRef[] = [];
+  for (const item of raw) {
+    if (
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as { id?: unknown }).id === 'string' &&
+      typeof (item as { name?: unknown }).name === 'string'
+    ) {
+      out.push({ id: (item as { id: string }).id, name: (item as { name: string }).name });
+    }
+  }
+  return out;
+}
+
+/**
+ * Read `serviceId` and bind it to the located project, as `readEnvironment` binds the
+ * environment. The id is sent upstream and the OAuth token reaches every project of
+ * the workspace : a service the project does not own would scope the call — a
+ * redeploy, a variable write, the upstream agent's context — outside the mission
+ * while the slice names the mission's project. `id` is `null` when the call names
+ * no service.
+ */
+function readService(
+  args: Readonly<Record<string, unknown>>,
+  project: Resource,
+): { readonly id: string | null } | Denial {
+  if (args.serviceId === undefined) return { id: null };
+  const serviceId = railwayId(args.serviceId);
+  if (serviceId === null) return { denied: 'serviceId: malformed ref.' };
+  const known = servicesOf(project);
+  if (known === null) {
+    return {
+      denied:
+        `serviceId: the services of railway project '${project.ref}' are unknown ; ` +
+        `ask the connection owner to refresh the resources of the connection.`,
+    };
+  }
+  if (!known.some((service) => service.id === serviceId)) {
+    return {
+      denied:
+        `serviceId: not a service of railway project '${project.ref}' as last discovered ; ` +
+        `a service created since then appears once the connection owner refreshes the resources.`,
+    };
+  }
+  return { id: serviceId };
 }
 
 /** The mission's Railway project the call targets : explicit, single, or found by environment. */

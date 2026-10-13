@@ -52,6 +52,7 @@ describe('missions: members and per-holder tokens', () => {
     seeded = await seedInstance(root);
     ({ ada, bob } = seeded);
     carol = await root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
       subject: 'idp|carol',
       email: 'carol@example.com',
     });
@@ -292,6 +293,24 @@ describe('missions: members and per-holder tokens', () => {
       expect(detail?.token?.prefix).toBe(second.token.prefix);
       expect(detail?.kit?.reveals_secret).toBe(false);
       expect(JSON.stringify(detail)).not.toContain(second.token.secret);
+    });
+
+    it('a creator who revoked their own token is issued one, by either way, under the same act', async () => {
+      const own = (await teamOf(ada)).tokens.find((t) => t.holder.label === ada.email);
+      expect(await team.revokeToken(ada, mission.id, own?.id ?? '')).toMatchObject({
+        already: false,
+      });
+      // "Rotate token" of the mission header: nothing is replaced, so it is an issue.
+      const viaRotate = await root.missions.service.rotate(ada, mission.id);
+      if (!viaRotate.ok) throw new Error('rotate refused');
+      expect((await adminActs()).at(-1)).toBe('mission-token-issued');
+
+      const again = (await teamOf(ada)).tokens.find((t) => t.holder.label === ada.email);
+      await team.revokeToken(ada, mission.id, again?.id ?? '');
+      // "Rotate my token" of the team section: the same act for the same situation.
+      const viaTeam = await team.generateToken(ada, mission.id);
+      if (!viaTeam.ok) throw new Error('generate refused');
+      expect((await adminActs()).at(-1)).toBe('mission-token-issued');
     });
 
     it('the creator rotating their own token leaves every other holder working', async () => {

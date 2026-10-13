@@ -16,7 +16,11 @@ describe('connection mapping', () => {
   afterEach(() => t.store.close());
 
   it('summarises a record as id, provider, display_name and status, and nothing else', async () => {
-    const user = await t.store.users.upsertFromIdp({ subject: 'a', email: 'alice@example.com' });
+    const user = await t.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'a',
+      email: 'alice@example.com',
+    });
     const record = await t.store.connections.create({
       provider: 'github',
       owner: { kind: 'user', id: user.id },
@@ -33,7 +37,11 @@ describe('connection mapping', () => {
   });
 
   it('names a user owner by email and a group owner by its name', async () => {
-    const user = await t.store.users.upsertFromIdp({ subject: 'a', email: 'alice@example.com' });
+    const user = await t.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'a',
+      email: 'alice@example.com',
+    });
     const group = await t.store.groups.getOrCreate('platform', 'idp');
 
     expect(await connectionOwnerOf(t.store, { owner: { kind: 'user', id: user.id } })).toEqual({

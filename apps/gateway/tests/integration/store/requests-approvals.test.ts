@@ -29,8 +29,20 @@ describe('requests repository', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    creator = (await store.users.upsertFromIdp({ subject: 'c', email: 'c@x' })).id;
-    other = (await store.users.upsertFromIdp({ subject: 'o', email: 'o@x' })).id;
+    creator = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'c',
+        email: 'c@x',
+      })
+    ).id;
+    other = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'o',
+        email: 'o@x',
+      })
+    ).id;
     const connection = await store.connections.create({
       provider: 'github',
       owner: { kind: 'user', id: creator },
@@ -179,7 +191,13 @@ describe('approvals repository', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    const creator = (await store.users.upsertFromIdp({ subject: 'c', email: 'c@x' })).id;
+    const creator = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'c',
+        email: 'c@x',
+      })
+    ).id;
     const connection = await store.connections.create({
       provider: 'github',
       owner: { kind: 'user', id: creator },

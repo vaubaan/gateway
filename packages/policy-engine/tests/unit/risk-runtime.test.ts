@@ -182,6 +182,60 @@ describe('evaluateCall — denied paths', () => {
     }
   });
 
+  test.each([
+    ['a glob in an identifier', 'github.repo[foo].branch[feature/*].file[a.ts].W'],
+    ['a glob in the middle of an identifier', 'github.repo[foo].branch[ma*n].W'],
+    ['a glob in a list entry', 'github.repo[foo].branch[fix/x,feature/*].file[a.ts].W'],
+    ['a star as a list entry', 'github.repo[foo].branch[main,*].W'],
+  ])('an executed slice with %s is refused, whatever the mission accepts', (_what, raw) => {
+    // What a call does is concrete. A classifier that means "any identifier" emits `[*]`
+    // or `[**]` whole; a `*` inside an identifier can only be a caller's value passed
+    // through, and reading it as a glob would price the call on what it happens to match.
+    const d = evaluateCall({
+      executed_slices: [parseSlice(raw)],
+      token_accepted_risks: new Set(catalog.risks.map((r) => r.id)),
+      catalog: idx,
+    });
+    expect(d.outcome).toBe('denied');
+    if (d.outcome !== 'denied') return;
+    expect(d.code).toBe('risk-not-accepted');
+    expect(d.missing_risks).toEqual([]);
+    expect(d.hint).toContain("'*' inside an identifier");
+  });
+
+  test('the whole-segment wildcards a classifier emits for "any" still pass', () => {
+    for (const raw of [
+      'github.repo[foo].file[*].R',
+      'github.repo[foo].file[**].R',
+      'github.repo[*].file[a.ts].R',
+    ]) {
+      const d = evaluateCall({
+        executed_slices: [parseSlice(raw)],
+        token_accepted_risks: new Set(['github.read-code']),
+        catalog: idx,
+      });
+      expect(d.outcome, raw).toBe('allowed');
+    }
+    // `{ kind: 'ident', value: '*' }`, the "any identifier" placeholder of the shipped classifiers.
+    const d = evaluateCall({
+      executed_slices: [
+        {
+          provider: 'github',
+          action: 'R',
+          path: [
+            { kind: 'name', value: 'repo' },
+            { kind: 'ident', value: 'foo' },
+            { kind: 'name', value: 'file' },
+            { kind: 'ident', value: '*' },
+          ],
+        },
+      ],
+      token_accepted_risks: new Set(['github.read-code']),
+      catalog: idx,
+    });
+    expect(d.outcome).toBe('allowed');
+  });
+
   test('no risk in catalog matches the slice → deny', () => {
     const otherCatalog: RiskCatalog = { provider: 'github', risks: [] };
     const d = evaluateCall({

@@ -10,9 +10,6 @@ test-results
 .vercel
 package-lock.json
 
-# Spec is read-only from the coding kind (cf. AGENTS.md §3, CLAUDE.md).
-docs/spec/
-
 # Build orchestrator artifacts.
 .build/
 BUILD_PROGRESS.md

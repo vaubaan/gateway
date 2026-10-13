@@ -16,6 +16,7 @@ import {
   Field,
   Input,
   Select,
+  Slug,
   Stack,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
@@ -73,7 +74,11 @@ function OwnerlessCard({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{connection.displayName}</CardTitle>
+        <CardTitle>
+          <Slug kind="connection" mono={false}>
+            {connection.displayName}
+          </Slug>
+        </CardTitle>
         <span className={styles.badges}>
           <span>{view.providerLabel}</span>
           <StateBadge status={connection.status} />

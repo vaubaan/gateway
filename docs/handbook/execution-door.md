@@ -11,6 +11,7 @@ tracks:
   - apps/gateway/src/server/compose/root.ts
   - apps/gateway/tests/integration/execution/
   - apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts
+  - apps/gateway/tests/unit/structural/manifest.ts
   - apps/gateway/tests/manual/seed-demo.ts
   - apps/gateway/tests/manual/streaming-check.ts
   - packages/gateway-core/src/pipeline.ts
@@ -39,7 +40,8 @@ credentials, surface rate limit, no secret in logs), §7.5, §8 (audit).
 Decisions:
 [docker-image-and-config-format](../decisions/docker-image-and-config-format.md)
 §6 (MCP SDK v2, stateless Streamable HTTP),
-[upstream-credential-cache-and-rejected-credentials](../decisions/upstream-credential-cache-and-rejected-credentials.md).
+[upstream-credential-cache-and-rejected-credentials](../decisions/upstream-credential-cache-and-rejected-credentials.md),
+[decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md).
 Built on [gateway-core](gateway-core.md) (pipeline, refusals),
 [budget and sessions](budget-and-sessions.md) (`createBudgetStage`),
 [connections](connections.md) (`CredentialBroker`), [missions](missions.md)
@@ -51,7 +53,7 @@ Built on [gateway-core](gateway-core.md) (pipeline, refusals),
 
 ```
 apps/gateway/src/server/execution/      host-agnostic, never imports `next`
-  index.ts            createExecutionModule(deps) → root.execution { pipeline, credentialCache, tokens, door, handlers }
+  index.ts            createExecutionModule(deps) → root.execution { pipeline, credentialCache, tokens, door, handlers }; the log line of a failed decision stage
   door.ts             ExecutionDoor: handleMcp(), handleCatalog(); admission, MCP serving
   token-verifier.ts   TokenVerifier — verified-token cache (sliding), throttle per prefix and client address, single flight
   mission-context.ts  loadMissionContext(), missionResourceOf(), periodOf()
@@ -307,6 +309,35 @@ holder (`{ id, prefix, holder }`):
 `mission-inactive` and `connection-unavailable` (a connection already `expired`
 or `revoked`) come from the pipeline's own pure checks.
 
+**A decision stage that throws refuses the call, and the refusal is
+audited.** The resource, risk and budget stages (`DECISION_STAGES` in
+gateway-core's `pipeline.ts`) each run inside `CallPipeline.attempt`. A stage
+that throws — a classifier that is not total, a store failure under the
+budget — has decided nothing: the outcome is `rejected`, nothing is counted,
+nothing is sent upstream, and the call's audit entry is written on what the
+earlier stages filled (no target when the resource stage failed, the touched
+risks when the budget stage did), with `decision: 'refused'` and no
+`refusal_code`. The reason is `stageFailureReason(stage, thrown)`, built from
+the stage and the class name of what was thrown, never from its message, which
+can quote the arguments:
+
+```
+Vaubaan could not decide this call: the risk stage failed (TypeError). The call was refused and nothing was executed; the operator finds the error in the instance log.
+```
+
+The agent reads that sentence (`-32602`) and the audit stores the same one. The
+thrown value goes to `CallPipelineDeps.onStageError(stage, error, call)`,
+which `createExecutionModule` wires to one `error` line, `call refused: a
+decision stage failed` (component `execution-door`), carrying `stage`, `tool`,
+`error_class` and `stack_frames` (the first 12 `at …` lines of the stack). The
+message is left out of the log too: no log line carries an argument. An
+observer that throws changes nothing, and a failure of the audit write itself
+still propagates, as for any call. The upstream stage is not part of this: a
+provider failure has its own path (below). Structural invariant
+**[inv: every-refused-call-audited]**
+(`tests/unit/structural/manifest.ts`); ADR
+[decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md).
+
 **Before any stage: the arguments must be JSON values.** `CallPipeline.execute`
 first asks gateway-core's `unfaithfulArgument(call.args)` for a non-finite
 number (`1e999` in the request body parses to `Infinity`, which canonical
@@ -347,7 +378,9 @@ The refusal carries `cited_ref`, `connection { id, name }` and
 `allowed_resources [{ ref, env, display_name }]`. A ref the connection has
 never discovered is indistinguishable from a malformed argument: the call is
 rejected with the classifier's sentence, not with the typed refusal. A
-classifier that throws is treated as a denial.
+classifier that throws is read here as a denial whose text is not kept: the
+stage passes with `resource: null`, the risk stage runs the classifier again,
+and that throw is the stage failure described above.
 
 ### Risk stage (`risk-stage.ts`)
 
@@ -365,6 +398,17 @@ as `production`, or a risk only acceptable in `staging` touched on `prod` —
 environments it is acceptable in). The risk is never dropped from
 `risks_touched`: a broader co-touched risk does not carry the call alone. The
 remedy is the owner's: label the resource on the connection page.
+
+Two more cases have no environment, and so refuse every env-scoped risk the
+call touches: a slice that cites several resources of the mission whose
+labels differ, an unlabelled one included (every identifier and list value is compared, not
+the first one only), and a slice for which the plugin's `envOf` answers
+`NO_SINGLE_ENV` (the call names a wildcard or a list where one environment
+is expected; the owner's label does not stand in for it). And a slice that
+carries a `*` inside an identifier or a list value is refused
+`risk-not-accepted` whatever the policy: a slice names what the call touches,
+the whole identifier `*` being the only way to say "any" (handbook
+[policy-engine](policy-engine.md)).
 
 ### Scope caps: not enforced (`scope-caps.ts`)
 
@@ -430,9 +474,10 @@ The stage only sees a provider failure the plugin **throws**. The plugin
 contract says so ([plugin-sdk](plugin-sdk.md), "Errors of `execute`"): 401/403
 as `UpstreamAuthError`, another failed status as `UpstreamHttpError`, a
 network failure as it comes. A result with `isError: true` is the executor
-declining the call itself (an unknown tool, an argument it cannot read, a
-target outside the mission): it is an `allowed` outcome with no
-`upstream_error`, handed to the agent untouched. All ten shipped plugins
+declining the call itself (an unknown tool, an argument it cannot read or
+that the tool does not declare, a target outside the mission) — the SDK's
+`ExecutorRefusal`, turned into that result by `declining()`: it is an
+`allowed` outcome with no `upstream_error`, handed to the agent untouched. All ten shipped plugins
 follow the rule since the Phase 2 cycle-end (`vercel` and `upstash-redis`
 used to return provider failures as results; `cloudflare-dns` used to throw
 its own refusals).
@@ -485,8 +530,9 @@ so the transport serializes it untouched (`refusalError` in `door.ts`).
 `tools/list` on an inactive mission is the same error with `mission-inactive`.
 
 One log line per call (`tools/call`, component `execution-door`): mission id,
-token prefix, tool, outcome, refusal code, `arguments_hash`, agent label. Never
-an argument, never the bearer.
+token prefix, token kind, holder label (the member's email or the token's
+name), tool, outcome, refusal code, `arguments_hash`, agent label. Never an
+argument, never the bearer.
 
 ### Audit entry
 
@@ -498,7 +544,24 @@ holders" above). Fields filled by the door:
 that also binds approvals, so an `approval-required` refusal's `fingerprint`
 equals the entry's hash. The entry of a call rejected for a non-finite number
 keeps that canonical hash (the value reads `null` there), with
-`decision: 'refused'` and no `refusal_code`. The creator's view of an approval request reads the
+`decision: 'refused'` and no `refusal_code`.
+
+**The stored reason of a rejection is not always the sentence the agent
+read.** `refusal_reason` of a `rejected` call is chosen at each call site of
+the pipeline, and bounded at `AUDIT_REASON_MAX_LENGTH` (500 characters):
+
+| Rejection                                               | The agent reads             | The audit stores                                                                                                    |
+| ------------------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| a plugin's denial, or the resource stage's own sentence | the sentence                | `auditReason(reason, args)`: every argument value of 3 characters or more found verbatim in it becomes `[argument]` |
+| an argument JSON cannot carry                           | the sentence, with the path | the same without the path, whose names the caller chose (`an argument is Infinity: …`)                              |
+| a missing catalog, a decision stage that threw          | the sentence                | the same sentence: the host built it from what it knows, nothing of the call                                        |
+
+A string or a finite number of fewer than 3 characters, a boolean, and a
+value the plugin quoted in another form (lower-cased, encoded, truncated)
+are not recognised and stay. The hint of a typed refusal is stored as it is:
+it names the cited resource ref, as the entry's `resource_ref` does.
+
+The creator's view of an approval request reads the
 slices and the touched risks of the call from this entry, found by mission,
 tool and that hash; the entry of the approved replay carries `approval_id`.
 
@@ -740,7 +803,7 @@ whose provider the mission both holds a connection for and accepts at least one
 risk of (`callableProviders`). The filter is per provider: a listed tool can
 still be refused `risk-not-accepted` at call time.
 
-`GET /mcp/catalog` (mission token; 401 / 403 / 429 as `/mcp`; an inactive
+`GET /mcp/catalog` (mission token; 405 with `Allow: GET` for another method; 401 / 403 / 429 as `/mcp`; an inactive
 mission is 403 `mission-inactive`), `Cache-Control: no-store`:
 
 ```jsonc
@@ -1010,11 +1073,14 @@ plugin streams), and a run behind a proxy other than Caddy.
   restores every token.
 - `src/server/http/client-ip.test.ts` (11) — the client-address rule and
   `isTrustedProxyEntry`.
-- `tests/integration/execution/pipeline.test.ts` (23) — allowed call
+- `tests/integration/execution/pipeline.test.ts` (24) — allowed call
   (decrement, audit entry, credential to the plugin only, env-qualified risk,
   agent label), each refusal with its fields (among them `mission-inactive`
   for a mission orphaned by a revoked connection), stale / hidden /
-  never-hydrated resources, structural rejections, upstream failure (the
+  never-hydrated resources, structural rejections, a classifier that throws
+  (refused `-32602` naming the risk stage and the error class, one audit
+  entry, nothing counted, one `error` log line, and the text of the error in
+  none of the three), upstream failure (the
   host-built summary in the audit, the detail to the agent, the HTTP status
   of a client error), 401 → refresh → retry, rejected refresh → `expired`,
   403, credential cache.
@@ -1060,10 +1126,15 @@ plugin streams), and a run behind a proxy other than Caddy.
   calls per seed (three seeds) through the door, then
   `countersAgreeWithAudit` with no mismatch; a concurrent burst on a small
   quota.
-- `packages/gateway-core/tests/unit/pipeline.test.ts` (28) — `UpstreamRefusalError`,
+- `packages/gateway-core/tests/unit/pipeline.test.ts` (38) — `UpstreamRefusalError`,
   `UpstreamFailureError` (summary to the audit, detail to the outcome, the
   bound), the structural rejection of the resource stage, an argument JSON
-  cannot carry rejected before any stage;
+  cannot carry rejected before any stage, the audit copy of a classifier's
+  denial (argument values replaced in one pass, as text, bounded), a stage
+  that throws before the decision (the classifier, the resource stage, the
+  budget stage: audited, nothing forwarded, no message kept; a thrown value
+  that is not an error; an observer that throws; the audit write of that
+  refusal failing still propagates);
   `plugins/github/tests/unit/token-cache.test.ts` (5).
 
 Scenarios in [integration-tests](../tests/integration-tests.md).
@@ -1092,9 +1163,14 @@ Scenarios in [integration-tests](../tests/integration-tests.md).
 - **`Vaubaan rejected the call: …`** (`-32602`) — no refusal code: the tool is
   unknown, its provider has no connection in the mission, or the classifier
   could not place the arguments. The sentence is the classifier's. The audit
-  row has `refusal_code` null and the same sentence in `refusal_reason`.
+  row has `refusal_code` null and the sentence in `refusal_reason`, with
+  `[argument]` where it quoted a value of the call.
   `argument '<path>' is Infinity: arguments must be JSON values` is the
   pipeline's own: the client sent a number JSON has no text for (`1e999`).
+  `Vaubaan could not decide this call: the <stage> stage failed (<class>)`
+  is a fault of the instance, not of the call: the log has `call refused: a
+decision stage failed` at `error` with the stage, the tool, the error
+  class and the stack frames.
 - **`resource-not-in-mission` for a resource the mission selected** — it went
   stale: the last discovery no longer returned it (Connections page, "Refresh
   discovery").
@@ -1160,6 +1236,8 @@ textParts(response.body))`, or call `ctx.emitPart` yourself and await it.
   [api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md),
   [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md),
   [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md),
+  [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md),
+  [plugin-arguments-closed-surface-and-typed-refusals](../decisions/plugin-arguments-closed-surface-and-typed-refusals.md),
   [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
   (amendment "Streamed results"); the agent label is in
   [atomic-budget-accounting](../decisions/atomic-budget-accounting.md)

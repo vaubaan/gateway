@@ -38,7 +38,7 @@
 # Risk count : 10 named risks + 1 fallback.
 
 provider: upstash-redis
-catalog_version: 3
+catalog_version: 4
 catalog_date: 2026-10-13
 
 risks:
@@ -86,10 +86,14 @@ risks:
       tools or the generic `execute` tool. An overwrite replaces the
       previous value, which is lost unless it is kept elsewhere ; a RENAME
       replaces the destination key. Affects application state if the app
-      reads from Redis at runtime. Removing data is not part of this risk :
-      deletions, FLUSH and arbitrary commands fire it next to their own,
-      more severe risk, so a mission accepting `write-data` alone can
-      neither delete nor flush.
+      reads from Redis at runtime. The deletion commands (DEL, UNLINK, the
+      POP and REM families, an expiry at an absolute instant), FLUSH and
+      arbitrary commands fire it next to their own, more severe risk, so a
+      mission accepting `write-data` alone cannot run them. It can still
+      make a key go away without them : a positive TTL (EXPIRE, SET … EX)
+      removes the key when it elapses, and RENAME, LMOVE or SMOVE take a
+      key or an element out of its source — as an overwrite already
+      destroys a value.
     matches: 'upstash-redis.database[**].key-space[**].W'
     vector:
       reversibility: reversible

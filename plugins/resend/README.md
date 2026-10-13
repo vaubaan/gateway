@@ -8,7 +8,10 @@ one per segment**, so a mission can send from the staging domain freely and
 touch the production domain or the customer segment under budget and
 approval.
 
-Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
+Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md);
+what the executor declines:
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
+Plugin version 0.3.0, catalog version 3.
 Modelling handbook: [`docs/handbook/providers/resend.md`](../../docs/handbook/providers/resend.md).
 Provider spec (domain, zones, catalog rationale): [`docs/spec/resend.md`](../../docs/spec/resend.md).
 Contributor guide: [`plugins/README.md`](../README.md).
@@ -71,26 +74,28 @@ each resource. A host that re-runs discovery must preserve those edits.
 e.g. `notifications.acme.com`); segment, membership and broadcast tools take
 `segment_id`. Sends take the domain from `from`.
 
-Reads (9): `get_email`, `list_domains`, `get_domain`, `list_segments`,
+Reads (10): `get_email`, `list_domains`, `get_domain`, `list_segments`,
 `get_segment`, `list_contacts`, `get_contact`, `list_broadcasts`,
-`get_broadcast`.
+`get_broadcast`, `describe_zones` (synthetic: returns the zone configuration
+of the mission's domains, without calling Resend).
 
-Writes (18): `send_email`, `send_batch_emails`, `create_domain`,
+Writes (17): `send_email`, `send_batch_emails`, `create_domain`,
 `update_domain`, `delete_domain`, `verify_domain`, `create_segment`,
 `delete_segment`, `create_contact`, `update_contact`, `delete_contact`,
 `add_contact_to_segment`, `remove_contact_from_segment`, `create_broadcast`,
-`update_broadcast`, `send_broadcast`, `delete_broadcast`, `describe_zones`
-(synthetic: returns the zone configuration of the mission's domains).
+`update_broadcast`, `send_broadcast`, `delete_broadcast`.
 
 Rules the classifier enforces, all `denied` (audited, never executed):
 
 - a `from` whose domain is not a sending domain of the mission (sends and
   broadcasts), a malformed recipient, a send without recipient;
 - `attachments` (anything but an empty list, a non-array value included),
-  `scheduled_at`, and `send: true` on a broadcast create or update — out of
-  scope in v1, and the latter would bypass `broadcast-send`;
+  `scheduled_at`, and any `send` on a broadcast create or update,
+  `send: false` as well as `send: true` — out of scope in v1: `true` would bypass
+  `broadcast-send`, and an argument that does nothing is not accepted;
 - a `headers` entry naming an envelope field (`To`, `Cc`, `Bcc`, `From`,
-  `Sender`, `Reply-To`, `Return-Path`, `Resent-*`; case-insensitive), a
+  `Sender`, `Reply-To`, `Return-Path`, `Resent-To` / `-Cc` / `-Bcc` /
+  `-From` / `-Sender`; case-insensitive), a
   malformed header name, a value that is not a single-line string — the
   zone is computed from `from`, `to`, `cc` and `bcc` only;
 - a batch with no email or more than 100;
@@ -110,14 +115,23 @@ A single send classifies to one slice, `domain[D].to-zone[Z].W`, whatever
 its number of recipients; a batch adds `domain[D].recipient-count[batch].W`
 per sending domain. No tool emits a slice that reaches the fallback.
 
-`execute` re-runs the classifier before any call, and every broadcast call
-first reads the broadcast upstream and refuses one that targets another
-segment than the one named. List tools return only the mission's domains,
-segments and the broadcasts of those segments. Only the fields a tool
-declares in its `inputSchema` are forwarded to Resend: an undeclared
-argument (`audience_id`, a template id, …) is dropped, because no classifier
+`execute` re-runs the classifier before any call, and a broadcast call that
+names an `id` (get, update, send, delete) first reads the broadcast upstream
+and declines one that targets another segment than the one named.
+`list_domains`, `list_segments` and `list_broadcasts` return only the
+mission's domains, segments and the broadcasts of those segments;
+`list_contacts` is not filtered (contacts are account-level). Only the
+fields a tool declares in its `inputSchema` are forwarded to Resend: the
+request is built field by field, so an undeclared argument (`audience_id`, a
+template id, …) is never read — ignored, not refused — because no classifier
 rule read it. To expose a new Resend field, declare it in `tools.ts` and
 decide how it is classified.
+
+What `execute` declines itself — whatever the classifier denies, a malformed
+id, a broadcast of another segment — is an `isError` result carrying the
+reason (`ExecutorRefusal` under the SDK's `declining`), not a thrown error:
+the audit records no upstream failure for it. What Resend fails is thrown
+(`UpstreamAuthError`, `UpstreamHttpError`).
 
 ## Catalog
 
@@ -175,12 +189,14 @@ evaluates each one call by call). Values are a starting point — ADR
 
 ## Tests
 
-`npx vitest run plugins/resend` — 161 tests: the SDK kit
+`npx vitest run plugins/resend` — 232 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage` with no fallback hit,
 `assertNoWildcard`, `assertPresetsValid`), the classifier (cross-cutting
-rules in `plugin.test.ts`, one scenario per tool in `classify.test.ts`),
+rules in `plugin.test.ts`, scenarios per tool in `classify.test.ts`),
 `execute` and `discoverResources` against `mockFetch`, the credential spec
-and presets, catalog invariants, the data model, and whole decisions through
+and presets, catalog invariants, the identifier grammars fed hostile values
+on both sides (`identifiers.test.ts`), address parsing, the data model, and
+whole decisions through
 the real catalog and the engine (`mission-evaluation.test.ts`: external
 sends per domain label, each preset call by call). No test ever calls
 Resend.

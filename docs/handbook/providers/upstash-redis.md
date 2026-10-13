@@ -16,8 +16,8 @@ tracks:
 
 # Upstash Redis provider — plugin and risk model
 
-`@vaubaan/plugin-upstash-redis` (`plugins/upstash-redis`), written against the
-Plugin SDK. Spec: [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md)
+`@vaubaan/plugin-upstash-redis` (`plugins/upstash-redis`, version 2.0.1),
+written against the Plugin SDK. Spec: [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md)
 §5 (plugins), §3.2 (presets); [`gateway-risk-model.md`](../../spec/gateway-risk-model.md)
 §2, §4, §7. ADR: [[plugin-contract-and-credential-spec]]. Contributor guide:
 [`plugins/upstash-redis/README.md`](../../../plugins/upstash-redis/README.md).
@@ -121,15 +121,15 @@ catch-all. Every command belongs to exactly one class; the six sets are
 exported from `classify.ts`, and a verb listed in two of them fails the
 import (that is, the gateway boot).
 
-| Class       | Set                 | Marker     | Risk touched (next to `write-data` for every write) | What is in it                                                                                                                                                 |
-| ----------- | ------------------- | ---------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read`      | `KNOWN_READS`       | —          | `read-data`                                         | Commands that change nothing: GET, MGET, SCAN, HGETALL, LRANGE, ZRANGE, XRANGE, JSON.GET, INFO, PING…                                                         |
-| `write`     | `KNOWN_WRITES`      | —          | `write-data`                                        | Create, overwrite, modify: SET, MSET, INCR, HSET, LPUSH, SADD, ZADD, RENAME, PERSIST, EXPIRE with a positive TTL, XADD, JSON.SET…                             |
-| `delete`    | `KNOWN_DELETES`     | `.delete`  | `delete-data`                                       | Remove keys, fields, members or entries: DEL, UNLINK, GETDEL, HDEL, LPOP, RPOP, LREM, LTRIM, SREM, SPOP, ZREM, ZPOPMIN, XDEL, XTRIM, JSON.DEL…                |
-| `flush`     | `KNOWN_DESTRUCTIVE` | `.flush`   | `flush-database`                                    | FLUSHDB, FLUSHALL.                                                                                                                                            |
-| `arbitrary` | `KNOWN_ARBITRARY`   | `.execute` | `execute-arbitrary`                                 | Code and sequences the classifier does not see: EVAL, EVALSHA, FCALL, FUNCTION, SCRIPT, MODULE, and transaction control alone (MULTI, EXEC, DISCARD, WATCH…). |
-| `admin`     | `KNOWN_ADMIN`       | `.execute` | `execute-arbitrary`                                 | Server, connection and replication administration: CONFIG, ACL, CLIENT, DEBUG, SHUTDOWN, REPLICAOF, SWAPDB, MIGRATE, SELECT…                                  |
-| (unknown)   | none                | `.execute` | `execute-arbitrary`                                 | Any verb the table does not hold, and any `command` that is not one readable command.                                                                         |
+| Class       | Set                 | Marker     | Risk touched (next to `write-data` for every write)           | What is in it                                                                                                                                                 |
+| ----------- | ------------------- | ---------- | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`      | `KNOWN_READS`       | —          | `read-data` (next to `read-database-metadata`, as every read) | Commands that change nothing: GET, MGET, SCAN, HGETALL, LRANGE, ZRANGE, XRANGE, JSON.GET, INFO, PING…                                                         |
+| `write`     | `KNOWN_WRITES`      | —          | `write-data`                                                  | Create, overwrite, modify: SET, MSET, INCR, HSET, LPUSH, SADD, ZADD, RENAME, PERSIST, EXPIRE with a positive TTL, XADD, JSON.SET…                             |
+| `delete`    | `KNOWN_DELETES`     | `.delete`  | `delete-data`                                                 | Remove keys, fields, members or entries: DEL, UNLINK, GETDEL, HDEL, LPOP, RPOP, LREM, LTRIM, SREM, SPOP, ZREM, ZPOPMIN, XDEL, XTRIM, JSON.DEL…                |
+| `flush`     | `KNOWN_DESTRUCTIVE` | `.flush`   | `flush-database`                                              | FLUSHDB, FLUSHALL.                                                                                                                                            |
+| `arbitrary` | `KNOWN_ARBITRARY`   | `.execute` | `execute-arbitrary`                                           | Code and sequences the classifier does not see: EVAL, EVALSHA, FCALL, FUNCTION, SCRIPT, MODULE, and transaction control alone (MULTI, EXEC, DISCARD, WATCH…). |
+| `admin`     | `KNOWN_ADMIN`       | `.execute` | `execute-arbitrary`                                           | Server, connection and replication administration: CONFIG, ACL, CLIENT, DEBUG, SHUTDOWN, REPLICAOF, SWAPDB, MIGRATE, SELECT…                                  |
+| (unknown)   | none                | `.execute` | `execute-arbitrary`                                           | Any verb the table does not hold, and any `command` that is not one readable command.                                                                         |
 
 Edge cases, all on the severe side:
 
@@ -169,13 +169,25 @@ Edge cases, all on the severe side:
   environment accepts everything a Redis command can do there. The `operator`
   preset therefore gates it like FLUSH (`approval` outside `development`).
 
-## 3. Catalog and presets (`src/risk-catalog.yaml`, v2)
+## 3. Catalog and presets (`src/risk-catalog.yaml`, v4)
 
 Risk ids are stable and never renamed. `write-data` (`key-space[**].W`) is
-deliberately broad: deletions, FLUSH and arbitrary commands fire it next to
-their own, more severe risk, so a mission accepting `write-data` alone can
-neither delete nor flush, and a deletion needs both `write-data` and
-`delete-data`.
+deliberately broad: the deletion commands (DEL, UNLINK, the POP and REM
+families, an expiry at an absolute instant), FLUSH and arbitrary commands
+fire it next to their own, more severe risk, so a mission accepting
+`write-data` alone cannot run them, and a deletion needs both `write-data`
+and `delete-data`. `write-data` alone can still make a key go away without
+those commands, and the catalog entry says so: a positive TTL (EXPIRE,
+`SET … EX`) removes the key when it elapses, and RENAME, LMOVE or SMOVE
+take a key or an element out of its source — as an overwrite already
+destroys a value.
+
+Ten named risks and the fallback: `read-database-metadata`, `read-stats`,
+`read-data`, `write-data`, `delete-data`, `flush-database`, `execute-arbitrary`,
+`create-database`, `delete-database`, `modify-database`, and
+`uncategorized-write`. `read-database-metadata` (`upstash-redis.[**].R`) is the
+read baseline: every read of the provider fires it, so a key read needs it next
+to `read-data`, and `get_database_stats` needs it next to `read-stats`.
 
 - **Every write risk is env-scoped** (`acceptable_in_envs: [development,
 staging, prod]`) except `create-database`, which is account-rooted (the
@@ -203,9 +215,21 @@ staging, prod]`) except `create-database`, which is account-rooted (the
 
 - Management API base `https://api.upstash.com/v2`, HTTP Basic auth built
   from the two credential fields (`basicAuthHeader`).
-- Data tools first read `GET /v2/redis/database/{id}` for `rest_url` and
-  `rest_token`, then `POST {rest_url}` the command as a JSON array with
-  `Authorization: Bearer <rest_token>`. The token is never returned.
+- Data tools first read `GET /v2/redis/database/{id}` for `rest_url` (or,
+  when it is absent, `endpoint`) and `rest_token`, then `POST` the command as
+  a JSON array with `Authorization: Bearer <rest_token>`. The token is never
+  returned.
+- **The REST endpoint is pinned to Upstash.** The database token is posted
+  there, so the answer of the Management API is not trusted to choose the
+  destination: `restEndpointOf(named)` rebuilds `https://<label>.upstash.io`
+  (`UPSTASH_REST_HOST_SUFFIX`) from the label alone. What the API names may
+  be a URL, a host or a bare slug; a URL must be `https`, with no port, no
+  userinfo, no path, no query and no fragment, and the label must be one DNS
+  label (lowercase letters, digits, inner hyphens, 63 characters at most).
+  Anything else — another host, `http`, a port, a path — is `null`: the
+  executor throws "the Management API named a host that is not an Upstash
+  REST endpoint (expected `https://<name>.upstash.io`); the call was not
+  sent", and the token goes nowhere.
 - `execute` sends the command exactly as the classifier read it
   (`redisCommandOf`): one flat command. A pipeline-shaped or otherwise
   unreadable `command` is an `isError` result before any network call — no
@@ -216,14 +240,16 @@ staging, prod]`) except `create-database`, which is account-rooted (the
   a `databaseId` that is not one path segment or not a mission resource, or
   a data tool on a mission holding several databases without `databaseId`,
   is an `isError` result carrying the classifier's refusal, before any
-  network call, like every malformed argument (`ExecutorRefusal` in
-  `src/execute.ts`). A management tool acts on the database the call names:
+  network call, like every malformed argument (the SDK's `ExecutorRefusal`,
+  thrown inside the executor and turned into the result at its entry
+  point). A management tool acts on the database the call names:
   the mission's single database is not a default for it. A provider failure
   is **thrown**: 401/403 on either
   surface → `UpstreamAuthError` (the host treats a 401 as a rejected
   credential, a 403 as a failed call), any other failed status →
   `UpstreamHttpError` with the status, a database whose answer exposes no
-  REST endpoint or token → a plain `Error`, a network failure → as it comes.
+  REST endpoint or token, or names a REST host that is not Upstash's → a
+  plain `Error`, a network failure → as it comes.
   The host records it as `upstream_error` in the audit and tells the agent
   `Upstream error: …`; none of them is an `isError` result.
 - `discoverResources`: `GET /v2/redis/databases` (unpaged upstream, capped
@@ -239,7 +265,7 @@ refresh.
 
 ## 6. Tests
 
-`npx vitest run plugins/upstash-redis` — 271 tests: `plugin.test.ts` (26:
+`npx vitest run plugins/upstash-redis` — 293 tests: `plugin.test.ts` (26:
 SDK kit with samples for every tool, presets, classifier conventions, env
 resolution through `resourceEnvResolver`, credential spec, execute and
 discovery against `mockFetch`), `classify.test.ts` (30: the expected slice
@@ -250,9 +276,11 @@ against the same command through `execute`), `policy.test.ts` (24: the
 shipped catalog and presets through `evaluateCall` with the gateway's env
 resolver — refusal on an unlabelled or mislabelled database, what each
 preset allows and refuses), `risk-catalog.test.ts` (49: schema, pattern and
-per-tool coverage lint of the loaded catalog), `execute.test.ts` (11:
+per-tool coverage lint of the loaded catalog), `execute.test.ts` (33:
 request shapes of the management tools, the Redis commands of the data
-tools, refusal of a command that is not one readable command),
+tools, refusal of a command that is not one readable command, the REST
+endpoint pinned to `https://<label>.upstash.io` — the forms accepted and
+every other host, scheme, port or path refused with nothing sent),
 `identifiers.test.ts` (42: the grammar of a database ref, hostile refs fed
 to `classify` and to `execute` for every tool that names a database, keys
 and command words that stay in the JSON body), `data-model.test.ts` (1).
@@ -274,5 +302,11 @@ and command words that stay in the JSON body), `data-model.test.ts` (1).
   is not in the command table. Add it to exactly one set in `classify.ts`
   (`KNOWN_READS` only if no argument can make it write), add a row to
   `tests/unit/command-table.test.ts`, bump the plugin minor version.
+- **`the Management API named a host that is not an Upstash REST
+endpoint`** — the database answer carries a `rest_url` / `endpoint` outside
+  `https://<label>.upstash.io`. Nothing was sent. A regional or custom REST
+  domain Upstash introduces needs a change of `restEndpointOf`, with its
+  tests.
 - **`mockFetch: unexpected POST https://…upstash.io`** — the data route in
-  the test must match `rest_url` exactly as the database route returned it.
+  the test must match the pinned endpoint, `https://<label>.upstash.io`,
+  whatever form the database route returned.

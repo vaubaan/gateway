@@ -49,6 +49,7 @@ import {
   railwayId,
   readVariableWrite,
   resolveTarget,
+  undeclaredArgument,
 } from './classify.ts';
 import {
   CUSTOM_TOOL_NAMES,
@@ -400,6 +401,11 @@ export async function discoverRailwayResources(
             id: e.node.id,
             name: e.node.name,
           })),
+          // What a `serviceId` is bound to (`readService`) : always a list, empty included.
+          services: (node.services?.edges ?? []).map((e) => ({
+            id: e.node.id,
+            name: e.node.name,
+          })),
         },
       });
     }
@@ -417,6 +423,14 @@ const PROJECTS_QUERY = /* GraphQL */ `
           id
           name
           environments {
+            edges {
+              node {
+                id
+                name
+              }
+            }
+          }
+          services {
             edges {
               node {
                 id
@@ -443,6 +457,9 @@ interface ProjectsPage {
         readonly environments?: {
           readonly edges: ReadonlyArray<{ readonly node: { id: string; name: string } }>;
         } | null;
+        readonly services?: {
+          readonly edges: ReadonlyArray<{ readonly node: { id: string; name: string } }>;
+        } | null;
       };
     }>;
     readonly pageInfo?: { readonly hasNextPage: boolean; readonly endCursor: string | null } | null;
@@ -456,30 +473,34 @@ interface ProjectsPage {
  * call they deny is refused. Account-level tools name no resource of the
  * mission and are forwarded as received.
  *
- * A call that names no project the mission can resolve is thrown, as it
- * always was ; every other denial is a refusal the agent reads.
+ * Every denial is a refusal the agent reads, a call that names no project the
+ * mission can resolve included : nothing was sent, so nothing failed upstream.
  */
 function pinTarget(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): { readonly args: Readonly<Record<string, unknown>> } | { readonly refused: string } {
+  // The arguments are forwarded as given, pinned ids aside : only what the tool declares.
+  const undeclared = undeclaredArgument(tool, args);
+  if (undeclared !== null) return { refused: undeclared };
   if (!isProjectScopedTool(tool)) return { args };
 
   const target = resolveTarget(tool, args, resources);
   if ('denied' in target) {
     if (target.denied === NO_RAILWAY_PROJECT || target.denied === AMBIGUOUS_RAILWAY_TARGET) {
-      throw new Error(`projectId: argument required (${target.denied})`);
+      return { refused: `projectId: argument required (${target.denied})` };
     }
     return { refused: target.denied };
   }
   const write = readVariableWrite(tool, args);
   if (write !== null && 'denied' in write) return { refused: write.denied };
 
-  const out: Record<string, unknown> = { ...args };
-  if (TOOLS_TAKING_PROJECT_ID.has(tool) || args.projectId !== undefined) {
-    out.projectId = target.project.ref;
-  }
+  // `projectId` is the mission's, written where the tool takes one and dropped where it
+  // does not (the upstream schema of `accept-deploy` is closed and has no such property).
+  const { projectId: _given, ...rest } = args;
+  const out: Record<string, unknown> = { ...rest };
+  if (TOOLS_TAKING_PROJECT_ID.has(tool)) out.projectId = target.project.ref;
   if (target.environmentId !== null) out.environmentId = target.environmentId;
   if (target.serviceId !== null) out.serviceId = target.serviceId;
   if (target.deploymentId !== null) out.deploymentId = target.deploymentId;

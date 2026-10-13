@@ -15,6 +15,7 @@
  */
 import { randomBytes } from 'node:crypto';
 
+import type { BuildInfo } from '../config/build-info';
 import type { OAuthClientRecord } from '../store/types';
 import { MANAGEMENT_SCOPE } from './endpoints';
 import type { RedirectKind } from './redirect-uri';
@@ -51,9 +52,19 @@ code { font-family: ui-monospace, monospace; font-size: 0.875em; }
 .actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; }
 button { font: inherit; padding: 0.5rem 1.25rem; border-radius: 0.375rem; border: 1px solid color-mix(in srgb, currentColor 35%, transparent); background: transparent; color: inherit; cursor: pointer; }
 button.primary { background: #1d4ed8; border-color: #1d4ed8; color: #fff; }
+footer { margin-top: 2rem; font-size: 0.75rem; opacity: 0.7; text-align: center; }
 `;
 
-function document(status: number, title: string, body: string): Response {
+/**
+ * The build footer of the application's pages (`components/shell/BuildFooter`),
+ * for the documents rendered here: the same two stamps `/healthz` answers.
+ */
+function buildFooter(build: BuildInfo | undefined): string {
+  if (!build) return '';
+  return `<footer data-testid="build-footer">Vaubaan Gateway <span data-testid="gateway-version">${escapeHtml(build.version)}</span> · <span data-testid="gateway-commit">${escapeHtml(build.commit)}</span></footer>`;
+}
+
+function document(status: number, title: string, body: string, build?: BuildInfo): Response {
   const nonce = randomBytes(NONCE_BYTES).toString('base64');
   const html = `<!doctype html>
 <html lang="en">
@@ -64,7 +75,7 @@ function document(status: number, title: string, body: string): Response {
 <title>${escapeHtml(title)}</title>
 <style nonce="${nonce}">${STYLE}</style>
 </head>
-<body><main>${body}</main></body>
+<body><main>${body}${buildFooter(build)}</main></body>
 </html>
 `;
   return new Response(html, {
@@ -84,8 +95,18 @@ function document(status: number, title: string, body: string): Response {
 }
 
 /** A page with one title and one sentence: the request stops here. */
-export function messagePage(status: number, title: string, message: string): Response {
-  return document(status, title, `<h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>`);
+export function messagePage(
+  status: number,
+  title: string,
+  message: string,
+  build?: BuildInfo,
+): Response {
+  return document(
+    status,
+    title,
+    `<h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>`,
+    build,
+  );
 }
 
 export interface ConsentView {
@@ -97,6 +118,8 @@ export interface ConsentView {
   readonly destination: { readonly kind: RedirectKind; readonly label: string };
   /** The path the form posts to (`CONSENT_DECISION_PATH`). */
   readonly action: string;
+  /** The running build, for the footer; absent, the page has none. */
+  readonly build?: BuildInfo;
 }
 
 const DESTINATION_SENTENCE: Readonly<Record<RedirectKind, string>> = {
@@ -162,5 +185,5 @@ export function consentPage(view: ConsentView): Response {
 <button type="submit" name="${DECISION_FIELD}" value="approve" class="primary">Authorize</button>
 </div>
 </form>`;
-  return document(200, `Authorize ${client.name}`, body);
+  return document(200, `Authorize ${client.name}`, body, view.build);
 }

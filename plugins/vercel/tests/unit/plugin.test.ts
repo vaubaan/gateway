@@ -24,7 +24,7 @@ import {
   mockFetch,
   type RecordedCall,
 } from '@vaubaan/plugin-sdk/testing';
-import { envResolverFor } from '@vaubaan/policy-engine';
+import { envResolverFor, NO_SINGLE_ENV } from '@vaubaan/policy-engine';
 
 import {
   classifyVercel,
@@ -252,9 +252,14 @@ describe('classifyVercel — project resolution against mission resources', () =
       [app],
     );
     expect('denied' in refused ? refused.denied : null).toMatch(/^target: expected an array of/);
-    expect(slices('vercel__deploy_to_vercel', { target: 'preview' }, [app])).toEqual([
+    expect(slices('vercel__deploy_to_vercel', {}, [app])).toEqual([
       'vercel.project[prj_abc].env[prod].deployment.W',
     ]);
+    // The upstream deploy tool has no `target` : naming one is refused, never ignored.
+    expect(classifyVercel('vercel__deploy_to_vercel', { target: 'preview' }, [app])).toEqual({
+      denied:
+        "target: not an argument of 'vercel__deploy_to_vercel' — nothing classifies it, so it is not sent.",
+    });
   });
 
   test('emitted slices parse back (round-trip)', () => {
@@ -290,6 +295,29 @@ describe('vercelEnvOf — the environment a slice touches', () => {
     expect(resolver.resolveEnv(parseSlice('vercel.project[prj_abc].project-settings.W'))).toBe(
       'staging',
     );
+  });
+
+  test.each([
+    'vercel.project[prj_abc].env[*].env-var[K].W',
+    'vercel.project[prj_abc].env[**].W',
+    'vercel.project[prj_abc].env[prod,preview].env-var[K].W',
+    'vercel.project[prj_abc].env[prod*].env-var[K].W',
+    'vercel.project[prj_abc].env[staging].env-var[K].W',
+  ])(
+    '%s names no single environment of the triad: none is resolved, the label is not used',
+    (s) => {
+      expect(vercelEnvOf(parseSlice(s))).toBe(NO_SINGLE_ENV);
+      const labelledStaging: Resource = { ...app, env: 'staging' };
+      const resolver = envResolverFor([labelledStaging], vercelPlugin.envOf);
+      expect(resolver.resolveEnv(parseSlice(s))).toBeNull();
+    },
+  );
+
+  test('no slice the classifier emits names several environments', () => {
+    // `upsert_env_var` without a target reaches all three: one slice per environment.
+    const out = classifyVercel('vercel__upsert_env_var', { key: 'K', value: 'v' }, [app]);
+    if (!('slices' in out)) throw new Error('expected slices');
+    expect(out.slices.map((s) => vercelEnvOf(s))).not.toContain(NO_SINGLE_ENV);
   });
 });
 
@@ -408,7 +436,6 @@ describe('executeVercel with mockFetch', () => {
       key: 'K',
       value: 'v',
       target: ['preview'],
-      sneaky: 'dropped',
     });
     const call = fetch.calls[0]!;
     expect(call.url).toBe(
@@ -416,6 +443,32 @@ describe('executeVercel with mockFetch', () => {
     );
     expect(call.json).toEqual({ key: 'K', value: 'v', target: ['preview'] });
   });
+
+  test.each<[string, Record<string, unknown>]>([
+    ['vercel__upsert_env_var', { projectId: 'prj_abc', key: 'K', value: 'v', sneaky: 'x' }],
+    ['vercel__update_project_settings', { projectId: 'prj_abc', rootDirectory: 'app', sneaky: 1 }],
+    ['vercel__add_project_domain', { projectId: 'prj_abc', name: 'www.example.com', sneaky: {} }],
+    // `customEnvironmentId` is a field of the provider's API the tool does not declare.
+    [
+      'vercel__add_project_domain',
+      { projectId: 'prj_abc', name: 'www.example.com', customEnvironmentId: 'env_1' },
+    ],
+    ['vercel__get_project', { projectId: 'prj_abc', project_id: 'prj_other' }],
+    ['vercel__deploy_to_vercel', { projectId: 'prj_abc', target: 'preview' }],
+    ['vercel__list_teams', { limit: 5 }],
+  ])(
+    '%s with an argument it does not declare is refused on both sides : nothing is sent',
+    async (tool, args) => {
+      const undeclared = Object.keys(args).at(-1)!;
+      const reason = `${undeclared}: not an argument of '${tool}' — nothing classifies it, so it is not sent.`;
+      expect(classifyVercel(tool, args, [app])).toEqual({ denied: reason });
+      const fetch = mockFetch([]);
+      const result = await vercelPlugin.execute(ctx(fetch), tool, args);
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as { text: string }).text).toBe(reason);
+      expect(fetch.calls).toHaveLength(0);
+    },
+  );
 
   test('401 / 403 become UpstreamAuthError on both surfaces', async () => {
     const mcp = mockFetch([{ url: VERCEL_MCP_URL, status: 401, body: 'Unauthorized' }]);
@@ -523,8 +576,6 @@ describe('executeVercel — request shapes of the custom REST tools', () => {
       projectId: 'prj_abc',
       rootDirectory: 'app',
       framework: 'nextjs',
-      // a field outside the whitelist must be dropped
-      secretField: 'should-not-leak',
     });
     expect(JSON.parse(text(result))).toEqual({ id: 'prj_abc', rootDirectory: 'app' });
     const call = fetch.calls[0]!;
@@ -653,8 +704,6 @@ describe('executeVercel — request shapes of the custom REST tools', () => {
       projectId: 'prj_abc',
       name: 'www.example.com',
       gitBranch: 'main',
-      // a field outside the whitelist must be dropped
-      sneakyExtra: 'nope',
     });
     expect(fetch.calls[0]!.json).toEqual({ name: 'www.example.com', gitBranch: 'main' });
 

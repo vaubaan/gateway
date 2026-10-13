@@ -32,9 +32,17 @@ export interface Proof {
   readonly file: string;
   /**
    * Titles (or distinctive fragments of a title) of the tests in `file` that
-   * prove the invariant. Each must still be in the file.
+   * prove the invariant. Each must still be the title of a test (or of a
+   * `describe`) that RUNS in that file: not a comment, not a skipped or
+   * to-do test (`index.test.ts` parses the file).
    */
   readonly tests: readonly string[];
+  /**
+   * Set when a named test sits under a condition (`describe.skipIf(…)`,
+   * `it.runIf(…)`): what it needs, and who runs it with that. The index
+   * refuses a conditional proof that does not say so, and the reverse.
+   */
+  readonly conditional?: string;
 }
 
 export interface Invariant {
@@ -67,7 +75,7 @@ export const INVARIANTS: readonly Invariant[] = [
     proofs: [
       {
         file: `${STRUCTURAL}/telemetry-report-shape.test.ts`,
-        tests: ['Structural test (spec §10 "a telemetry report contains none of the'],
+        tests: ['structural: a telemetry report contains none of the forbidden fields (spec §9)'],
       },
       {
         file: `${STRUCTURAL}/telemetry-collector-schema.test.ts`,
@@ -91,7 +99,7 @@ export const INVARIANTS: readonly Invariant[] = [
       },
       {
         file: `${INTEGRATION}/budget/pipeline-consistency.test.ts`,
-        tests: ['session counters agree with the audit'],
+        tests: ['after a mixed run, SUM(session_counters) == COUNT(audit allowed) per risk'],
       },
       {
         file: `${INTEGRATION}/store/sessions.test.ts`,
@@ -349,6 +357,8 @@ export const INVARIANTS: readonly Invariant[] = [
       {
         file: `${INTEGRATION}/standalone-plugin-catalogs.test.ts`,
         tests: ['ships no test file: no trace names one and the standalone tree holds none'],
+        conditional:
+          'needs the standalone build (`npm run build`): `npm run ci` and the CI job `check` build before they test',
       },
       {
         file: 'deploy/docker/smoke.sh',
@@ -509,7 +519,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'every-slice-covered',
     statement:
-      'A call is allowed only when every slice it executes matches a catalog entry and every risk touched is accepted: no slice, no risk, an uncovered slice, a missing catalog and a classifier that fails all refuse.',
+      'A call is allowed only when every slice it executes matches a catalog entry and every risk touched is accepted: no slice, no risk, an uncovered slice and a missing catalog all refuse (a classifier that throws: see every-refused-call-audited).',
     source: 'spec §3.1, §6; ADR execution-door-json-faithful-arguments-and-shared-throttle',
     proofs: [
       {
@@ -518,6 +528,29 @@ export const INVARIANTS: readonly Invariant[] = [
           'a slice no catalog entry matches denies the call, although another slice is covered and accepted',
           'a slice of another provider is not dropped: it denies',
           'no slice → deny (classification gap)',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'every-refused-call-audited',
+    statement:
+      'Every call the execution door refuses leaves its audit entry, including the one refused because a decision stage threw (a classifier that is not total, a store failure): the entry names the stage and the class of the error, never its text.',
+    source: 'spec §8 ("one immutable entry per MCP call, allowed or refused"); spec §6',
+    proofs: [
+      {
+        file: 'packages/gateway-core/tests/unit/pipeline.test.ts',
+        tests: [
+          'a classifier that throws: one audit entry, no budget, no upstream, no message kept',
+          'the resource stage throws: audited with no target',
+          'the budget stage throws: audited with the risks the call touched, nothing forwarded',
+          'the audit write of that refusal failing still propagates',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/execution/pipeline.test.ts`,
+        tests: [
+          'a classifier that throws: the call is refused, AUDITED, counted nowhere, and its text reaches neither the audit nor the log',
         ],
       },
     ],
@@ -578,7 +611,10 @@ export const INVARIANTS: readonly Invariant[] = [
       },
       {
         file: 'plugins/_template/tests/unit/plugin.test.ts',
-        tests: ["'..'"],
+        tests: [
+          'an identifier that is not one path segment is refused, never escaped',
+          "execute applies the classifier's identifier check : nothing is sent for an unsafe id",
+        ],
       },
     ],
   },

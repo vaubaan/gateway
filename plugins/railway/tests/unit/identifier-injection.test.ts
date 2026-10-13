@@ -12,7 +12,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { serializeSlice, type ExecuteContext, type Resource } from '@vaubaan/plugin-sdk';
-import { mockFetch, type MockRoute } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch, type MockRoute, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 import {
   RAILWAY_GRAPHQL_URL,
@@ -35,14 +35,20 @@ const project: Resource = {
   ref: PROJECT,
   env: 'staging',
   displayName: 'api',
-  metadata: { environments: [{ id: ENV, name: 'staging' }] },
+  metadata: {
+    services: [{ id: SERVICE, name: 'api' }],
+    environments: [{ id: ENV, name: 'staging' }],
+  },
 };
 const other: Resource = {
   provider: 'railway',
   ref: OTHER_PROJECT,
   env: 'prod',
   displayName: 'web',
-  metadata: { environments: [{ id: OTHER_ENV, name: 'production' }] },
+  metadata: {
+    services: [{ id: SERVICE, name: 'api' }],
+    environments: [{ id: OTHER_ENV, name: 'production' }],
+  },
 };
 
 const execCtx = (
@@ -326,9 +332,9 @@ describe('railway identifiers — execute runs on the target the classifier reso
     async (tool, args) => {
       expect(isDenied(tool, args, [project, other])).toBe(true);
       const fetch = mockFetch(upstream);
-      await expect(
-        railwayPlugin.execute(execCtx(fetch, [project, other]), tool, args),
-      ).rejects.toThrow(/projectId: argument required/);
+      expect(
+        await refusalText(railwayPlugin.execute(execCtx(fetch, [project, other]), tool, args)),
+      ).toMatch(/projectId: argument required/);
       expect(fetch.calls).toHaveLength(0);
     },
   );
@@ -409,5 +415,124 @@ describe('railway discovery — a project id the classifier would refuse', () =>
     await expect(railwayPlugin.discoverResources(connection)).rejects.toThrow(
       /not a Railway identifier/,
     );
+  });
+});
+
+describe('railway arguments — a tool takes what its schema declares, nothing else', () => {
+  const refusal = (tool: string, name: string): string =>
+    `${name}: not an argument of '${tool}' — nothing classifies it, so it is not sent.`;
+
+  test.each<[string, Record<string, unknown>, string]>([
+    // The upstream schemas of the two account tools are open: anything was forwarded.
+    ['railway__whoami', { verbose: true }, 'verbose'],
+    ['railway__list-projects', { teamId: 'team_1' }, 'teamId'],
+    ['railway__list-services', { projectId: PROJECT, serviceId: SERVICE }, 'serviceId'],
+    ['railway__redeploy', { ...base, serviceId: SERVICE, force: true }, 'force'],
+    ['railway__upsert-variable', { ...base, name: 'K', value: 'v', sealed: true }, 'sealed'],
+    ['railway__railway-agent', { ...base, message: 'hi', model: 'x' }, 'model'],
+    // The camelCase / snake_case twin of an id names nothing.
+    ['railway__redeploy', { ...base, serviceId: SERVICE, service_id: SERVICE }, 'service_id'],
+  ])('%s %j is refused by classify and by execute, no request', async (tool, args, name) => {
+    expect(classifyRailway(tool, args, [project])).toEqual({ denied: refusal(tool, name) });
+    const fetch = mockFetch(upstream);
+    const result = await railwayPlugin.execute(execCtx(fetch), tool, args);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toBe(refusal(tool, name));
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('`projectId` on a tool that takes none is checked, then not sent', async () => {
+    // `accept-deploy` is addressed by its environment; its upstream schema is closed and
+    // has no `projectId`. Naming the mission's project is a correct hint, not an error.
+    const args = { projectId: PROJECT, environmentId: ENV };
+    expect(isDenied('railway__accept-deploy', args)).toBe(false);
+    const { payload } = await sent('railway__accept-deploy', args);
+    expect(payload).toEqual({ environmentId: ENV });
+    // A foreign project is still refused.
+    await expectRefusedWithoutCall('railway__accept-deploy', {
+      projectId: FOREIGN_PROJECT,
+      environmentId: ENV,
+    });
+  });
+});
+
+describe('railway serviceId — bound to the project the mission holds (threat model A18)', () => {
+  const FOREIGN_SERVICE = '00000000-0000-4000-8000-0000000000bb';
+  const NOT_A_SERVICE = `serviceId: not a service of railway project '${PROJECT}' as last discovered ; a service created since then appears once the connection owner refreshes the resources.`;
+
+  // Every tool that takes a `serviceId`, with the other arguments it needs.
+  const WITH_SERVICE: ReadonlyArray<readonly [string, Record<string, unknown>]> = [
+    ['railway__list-deployments', { projectId: PROJECT }],
+    ['railway__get-logs', { ...base }],
+    ['railway__redeploy', { ...base }],
+    ['railway__railway-agent', { ...base, message: 'status?' }],
+    ['railway__list-variables', { ...base }],
+    ['railway__upsert-variable', { ...base, name: 'K', value: 'v' }],
+    ['railway__upsert-variables', { ...base, variables: { A: '1' } }],
+    ['railway__delete-variable', { ...base, name: 'K' }],
+  ];
+
+  test.each(WITH_SERVICE)(
+    '%s : a service of another project is refused by classify and by execute, no request',
+    async (tool, args) => {
+      const call = { ...args, serviceId: FOREIGN_SERVICE };
+      expect(classifyRailway(tool, call, [project])).toEqual({ denied: NOT_A_SERVICE });
+      const fetch = mockFetch(upstream);
+      const result = await railwayPlugin.execute(execCtx(fetch), tool, call);
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as { text: string }).text).toBe(NOT_A_SERVICE);
+      expect(fetch.calls).toHaveLength(0);
+    },
+  );
+
+  test.each(WITH_SERVICE)("%s : the project's own service is sent as given", async (tool, args) => {
+    const call = { ...args, serviceId: SERVICE };
+    expect(isDenied(tool, call)).toBe(false);
+    const { payload } = await sent(tool, call);
+    expect(payload.serviceId).toBe(SERVICE);
+  });
+
+  test("a service of another project OF THE SAME MISSION is still not the named project's", async () => {
+    const otherWithService: Resource = {
+      ...other,
+      metadata: { ...other.metadata, services: [{ id: FOREIGN_SERVICE, name: 'web' }] },
+    };
+    const call = { ...base, serviceId: FOREIGN_SERVICE };
+    expect(classifyRailway('railway__redeploy', call, [project, otherWithService])).toEqual({
+      denied: NOT_A_SERVICE,
+    });
+    await expectRefusedWithoutCall('railway__redeploy', call, [project, otherWithService]);
+  });
+
+  test('a project discovered before services were recorded names none : refused, with what to do', async () => {
+    const undiscovered: Resource = {
+      ...project,
+      metadata: { environments: [{ id: ENV, name: 'staging' }] },
+    };
+    const call = { ...base, serviceId: SERVICE };
+    const outcome = classifyRailway('railway__redeploy', call, [undiscovered]);
+    expect(outcome).toEqual({
+      denied: `serviceId: the services of railway project '${PROJECT}' are unknown ; ask the connection owner to refresh the resources of the connection.`,
+    });
+    await expectRefusedWithoutCall('railway__redeploy', call, [undiscovered]);
+    // A call that names no service is not concerned.
+    expect(isDenied('railway__list-variables', { ...base }, [undiscovered])).toBe(false);
+  });
+
+  test('a project with no service at all refuses every serviceId', () => {
+    const empty: Resource = { ...project, metadata: { ...project.metadata, services: [] } };
+    expect(classifyRailway('railway__redeploy', { ...base, serviceId: SERVICE }, [empty])).toEqual({
+      denied: NOT_A_SERVICE,
+    });
+  });
+
+  test('a malformed list in the metadata binds nothing', () => {
+    for (const services of ['nope', [{ id: 1, name: 'x' }], [SERVICE], [{ id: SERVICE }]]) {
+      const odd: Resource = { ...project, metadata: { ...project.metadata, services } };
+      expect(
+        isDenied('railway__redeploy', { ...base, serviceId: SERVICE }, [odd]),
+        JSON.stringify(services),
+      ).toBe(true);
+    }
   });
 });

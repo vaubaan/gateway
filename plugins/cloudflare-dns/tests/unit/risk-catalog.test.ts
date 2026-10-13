@@ -10,6 +10,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { parseSlice, type Resource } from '@vaubaan/plugin-sdk';
+import { declaredOnly } from '@vaubaan/plugin-sdk/testing';
 import { prepareCatalog, risksTouchedBy } from '@vaubaan/policy-engine';
 
 import { classifyCloudflareDns } from '../../src/classify.ts';
@@ -78,7 +79,12 @@ const CF_DNS_TOOLS = cloudflareDnsTools.map((t) => t.name);
 
 /** The risks a call touches, in catalog order ; a denied sample is a test failure, not an empty list. */
 function risksFor(tool: string, args: Record<string, unknown>): string[] {
-  const result = classifyCloudflareDns(tool, args, [zone]);
+  // One sample serves every tool : each receives the arguments it declares.
+  const result = classifyCloudflareDns(
+    tool,
+    declaredOnly({ tools: cloudflareDnsTools }, tool, args),
+    [zone],
+  );
   if ('denied' in result) throw new Error(`'${tool}' sample was denied: ${result.denied}`);
   const touched = new Set(result.slices.flatMap((slice) => risksTouchedBy(slice, idx)));
   return catalog.risks.map((r) => r.id).filter((id) => touched.has(id));

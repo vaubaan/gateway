@@ -15,6 +15,7 @@ status: legacy
 > d'autorisations, il porte une liste de **risques acceptés**.
 >
 > **Évolutions actées en aval** (à intégrer ici à la prochaine passe) :
+>
 > - [ADR unified-tokens-delegation-chain-and-escalation-channel](../../decisions/unified-tokens-delegation-chain-and-escalation-channel.md)
 >   — table `tokens` unifiée + `delegation_chain` + `escalation_channel`.
 > - [ADR unified-gates-drop-confirm](../../decisions/unified-gates-drop-confirm.md)
@@ -27,18 +28,18 @@ status: legacy
 
 ## 0. Le shift conceptuel — "risque acceptable" plutôt que "droits demandés"
 
-| Avant (v1 rings, v2 macros, v3 slices)         | Après (v4 risk-based)                                             |
-| ---------------------------------------------- | ----------------------------------------------------------------- |
-| Le manager **énumère ce que l'agent peut faire** (slices/caps explicites). | Le manager **énumère les risques qu'il accepte de prendre** sur cette session. |
+| Avant (v1 rings, v2 macros, v3 slices)                                                        | Après (v4 risk-based)                                                                                                      |
+| --------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
+| Le manager **énumère ce que l'agent peut faire** (slices/caps explicites).                    | Le manager **énumère les risques qu'il accepte de prendre** sur cette session.                                             |
 | Sous-grant → l'agent se bloque mid-session, friction. Sur-grant → on perd le least-privilege. | Le profil de risque est **stable inter-sessions**, scannable en 30s, ne demande pas d'anticiper la trajectoire de l'agent. |
-| Le langage du grant suit la surface d'API du provider. | Le langage du grant suit l'**intention métier** ("écrire en bulk", "modifier RLS", "deploy prod"). |
-| Audit = "qu'est-ce qui a été grant". | Audit = "quelles slices ont été touchées + quels risques catégorisés". |
+| Le langage du grant suit la surface d'API du provider.                                        | Le langage du grant suit l'**intention métier** ("écrire en bulk", "modifier RLS", "deploy prod").                         |
+| Audit = "qu'est-ce qui a été grant".                                                          | Audit = "quelles slices ont été touchées + quels risques catégorisés".                                                     |
 
 C'est l'inversion **capability-based → risk-based** que font Google Adaptive
 Auth, Microsoft Conditional Access, OAuth Step-Up (RFC 9470) et Claude Code
 Auto Mode. Le manager raisonne comme avec un humain à qui il délègue :
-*"OK pour tout sauf : tu touches pas la prod, tu modifies pas DNS, tu crées
-pas de comptes."*
+_"OK pour tout sauf : tu touches pas la prod, tu modifies pas DNS, tu crées
+pas de comptes."_
 
 ### Ce qui survit des itérations précédentes
 
@@ -105,7 +106,7 @@ résolution du token (cachée, comme aujourd'hui).
 
 ## 2. Le data-model par plane
 
-> *Premier énoncé de chaque doc de provider* :
+> _Premier énoncé de chaque doc de provider_ :
 > **"Un provider est une BDD mutable de `(entité_1, entité_2, …)` avec
 > des side effects observables via `read` sur certaines entités."**
 
@@ -117,11 +118,11 @@ mermaid pour les revues de design.
 
 3 niveaux universels :
 
-| Cardinalité | Sémantique                            | Inférence depuis le selecteur            |
-| ----------- | ------------------------------------- | ---------------------------------------- |
-| `one`       | exactement 1 instance ciblée nommément| identifiant exact (`branch[main]`)       |
-| `bounded`   | ≤ N, count borné                      | liste finie ou glob borné par namespace  |
-| `unbounded` | nombre inconnu, peut tout toucher     | wildcard `*` ou `**`                     |
+| Cardinalité | Sémantique                             | Inférence depuis le selecteur           |
+| ----------- | -------------------------------------- | --------------------------------------- |
+| `one`       | exactement 1 instance ciblée nommément | identifiant exact (`branch[main]`)      |
+| `bounded`   | ≤ N, count borné                       | liste finie ou glob borné par namespace |
+| `unbounded` | nombre inconnu, peut tout toucher      | wildcard `*` ou `**`                    |
 
 La cardinalité **n'est pas dans le wire** — elle émerge du selecteur et
 sert au catalogue de risques pour distinguer `row.W[one]` de `row.W[*]`.
@@ -182,7 +183,7 @@ flowchart TB
 ```
 
 > Les data-models par-provider vivent dans `plugins/<vendor>/
-> src/data-model.ts` et se rendent automatiquement en mermaid dans le
+src/data-model.ts` et se rendent automatiquement en mermaid dans le
 > handbook du provider.
 
 ## 3. Le DSL des slices (interne)
@@ -241,15 +242,15 @@ le repo. Une entrée = une intention métier exprimable en une phrase.
 ### 4.1 Schéma
 
 ```ts
-type RiskId = string;   // ex: "supabase.staging.bulk-row-write"
+type RiskId = string; // ex: "supabase.staging.bulk-row-write"
 
 type RiskEntry = {
-  id: RiskId;                         // stable, versionné, qualifié par provider+env
-  label: string;                      // libellé court (UI)
-  reason: string;                     // pourquoi c'est un risque (≤ 2 phrases)
-  matches: SlicePattern;              // pattern catalogue (peut être large : ex: '**.policy[**].W')
-  vector: RiskVector6D;               // pour expliquer + ordonner la UI par sévérité
-  acceptable_in_envs?: string[];      // ex: ['preview', 'staging'] — empêche d'accepter sur prod
+  id: RiskId; // stable, versionné, qualifié par provider+env
+  label: string; // libellé court (UI)
+  reason: string; // pourquoi c'est un risque (≤ 2 phrases)
+  matches: SlicePattern; // pattern catalogue (peut être large : ex: '**.policy[**].W')
+  vector: RiskVector6D; // pour expliquer + ordonner la UI par sévérité
+  acceptable_in_envs?: string[]; // ex: ['preview', 'staging'] — empêche d'accepter sur prod
 };
 ```
 
@@ -263,11 +264,11 @@ vecteur (ADR unified-gates-drop-confirm §A1).
 ```ts
 type RiskVector6D = {
   reversibility: 'reversible' | 'costly' | 'irreversible';
-  blast:         'single' | 'env' | 'account' | 'bulk';
-  data:          'metadata' | 'data' | 'secret' | 'pii';
-  cost:          'free' | 'moderate' | 'unbounded';
-  visibility:    'internal' | 'team' | 'public';
-  persistence:   'stateless' | 'session' | 'posture';
+  blast: 'single' | 'env' | 'account' | 'bulk';
+  data: 'metadata' | 'data' | 'secret' | 'pii';
+  cost: 'free' | 'moderate' | 'unbounded';
+  visibility: 'internal' | 'team' | 'public';
+  persistence: 'stateless' | 'session' | 'posture';
 };
 ```
 
@@ -277,63 +278,119 @@ type RiskVector6D = {
 github:
   risks:
     - id: github.read-code
-      label: "Lire le code et les PR"
-      reason: "Lectures peuvent leak des secrets via .env commit (rare). Body
-               des issues/PR est injectable (OWASP LLM01)."
-      matches: "github.repo[**].file[**].R"
-      vector: { reversibility: reversible, blast: single, data: data,
-                cost: free, visibility: internal, persistence: stateless }
+      label: 'Lire le code et les PR'
+      reason: 'Lectures peuvent leak des secrets via .env commit (rare). Body
+        des issues/PR est injectable (OWASP LLM01).'
+      matches: 'github.repo[**].file[**].R'
+      vector:
+        {
+          reversibility: reversible,
+          blast: single,
+          data: data,
+          cost: free,
+          visibility: internal,
+          persistence: stateless,
+        }
     - id: github.feature-branch-write
-      label: "Créer / modifier des branches feature/*"
-      reason: "Réversible (git revert). Pas de side effect prod tant que
-               pas mergé."
-      matches: "github.repo[**].branch[feature/*,fix/*].file[**].W"
-      vector: { reversibility: reversible, blast: single, data: data,
-                cost: free, visibility: internal, persistence: session }
+      label: 'Créer / modifier des branches feature/*'
+      reason: 'Réversible (git revert). Pas de side effect prod tant que
+        pas mergé.'
+      matches: 'github.repo[**].branch[feature/*,fix/*].file[**].W'
+      vector:
+        {
+          reversibility: reversible,
+          blast: single,
+          data: data,
+          cost: free,
+          visibility: internal,
+          persistence: session,
+        }
     - id: github.create-pr
-      label: "Ouvrir une pull request"
-      reason: "Pas de mutation prod. Notifie les reviewers."
-      matches: "github.repo[**].pr[**].W"
-      vector: { reversibility: reversible, blast: single, data: data,
-                cost: free, visibility: team, persistence: session }
+      label: 'Ouvrir une pull request'
+      reason: 'Pas de mutation prod. Notifie les reviewers.'
+      matches: 'github.repo[**].pr[**].W'
+      vector:
+        {
+          reversibility: reversible,
+          blast: single,
+          data: data,
+          cost: free,
+          visibility: team,
+          persistence: session,
+        }
     - id: github.merge-protected
-      label: "Merger vers une branche protégée (main/master/prod)"
-      reason: "Trigger CI/CD prod en aval. Costly à reverter (release notes,
-               communications, dependencies aval)."
-      matches: "github.repo[**].branch[main,master,prod*].W"
-      vector: { reversibility: costly, blast: env, data: data,
-                cost: moderate, visibility: team, persistence: session }
+      label: 'Merger vers une branche protégée (main/master/prod)'
+      reason: 'Trigger CI/CD prod en aval. Costly à reverter (release notes,
+        communications, dependencies aval).'
+      matches: 'github.repo[**].branch[main,master,prod*].W'
+      vector:
+        {
+          reversibility: costly,
+          blast: env,
+          data: data,
+          cost: moderate,
+          visibility: team,
+          persistence: session,
+        }
     - id: github.branch-protection-write
-      label: "Modifier la branch protection"
-      reason: "Posture-shift : ouvre la branche aux écritures hors-process.
-               Persistance après la session."
-      matches: "github.repo[**].branch-protection[**].W"
-      vector: { reversibility: costly, blast: env, data: metadata,
-                cost: free, visibility: team, persistence: posture }
+      label: 'Modifier la branch protection'
+      reason: 'Posture-shift : ouvre la branche aux écritures hors-process.
+        Persistance après la session.'
+      matches: 'github.repo[**].branch-protection[**].W'
+      vector:
+        {
+          reversibility: costly,
+          blast: env,
+          data: metadata,
+          cost: free,
+          visibility: team,
+          persistence: posture,
+        }
     - id: github.mint-install-token
-      label: "Minter un install token GitHub App"
-      reason: "Credential creation. Le token a sa propre durée de vie et
-               son propre scope, indépendamment du token Vaubaan."
-      matches: "github.repo[**].install-token[**].*"
-      vector: { reversibility: reversible, blast: account, data: secret,
-                cost: free, visibility: internal, persistence: posture }
+      label: 'Minter un install token GitHub App'
+      reason: 'Credential creation. Le token a sa propre durée de vie et
+        son propre scope, indépendamment du token Vaubaan.'
+      matches: 'github.repo[**].install-token[**].*'
+      vector:
+        {
+          reversibility: reversible,
+          blast: account,
+          data: secret,
+          cost: free,
+          visibility: internal,
+          persistence: posture,
+        }
     - id: github.collaborator-write
-      label: "Modifier la liste des collaborateurs"
-      reason: "Posture-shift : donne durablement accès au repo."
-      matches: "github.repo[**].collaborator[**].W"
-      vector: { reversibility: reversible, blast: account, data: metadata,
-                cost: free, visibility: team, persistence: posture }
+      label: 'Modifier la liste des collaborateurs'
+      reason: 'Posture-shift : donne durablement accès au repo.'
+      matches: 'github.repo[**].collaborator[**].W'
+      vector:
+        {
+          reversibility: reversible,
+          blast: account,
+          data: metadata,
+          cost: free,
+          visibility: team,
+          persistence: posture,
+        }
     # … etc
 
     # Fallback générique — DOIT être présent par provider
     - id: github.uncategorized-write
-      label: "Écriture GitHub non catégorisée"
+      label: 'Écriture GitHub non catégorisée'
       reason: "Catch-all pour les writes qui n'ont pas été explicitement
-               catégorisés. Si vu en prod, signale qu'il manque une
-               entrée au catalogue."
-      matches: "github.**.W"
-      vector: { reversibility: costly, blast: env, data: data,
-                cost: free, visibility: internal, persistence: session }
+        catégorisés. Si vu en prod, signale qu'il manque une
+        entrée au catalogue."
+      matches: 'github.**.W'
+      vector:
+        {
+          reversibility: costly,
+          blast: env,
+          data: data,
+          cost: free,
+          visibility: internal,
+          persistence: session,
+        }
 ```
 
 ### 4.4 Qualification par binding (env / resource)
@@ -367,7 +424,7 @@ de même la slice exécutée (l'env est résolu par le binding) et compare.
 
 ## 4bis. Scope caps — axe d'amplitude orthogonal
 
-Les `accepted_risks` capturent le *kind* d'action (lire un mail,
+Les `accepted_risks` capturent le _kind_ d'action (lire un mail,
 écrire un env var) mais **pas son amplitude** (combien d'items, sur
 quelle fenêtre temporelle, à quel rythme). Cette dimension est portée
 par les **scope caps**, primitive orthogonale aux risks. Détails dans
@@ -402,13 +459,13 @@ gateway, quotas cache partagés cross-org, plafonds upstream durs).
 
 ### 4bis.2 Quatre niveaux asymétriques + wrap infra
 
-| Niveau | Champ | Direction permise |
-|---|---|---|
-| catalog (suggestion) | `RiskEntry.caps?` | point de départ |
-| org (contractuel) | `organizations.caps_defaults` | loose OU tighten vs catalog |
-| binding (opérationnel) | `provider_bindings.caps` | tighten only vs org |
-| token (per-mint) | `tokens.caps_override` | tighten only vs binding |
-| infra (wrap final) | `RiskEntry.infra_limits?` | jamais overrideable |
+| Niveau                 | Champ                         | Direction permise           |
+| ---------------------- | ----------------------------- | --------------------------- |
+| catalog (suggestion)   | `RiskEntry.caps?`             | point de départ             |
+| org (contractuel)      | `organizations.caps_defaults` | loose OU tighten vs catalog |
+| binding (opérationnel) | `provider_bindings.caps`      | tighten only vs org         |
+| token (per-mint)       | `tokens.caps_override`        | tighten only vs binding     |
+| infra (wrap final)     | `RiskEntry.infra_limits?`     | jamais overrideable         |
 
 Résolution : dernière-valeur-définie sur la chaîne (token > binding >
 org > catalog) puis clamp silencieux sur `infra_limits`. Validations
@@ -422,12 +479,12 @@ au write (binding ≤ org, token ≤ binding) avec 403
   label: 'Lecture bulk via filtre `q`'
   matches: 'gmail.mailbox.bulk-marker.R'
   vector: { … }
-  caps:                     # soft default, loosenable au niveau org
+  caps: # soft default, loosenable au niveau org
     items_per_call_max: 200
     calls_per_minute_max: 5
-  infra_limits:             # hard ceiling, jamais overrideable
-    bytes_per_call_max: 10485760    # 10 MB, budget parsing gateway
-    items_per_call_max: 500         # Gmail API plafonne à 500 max
+  infra_limits: # hard ceiling, jamais overrideable
+    bytes_per_call_max: 10485760 # 10 MB, budget parsing gateway
+    items_per_call_max: 500 # Gmail API plafonne à 500 max
 ```
 
 Les deux champs sont optionnels. Absence = pas de cap soft / pas de
@@ -453,16 +510,16 @@ Deux familles distinctes :
 ```ts
 type TokenMintRequest = {
   projectSlug: string;
-  bindings: ProjectBinding[];          // déjà existant
-  accepted_risks: RiskId[];            // sous-ensemble du catalogue, filtré par policy
-  denied_risks?: RiskId[];             // opt-out explicite (utile si on dérive accepted_risks
-                                       //   d'un preset et qu'on veut retirer une entrée)
+  bindings: ProjectBinding[]; // déjà existant
+  accepted_risks: RiskId[]; // sous-ensemble du catalogue, filtré par policy
+  denied_risks?: RiskId[]; // opt-out explicite (utile si on dérive accepted_risks
+  //   d'un preset et qu'on veut retirer une entrée)
   context?: {
     task?: string;
     agent_id?: string;
     requester_user_id?: string;
   };
-  ttlSeconds?: number;       // capé à 3600 si singleUse=true
+  ttlSeconds?: number; // capé à 3600 si singleUse=true
   singleUse?: boolean;
 };
 
@@ -470,8 +527,8 @@ type TokenMintRequest = {
 // (sous-ensemble strict de l'autorité parent + acceptable_in_envs OK),
 // soit il échoue avec 403 + liste explicite des risks bloquants.
 type TokenMintResponse =
-  | { status: 'minted', api_key: string, expires_at: string }
-  | { status: 'rejected', not_acceptable: RiskId[], not_inherited: RiskId[] };
+  | { status: 'minted'; api_key: string; expires_at: string }
+  | { status: 'rejected'; not_acceptable: RiskId[]; not_inherited: RiskId[] };
 
 // Au runtime, le token résolu en cache contient :
 type ResolvedToken = {
@@ -513,7 +570,7 @@ interface ProviderPlugin {
   readonly provider: string;
 
   // (1) Le data-model statique du provider.
-  readonly dataModel: DataModel;     // entités + containment + cardinalités
+  readonly dataModel: DataModel; // entités + containment + cardinalités
 
   // (2) Classification d'un call concret → slice touchée.
   classify(
@@ -767,40 +824,40 @@ Estimation : Phases 0-4 ~ 2 semaines focus full-time. Phases 5-6 ~
 
 ## 14. Anti-patterns à éviter (mis à jour pour risk-based)
 
-| Piège                                                | Garde-fou v4                                                                       |
-| ---------------------------------------------------- | ---------------------------------------------------------------------------------- |
-| Catalogue avec trous (slice sans risk)               | Fallback générique par provider + lint au CI qui vérifie couverture des tools.     |
-| Risk trop large ("write-anything") accepté par UX rapide | Catalogue cible 10-15 risks fins. UI groupe par bucket de sévérité, pas un single "tout".|
-| Manager autorise tous les risks par défaut          | Pas de bouton "Accept All". Manager doit cocher chaque risk à risque non-trivial.  |
-| Slice attacker-controlled (branche `feature/exfil`)  | Les risks `feature/*` sont grantable mais bornés à `file.W` (pas `branch-protection`, pas `secret`). |
-| Bulk silencieux                                      | Cardinalité émergente : `row[*].W` matche le risk `bulk-row-write` distinct de `row[id=…].W`. |
-| Token sur-vit à un changement de catalogue           | Ajout d'un risk = fail-closed sur tokens existants. UI signale "X tokens à re-mint".|
-| State in-memory                                      | DB-only (déjà v1).                                                                  |
-| Logging insuffisant                                  | `slices_executed` + `risks_touched` + `token_accepted_risks` (snapshot).            |
-| `dispatch_workflow` comme bypass                     | Retiré du périmètre (§7.2 #1).                                                      |
-| Mauvaise classification SQL                          | Read-only Postgres-enforced (§7.2 #2). Pas de parser, pas de bug.                  |
+| Piège                                                    | Garde-fou v4                                                                                         |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Catalogue avec trous (slice sans risk)                   | Fallback générique par provider + lint au CI qui vérifie couverture des tools.                       |
+| Risk trop large ("write-anything") accepté par UX rapide | Catalogue cible 10-15 risks fins. UI groupe par bucket de sévérité, pas un single "tout".            |
+| Manager autorise tous les risks par défaut               | Pas de bouton "Accept All". Manager doit cocher chaque risk à risque non-trivial.                    |
+| Slice attacker-controlled (branche `feature/exfil`)      | Les risks `feature/*` sont grantable mais bornés à `file.W` (pas `branch-protection`, pas `secret`). |
+| Bulk silencieux                                          | Cardinalité émergente : `row[*].W` matche le risk `bulk-row-write` distinct de `row[id=…].W`.        |
+| Token sur-vit à un changement de catalogue               | Ajout d'un risk = fail-closed sur tokens existants. UI signale "X tokens à re-mint".                 |
+| State in-memory                                          | DB-only (déjà v1).                                                                                   |
+| Logging insuffisant                                      | `slices_executed` + `risks_touched` + `token_accepted_risks` (snapshot).                             |
+| `dispatch_workflow` comme bypass                         | Retiré du périmètre (§7.2 #1).                                                                       |
+| Mauvaise classification SQL                              | Read-only Postgres-enforced (§7.2 #2). Pas de parser, pas de bug.                                    |
 
 ## 15. Comparaison v1 / v4 — checklist de bascule
 
-| Aspect                          | v1                                                       | **v4**                                                       | Cassé ? |
-| ------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------ | ------- |
-| Unit de grant                   | `{provider, plane, level, action, env?}`                 | **`accepted_risks: RiskId[]` + bindings**                    | OUI     |
-| Plane / level                   | top-level concept                                        | **disparu du wire**, plomberie interne au plugin             | OUI     |
-| Action                          | `read | write`                                           | **disparue du wire**, R/W reste au runtime sur slice         | OUI     |
-| Env                             | calque axe à part                                        | **segment du data-model** + qualif du RiskId par binding     | OUI     |
-| Macro-permission                | n/a (v2 only)                                            | abandonnée — manager raisonne en risk-id catalogue           | n/a     |
-| Slice (DSL)                     | n/a                                                      | introduit, **plomberie interne** seulement                   | OUI (new) |
-| Catalogue de risks par provider | n/a                                                      | **NEW** — versionné YAML dans le repo provider               | OUI (new) |
-| Project policy                  | matrice (plane,level,action,env,gate)                    | **DROPPÉ** (ADR unified-gates-drop-confirm) — `acceptable_in_envs` au catalog seul garde-fou | OUI |
-| Plugin contract                 | `classify(t,a) → CapabilityV1`                            | `classify(t,a) → Slice[]` + `dataModel`                       | OUI     |
-| Gates                           | `allow / confirm / deny`                                  | **DROPPÉ** — décision binaire `risk ∈ accepted_risks`         | OUI     |
-| Default-deny                    | oui                                                       | identique (catalogue-driven + fallback risk)                  | non     |
-| Approval channels               | Telegram + Manual                                         | **DROPPÉ** — `escalation_channel` runtime hors gateway        | OUI     |
-| Polling                         | 202 + GET court                                           | **DROPPÉ** (avec le mint-time approval)                       | OUI     |
-| Single-use token                | oui                                                       | identique                                                     | non     |
-| Audit log                       | `capability_matched`                                      | `slices_executed` + `risks_touched` + snapshot                | étendu  |
-| Tools `dispatch_workflow.W`     | exposés                                                   | **retirés**                                                   | OUI     |
-| Tools `execute_sql` write       | classifié via parser SQL                                  | **Postgres read-only forced** ; writes via API tools          | OUI     |
+| Aspect                          | v1                                       | **v4**                                                                                       | Cassé ?                                              |
+| ------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------------- | --- |
+| Unit de grant                   | `{provider, plane, level, action, env?}` | **`accepted_risks: RiskId[]` + bindings**                                                    | OUI                                                  |
+| Plane / level                   | top-level concept                        | **disparu du wire**, plomberie interne au plugin                                             | OUI                                                  |
+| Action                          | `read                                    | write`                                                                                       | **disparue du wire**, R/W reste au runtime sur slice | OUI |
+| Env                             | calque axe à part                        | **segment du data-model** + qualif du RiskId par binding                                     | OUI                                                  |
+| Macro-permission                | n/a (v2 only)                            | abandonnée — manager raisonne en risk-id catalogue                                           | n/a                                                  |
+| Slice (DSL)                     | n/a                                      | introduit, **plomberie interne** seulement                                                   | OUI (new)                                            |
+| Catalogue de risks par provider | n/a                                      | **NEW** — versionné YAML dans le repo provider                                               | OUI (new)                                            |
+| Project policy                  | matrice (plane,level,action,env,gate)    | **DROPPÉ** (ADR unified-gates-drop-confirm) — `acceptable_in_envs` au catalog seul garde-fou | OUI                                                  |
+| Plugin contract                 | `classify(t,a) → CapabilityV1`           | `classify(t,a) → Slice[]` + `dataModel`                                                      | OUI                                                  |
+| Gates                           | `allow / confirm / deny`                 | **DROPPÉ** — décision binaire `risk ∈ accepted_risks`                                        | OUI                                                  |
+| Default-deny                    | oui                                      | identique (catalogue-driven + fallback risk)                                                 | non                                                  |
+| Approval channels               | Telegram + Manual                        | **DROPPÉ** — `escalation_channel` runtime hors gateway                                       | OUI                                                  |
+| Polling                         | 202 + GET court                          | **DROPPÉ** (avec le mint-time approval)                                                      | OUI                                                  |
+| Single-use token                | oui                                      | identique                                                                                    | non                                                  |
+| Audit log                       | `capability_matched`                     | `slices_executed` + `risks_touched` + snapshot                                               | étendu                                               |
+| Tools `dispatch_workflow.W`     | exposés                                  | **retirés**                                                                                  | OUI                                                  |
+| Tools `execute_sql` write       | classifié via parser SQL                 | **Postgres read-only forced** ; writes via API tools                                         | OUI                                                  |
 
 ## 16. Décisions résiduelles à acter
 
@@ -901,10 +958,10 @@ ne peut pas décider seul.
 **Contexte** : Story Dev démarre la session "implémente le channel Email
 pour les approvals" sur `vaubaan-gateway`.
 
-**Story Dev (raisonnement)** : *« Cette tâche touche du code backend
+**Story Dev (raisonnement)** : _« Cette tâche touche du code backend
 (Next.js route + EmailChannel impl), une migration Supabase staging
 (nouvelle colonne `email_address`), un deploy preview Vercel pour valider.
-Pas de prod, pas de secret prod, pas de governance. »*
+Pas de prod, pas de secret prod, pas de governance. »_
 
 Il ouvre l'UI mint, coche :
 
@@ -922,6 +979,7 @@ en 201, `api_key` retourné, valide 1h, single-use désactivé (le Coding
 Agent va faire plusieurs calls).
 
 **Coding Agent** reçoit le token, exécute :
+
 - `github__create_branch feature/email-channel` → OK (catégorisé `github.feature-branch-write`)
 - `github__create_or_update_file …/EmailChannel.ts` → OK (idem)
 - `supabase__apply_migration "alter table … add column email_address text"` → OK (catégorisé `supabase[staging].migration.W`)
@@ -962,10 +1020,10 @@ POST /api/v1/mcp/tools/call
 Le Coding Agent ne re-tente pas, ne contourne pas, **n'invente pas un
 workaround**. Il renvoie le message au Story Dev en synchronous :
 
-> Coding Agent : *« Blocked on `github__update_branch_protection`. Risk
+> Coding Agent : _« Blocked on `github__update_branch_protection`. Risk
 > `github.branch-protection-write` not accepted. Context: je voulais
 > ajouter `email-channel-tests` aux required checks de `main` pour que
-> les futurs PR sur le module Email soient automatiquement testés. »*
+> les futurs PR sur le module Email soient automatiquement testés. »_
 
 **Ce que le scenario montre** : strict-fail = comportement déterministe,
 message actionnable, pas d'effet de bord runtime. Le Coding Agent rend
@@ -975,11 +1033,11 @@ la main proprement.
 
 **Suite du scenario 2.** Le Story Dev raisonne :
 
-> Story Dev : *« `branch-protection.W` est DENY par catalogue parce que
+> Story Dev : _« `branch-protection.W` est DENY par catalogue parce que
 > c'est un posture shift. Mais ici c'est juste ajouter une required check
 > — c'est durcir la protection, pas la relâcher. Et c'est cohérent avec
 > le but de la feature. Le humain serait d'accord. Est-ce que MA
-> propre management key autorise ce risk à grant ? »*
+> propre management key autorise ce risk à grant ? »_
 
 Hypothèse : le token parent du Story Dev a `accepted_risks` qui **inclut**
 `github.branch-protection-write` (parce que c'est un orchestrateur de
@@ -1001,10 +1059,11 @@ Le Story Dev passe ce nouveau token au Coding Agent, qui retente le call
 avec le nouveau Bearer. 200 OK. La session continue.
 
 **Audit log** capture :
+
 - Mint #1 par Story Dev avec 6 risks (Scenario 1).
 - Bloquage du call (Scenario 2) avec slice + missing risk.
 - Mint #2 par Story Dev avec 7 risks, marqué `escalation_decided_locally: true`
-  + champ `parent_token_id`.
+  - champ `parent_token_id`.
 - Call retenté avec succès.
 
 **Ce que le scenario montre** : la délégation peut être **élargie en
@@ -1014,19 +1073,20 @@ l'autorité pour le faire. Strict-fail force la transparence (chaque
 
 ### Scenario 5 — Le pire-cas : agent qui essaie de contourner
 
-**Contexte** : session avec profil "Coder feature/*". Le Coding Agent
+**Contexte** : session avec profil "Coder feature/\*". Le Coding Agent
 veut deploy prod (pas dans le profil).
 
 **Tentative 1** :
+
 ```
 vercel__deploy_to_vercel target=prod
 → 403 risk-not-accepted: vercel.deploy-prod
 ```
 
 **Tentative 2 (contournement essayé)** : le Coding Agent pense
-*« si je trigger un workflow GitHub qui contient un step `vercel deploy
+_« si je trigger un workflow GitHub qui contient un step `vercel deploy
 --prod`, le workflow utilise le secret du repo, je n'ai pas besoin du
-droit Vercel »*. Il appelle :
+droit Vercel »_. Il appelle :
 
 ```
 github__dispatch_workflow workflow_id=deploy-prod.yml
@@ -1050,6 +1110,7 @@ ou d'escalader. Strict-fail rend les bypass structurellement impossibles
 tant que le catalogue couvre bien les surfaces.
 
 **Ce que le scenario montre** :
+
 1. Retirer les surfaces critique (`dispatch_workflow.W`) ferme des classes
    entières d'attaques par confused deputy.
 2. Le catalogue exhaustif + fallback générique garantit qu'aucune action
@@ -1059,19 +1120,20 @@ tant que le catalogue couvre bien les surfaces.
 
 ### Patterns récurrents observés dans ces scenarios
 
-| Pattern                       | Quand il se déclenche                                  | Mécanisme                                                                       |
-| ----------------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------- |
-| **Mint serein**               | Tâche bien cadrée, profil pré-établi suffit            | UI checklist + mint direct                                                      |
-| **Blocage propre**            | Agent dépasse le profil                                | 403 avec `missing_risks` + slice exécutée                                       |
-| **Élargissement local**       | Story Dev a l'autorité pour ajouter le risk            | Re-mint avec `parent_token_id`, marqué `decided_locally`                        |
-| **Escalation runtime**        | Story Dev n'a pas l'autorité, demande à son parent     | POST `escalation_channel.endpoint_url` → parent re-mint side-channel (cf. §11)  |
-| **Contournement impossible**  | Agent essaie via workflow ou backdoor                  | Tools critiques retirés + catalogue exhaustif + fallback                        |
+| Pattern                      | Quand il se déclenche                              | Mécanisme                                                                      |
+| ---------------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------ |
+| **Mint serein**              | Tâche bien cadrée, profil pré-établi suffit        | UI checklist + mint direct                                                     |
+| **Blocage propre**           | Agent dépasse le profil                            | 403 avec `missing_risks` + slice exécutée                                      |
+| **Élargissement local**      | Story Dev a l'autorité pour ajouter le risk        | Re-mint avec `parent_token_id`, marqué `decided_locally`                       |
+| **Escalation runtime**       | Story Dev n'a pas l'autorité, demande à son parent | POST `escalation_channel.endpoint_url` → parent re-mint side-channel (cf. §11) |
+| **Contournement impossible** | Agent essaie via workflow ou backdoor              | Tools critiques retirés + catalogue exhaustif + fallback                       |
 
 ## Annexe C — Pourquoi ne pas garder le modèle capability-based ?
 
 Les 3 itérations précédentes (rings v1, macros v2, slices v3) partageaient
 toutes la même hypothèse : **le manager sait à l'avance ce que l'agent va
 faire**. Hypothèse fausse en pratique pour un coding agent autonome :
+
 - Si on sous-grant → blocage mid-session, re-prompts, friction.
 - Si on sur-grant → on perd le bénéfice du least-privilege.
 

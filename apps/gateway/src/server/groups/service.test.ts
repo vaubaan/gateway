@@ -228,7 +228,11 @@ describe('findActiveUserByEmail', () => {
       reason: 'unknown',
     });
 
-    const twin = await users.upsertFromIdp({ subject: 'idp|bob-2', email: 'bob@example.com' });
+    const twin = await users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'idp|bob-2',
+      email: 'bob@example.com',
+    });
     expect(await findActiveUserByEmail(users, 'bob@example.com')).toEqual({
       found: false,
       reason: 'ambiguous',

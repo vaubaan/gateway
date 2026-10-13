@@ -47,19 +47,36 @@ export interface SeededInstance {
   readonly gmail: SeededConnection;
 }
 
-export const ADA = { subject: 'idp|ada', email: 'ada@example.com', displayName: 'Ada' } as const;
-export const BOB = { subject: 'idp|bob', email: 'bob@example.com', displayName: 'Bob' } as const;
+export const ADA = {
+  issuer: 'http://idp.test',
+  subject: 'idp|ada',
+  email: 'ada@example.com',
+  displayName: 'Ada',
+} as const;
+export const BOB = {
+  issuer: 'http://idp.test',
+  subject: 'idp|bob',
+  email: 'bob@example.com',
+  displayName: 'Bob',
+} as const;
 
 /**
  * Ada owns four connections: GitHub (three repositories), Supabase (a
  * staging and a prod project), Vercel (two projects, no label: the plugin
  * derives the env from the call) and Gmail (experimental plugin, no
  * resource). Bob owns nothing.
+ *
+ * `issuer` is the `iss` of the identity provider the seeded people will sign in
+ * through, when it is not the default test IdP: a user is `(issuer, subject)`,
+ * and Ada signing in from another issuer would be somebody else.
  */
-export async function seedInstance(root: GatewayRoot): Promise<SeededInstance> {
+export async function seedInstance(
+  root: GatewayRoot,
+  issuer: string = ADA.issuer,
+): Promise<SeededInstance> {
   const { store } = root;
-  const ada = await store.users.upsertFromIdp(ADA);
-  const bob = await store.users.upsertFromIdp(BOB);
+  const ada = await store.users.upsertFromIdp({ ...ADA, issuer });
+  const bob = await store.users.upsertFromIdp({ ...BOB, issuer });
   const owner = { kind: 'user', id: ada.id } as const;
   const github = await seedConnection(store, {
     provider: 'github',

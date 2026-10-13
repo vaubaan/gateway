@@ -35,8 +35,10 @@ handbook [mcp-gateway](./legacy/mcp-gateway.md).
 packages/gateway-core/
   src/
     types.ts         re-exports the shared vocabulary (RefusalCode, statuses, Budget, Period,
-                     MissionPolicyEntry ...) and adds Door, BearerKind, MissionContext and
-                     its projections (MissionConnection, MissionResource, MissionSummary)
+                     MissionPolicyEntry, MissionTokenKind, TokenAttribution ...) and adds Door,
+                     BearerKind, TokenHolder / AuthenticatedToken (with tokenAttributionOf and
+                     tokenHolderLabel), MissionContext and its projections (MissionConnection,
+                     MissionResource, MissionSummary)
     errors.ts        Refusal union, `refuse.*` builders, JSON-RPC mapping, AuthError
     audit.ts         CallAuditEntry / AdminAuditEntry, AuditWriter, MemoryAuditWriter,
                      BOOTSTRAP_ACTOR_ID / BOOTSTRAP_ACTOR_LABEL
@@ -45,9 +47,11 @@ packages/gateway-core/
     cache.ts         CacheClient interface, bounded MemoryCacheClient (single-process only)
     risk-gateway.ts  decision core: evaluateCallForToken (classify → intersect → allow/deny),
                      Classifier, CallVerdict, AcceptedRisksSnapshot
-    pipeline.ts      door check, DoorAuthenticator, CallPipeline and its stage interfaces
+    pipeline.ts      door check, DoorAuthenticator, CallPipeline and its stage interfaces,
+                     DECISION_STAGES / stageFailureReason, auditReason
     index.ts         barrel
-  tests/unit/        errors, audit, fingerprint, cache, authenticate, pipeline, risk-gateway
+  tests/unit/        errors, audit, fingerprint, cache, authenticate, pipeline, risk-gateway,
+                     token-holder
 ```
 
 Dependencies: `@vaubaan/shared` (the domain types, `RiskId`, `Slice`,
@@ -67,13 +71,14 @@ The domain types are defined once, in `@vaubaan/shared` (`domain.ts`,
 D8). `types.ts` re-exports what the pipeline consumes so the door keeps a
 single import, and defines only what is specific to the core:
 
-| Re-exported from `@vaubaan/shared`                                              | Defined here                                                                                    |
-| ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `REFUSAL_CODES`, `RefusalCode`, `isRefusalCode`                                 | `Door` — `execution` \| `management`                                                            |
-| `ConnectionStatus`, `MissionStatus`                                             | `BearerKind` — `mission-token` \| `delegated-token` \| `human-session` (spec §6)                |
-| `Gate`, `GATES`, `Budget`, `RateLimit`, `Period`                                | `ConnectionOwner` — shared `Principal` plus the `display` a refusal shows (email or group name) |
-| `Principal`, `MissionPolicyEntry`, `MissionPolicy`, `acceptedRisksOf`           | `MissionConnection`, `MissionResource`, `MissionSummary`, `SessionHandle`, `MissionContext`     |
-| `ConnectionResource`, `AuditDecision` (`allowed` \| `refused`, from `audit.ts`) | `DelegationContext` (the door-check part of a delegated token; P2.3 owns the rest)              |
+| Re-exported from `@vaubaan/shared`                                                  | Defined here                                                                                    |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `REFUSAL_CODES`, `RefusalCode`, `isRefusalCode`                                     | `Door` — `execution` \| `management`                                                            |
+| `ConnectionStatus`, `MissionStatus`                                                 | `BearerKind` — `mission-token` \| `delegated-token` \| `human-session` (spec §6)                |
+| `Gate`, `GATES`, `Budget`, `RateLimit`, `Period`                                    | `ConnectionOwner` — shared `Principal` plus the `display` a refusal shows (email or group name) |
+| `Principal`, `MissionPolicyEntry`, `MissionPolicy`, `acceptedRisksOf`               | `MissionConnection`, `MissionResource`, `MissionSummary`, `SessionHandle`, `MissionContext`     |
+| `ConnectionResource`, `AuditDecision` (`allowed` \| `refused`, from `audit.ts`)     | `DelegationContext` (the door-check part of a delegated token; P2.3 owns the rest)              |
+| `MISSION_TOKEN_KINDS`, `MissionTokenKind`, `isMissionTokenKind`, `TokenAttribution` | `TokenHolder`, `AuthenticatedToken`, `tokenAttributionOf`, `tokenHolderLabel`                   |
 
 Two names deserve a word. **`BearerKind`** is the kind of bearer a door
 receives; it is not `CredentialKind` from `@vaubaan/shared`, which is how a
@@ -142,7 +147,10 @@ holders").
 `AuditEntry = CallAuditEntry | AdminAuditEntry`, discriminated by `kind`.
 
 **Call entry** (one per `tools/call`, allowed or refused): `ts`,
-`mission_id`, `session_id`, `connection_id`, `resource_ref`, `tool`,
+`mission_id`, `token_id`, `token_kind`, `token_holder` (the authenticated
+token and its holder: the member's user id or the token's name; all three
+`null` only on an entry older than the holder model), `session_id`,
+`connection_id`, `resource_ref`, `tool`,
 `arguments_hash`, `slices_executed` (structured `Slice[]`, as in v4),
 `risks_touched`, `accepted_risks_snapshot`, `decision` (`AuditDecision`:
 `allowed` | `refused`), `refusal_code`, `refusal_reason`, `approval_id`,
@@ -163,19 +171,17 @@ Two conventions:
   "actions with no business effect" is `decision = 'allowed' AND
 upstream_error IS NOT NULL`.
 - A structural rejection without a code (an argument JSON cannot carry, unknown tool, a provider the
-  mission has no connection for, classifier denial, catalog not loaded) is `decision = 'refused'`, `refusal_code = null`,
-  `refusal_reason = <text>`. The text is the **audit copy** of the reason
-  (`auditReason` in `pipeline.ts`): a plugin's denial may quote the value it
-  refuses, which the caller reads whole in its JSON-RPC error, while the entry
-  has every argument value found in the text (strings and numbers of three
-  characters or more, at any depth) replaced by `[argument]` and is cut at
-  500 characters — the audit holds the fingerprint of the arguments, never
+  mission has no connection for, classifier denial, catalog not loaded, a decision stage that threw) is `decision = 'refused'`, `refusal_code = null`,
+  `refusal_reason = <text>`. The text is the **audit copy** of the reason,
+  which is not always the sentence the caller reads (see "What a rejection
+  stores" below): the audit holds the fingerprint of the arguments, never
   the arguments.
 
 **Administrative entry**: `ts`, `user_id`, `act` (`AdminAct` union:
 connection created/reconnected/refused/transferred/reassigned/revoked, resources
 discovered, resource edited, share created/revoked,
-mission issued/rotated/revoked/closed/orphaned/restored, budget extended, period reset,
+mission issued/rotated/revoked/closed/orphaned/restored, mission member added/removed,
+mission token issued/revoked, budget extended, period reset,
 expiry extended, gate opened, gate changed, approval granted, request refused,
 delegation granted/revoked, group created, group member added/removed,
 OAuth client approved/disabled, user deactivated/reactivated, config changed),
@@ -243,7 +249,8 @@ maps its rows to it without translation:
   `expired` | `orphaned` | `revoked`; `expires_at` is nullable; `period` is
   the shared union `{ kind: 'one-off' }` |
   `{ kind: 'recurring', length_seconds, anchor_at }`.
-- `token` — id and prefix (only the prefix is ever logged).
+- `token` — `AuthenticatedToken`: id, prefix and holder (only the prefix is
+  ever logged; the audit keeps the attribution, never the secret).
 - `connections[]` — `MissionConnection = Pick<Connection, 'id' | 'provider' |
 'display_name' | 'status'>` plus `owner: ConnectionOwner` (`Principal` with
   `display`). Never a credential.
@@ -300,7 +307,8 @@ audit.write(entry)                  always, exactly once     (AuditWriter — P0
 ```
 
 `CallPipeline` is built from `CallPipelineDeps` (`resources`, `risks`,
-`budget`, `upstream`, `audit`, optional `now` clock; the budget stage
+`budget`, `upstream`, `audit`, an optional `now` clock and the optional
+observer `onStageError(stage, error, call)`; the budget stage
 returns a `BudgetDecision`). `CallPipeline.execute(ctx, call)` returns a
 `CallOutcome`:
 
@@ -309,10 +317,13 @@ returns a `BudgetDecision`). `CallPipeline.execute(ctx, call)` returns a
   `refusal_reason` = the hint; a `risk-not-accepted` entry also records
   the `risks_touched` the decision core computed, covered and missing);
 - `rejected` — structural, no code (an argument that is not a JSON value,
-  the resource stage found no target, classifier denial, catalog missing);
+  the resource stage found no target, classifier denial, catalog missing, a
+  decision stage that threw);
   fail closed. The first of these is decided before the mission's state is
   read and before any stage, and its reason reads
-  `argument '<path>' is <value>: arguments must be JSON values (…)`.
+  `argument '<path>' is <value>: arguments must be JSON values (…)` — the
+  entry stores `an argument is <value>: …`, without the path, which is made
+  of names the caller chose.
   Its audit entry keeps the canonical hash of the arguments (the
   number reads `null` there), so it joins the other entries of the same
   arguments; for a BigInt, which has no canonical form and cannot come from a
@@ -346,6 +357,58 @@ the HTTP status and the class name).
 `CallOutcome` (the call ends there, audited) or the audit entry enriched
 with what the stage learned, which the next stage receives.
 
+#### A decision stage that throws
+
+`DECISION_STAGES` = `resource`, `risk`, `budget` (`DecisionStage`): the
+stages that run before the decision is final. The first three private
+methods call their stage through the private
+`attempt(stage, call, entry, run)`, which returns `{ ok: true, value }` or
+`{ ok: false, outcome }`. A stage that throws — a classifier that is not
+total, a catalog lookup or a store that fails — has decided nothing, so
+`attempt`:
+
+1. calls `deps.onStageError?.(stage, thrown, call)`, inside its own `try`:
+   an observer that throws changes nothing;
+2. writes the refusal on the entry as far as the earlier stages filled it (no
+   target when the resource stage threw, the touched risks when the budget
+   stage threw) and returns a `rejected` outcome.
+
+The reason is `stageFailureReason(stage, thrown)`: "Vaubaan could not decide
+this call: the `<stage>` stage failed (`<error class>`). The call was refused
+and nothing was executed; the operator finds the error in the instance log."
+It is built from the stage and `upstreamErrorClassName(thrown)` alone, never
+from the error's message, which may quote arguments; the agent and the audit
+read the same sentence. The thrown value goes to the observer only: the
+execution door wires it to an `error` log line carrying the stage, the tool,
+the error class and the first stack frames
+([execution-door](execution-door.md)). The call is refused and audited
+whether or not an observer is given. Only the stage is guarded: a failure of
+that audit write propagates like any other. The upstream stage is not a
+decision stage; its failures follow the table above (ADR
+[decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md)
+D1).
+
+#### What a rejection stores
+
+The private `rejected(base, reason, stored)` returns `reason` to the caller
+as it is and writes the entry. `stored` is **required**, so no call site
+keeps a text in the audit without deciding what it may hold:
+
+| Rejection                                                                                             | `stored`                                                                                                                        |
+| ----------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| a reason a plugin or a stage wrote (`{ ok: false, reason }` of the resource stage, `classify-denied`) | `auditReason(reason, call.args)`: the argument values it quotes removed                                                         |
+| an argument JSON cannot carry                                                                         | another sentence, without the argument path                                                                                     |
+| catalog not loaded, a decision stage that threw                                                       | the private marker `HOST_BUILT`: the host wrote the reason from what it knows and nothing of the call, so it is stored as it is |
+
+`auditReason(reason, args)` (exported) replaces by `[argument]` every
+argument value found in the text — strings and numbers of three characters
+or more, at any depth — and cuts the result at 500 characters. The
+replacement is one pass over the reason, longest value first, the values
+matched as text (pattern characters escaped): replaced one after the other,
+a short value would be found again inside a placeholder already written.
+Every stored reason goes through the 500-character bound, the host-built
+ones included.
+
 `checkMissionActive` fails closed on an expiry it cannot read: an
 `expires_at` that `Date.parse` does not understand is `mission-inactive`
 (`status: 'expired'`, the reason says the expiry is unreadable), never "no
@@ -361,7 +424,7 @@ Invariants the tests pin: the resource check runs before any risk is
 evaluated; a refusal at any stage never reaches the budget or the
 upstream; the `risk-not-accepted` refusal is produced by the unchanged
 decision core (`risks_touched ⊆ accepted_risks`); every path writes
-exactly one audit entry; an audit write failure propagates, on the success
+exactly one audit entry, a decision stage that throws included; an audit write failure propagates, on the success
 path as on the others, with the provider called once and no entry carrying
 `upstream_error`.
 
@@ -379,13 +442,13 @@ resolved
 
 ### Stage contracts (hook points)
 
-| Interface       | Filled by      | Contract                                                                                                                                                        |
-| --------------- | -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ResourceStage` | execution door | `resolve(ctx, call)` → `ResourceResolution`: target, `resource-not-in-mission` refusal, or `{ ok: false, reason }` (structural rejection)                       |
-| `RiskStage`     | execution door | `evaluate(ctx, call, target)` → `CallVerdict` (default: `evaluateCallForToken` + the plugin's `classify`)                                                       |
-| `BudgetStage`   | P1.3           | `decide(ctx, call, {risks_touched, now})` → allowed `{session_id, remaining, approval_id}` or refusal; atomic; a refusal decrements nothing                     |
-| `UpstreamStage` | execution door | `execute(ctx, call, target)` → provider result; throws `UpstreamRefusalError(refusal)` for an unusable connection, `UpstreamFailureError` for any other failure |
-| `AuditWriter`   | P0.3           | `write(entry)`; failures propagate                                                                                                                              |
+| Interface       | Filled by      | Contract                                                                                                                                                                        |
+| --------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ResourceStage` | execution door | `resolve(ctx, call)` → `ResourceResolution`: target, `resource-not-in-mission` refusal, or `{ ok: false, reason }` (structural rejection); a throw is a refused, audited call   |
+| `RiskStage`     | execution door | `evaluate(ctx, call, target)` → `CallVerdict` (default: `evaluateCallForToken` + the plugin's `classify`); a throw is a refused, audited call                                   |
+| `BudgetStage`   | P1.3           | `decide(ctx, call, {risks_touched, now})` → allowed `{session_id, remaining, approval_id}` or refusal; atomic; a refusal decrements nothing; a throw is a refused, audited call |
+| `UpstreamStage` | execution door | `execute(ctx, call, target)` → provider result; throws `UpstreamRefusalError(refusal)` for an unusable connection, `UpstreamFailureError` for any other failure                 |
+| `AuditWriter`   | P0.3           | `write(entry)`; failures propagate                                                                                                                                              |
 
 ## Decision core (`risk-gateway.ts`)
 
@@ -404,8 +467,10 @@ envResolver? })` classifies through the plugin, intersects with the
 - `resources: Resource[]` — the mission's resources on the target
   connection, handed to the classifier and, by default, to
   `envResolverFor(resources, adapter.envOf)`: the plugin's own derivation
-  first (Vercel's `env[prod]` segment), the owner's label on the matching
-  resource next, unqualified last. So a mission that accepted
+  first (Vercel's `env[prod]` segment; `NO_SINGLE_ENV` from it means no
+  environment and no fallback to the label), the owner's label on the
+  resources the slice names next (none when they disagree), unqualified
+  last ([policy-engine](./policy-engine.md), `qualify.ts`). So a mission that accepted
   `supabase[staging].bulk-row-write` matches an executed
   `supabase.bulk-row-write` on the staging resource. A host may pass its
   own `envResolver`; the literal `'unqualified'` asks for the engine's mode
@@ -464,9 +529,11 @@ pivot D1; the Upstash ADR is superseded).
 
 `packages/gateway-core/tests/unit/`, vitest, no network, no store:
 
-- `errors.test.ts` (29) — eight codes, one sample each, every field, hint
+- `errors.test.ts` (31) — eight codes, one sample each, every field, hint
   non-empty and serializable; `isRefusal`; `isUnavailableConnectionStatus`;
-  `rpcError` / `rpcSuccess`; `AuthError` code and status;
+  `rpcError` / `rpcSuccess`; `AuthError` code and status; a mission token that
+  stopped working is an `AuthError` carrying its reason and sentence, never a
+  refusal code, and an unknown bearer carries no reason;
   `refusalToRpcError` (-32603, data = refusal); the `mission-inactive` hint of
   an orphaned mission says how long an earlier request stays grantable.
 - `audit.test.ts` (2) — `MemoryAuditWriter` over both kinds; the call entry
@@ -482,7 +549,7 @@ pivot D1; the Upstash ADR is superseded).
 - `authenticate.test.ts` (11) — door table, pure `checkDoor` on every
   mismatch, `parseBearer`, `DoorAuthenticator` for mission token vs
   delegated token vs session at each door, unknown bearer → `AuthError`.
-- `pipeline.test.ts` (28) — `checkMissionActive` (status, passed, future
+- `pipeline.test.ts` (38) — `checkMissionActive` (status, passed, future
   and unreadable `expires_at`, the wording of an expired status without a
   stored expiry), `checkConnectionAvailable` (`unowned` passes,
   `expired` and `revoked` refuse), then the pipeline over
@@ -490,13 +557,19 @@ pivot D1; the Upstash ADR is superseded).
   period): happy path with the full audit entry, inactive mission
   short-circuit, resource refusal before risk, expired connection,
   `risk-not-accepted` through the real decision core and the resources of
-  the target connection, structural rejections, budget refusal without
+  the target connection, structural rejections (and their audit copy: the
+  argument values a classifier denial quotes replaced in one pass and as
+  text, the reason bounded), budget refusal without
   upstream, approval id carried, upstream failure after allow (with and
   without `UpstreamRefusalError`; `UpstreamFailureError` with an argument
   marker absent from the audit and present on the outcome; the bound of the
   stored summary; `upstreamErrorClassName`), a call with no target rejected before
   any risk, an argument JSON cannot carry (`Infinity`) rejected before any
-  stage, audit failure propagating — including a writer that fails once
+  stage, a decision stage that throws (the classifier, the resource stage,
+  the budget stage: one audit entry, nothing forwarded, no message kept; a
+  thrown value that is not an error reads `Error`; an observer that throws
+  does not un-audit the refusal; the audit write of that refusal failing
+  still propagates), audit failure propagating — including a writer that fails once
   after a successful forward (the call rejects, the provider was called
   once, nothing is stored as an upstream failure) and one that fails after
   an upstream failure.
@@ -506,6 +579,10 @@ pivot D1; the Upstash ADR is superseded).
   `(tool, args, resources)`, environment qualification: the adapter's
   `envOf` first, the resource label when it abstains, an explicit
   `envResolver` overriding both, and `envResolver: 'unqualified'`.
+- `token-holder.test.ts` (3) — `tokenAttributionOf` keeps the user id of a
+  member and the name of a named token; `tokenHolderLabel` shows the member's
+  email or the token's name; `MISSION_TOKEN_KINDS` / `isMissionTokenKind` are a
+  closed set of two.
 
 ## References
 
@@ -515,7 +592,9 @@ pivot D1; the Upstash ADR is superseded).
   [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
   D1 (`classify`), D3 (`Resource`, `EnvResolver`), D8 (`shared` reset);
   [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)
-  (arguments must be JSON values).
+  (arguments must be JSON values);
+  [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md)
+  (a decision stage that throws).
 - Spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §3.1–3.5, §4.1,
   §6, §8, §10; [gateway-risk-model](../spec/gateway-risk-model.md) §8,
   §12.

@@ -17,7 +17,13 @@ describe('connections repository', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    owner = (await store.users.upsertFromIdp({ subject: 'o', email: 'o@x' })).id;
+    owner = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'o',
+        email: 'o@x',
+      })
+    ).id;
     group = (await store.groups.getOrCreate('github-admins', 'idp')).id;
   });
   afterEach(() => store.close());
@@ -318,8 +324,20 @@ describe('shares repository', () => {
 
   beforeEach(async () => {
     store = openTestStore().store;
-    owner = (await store.users.upsertFromIdp({ subject: 'o', email: 'o@x' })).id;
-    target = (await store.users.upsertFromIdp({ subject: 't', email: 't@x' })).id;
+    owner = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'o',
+        email: 'o@x',
+      })
+    ).id;
+    target = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 't',
+        email: 't@x',
+      })
+    ).id;
     group = (await store.groups.getOrCreate('devs', 'idp')).id;
     connection = (
       await store.connections.create({

@@ -16,9 +16,9 @@ status: legacy
 
 **Why Resend.** Resend is the modern transactional-and-broadcast email
 API for developers. It fills a gap in the Vaubaan provider catalog :
-**outbound email as a first-class cloud surface**. Gmail covers *inbox
-reads + drafts* (inbound + compose-but-not-send) ; Resend covers
-*email delivery* (outbound). The two are complementary, not competing.
+**outbound email as a first-class cloud surface**. Gmail covers _inbox
+reads + drafts_ (inbound + compose-but-not-send) ; Resend covers
+_email delivery_ (outbound). The two are complementary, not competing.
 
 **Use cases :**
 
@@ -34,25 +34,25 @@ reads + drafts* (inbound + compose-but-not-send) ; Resend covers
    that sets up a new project needs to wire up email infrastructure.
 
 **Positioning within the gateway.** Resend is the first provider whose
-primary action is *sending messages to external recipients*. This makes
+primary action is _sending messages to external recipients_. This makes
 identity-zoning (who the email goes to) and blast-radius control
 (how many recipients per call) cardinal risk axes — borrowed from the
 Gmail research but adapted for outbound semantics.
 
 ## 1. Vocabulary
 
-| Resend concept       | Vaubaan data-model entity | Notes                                                                                       |
-| -------------------- | ------------------------- | ------------------------------------------------------------------------------------------- |
-| Account              | `account`                 | The Resend account backing the API key. Singleton per binding.                              |
-| API Key              | (binding credential)      | `re_*` key pasted by the operator. Stored encrypted in `provider_admins.access_token_encrypted`. Not an entity — it *is* the binding credential. |
-| Domain               | `domain`                  | A verified sending domain (e.g. `notifications.acme.com`). Carries DNS records (DKIM, SPF, DMARC). |
-| DNS record           | `dns-record`              | Synthetic child of `domain` — the individual TXT/CNAME records the operator must configure. Read-only from Resend's perspective (Resend tells you *what* to set, the human does it in their DNS). |
-| Email                | `email`                   | A single transactional email (sent or in-flight). Carries `id`, `from`, `to`, `subject`, status. |
-| Batch                | `batch`                   | A set of emails sent in a single API call (`POST /emails/batch`). Synthetic marker for blast-radius gating. |
-| Audience             | `audience`                | A named contact list (e.g. "Newsletter subscribers", "Beta users"). Container for contacts. |
-| Contact              | `contact`                 | A subscriber in an audience. Carries PII : email, first_name, last_name, custom properties.  |
-| Broadcast            | `broadcast`               | A campaign email destined to an audience/segment. Can be created, updated, scheduled, sent, deleted. |
-| Webhook (future)     | (out of scope v1)         | Resend webhook endpoints for delivery events. Deferred — see hors-scope.                    |
+| Resend concept   | Vaubaan data-model entity | Notes                                                                                                                                                                                             |
+| ---------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Account          | `account`                 | The Resend account backing the API key. Singleton per binding.                                                                                                                                    |
+| API Key          | (binding credential)      | `re_*` key pasted by the operator. Stored encrypted in `provider_admins.access_token_encrypted`. Not an entity — it _is_ the binding credential.                                                  |
+| Domain           | `domain`                  | A verified sending domain (e.g. `notifications.acme.com`). Carries DNS records (DKIM, SPF, DMARC).                                                                                                |
+| DNS record       | `dns-record`              | Synthetic child of `domain` — the individual TXT/CNAME records the operator must configure. Read-only from Resend's perspective (Resend tells you _what_ to set, the human does it in their DNS). |
+| Email            | `email`                   | A single transactional email (sent or in-flight). Carries `id`, `from`, `to`, `subject`, status.                                                                                                  |
+| Batch            | `batch`                   | A set of emails sent in a single API call (`POST /emails/batch`). Synthetic marker for blast-radius gating.                                                                                       |
+| Audience         | `audience`                | A named contact list (e.g. "Newsletter subscribers", "Beta users"). Container for contacts.                                                                                                       |
+| Contact          | `contact`                 | A subscriber in an audience. Carries PII : email, first_name, last_name, custom properties.                                                                                                       |
+| Broadcast        | `broadcast`               | A campaign email destined to an audience/segment. Can be created, updated, scheduled, sent, deleted.                                                                                              |
+| Webhook (future) | (out of scope v1)         | Resend webhook endpoints for delivery events. Deferred — see hors-scope.                                                                                                                          |
 
 ## 2. Data-model
 
@@ -209,18 +209,18 @@ export const dataModel: DataModel = {
 
 ### 2.3 Cardinalities summary
 
-| Entity           | Cardinality | Rationale                                    |
-| ---------------- | ----------- | -------------------------------------------- |
-| `account`        | `one`       | Singleton per binding (one API key = one account). |
-| `domain`         | `bounded`   | A handful per account (1-5 typically).       |
-| `dns-record`     | `bounded`   | 3-5 per domain (DKIM x2 + SPF + DMARC).     |
-| `email`          | `unbounded` | Millions over a SaaS lifetime.               |
-| `batch`          | `unbounded` | One per batch-send call, accumulates.        |
-| `audience`       | `bounded`   | Dozens at most.                              |
-| `contact`        | `unbounded` | Can grow to millions (large newsletter).     |
-| `broadcast`      | `unbounded` | Accumulates over time.                       |
-| `to-zone`        | `bounded`   | 3 synthetic zone values.                     |
-| `recipient-count`| `bounded`   | 3 synthetic count values.                    |
+| Entity            | Cardinality | Rationale                                          |
+| ----------------- | ----------- | -------------------------------------------------- |
+| `account`         | `one`       | Singleton per binding (one API key = one account). |
+| `domain`          | `bounded`   | A handful per account (1-5 typically).             |
+| `dns-record`      | `bounded`   | 3-5 per domain (DKIM x2 + SPF + DMARC).            |
+| `email`           | `unbounded` | Millions over a SaaS lifetime.                     |
+| `batch`           | `unbounded` | One per batch-send call, accumulates.              |
+| `audience`        | `bounded`   | Dozens at most.                                    |
+| `contact`         | `unbounded` | Can grow to millions (large newsletter).           |
+| `broadcast`       | `unbounded` | Accumulates over time.                             |
+| `to-zone`         | `bounded`   | 3 synthetic zone values.                           |
+| `recipient-count` | `bounded`   | 3 synthetic count values.                          |
 
 ## 3. Binding model
 
@@ -263,12 +263,12 @@ provider_bindings row:
 
 **`metadata` fields :**
 
-| Field                  | Type       | Purpose                                                    |
-| ---------------------- | ---------- | ---------------------------------------------------------- |
-| `internal_domains`     | `string[]` | Domains considered "internal" for to-zone classification. Emails to `*@acme.com` are `internal`. |
-| `allowlist_domains`    | `string[]` | External domains pre-approved for sending. Emails to `*@partner.com` are `allowlist`. |
-| `allowlist_addresses`  | `string[]` | Individual external addresses pre-approved. `support@vendor.com` is `allowlist`. |
-| `sending_domains`      | `string[]` | Informational — the verified Resend domains this binding is expected to send from. Used for UI display and future validation. |
+| Field                 | Type       | Purpose                                                                                                                       |
+| --------------------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `internal_domains`    | `string[]` | Domains considered "internal" for to-zone classification. Emails to `*@acme.com` are `internal`.                              |
+| `allowlist_domains`   | `string[]` | External domains pre-approved for sending. Emails to `*@partner.com` are `allowlist`.                                         |
+| `allowlist_addresses` | `string[]` | Individual external addresses pre-approved. `support@vendor.com` is `allowlist`.                                              |
+| `sending_domains`     | `string[]` | Informational — the verified Resend domains this binding is expected to send from. Used for UI display and future validation. |
 
 ### 3.3 Upstream token minting
 
@@ -290,18 +290,18 @@ display name from the first domain or the key prefix.
 
 ## 4. Identity-zoning
 
-Resend is an **outbound** email provider. The cardinal risk is *who the
-email goes to*, not who it comes from (that is fixed by the verified
+Resend is an **outbound** email provider. The cardinal risk is _who the
+email goes to_, not who it comes from (that is fixed by the verified
 sending domain). The zoning model is therefore a simplified version of
 Gmail's, focused on **recipients** (the `to-zone` axis).
 
 ### 4.1 Recipient zones
 
-| Zone                  | Criteria                                               | Risk profile          |
-| --------------------- | ------------------------------------------------------ | --------------------- |
-| `internal`            | All recipients match `internal_domains` from metadata. | Low — internal comms. |
-| `allowlist`           | All recipients match `allowlist_domains` or `allowlist_addresses`, none is `internal`. | Medium — pre-approved external contacts. |
-| `external-unbounded`  | At least one recipient matches neither `internal_domains` nor `allowlist_*`. | High — arbitrary external recipient. Exfiltration vector. |
+| Zone                 | Criteria                                                                               | Risk profile                                              |
+| -------------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| `internal`           | All recipients match `internal_domains` from metadata.                                 | Low — internal comms.                                     |
+| `allowlist`          | All recipients match `allowlist_domains` or `allowlist_addresses`, none is `internal`. | Medium — pre-approved external contacts.                  |
+| `external-unbounded` | At least one recipient matches neither `internal_domains` nor `allowlist_*`.           | High — arbitrary external recipient. Exfiltration vector. |
 
 **Classification rule :** The classifier examines the union of `to` +
 `cc` + `bcc` fields. The zone is the **worst-case** (most permissive)
@@ -310,11 +310,11 @@ the whole call is classified as `external-unbounded`.
 
 ### 4.2 Recipient count
 
-| Count     | Criteria                                               | Risk profile          |
-| --------- | ------------------------------------------------------ | --------------------- |
-| `single`  | Exactly 1 recipient total across `to` + `cc` + `bcc`. | Baseline.             |
-| `multi`   | 2+ recipients in a single `send_email` call.           | Amplified blast.      |
-| `batch`   | Call to `POST /emails/batch` (up to 100 emails).       | Bulk amplification.   |
+| Count    | Criteria                                              | Risk profile        |
+| -------- | ----------------------------------------------------- | ------------------- |
+| `single` | Exactly 1 recipient total across `to` + `cc` + `bcc`. | Baseline.           |
+| `multi`  | 2+ recipients in a single `send_email` call.          | Amplified blast.    |
+| `batch`  | Call to `POST /emails/batch` (up to 100 emails).      | Bulk amplification. |
 
 ### 4.3 Broadcast sends
 
@@ -405,252 +405,252 @@ resend:
 ### 5.2 WRITES — Transactional email
 
 ```yaml
-    # ─── WRITES — TRANSACTIONAL EMAIL ──────────────────────────────────────
+# ─── WRITES — TRANSACTIONAL EMAIL ──────────────────────────────────────
 
-    - id: resend.send-email-internal
-      label: 'Send a transactional email to internal recipients only'
-      reason: >-
-        Single email to recipients matching internal_domains. Low
-        exfiltration risk — stays within the organisation boundary.
-        Side effect : real email delivered to a real inbox.
-      matches: 'resend.account[**].to-zone[internal].W'
-      vector:
-        reversibility: costly
-        blast: single
-        data: data
-        cost: free
-        visibility: internal
-        persistence: session
+- id: resend.send-email-internal
+  label: 'Send a transactional email to internal recipients only'
+  reason: >-
+    Single email to recipients matching internal_domains. Low
+    exfiltration risk — stays within the organisation boundary.
+    Side effect : real email delivered to a real inbox.
+  matches: 'resend.account[**].to-zone[internal].W'
+  vector:
+    reversibility: costly
+    blast: single
+    data: data
+    cost: free
+    visibility: internal
+    persistence: session
 
-    - id: resend.send-email-allowlist
-      label: 'Send a transactional email to pre-approved external contacts'
-      reason: >-
-        Email to recipients matching allowlist_domains or
-        allowlist_addresses. Pre-approved but external — the email
-        leaves the org boundary. Reversible only in the sense that
-        the content is already delivered (email is fire-and-forget).
-      matches: 'resend.account[**].to-zone[allowlist].W'
-      vector:
-        reversibility: costly
-        blast: single
-        data: data
-        cost: free
-        visibility: team
-        persistence: session
+- id: resend.send-email-allowlist
+  label: 'Send a transactional email to pre-approved external contacts'
+  reason: >-
+    Email to recipients matching allowlist_domains or
+    allowlist_addresses. Pre-approved but external — the email
+    leaves the org boundary. Reversible only in the sense that
+    the content is already delivered (email is fire-and-forget).
+  matches: 'resend.account[**].to-zone[allowlist].W'
+  vector:
+    reversibility: costly
+    blast: single
+    data: data
+    cost: free
+    visibility: team
+    persistence: session
 
-    - id: resend.send-email-external-unbounded
-      label: 'Send a transactional email to an arbitrary external recipient'
-      reason: >-
-        Email to an address not in internal_domains or allowlist. Cardinal
-        exfiltration vector — an agent could embed sensitive data in the
-        email body and send it to an attacker-controlled address. The
-        email is irreversibly delivered. Never acceptable on prod at MVP.
-      matches: 'resend.account[**].to-zone[external-unbounded].W'
-      vector:
-        reversibility: irreversible
-        blast: single
-        data: secret
-        cost: free
-        visibility: public
-        persistence: session
-      acceptable_in_envs: ['staging', 'dev']
+- id: resend.send-email-external-unbounded
+  label: 'Send a transactional email to an arbitrary external recipient'
+  reason: >-
+    Email to an address not in internal_domains or allowlist. Cardinal
+    exfiltration vector — an agent could embed sensitive data in the
+    email body and send it to an attacker-controlled address. The
+    email is irreversibly delivered. Never acceptable on prod at MVP.
+  matches: 'resend.account[**].to-zone[external-unbounded].W'
+  vector:
+    reversibility: irreversible
+    blast: single
+    data: secret
+    cost: free
+    visibility: public
+    persistence: session
+  acceptable_in_envs: ['staging', 'dev']
 
-    - id: resend.send-batch
-      label: 'Send a batch of transactional emails (up to 100 per call)'
-      reason: >-
-        POST /emails/batch sends up to 100 emails in one API call. Bulk
-        amplification regardless of recipient zone — the classifier
-        additionally emits the to-zone slice so both risks must be
-        accepted. Distinct marker so the operator explicitly consents to
-        bulk sending.
-      matches: 'resend.account[**].recipient-count[batch].W'
-      vector:
-        reversibility: irreversible
-        blast: bulk
-        data: data
-        cost: moderate
-        visibility: team
-        persistence: session
-      caps:
-        items_per_call_max: 100
-        calls_per_minute_max: 5
-        calls_per_session_max: 50
-      infra_limits:
-        items_per_call_max: 100
+- id: resend.send-batch
+  label: 'Send a batch of transactional emails (up to 100 per call)'
+  reason: >-
+    POST /emails/batch sends up to 100 emails in one API call. Bulk
+    amplification regardless of recipient zone — the classifier
+    additionally emits the to-zone slice so both risks must be
+    accepted. Distinct marker so the operator explicitly consents to
+    bulk sending.
+  matches: 'resend.account[**].recipient-count[batch].W'
+  vector:
+    reversibility: irreversible
+    blast: bulk
+    data: data
+    cost: moderate
+    visibility: team
+    persistence: session
+  caps:
+    items_per_call_max: 100
+    calls_per_minute_max: 5
+    calls_per_session_max: 50
+  infra_limits:
+    items_per_call_max: 100
 ```
 
 ### 5.3 WRITES — Audiences, contacts, broadcasts
 
 ```yaml
-    # ─── WRITES — AUDIENCES & CONTACTS ─────────────────────────────────────
+# ─── WRITES — AUDIENCES & CONTACTS ─────────────────────────────────────
 
-    - id: resend.audience-write
-      label: 'Create or delete an audience'
-      reason: >-
-        Structural change to the contact database. Creating an audience
-        is low risk ; deleting one removes all contained contacts
-        (irreversible data loss). Conservative vector reflects the
-        worst case (delete).
-      matches: 'resend.account[**].audience[**].W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: posture
+- id: resend.audience-write
+  label: 'Create or delete an audience'
+  reason: >-
+    Structural change to the contact database. Creating an audience
+    is low risk ; deleting one removes all contained contacts
+    (irreversible data loss). Conservative vector reflects the
+    worst case (delete).
+  matches: 'resend.account[**].audience[**].W'
+  vector:
+    reversibility: costly
+    blast: env
+    data: metadata
+    cost: free
+    visibility: internal
+    persistence: posture
 
-    - id: resend.contact-write
-      label: 'Create, update, or delete contacts in an audience'
-      reason: >-
-        Mutate the contact list — add subscribers, update PII fields,
-        remove contacts. PII-carrying operation (email, name, custom
-        properties). Reversible for creates (delete the contact) but
-        not for deletes (data loss).
-      matches: 'resend.account[**].audience[**].contact[**].W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: pii
-        cost: free
-        visibility: internal
-        persistence: posture
+- id: resend.contact-write
+  label: 'Create, update, or delete contacts in an audience'
+  reason: >-
+    Mutate the contact list — add subscribers, update PII fields,
+    remove contacts. PII-carrying operation (email, name, custom
+    properties). Reversible for creates (delete the contact) but
+    not for deletes (data loss).
+  matches: 'resend.account[**].audience[**].contact[**].W'
+  vector:
+    reversibility: costly
+    blast: env
+    data: pii
+    cost: free
+    visibility: internal
+    persistence: posture
 
-    # ─── WRITES — BROADCASTS ───────────────────────────────────────────────
+# ─── WRITES — BROADCASTS ───────────────────────────────────────────────
 
-    - id: resend.broadcast-draft
-      label: 'Create or update a broadcast (draft, not sent)'
-      reason: >-
-        Draft a campaign email. No side effect until sent — the broadcast
-        sits in draft status. Reversible (delete the broadcast).
-      matches: 'resend.account[**].audience[**].broadcast.W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: data
-        cost: free
-        visibility: internal
-        persistence: session
+- id: resend.broadcast-draft
+  label: 'Create or update a broadcast (draft, not sent)'
+  reason: >-
+    Draft a campaign email. No side effect until sent — the broadcast
+    sits in draft status. Reversible (delete the broadcast).
+  matches: 'resend.account[**].audience[**].broadcast.W'
+  vector:
+    reversibility: reversible
+    blast: single
+    data: data
+    cost: free
+    visibility: internal
+    persistence: session
 
-    - id: resend.broadcast-send
-      label: 'Send a broadcast to its audience (mass email delivery)'
-      reason: >-
-        Trigger delivery of a broadcast to all contacts in the audience
-        (or a segment). Cardinal bulk action — potentially thousands of
-        real emails delivered irreversibly. Cost scales with audience
-        size (Resend pricing is per-email). The highest-risk operation
-        in this provider.
-      matches: 'resend.account[**].audience[**].broadcast[**].send.W'
-      vector:
-        reversibility: irreversible
-        blast: bulk
-        data: data
-        cost: unbounded
-        visibility: public
-        persistence: posture
-      caps:
-        calls_per_minute_max: 1
-        calls_per_session_max: 5
-      infra_limits:
-        calls_per_minute_max: 10
+- id: resend.broadcast-send
+  label: 'Send a broadcast to its audience (mass email delivery)'
+  reason: >-
+    Trigger delivery of a broadcast to all contacts in the audience
+    (or a segment). Cardinal bulk action — potentially thousands of
+    real emails delivered irreversibly. Cost scales with audience
+    size (Resend pricing is per-email). The highest-risk operation
+    in this provider.
+  matches: 'resend.account[**].audience[**].broadcast[**].send.W'
+  vector:
+    reversibility: irreversible
+    blast: bulk
+    data: data
+    cost: unbounded
+    visibility: public
+    persistence: posture
+  caps:
+    calls_per_minute_max: 1
+    calls_per_session_max: 5
+  infra_limits:
+    calls_per_minute_max: 10
 
-    - id: resend.broadcast-delete
-      label: 'Delete a broadcast'
-      reason: >-
-        Remove a broadcast. If the broadcast was already sent, this only
-        removes the campaign record — emails already delivered are not
-        recalled. If the broadcast was scheduled, this cancels it.
-      matches: 'resend.account[**].audience[**].broadcast[**].delete.W'
-      vector:
-        reversibility: costly
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: session
+- id: resend.broadcast-delete
+  label: 'Delete a broadcast'
+  reason: >-
+    Remove a broadcast. If the broadcast was already sent, this only
+    removes the campaign record — emails already delivered are not
+    recalled. If the broadcast was scheduled, this cancels it.
+  matches: 'resend.account[**].audience[**].broadcast[**].delete.W'
+  vector:
+    reversibility: costly
+    blast: single
+    data: metadata
+    cost: free
+    visibility: internal
+    persistence: session
 ```
 
 ### 5.4 WRITES — Domains
 
 ```yaml
-    # ─── WRITES — DOMAINS ──────────────────────────────────────────────────
+# ─── WRITES — DOMAINS ──────────────────────────────────────────────────
 
-    - id: resend.domain-write
-      label: 'Add, update, or remove a sending domain'
-      reason: >-
-        Posture-shift : adding a domain changes the sending surface of
-        the account. Removing a domain breaks email delivery for all
-        messages using that sender. Requires DNS configuration outside
-        Resend (DKIM, SPF, DMARC) — the operator must complete
-        verification manually.
-      matches: 'resend.account[**].domain[**].W'
-      vector:
-        reversibility: costly
-        blast: account
-        data: metadata
-        cost: free
-        visibility: public
-        persistence: posture
+- id: resend.domain-write
+  label: 'Add, update, or remove a sending domain'
+  reason: >-
+    Posture-shift : adding a domain changes the sending surface of
+    the account. Removing a domain breaks email delivery for all
+    messages using that sender. Requires DNS configuration outside
+    Resend (DKIM, SPF, DMARC) — the operator must complete
+    verification manually.
+  matches: 'resend.account[**].domain[**].W'
+  vector:
+    reversibility: costly
+    blast: account
+    data: metadata
+    cost: free
+    visibility: public
+    persistence: posture
 
-    - id: resend.domain-verify
-      label: 'Trigger DNS verification of a domain'
-      reason: >-
-        Idempotent call that asks Resend to re-check the DNS records.
-        No side effect beyond the verification attempt. Low risk but
-        grouped with domain-write because it is a step in the domain
-        setup posture-shift.
-      matches: 'resend.account[**].domain[**].dns-record[**].W'
-      vector:
-        reversibility: reversible
-        blast: single
-        data: metadata
-        cost: free
-        visibility: internal
-        persistence: stateless
+- id: resend.domain-verify
+  label: 'Trigger DNS verification of a domain'
+  reason: >-
+    Idempotent call that asks Resend to re-check the DNS records.
+    No side effect beyond the verification attempt. Low risk but
+    grouped with domain-write because it is a step in the domain
+    setup posture-shift.
+  matches: 'resend.account[**].domain[**].dns-record[**].W'
+  vector:
+    reversibility: reversible
+    blast: single
+    data: metadata
+    cost: free
+    visibility: internal
+    persistence: stateless
 ```
 
 ### 5.5 FALLBACK
 
 ```yaml
-    # ─── FALLBACK (required) ───────────────────────────────────────────────
+# ─── FALLBACK (required) ───────────────────────────────────────────────
 
-    - id: resend.uncategorized-write
-      label: 'Uncategorized Resend write'
-      reason: >-
-        Catch-all for writes not covered by a named risk. If Resend
-        adds new API surfaces (webhooks, API key management, templates)
-        and Vaubaan wraps them before the catalog is updated, calls
-        land here — fail-loud by design.
-      matches: 'resend.[**].W'
-      vector:
-        reversibility: costly
-        blast: env
-        data: data
-        cost: moderate
-        visibility: internal
-        persistence: posture
+- id: resend.uncategorized-write
+  label: 'Uncategorized Resend write'
+  reason: >-
+    Catch-all for writes not covered by a named risk. If Resend
+    adds new API surfaces (webhooks, API key management, templates)
+    and Vaubaan wraps them before the catalog is updated, calls
+    land here — fail-loud by design.
+  matches: 'resend.[**].W'
+  vector:
+    reversibility: costly
+    blast: env
+    data: data
+    cost: moderate
+    visibility: internal
+    persistence: posture
 ```
 
 ### 5.6 Catalog summary
 
-| # | RiskId                              | Kind   | Cardinal axis                   |
-|---|-------------------------------------|--------|---------------------------------|
-| 1 | `resend.read-email-status`          | read   | email metadata                  |
-| 2 | `resend.read-domains`               | read   | domain + DNS status             |
-| 3 | `resend.read-audiences`             | read   | contacts PII                    |
-| 4 | `resend.read-broadcasts`            | read   | campaign metadata               |
-| 5 | `resend.send-email-internal`        | write  | to-zone internal                |
-| 6 | `resend.send-email-allowlist`       | write  | to-zone allowlist               |
-| 7 | `resend.send-email-external-unbounded` | write | to-zone external (exfil vector) |
-| 8 | `resend.send-batch`                 | write  | bulk amplification              |
-| 9 | `resend.audience-write`             | write  | audience structure              |
-|10 | `resend.contact-write`              | write  | contact PII mutation            |
-|11 | `resend.broadcast-draft`            | write  | campaign creation               |
-|12 | `resend.broadcast-send`             | write  | mass email delivery (cardinal)  |
-|13 | `resend.broadcast-delete`           | write  | campaign removal                |
-|14 | `resend.domain-write`               | write  | sending posture-shift           |
-|15 | `resend.domain-verify`              | write  | DNS verification trigger        |
-|16 | `resend.uncategorized-write`        | write  | fallback catch-all              |
+| #   | RiskId                                 | Kind  | Cardinal axis                   |
+| --- | -------------------------------------- | ----- | ------------------------------- |
+| 1   | `resend.read-email-status`             | read  | email metadata                  |
+| 2   | `resend.read-domains`                  | read  | domain + DNS status             |
+| 3   | `resend.read-audiences`                | read  | contacts PII                    |
+| 4   | `resend.read-broadcasts`               | read  | campaign metadata               |
+| 5   | `resend.send-email-internal`           | write | to-zone internal                |
+| 6   | `resend.send-email-allowlist`          | write | to-zone allowlist               |
+| 7   | `resend.send-email-external-unbounded` | write | to-zone external (exfil vector) |
+| 8   | `resend.send-batch`                    | write | bulk amplification              |
+| 9   | `resend.audience-write`                | write | audience structure              |
+| 10  | `resend.contact-write`                 | write | contact PII mutation            |
+| 11  | `resend.broadcast-draft`               | write | campaign creation               |
+| 12  | `resend.broadcast-send`                | write | mass email delivery (cardinal)  |
+| 13  | `resend.broadcast-delete`              | write | campaign removal                |
+| 14  | `resend.domain-write`                  | write | sending posture-shift           |
+| 15  | `resend.domain-verify`                 | write | DNS verification trigger        |
+| 16  | `resend.uncategorized-write`           | write | fallback catch-all              |
 
 ## 6. Tools list
 
@@ -659,38 +659,38 @@ Vaubaan convention.
 
 ### 6.1 Read tools
 
-| Tool                            | Resend API              | Risk(s) touched              |
-| ------------------------------- | ----------------------- | ---------------------------- |
-| `resend__get_email`             | `GET /emails/:id`       | `read-email-status`          |
-| `resend__list_domains`          | `GET /domains`          | `read-domains`               |
-| `resend__get_domain`            | `GET /domains/:id`      | `read-domains`               |
-| `resend__list_audiences`        | `GET /audiences`        | `read-audiences`             |
-| `resend__get_audience`          | `GET /audiences/:id`    | `read-audiences`             |
-| `resend__list_contacts`         | `GET /audiences/:id/contacts` | `read-audiences`        |
-| `resend__get_contact`           | `GET /contacts/:id`     | `read-audiences`             |
-| `resend__list_broadcasts`       | `GET /broadcasts`       | `read-broadcasts`            |
-| `resend__get_broadcast`         | `GET /broadcasts/:id`   | `read-broadcasts`            |
+| Tool                      | Resend API                    | Risk(s) touched     |
+| ------------------------- | ----------------------------- | ------------------- |
+| `resend__get_email`       | `GET /emails/:id`             | `read-email-status` |
+| `resend__list_domains`    | `GET /domains`                | `read-domains`      |
+| `resend__get_domain`      | `GET /domains/:id`            | `read-domains`      |
+| `resend__list_audiences`  | `GET /audiences`              | `read-audiences`    |
+| `resend__get_audience`    | `GET /audiences/:id`          | `read-audiences`    |
+| `resend__list_contacts`   | `GET /audiences/:id/contacts` | `read-audiences`    |
+| `resend__get_contact`     | `GET /contacts/:id`           | `read-audiences`    |
+| `resend__list_broadcasts` | `GET /broadcasts`             | `read-broadcasts`   |
+| `resend__get_broadcast`   | `GET /broadcasts/:id`         | `read-broadcasts`   |
 
 ### 6.2 Write tools
 
-| Tool                            | Resend API                     | Risk(s) touched                                       | Notes                              |
-| ------------------------------- | ------------------------------ | ----------------------------------------------------- | ---------------------------------- |
-| `resend__send_email`            | `POST /emails`                 | `send-email-{zone}` + `recipient-count[single\|multi]`| Zone resolved from to/cc/bcc.     |
-| `resend__send_batch_emails`     | `POST /emails/batch`           | `send-email-{zone}` + `send-batch`                    | Worst-case zone across all emails. |
-| `resend__create_domain`         | `POST /domains`                | `domain-write`                                         |                                    |
-| `resend__update_domain`         | `PATCH /domains/:id`           | `domain-write`                                         |                                    |
-| `resend__delete_domain`         | `DELETE /domains/:id`          | `domain-write`                                         |                                    |
-| `resend__verify_domain`         | `POST /domains/:id/verify`     | `domain-verify`                                        |                                    |
-| `resend__create_audience`       | `POST /audiences`              | `audience-write`                                       |                                    |
-| `resend__delete_audience`       | `DELETE /audiences/:id`        | `audience-write`                                       |                                    |
-| `resend__create_contact`        | `POST /audiences/:id/contacts` | `contact-write`                                        |                                    |
-| `resend__update_contact`        | `PATCH /contacts/:id`          | `contact-write`                                        |                                    |
-| `resend__delete_contact`        | `DELETE /contacts/:id`         | `contact-write`                                        |                                    |
-| `resend__create_broadcast`      | `POST /audiences/:id/broadcasts` | `broadcast-draft`                                    |                                    |
-| `resend__update_broadcast`      | `PUT /broadcasts/:id`          | `broadcast-draft`                                      |                                    |
-| `resend__send_broadcast`        | `POST /broadcasts/:id/send`    | `broadcast-send`                                       | Cardinal risk.                     |
-| `resend__delete_broadcast`      | `DELETE /broadcasts/:id`       | `broadcast-delete`                                     |                                    |
-| `resend__describe_zones`        | (synthetic — no upstream call)  | (no risk — read-only binding metadata) | Returns the to-zone config from binding metadata. |
+| Tool                        | Resend API                       | Risk(s) touched                                        | Notes                                             |
+| --------------------------- | -------------------------------- | ------------------------------------------------------ | ------------------------------------------------- |
+| `resend__send_email`        | `POST /emails`                   | `send-email-{zone}` + `recipient-count[single\|multi]` | Zone resolved from to/cc/bcc.                     |
+| `resend__send_batch_emails` | `POST /emails/batch`             | `send-email-{zone}` + `send-batch`                     | Worst-case zone across all emails.                |
+| `resend__create_domain`     | `POST /domains`                  | `domain-write`                                         |                                                   |
+| `resend__update_domain`     | `PATCH /domains/:id`             | `domain-write`                                         |                                                   |
+| `resend__delete_domain`     | `DELETE /domains/:id`            | `domain-write`                                         |                                                   |
+| `resend__verify_domain`     | `POST /domains/:id/verify`       | `domain-verify`                                        |                                                   |
+| `resend__create_audience`   | `POST /audiences`                | `audience-write`                                       |                                                   |
+| `resend__delete_audience`   | `DELETE /audiences/:id`          | `audience-write`                                       |                                                   |
+| `resend__create_contact`    | `POST /audiences/:id/contacts`   | `contact-write`                                        |                                                   |
+| `resend__update_contact`    | `PATCH /contacts/:id`            | `contact-write`                                        |                                                   |
+| `resend__delete_contact`    | `DELETE /contacts/:id`           | `contact-write`                                        |                                                   |
+| `resend__create_broadcast`  | `POST /audiences/:id/broadcasts` | `broadcast-draft`                                      |                                                   |
+| `resend__update_broadcast`  | `PUT /broadcasts/:id`            | `broadcast-draft`                                      |                                                   |
+| `resend__send_broadcast`    | `POST /broadcasts/:id/send`      | `broadcast-send`                                       | Cardinal risk.                                    |
+| `resend__delete_broadcast`  | `DELETE /broadcasts/:id`         | `broadcast-delete`                                     |                                                   |
+| `resend__describe_zones`    | (synthetic — no upstream call)   | (no risk — read-only binding metadata)                 | Returns the to-zone config from binding metadata. |
 
 ## 7. Classifier design
 
@@ -835,16 +835,16 @@ has `environment = NULL` and risks are unqualified
 
 ## 10. Hors-scope (v1)
 
-| Feature                          | Reason                                                         | Phase          |
-| -------------------------------- | -------------------------------------------------------------- | -------------- |
-| **Resend Webhooks**              | Webhook endpoints are an inbound configuration surface. Adds complexity (URL validation, secret rotation) without clear agent use case at MVP. | Phase 2        |
-| **API key management**           | `POST /api-keys`, `DELETE /api-keys` — creating/deleting Resend API keys from within the gateway is a credential-minting surface. Too risky for an agent ; left to human operators. | Phase 2+       |
-| **Resend Templates**             | Templates are a convenience layer (WYSIWYG editor). Agents compose HTML directly ; templates add no security surface. | Phase 2 (if demand) |
-| **Email scheduling**             | `POST /emails { scheduled_at }` — single-email scheduling. Adds a temporal dimension to blast control. Spec the cap model first. | Phase 2        |
-| **Broadcast scheduling**         | `POST /broadcasts { scheduled_at }` — broadcast scheduling. Same temporal concern. | Phase 2        |
-| **Inbound email (receiving)**    | Resend's receiving API (`/inbound`) is a separate product surface. Out of scope — Vaubaan focuses on outbound. | Not planned    |
-| **`send_email` with attachments** | Attachments add a data-exfiltration surface (binary blobs). Blocked at v1 — the classifier rejects calls with non-empty `attachments` array. | Phase 2 (with `bytes_per_call_max` cap) |
-| **Multi-recipient to-zone per-address** | At v1, zone is worst-case across all recipients. Future: emit per-recipient slices for fine-grained gating. | Phase 3        |
+| Feature                                 | Reason                                                                                                                                                                              | Phase                                   |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- |
+| **Resend Webhooks**                     | Webhook endpoints are an inbound configuration surface. Adds complexity (URL validation, secret rotation) without clear agent use case at MVP.                                      | Phase 2                                 |
+| **API key management**                  | `POST /api-keys`, `DELETE /api-keys` — creating/deleting Resend API keys from within the gateway is a credential-minting surface. Too risky for an agent ; left to human operators. | Phase 2+                                |
+| **Resend Templates**                    | Templates are a convenience layer (WYSIWYG editor). Agents compose HTML directly ; templates add no security surface.                                                               | Phase 2 (if demand)                     |
+| **Email scheduling**                    | `POST /emails { scheduled_at }` — single-email scheduling. Adds a temporal dimension to blast control. Spec the cap model first.                                                    | Phase 2                                 |
+| **Broadcast scheduling**                | `POST /broadcasts { scheduled_at }` — broadcast scheduling. Same temporal concern.                                                                                                  | Phase 2                                 |
+| **Inbound email (receiving)**           | Resend's receiving API (`/inbound`) is a separate product surface. Out of scope — Vaubaan focuses on outbound.                                                                      | Not planned                             |
+| **`send_email` with attachments**       | Attachments add a data-exfiltration surface (binary blobs). Blocked at v1 — the classifier rejects calls with non-empty `attachments` array.                                        | Phase 2 (with `bytes_per_call_max` cap) |
+| **Multi-recipient to-zone per-address** | At v1, zone is worst-case across all recipients. Future: emit per-recipient slices for fine-grained gating.                                                                         | Phase 3                                 |
 
 ## 11. Questions résolues
 

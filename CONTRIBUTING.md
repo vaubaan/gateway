@@ -47,7 +47,7 @@ gateway.
 ## Look at the product
 
 ```bash
-npm run demo      # builds, then serves the whole interface on http://localhost:3210
+npm run demo      # builds when the sources changed, then serves the whole interface on http://localhost:3210
 ```
 
 The demo is the real application with a simulated identity provider (an
@@ -102,7 +102,7 @@ CI runs the same gate, then the browser tests and the image build.
 ```
 apps/gateway/            the application: server and web interface    @vaubaan/gateway-app
 packages/shared/         shared types and helpers                      @vaubaan/shared
-packages/policy-engine/  slices, risk matching, budget rules           @vaubaan/policy-engine
+packages/policy-engine/  slices, matching, the risk decision, the validity rule of a budget  @vaubaan/policy-engine
 packages/plugin-sdk/     the plugin contract, registry and test kit    @vaubaan/plugin-sdk
 packages/gateway-core/   call pipeline, decisions, refusals, audit     @vaubaan/gateway-core
 packages/telemetry/      opt-in telemetry report                       @vaubaan/telemetry
@@ -146,7 +146,8 @@ The order of work:
 Three rules about these documents:
 
 - An accepted **ADR is never edited** to say something else. A new ADR
-  supersedes it, or a dated amendment is added at its top. Name the file
+  supersedes it, or a dated `## Amendment` section is added at its end, after
+  the rejected alternatives, with a one-line pointer at its top. Name the file
   after the decision (`docs/decisions/<slug>.md`, no number), with
   `status: accepted` and the date in its frontmatter.
 - A **handbook** starts with a `tracks:` list in its frontmatter: the source

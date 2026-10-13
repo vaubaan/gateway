@@ -64,11 +64,13 @@ export async function authorityRig(options: ExecutionInstanceOptions = {}): Prom
   });
   const { root } = instance;
   const bob = await root.store.users.upsertFromIdp({
+    issuer: 'http://idp.test',
     subject: 'idp|bob',
     email: 'bob@example.com',
     displayName: 'Bob',
   });
   const operator = await root.store.users.upsertFromIdp({
+    issuer: 'http://idp.test',
     subject: 'idp|ops',
     email: OPERATOR_EMAIL,
     displayName: 'Ops',

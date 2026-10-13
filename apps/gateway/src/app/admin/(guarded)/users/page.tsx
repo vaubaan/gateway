@@ -9,7 +9,7 @@
 import { LocalDate } from '@/components/LocalDate';
 import styles from '@/components/connections/connections.module.css';
 import { NoticeBanner } from '@/components/connections/parts';
-import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Stack } from '@/components/ui';
+import { Badge, Button, Card, CardBody, CardHeader, CardTitle, Slug, Stack } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
 import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import { USERS_PAGE, type UserView } from '@/server/users';
@@ -57,7 +57,11 @@ function UserCard({ view, isSelf }: { view: UserView; isSelf: boolean }) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>{user.email}</CardTitle>
+        <CardTitle>
+          <Slug kind="member" mono={false}>
+            {user.email}
+          </Slug>
+        </CardTitle>
         <span className={styles.badges}>
           <Badge tone={active ? 'success' : 'danger'}>{active ? 'active' : 'deactivated'}</Badge>
           {isSelf && <Badge tone="info">you</Badge>}

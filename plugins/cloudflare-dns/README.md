@@ -83,6 +83,21 @@ Writes (8): `create_record`, `update_record`, `delete_record`,
 `import_records`, `edit_zone_settings`, `purge_cache`, `edit_dnssec`,
 `delete_zone`.
 
+A tool takes the arguments its schema declares and nothing else. `execute`
+builds its query string and its JSON body from the arguments, so an
+undeclared one (a field of Cloudflare's API no tool lists) is denied by
+`classify` and refused again by `execute` (`undeclaredArgument` in
+`src/classify.ts`, over the SDK's `undeclaredArgumentDenial`):
+`<name>: not an argument of '<tool>' — nothing classifies it, so it is not sent.`
+To
+support a new field, declare it in `src/tools.ts` and classify it.
+
+What `execute` declines itself — an unknown tool, an unresolved zone, an
+undeclared argument, a malformed identifier, the record guard below — is an
+`isError` result; what Cloudflare fails is thrown (`UpstreamAuthError` on
+401/403, `UpstreamHttpError` otherwise). Plugin version 3.0.0, catalog
+version 2.
+
 Three behaviours are specific to v5:
 
 - `list_zones` answers with the upstream list **filtered to the mission's
@@ -138,11 +153,11 @@ persisted policy is the explicit enumeration.
 
 ## Tests
 
-`npx vitest run plugins/cloudflare-dns` — 122 tests: the SDK kit
+`npx vitest run plugins/cloudflare-dns` — 189 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
 `assertPresetsValid`), the classifier (`plugin.test.ts` and the per-tool
 suite `classify.test.ts`, including the path-safe identifiers), `execute`
 and `discoverResources` against `mockFetch` (the update / delete guard, no
 call for an unsafe identifier), the credential spec and presets, catalog
-invariants with the exact risks each tool touches, and the data model. No
-test ever calls Cloudflare.
+invariants with the exact risks each tool touches, the identifier grammars
+(`identifiers.test.ts`), and the data model. No test ever calls Cloudflare.

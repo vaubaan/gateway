@@ -10,6 +10,8 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
   (data model, tool → slice mapping, catalog, edge cases).
 - Upstream: ADRs [`rewrap-official-mcps`](../../docs/decisions/rewrap-official-mcps.md)
   and [`vercel-augment-with-rest-tools`](../../docs/decisions/vercel-augment-with-rest-tools.md).
+- Arguments and refusals: ADR [`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
+- Plugin version 3.0.0, catalog version 2.
 
 ## Layout
 
@@ -64,6 +66,19 @@ hostname or URL. A value outside its grammar — `..`, a separator, an encoded
 form — is denied by `classify` and refused by `execute` before any request,
 never escaped.
 
+A tool takes the arguments its schema declares and nothing else. The
+rewrapped tools forward their arguments whole, so an undeclared one —
+another spelling (`project_id`), a `target` on `deploy_to_vercel`, a field
+of Vercel's API — is denied by `classify` and refused by `execute`
+(`undeclaredArgument` in `src/classify.ts`, over the SDK's
+`undeclaredArgumentDenial`). `teamId` and `projectId` are the two routing
+arguments: read for every tool, then dropped and written again from the
+credential and the resolved project.
+
+What `execute` declines itself is an `isError` result carrying the reason;
+what Vercel fails is thrown (`UpstreamAuthError` on 401/403,
+`UpstreamHttpError` on another failed status).
+
 ## Credential
 
 `api-key` with two fields, collected by the host's generic form:
@@ -107,11 +122,13 @@ the persisted mission policy is always the explicit enumeration.
 Env-qualified entries (`vercel[preview].deploy`) rely on the runtime knowing
 which environment a call touched. For Vercel that is **not** the owner's
 label on the project resource (a project spans all three environments) but
-the `env[<label>]` segment the classifier emits. The plugin exports a pure
-helper, `vercelEnvOf(slice)`, that reads it; the default
-`resourceEnvResolver` of `@vaubaan/policy-engine` does not. Until the host
-wires a slice-aware resolver, the env-qualified preset entries may not match
-at runtime — see the handbook, "Environment axis".
+the `env[<label>]` segment the classifier emits. The plugin declares
+`envOf` (`vercelEnvOf(slice)`), which the host's default resolver asks
+before the resource label. A slice whose `env` segment is not one label of
+the triad — a wildcard, a list, another label — answers `NO_SINGLE_ENV`: the
+host then resolves no environment, does not fall back to the label, and
+refuses every env-scoped risk the slice touches. See the handbook,
+"Environment axis".
 
 ## Resources
 
@@ -139,4 +156,4 @@ carries the credential's team and that no team id comes from the arguments;
 `identifier-injection.test.ts` feeds dot segments, separators and encoded
 forms to every identifier position of `classify` and `execute`;
 `firewall.test.ts` covers the five firewall tools (slices, risks, request
-shapes). No test reaches the network.
+shapes). 622 tests; none reaches the network.

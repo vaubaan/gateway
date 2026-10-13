@@ -14,6 +14,7 @@ describe('users repository', () => {
 
   it('creates a user on first login and refreshes it afterwards', async () => {
     const created = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
       subject: 'idp|1',
       email: 'ada@example.test',
       displayName: 'Ada',
@@ -27,7 +28,11 @@ describe('users repository', () => {
     });
 
     t.clock.advance(60_000);
-    const again = await store.users.upsertFromIdp({ subject: 'idp|1', email: 'ada@new.test' });
+    const again = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'idp|1',
+      email: 'ada@new.test',
+    });
     expect(again.id).toBe(created.id);
     expect(again.email).toBe('ada@new.test');
     expect(again.lastLoginAt).toBe('2026-10-13T09:01:00.000Z');
@@ -35,15 +40,23 @@ describe('users repository', () => {
   });
 
   it('looks users up by id, subject and email', async () => {
-    const u = await store.users.upsertFromIdp({ subject: 's', email: 'e@x' });
+    const u = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 's',
+      email: 'e@x',
+    });
     expect(await store.users.getById(u.id)).toEqual(u);
-    expect(await store.users.getBySubject('s')).toEqual(u);
+    expect(await store.users.getByIdentity('http://idp.test', 's')).toEqual(u);
     expect(await store.users.findByEmail('e@x')).toEqual([u]);
     expect(await store.users.getById('missing')).toBeNull();
   });
 
   it('marks a user removed; a later login does not bring them back, `reactivate` does', async () => {
-    const u = await store.users.upsertFromIdp({ subject: 's', email: 'e@x' });
+    const u = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 's',
+      email: 'e@x',
+    });
     expect(u.sessionsEndedAt).toBeNull();
     const removed = await store.users.markRemoved(u.id);
     expect(removed.status).toBe('removed');
@@ -52,7 +65,11 @@ describe('users repository', () => {
 
     // The identity provider still knows them: the row is refreshed, the status is not.
     t.clock.advance(60_000);
-    const still = await store.users.upsertFromIdp({ subject: 's', email: 'e@new' });
+    const still = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 's',
+      email: 'e@new',
+    });
     expect(still).toMatchObject({ id: u.id, email: 'e@new', status: 'removed' });
     expect(still.removedAt).toBe(removed.removedAt);
 
@@ -74,8 +91,20 @@ describe('groups repository', () => {
 
   beforeEach(async () => {
     store = openTestStore().store;
-    alice = (await store.users.upsertFromIdp({ subject: 'a', email: 'a@x' })).id;
-    bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'b@x' })).id;
+    alice = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'a',
+        email: 'a@x',
+      })
+    ).id;
+    bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'b@x',
+      })
+    ).id;
   });
   afterEach(() => store.close());
 

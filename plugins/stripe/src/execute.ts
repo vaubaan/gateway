@@ -23,9 +23,12 @@
  */
 
 import {
+  ExecutorRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
+  declining,
   expectCredentialKind,
+  refusalResult,
   type ConnectionContext,
   type ExecuteContext,
   type McpToolResult,
@@ -71,7 +74,7 @@ interface Route {
  */
 function pathId(args: Args): string {
   const id = stripeId(args.id);
-  if (id === null) throw new Error('stripe: id: missing or malformed');
+  if (id === null) throw new ExecutorRefusal('stripe: id: missing or malformed');
   return id;
 }
 
@@ -125,19 +128,34 @@ const ROUTES: Readonly<Record<string, Route>> = {
 
 // ─── Entry points ─────────────────────────────────────────────────────────────
 
-export async function executeStripe(
+/**
+ * What this executor declines itself — an account outside the mission, a malformed
+ * identifier, a mode the connection holds no key for — is an `ExecutorRefusal`,
+ * returned as an `isError` result : no request left, nothing failed at Stripe.
+ */
+export function executeStripe(
   ctx: ExecuteContext,
   tool: string,
   args: Args,
 ): Promise<McpToolResult> {
-  const route = ROUTES[tool];
-  if (!route) return { content: [{ type: 'text', text: `unknown tool '${tool}'` }], isError: true };
+  return declining(() => executeDeclared(ctx, tool, args));
+}
+
+async function executeDeclared(
+  ctx: ExecuteContext,
+  tool: string,
+  args: Args,
+): Promise<McpToolResult> {
+  const route = Object.hasOwn(ROUTES, tool) ? ROUTES[tool] : undefined;
+  if (!route) return refusalResult(`unknown tool '${tool}'`);
 
   const target = resolveStripeResource(args, ctx.resources);
-  if ('denied' in target) throw new Error(`stripe: ${target.denied}`);
+  if ('denied' in target) throw new ExecutorRefusal(`stripe: ${target.denied}`);
   const mode = modeOf(target.resource);
   if (!mode) {
-    throw new Error(`stripe: cannot determine the test/live mode of '${target.resource.ref}'`);
+    throw new ExecutorRefusal(
+      `stripe: cannot determine the test/live mode of '${target.resource.ref}'`,
+    );
   }
   const key = keyFor(ctx, mode);
 
@@ -145,7 +163,7 @@ export async function executeStripe(
   // Every identifier argument is read the way the classifier read it : one
   // that it would have refused is not sent in a query string or a body either.
   const ids = readIdArgs(args);
-  if ('denied' in ids) throw new Error(`stripe: ${ids.denied}`);
+  if ('denied' in ids) throw new ExecutorRefusal(`stripe: ${ids.denied}`);
 
   const payload = await callStripeApi(
     ctx.fetch,
@@ -215,7 +233,7 @@ function isAccountDto(value: unknown): value is AccountDto {
 function keyFor(ctx: ConnectionContext, mode: StripeMode): string {
   const secret = expectCredentialKind(STRIPE_PROVIDER, ctx.credential, 'api-key');
   const key = secret.fields[KEY_FIELD_BY_MODE[mode]];
-  if (!key) throw new Error(`stripe: this connection has no ${mode}-mode key`);
+  if (!key) throw new ExecutorRefusal(`stripe: this connection has no ${mode}-mode key`);
   return key;
 }
 

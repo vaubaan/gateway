@@ -395,9 +395,8 @@ Ten read, seventeen write. Resource arguments are explicit: domain tools
 take the domain's ref, segment, membership and broadcast tools take the
 segment's ref, and sends take their domain from the `from` address.
 
-The plugin's own declaration groups `describe_zones` with the write
-tools (9 and 18); it is counted here with the reads because that is how
-it is classified.
+`describe_zones` is one of the ten reads: it returns configuration and
+is classified as a read.
 
 ### 6.1 Sent emails and transactional sends
 

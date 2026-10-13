@@ -17,6 +17,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
+import { declaredOnly } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyCloudflareDns } from '../../src/classify.ts';
 import { cloudflareDnsDataModel } from '../../src/data-model.ts';
@@ -212,7 +213,11 @@ describe('classifyCloudflareDns — account propagation from the zone resource',
         { zone_id: 'z1', record_id: 'r1' },
         { zone_id: 'z1', record_id: 'r1', ...ordinary },
       ]) {
-        const result = classifyCloudflareDns(tool, args, [zone]);
+        const result = classifyCloudflareDns(
+          tool,
+          declaredOnly({ tools: cloudflareDnsTools }, tool, args),
+          [zone],
+        );
         if ('denied' in result) throw new Error(`${tool}: unexpected denial: ${result.denied}`);
         expect(result.slices.length, tool).toBeGreaterThan(0);
         for (const s of result.slices) {
@@ -239,7 +244,15 @@ describe('classifyCloudflareDns — identifiers that reach the URL path', () => 
     for (const record_id of ['.', '..', '../..', 'r1/../r2', '~', 'a/b', 'a.b', 'r1?x=1', 'r1#x']) {
       for (const tool of RECORD_TOOLS) {
         expect(
-          classifyCloudflareDns(tool, { zone_id: 'z1', record_id, ...ordinary }, [zone]),
+          classifyCloudflareDns(
+            tool,
+            declaredOnly({ tools: cloudflareDnsTools }, tool, {
+              zone_id: 'z1',
+              record_id,
+              ...ordinary,
+            }),
+            [zone],
+          ),
           `${tool} ${record_id}`,
         ).toEqual({ denied: 'record_id: malformed identifier' });
       }
@@ -268,7 +281,15 @@ describe('classifyCloudflareDns — identifiers that reach the URL path', () => 
     for (const record_id of [undefined, null, '']) {
       for (const tool of RECORD_TOOLS) {
         expect(
-          classifyCloudflareDns(tool, { zone_id: 'z1', record_id, ...ordinary }, [zone]),
+          classifyCloudflareDns(
+            tool,
+            declaredOnly({ tools: cloudflareDnsTools }, tool, {
+              zone_id: 'z1',
+              record_id,
+              ...ordinary,
+            }),
+            [zone],
+          ),
           `${tool} ${String(record_id)}`,
         ).toEqual({ denied: 'record_id: missing' });
       }

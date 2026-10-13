@@ -31,6 +31,12 @@
  * provider's text goes to the caller only, on the `failed` outcome. An
  * audit write that fails propagates: no call completes without its entry.
  *
+ * A decision stage that THROWS (resource, risk, budget: a classifier that is
+ * not total, a store failure) has decided nothing: the call is refused, and
+ * the refusal is audited like any other (`CallPipeline.attempt`) with a
+ * reason built from the stage and the error's class name alone. The thrown
+ * value goes to `onStageError` for the host's log, never to the audit.
+ *
  * Streaming (spec §4.1 "the decision is made before the stream starts"): a
  * call may carry `onPart`; the upstream stage hands it each part of a result
  * the provider delivers progressively. The order above is unchanged — the
@@ -436,13 +442,47 @@ function argumentValues(args: unknown, out: Set<string>): Set<string> {
  * first, and the whole is bounded.
  */
 export function auditReason(reason: string, args: unknown): string {
-  let kept = reason;
-  const values = [...argumentValues(args, new Set())].sort((a, b) => b.length - a.length);
-  for (const value of values) kept = kept.split(value).join(ARGUMENT_PLACEHOLDER);
+  // One pass, longest value first: replaced one after the other, a short value would
+  // be found again inside a placeholder already written.
+  // Only the values the reason actually holds make the pattern: the arguments can be
+  // large, the reason is a sentence.
+  const values = [...argumentValues(args, new Set())]
+    .filter((value) => value.length <= reason.length && reason.includes(value))
+    .sort((a, b) => b.length - a.length);
+  const kept =
+    values.length === 0
+      ? reason
+      : reason.replace(
+          new RegExp(
+            values.map((value) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|'),
+            'g',
+          ),
+          ARGUMENT_PLACEHOLDER,
+        );
   return kept.length > AUDIT_REASON_MAX_LENGTH
     ? `${kept.slice(0, AUDIT_REASON_MAX_LENGTH - 1)}…`
     : kept;
 }
+
+/** The stages that run before the decision is final; the upstream stage has its own failure path. */
+export const DECISION_STAGES = ['resource', 'risk', 'budget'] as const;
+export type DecisionStage = (typeof DECISION_STAGES)[number];
+
+/**
+ * The reason of a call refused because a decision stage threw. Built by the host
+ * from the stage and the class name of what was thrown, never from its message: a
+ * classifier's error text can quote the arguments it choked on, and this reason is
+ * stored in the audit.
+ */
+export function stageFailureReason(stage: DecisionStage, thrown: unknown): string {
+  return (
+    `Vaubaan could not decide this call: the ${stage} stage failed (${upstreamErrorClassName(thrown)}). ` +
+    `The call was refused and nothing was executed; the operator finds the error in the instance log.`
+  );
+}
+
+/** The reason of a rejection was built by the host from what it knows: it is stored as it is. */
+const HOST_BUILT = Symbol('host-built reason');
 
 export interface CallPipelineDeps {
   readonly resources: ResourceStage;
@@ -452,6 +492,12 @@ export interface CallPipelineDeps {
   readonly audit: AuditWriter;
   /** Clock, injectable for tests. */
   readonly now?: () => Date;
+  /**
+   * Told when a decision stage throws (a classifier bug, a store failure), with
+   * the thrown value: the host logs it. The call is refused and audited whether
+   * or not an observer is given, and whatever the observer does.
+   */
+  readonly onStageError?: (stage: DecisionStage, error: unknown, call: CallRequest) => void;
 }
 
 export type CallOutcome =
@@ -518,12 +564,17 @@ export class CallPipeline {
     // as another. Structural, like an unknown tool: no stage sees the call.
     const unfaithful = unfaithfulArgument(call.args);
     if (unfaithful) {
+      const expected =
+        'arguments must be JSON values (a finite number, a string, a boolean, null, an array or an object).';
       return this.rejected(
         // Its hash is still the canonical one (the value reads `null` there), so the
         // entry joins the others of the same arguments. A BigInt has no canonical
         // form and cannot come from a JSON body: the entry then carries no arguments.
         this.baseEntry(ctx, unfaithful.kind === 'bigint' ? { ...call, args: {} } : call, now),
-        `argument '${unfaithful.path}' is ${unfaithful.value}: arguments must be JSON values (a finite number, a string, a boolean, null, an array or an object).`,
+        `argument '${unfaithful.path}' is ${unfaithful.value}: ${expected}`,
+        // The path is made of names the caller chose: the caller reads it, the audit
+        // keeps what was wrong.
+        `an argument is ${unfaithful.value}: ${expected}`,
       );
     }
     const base = this.baseEntry(ctx, call, now);
@@ -549,11 +600,15 @@ export class CallPipeline {
     call: CallRequest,
     base: CallAuditEntry,
   ): Promise<CallOutcome | TargetedCall> {
-    const resolved = await this.deps.resources.resolve(ctx, call);
+    const attempt = await this.attempt('resource', call, base, () =>
+      this.deps.resources.resolve(ctx, call),
+    );
+    if (!attempt.ok) return attempt.outcome;
+    const resolved = attempt.value;
     if (!resolved.ok) {
       return 'refusal' in resolved
         ? this.refused(base, resolved.refusal)
-        : this.rejected(base, resolved.reason, call.args);
+        : this.rejected(base, resolved.reason, auditReason(resolved.reason, call.args));
     }
     const { target } = resolved;
     const entry: CallAuditEntry = {
@@ -574,15 +629,20 @@ export class CallPipeline {
     targeted: TargetedCall,
   ): Promise<CallOutcome | ClassifiedCall> {
     const { target, entry } = targeted;
-    const verdict = await this.deps.risks.evaluate(ctx, call, target);
+    const attempt = await this.attempt('risk', call, entry, () =>
+      this.deps.risks.evaluate(ctx, call, target),
+    );
+    if (!attempt.ok) return attempt.outcome;
+    const verdict = attempt.value;
     switch (verdict.kind) {
       case 'no-catalog':
         return this.rejected(
           entry,
           `risk catalog for '${target.connection.provider}' is not loaded; refusing (fail closed).`,
+          HOST_BUILT,
         );
       case 'classify-denied':
-        return this.rejected(entry, verdict.reason, call.args);
+        return this.rejected(entry, verdict.reason, auditReason(verdict.reason, call.args));
       case 'deny':
         return this.refused(
           {
@@ -615,10 +675,11 @@ export class CallPipeline {
     classified: ClassifiedCall,
     now: Date,
   ): Promise<CallOutcome | CallAuditEntry> {
-    const budget = await this.deps.budget.decide(ctx, call, {
-      risks_touched: classified.risks_touched,
-      now,
-    });
+    const attempt = await this.attempt('budget', call, classified.entry, () =>
+      this.deps.budget.decide(ctx, call, { risks_touched: classified.risks_touched, now }),
+    );
+    if (!attempt.ok) return attempt.outcome;
+    const budget = attempt.value;
     if (budget.outcome === 'refused') return this.refused(classified.entry, budget.refusal);
     return {
       ...classified.entry,
@@ -627,6 +688,38 @@ export class CallPipeline {
       approval_id: budget.approval_id,
       remaining_budget: budget.remaining,
     };
+  }
+
+  /**
+   * Runs one decision stage. A stage that throws — a classifier that is not total,
+   * a store that fails under the budget — has decided nothing, so the call is
+   * refused; and since every refused call has its entry (spec §8), the refusal is
+   * written here, on the entry as far as the earlier stages filled it. Only the
+   * stage is guarded: a failure of that audit write propagates like any other.
+   */
+  private async attempt<T>(
+    stage: DecisionStage,
+    call: CallRequest,
+    entry: CallAuditEntry,
+    run: () => Promise<T>,
+  ): Promise<
+    { readonly ok: true; readonly value: T } | { readonly ok: false; readonly outcome: CallOutcome }
+  > {
+    let value: T;
+    try {
+      value = await run();
+    } catch (thrown) {
+      try {
+        this.deps.onStageError?.(stage, thrown, call);
+      } catch {
+        // The observer is a log line; the refusal and its entry do not depend on it.
+      }
+      return {
+        ok: false,
+        outcome: await this.rejected(entry, stageFailureReason(stage, thrown), HOST_BUILT),
+      };
+    }
+    return { ok: true, value };
   }
 
   /**
@@ -713,20 +806,23 @@ export class CallPipeline {
   }
 
   /**
-   * A structural rejection. `reason` goes to the caller as it is; the audit entry
-   * keeps a copy without the argument values a plugin may have quoted in it
-   * (`args`, when the reason comes from a plugin), and bounded.
+   * A structural rejection. `reason` goes to the caller as it is. What the audit
+   * keeps is a separate, REQUIRED argument, so that no call site can store a text by
+   * forgetting to think about it: `auditReason(reason, args)` for a text a plugin
+   * wrote (its argument values removed), another sentence when the reason names
+   * something of the arguments, `HOST_BUILT` when the host wrote the reason from
+   * what it knows and nothing of the call.
    */
   private async rejected(
     base: CallAuditEntry,
     reason: string,
-    args?: unknown,
+    stored: string | typeof HOST_BUILT,
   ): Promise<CallOutcome> {
     const entry: CallAuditEntry = {
       ...base,
       decision: 'refused',
       refusal_code: null,
-      refusal_reason: auditReason(reason, args),
+      refusal_reason: auditReason(stored === HOST_BUILT ? reason : stored, undefined),
     };
     await this.deps.audit.write(entry);
     return { kind: 'rejected', reason, audit: entry };

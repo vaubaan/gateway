@@ -1,11 +1,13 @@
 import { assertKnownRiskIds } from '../catalog-index.ts';
 import { withImmediateTransaction } from '../db.ts';
-import { InvariantError, NotFoundError } from '../errors.ts';
+import { InvariantError, NotFoundError, TokenNotIssuableError } from '../errors.ts';
+import { isOnMission, membershipOf } from '../membership.ts';
 import { MISSION_TOKEN_KINDS } from '@vaubaan/shared';
 
 import {
   MISSION_TOKEN_STATUSES,
   RESOURCE_SCOPES,
+  USER_STATUSES,
   type Gate,
   type Iso,
   type MissionConnection,
@@ -46,6 +48,12 @@ export interface IssueTokenInput {
   readonly holder: TokenHolderRecord;
   /** The user who generates or creates it. */
   readonly createdBy: string;
+}
+
+export interface AddedMember {
+  readonly member: MissionMemberRecord;
+  /** A working token that predated the membership, revoked with it; normally `null`. */
+  readonly tokenRevoked: MissionTokenRecord | null;
 }
 
 export interface IssuedToken {
@@ -114,8 +122,10 @@ export interface MissionsRepo {
    * Issues a token to one holder. A member's previous active token becomes `rotated`
    * in the same transaction (at most one active token per member of a mission); the
    * tokens of the other holders are untouched. A named token whose name an active
-   * token of the mission already carries is refused (`InvariantError`): a name
-   * identifies one token.
+   * token of the mission already carries is refused
+   * (`TokenNotIssuableError('name-taken')`): a name identifies one token. So is a
+   * token on a mission whose stored status is not `active`, or for a holder who is
+   * not on the mission: both are read again inside the transaction.
    */
   issueToken(input: IssueTokenInput): Promise<IssuedToken>;
   findTokenByPrefix(
@@ -145,9 +155,11 @@ export interface MissionsRepo {
   /**
    * Gives a user access to the mission. Adding a removed member again clears
    * `removed_at` (their old token stays revoked). The creator is never a row: adding
-   * them is refused (`InvariantError`).
+   * them is refused (`InvariantError`). A member starts with no token: a working
+   * member token of that user found on the mission is revoked in the same
+   * transaction and returned (`tokenRevoked`), `null` when there was none.
    */
-  addMember(input: AddMemberInput): Promise<MissionMemberRecord>;
+  addMember(input: AddMemberInput): Promise<AddedMember>;
   /**
    * Removes a current member and revokes their active token, in one transaction: there
    * is no instant at which a removed member still holds a working token. `null` when
@@ -474,6 +486,15 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
      WHERE mission_id = ? AND user_id = ? AND removed_at IS NULL`,
   );
 
+  const userStatus = db.prepare<[string], { status: string }>(
+    'SELECT status FROM users WHERE id = ?',
+  );
+  /** The status of a user, as the membership rule reads it; `null` for an unknown user. */
+  function userStatusOf(userId: string): { status: 'active' | 'removed' } | null {
+    const row = userStatus.get(userId);
+    return row ? { status: parseEnum(USER_STATUSES, row.status, 'users.status') } : null;
+  }
+
   function requireToken(id: string): MissionTokenRecord {
     return tokenToRecord(requireRow(tokenById.get(id), 'mission_token', id));
   }
@@ -636,15 +657,30 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       const now = nowIso(ctx);
       const { holder } = input;
       const replacedId = withImmediateTransaction(db, () => {
-        requireMission(input.missionId);
+        const mission = requireMission(input.missionId);
+        // The caller checked all of this before it computed the hash, which takes
+        // tens of milliseconds: a revocation, a removal or a deactivation committed
+        // meanwhile must not be undone by the insert. Checked again here, in the
+        // transaction that writes.
+        if (mission.status !== 'active') {
+          throw new TokenNotIssuableError('mission-not-active', input.missionId);
+        }
         let previous: TokenRow | undefined;
         if (holder.kind === 'member') {
+          const row = memberOf.get(input.missionId, holder.userId);
+          const membership = membershipOf(
+            mission,
+            holder.userId,
+            userStatusOf(holder.userId),
+            row ? { removedAt: row.removed_at } : null,
+          );
+          if (!isOnMission(membership)) {
+            throw new TokenNotIssuableError('holder-not-a-member', input.missionId);
+          }
           previous = activeOfMember.get(input.missionId, holder.userId);
           if (previous) retireOne.run(now, previous.id);
         } else if (activeOfName.get(input.missionId, holder.name)) {
-          throw new InvariantError(
-            `mission ${input.missionId}: an active named token already carries this name`,
-          );
+          throw new TokenNotIssuableError('name-taken', input.missionId);
         }
         insertToken.run(
           id,
@@ -698,16 +734,25 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     },
     async addMember(input) {
       const now = nowIso(ctx);
-      withImmediateTransaction(db, () => {
+      const staleId = withImmediateTransaction(db, () => {
         const mission = requireMission(input.missionId);
         if (mission.creatorUserId === input.userId) {
           throw new InvariantError('the creator is a member by construction, never a member row');
         }
+        // A member starts with no token. A working row found here predates this
+        // membership (it should not exist: removal revokes, and `issueToken` refuses
+        // a holder who is not on the mission): it is revoked with the same write.
+        const stale = activeOfMember.get(input.missionId, input.userId);
+        if (stale) revokeOne.run(now, stale.id);
         upsertMember.run(input.missionId, input.userId, input.addedBy, now);
+        return stale?.id ?? null;
       });
-      return memberToRecord(
-        requireRow(memberOf.get(input.missionId, input.userId), 'mission_member', input.userId),
-      );
+      return {
+        member: memberToRecord(
+          requireRow(memberOf.get(input.missionId, input.userId), 'mission_member', input.userId),
+        ),
+        tokenRevoked: staleId === null ? null : requireToken(staleId),
+      };
     },
     async removeMember(missionId, userId) {
       const now = nowIso(ctx);

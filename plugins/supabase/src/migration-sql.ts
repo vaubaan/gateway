@@ -104,8 +104,11 @@ function tokenise(sql: string): Statement[] | null {
     } else if (ch < ' ' || ch === '\u007f' || ch === '$') {
       return null;
     } else if (ch === '-' && next === '-') {
-      const end = sql.indexOf('\n', i);
-      i = end === -1 ? sql.length : end + 1;
+      // PostgreSQL ends a line comment at `\n` OR `\r` (scan.l: `non_newline [^\n\r]`).
+      // Waiting for `\n` alone would hide from this reader everything after a bare `\r`,
+      // which the server executes.
+      i += 2;
+      while (i < sql.length && sql[i] !== '\n' && sql[i] !== '\r') i += 1;
     } else if (ch === '/' && next === '*') {
       const end = endOfBlockComment(sql, i);
       if (end === null) return null;
@@ -423,11 +426,32 @@ function classesOfAlterTable(s: Statement): Classes | null {
     if (verb === 'drop') {
       // Dropping a column destroys its values in every row.
       if (word(action, 1) !== 'constraint') classes.add('bulk-row');
-    } else if (verb !== 'add' && verb !== 'alter' && verb !== 'rename' && verb !== 'validate') {
+    } else if (verb === 'alter') {
+      // `ALTER [COLUMN] c [SET DATA] TYPE t [USING expr]` rewrites the column in every
+      // row, and `USING` overwrites the values with any expression: the same loss as
+      // dropping the column. The keyword is looked for after the column name, bare: a
+      // column called "type" is quoted, hence never a keyword.
+      if (changesColumnType(action)) classes.add('bulk-row');
+    } else if (verb !== 'add' && verb !== 'rename' && verb !== 'validate') {
       return null;
     }
   }
   return [...classes];
+}
+
+/**
+ * Is this `ALTER [COLUMN] <name> …` action a type change ? `TYPE` or `USING` as a
+ * bare word anywhere after the column name : `alter column c type t`, `alter c set
+ * data type t`, with or without `USING`. Anything else that happens to carry the
+ * word is priced as one too (the costly side).
+ */
+function changesColumnType(action: Statement): boolean {
+  const nameAt = skip(action, 1, 'column');
+  for (let k = nameAt + 1; k < action.length; k += 1) {
+    const w = word(action, k);
+    if (w === 'type' || w === 'using') return true;
+  }
+  return false;
 }
 
 /** `ENABLE | DISABLE | FORCE | NO FORCE ROW LEVEL SECURITY`, exactly. */

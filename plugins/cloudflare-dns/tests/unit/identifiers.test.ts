@@ -16,7 +16,7 @@
 import { describe, expect, test } from 'vitest';
 
 import { serializeSlice, type ExecuteContext, type Resource } from '@vaubaan/plugin-sdk';
-import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
+import { declaredOnly, mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyCloudflareDns } from '../../src/classify.ts';
 import { CLOUDFLARE_API_BASE } from '../../src/execute.ts';
@@ -101,6 +101,10 @@ async function expectRefused(
   expect(fetch.calls).toHaveLength(0);
 }
 
+/** The arguments of a matrix row that `tool` declares (one row serves a family of tools). */
+const declared = (tool: string, args: Record<string, unknown>): Record<string, unknown> =>
+  declaredOnly(cloudflareDnsPlugin, tool, args);
+
 const ZONE_TOOLS: readonly string[] = [
   'cloudflare_dns__get_zone',
   'cloudflare_dns__list_records',
@@ -180,7 +184,7 @@ describe('`zone_id` — the zone segment of the request path', () => {
       for (const zone_id of HOSTILE) {
         await expectRefused(
           tool,
-          { zone_id, record_id: RECORD_ID },
+          declared(tool, { zone_id, record_id: RECORD_ID }),
           'zone_id: malformed zone id',
           /zone_id: malformed zone id/,
         );
@@ -193,7 +197,7 @@ describe('`zone_id` — the zone segment of the request path', () => {
         for (const args of [{ record_id: RECORD_ID }, { zone_id: ref, record_id: RECORD_ID }]) {
           await expectRefused(
             tool,
-            args,
+            declared(tool, args),
             'zone_id: malformed zone id',
             /zone_id: malformed zone id/,
             [poisoned],
@@ -205,7 +209,12 @@ describe('`zone_id` — the zone segment of the request path', () => {
 
   for (const tool of ZONE_TOOLS) {
     test(`${tool} : every request runs on the zone the slices name`, async () => {
-      const args = { zone_id: ZONE_ID, type: 'A', name: 'www.example.com', content: '192.0.2.1' };
+      const args = declared(tool, {
+        zone_id: ZONE_ID,
+        type: 'A',
+        name: 'www.example.com',
+        content: '192.0.2.1',
+      });
       const slices = classify(tool, args);
       expect(Array.isArray(slices) && slices.every((s) => s.startsWith(ROOT))).toBe(true);
       const fetch = permissiveFetch();
@@ -237,7 +246,7 @@ describe('`record_id` — the record segment of the request path', () => {
       for (const record_id of HOSTILE) {
         await expectRefused(
           tool,
-          { zone_id: ZONE_ID, record_id, type: 'A', name: 'www.example.com' },
+          declared(tool, { zone_id: ZONE_ID, record_id, type: 'A', name: 'www.example.com' }),
           'record_id: malformed identifier',
           /record_id: missing or malformed identifier/,
         );
@@ -245,7 +254,7 @@ describe('`record_id` — the record segment of the request path', () => {
       for (const record_id of ['', null, undefined]) {
         await expectRefused(
           tool,
-          { zone_id: ZONE_ID, record_id, type: 'A', name: 'www.example.com' },
+          declared(tool, { zone_id: ZONE_ID, record_id, type: 'A', name: 'www.example.com' }),
           'record_id: missing',
           /record_id: missing or malformed identifier/,
         );
@@ -253,7 +262,12 @@ describe('`record_id` — the record segment of the request path', () => {
     });
 
     test(`${tool} : every request names exactly the record the slices name`, async () => {
-      const args = { zone_id: ZONE_ID, record_id: RECORD_ID, type: 'A', name: 'www.example.com' };
+      const args = declared(tool, {
+        zone_id: ZONE_ID,
+        record_id: RECORD_ID,
+        type: 'A',
+        name: 'www.example.com',
+      });
       const slices = classify(tool, args);
       expect(
         Array.isArray(slices) && slices.every((s) => s.startsWith(`${ROOT}.record[${RECORD_ID}]`)),
@@ -345,7 +359,10 @@ describe('a record `name` and `type` — the critical-record verdict', () => {
   for (const tool of ['cloudflare_dns__create_record', ...RECORD_TOOLS.slice(1)]) {
     test(`${tool} : a write naming such a record carries the critical slice`, () => {
       for (const name of NOT_A_NAME) {
-        const slices = classify(tool, { zone_id: ZONE_ID, record_id: RECORD_ID, type: 'A', name });
+        const slices = classify(
+          tool,
+          declared(tool, { zone_id: ZONE_ID, record_id: RECORD_ID, type: 'A', name }),
+        );
         expect(
           Array.isArray(slices) && slices.some((s) => s.endsWith('.critical.W')),
           JSON.stringify(name).slice(0, 40),

@@ -3,6 +3,9 @@
  * cardinal pages — the current one marked — and the account in a compact
  * menu, then the page, then the build footer. Server component. A feature
  * adds its page by appending one entry to `APP_NAV`.
+ *
+ * Administration is the same shell with its own entries (`AdminShell`): one
+ * bar, one account menu and one footer for the whole product.
  */
 import Link from 'next/link';
 
@@ -38,31 +41,47 @@ export const APP_NAV: readonly AppNavEntry[] = [
   { href: PROVIDERS_PATH, label: 'Providers' },
 ];
 
-/** Operators only: the administration pages have a bar of their own. */
+/** Operators only: the administration pages have entries of their own. */
 const ADMIN_ENTRY: AppNavEntry = { href: '/admin', label: 'Admin' };
 
-export function AppShell({
+/** The pages of Administration, in the order an operator sets an instance up. */
+export const ADMIN_NAV: readonly AppNavEntry[] = [
+  { href: '/admin/identity-provider', label: 'Identity provider' },
+  { href: '/admin/provider-apps', label: 'Provider apps' },
+  { href: '/admin/users', label: 'Users' },
+  { href: '/admin/groups', label: 'Groups' },
+  { href: '/admin/connections', label: 'Connections' },
+  { href: '/admin/telemetry', label: 'Telemetry' },
+  { href: '/admin/oauth-clients', label: 'OAuth clients' },
+];
+
+/** The application's home, where the brand leads a signed-in user. */
+const APP_HOME = '/connections';
+const ADMIN_HOME = '/admin';
+
+function Shell({
   principal,
+  brandHref,
+  section,
+  items,
   children,
 }: {
   principal: Principal;
+  brandHref: string;
+  /** Names the surface after the brand when it is not the application itself. */
+  section?: NavItem;
+  items: readonly NavItem[];
   children: React.ReactNode;
 }) {
   const who = principal.kind === 'user' ? principal.user.email : 'bootstrap token';
-  const entries = isOperatorPrincipal(principal) ? [...APP_NAV, ADMIN_ENTRY] : APP_NAV;
-  const items: NavItem[] = entries.map((entry) => ({
-    href: entry.href,
-    label: entry.label,
-    count: entry.Count ? <entry.Count principal={principal} /> : undefined,
-  }));
   return (
     <div className={styles.shell}>
       <header className={styles.bar}>
-        <nav className={styles.nav} aria-label="Main">
-          <Link href="/connections" className={styles.brand}>
+        <nav className={styles.nav} aria-label={section ? section.label : 'Main'}>
+          <Link href={brandHref} className={styles.brand}>
             Vaubaan
           </Link>
-          <NavLinks items={items} />
+          <NavLinks items={section ? [section, ...items] : items} />
         </nav>
         <UserMenu name={who}>
           <OperatorBadge principal={principal} />
@@ -72,5 +91,48 @@ export function AppShell({
       <Container>{children}</Container>
       <BuildFooter />
     </div>
+  );
+}
+
+export function AppShell({
+  principal,
+  children,
+}: {
+  principal: Principal;
+  children: React.ReactNode;
+}) {
+  const entries = isOperatorPrincipal(principal) ? [...APP_NAV, ADMIN_ENTRY] : APP_NAV;
+  const items: NavItem[] = entries.map((entry) => ({
+    href: entry.href,
+    label: entry.label,
+    count: entry.Count ? <entry.Count principal={principal} /> : undefined,
+  }));
+  return (
+    <Shell principal={principal} brandHref={APP_HOME} items={items}>
+      {children}
+    </Shell>
+  );
+}
+
+/**
+ * Administration: the same bar. The brand leads back to the application for a
+ * user; the bootstrap operator has no application to go to and stays here.
+ */
+export function AdminShell({
+  principal,
+  children,
+}: {
+  principal: Principal;
+  children: React.ReactNode;
+}) {
+  return (
+    <Shell
+      principal={principal}
+      brandHref={principal.kind === 'user' ? APP_HOME : ADMIN_HOME}
+      section={{ href: ADMIN_HOME, label: 'Administration', exact: true }}
+      items={ADMIN_NAV.map((entry) => ({ href: entry.href, label: entry.label }))}
+    >
+      {children}
+    </Shell>
   );
 }

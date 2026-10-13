@@ -161,9 +161,10 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
     case 'vercel__list_toolbar_threads':
       return [{ ...base }];
     case 'vercel__add_project_domain':
+      return [{ ...base, name: 'staging' }];
     case 'vercel__verify_project_domain':
     case 'vercel__remove_project_domain':
-      return [{ ...base, name: 'staging', domain: 'staging' }];
+      return [{ ...base, domain: 'staging' }];
     default:
       return [base];
   }

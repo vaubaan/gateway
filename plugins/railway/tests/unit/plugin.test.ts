@@ -21,6 +21,7 @@ import {
   assertPluginWellFormed,
   assertPresetsValid,
   mockFetch,
+  refusalText,
 } from '@vaubaan/plugin-sdk/testing';
 
 import {
@@ -47,21 +48,30 @@ const staging: Resource = {
   ref: PROJECT_STG,
   env: 'staging',
   displayName: 'api (staging)',
-  metadata: { environments: [{ id: ENV_STG, name: 'staging' }] },
+  metadata: {
+    services: [{ id: SERVICE, name: 'api' }],
+    environments: [{ id: ENV_STG, name: 'staging' }],
+  },
 };
 const prod: Resource = {
   provider: 'railway',
   ref: PROJECT_PRD,
   env: 'prod',
   displayName: 'api (prod)',
-  metadata: { environments: [{ id: ENV_PRD, name: 'production' }] },
+  metadata: {
+    services: [{ id: SERVICE, name: 'api' }],
+    environments: [{ id: ENV_PRD, name: 'production' }],
+  },
 };
 /** Discovered, but the owner has not labelled it yet. */
 const unlabelled: Resource = {
   provider: 'railway',
   ref: PROJECT_STG,
   displayName: 'api',
-  metadata: { environments: [{ id: ENV_STG, name: 'staging' }] },
+  metadata: {
+    services: [{ id: SERVICE, name: 'api' }],
+    environments: [{ id: ENV_STG, name: 'staging' }],
+  },
 };
 /** A project resource whose environments discovery never stored. */
 const undiscovered: Resource = {
@@ -338,7 +348,10 @@ describe('classifyRailway', () => {
     expect(
       environmentsOf({
         ...undiscovered,
-        metadata: { environments: [{ id: 1 }, { id: 'e', name: 'n' }] },
+        metadata: {
+          services: [{ id: SERVICE, name: 'api' }],
+          environments: [{ id: 1 }, { id: 'e', name: 'n' }],
+        },
       }),
     ).toEqual([{ id: 'e', name: 'n' }]);
   });
@@ -411,9 +424,11 @@ describe('executeRailway with mockFetch', () => {
 
   test('requires projectId when the mission touches several projects', async () => {
     const never = mockFetch([]);
-    await expect(
-      railwayPlugin.execute(execCtx(never, [staging, prod]), 'railway__list-services', {}),
-    ).rejects.toThrow(/projectId: argument required/);
+    expect(
+      await refusalText(
+        railwayPlugin.execute(execCtx(never, [staging, prod]), 'railway__list-services', {}),
+      ),
+    ).toMatch(/projectId: argument required/);
   });
 
   test('appends the staged-changes hint to railway-agent answers', async () => {
@@ -618,7 +633,12 @@ describe('executeRailway with mockFetch', () => {
 
 describe('discoverRailwayResources', () => {
   const page = (
-    projects: Array<{ id: string; name: string; envs: Array<[string, string]> }>,
+    projects: Array<{
+      id: string;
+      name: string;
+      envs: Array<[string, string]>;
+      services?: Array<[string, string]>;
+    }>,
     next: string | null,
   ) => ({
     data: {
@@ -628,6 +648,10 @@ describe('discoverRailwayResources', () => {
             id: p.id,
             name: p.name,
             environments: { edges: p.envs.map(([id, name]) => ({ node: { id, name } })) },
+            // The second project answers without the connection at all : read as "no service".
+            ...(p.services
+              ? { services: { edges: p.services.map(([id, name]) => ({ node: { id, name } })) } }
+              : {}),
           },
         })),
         pageInfo: { hasNextPage: next !== null, endCursor: next },
@@ -653,6 +677,7 @@ describe('discoverRailwayResources', () => {
                       [ENV_STG, 'staging'],
                       [ENV_PRD, 'production'],
                     ],
+                    services: [[SERVICE, 'api']],
                   },
                 ],
                 'c1',
@@ -672,10 +697,20 @@ describe('discoverRailwayResources', () => {
             { id: ENV_STG, name: 'staging' },
             { id: ENV_PRD, name: 'production' },
           ],
+          services: [{ id: SERVICE, name: 'api' }],
         },
       },
-      { provider: 'railway', ref: PROJECT_PRD, displayName: 'web', metadata: { environments: [] } },
+      {
+        provider: 'railway',
+        ref: PROJECT_PRD,
+        displayName: 'web',
+        metadata: { environments: [], services: [] },
+      },
     ]);
+    // The services are asked for with the projects : what a `serviceId` is bound to.
+    expect((fetch.calls[0]!.json as { query: string }).query).toMatch(
+      /services\s*\{\s*edges\s*\{\s*node\s*\{\s*id\s+name/,
+    );
     expect(fetch.calls).toHaveLength(2);
     expect((fetch.calls[1]!.json as { variables: { after: string } }).variables.after).toBe('c1');
     expect(fetch.calls[0]!.headers.authorization).toBe('Bearer rlwy_at');

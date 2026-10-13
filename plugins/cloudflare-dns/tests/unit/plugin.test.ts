@@ -18,6 +18,7 @@ import {
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
+  declaredOnly,
   mockFetch,
 } from '@vaubaan/plugin-sdk/testing';
 
@@ -464,6 +465,53 @@ describe('executeCloudflareDns with mockFetch', () => {
     expect(fetch.pending()).toEqual([]);
   });
 
+  test.each<[string, Record<string, unknown>, string]>([
+    // The body of a write is built from the arguments: a field the tool does not declare
+    // (here real fields of the provider's API) would have been sent as given.
+    [
+      'cloudflare_dns__create_record',
+      {
+        type: 'A',
+        name: 'www.example.com',
+        content: '192.0.2.1',
+        settings: { flatten_cname: true },
+      },
+      'settings',
+    ],
+    [
+      'cloudflare_dns__update_record',
+      { record_id: 'r1', type: 'A', name: 'www.example.com', tags: ['x'] },
+      'tags',
+    ],
+    [
+      'cloudflare_dns__edit_dnssec',
+      { status: 'disabled', dnssec_presigned: true },
+      'dnssec_presigned',
+    ],
+    ['cloudflare_dns__purge_cache', { purge_everything: true, envelope: 1 }, 'envelope'],
+    // A read's query string is built the same way.
+    [
+      'cloudflare_dns__list_records',
+      { type: 'A', 'comment.contains': 'x' },
+      'an argument with a malformed name',
+    ],
+    ['cloudflare_dns__get_zone', { record_id: 'r1' }, 'record_id'],
+    // `list_zones` names no zone: a `zone_id` there was sent to the account-wide listing.
+    ['cloudflare_dns__list_zones', { zone_id: 'z1' }, 'zone_id'],
+    ['cloudflare_dns__list_zones', { 'account.id': 'other' }, 'an argument with a malformed name'],
+  ])(
+    '%s %j : the argument it does not declare is refused by classify and by execute, nothing is sent',
+    async (tool, args, label) => {
+      const reason = `${label}: not an argument of '${tool}' — nothing classifies it, so it is not sent.`;
+      expect(classifyCloudflareDns(tool, args, [exampleCom])).toEqual({ denied: reason });
+      const fetch = mockFetch([]);
+      expect(refusalOf(await cloudflareDnsPlugin.execute(ctx(fetch), tool, args))).toBe(
+        `cloudflare-dns: ${reason}`,
+      );
+      expect(fetch.calls).toHaveLength(0);
+    },
+  );
+
   test('a dot-segment or otherwise path-unsafe record_id never reaches the API', async () => {
     const fetch = mockFetch([]);
     for (const record_id of ['.', '..', '../..', 'r1/../r2', 'a/b', 'a.b', '~', '', undefined]) {
@@ -474,12 +522,16 @@ describe('executeCloudflareDns with mockFetch', () => {
       ]) {
         expect(
           refusalOf(
-            await cloudflareDnsPlugin.execute(ctx(fetch), tool, {
-              zone_id: 'z1',
-              record_id,
-              type: 'MX',
-              name: 'example.com',
-            }),
+            await cloudflareDnsPlugin.execute(
+              ctx(fetch),
+              tool,
+              declaredOnly(cloudflareDnsPlugin, tool, {
+                zone_id: 'z1',
+                record_id,
+                type: 'MX',
+                name: 'example.com',
+              }),
+            ),
           ),
           `${tool} ${String(record_id)}`,
         ).toMatch(/record_id: missing or malformed identifier/);

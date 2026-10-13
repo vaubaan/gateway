@@ -26,7 +26,7 @@ export const resendCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url))
 export const resendPlugin = definePlugin({
   id: 'resend',
   displayName: 'Resend',
-  version: '0.2.0',
+  version: '0.3.0',
   description:
     'Outbound email : transactional sends classified by recipient zone, segments and contacts, ' +
     'broadcast campaigns, sending domains — one resource per domain and per segment.',

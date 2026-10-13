@@ -330,10 +330,15 @@ describe('CallPipeline', () => {
     expect(audit.calls[0]).toMatchObject({
       decision: 'refused',
       refusal_code: null,
-      refusal_reason: out.reason,
       connection_id: null,
       remaining_budget: null,
     });
+    // The caller reads which argument; the audit, which keeps no trace of the arguments
+    // but their hash, keeps what was wrong and not the name the caller chose.
+    const stored = audit.calls[0]!.refusal_reason ?? '';
+    expect(stored).toContain('Infinity');
+    expect(stored).toContain('arguments must be JSON values');
+    expect(stored).not.toContain('limit');
   });
 
   test('a classifier denial that quotes an argument: the agent reads it whole, the audit entry holds no argument value', async () => {
@@ -356,6 +361,28 @@ describe('CallPipeline', () => {
     expect(stored).not.toContain('ops@acme.example');
     expect(stored).toBe("path: '[argument]' is not a file of this mission (asked by [argument])");
     expect(out.audit.refusal_reason).toBe(stored);
+  });
+
+  test('the audit copy is redacted in one pass: a short value is not found inside a placeholder already written', async () => {
+    // `argument` and `ment` are values too: replaced one after the other, the second
+    // would be matched inside the `[argument]` the first one left.
+    const reason = "argument 'ment' of statement 'argument-list' is refused";
+    const { p, audit } = pipeline({
+      risks: { evaluate: async () => ({ kind: 'classify-denied', reason }) },
+    });
+    await p.execute(ctx, { ...call, args: { a: 'argument', b: 'ment', c: 'argument-list' } });
+    expect(audit.calls[0]!.refusal_reason).toBe(
+      "[argument] '[argument]' of state[argument] '[argument]' is refused",
+    );
+  });
+
+  test('a value with characters a pattern would read is replaced as text', async () => {
+    const value = 'a.*(b)|[c]$^+?{1}\\';
+    const { p, audit } = pipeline({
+      risks: { evaluate: async () => ({ kind: 'classify-denied', reason: `bad: ${value}!` }) },
+    });
+    await p.execute(ctx, { ...call, args: { q: value } });
+    expect(audit.calls[0]!.refusal_reason).toBe('bad: [argument]!');
   });
 
   test('the audit copy of a structural reason is bounded', async () => {
@@ -657,6 +684,177 @@ describe('CallPipeline', () => {
       refusal_code: null,
       refusal_reason: "unknown tool 'x__y'",
       connection_id: null,
+    });
+  });
+
+  describe('a stage that throws before the decision: refused AND audited (spec §8)', () => {
+    class ClassifierBug extends TypeError {
+      constructor(message: string) {
+        super(message);
+        this.name = 'ClassifierBug';
+      }
+    }
+    const neverUpstream = (): { stage: UpstreamStage; calls: () => number } => {
+      let calls = 0;
+      return {
+        stage: {
+          execute: async () => {
+            calls += 1;
+            return {};
+          },
+        },
+        calls: () => calls,
+      };
+    };
+
+    test('a classifier that throws: one audit entry, no budget, no upstream, no message kept', async () => {
+      const upstream = neverUpstream();
+      let budgetAsked = false;
+      const seen: { stage: string; error: unknown }[] = [];
+      const { p, audit } = pipeline({
+        risks: {
+          evaluate: async () => {
+            // A classifier's error text can quote what it choked on.
+            throw new ClassifierBug("cannot read 'select 1' of undefined");
+          },
+        },
+        budget: {
+          decide: async (...args) => {
+            budgetAsked = true;
+            return allowBudget.decide(...args);
+          },
+        },
+        upstream: upstream.stage,
+        onStageError: (stage, error) => seen.push({ stage, error }),
+      });
+
+      const out = await p.execute(ctx, call);
+
+      expect(out.kind).toBe('rejected');
+      if (out.kind !== 'rejected') return;
+      expect(out.reason).toContain('risk stage');
+      expect(out.reason).toContain('ClassifierBug');
+      expect(out.reason).not.toContain('select 1');
+      expect(budgetAsked).toBe(false);
+      expect(upstream.calls()).toBe(0);
+      expect(audit.calls).toHaveLength(1);
+      expect(audit.calls[0]).toMatchObject({
+        decision: 'refused',
+        refusal_code: null,
+        refusal_reason: out.reason,
+        // What was known when the stage failed is kept.
+        connection_id: 'con_1',
+        resource_ref: 'prj_x',
+        tool: call.tool,
+        arguments_hash: fingerprintArguments(call.args),
+        token_id: 'tok_1',
+        remaining_budget: null,
+      });
+      expect(JSON.stringify(audit.calls[0])).not.toContain('select 1');
+      expect(seen).toHaveLength(1);
+      expect(seen[0]!.stage).toBe('risk');
+      expect(seen[0]!.error).toBeInstanceOf(ClassifierBug);
+    });
+
+    test('the resource stage throws: audited with no target', async () => {
+      const upstream = neverUpstream();
+      const { p, audit } = pipeline({
+        resources: {
+          resolve: async () => {
+            throw new Error('SQLITE_IOERR');
+          },
+        },
+        upstream: upstream.stage,
+      });
+      const out = await p.execute(ctx, call);
+      expect(out.kind).toBe('rejected');
+      if (out.kind === 'rejected') expect(out.reason).toContain('resource stage');
+      expect(upstream.calls()).toBe(0);
+      expect(audit.calls).toHaveLength(1);
+      expect(audit.calls[0]).toMatchObject({
+        decision: 'refused',
+        refusal_code: null,
+        connection_id: null,
+      });
+    });
+
+    test('the budget stage throws: audited with the risks the call touched, nothing forwarded', async () => {
+      const upstream = neverUpstream();
+      const { p, audit } = pipeline({
+        budget: {
+          decide: async () => {
+            throw new Error('database is locked');
+          },
+        },
+        upstream: upstream.stage,
+      });
+      const out = await p.execute(ctx, call);
+      expect(out.kind).toBe('rejected');
+      if (out.kind === 'rejected') {
+        expect(out.reason).toContain('budget stage');
+        expect(out.reason).not.toContain('database is locked');
+      }
+      expect(upstream.calls()).toBe(0);
+      expect(audit.calls).toHaveLength(1);
+      expect(audit.calls[0]).toMatchObject({
+        decision: 'refused',
+        refusal_code: null,
+        risks_touched: ['supabase.read-data'],
+        remaining_budget: null,
+        session_id: null,
+      });
+    });
+
+    test('a thrown value that is not an error, and a free-text error name, read `Error`', async () => {
+      const named = new Error('x');
+      named.name = 'drop table users; --';
+      for (const thrown of ['a string', named]) {
+        const { p, audit } = pipeline({
+          risks: {
+            evaluate: async () => {
+              // eslint-disable-next-line @typescript-eslint/only-throw-error -- the case under test
+              throw thrown;
+            },
+          },
+        });
+        const out = await p.execute(ctx, call);
+        expect(out).toMatchObject({ kind: 'rejected' });
+        expect(audit.calls[0]!.refusal_reason).toContain('(Error)');
+        expect(audit.calls[0]!.refusal_reason).not.toContain('drop table');
+      }
+    });
+
+    test('an observer that throws does not un-audit the refusal', async () => {
+      const { p, audit } = pipeline({
+        risks: {
+          evaluate: async () => {
+            throw new Error('boom');
+          },
+        },
+        onStageError: () => {
+          throw new Error('logger down');
+        },
+      });
+      const out = await p.execute(ctx, call);
+      expect(out.kind).toBe('rejected');
+      expect(audit.calls).toHaveLength(1);
+    });
+
+    test('the audit write of that refusal failing still propagates', async () => {
+      const failing: AuditWriter = {
+        write: async () => {
+          throw new Error('disk full');
+        },
+      };
+      const { p } = pipeline({
+        audit: failing,
+        risks: {
+          evaluate: async () => {
+            throw new Error('boom');
+          },
+        },
+      });
+      await expect(p.execute(ctx, call)).rejects.toThrow('disk full');
     });
   });
 

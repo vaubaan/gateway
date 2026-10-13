@@ -25,6 +25,9 @@ both MCP doors, requests and approvals, the audit, a plugin per provider
 pipeline that has not yet produced a release, and a demo that runs on a
 laptop.
 
+What has not been done or is not there, one line each:
+[known limitations](docs/handbook/known-limitations.md).
+
 ## Who it is for
 
 - **A team that lets coding agents act on real infrastructure** and wants a
@@ -53,7 +56,8 @@ npm ci
 npm run demo
 ```
 
-The last command builds the application, then prints a URL
+The last command builds the application (on the first start, and again
+only when the sources changed), then prints a URL
 (`http://localhost:3210`), three demo accounts without passwords, mission
 tokens and ready-made `curl` commands. Use Chrome or Firefox. `DEMO_PORT=4000
 npm run demo` picks another port. The demo is a development tool, never an
@@ -109,7 +113,7 @@ and configure your identity provider.
 │  POST /mcp               POST /mcp/manage          /connections /shares  │
 │  tools/list, tools/call  read authority, preview,  /missions /requests   │
 │  GET /mcp/catalog        issue / rotate / revoke   /audit /delegations   │
-│                          a mission                 /admin                │
+│                          a mission                 /providers /admin     │
 │       │                  never executes,           sign-in through your  │
 │       │                  never approves            identity provider     │
 │       ▼                                                                  │
@@ -184,7 +188,7 @@ maintained.
 ```
 apps/gateway/            the deployable: both doors, the web interface, the store
 packages/shared/         domain and risk types
-packages/policy-engine/  slices, matching, the risk decision
+packages/policy-engine/  slices, matching, the risk decision, the validity rule of a budget
 packages/gateway-core/   the call pipeline, refusals, the audit entry
 packages/plugin-sdk/     the plugin contract, catalog loader, registry, test kit
 packages/telemetry/      opt-in, anonymous plugin reports (off by default)

@@ -19,7 +19,7 @@
  * fetch of the context ; tests pass `mockFetch`.
  */
 
-import { UpstreamAuthError } from '@vaubaan/plugin-sdk';
+import { UpstreamAuthError, UpstreamHttpError } from '@vaubaan/plugin-sdk';
 import { SignJWT } from 'jose';
 import { createPrivateKey } from 'node:crypto';
 
@@ -125,7 +125,7 @@ export async function mintInstallationToken(
     const errBody = await res.text();
     const msg = `GitHub App token mint failed (${res.status}): ${errBody.slice(0, 200)}`;
     if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new Error(msg);
+    throw new UpstreamHttpError(msg, res.status);
   }
   const data = (await res.json()) as {
     token: string;

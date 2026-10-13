@@ -161,6 +161,10 @@ in the blob. `scripts/gen-master-key.mjs` prints a key.
 - CI builds the image and runs `deploy/docker/smoke.sh` on every push and
   PR. Publishing (GHCR, tags `v2.x.y`) belongs to the release pipeline
   (P3.2).
+  _2026-10-13: the release pipeline is written
+  (`.github/workflows/release.yml`: image to GHCR on a `v2.x.y` tag, with
+  provenance) and has never run; see
+  [known limitations](../handbook/known-limitations.md)._
 
 ### 6. Platform moves recorded for the next features
 

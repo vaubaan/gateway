@@ -46,6 +46,7 @@ describe('execution door: one mission, several token holders', () => {
     instance = await executionInstance();
     ({ ada } = instance);
     bob = await instance.root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
       subject: 'idp|bob',
       email: 'bob@example.com',
     });
@@ -422,6 +423,7 @@ describe('execution door: one mission, several token holders', () => {
       expect(allowed((await call(token)).body)).toBe(true);
     }
     const carol = await instance.root.store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
       subject: 'idp|carol',
       email: 'carol@example.com',
     });

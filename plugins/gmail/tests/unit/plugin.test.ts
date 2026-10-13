@@ -126,13 +126,13 @@ describe('gmail plugin — SDK kit', () => {
       {
         gmail__describe_zones: [{ args: {} }],
         gmail__search_threads: [
-          { args: { q: 'from:no-reply@github.com' } },
+          { args: { q: 'from:no-reply@vendor.com' } },
           { args: { q: 'from:colleague@myorg.com' } },
           { args: { q: 'from:other@vendor.com' } },
           { args: { q: 'from:random@random.io' } },
           { args: { q: 'is:unread' } },
           { args: { q: 'label:LEGAL' } },
-          { args: { q: 'from:no-reply@github.com OR newer_than:3650d' } },
+          { args: { q: 'from:no-reply@vendor.com OR newer_than:3650d' } },
           { args: { q: 'from:colleague@myorg.com -label:LEGAL -label:HR' } },
           { args: { q: 'is:unread' }, resources: [], expectDenied: true },
           { args: { q: 'is:unread' }, resources: [mailbox, otherMailbox], expectDenied: true },

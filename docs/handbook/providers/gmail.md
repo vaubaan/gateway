@@ -24,18 +24,18 @@ git history (`docs/handbook/providers/gmail.md` before 2026-10-13).
 
 ## Shape
 
-| Member              | Where                   | Facts                                                                                                                                                                             |
-| ------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id` / `version`    | `src/index.ts`          | `gmail`, `0.2.0` (pre-1.0 while experimental). Default export `gmailPlugin`, typed `ProviderPlugin`.                                                                              |
-| `experimental`      | `src/index.ts`          | `true` — `ProviderPlugin.experimental` of the SDK : the host registers the plugin, shows an "experimental" badge and keeps it out of the default connect and issuance flows.      |
-| `tools`             | `src/tools.ts`          | **Empty.** `gmailClassifiedToolDeclarations` holds the 10 modelled tools (9 official Gmail MCP + synthetic `gmail__describe_zones`).                                              |
-| `dataModel`         | `src/data-model.ts`     | 1 plane `mailbox`, 7 Gmail entities + 4 synthetic markers ; `mailbox` is `envScopable`.                                                                                           |
-| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 3`, 14 live risks + 1 deprecated id (`gmail.draft-to-zone-external-unbounded`) + `gmail.uncategorized-write`, 2 presets. Loaded by `loadCatalogFile` at import. |
-| `credential`        | `src/credential.ts`     | `oauth2` Google : PKCE, `client_secret_post`, scopes `gmail.readonly` + `gmail.compose`, `access_type=offline`, `prompt=consent`.                                                 |
-| `classify`          | `src/classify.ts`       | Pure, fail-closed ; keyed on the mission's single mailbox resource and its `metadata`. Parsers : `src/q-parser.ts`, `src/address.ts`.                                             |
-| `execute`           | `src/execute.ts`        | Returns `{ isError: true, structuredContent: { error: 'not_implemented', experimental: true, tool } }` for every tool ; no call.                                                  |
-| `discoverResources` | `src/execute.ts`        | `GET /gmail/v1/users/me/profile` → one resource, `ref` = lower-cased address ; `UpstreamAuthError` on 401/403.                                                                    |
-| `refresh`           | —                       | None : Google's refresh is the standard `refresh_token` grant the host performs from the spec (`refreshable: true`) ; P1.2-align.                                                 |
+| Member              | Where                   | Facts                                                                                                                                                                                                  |
+| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id` / `version`    | `src/index.ts`          | `gmail`, `0.3.0` (pre-1.0 while experimental). Default export `gmailPlugin`, typed `ProviderPlugin`.                                                                                                   |
+| `experimental`      | `src/index.ts`          | `true` — `ProviderPlugin.experimental` of the SDK : the host registers the plugin, shows an "experimental" badge and keeps it out of the default connect and issuance flows.                           |
+| `tools`             | `src/tools.ts`          | **Empty.** `gmailClassifiedToolDeclarations` holds the 10 modelled tools (9 official Gmail MCP + synthetic `gmail__describe_zones`).                                                                   |
+| `dataModel`         | `src/data-model.ts`     | 1 plane `mailbox`, 7 Gmail entities + 4 synthetic markers ; `mailbox` is `envScopable`.                                                                                                                |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 3`, 14 live risks + 1 deprecated id (`gmail.draft-to-zone-external-unbounded`) + `gmail.uncategorized-write`, 2 presets. Loaded by `loadCatalogFile` at import.                      |
+| `credential`        | `src/credential.ts`     | `oauth2` Google : PKCE, `client_secret_post`, scopes `gmail.readonly` + `gmail.compose`, `access_type=offline`, `prompt=consent`, `include_granted_scopes=true`.                                       |
+| `classify`          | `src/classify.ts`       | Pure, fail-closed ; keyed on the mission's single mailbox resource and its `metadata`. Parsers : `src/q-parser.ts`, `src/address.ts`.                                                                  |
+| `execute`           | `src/execute.ts`        | Returns `{ isError: true, structuredContent: { error: 'not_implemented', plugin: 'gmail', experimental: true, tool, message } }` for every tool, the same payload as JSON text in `content` ; no call. |
+| `discoverResources` | `src/execute.ts`        | `GET /gmail/v1/users/me/profile` → one resource, `ref` = lower-cased address ; `UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed status.                                           |
+| `refresh`           | —                       | None : Google's refresh is the standard `refresh_token` grant the host performs from the spec (`refreshable: true`) ; P1.2-align.                                                                      |
 
 ## Classification rules
 
@@ -60,12 +60,14 @@ flowchart LR
 ```
 
 - **Identity zoning.** `from-zone` of a sender, which must be one full
-  address : local part _equal to_ a known no-reply name (`no-reply`,
-  `noreply`, `do-not-reply`, `donotreply`, `notifications`, `alerts`,
-  `support`) → `automated`, before any domain rule ; domain in
-  `internal_domains` → `internal` ; domain or address allowlisted →
-  `known-external` ; else `unknown`. The match is exact, never a substring :
-  `supportive.ceo@myorg.com` is `internal`. `to-zone` of a recipient set :
+  address : domain in `internal_domains` → `internal` ; domain or address
+  allowlisted → `known-external` ; else `unknown`. Among the senders the
+  owner already knows — internal or allowlisted — a local part _equal to_ a
+  known no-reply name (`no-reply`, `noreply`, `do-not-reply`, `donotreply`,
+  `notifications`, `alerts`, `support`) is `automated` instead. On any other
+  domain the local part is chosen by the sender and decides nothing :
+  `noreply@` on a domain nobody listed is `unknown`. The match is exact,
+  never a substring : `supportive.ceo@myorg.com` is `internal`. `to-zone` of a recipient set :
   the worst of `self` (= `account_email`), `internal`, `allowlist` ; an
   external recipient refuses the call (below).
 - **`search_threads`** always emits `label[*].R`. The query parser
@@ -115,7 +117,9 @@ flowchart LR
   a mailbox with `sensitive_labels`, a label that names one (or a label
   nested under it) adds `sensitive-label[l].W`, and any other label that is
   not a system label id (`INBOX`, `STARRED`, `UNREAD`, `IMPORTANT`, `SENT`,
-  `DRAFT`, `CHAT`, `CATEGORY_*`) adds `sensitive-label[*].W` — a user label
+  `DRAFT`, `CHAT`, `CATEGORY_PERSONAL`, `CATEGORY_SOCIAL`,
+  `CATEGORY_PROMOTIONS`, `CATEGORY_UPDATES`, `CATEGORY_FORUMS`, compared
+  exactly) adds `sensitive-label[*].W` — a user label
   id (`Label_42`) cannot be mapped to a name by a pure classifier. That slice
   matches only the fallback `gmail.uncategorized-write`.
 - **Identifiers.** One grammar function per kind, exported from
@@ -133,9 +137,10 @@ flowchart LR
 - **Mailbox selection.** Exactly one gmail resource ; two or more are denied
   as ambiguous (v4 silently took the first binding ; that path is deleted).
 - **Metadata defaults.** Missing or ill-typed lists are empty, so an
-  unconfigured mailbox classifies every sender `unknown` and refuses every
-  draft but one addressed to the mailbox itself ; `account_email` falls back
-  to the resource ref.
+  unconfigured mailbox classifies every sender `unknown` — the no-reply
+  names included, since `automated` needs a listed domain or address — and
+  refuses every draft but one addressed to the mailbox itself (or with no
+  recipient) ; `account_email` falls back to the resource ref.
 
 ## Catalog decisions (v5)
 
@@ -192,12 +197,12 @@ and `sensitive_labels` on the resource (`GMAIL_METADATA_KEYS`).
 
 ## Tests
 
-`npx vitest run plugins/gmail` — 403 tests : `plugin.test.ts` (26 : SDK kit,
+`npx vitest run plugins/gmail` — 406 tests : `plugin.test.ts` (26 : SDK kit,
 experimental shape, coverage through a tool-exposing variant, mailbox
 selection, credential spec, absence of a plugin refresh, discovery and execute
 against `mockFetch`, presets), `risk-catalog.test.ts` (45 : loaded catalog
 lint, pattern parsing, per-tool coverage, `risksTouchedBy` spot checks, the
-refused external draft), `classify.test.ts` (105 : the per-tool suite of
+refused external draft), `classify.test.ts` (108 : the per-tool suite of
 `classifyGmail` — bounded and unbounded searches, sensitive labels,
 strict recipients, label writes, automated senders), `q-parser.test.ts`
 (32 : operators, disjunction / negation / unknown flags),

@@ -87,9 +87,12 @@ export interface RunningDemo {
   close(): Promise<void>;
 }
 
+/** Where `next build` writes the production build the demo serves. */
+export const BUILD_DIR = resolve(APP_DIR, '.next');
+
 /** True when `apps/gateway/.next` holds a production build to serve. */
 export function hasBuild(): boolean {
-  return existsSync(resolve(APP_DIR, '.next/BUILD_ID'));
+  return existsSync(resolve(BUILD_DIR, 'BUILD_ID'));
 }
 
 function listen(server: Server, port: number): Promise<number> {

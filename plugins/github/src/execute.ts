@@ -19,7 +19,10 @@
 
 import { Octokit } from '@octokit/rest';
 import {
+  ExecutorRefusal,
   UpstreamAuthError,
+  UpstreamHttpError,
+  declining,
   type ConnectionContext,
   type ExecuteContext,
   type McpToolResult,
@@ -60,7 +63,20 @@ export const MINT_PERMISSIONS: Readonly<
 export const DISCOVERY_PAGE_SIZE = 100;
 export const DISCOVERY_MAX_PAGES = 10;
 
-export async function executeGithub(
+/**
+ * What the reader denies, and the merge guard that does not hold, is declined :
+ * an `isError` result (`ExecutorRefusal`), no request sent for it, nothing failed
+ * at GitHub. A failure of GitHub is thrown.
+ */
+export function executeGithub(
+  ctx: ExecuteContext,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): Promise<McpToolResult> {
+  return declining(() => executeRead(ctx, tool, args));
+}
+
+async function executeRead(
   ctx: ExecuteContext,
   tool: string,
   args: Readonly<Record<string, unknown>>,
@@ -69,7 +85,7 @@ export async function executeGithub(
   // call that runs is the call that was classified, or nothing runs — not
   // even the token mint.
   const call = readGithubCall(tool, args, githubRepoRefs(ctx.resources));
-  if ('denied' in call) throw new Error(refusalOf(tool, call.denied));
+  if ('denied' in call) throw new ExecutorRefusal(refusalOf(tool, call.denied));
   if (call.tool === MINT_TOOL) return mintInstallTokenTool(ctx, call);
 
   // Least privilege : the per-call token only sees the repository the call
@@ -98,9 +114,9 @@ export async function executeGithub(
 }
 
 /**
- * What `execute` throws for a call the reader refuses : the classifier's
+ * What `execute` answers for a call the reader refuses : the classifier's
  * sentence, led by the tool name (`tool 'x' requires …` → `x requires …`).
- * Thrown, like every refusal of this executor — nothing was sent.
+ * Declined, like every refusal of this executor — nothing was sent.
  */
 function refusalOf(tool: string, denied: string): string {
   const classifierLead = `tool '${tool}' `;
@@ -163,8 +179,12 @@ export async function discoverGithubResources(
         res.status,
       );
     }
-    if (!res.ok)
-      throw new Error(`github GET /installation/repositories failed with HTTP ${res.status}`);
+    if (!res.ok) {
+      throw new UpstreamHttpError(
+        `github GET /installation/repositories failed with HTTP ${res.status}`,
+        res.status,
+      );
+    }
     const body = (await res.json()) as {
       total_count?: number;
       repositories?: readonly InstallationRepositoryDto[];

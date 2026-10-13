@@ -25,8 +25,20 @@ describe('ownership and orphan states in the store', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    ada = (await store.users.upsertFromIdp({ subject: 'a', email: 'ada@x' })).id;
-    bob = (await store.users.upsertFromIdp({ subject: 'b', email: 'bob@x' })).id;
+    ada = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'a',
+        email: 'ada@x',
+      })
+    ).id;
+    bob = (
+      await store.users.upsertFromIdp({
+        issuer: 'http://idp.test',
+        subject: 'b',
+        email: 'bob@x',
+      })
+    ).id;
     group = (await store.groups.getOrCreate('github-admins', 'local')).id;
   });
   afterEach(() => store.close());

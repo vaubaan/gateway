@@ -25,9 +25,10 @@
  *      the batch only, and a slice no named risk matches would touch the
  *      fallback on every send.
  *   4. **Attachments and scheduling are out of scope** (spec §10) : any
- *      `attachments` (a non-array value included), `scheduled_at` or
- *      broadcast `send: true` is `denied`, so the broadcast-send gate cannot
- *      be bypassed from a draft.
+ *      `attachments` (a non-array value included), any `scheduled_at`, and
+ *      any `send` on a broadcast creation or update — `send: false` as well
+ *      as `send: true` — is `denied`, so the broadcast-send gate cannot be
+ *      bypassed from a draft and no argument is accepted that does nothing.
  *   5. **Every broadcast call names its segment** ; `execute` checks upstream
  *      that the broadcast belongs to it before acting.
  *   6. **Custom headers cannot rewrite the envelope** : a `headers` key that
@@ -189,7 +190,7 @@ function checkBroadcastFrom(args: Args, resources: readonly Resource[]): Denied 
   return 'denied' in target ? target : null;
 }
 
-/** A broadcast create or update must stay a draft : no send, no schedule. */
+/** A broadcast create or update must stay a draft : no `send` (whatever its value), no schedule. */
 function refuseBroadcastDispatch(args: Args): Denied | null {
   if (args.send !== undefined) {
     return { denied: 'send: a broadcast is sent with resend__send_broadcast, not at creation' };

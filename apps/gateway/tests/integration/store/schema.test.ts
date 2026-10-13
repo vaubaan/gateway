@@ -88,7 +88,7 @@ describe('store schema v1', () => {
   it('creates every table of the plan on an in-memory database', () => {
     const { store } = openTestStore();
     opened.push(store);
-    expect(store.schemaVersion).toBe(10);
+    expect(store.schemaVersion).toBe(11);
     expect(tableNames(store)).toEqual(EXPECTED_TABLES);
   });
 
@@ -127,10 +127,10 @@ describe('store schema v1', () => {
     opened.splice(opened.indexOf(first), 1);
 
     const second = fileStore(path);
-    expect(second.schemaVersion).toBe(10);
+    expect(second.schemaVersion).toBe(11);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(10);
+    ).toBe(11);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {
@@ -140,20 +140,32 @@ describe('store schema v1', () => {
 
     // Writer A holds the reserved lock; writer B must wait and then fail with SQLITE_BUSY.
     a.db.prepare('BEGIN IMMEDIATE').run();
-    await expect(b.users.upsertFromIdp({ subject: 'u', email: 'u@x' })).rejects.toMatchObject({
+    await expect(
+      b.users.upsertFromIdp({ issuer: 'http://idp.test', subject: 'u', email: 'u@x' }),
+    ).rejects.toMatchObject({
       code: 'SQLITE_BUSY',
     });
     a.db.prepare('COMMIT').run();
 
     // Once A releases the lock, B's write goes through and A observes it.
-    const user = await b.users.upsertFromIdp({ subject: 'u', email: 'u@x' });
-    expect(await a.users.getBySubject('u')).toMatchObject({ id: user.id });
+    const user = await b.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'u',
+      email: 'u@x',
+    });
+    expect(await a.users.getByIdentity('http://idp.test', 'u')).toMatchObject({
+      id: user.id,
+    });
   });
 
   it('backs up to a consistent single file with VACUUM INTO', async () => {
     const dir = tempDir();
     const store = fileStore(join(dir, 'gateway.sqlite'));
-    await store.users.upsertFromIdp({ subject: 's', email: 's@x' });
+    await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 's',
+      email: 's@x',
+    });
     const backupPath = join(dir, 'backup.sqlite');
     store.backupTo(backupPath);
 

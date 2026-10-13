@@ -63,7 +63,7 @@ apps/gateway/src/server/compose/shipped-plugins.ts   SHIPPED_PLUGINS, buildShipp
 apps/gateway/migrations/0004_connection_resource_curation.sql
 apps/gateway/src/lib/connections/session.ts  Next glue: currentActor(), takeNotice()
 apps/gateway/src/components/
-  shell/AppShell.tsx                 the v5 bar; APP_NAV is the list of cardinal pages
+  shell/AppShell.tsx                 the bar: AppShell (APP_NAV, the cardinal pages) and AdminShell (ADMIN_NAV, the pages of Administration)
   connections/parts.tsx              NoticeBanner, StateBadge, ExperimentalBadge, CredentialFieldInputs
   connections/RevokeConnection.tsx   client: type-to-confirm, then a plain form POST
 apps/gateway/src/app/(app)/connections/
@@ -78,9 +78,11 @@ apps/gateway/src/app/(app)/connections/
   [id]/resources/[resourceId]/route.ts  POST /connections/<id>/resources/<resourceId>
   [id]/transfer/route.ts             POST /connections/<id>/transfer          (handbook authority)
   [id]/share/page.tsx                /connections/<id>/share                  the Share dialog (handbook authority)
+  [id]/share/share-form.tsx          the dialog's client form (handbook authority)
   [id]/shares/route.ts               POST /connections/<id>/shares            → root.shares.handlers.share
   [id]/shares/[shareId]/revoke/route.ts  POST /connections/<id>/shares/<shareId>/revoke → root.shares.handlers.revoke
 apps/gateway/src/app/admin/(guarded)/connections/
+  page.tsx                           /admin/connections   ownerless connections (handbook authority)
   [id]/reassign/route.ts             POST /admin/connections/<id>/reassign    → connections.handlers.reassign (handbook authority)
 apps/gateway/src/app/admin/(guarded)/provider-apps/
   page.tsx                           /admin/provider-apps
@@ -630,7 +632,10 @@ plugin` badge, hidden checkbox, Save — inputs reach their per-row form
   anyone else to `/login`. `APP_NAV` in `AppShell.tsx` is the list of pages
   in the bar (Connections, Shares, Missions, Requests, Audit, Delegations,
   Providers); operators also get the Admin link
-  ([web-app](web-app.md), "The shell").
+  ([web-app](web-app.md), "The shell"). The pages under `/admin` — Provider
+  apps and the ownerless connections among them — are rendered in the same
+  shell with Administration's entries (`AdminShell`, `ADMIN_NAV`; handbook
+  [authentication](authentication.md), "Pages").
 - **Notices.** A handler never puts a message in a URL: it stores a
   `Notice { tone, title, lines }` in the `NoticeStore` (`notice:<id>`,
   5 min, readable once, only by the web session it was written for) and
@@ -720,7 +725,7 @@ ordinary reassignment are in `tests/integration/authority/ownership.test.ts`
 (handbook [authority](authority.md)).
 
 Not automated: a browser run against real providers
-([e2e-tests](../tests/e2e-tests.md#connect-a-provider-p14), "Manual checks
+([e2e-tests](../tests/e2e-tests.md#connect-a-provider), "Manual checks
 by feature" → "Connect a provider (P1.4)").
 
 ## How to debug

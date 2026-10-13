@@ -186,7 +186,7 @@ describe('an MCP client obtains a delegation with no configuration', () => {
     await client.close();
 
     // ── What the instance recorded ───────────────────────────────────────────
-    const ada = await instance.root.store.users.getBySubject(ADA.sub);
+    const ada = await instance.root.store.users.getByIdentity(instance.idp.iss, ADA.sub);
     const delegations = await instance.root.store.delegations.listForUser(ada?.id ?? '');
     expect(delegations).toHaveLength(1);
     expect(delegations[0]).toMatchObject({ status: 'active', scope: 'mgmt' });
@@ -224,7 +224,7 @@ describe('an MCP client obtains a delegation with no configuration', () => {
     await first.finishAuth(callback.searchParams);
     await (await connect()).close();
 
-    const ada = await instance.root.store.users.getBySubject(ADA.sub);
+    const ada = await instance.root.store.users.getByIdentity(instance.idp.iss, ADA.sub);
     const [delegation] = await instance.root.store.delegations.listForUser(ada?.id ?? '');
     const revoked = await browser.post(`/delegations/${delegation?.id ?? ''}/revoke`, {});
     expect(revoked.headers.get('location')).toBe('/delegations?revoked=1');
@@ -248,7 +248,7 @@ describe('an MCP client obtains a delegation with no configuration', () => {
     expect(callback.searchParams.get('error')).toBe('access_denied');
     await expect(first.finishAuth(callback.searchParams)).rejects.toThrow(/refused|access_denied/);
     expect(provider.stored).toBeUndefined();
-    const ada = await instance.root.store.users.getBySubject(ADA.sub);
+    const ada = await instance.root.store.users.getByIdentity(instance.idp.iss, ADA.sub);
     expect(await instance.root.store.delegations.listForUser(ada?.id ?? '')).toEqual([]);
   });
 });

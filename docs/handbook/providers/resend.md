@@ -17,8 +17,11 @@ tracks:
 
 # Resend provider — modelling and runtime
 
-`@vaubaan/plugin-resend` on the v5 Plugin SDK (feature P1.2f). Contract :
-ADR [[plugin-contract-and-credential-spec]] ; spec
+`@vaubaan/plugin-resend` (version 0.3.0) on the v5 Plugin SDK (feature
+P1.2f). Contract : ADR [[plugin-contract-and-credential-spec]] ; what the
+executor declines : ADR
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
+D3 ; spec
 [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §0, §3.1, §3.2, §5 and
 [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2, §4, §7 ; the
 provider's own spec [`resend.md`](../../spec/resend.md) (zones, catalog
@@ -52,7 +55,8 @@ plugins/resend/src/
   resources.ts        kinds, PATH_IDENT / pathIdent, DOMAIN_NAME / domainName, CONTACT_EMAIL / contactSelector,
                       domainIdOf, zoneConfigOf, resolveDomain / resolveDomainArg / resolveSegmentArg
   zones.ts            parseAddress, collectRecipients, zoneOfAddress, worstZone
-  tools.ts            27 McpToolDeclaration (`domain` / `segment_id` resource arguments), declaredFieldsOf
+  tools.ts            27 McpToolDeclaration — 10 reads (`describe_zones` among them, synthetic) and 17 writes ;
+                      `domain` / `segment_id` resource arguments ; declaredFieldsOf, RESEND_TOOL_NAMES
   classify.ts         classifyResend — pure, (tool, args, resources) → slices | denied
   execute.ts          executeResend, discoverResendResources, RESEND_API_BASE, paging constants
   data-model.ts       plane `email`, 9 entities, `domain` and `segment` envScopable
@@ -71,7 +75,7 @@ flowchart LR
   owner --> mission["mission selects resources"]
   mission -->|"from → domain"| cls["classifyResend"]
   cls --> z["domain[notifications.acme.com].to-zone[Z].W<br/>(batch: + recipient-count[batch].W)"]
-  z -->|"resourceEnvResolver: first ident = ref"| env["env → resend[staging].send-email-external-unbounded<br/>prod or no label → refused"]
+  z -->|"resourceEnvResolver: the ident that is a ref"| env["env → resend[staging].send-email-external-unbounded<br/>prod or no label → refused"]
   mission -->|"segment_id"| b["segment[7826…].broadcast[B].send.W"]
 ```
 
@@ -149,12 +153,15 @@ Refusals (`denied`, audited, never executed) : `from` outside the mission or
 malformed ; malformed or absent recipients ; `attachments` in any shape but
 an empty list (a non-array value is unreadable, not absent), `scheduled_at`
 (spec §10 : out of scope) ; a `headers` entry that names an envelope field —
-`To`, `Cc`, `Bcc`, `From`, `Sender`, `Reply-To`, `Return-Path` and their
-`Resent-*` forms, case-insensitive (`ENVELOPE_HEADERS`) — or whose name is
+`To`, `Cc`, `Bcc`, `From`, `Sender`, `Reply-To`, `Return-Path`, and
+`Resent-To` / `-Cc` / `-Bcc` / `-From` / `-Sender`, case-insensitive
+(`ENVELOPE_HEADERS`) — or whose name is
 not a plain header token, or whose value is not a single-line string, or
 `headers` that is not an object (the zone was computed from `from`, `to`,
-`cc`, `bcc` alone) ; `send` on a broadcast create or update (would bypass
-`broadcast-send`) ; `domain` / `segment_id` outside the mission ; malformed
+`cc`, `bcc` alone) ; any `send` on a broadcast create or update, whatever
+its value — `send: false` as well as `send: true` : `true` would bypass
+`broadcast-send`, and an argument that does nothing is not accepted (a
+broadcast is sent with `send_broadcast`) ; `domain` / `segment_id` outside the mission ; malformed
 identifiers (see "Identifiers" below) ; a create without its `name` /
 `email` / `from` ; `scheduled_at` on a broadcast send ; unknown tool.
 
@@ -177,7 +184,7 @@ never escaped or repaired (ADR
 
 `execute` reads each of them with the function the classifier used
 (`idSegment`, `contactSegment`, `segmentRef` and `domainId` in `execute.ts`
-wrap them and throw the classifier's message). An id is interpolated as it
+wrap them and decline with the classifier's message). An id is interpolated as it
 is : `encodeURIComponent` leaves `.` and `..` untouched and a URL parser
 removes them, so `/emails/..` would be sent as `/`. The one value that is
 percent-encoded is a contact address, whose `@` becomes `%40` — the segment
@@ -204,10 +211,10 @@ Presets, with what a mission built from each one alone allows
 
 | Preset               | Allows                                                                                                                                                                                | Refuses                                                          |
 | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
-| `read-only`          | email status, domains, broadcast metadata                                                                                                                                             | contacts (PII), every write                                      |
+| `read-only`          | email status, domains, broadcast metadata                                                                                                                                             | segments and contacts (PII), every write                         |
 | `developer`          | the same reads ; single sends to internal and allow-listed recipients, one or several                                                                                                 | external sends, batches, contacts, segments, broadcasts, domains |
 | `marketing-operator` | reads including contacts ; internal and allow-listed sends, single or batch (`approval`) ; contact writes ; segment writes (`approval`) ; drafts, broadcast send (`approval`), delete | external sends (single or batch, any domain), domain writes      |
-| `domain-admin`       | read and verify domains ; create and update them (`approval`)                                                                                                                         | every send, contacts, segments, broadcasts, email status         |
+| `domain-admin`       | read and verify domains ; create, update and delete them (`approval`)                                                                                                                 | every send, contacts, segments, broadcasts, email status         |
 
 No preset can reach an `external-unbounded` recipient : a creator adds
 `resend[staging].send-email-external-unbounded` (or `[dev]`) by hand, and
@@ -217,27 +224,44 @@ point — ADR `mission-presets-default-values` is deferred.
 ## Execute
 
 JSON bodies, `Authorization: Bearer <api_key>`, `ctx.fetch` only. `execute`
-re-runs `classifyResend` and throws on `denied` (fail closed whatever the
-host did). Only the fields a tool declares in its `inputSchema` are
+re-runs `classifyResend` and declines on `denied` (fail closed whatever the
+host did). **What the executor declines is an `isError` result, never a
+throw** : the body of `executeResend` runs under the SDK's `declining`, and
+everything the classifier denies and every guard that does not hold — a
+malformed id, a resource outside the mission, a broadcast of another
+segment, a batch that is not a list — is thrown inside as `ExecutorRefusal`
+and comes out as the result carrying the sentence (`resend: <reason>` ; an
+unknown tool keeps the classifier's own words). No request leaves for a
+declined call, beyond the read a guard itself needed. Only what Resend
+fails is thrown.
+
+Only the fields a tool declares in its `inputSchema` are
 forwarded (`declaredFieldsOf`, one list per tool derived from `tools.ts` ;
 each email of a batch is reduced the same way) : an argument the schema
 does not name — `audience_id`, a template id, anything Resend adds later —
-was read by no classifier rule, so it is dropped before the call instead of
-reaching Resend unseen. The resource arguments (`domain`, `segment_id`,
+was read by no classifier rule and is never read by the executor either, so
+it does not reach Resend. The request is built field by field : such an
+argument is ignored, not refused. The resource arguments (`domain`, `segment_id`,
 `id`) go in the path or are re-resolved against the mission, never copied
 into the body. Domain tools map the ref to `metadata.domain_id` (missing →
 "refresh the connection's resources" ; not a `pathIdent` → "carries a
-malformed domain_id"). Every broadcast call first
-`GET /broadcasts/:id` and refuses a broadcast whose `segment_id`
-(`audience_id` on older payloads) differs from the one named. List tools
-filter upstream results to the mission's resources. `create_contact` with
+malformed domain_id"). A broadcast call that names an `id` (get, update,
+send, delete) first `GET /broadcasts/:id` and declines a broadcast whose
+`segment_id` (`audience_id` on older payloads) differs from the one named ;
+`create_broadcast` sends the resolved `segment_id` in its body.
+`list_domains`, `list_segments` and `list_broadcasts` filter upstream
+results to the mission's resources ; `list_contacts` is not filtered
+(contacts are account-level) and takes `segment_id` as a query filter only.
+`describe_zones` calls nothing : it returns the zone lists of the mission's
+domains from the resource metadata. `create_contact` with
 `segment_id` is two calls (`POST /contacts`, then
 `POST /contacts/:id/segments/:segment_id`) ; a create answer without an
 `id`, or with one that is not a `pathIdent`, stops there with an error
 rather than building the second URL from a missing or unchecked value.
 401 → `UpstreamAuthError` ;
 403 → `UpstreamAuthError` unless Resend names a `validation_error` (an
-unverified `from` domain is a 403 too). Unknown tool → `isError` result.
+unverified `from` domain is a 403 too) ; any other failed status →
+`UpstreamHttpError`. Unknown tool → `isError` result.
 
 ## How to debug
 
@@ -248,7 +272,10 @@ unverified `from` domain is a 403 too). Unknown tool → `isError` result.
   are empty (fresh discovery) or the recipient domain is not listed exactly.
   `describe_zones` shows what the classifier sees.
 - **`broadcast 'b' targets segment 's1', not 's2'`** — the agent named the
-  wrong `segment_id` ; nothing was sent.
+  wrong `segment_id` ; nothing was sent. An `isError` result, like every
+  refusal of the executor : the audit shows no `upstream_error` for it.
+- **`send: a broadcast is sent with resend__send_broadcast, not at
+creation`** — the call carries `send`, with any value. Remove the argument.
 - **Discovery fails with `UpstreamAuthError` 403** — a `sending_access` key
   : create a full-access key.
 - **`carries no domain_id`** — a resource predating discovery metadata ;
@@ -262,8 +289,10 @@ labelled 'prod', but is acceptable only in [staging, dev]`** (or `a
 resource with no environment label`) — a recipient is in no zone list of
   the sending domain. No mission can send it from there : add the recipient
   or its domain to the zone lists, or send from a `staging` / `dev` domain.
-- **`headers: 'Bcc' is an envelope header`** — recipients and sender go in
-  `to` / `cc` / `bcc` / `from` / `reply_to`, where they are zoned.
+- **`headers: 'Bcc' is an envelope header`** — recipients go in `to` / `cc` /
+  `bcc`, where they are zoned, and the sender in `from`, which must be on a
+  sending domain of the mission. A reply address goes in `reply_to` : the
+  field is forwarded as it is, the classifier does not read it.
 - **A field the agent passed is missing upstream** — it is not declared by
   the tool (`tools.ts`) ; declare it and decide how it is classified.
 
@@ -272,7 +301,8 @@ resource with no environment label`) — a recipient is in no zone list of
 `npx vitest run plugins/resend` — 232 : `plugin.test.ts` (kit with
 `fallbackHits` empty, cross-cutting classifier rules, execute and its
 forwarded fields, discovery, credential, presets ; 43), `classify.test.ts`
-(one scenario per tool on `classifyResend`, envelope headers, attachments,
+(a scenario per tool on `classifyResend` except the segment and membership
+tools, which `plugin.test.ts` covers ; envelope headers, attachments,
 identifiers ; 64), `risk-catalog.test.ts` (counts, invariants and
 disjointness ; 33), `mission-evaluation.test.ts` (real catalog through
 `evaluateCall` with the gateway's env resolver : external sends per domain

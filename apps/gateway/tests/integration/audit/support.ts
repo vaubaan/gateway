@@ -48,6 +48,7 @@ export async function openAuditRig(): Promise<OperatorRig> {
   const root = await buildTestRoot({ env: { VAUBAAN_ADMIN_EMAILS: OPERATOR_EMAIL } });
   const seeded = await seedInstance(root);
   const operator = await root.store.users.upsertFromIdp({
+    issuer: 'http://idp.test',
     subject: 'idp|ops',
     email: OPERATOR_EMAIL,
     displayName: 'Ops',

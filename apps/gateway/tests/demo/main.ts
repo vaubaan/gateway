@@ -4,7 +4,10 @@
  *
  *   DEMO_PORT=<port>      listen on another port (default 3210)
  *   DEMO_KEEP=1           keep the SQLite file and the log on exit
- *   DEMO_SKIP_BUILD=1     serve the existing build instead of building first
+ *   DEMO_SKIP_BUILD=1     serve the existing build as it is, whatever it was built from
+ *
+ * The application is built on the first start and again only when a file a
+ * build reads has changed since (`build-stamp.ts`).
  *
  * Never part of the image: this file lives under `tests/`, and it refuses to
  * start in a production environment or next to a real configuration
@@ -15,7 +18,8 @@ import { hostname } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { hasBuild, startDemo, type RunningDemo } from './demo-instance';
+import { buildIsFresh, readBuildStamp, sourceDigest, writeBuildStamp } from './build-stamp';
+import { BUILD_DIR, hasBuild, startDemo, type RunningDemo } from './demo-instance';
 import { assertDemoAllowed, demoPort, DemoRefusal } from './guards';
 import { DEMO_BANNER, tourText } from './tour';
 
@@ -44,12 +48,40 @@ function refuseNonLoopbackFetch(): void {
 }
 
 function build(): void {
-  say('Building the web application (DEMO_SKIP_BUILD=1 serves the existing build)…');
   const result = spawnSync('npm', ['run', 'build', '--workspace', '@vaubaan/gateway-app'], {
     cwd: REPO_ROOT,
     stdio: 'inherit',
   });
   if (result.status !== 0) throw new Error('the build failed; see the output above');
+}
+
+/**
+ * Serves the build that is there when it is the build of the sources as they
+ * are; builds otherwise, and stamps what it built. `DEMO_SKIP_BUILD=1` serves
+ * whatever build exists without looking.
+ */
+function ensureBuild(env: NodeJS.ProcessEnv): void {
+  if (env.DEMO_SKIP_BUILD === '1' && hasBuild()) {
+    say('Serving the existing build as it is (DEMO_SKIP_BUILD=1).');
+    return;
+  }
+  // The digest is taken before the build: a file edited while it runs makes
+  // the next start build again.
+  const digest = sourceDigest(REPO_ROOT);
+  if (buildIsFresh(BUILD_DIR, digest)) {
+    say('The web application is already built from these sources.');
+    return;
+  }
+  const stamp = hasBuild() ? readBuildStamp(BUILD_DIR) : null;
+  say(
+    stamp !== null
+      ? 'The sources changed since the last build: building the web application…'
+      : hasBuild()
+        ? 'The existing build was not made by the demo (no stamp): building the web application…'
+        : 'Building the web application…',
+  );
+  build();
+  writeBuildStamp(BUILD_DIR, digest);
 }
 
 async function main(): Promise<void> {
@@ -58,7 +90,7 @@ async function main(): Promise<void> {
   const port = demoPort(process.env);
   say(DEMO_BANNER);
 
-  if (process.env.DEMO_SKIP_BUILD !== '1' || !hasBuild()) build();
+  ensureBuild(process.env);
   // Next's own anonymous usage reports are an outbound call too.
   process.env.NEXT_TELEMETRY_DISABLED = '1';
   refuseNonLoopbackFetch();

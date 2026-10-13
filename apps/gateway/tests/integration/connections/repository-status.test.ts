@@ -16,7 +16,11 @@ describe('connection statuses at the repository', () => {
   beforeEach(async () => {
     t = openTestStore();
     store = t.store;
-    const owner = await store.users.upsertFromIdp({ subject: 'o', email: 'o@example.com' });
+    const owner = await store.users.upsertFromIdp({
+      issuer: 'http://idp.test',
+      subject: 'o',
+      email: 'o@example.com',
+    });
     const connection = await store.connections.create({
       provider: 'github',
       owner: { kind: 'user', id: owner.id },

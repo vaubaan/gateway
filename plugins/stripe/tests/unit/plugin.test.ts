@@ -21,6 +21,7 @@ import {
   assertPluginWellFormed,
   assertPresetsValid,
   mockFetch,
+  refusalText,
 } from '@vaubaan/plugin-sdk/testing';
 import { resourceEnvResolver } from '@vaubaan/policy-engine';
 
@@ -277,14 +278,14 @@ describe('executeStripe with mockFetch', () => {
 
   test('refuses to run without a resolvable resource or without the key of its mode', async () => {
     const fetch = mockFetch([]);
-    await expect(stripePlugin.execute(ctx(fetch), 'stripe__get_balance', {})).rejects.toThrow(
+    expect(await refusalText(stripePlugin.execute(ctx(fetch), 'stripe__get_balance', {}))).toMatch(
       /touches 2 Stripe resources/,
     );
     const testOnly: ExecuteContext = {
       ...ctx(fetch, [liveRes]),
       credential: { kind: 'api-key', fields: { test_key: 'sk_test_abc' }, metadata: {} },
     };
-    await expect(stripePlugin.execute(testOnly, 'stripe__get_balance', {})).rejects.toThrow(
+    expect(await refusalText(stripePlugin.execute(testOnly, 'stripe__get_balance', {}))).toMatch(
       /no live-mode key/,
     );
     expect(fetch.calls).toHaveLength(0);

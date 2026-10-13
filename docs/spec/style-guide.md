@@ -76,6 +76,8 @@ The style guide is the non-functional subsystem that:
 Primitive tokens          anonymous, no prescribed use
   gray                    14 steps, gray-0 (near white) to gray-1000 (near black)
   blue, green, amber, red 4 steps each: 50, 200, 600, 900
+  violet, teal, pink, lime, cyan, indigo, orange, magenta, gold
+                          4 steps each, the hues of the kinds of object
   space                   base 4 px
   radius                  none, xs, sm, md, lg, full
   font size, font weight
@@ -88,6 +90,7 @@ Semantic tokens           prescribe a use; mapped per theme
   text-foreground, text-muted, text-subtle, text-inverse
   border-subtle, border-strong
   accent-{info,success,warning,danger}-{bg,fg}
+  type-<kind>-{rail,bg,fg}
   primary-bg, primary-fg, primary-bg-hover
   focus-ring
         │
@@ -114,8 +117,16 @@ of each theme their small differences in lightness.
 A status is always used as a **pair** of semantic tokens, background and
 foreground: `accent-warning-bg` with `accent-warning-fg`. In the light
 theme the pair is step 50 under step 900; in the dark theme, step 900
-under step 200. Step 600 is defined and not used by any semantic token.
-No component references a family step directly.
+under step 200. Step 600 of these four families is defined and not used by
+any semantic token. No component references a family step directly.
+
+**Kinds.** Nine more families, four steps each, chosen between the status
+hues so that a kind is never read as a state: violet (risk), teal (preset),
+pink (tool), lime (plane), cyan (resource), indigo (connection), orange
+(mission), magenta (member), gold (token). Each kind has three semantic
+tokens — `type-<kind>-rail` (step 600, the marker), `type-<kind>-bg` and
+`type-<kind>-fg` (50 under 900 in the light theme, 900 under 200 in the
+dark one) — which an element receives by naming its kind.
 
 **Primary action.** The primary button is the inverse of the page, not
 an accent: near black on a light page, near white on a dark one
@@ -163,6 +174,9 @@ Scale, relative to the root size:
 | `text-sm`   | 0.8125 | `text-xl`  | 1.5   |
 | `text-base` | 0.875  | `text-2xl` | 2     |
 | `text-md`   | 1      | `text-3xl` | 2.5   |
+
+A ninth token, `text-2xs` (0.65), exists for axis abbreviations and column
+captions only.
 
 The root size is 125 % of the browser default, so the whole scale renders
 a quarter larger than its nominal values. Body text is `text-base`.
@@ -231,24 +245,30 @@ globally.
 
 ### 3.3 Interface primitives
 
-| Primitive               | Variants and parts                                                                                            |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------- |
-| **Button**              | `primary`, `secondary` (default), `ghost`, `danger`; sizes `sm`, `md`; states hover, focus, disabled, loading |
-| **Input**               | text input, text area, select, and a **field** wrapper that carries the label, a hint and the error           |
-| **Card**                | raised surface with a hairline; optional header with a title, and a body                                      |
-| **Badge**               | tones `neutral`, `info`, `success`, `warning`, `danger`; an optional monospace form for identifiers           |
-| **Banner**              | same five tones; optional title; in the flow of the page, not dismissible                                     |
-| **Table**               | head on a sunken surface, hairline between rows                                                               |
-| **Code**                | inline technical text in the monospace family                                                                 |
-| **Layout**              | the page container, and a vertical stack with a gap taken from the space scale                                |
-| **Danger confirmation** | a modal for terminal actions: the user types a given phrase before the action is enabled; Escape cancels      |
+| Primitive               | Variants and parts                                                                                                                                                                                          |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Button**              | `primary`, `secondary` (default), `ghost`, `danger`; sizes `sm`, `md`; states hover, focus, disabled, loading                                                                                               |
+| **Input**               | text input, text area, select, and a **field** wrapper that carries the label, a hint and the error                                                                                                         |
+| **Card**                | raised surface with a hairline; optional header with a title, and a body                                                                                                                                    |
+| **Badge**               | tones `neutral`, `info`, `success`, `warning`, `danger`; an optional monospace form for identifiers                                                                                                         |
+| **Banner**              | same five tones; optional title; in the flow of the page, not dismissible                                                                                                                                   |
+| **Table**               | head on a sunken surface, hairline between rows                                                                                                                                                             |
+| **Code**                | inline technical text in the monospace family                                                                                                                                                               |
+| **Layout**              | the page container, and a vertical stack with a gap taken from the space scale                                                                                                                              |
+| **Danger confirmation** | a modal for terminal actions: the user types a given phrase before the action is enabled; Escape cancels                                                                                                    |
+| **Slug**                | a technical name in the colour and with the glyph of its kind (risk, preset, tool, plane, resource, connection, mission, member, token); a link when it has a target; an identifier wraps between its words |
+| **Glyph**               | the one icon set: twelve-pixel line drawings in the current colour, hidden from assistive technology                                                                                                        |
+| **Callout**             | a note inside the flow: a glyph, a short title, a sentence or two; tones as the badge, carried by the glyph and the title on a neutral surface                                                              |
+| **Help**                | one line of explanation and a button that unfolds the rest; closed by default, the choice remembered per browser                                                                                            |
+| **Tabs**                | a tab list and its panel; arrow keys, Home and End move between tabs; an optional count per tab                                                                                                             |
+| **Kind legend**         | what the colour of each kind means                                                                                                                                                                          |
 
 There is no link-styled button: a link is a link. An input has no
 success state: the absence of an error is enough.
 
 ### 3.4 Not provided
 
-Generic dialog, tooltip, dropdown menu, tabs, toast. Errors and results
+Generic dialog, tooltip, dropdown menu, toast. Errors and results
 are shown inline, in a banner or beside the field.
 
 ## 4. Composition
@@ -304,32 +324,35 @@ Neither exists yet (§8).
 
 - **Theme selection.** Follow the system preference, offer a switch that
   is remembered, or both. Today the light theme is fixed.
-- **Icons.** None is used. If a set is introduced it must be a single,
-  neutral one.
+- **Icons.** One set is used, drawn in the code base (`Glyph`:
+  twelve-pixel line drawings in the current colour, never the only carrier
+  of a meaning). It must stay a single, neutral one.
 - **The primitives of §3.4.** When, and triggered by which screen.
 
 ## 8. Known gaps between this guide and the interface
 
 Stated so that nobody takes a rule for a fact:
 
-- **Reduced motion** (§5) is not handled.
-- **The small button** is 26 px high, under the 32 px target (§5).
+- **The small button** is drawn 26 px high; its click target is extended
+  to 32 px (§5).
 - **Raw values remain.** Paddings, heights and a few font sizes are
   written in pixels rather than with tokens in the styles of buttons,
   badges, inputs, banners, code and table cells, and in the style sheets
-  of the missions, audit and connections screens. Modal backdrops are a
+  of the missions, providers, audit, connections, share and requests
+  screens. Modal backdrops are a
   raw translucent black. Text selection uses primitive grays directly.
 - **A second modal exists inside a screen**: the dialog that reveals a
   mission token is built by the missions screen, not from a primitive. It
-  does not take focus when it opens and does not close on Escape (§5).
-- **The danger confirmation** takes focus and closes on Escape, but does
-  not trap focus inside itself; it is styled inline and builds its own
+  takes focus when it opens and does not close on Escape (§5): the token
+  it shows cannot be shown again.
+- **The danger confirmation** takes focus, keeps it inside itself and
+  closes on Escape; it is styled inline and builds its own
   text input instead of using the input primitive. The vertical stack is
   styled inline too (§3.1).
-- **The overlay surface and the shadows are not used**: both modals sit on
-  the raised surface (§2.6).
-- **Table rows do not highlight on hover**: the rule is written and never
-  applies.
+- **The two modals do not sit on the overlay surface**: both use the raised
+  surface and no shadow (§2.6). The overlay surface and `shadow-md` are used
+  by the account panel of the application bar and by the full text of a
+  vector strip; `shadow-sm` is used nowhere.
 - **No contrast probe and no gallery** (§6).
 - **The dark theme** is defined but not reachable from the interface
   (§2.3).
