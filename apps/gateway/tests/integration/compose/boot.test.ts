@@ -68,7 +68,7 @@ describe('composition root over the embedded SQLite store', () => {
 
     const log = lines.join('\n');
     expect(log).toContain('"msg":"store opened"');
-    expect(log).toContain('"schema_version":4');
+    expect(log).toContain('"schema_version":5');
     expect(log).toContain('"msg":"composition root ready"');
   });
 
