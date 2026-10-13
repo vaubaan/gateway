@@ -159,7 +159,7 @@ authority is recomputed on every request.
 ## The shell — `components/shell/`
 
 `AppShell({ principal, children })` (server component) renders one bar, then
-the page in a `Container`:
+the page in a `Container`, then the build footer:
 
 - the brand link (to `/connections`) and one link per entry of `APP_NAV`:
   **Connections**, **Shares received**, **Missions**, **Requests**, **Audit**,
@@ -171,6 +171,16 @@ the page in a `Container`:
 - on the right: the user's email (or `bootstrap token`), `OperatorBadge`
   (`Operator` / `User` / "Bootstrap operator") and `SignOutButton`, both from
   `components/auth/PrincipalCard.tsx`.
+
+`BuildFooter` (server component, `shell.module.css`) is one line at the
+bottom of every page: `Vaubaan Gateway <version> · <commit>`, the build
+stamps of `server/config/build-info.ts` — the values `/healthz` answers and
+telemetry reports as `gateway_version`; `dev` for an unstamped build. The
+three layouts render it: `AppShell`, the Administration layout and the
+public layout (`/login`). `/admin/bootstrap` and the OAuth consent screen,
+which have no layout of their own, do not. `data-testid`: `build-footer`,
+`gateway-version`, `gateway-commit`. The version has one source, the root
+`package.json` ([coding workflow, "One version"](../workflow/coding-workflow.md#one-version)).
 
 `AppNavEntry` is `{ href, label, Count? }`. `Count` is an optional server
 component rendered after the label with the principal. The only one is
@@ -350,7 +360,12 @@ and `app/(app)/missions/message-of.test.ts`.
 `guard-harness.ts` holds what the two guard files share (file discovery, calling
 a page as a function, naming a redirect or a "not found").
 
-The other primitives and the shell have no unit test of their own. They are
+`tests/unit/app/build-footer.test.tsx` renders the footer (given stamps, the
+stamps of the build, `dev`), and
+`tests/unit/structural/version-single-source.test.ts` checks that the build
+stamps the version of the root `package.json`.
+
+The other primitives and the rest of the shell have no unit test of their own. They are
 exercised by the Playwright suite `apps/gateway/tests/e2e/v5/` (`npm run test:e2e:v5`,
 seven specs): navigation through the bar (`navigation` named "Main"), the open
 request count (`data-testid="open-request-count"`), forms, tables and dialogs of

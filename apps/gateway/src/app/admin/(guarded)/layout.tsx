@@ -12,6 +12,7 @@ import Link from 'next/link';
 
 import { OperatorBadge, SignOutButton } from '@/components/auth/PrincipalCard';
 import styles from '@/components/auth/auth.module.css';
+import { BuildFooter } from '@/components/shell/BuildFooter';
 import { Banner, Container } from '@/components/ui';
 import { adminDecision } from '@/lib/auth/session';
 import { adminSignInPage } from '@/server/auth';
@@ -57,6 +58,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         </div>
       </header>
       <Container>{children}</Container>
+      <BuildFooter />
     </div>
   );
 }
