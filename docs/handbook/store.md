@@ -616,7 +616,7 @@ this transaction, so a rule that depends on them (no reset or extension of a mis
 revoked since the page was read, an expiry that never moves backwards on a stale read)
 is checked on the row the decision will write next to; `ApprovalDecisionContext` carries
 the same `mission`. The claim context offers `counters(periodStart)`,
-`resetCounters(periodStart)`, `creditCounter(periodStart, riskId, amount)` (refuses to
+`resetCounter(periodStart, riskId)` (one risk, back to zero), `creditCounter(periodStart, riskId, amount)` (refuses to
 take a counter below zero), `setMissionExpiry(iso)` (a mission stored `expired` becomes
 `active`, `closed_at` cleared) and `recordEvent(event)`. A thrown callback rolls
 everything back.
@@ -625,7 +625,7 @@ everything back.
 The requests and missions repositories do not prepare statements on those tables: the
 claim context, the sweeper and `MissionsRepo.setGate` (its `gate-changed` event) call
 `createSessionPrimitives(ctx)` (`sessionOfMission`, `recordEvent`, `countersOfPeriod`,
-`resetPeriod`, `creditCounter`, `riskEvents`), synchronous functions with no transaction of
+`creditCounter`, `riskEvents`), synchronous functions with no transaction of
 their own that run inside the caller's `BEGIN IMMEDIATE`. An event is therefore inserted and
 mapped by the same code whether it comes from a call decision, a claim decision, a gate
 change or the sweeper, and `recordEvent` always returns the stored row.
@@ -686,9 +686,10 @@ request or an approval is born inside a decision transaction and a share through
 `MissionsRepo.setStatus` is the mission's (it takes a `StoredMissionStatus`, see above);
 no other repository has a method that sets a status it is given. A request is decided
 through `decideClaim` or `decideApproval` only, and expires through `sweepExpired` (or
-inside a decision that finds it overdue); a session's counters are reset through
-`ClaimDecisionContext.resetCounters` only, inside the decision of the claim that grants
-the reset.
+inside a decision that finds it overdue); a session's counter goes down through
+`ClaimDecisionContext.resetCounter` and `creditCounter` only — both the one conditional
+`UPDATE … WHERE consumed >= ?` on one risk — inside the decision of the claim that grants
+it. Nothing sets every counter of a period.
 
 ## Backup
 

@@ -257,8 +257,6 @@ export interface SessionPrimitives {
   recordEvent(sessionId: string, event: UntypedNewEvent, now: Iso): EventRecord;
   /** Every counter of the session in the period starting at `periodStart`, by risk id. */
   countersOfPeriod(sessionId: string, periodStart: Iso): SessionCounterRecord[];
-  /** Sets every counter of the period to zero; returns how many rows it touched. */
-  resetPeriod(sessionId: string, periodStart: Iso): number;
   /** Gives `amount` actions back on one risk; false (nothing written) when fewer were consumed. */
   creditCounter(sessionId: string, periodStart: Iso, riskId: RiskId, amount: number): boolean;
   /** Events of the session of some kinds about some risks since an instant, oldest first. */
@@ -294,9 +292,6 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     `SELECT ${COUNTER_COLUMNS} FROM session_counters
      WHERE session_id = ? AND period_start = ? ORDER BY risk_id`,
   );
-  const resetPeriod = db.prepare<[string, string]>(
-    'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ?',
-  );
   const creditOne = db.prepare<[number, string, string, string, number]>(
     `UPDATE session_counters SET consumed = consumed - ?
      WHERE session_id = ? AND period_start = ? AND risk_id = ? AND consumed >= ?`,
@@ -326,9 +321,6 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     },
     countersOfPeriod(sessionId, periodStart) {
       return countersOfPeriod.all(sessionId, periodStart).map(counterToRecord);
-    },
-    resetPeriod(sessionId, periodStart) {
-      return resetPeriod.run(sessionId, periodStart).changes;
     },
     creditCounter(sessionId, periodStart, riskId, amount) {
       return creditOne.run(amount, sessionId, periodStart, riskId, amount).changes === 1;

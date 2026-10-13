@@ -99,7 +99,7 @@ test('exhaust a budget, then the creator — and only the creator — answers th
 
   // Four actions, each with its consequence in one line.
   await expect(ada.getByTestId('action-reset-period')).toContainText(
-    'Every counter of this mission goes back to zero',
+    'The other risks of the mission keep what they consumed',
   );
   await expect(ada.getByTestId('action-extend-quota')).toContainText('for the current period only');
   await expect(ada.getByLabel('Actions to give back')).toHaveValue('2');

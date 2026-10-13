@@ -42,7 +42,7 @@ export interface SessionEventLine {
   readonly summary: string;
 }
 
-const RESET_LINE = 'The creator reset the period: every counter back to zero';
+const RESET_LINE = 'The creator reset the period for the claimed risk: its counter is back to zero';
 const ROTATION_LINE = 'A mission token was rotated';
 const TOKEN_ISSUED_LINE = 'A mission token was issued';
 const REVOCATION_LINE = 'The mission was revoked';

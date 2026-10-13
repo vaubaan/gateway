@@ -176,8 +176,9 @@ listed again, as questions, in the [appendix](#appendix--decisions-to-confirm).
   GitHub personal-access-token path. Supabase `execute_sql` and the `list_*`
   tools go to the read-only endpoint.
 - **A quota extension is capped at what was consumed** in the period (quota
-  5, consumed 5 → at most 5 more), and "Reset the period" resets every risk of
-  the mission. A larger quota means a new mission: there is no edit screen,
+  5, consumed 5 → at most 5 more), and "Reset the period" resets the claimed
+  risk only: another exhausted risk has its own claim. A larger quota means a
+  new mission: there is no edit screen,
   "Duplicate" pre-fills the form, and the duplicate has its own token.
 - **Not built**: the stateless caps of the catalogs (items or bytes per call).
   No shipped catalog declares one any more and the door applies none
@@ -404,7 +405,7 @@ cutover; each is a default that can be changed, most in one place.
 | Question                                                                | Current behaviour                                                                                              |
 | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
 | Quota extension capped at the period's consumption — acceptable for M1? | Capped: a granted claim is a credit on the period counter. Lifting the cap needs a per-period extension table. |
-| "Reset the period" resets every risk of the mission — intended?         | Yes, every counter of the current period, not only the claimed risk.                                           |
+| "Reset the period" resets every risk of the mission — intended?         | **No** (decided 2026-10-13): it resets the claimed risk only; the extension cap stays.                         |
 | Time zone on the claim page                                             | Consequence lines show UTC, facts show the browser's local time.                                               |
 | Default expiry of a claim / of an approval                              | 24 h / 10 min, both configurable (`requests.expiry`, `approvals.expiry`).                                      |
 | The audit's argument hash as the approval fingerprint                   | Done: one canonical SHA-256 of the key-sorted JSON (64 hex).                                                   |

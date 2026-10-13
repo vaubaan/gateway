@@ -82,8 +82,11 @@ export interface ClaimDecisionContext {
   readonly now: Iso;
   /** Consumed count per risk in the period starting at `periodStart`. */
   counters(periodStart: Iso): ReadonlyMap<RiskId, number>;
-  /** Sets every counter of the period to zero; returns what each one held. */
-  resetCounters(periodStart: Iso): ReadonlyMap<RiskId, number>;
+  /**
+   * Sets the counter of ONE risk to zero in the period; returns what it held (0
+   * when there was nothing to give back, or no session). No other risk is touched.
+   */
+  resetCounter(periodStart: Iso, riskId: RiskId): number;
   /** Gives `amount` actions back on one risk; false (nothing written) when fewer were consumed. */
   creditCounter(periodStart: Iso, riskId: RiskId, amount: number): boolean;
   /** Moves the mission's expiry; a mission stored `expired` becomes `active` again. */
@@ -409,10 +412,13 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       session,
       now,
       counters: read,
-      resetCounters(periodStart) {
-        const before = read(periodStart);
-        if (session) sessions.resetPeriod(session.id, periodStart);
-        return before;
+      resetCounter(periodStart, riskId) {
+        if (!session) return 0;
+        const held = read(periodStart).get(riskId) ?? 0;
+        // The same conditional write as a quota credit: it gives back exactly what was
+        // read, or nothing — both happen inside this transaction.
+        if (held < 1 || !sessions.creditCounter(session.id, periodStart, riskId, held)) return 0;
+        return held;
       },
       creditCounter(periodStart, riskId, amount) {
         if (!session || !Number.isInteger(amount) || amount < 1) return false;

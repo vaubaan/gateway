@@ -67,6 +67,10 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   granted more than 90 days ago stop at the first renewal after the upgrade.** The
   page shows the date for each. Operators set another duration with
   `oauth.delegation_max_lifetime` (`VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME`).
+- **"Reset the period" on a claim resets the claimed risk only.** It used to put every
+  counter of the mission back to zero, so answering a claim on one risk silently
+  reopened any other exhausted risk. Each exhausted risk has its own claim. The quota
+  extension is unchanged: at most what the period consumed on that risk.
 - **The Audit page shows more to two people.** A **member** of a mission now reads
   that mission's entries (calls, acts, requests) for as long as they are a member.
   An **operator** now reads every entry of the instance, calls included, where they

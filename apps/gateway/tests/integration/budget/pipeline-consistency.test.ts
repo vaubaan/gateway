@@ -254,8 +254,9 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     expect((await check()).mismatches).toEqual([]);
     expect((await pipeline.execute(ctx, request([WRITE]))).kind).toBe('allowed');
 
-    // Period reset: every counter back to zero.
+    // Period reset: the counter of the claimed risk back to zero, no other.
     await requests.decide(creator, await claimOf(), { resolution: 'reset-period' });
+    expect((await check()).mismatches).toEqual([]);
     expect((await pipeline.execute(ctx, request([READ, WRITE]))).kind).toBe('allowed');
 
     // A refusal and an expiry extension give nothing back.
@@ -265,7 +266,8 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     expect(report.mismatches).toEqual([]);
     expect(new Map(report.risks.map((r) => [r.risk_id, r]))).toEqual(
       new Map([
-        [READ, { risk_id: READ, counted: 1, credited: 2, audited: 3 }],
+        // READ was never claimed: nothing was given back on it.
+        [READ, { risk_id: READ, counted: 3, credited: 0, audited: 3 }],
         [WRITE, { risk_id: WRITE, counted: 1, credited: 2, audited: 3 }],
         [MERGE, { risk_id: MERGE, counted: 0, credited: 0, audited: 0 }],
       ]),

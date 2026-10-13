@@ -50,7 +50,13 @@ describe('claimOptions', () => {
       `'${RISK}' stays exhausted until the period ends (2026-10-14 00:00 UTC)`,
     );
     expect(optionOf(s, 'extend-expiry').consequence).toContain('stays exhausted');
-    expect(optionOf(s, 'reset-period').consequence).toContain('Every counter of this mission');
+    expect(optionOf(s, 'reset-period').consequence).toContain(
+      `The counter of '${s.risk_id}' goes back to zero`,
+    );
+    expect(optionOf(s, 'reset-period').consequence).toContain(
+      'The other risks of the mission keep what they consumed',
+    );
+    expect(optionOf(s, 'reset-period').consequence).not.toMatch(/every counter/i);
     expect(optionOf(s, 'extend-quota').consequence).toContain('for the current period only');
     expect(optionOf(s, 'extend-quota').consequence).toContain('the quota is 5 again');
   });

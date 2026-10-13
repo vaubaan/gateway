@@ -205,12 +205,12 @@ state, expiry, current period end, the risk's quota and what it consumed in
 the current period, and the request's own expiry (`request_expires_at`, for
 the sentence of an orphaned mission).
 
-| Resolution      | Effect                                                                                | Refused when                                                                                        |
-| --------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
-| `reset-period`  | every counter of the mission's **current** period → 0 (all risks)                     | mission revoked / orphaned (`mission-closed`), expired (`mission-expired`), risk left the policy    |
-| `extend-quota`  | `amount` actions given back on the claimed risk, current period only                  | same, plus `nothing-consumed`; `amount` not an integer in `1 … consumed` (`invalid-amount`)         |
-| `extend-expiry` | `missions.expires_at` moved; a mission stored `expired` becomes `active` again        | `mission-closed`; no expiry (`no-expiry`); date not later than max(now, current) (`invalid-expiry`) |
-| `refuse`        | nothing; the risk stays exhausted until the next period, the other risks keep running | never                                                                                               |
+| Resolution      | Effect                                                                                            | Refused when                                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `reset-period`  | the counter of the **claimed risk** in the mission's current period → 0; no other risk is touched | mission revoked / orphaned (`mission-closed`), expired (`mission-expired`), risk left the policy    |
+| `extend-quota`  | `amount` actions given back on the claimed risk, current period only                              | same, plus `nothing-consumed`; `amount` not an integer in `1 … consumed` (`invalid-amount`)         |
+| `extend-expiry` | `missions.expires_at` moved; a mission stored `expired` becomes `active` again                    | `mission-closed`; no expiry (`no-expiry`); date not later than max(now, current) (`invalid-expiry`) |
+| `refuse`        | nothing; the risk stays exhausted until the next period, the other risks keep running             | never                                                                                               |
 
 `orphaned` is derived, never stored ([authority](authority.md)): `own()`
 reads the mission through `grounds.derive` (`RequestServiceDeps.grounds`,
@@ -299,12 +299,12 @@ reset, no extension and no approval (`mission-closed`). The `orphaned` verdict
 itself stays a read of the instant before the transaction, and the policy
 (quota, gate) is the one `own()` read.
 
-| Resolution      | Request state | Session event                                                                               | Audit act         |
-| --------------- | ------------- | ------------------------------------------------------------------------------------------- | ----------------- |
-| `reset-period`  | `granted`     | `reset` `{ request_id, period_start, period_end, credits: { <risk>: n, … } }`               | `period-reset`    |
-| `extend-quota`  | `granted`     | `extension` `{ request_id, dimension: 'quota', amount, period_start, period_end, credits }` | `budget-extended` |
-| `extend-expiry` | `granted`     | `extension` `{ request_id, dimension: 'expiry', expires_at_before, expires_at }`            | `expiry-extended` |
-| `refuse`        | `refused`     | `request` `{ request_id, request_kind, state: 'refused' }`                                  | `request-refused` |
+| Resolution      | Request state | Session event                                                                                                       | Audit act         |
+| --------------- | ------------- | ------------------------------------------------------------------------------------------------------------------- | ----------------- |
+| `reset-period`  | `granted`     | `reset` `{ request_id, period_start, period_end, credits: { <claimed risk>: n } }` (`{}` when nothing was consumed) | `period-reset`    |
+| `extend-quota`  | `granted`     | `extension` `{ request_id, dimension: 'quota', amount, period_start, period_end, credits }`                         | `budget-extended` |
+| `extend-expiry` | `granted`     | `extension` `{ request_id, dimension: 'expiry', expires_at_before, expires_at }`                                    | `expiry-extended` |
+| `refuse`        | `refused`     | `request` `{ request_id, request_kind, state: 'refused' }`                                                          | `request-refused` |
 
 Every event carries `riskId` (the claimed risk) and `actorUserId`. These shapes
 are the `reset`, `extension` and `request` members of `SessionEventDetails`
@@ -334,6 +334,27 @@ names a token, "The mission was revoked" otherwise.
 resolution posted to an approval request (or the reverse) is `invalid` /
 `invalid-decision`; `unsupported-kind` is what `decideClaim` answers for an
 approval request and `decideApproval` for a claim.
+
+### A claim is about one risk, and so is its answer
+
+"Reset the period" puts the counter of the **claimed risk** back to zero and
+leaves every other risk of the mission as it is (spec §3.4; product owner's
+decision of 2026-10-13, ADR
+[claim-reset-is-the-claimed-risk-only](../decisions/claim-reset-is-the-claimed-risk-only.md)).
+Until then it zeroed every counter of the period: answering a claim on
+"read code" also reopened "merge to a protected branch" if that one was
+exhausted too, without the creator being shown it. A second exhausted risk
+has its own claim, and its own answer.
+
+The quota extension keeps its cap: at most what the period consumed on the
+claimed risk. With both rules, the most a creator can grant on a claim is
+"this risk starts its period again" — a reset — and anything larger is a
+change of the mission. The two resolutions now differ by the amount only
+(all of it, or the number chosen) and by the event they leave (`reset`,
+`extension`).
+
+A `reset` event written before this rule lists every risk that had been
+consumed in `credits`; the counters-vs-audit check reads both shapes.
 
 ### Credits and the counters-vs-audit check
 
@@ -414,8 +435,9 @@ Additive, in `store/repositories/requests.ts` and `sessions.ts`:
   `apply(ctx)` is synchronous and gets a `ClaimDecisionContext`: `request`,
   `mission` (`StoredMissionFacts { status, expiresAt }`, the mission row read
   inside the transaction; the status is the stored one, never `orphaned`),
-  `session`, `now`, `counters(periodStart)`, `resetCounters(periodStart)`
-  (returns what each counter held), `creditCounter(periodStart, riskId,
+  `session`, `now`, `counters(periodStart)`, `resetCounter(periodStart,
+riskId)` (sets that one counter to zero and returns what it held; no other
+  risk is touched), `creditCounter(periodStart, riskId,
 amount)` (one conditional `UPDATE … WHERE consumed >= amount`; `false` and
   nothing written otherwise — a counter never goes below zero),
   `setMissionExpiry(iso)`, `recordEvent(event)`. Not a claim →

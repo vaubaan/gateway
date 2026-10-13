@@ -40,7 +40,9 @@ per IP. A Next.js page cannot choose its status code without the
 ### A grant gives consumed actions back on the counters of the current period
 
 - **Reset the period** sets every counter of the mission's current period to
-  zero — all accepted risks, not only the claimed one.
+  zero — all accepted risks, not only the claimed one. _(Changed 2026-10-13 by
+  [claim-reset-is-the-claimed-risk-only](./claim-reset-is-the-claimed-risk-only.md):
+  the claimed risk only.)_
 - **Extend the quota** subtracts `amount` from the claimed risk's counter of
   the current period, with `1 <= amount <= consumed`. The amount is bounded by
   what was consumed: a claim can at most give back the period's consumption on

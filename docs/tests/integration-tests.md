@@ -2655,9 +2655,12 @@ Integration:
   beneficiary of a share on the same connection**, a co-owner through the
   owner group → `forbidden`, and a refused decision changes nothing; the
   creator's view (risk line, other risks, period, events, options);
-  after a rollover the risk reads un-exhausted; **reset** zeroes every
-  counter of the period, records the `reset` event with credits, **the
-  replay passes**, admin audit `period-reset`; **extend quota** gives back
+  after a rollover the risk reads un-exhausted; **reset** zeroes the
+  counter of the claimed risk and no other, records the `reset` event with
+  that one credit, **the replay passes**, a claim on one exhausted risk does
+  not reopen another exhausted risk (its claim stays open, a call touching
+  both is still refused), with nothing consumed it gives nothing back, admin
+  audit `period-reset`; **extend quota** gives back
   N on the claimed risk only, does not carry over to the next period,
   refuses more than was consumed and leaves the request open, and the
   store never lets a counter go below zero; **extend expiry** moves the

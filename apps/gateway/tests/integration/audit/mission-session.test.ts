@@ -303,7 +303,7 @@ describe('mission session view', () => {
       request_id: claim.result.request_id,
     });
 
-    // A period reset gives everything back, on every risk.
+    // A period reset gives back what was consumed on the claimed risk, and on no other.
     await seedCall(rig, mission, { risks: [PR] });
     const second = await seedCall(rig, mission, { risks: [PR] });
     if (second.result.outcome !== 'refused' || !second.result.request_id) {
@@ -313,8 +313,13 @@ describe('mission session view', () => {
       resolution: 'reset-period',
     });
     const after = await view();
-    expect(after.risks.every((r) => r.consumed === 0 && !r.exhausted)).toBe(true);
-    expect(after.events[0]).toMatchObject({ kind: 'reset', credits: { [PR]: 2, [READ]: 1 } });
+    expect(after.risks.find((r) => r.risk_id === PR)).toMatchObject({
+      consumed: 0,
+      exhausted: false,
+    });
+    expect(after.risks.find((r) => r.risk_id === READ)).toMatchObject({ consumed: 1 });
+    expect(after.events[0]).toMatchObject({ kind: 'reset' });
+    expect(after.events[0]).toHaveProperty('credits', { [PR]: 2 });
     // The decisions are in the audit of the mission.
     const audit = await rig.root.audit.query.search(
       { kind: 'user', user: rig.seeded.ada, groups: [], isOperator: false },

@@ -3,15 +3,20 @@
  *
  * Four resolutions (`ClaimResolution` of `@vaubaan/shared`):
  *
- *   reset-period    every counter of the mission's current period goes back to zero
+ *   reset-period    the counter of the claimed risk goes back to zero for the
+ *                   mission's current period; the other risks keep what they consumed
  *   extend-quota    N actions given back on the claimed risk, current period only
  *   extend-expiry   the mission runs until a later date
  *   refuse          nothing changes; the risk stays exhausted until the next period
  *
- * A claim never edits the policy: the quota of the next period is the
- * mission's, and a permanent change goes through the mission itself.
- * `extend-quota` gives back actions already consumed in the period, so its
- * amount is bounded by what was consumed (the counters never go below zero).
+ * A claim is about one risk and so is its answer (spec §3.4; ADR
+ * claim-reset-is-the-claimed-risk-only): nothing a creator grants on a claim
+ * reopens another risk. A claim never edits the policy either: the quota of
+ * the next period is the mission's, and a permanent change goes through the
+ * mission itself. Both budget resolutions give back actions already consumed
+ * on the claimed risk in the period — `reset-period` all of them,
+ * `extend-quota` the number chosen, bounded by what was consumed (the counters
+ * never go below zero).
  *
  * Browser-safe: values only, no store, no `node:` import.
  */
@@ -121,7 +126,7 @@ function closedProblem(situation: ClaimSituation): ClaimProblem | null {
   return null;
 }
 
-/** Why a budget resolution (reset, quota) cannot apply; `null` when it can. */
+/** Why a budget resolution (reset, quota) cannot apply at all; `null` when it can. */
 function budgetProblem(situation: ClaimSituation): ClaimProblem | null {
   const closed = closedProblem(situation);
   if (closed) return closed;
@@ -140,7 +145,19 @@ function budgetProblem(situation: ClaimSituation): ClaimProblem | null {
   return null;
 }
 
-function quotaProblem(situation: ClaimSituation): ClaimProblem | null {
+/** What a reset gives back on the claimed risk, in words. */
+function givenBack(consumed: number): string {
+  if (consumed < 1) return 'nothing was consumed on it in this period, so nothing changes';
+  return consumed === 1
+    ? 'the 1 action consumed on it is given back'
+    : `the ${consumed} actions consumed on it are given back`;
+}
+
+/**
+ * Why no chosen number of actions can be given back on the claimed risk; `null`
+ * when some can (the period may have rolled over since the claim was dropped).
+ */
+function creditProblem(situation: ClaimSituation): ClaimProblem | null {
   const problem = budgetProblem(situation);
   if (problem) return problem;
   if (situation.consumed < 1) {
@@ -179,14 +196,14 @@ export function claimOptions(situation: ClaimSituation): ClaimOption[] {
     {
       resolution: 'reset-period',
       label: LABELS['reset-period'],
-      consequence: `Every counter of this mission goes back to zero ${exhaustedUntil}; the policy does not change.`,
+      consequence: `The counter of '${risk}' goes back to zero ${exhaustedUntil}: ${givenBack(consumed)}. The other risks of the mission keep what they consumed; the policy does not change.`,
       unavailable: budgetProblem(situation),
     },
     {
       resolution: 'extend-quota',
       label: LABELS['extend-quota'],
       consequence: `Gives back the number of actions you choose on '${risk}' (at most ${consumed}, what was consumed) for the current period only; ${afterwards}.`,
-      unavailable: quotaProblem(situation),
+      unavailable: creditProblem(situation),
       max_amount: consumed,
     },
     {
@@ -216,7 +233,7 @@ export function checkClaimDecision(
     case 'reset-period':
       return budgetProblem(situation);
     case 'extend-quota': {
-      const problem = quotaProblem(situation);
+      const problem = creditProblem(situation);
       if (problem) return problem;
       if (!Number.isInteger(decision.amount) || decision.amount < 1) {
         return {

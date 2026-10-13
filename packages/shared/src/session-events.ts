@@ -75,13 +75,16 @@ export interface RequestClosedEventDetails {
 
 export type RequestEventDetails = RequestDroppedEventDetails | RequestClosedEventDetails;
 
-/** A granted claim "reset the period": every counter of the period back to zero. */
+/** A granted claim "reset the period": the counter of the claimed risk back to zero, no other. */
 export interface ResetEventDetails {
   readonly request_id: string;
   readonly period_start: Iso8601;
   /** `null` for a one-off mission: its single period never ends. */
   readonly period_end: Iso8601 | null;
-  /** Actions given back, per risk. */
+  /**
+   * Actions given back, per risk: the claimed risk alone. Events written before a
+   * reset was narrowed to the claimed risk list every risk of the period.
+   */
   readonly credits: Readonly<Record<RiskId, number>>;
 }
 

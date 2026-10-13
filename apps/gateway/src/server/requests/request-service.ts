@@ -887,8 +887,9 @@ function applyClaim(ctx: ClaimDecisionContext, input: ApplyInput): AppliedClaim 
 
   switch (decision.resolution) {
     case 'reset-period': {
-      const before = ctx.resetCounters(period.start);
-      const credits = Object.fromEntries([...before].filter(([, count]) => count > 0));
+      // The claimed risk, and no other: a claim on one risk reopens nothing else.
+      const given = ctx.resetCounter(period.start, riskId);
+      const credits: Record<RiskId, number> = given > 0 ? { [riskId]: given } : {};
       ctx.recordEvent({
         kind: 'reset',
         riskId,

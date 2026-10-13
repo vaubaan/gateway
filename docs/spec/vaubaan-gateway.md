@@ -490,7 +490,12 @@ For the claim, raised when a call touches a risk at zero quota:
   beneficiary of the same share.
 - The creator sees the session history, the risk concerned, the
   remainder of the other risks, and chooses: reset the period, extend
-  the quota, extend the expiry, or refuse.
+  the quota, extend the expiry, or refuse. **A claim is about one risk,
+  and so is its answer**: "reset the period" puts the counter of the
+  claimed risk back to zero for the current period and leaves the other
+  risks as they are; "extend the quota" gives back a number of actions
+  on that risk, at most what the period consumed on it. A larger quota,
+  or more room on another risk, is a change of the mission.
 - The claim produces an event. The token does not change; the executor
   replays its call.
 - A refused or expired claim does not close the mission: the risk stays
