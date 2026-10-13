@@ -27,6 +27,7 @@ import {
 } from '../auth/authenticator';
 import { statusResponse } from '../auth/handlers';
 import { forbiddenOriginResponse, isSameOrigin } from '../auth/origin';
+import { resolveReturnTo } from '../http/return-to';
 import type { Logger } from '../logging';
 import {
   ProviderAppError,
@@ -93,7 +94,10 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     notice: Notice,
   ): Promise<Response> {
     const id = await deps.notices.put(principal.sessionId, notice);
-    const url = new URL(path, deps.publicUrl);
+    // `path` was validated when it was stored; it is validated again where it
+    // becomes a `Location`, so a value stored by an older build cannot leave
+    // the instance.
+    const url = new URL(resolveReturnTo(path, deps.publicUrl) ?? CONNECTIONS_PATH, deps.publicUrl);
     url.searchParams.set(NOTICE_PARAM, id);
     return redirect(`${url.pathname}${url.search}${url.hash}`);
   }

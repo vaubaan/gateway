@@ -312,7 +312,10 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     const late = await post(TEST_BOOTSTRAP_TOKEN);
     expect(late.headers.get('location')).toBe('/admin/bootstrap?error=bootstrap-unavailable');
     expect(await root.auth.bootstrap.verify(TEST_BOOTSTRAP_TOKEN)).toBe(false);
+    // …on every surface, not only /admin: the session stops being a principal
+    // (the Audit page and the shell call `authenticate()` alone).
     const stale = await root.auth.authenticator.authenticate(headersOf(b));
+    expect(stale).toBeNull();
     expect(await root.auth.authenticator.authorizeAdmin(stale)).toMatchObject({
       ok: false,
       status: 401,

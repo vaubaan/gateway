@@ -53,25 +53,7 @@ export function cleanName(raw: string | null | undefined): string | null {
   return name.length === 0 ? null : name.slice(0, MAX_NAME_CHARS);
 }
 
-/**
- * The return address of a flow, limited to the instance (spec §6
- * "anti-redirect: return URL limited to the instance's public URL"). Accepts
- * a path or an absolute URL of the public origin and returns the path to
- * redirect to; anything resolving to another origin is refused (`null`).
- * Parsing is the WHATWG URL parser's, so `//host`, `/\host` and scheme tricks
- * are judged the way a browser would follow them.
- */
-export function resolveReturnTo(raw: string | null | undefined, publicUrl: URL): string | null {
-  if (!raw) return null;
-  let url: URL;
-  try {
-    url = new URL(raw, publicUrl);
-  } catch {
-    return null;
-  }
-  if (url.origin !== publicUrl.origin) return null;
-  return `${url.pathname}${url.search}${url.hash}`;
-}
+export { resolveReturnTo } from '../http/return-to';
 
 /** `prod`, `staging`… (`ENV_LABEL_PATTERN`); blank clears the label. */
 export function parseEnvLabel(

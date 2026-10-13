@@ -51,7 +51,12 @@ export class Authenticator {
     const session = await this.sessions.read(headers);
     if (!session) return null;
     if (session.record.kind === 'bootstrap') {
-      return { kind: 'bootstrap', sessionId: session.id };
+      // Decided where the principal is made, not by each caller: once the
+      // token is revoked its open sessions are nobody, on every surface.
+      const state = await this.bootstrap.state();
+      if (state.status === 'active') return { kind: 'bootstrap', sessionId: session.id };
+      await this.sessions.destroyById(session.id);
+      return null;
     }
     const user = await this.store.users.getById(session.record.userId);
     if (!user || user.status !== 'active') {

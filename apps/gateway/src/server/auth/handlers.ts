@@ -15,6 +15,7 @@
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
+import { resolveReturnTo } from '../http/return-to';
 import type { Logger } from '../logging';
 import type { Clock } from '../store/clock';
 import { toIso } from '../store/clock';
@@ -73,7 +74,10 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
     async loginStart(request) {
       const current = await deps.idp.current();
       if (!current) return loginError('idp-not-configured');
-      const returnTo = safeReturnTo(new URL(request.url).searchParams.get(RETURN_TO_PARAM));
+      const returnTo = safeReturnTo(
+        new URL(request.url).searchParams.get(RETURN_TO_PARAM),
+        deps.publicUrl,
+      );
       try {
         const started = await deps.relyingParties.for(current.settings).start();
         const pending = await deps.sessions.createPending({
@@ -110,7 +114,10 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
           userId: outcome.user.id,
           login: { email: identity.email, groups: identity.groups },
         });
-        const headers = new Headers({ Location: pending.returnTo, 'Cache-Control': 'no-store' });
+        // Validated again where it becomes a `Location`: a pending sign-in stored by
+        // an older build cannot leave the instance.
+        const location = safeReturnTo(pending.returnTo, deps.publicUrl);
+        const headers = new Headers({ Location: location, 'Cache-Control': 'no-store' });
         headers.append('Set-Cookie', session.setCookie);
         headers.append('Set-Cookie', clearPending);
         return new Response(null, { status: SEE_OTHER, headers });
@@ -195,11 +202,14 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
   }
 }
 
-/** A same-origin absolute path (`/x`), never a URL, never `//host`. */
-export function safeReturnTo(raw: string | null, fallback = LOGIN_PAGE): string {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\'))
-    return fallback;
-  return raw;
+/**
+ * The path to land on after sign-in: a path of this instance, else `fallback`.
+ * Stricter than `resolveReturnTo` on one point: only a path is accepted
+ * (`/admin`), not an absolute URL nor a relative reference.
+ */
+export function safeReturnTo(raw: string | null, publicUrl: URL, fallback = LOGIN_PAGE): string {
+  if (!raw || !raw.startsWith('/')) return fallback;
+  return resolveReturnTo(raw, publicUrl) ?? fallback;
 }
 
 function stringField(form: FormData, name: string): string {
