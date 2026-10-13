@@ -409,9 +409,55 @@ describe('execution door: the call pipeline', () => {
       expect(await consumed(mission, READ)).toBe(1);
       expect((await callEntries(mission))[0]).toMatchObject({
         decision: 'allowed',
-        upstream_error: 'depot answered 502',
+        upstream_error: 'depot call failed (Error)',
         remaining_budget: { [READ]: 4 },
       });
+    });
+
+    it("keeps the provider's text out of the audit: a host-built summary there, the detail to the agent", async () => {
+      // Providers echo input in their errors (an object id, a SQL fragment), and
+      // plugins quote the provider's body in the error they throw.
+      const marker = 'item-marker-7f3a9c';
+      const mission = await instance.issue({ policy: [line(READ, 5)] });
+      instance.depot.script(async (_ctx, _tool, args) => {
+        const item = String(args.item);
+        throw new UpstreamAuthError(`depot GET /items/${item} 403: no item '${item}' here`, 403);
+      });
+
+      const body = await instance.call(mission, 'depot__read_item', {
+        space: 'scratch',
+        item: marker,
+      });
+
+      // The agent, which knows its own arguments, reads the provider's answer.
+      expect(body.result).toMatchObject({
+        isError: true,
+        content: [
+          {
+            type: 'text',
+            text: `Upstream error: depot GET /items/${marker} 403: no item '${marker}' here`,
+          },
+        ],
+      });
+      // The audit holds the provider id, the status and the error class — nothing else.
+      const [entry] = await callEntries(mission);
+      expect(entry?.upstream_error).toBe('depot answered HTTP 403 (UpstreamAuthError)');
+      expect(JSON.stringify(entry)).not.toContain(marker);
+      const stored = await instance.root.store.audit.list({ missionId: mission.mission.id });
+      expect(JSON.stringify(stored)).not.toContain(marker);
+    });
+
+    it('names the HTTP status an HTTP client put on its error, and nothing of its message', async () => {
+      const mission = await instance.issue({ policy: [line(READ, 5)] });
+      instance.depot.script(async () => {
+        throw Object.assign(new Error('Validation Failed: "q" is too long'), { status: 422 });
+      });
+
+      await instance.call(mission, 'depot__read_item', { space: 'scratch' });
+
+      expect((await callEntries(mission))[0]?.upstream_error).toBe(
+        'depot answered HTTP 422 (Error)',
+      );
     });
 
     it('401 → refresh → retry with the new credential; the connection stays active', async () => {

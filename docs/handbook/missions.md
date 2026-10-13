@@ -36,9 +36,10 @@ apps/gateway/src/server/authority/
   catalog-authority.ts   explicitRiskIdsOf(), fullCatalogRiskIds()  — a catalog as explicit ids   (pure)
   authority-service.ts   AuthorityService, OwnerAuthorityService, uncoveredRisks()
 apps/gateway/src/server/missions/
-  model.ts               MissionDraft, IssuanceConnection, MissionPreview, PreviewIssue…           (types)
+  model.ts               MissionDraft, IssuanceConnection, MissionPreview, PreviewIssue, PreviewNotice… (types)
   catalog-view.ts        enumerateCatalog(), severityOf(), isResolvable(), presetWidth()           (pure)
-  preview.ts             previewDraft(), previewConnection(), expandPreset(), budgetProblem()      (pure)
+  preview.ts             previewDraft(), previewConnection(), expandPreset(), budgetProblem(),
+                         envNotices()                                                              (pure)
   summary.ts             summarize() — the three lines; period / expiry phrases                    (pure)
   bootstrap-kit.ts       buildBootstrapKit(), REFUSAL_GUIDANCE, MISSION_TOKEN_ENV, AGENT_LABEL_*   (pure)
   draft-schema.ts        parseMissionDraft() — zod shape check of a JSON draft
@@ -50,7 +51,8 @@ apps/gateway/src/server/missions/
   testing.ts             ACME_CATALOG, acmeConnection(), seedConnection(), catalogEnvs() — tests only
 apps/gateway/src/app/(app)/missions/
   page.tsx               /missions — list
-  current-user.ts        currentUser(); needs-user.tsx — the notice shown to the bootstrap operator
+                         (the user comes from `currentUser()` in `@/lib/auth/session`; the bootstrap
+                         operator sees `NeedsUser` from `@/components/auth/NeedsUser`)
   new/page.tsx           /missions/new — loads the issuance context (and ?from=<id>)
   new/mission-form.tsx   the one-page creation screen (client)
   new/form-state.ts      state and transitions of the form (pure, unit-tested)
@@ -66,7 +68,8 @@ apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [i
 ```
 
 `model`, `catalog-view`, `preview` and `summary` are **browser-safe** (values
-only from `@vaubaan/shared/risk-id` and `@vaubaan/policy-engine`): the creation
+only from `@vaubaan/shared/risk-id`, `@vaubaan/shared/domain` and
+`@vaubaan/policy-engine`): the creation
 form imports them directly and runs the same decision as the server. The
 `index.ts` barrel is server-only (argon2 through `token.ts`).
 
@@ -162,18 +165,60 @@ risk_ids?, resource_refs? }`, so everything is fixed in one pass.
 | `exceeds-authority`          | accepted ⊄ authority; `risk_ids` is the uncovered list (spec §3.1 "Monotonicity")                                                                    |
 | `unresolvable-env`           | env-qualified entries whose environment no selected resource carries                                                                                 |
 | `missing-budget`             | an accepted risk with no resolved quota + rate limit                                                                                                 |
-| `invalid-budget`             | quota / rate max / window not an integer ≥ 1, or rate above the catalog's `infra_limits.calls_per_minute_max`                                        |
+| `invalid-budget`             | quota / rate max / window not an integer ≥ 1, gate outside the closed set, or rate above the catalog's `infra_limits.calls_per_minute_max`           |
 | `no-accepted-risk`           | a connection that ends up accepting nothing                                                                                                          |
 | `invalid-period`             | recurring period outside 60 s … 366 days, or not an integer                                                                                          |
 | `invalid-expiry`             | not a date, or not in the future                                                                                                                     |
 
-`MissionPreview` = `{ ok, issues, name, connections: ConnectionPreview[], policy,
-period, expires_at, summary, resolved }`. Per connection: `passes` (what becomes
+The budget rule itself (positive integer quota, positive integer rate over a
+positive integer window, gate of the closed set) is `budgetIssues` of
+`@vaubaan/policy-engine` — the function the plugin SDK's catalog loader applies
+to a preset entry. `budgetProblem(entry, risk)` calls it, words the first issue
+for the creator, and adds the one check issuance owns: the catalog's rate
+ceiling (`exceedsRateCeiling`).
+
+`previewConnection(connection, draft, index)` is an orchestration of four named
+steps, each returning values (no shared accumulator): `resolveResources` (the
+selection and its issues), `resolvePreset` (the preset, its lines expanded
+against the selection, the budget defaults of an explicit line),
+`classifyLines` (each line into exactly one `LineBuckets` bucket, first reason
+wins: duplicate, unknown, outside the authority, unresolvable environment, no
+budget, invalid budget, else `passes`) and `issuesOf` (one issue per non-empty
+refusing bucket, in the order of the table above).
+
+`MissionPreview` = `{ ok, issues, notices, name, connections: ConnectionPreview[],
+policy, period, expires_at, summary, resolved }`. Per connection: `passes` (what becomes
 callable, complete `MissionPolicyEntry` lines), `exceeds`, `unknown`,
 `unresolvable`, `missing_budget`, `skipped_from_preset`, the explicit
 `resources` and `resources_total`. `resolved` is the passing part of the draft
 with every alias resolved; the form loads it after a proposal or a duplicate.
 The same shape is what the management door will expose (P2.4).
+
+**Notices — what passes but the creator should know.** `notices` is a list of
+`PreviewNotice { code, message, connection_index?, connection_id?,
+resource_refs, risk_ids }`. A notice never blocks: `ok` is `issues.length === 0`
+and ignores it. Both codes (`PREVIEW_NOTICE_CODES`) come from `envNotices` and
+state one rule of the policy engine ([policy-engine](policy-engine.md)): at call
+time an env-scoped risk touched on a resource whose environment label is
+absent, or is not an environment the risk is acceptable in, **refuses the call**
+(`risk-not-accepted`), whatever the mission accepts. On such a resource the
+mission reaches the account-scoped risks only.
+
+| Code                          | When                                                                                                             |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `resource-without-env`        | a selected resource has no environment label, on a connection whose catalog has env-scoped risks                 |
+| `resource-env-not-in-catalog` | a selected resource is labelled with an environment (`dev`, a typo) that no risk of the catalog is acceptable in |
+
+`resource_refs` names the resources, `risk_ids` the env-scoped ids the draft
+accepts on that connection (unreachable there), and the message names the
+labels the catalog knows and the remedy: label the resource on the connection's
+page, or leave it out. Nothing is emitted when the plugin derives the
+environment from the call (`derives_env`, today Vercel) or when the catalog has
+no env-scoped risk. This is separate from `unresolvable-env`, which refuses an
+env-qualified entry that _no_ selected resource can resolve: a notice is about a
+mission that is issuable and still cannot do, on one resource, what its policy
+suggests. The creation form lists them under the issuance bar and `POST
+/api/missions/preview` returns them.
 
 **Hidden and stale resources** (handbook [connections](connections.md)).
 `IssuanceResource` carries `hidden` and `stale` (`staleSince !== null`).
@@ -253,17 +298,24 @@ Defaults the form adds: period **daily reload** (`DEFAULT_PERIOD`), expiry
 2. `previewDraft`. Not `ok` → `{ ok: false, reason: 'refused', preview }`,
    nothing written.
 3. `missions.create`: `creatorUserId`, `periodSeconds` (null for one-off),
-   `expiresAt`, the policy lines, and per connection the **explicit resource
-   ids** with `resourceScope: 'selected'` — also when the draft said `all`
-   (then: the resources neither hidden nor stale), so a resource discovered
-   later is not covered (spec §3.1). A connection with no
-   known resource is stored `all` with an empty list (the store refuses an empty
-   `selected`).
+   `expiresAt`, the policy lines (`policyEntryRecordOf`), and per connection the
+   **explicit resource ids** with `resourceScope: 'selected'` — also when the
+   draft said `all` (then: the resources neither hidden nor stale), so a
+   resource discovered later is not covered (spec §3.1). A connection on which
+   nothing resolved (no resource known, or every resource hidden) is stored
+   `all` with an empty list, because the store refuses an empty `selected`
+   (`selectionRecordOf`). See "What a mission reaches" below for how that row is
+   read.
 4. Token: `mintMissionToken()` → `vbn_live_<8>_<32>`, argon2id hash; a prefix
    already taken is re-drawn (up to 5 times); `missions.issueToken` stores
    prefix + hash + `hashAlg: 'argon2id'`.
-5. Admin audit `mission-issued` (`after`: name, connections, policy, period,
-   expiry, token prefix — never the secret); log line with the prefix.
+5. Admin audit `mission-issued`; log line with the prefix. The `after` payload
+   is built field by field by `issuedAuditOf` (type `MissionIssuedAudit`) in
+   snake_case domain shapes only — the audit is immutable, so it never inherits
+   the naming of a store record — and a test pins it:
+   `{ name, connections: [{ connection_id, resource_ids }], policy: [{ risk_id,
+quota, rate_limit: { max, window_seconds }, gate }], period: { kind,
+length_seconds? }, expires_at, token_prefix }`. Never the secret.
 6. Returns `{ ok: true, mission, token: { secret, prefix }, kit, preview }`.
    The secret exists nowhere else.
 
@@ -277,12 +329,35 @@ no caller sets it today). `duplicate` also takes `overrides` for `name`,
 `period` and `expires_at`, and answers `not-found` for a mission that is not
 the creator's.
 
+### What a mission reaches on a connection — one rule, three readers
+
+A mission reaches, on each of its connections, **exactly the resource ids stored
+at issuance that discovery still returns**. Scope `all` with an empty list means
+"none known at issuance", never "everything discovered later". The execution
+door enforces it (`loadMissionContext`, handbook
+[execution-door](execution-door.md)); the two human-facing readers say the same
+thing:
+
+- `MissionService.get` (`detailConnections`) lists, per connection, the stored
+  ids that are not stale — an empty list for a connection that had no resource
+  at issuance, whatever it discovered since; the page then shows "no resource
+  (account-level tools only)";
+- the bootstrap kit (issuance, rotation, revisited page) is built from that same
+  list, so the agent is never told it may touch a resource the door refuses
+  with `resource-not-in-mission`.
+
+A hidden resource selected on purpose stays reached (hiding is a listing
+preference of the owner); a stale one is dropped by all three.
+
 - **`draftFrom(user, missionId)` / `duplicate(...)`** — the creator's own
   mission as a draft: same connections, the selected resources that still exist
   and are not stale,
   the explicit policy split by provider, same period, **no expiry**, name
   `"<name> (copy)"`. `duplicate` issues it, so the copy is re-checked against the
   creator's _current_ authority and gets its own token, session and budget.
+  A source that stored no resource on a connection is drafted `{ scope: 'all' }`:
+  the copy is a new issuance and resolves "all" against the resources known when
+  _it_ is issued, while the source keeps reaching none.
 - **`rotate`** — creator only; the mission must be `active` and unexpired
   (`deriveMissionState`); the old token becomes `rotated`; audit
   `mission-rotated`; a `rotation` session event when the session exists.
@@ -292,14 +367,45 @@ the creator's.
   `missions.findTokenByPrefix` → `bearerMatches` (argon2 verify) →
   `{ outcome: 'verified', mission, token }`, `{ outcome: 'retired', reason:
 'rotated' | 'revoked', mission, token }` or `{ outcome: 'unknown' }` (malformed,
-  unknown prefix and wrong secret are one answer). The execution door
+  unknown prefix and wrong secret are one answer). `token` is a `VerifiedToken`
+  — `{ id, prefix }`: the token record and its hash do not leave the service.
+  The execution door
   ([execution-door](execution-door.md)) calls it behind its verified-token
   cache, turns `retired/rotated` into an authentication failure (401) and a
   revoked mission into `mission-inactive` through gateway-core's
   `checkMissionActive`.
-- **`list` / `get`** — the creator's missions with `deriveMissionState` and the
-  active token's prefix; `get` adds connections, resources, labelled policy
-  lines with what is left this period, and the kit with the masked prefix.
+- **`list` / `get`** — the creator's missions with their state and the active
+  token's prefix; `get` adds connections, the resources the mission reaches,
+  labelled policy lines with what is left this period, and the kit with the
+  masked prefix. The state comes from the budget's single "load counters,
+  derive state" read (`SessionService.stateOf`, handbook
+  [budget-and-sessions](budget-and-sessions.md)), which loads the counters of
+  the current period only: listing missions costs the same on day 300 as on
+  day 1.
+
+### Records and views
+
+Store records (`MissionRecord`, `ConnectionRecord`, …, camelCase) are the read
+model of the service; what leaves it is a snake_case view. The translations
+have two homes and no other: `budget/mapping.ts` (policy entry in both
+directions — `policyEntryOf` / `policyEntryRecordOf` —, the period —
+`periodOf`, `statedPeriodOf`, `budgetPeriodOf` —, `isStale`, the counter) and
+`connections/mapping.ts` (`connectionSummaryOf`, `connectionOwnerOf`). The rule:
+**no `*Record` crosses an HTTP handler, a page prop or an audit payload.**
+
+Where it holds today: every handler answer (`{ id, name }`, `{ id, status }`,
+the kit, the preview), the `mission-issued` / `mission-rotated` /
+`mission-revoked` audit payloads, `TokenVerification.token`. Where it does not
+yet, because the consumers are pages and the audit module: `MissionOverview.mission`
+(a `MissionRecord`, read by `/missions`, `/missions/<id>` and the session view)
+and `MissionOverview.token.createdAt`; `IssueResult.mission` /
+`RotateResult.mission` / `RevokeResult.mission` (records inside the service
+result, reduced to `{ id, name }` by the handlers); `TokenVerification.mission`
+(the door maps it with `loadMissionContext`).
+
+The store's camelCase policy entry and selection are named `MissionPolicyEntry`
+and `MissionConnection`, like the shared and gateway-core domain types; the
+store's names are its contract, so consumers alias them (`…Record`).
 
 "Not found" and "not yours" are one answer everywhere (`not-found`).
 
@@ -312,9 +418,10 @@ the creator's.
 | `POST /api/missions/:id/rotate` | `rotate`  | 200 `{ mission, token, kit }` · 404 · 409 `mission-inactive`                            |
 | `POST /api/missions/:id/revoke` | `revoke`  | 200 `{ mission: { id, status } }` · 404                                                 |
 
-All four: origin check first (403 `origin-mismatch`), then a **user** session
-(401 without, 403 for the bootstrap operator — a mission always has an
-identified human behind it), `Cache-Control: no-store`; a body that is not a
+All four go through `guardMutation(request, deps, 'user')` (handbook
+[authentication](authentication.md)): origin check first (403
+`origin-mismatch`), then a **user** session (401 without, 403 for the
+bootstrap operator — a mission always has an identified human behind it), `Cache-Control: no-store`; a body that is not a
 draft is 400 `invalid-draft` with one problem per field (unknown keys refused).
 
 ## The creation screen (`/missions/new`)
@@ -346,7 +453,11 @@ One page, one column, in the order of spec §4.2:
    selection" with the reason and cannot be ticked; an entry ticked earlier that
    stopped resolving stays, marked "Refused", with "Remove the N refused".
 5. **Period and expiry**, and **Issue mission**, in a bar that stays at the
-   bottom of the viewport. Under it, what still blocks issuance.
+   bottom of the viewport. Under it, what still blocks issuance, then the
+   preview's `notices` (`data-testid="notices"`): one warning-coloured line
+   each — a folded `<details>` whose summary names the code's meaning and the
+   resources, and which unfolds to the full message. A notice never disables
+   the button, and the list is absent when there is none.
 
 Behaviour worth knowing (`form-state.ts`):
 
@@ -404,8 +515,11 @@ cached five minutes) serves `content.md`, the generic companion of the kit
 ## Wiring
 
 `createMissionsModule({ config, store, registry, authenticator, logger,
-authority?, clock?, mint? })` → `root.missions = { authority, service,
-handlers }` (composition root, after `root.auth`).
+authority?, clock?, mint?, budget? })` → `root.missions = { authority, service,
+handlers }` (composition root, after `root.auth`). `budget` is a
+`Pick<SessionService, 'stateOf'>`; the root builds the missions module before
+the `SessionService`, so it is left out and defaults to
+`missionUsageReader(store.sessions)` — the same function over the same store.
 
 The registry is the root's own (`compose/shipped-plugins.ts`): the plugins the
 image ships are the plugins issuance offers, with no second list. Connections
@@ -414,13 +528,17 @@ and resources are read through the store repositories only
 
 ## Tests
 
-Unit, beside the code (104): `authority/authority-service.test.ts` (7),
-`missions/preview.test.ts` (39), `catalog-view.test.ts` (11), `summary.test.ts`
+Unit, beside the code (109): `authority/authority-service.test.ts` (7),
+`missions/preview.test.ts` (44), `catalog-view.test.ts` (11), `summary.test.ts`
 (8), `bootstrap-kit.test.ts` (9), `token.test.ts` (8, with the draft schema),
 `app/(app)/missions/new/form-state.test.ts` (22).
 
-Integration, `tests/integration/missions/` (32) on the real root over
-`:memory:`: `mission-lifecycle.test.ts` (24) and `mission-handlers.test.ts` (8).
+Integration, `tests/integration/missions/` (36) on the real root over
+`:memory:`: `mission-lifecycle.test.ts` (28) and `mission-handlers.test.ts` (8).
+The lifecycle suite builds the pipeline's view with the door's own
+`loadMissionContext`, pins the `mission-issued` payload, and checks that the
+detail and the kit list what the door reaches (no resource at issuance then a
+discovery; every resource hidden; a resource turned stale).
 Scenarios in [integration-tests](../tests/integration-tests.md).
 
 Browser, `tests/e2e/v5/issue-mission.spec.ts` (2), `npm run test:e2e:v5`:
@@ -434,6 +552,14 @@ see [e2e-tests](../tests/e2e-tests.md) for the ephemeral instance.
 - **`connection-unknown` for a connection that exists** — the user is not its
   owner (or no longer a member of the owner group), the connection is `revoked`,
   or its provider has no registered plugin (`root.registry.ids`).
+- **The detail shows "no resource" on a connection that has resources** — the
+  mission was issued when the connection had none (or all were hidden): it
+  reaches none, and the door answers `resource-not-in-mission`. Duplicate the
+  mission to issue one on the resources known now.
+- **Calls are refused `risk-not-accepted` on one resource only** — read the
+  preview's `notices`: the resource has no environment label, or a label the
+  catalog does not know; env-scoped risks can never be touched on it. Label it
+  on the Connections page.
 - **A preset fills fewer risks than it lists** — read the line under the preset
   select: entries outside the authority, or needing a resource labelled with an
   environment nobody labelled (Connections page), are left out.

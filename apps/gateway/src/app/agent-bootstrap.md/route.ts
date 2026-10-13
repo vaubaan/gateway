@@ -3,7 +3,7 @@
  *
  * Serves the self-contained agent-bootstrap doc as raw markdown so that an LLM
  * (or any MCP client) can `curl` it and follow the instructions to use a
- * `vbn_live_*` access token. Content is in ./content.md ; this route just
+ * `vbn_live_*` mission token. Content is in ./content.md ; this route just
  * reads it from disk with the right Content-Type.
  */
 

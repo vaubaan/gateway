@@ -6,7 +6,7 @@
  * Pure and browser-safe. The same text is returned by `preview()` and shown
  * live by the creation form.
  */
-import type { MissionPolicyEntry } from '@vaubaan/shared';
+import { ratePerMinute } from '@vaubaan/policy-engine';
 
 import type {
   CatalogRisk,
@@ -63,10 +63,6 @@ export function expiryPhrase(expiresAt: string | null): string {
   return `expires ${at.toISOString().slice(0, 16).replace('T', ' ')} UTC`;
 }
 
-function ratePerMinute(entry: MissionPolicyEntry): number {
-  return (entry.rate_limit.max * 60) / entry.rate_limit.window_seconds;
-}
-
 function mostSevere(risks: readonly CatalogRisk[]): CatalogRisk | null {
   let top: CatalogRisk | null = null;
   for (const risk of risks) if (top === null || risk.severity > top.severity) top = risk;
@@ -120,7 +116,7 @@ function quantitiesLine(input: SummaryInput): string {
   let approvals = 0;
   for (const entry of entries) {
     if (entry.quota > largest.quota) largest = entry;
-    if (ratePerMinute(entry) > ratePerMinute(fastest)) fastest = entry;
+    if (ratePerMinute(entry.rate_limit) > ratePerMinute(fastest.rate_limit)) fastest = entry;
     if (entry.gate === 'approval') approvals += 1;
   }
   const parts = [

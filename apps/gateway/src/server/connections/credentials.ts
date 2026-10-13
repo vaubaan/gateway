@@ -22,6 +22,7 @@
  * declares one (non-standard flow). The OAuth client secret never reaches a
  * plugin: `appConfig` is `ProviderAppsService.pluginAppConfig()`.
  */
+import { isUnavailableConnectionStatus } from '@vaubaan/gateway-core';
 import { UpstreamAuthError } from '@vaubaan/shared';
 import type {
   ConnectionContext,
@@ -72,10 +73,13 @@ export class CredentialBroker {
   constructor(private readonly deps: CredentialBrokerDeps) {}
 
   /**
-   * The credential of an `active` connection, refreshed first when it is an
-   * `oauth2` token about to expire. Throws `ConnectionUnavailableError` for a
-   * connection that is not `active`, `UpstreamAuthError` when the refresh is
-   * rejected (the connection is then `expired`).
+   * The credential of a connection that serves calls, refreshed first when it
+   * is an `oauth2` token about to expire. A connection serves while it is
+   * `active` or `unowned` (spec §2.3: an unowned connection's missions keep
+   * running); `isUnavailableConnectionStatus` of gateway-core is the one rule.
+   * Throws `ConnectionUnavailableError` for an `expired`, `revoked` or missing
+   * connection, `UpstreamAuthError` when the refresh is rejected (an `active`
+   * connection is then `expired`).
    */
   async resolve(connectionId: string): Promise<ResolvedCredential> {
     const current = await this.load(connectionId);
@@ -116,7 +120,7 @@ export class CredentialBroker {
   private async load(connectionId: string): Promise<ResolvedCredential> {
     const connection = await this.deps.connections.getById(connectionId);
     if (!connection) throw new ConnectionUnavailableError(connectionId, 'missing');
-    if (connection.status !== 'active') {
+    if (isUnavailableConnectionStatus(connection.status)) {
       throw new ConnectionUnavailableError(connectionId, connection.status);
     }
     const registered = this.deps.registry.get(connection.provider);
@@ -159,7 +163,7 @@ export class CredentialBroker {
       next = await this.obtain(current);
     } catch (err) {
       // Only a rejection by the provider ends the connection; an unreachable provider,
-      // a missing app configuration or a bug leaves it `active` for the next attempt.
+      // a missing app configuration or a bug leaves its status alone for the next attempt.
       if (!(err instanceof UpstreamAuthError)) {
         if (err instanceof ProviderUnreachableError) throw err;
         throw new ProviderUnreachableError(

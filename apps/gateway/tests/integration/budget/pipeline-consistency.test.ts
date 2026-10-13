@@ -137,6 +137,42 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     );
   });
 
+  it('skips a credit event whose details are malformed, and does not throw', async () => {
+    const pipeline = buildPipeline(f, () => f.clock.now());
+    await pipeline.execute(contextOf(f, f.mission), request([READ]));
+    const session = await f.store.sessions.getByMission(f.mission.id);
+    if (!session) throw new Error('the first call creates the session');
+    const { period } = await countersAgreeWithAudit(f.store, f.mission, f.clock.now());
+
+    // Rows no writer of the gateway produces: a reset without its request and period
+    // end, a quota extension whose credit is text, a reset with no details at all.
+    await f.store.sessions.recordEvent(session.id, {
+      kind: 'reset',
+      details: { period_start: period.start, credits: { [READ]: 5 } },
+    });
+    await f.store.sessions.recordEvent(session.id, {
+      kind: 'extension',
+      details: {
+        request_id: 'r-1',
+        dimension: 'quota',
+        amount: 2,
+        period_start: period.start,
+        period_end: period.end,
+        credits: { [READ]: '2' },
+      },
+    });
+    await f.store.sessions.recordEvent(session.id, { kind: 'reset' });
+
+    const report = await countersAgreeWithAudit(f.store, f.mission, f.clock.now());
+    expect(report.risks.find((r) => r.risk_id === READ)).toEqual({
+      risk_id: READ,
+      counted: 1,
+      credited: 0,
+      audited: 1,
+    });
+    expect(report.mismatches).toEqual([]);
+  });
+
   it('an allowed call that fails upstream keeps its credit: audit says allowed, counter incremented', async () => {
     const pipeline = buildPipeline(f, () => f.clock.now());
     const ctx = contextOf(f, f.mission);
@@ -144,9 +180,10 @@ describe('budget stage in the pipeline — counters vs audit', () => {
     expect(outcome.kind).toBe('failed');
     expect(outcome.audit).toMatchObject({
       decision: 'allowed',
-      upstream_error: 'provider 502',
       remaining_budget: { [WRITE]: 0 },
     });
+    // The wording of the failure is the pipeline's (gateway-core); here it only has to be recorded.
+    expect(typeof outcome.audit.upstream_error).toBe('string');
     // Not refunded: the next WRITE is refused.
     const next = await pipeline.execute(ctx, request([WRITE]));
     expect(next.kind).toBe('refused');

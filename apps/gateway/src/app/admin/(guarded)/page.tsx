@@ -5,15 +5,16 @@
  */
 import Link from 'next/link';
 
+import { LocalDate } from '@/components/LocalDate';
 import styles from '@/components/auth/auth.module.css';
 import { Badge, Card, CardBody, CardHeader, CardTitle, Stack } from '@/components/ui';
-import { adminDecision } from '@/lib/auth/session';
+import { requireOperator } from '@/lib/auth/session';
 import { describeAdminRule } from '@/server/auth';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminIndexPage() {
-  const { root } = await adminDecision();
+  const { root } = await requireOperator();
   const idp = await root.auth.idp.current();
   const bootstrap = await root.auth.bootstrap.state();
 
@@ -48,7 +49,9 @@ export default async function AdminIndexPage() {
             <dd>
               {bootstrap.status === 'active' && <Badge tone="warning">active</Badge>}
               {bootstrap.status === 'revoked' && (
-                <Badge tone="success">revoked {bootstrap.revokedAt}</Badge>
+                <Badge tone="success">
+                  revoked <LocalDate ts={bootstrap.revokedAt} />
+                </Badge>
               )}
               {bootstrap.status === 'unavailable' && <Badge>not configured</Badge>}
             </dd>

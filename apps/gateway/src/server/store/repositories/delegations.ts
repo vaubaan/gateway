@@ -6,16 +6,18 @@
 
 import { withImmediateTransaction } from '../db.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
-import type {
-  AccessTokenRecord,
-  DelegationRecord,
-  DelegationStatus,
-  Iso,
-  OAuthClientRecord,
-  OAuthCodeRecord,
-  RefreshTokenRecord,
+import {
+  CODE_CHALLENGE_METHODS,
+  DELEGATION_STATUSES,
+  type AccessTokenRecord,
+  type CodeChallengeMethod,
+  type DelegationRecord,
+  type Iso,
+  type OAuthClientRecord,
+  type OAuthCodeRecord,
+  type RefreshTokenRecord,
 } from '../types.ts';
-import { nowIso, requireRow, type RepoContext } from './context.ts';
+import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
 
 export interface RegisterClientInput {
   readonly clientId: string;
@@ -36,7 +38,7 @@ export interface CreateCodeInput {
   readonly codeHash: string;
   readonly redirectUri: string;
   readonly codeChallenge: string;
-  readonly codeChallengeMethod: 'S256';
+  readonly codeChallengeMethod: CodeChallengeMethod;
   readonly expiresAt: Iso;
 }
 
@@ -135,7 +137,7 @@ function delegationToRecord(row: DelegationRow): DelegationRecord {
     userId: row.user_id,
     clientId: row.client_id,
     scope: row.scope,
-    status: row.status as DelegationStatus,
+    status: parseEnum(DELEGATION_STATUSES, row.status, 'delegations.status'),
     createdAt: row.created_at,
     revokedAt: row.revoked_at,
   };
@@ -147,7 +149,11 @@ function codeToRecord(row: CodeRow): OAuthCodeRecord {
     delegationId: row.delegation_id,
     redirectUri: row.redirect_uri,
     codeChallenge: row.code_challenge,
-    codeChallengeMethod: 'S256',
+    codeChallengeMethod: parseEnum(
+      CODE_CHALLENGE_METHODS,
+      row.code_challenge_method,
+      'oauth_codes.code_challenge_method',
+    ),
     createdAt: row.created_at,
     expiresAt: row.expires_at,
     consumedAt: row.consumed_at,

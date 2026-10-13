@@ -20,7 +20,7 @@
  */
 
 import { refuse, type Refusal } from '@vaubaan/gateway-core';
-import type { Iso8601, RiskId, SessionEventKind } from '@vaubaan/shared';
+import type { CallAllowedEventDetails, Iso8601, RiskId } from '@vaubaan/shared';
 import { InvariantError } from '../store/errors.ts';
 import type {
   DecideContext,
@@ -41,8 +41,9 @@ import {
   type Refuse,
 } from './decide.ts';
 import { fingerprintArguments } from './fingerprint.ts';
-import { sessionCounterOf, type BudgetMission } from './mapping.ts';
-import { deriveMissionState, type MissionState } from './mission-state.ts';
+import type { BudgetMission } from './mapping.ts';
+import type { MissionState } from './mission-state.ts';
+import { readMissionUsage, type MissionUsage } from './mission-usage.ts';
 import { currentPeriod, type CurrentPeriod } from './period.ts';
 
 const MS_PER_SECOND = 1000;
@@ -95,6 +96,8 @@ export interface SessionServiceDeps {
 
 /** What the transaction callback hands back, beyond the store's `allow` / `event`. */
 interface TransactionOutcome extends DecisionOutcome {
+  /** Typed here: the store takes any event, this service writes only known shapes. */
+  readonly event: NewEvent;
   readonly decision: BudgetOutcome;
   readonly request: RequestRecord | null;
   readonly approvalIds: readonly string[];
@@ -158,9 +161,15 @@ export class SessionService {
 
   /** Mission state with the rollover applied on read (spec §2.3, §3.3). */
   async stateOf(mission: BudgetMission, now: Date): Promise<MissionState> {
-    const session = await this.deps.sessions.getByMission(mission.id);
-    const counters = session ? await this.deps.sessions.counters(session.id) : [];
-    return deriveMissionState(mission, counters.map(sessionCounterOf), now);
+    return (await this.usageOf(mission, now)).state;
+  }
+
+  /**
+   * The current period of a mission, what it consumed in it and the state that follows.
+   * The single "load counters, derive state" read; only the current period is loaded.
+   */
+  async usageOf(mission: BudgetMission, now: Date): Promise<MissionUsage> {
+    return readMissionUsage(this.deps.sessions, mission, now);
   }
 
   /** Seals the arguments ahead of the transaction when a touched risk may need an
@@ -241,10 +250,14 @@ export class SessionService {
       decision,
       request: null,
       approvalIds,
-      event: callEvent('call-allowed', input, fingerprint, {
-        remaining: decision.remaining,
-        approval_ids: approvalIds,
-      }),
+      event: {
+        kind: 'call-allowed',
+        details: {
+          ...callDetails(input, fingerprint),
+          remaining: decision.remaining,
+          approval_ids: approvalIds,
+        },
+      },
     };
   }
 
@@ -263,11 +276,13 @@ export class SessionService {
       request,
       approvalIds: [],
       event: {
-        ...callEvent('call-refused', input, fingerprint, {
+        kind: 'call-refused',
+        riskId: decision.risk_id,
+        details: {
+          ...callDetails(input, fingerprint),
           refusal_code: decision.code,
           request_id: request?.id ?? null,
-        }),
-        riskId: decision.risk_id,
+        },
       },
     };
   }
@@ -298,10 +313,10 @@ export class SessionService {
       expiresAt: addSeconds(now, this.deps.requestExpirySeconds),
     });
     ctx.recordEvent({
-      kind: 'request' satisfies SessionEventKind,
+      kind: 'request',
       riskId: decision.risk_id,
       details: { request_id: request.id, request_kind: kind, tool: input.tool, fingerprint },
-    });
+    } satisfies NewEvent);
     return request;
   }
 
@@ -343,20 +358,17 @@ function addSeconds(instant: Date, seconds: number): Iso8601 {
   return new Date(instant.getTime() + seconds * MS_PER_SECOND).toISOString();
 }
 
-function callEvent(
-  kind: Extract<SessionEventKind, 'call-allowed' | 'call-refused'>,
-  input: RecordCallInput,
-  fingerprint: string,
-  details: Record<string, unknown>,
-): NewEvent {
+/** What a call event carries whether the call is allowed or refused. */
+type CallDetails = Pick<
+  CallAllowedEventDetails,
+  'tool' | 'fingerprint' | 'risk_ids' | 'agent_label'
+>;
+
+function callDetails(input: RecordCallInput, fingerprint: string): CallDetails {
   return {
-    kind,
-    details: {
-      tool: input.tool,
-      fingerprint,
-      risk_ids: distinctRisks(input.risks_touched),
-      agent_label: input.agent_label ?? null,
-      ...details,
-    },
+    tool: input.tool,
+    fingerprint,
+    risk_ids: distinctRisks(input.risks_touched),
+    agent_label: input.agent_label ?? null,
   };
 }

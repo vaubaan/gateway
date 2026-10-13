@@ -101,7 +101,7 @@ async function githubInstance(env: Record<string, string> = {}): Promise<GithubI
       metadata: {},
     }),
   });
-  await store.connections.replaceResources(github.id, [
+  await store.connections.syncDiscoveredResources(github.id, [
     { ref: 'acme/app', displayName: 'acme/app', env: null },
     { ref: 'acme/infra', displayName: 'acme/infra', env: null },
   ]);
@@ -486,6 +486,45 @@ describe('execution door over HTTP: real GitHub plugin, mocked upstream', () => 
       }
       expect(statuses.slice(0, VERIFY_ATTEMPTS_PER_WINDOW).every((s) => s === 401)).toBe(true);
       expect(statuses[VERIFY_ATTEMPTS_PER_WINDOW]).toBe(429);
+    }, 60_000);
+
+    it('does not lock a verified agent out when another address floods its prefix with wrong secrets', async () => {
+      const proxied = await githubInstance({ VAUBAAN_TRUSTED_PROXIES: '10.0.0.0/8' });
+      try {
+        const mission = await proxied.issueGithub();
+        const attacker = { 'x-forwarded-for': '203.0.113.7:4711, 10.0.0.1' };
+        const agent = { 'x-forwarded-for': '198.51.100.9, 10.0.0.1' };
+        const wrong = (i: number) => `vbn_live_${mission.prefix}_${String(i).padStart(32, 'a')}`;
+        for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW; i++) {
+          expect((await proxied.rpc(wrong(i), LIST, attacker)).status).toBe(401);
+        }
+        // The flooding address is throttled, whatever source port it comes from...
+        const samePeer = { 'x-forwarded-for': '203.0.113.7:9, 10.0.0.1' };
+        expect((await proxied.rpc(wrong(98), LIST, samePeer)).status).toBe(429);
+        // ...the real agent, never verified yet and calling from elsewhere, is not.
+        expect((await proxied.rpc(mission.token, LIST, agent)).status).toBe(200);
+        expect((await proxied.rpc(wrong(99), LIST, attacker)).status).toBe(429);
+        expect((await proxied.rpc(mission.token, LIST, agent)).status).toBe(200);
+      } finally {
+        await proxied.close();
+      }
+    }, 60_000);
+
+    it('lets a verified agent through a flood even when no client address can be resolved', async () => {
+      // No trusted proxy: every caller shares the `unknown` window of the prefix.
+      const mission = await instance.issueGithub();
+      const verify = vi.spyOn(instance.root.missions.service, 'verifyToken');
+      expect((await instance.rpc(mission.token, LIST)).status).toBe(200);
+      for (let i = 0; i <= VERIFY_ATTEMPTS_PER_WINDOW; i++) {
+        const wrong = `vbn_live_${mission.prefix}_${String(i).padStart(32, 'b')}`;
+        await instance.rpc(wrong, LIST, { 'x-forwarded-for': `203.0.113.${i}` });
+      }
+      const flooded = `vbn_live_${mission.prefix}_${'c'.repeat(32)}`;
+      expect((await instance.rpc(flooded, LIST)).status).toBe(429);
+      // The proof of the real bearer is renewed by its own calls: no hash, no throttle.
+      expect((await instance.rpc(mission.token, LIST)).status).toBe(200);
+      // The window counted the agent's one verification and the wrong secrets after it.
+      expect(verify).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW);
     }, 60_000);
 
     it('applies the surface rate limit per mission, not per agent', async () => {

@@ -3,8 +3,9 @@
  * `?from=<mission id>` starts from a duplicate of one of the creator's
  * missions, re-checked against their current authority.
  */
-import { currentUser } from '../current-user';
-import { NeedsUser } from '../needs-user';
+import { NeedsUser } from '@/components/auth/NeedsUser';
+import { currentUser } from '@/lib/auth/session';
+
 import styles from '../missions.module.css';
 import { MissionForm, type InitialDraft } from './mission-form';
 

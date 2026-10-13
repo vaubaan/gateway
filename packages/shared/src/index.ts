@@ -19,4 +19,5 @@ export * from './risk.ts';
 export * from './risk-id.ts';
 export * from './refusal.ts';
 export * from './domain.ts';
+export * from './session-events.ts';
 export * from './data-model.ts';

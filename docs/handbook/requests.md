@@ -202,7 +202,14 @@ offset — what a `datetime-local` field posts — is read as UTC.
 | `extend-expiry` | `granted`     | `extension` `{ request_id, dimension: 'expiry', expires_at_before, expires_at }`            | `expiry-extended` |
 | `refuse`        | `refused`     | `request` `{ request_id, request_kind, state: 'refused' }`                                  | `request-refused` |
 
-Every event carries `riskId` (the claimed risk) and `actorUserId`. The mission
+Every event carries `riskId` (the claimed risk) and `actorUserId`. These shapes
+are the `reset`, `extension` and `request` members of `SessionEventDetails`
+(`@vaubaan/shared`); `ClaimDecisionContext.recordEvent` takes a typed
+`NewEvent`, and the timeline (`events.ts`) and the check below read them back
+through `parseEventDetails` (budget handbook, "One contract for event
+details"). An event whose stored details are malformed reads as a line without
+detail (`Allowed a tool`, `A request changed state`, `The creator extended the
+mission`…). The mission
 token does not change; the executor replays its call. Once a claim is decided
 or expired, the next refused call drops a new one (budget handbook).
 
@@ -227,8 +234,10 @@ events of the period (`CREDIT_EVENT_KINDS`). Each report line is
 | `GET /api/requests`             | `inbox`  | 200 `{ requests }` · 401 · 403 (bearer, bootstrap)                                                                                                                                            |
 | `POST /api/requests/:id/decide` | `decide` | 200 `{ request }` · 400 not a body · 401 · 403 `origin-mismatch` / `forbidden` / `wrong-credential-kind` · 409 `request-not-open` (+ `state`) / `unsupported-kind` · 422 `<ClaimProblemCode>` |
 
-`decide` checks, in order: bearer, origin (`isSameOrigin`), user session,
-then the service. A JSON body gets JSON; a form post (the page's forms,
+`decide` checks, in order: bearer, then `guardMutation(request, deps, 'user')`
+(origin, user session; handbook [authentication](authentication.md)), then
+the service. `inbox` and `open` are reads: bearer, then `guardSession` (the
+same session and role check, no origin). A JSON body gets JSON; a form post (the page's forms,
 `application/x-www-form-urlencoded` or `multipart/form-data`) gets a 303 back
 to `/requests/<id>` with `?decided=1` or `?problem=<code>`
 (`DecideProblemCode`), except `forbidden`, which gets the same 403 page as

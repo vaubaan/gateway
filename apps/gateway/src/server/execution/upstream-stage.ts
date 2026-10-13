@@ -27,10 +27,19 @@
  * secondary rate limit). Expiring the connection on it would stop every
  * mission of that connection for a call that was merely not permitted; it is
  * reported as an ordinary upstream failure, naming the provider's answer.
+ *
+ * Every failure that is not that refusal leaves as `UpstreamFailureError`.
+ * Plugins build their message from the request path and the start of the
+ * provider's body, and providers echo input there (a SQL fragment, an object
+ * id). So the message is the `detail`, for the agent only; what the audit
+ * keeps is the `summary` built here from the provider id, the HTTP status
+ * when the error carries one, and the error's class name.
  */
 import {
   isUnavailableConnectionStatus,
   refuse,
+  UpstreamFailureError,
+  upstreamErrorClassName,
   UpstreamRefusalError,
   type CallRequest,
   type CallTarget,
@@ -49,6 +58,8 @@ import type { Logger } from '../logging';
 import type { ConnectionCredentialCache } from './credential-cache';
 
 const HTTP_UNAUTHORIZED = 401;
+const HTTP_STATUS_MIN = 100;
+const HTTP_STATUS_MAX = 599;
 
 export interface UpstreamStageDeps {
   readonly credentials: Pick<CredentialBroker, 'resolve' | 'refresh' | 'contextOf'>;
@@ -59,6 +70,43 @@ export interface UpstreamStageDeps {
 /** The provider said the credential itself is not valid (as opposed to "not allowed"). */
 function credentialRejected(err: unknown): err is UpstreamAuthError {
   return err instanceof UpstreamAuthError && err.upstreamStatus === HTTP_UNAUTHORIZED;
+}
+
+function isHttpStatus(value: unknown): value is number {
+  return (
+    typeof value === 'number' &&
+    Number.isInteger(value) &&
+    value >= HTTP_STATUS_MIN &&
+    value <= HTTP_STATUS_MAX
+  );
+}
+
+/**
+ * The HTTP status a failure carries: `UpstreamAuthError.upstreamStatus` (the
+ * plugin contract), or the numeric `status` HTTP clients put on their errors.
+ */
+function httpStatusOf(err: unknown): number | null {
+  if (err instanceof UpstreamAuthError) {
+    return isHttpStatus(err.upstreamStatus) ? err.upstreamStatus : null;
+  }
+  if (typeof err !== 'object' || err === null || !('status' in err)) return null;
+  return isHttpStatus(err.status) ? err.status : null;
+}
+
+/** A provider failure, split into what the audit stores and what the agent reads. */
+function asUpstreamFailure(err: unknown, provider: string): UpstreamFailureError {
+  if (err instanceof UpstreamFailureError) return err;
+  const status = httpStatusOf(err);
+  const className = upstreamErrorClassName(err);
+  return new UpstreamFailureError({
+    summary:
+      status === null
+        ? `${provider} call failed (${className})`
+        : `${provider} answered HTTP ${status} (${className})`,
+    detail: err instanceof Error ? err.message : String(err),
+    status,
+    cause: err,
+  });
 }
 
 export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
@@ -101,44 +149,58 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
     );
   }
 
-  return {
-    async execute(ctx, call, target): Promise<unknown> {
-      const connectionId = target.connection.id;
-      let resolved: ResolvedCredential;
-      try {
-        resolved = await deps.credentials.resolve(connectionId);
-      } catch (err) {
-        throw await asUnavailable(err, target);
-      }
+  /** Resolve, forward, and climb the retry ladder of the header. */
+  async function attempt(
+    ctx: MissionContext,
+    call: CallRequest,
+    target: CallTarget,
+  ): Promise<unknown> {
+    const connectionId = target.connection.id;
+    let resolved: ResolvedCredential;
+    try {
+      resolved = await deps.credentials.resolve(connectionId);
+    } catch (err) {
+      throw await asUnavailable(err, target);
+    }
 
+    try {
+      return await forward(resolved, ctx, call, target);
+    } catch (err) {
+      if (!credentialRejected(err)) throw err;
+      deps.logger.warn('upstream rejected the credential', {
+        connection_id: connectionId,
+        provider: target.connection.provider,
+        tool: call.tool,
+      });
+    }
+
+    if ((await deps.credentialCache.drop(connectionId)) > 0) {
       try {
         return await forward(resolved, ctx, call, target);
       } catch (err) {
         if (!credentialRejected(err)) throw err;
-        deps.logger.warn('upstream rejected the credential', {
-          connection_id: connectionId,
-          provider: target.connection.provider,
-          tool: call.tool,
-        });
       }
+    }
 
-      if ((await deps.credentialCache.drop(connectionId)) > 0) {
-        try {
-          return await forward(resolved, ctx, call, target);
-        } catch (err) {
-          if (!credentialRejected(err)) throw err;
-        }
-      }
+    let refreshed: ResolvedCredential;
+    try {
+      refreshed = await deps.credentials.refresh(connectionId);
+    } catch (err) {
+      throw await asUnavailable(err, target);
+    }
+    // A second rejection right after a successful refresh is final for this call;
+    // the next call starts over and the broker decides the connection's fate.
+    return forward(refreshed, ctx, call, target);
+  }
 
-      let refreshed: ResolvedCredential;
+  return {
+    async execute(ctx, call, target): Promise<unknown> {
       try {
-        refreshed = await deps.credentials.refresh(connectionId);
+        return await attempt(ctx, call, target);
       } catch (err) {
-        throw await asUnavailable(err, target);
+        if (err instanceof UpstreamRefusalError) throw err;
+        throw asUpstreamFailure(err, target.connection.provider);
       }
-      // A second rejection right after a successful refresh is final for this call;
-      // the next call starts over and the broker decides the connection's fate.
-      return forward(refreshed, ctx, call, target);
     },
   };
 }

@@ -16,6 +16,7 @@ tracks:
   - apps/gateway/src/components/shell/AppShell.tsx
   - apps/gateway/src/lib/connections/session.ts
   - apps/gateway/tests/integration/connections/
+  - apps/gateway/tests/unit/server/connections/
 ---
 
 # Connections — connect flows, resources, credential refresh, provider apps
@@ -34,7 +35,7 @@ D2 (the host runs the four flows and the standard refresh). Built on the
 `connection_resources`, `instance_config`), the
 [configuration](configuration.md) root (`providers` block, `RateLimiter`,
 `SessionStore`) and [authentication](authentication.md) (web session,
-origin check, `authorizeAdmin`).
+`guardMutation`: origin check, session, role).
 
 ## Layout
 
@@ -52,13 +53,14 @@ apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   credential-codec.ts  serializeSecret / parseSecret: CredentialSecret ⇄ the sealed text
   ssh-keypair.ts       generateEd25519KeyPair(): OpenSSH private key + authorized_keys line
   input.ts             field validation, resolveReturnTo, env label, editable metadata lists
+  mapping.ts           connectionSummaryOf(), connectionOwnerOf(): record → shown shapes
   handlers.ts          Request → Response handlers of the six endpoints
   errors.ts            ConnectError (closed codes + UI sentences), ConnectionUnavailableError,
                        ProviderUnreachableError
   testing.ts           fixturePlugin(), one spec per kind, connectionsHarness() — tests only
 apps/gateway/src/server/compose/shipped-plugins.ts   SHIPPED_PLUGINS, buildShippedRegistry()
 apps/gateway/migrations/0004_connection_resource_curation.sql
-apps/gateway/src/lib/connections/session.ts  Next glue: requireUser(), takeNotice()
+apps/gateway/src/lib/connections/session.ts  Next glue: currentActor(), takeNotice()
 apps/gateway/src/components/
   shell/AppShell.tsx                 the v5 bar; APP_NAV is the list of cardinal pages
   connections/parts.tsx              NoticeBanner, StateBadge, ExperimentalBadge, CredentialFieldInputs
@@ -79,7 +81,10 @@ apps/gateway/src/app/admin/(guarded)/provider-apps/
 ```
 
 Route handlers are one-line adapters over `root.connections.handlers`; pages
-call `requireUser()` / `adminDecision()` and render. Everything that decides
+call `currentActor()` / `adminDecision()` and render. `currentActor()` answers
+`null` for the bootstrap operator, and every Connections page then renders
+`NeedsUser` (`@/components/auth/NeedsUser`): a connection belongs to an
+identified user. Everything that decides
 is under `server/` and is tested without Next.
 
 ## The provider list
@@ -149,16 +154,32 @@ the mounted configuration`), the URL to register at the provider
 authorization when installations are verified, its setup URL otherwise),
 the fields
 (`CredentialFieldInputs`: secrets as password inputs, PEM-like secrets as a
-textarea, never pre-filled), Save, and Remove for store-sourced settings.
-`POST /admin/provider-apps/<provider>` (`handlers.saveProviderApp`) is
-origin-checked, requires `authorizeAdmin` (the bootstrap operator may use
-it), and writes an `AdminAuditEntry` `config-changed` on `instance-config` /
+textarea, never pre-filled; its required `idPrefix` binds each label to its
+input and must be unique on the page, so each provider's list gets its own), Save, and Remove for store-sourced settings.
+`POST /admin/provider-apps/<provider>` (`handlers.saveProviderApp`) goes
+through `guardMutation(request, deps, 'operator')` (origin, session, admin
+rule; the bootstrap operator may use it), answers 400 to a body that is not a
+form, and writes an `AdminAuditEntry` `config-changed` on `instance-config` /
 `provider-app:<id>` whose `before`/`after` carry the non-secret values, the
 names of the secrets set and, for an installed app, `install_verification`.
 Its `user_id` is `auditActorId(principal)`: the operator's user id, or
 `BOOTSTRAP_ACTOR_ID` for the bootstrap operator (shown as
 `BOOTSTRAP_ACTOR_LABEL` in the audit view's `actor.label`; handbook
 [authentication](authentication.md)).
+
+The handler itself only authorizes, checks that the provider is registered
+(`registry.has`; an unknown id gets the `provider-unknown` notice) and reads
+the settings before the change. A failure to read them (store,
+configuration) is not reported as an unknown provider: it propagates. The
+form's `action` then picks one of three helpers, each returning the new
+status and the notice — `setInstallAcceptance` (`accept-unverified` /
+`refuse-unverified`), `clearProviderApp` (`clear`), `storeProviderApp`
+(no action) — and `auditProviderApp` writes the one `config-changed` entry
+for all of them. The entry is written after the change is committed: when
+that write fails, the failure is logged at `error` (`audit entry not written
+for a saved configuration change`, with `actor` = `auditActorId(principal)`
+and `provider`) and the operator still gets the notice of the saved change,
+as for the IdP settings.
 
 An installed app also shows how its installations are bound to the
 connecting user: the badge `installations verified`, or — for a plugin
@@ -232,8 +253,16 @@ Basic` with form-encoded id and secret (RFC 6749 §2.3.1),
   an `invalid_grant`-class code) from a transient failure (5xx, network,
   15 s timeout). Messages carry the provider's `error` /
   `error_description`, never a credential.
-- **`finalize`** runs the first discovery with the secret still in memory,
-  then writes. Discovery policy per kind:
+- **`start`** resolves what every kind needs once (`FlowStart`: actor,
+  plugin, display name, return path, reconnect target) and dispatches to one
+  private method per kind: `startOAuth2`, `startAppInstall`,
+  `connectWithApiKey`, `connectWithSshKey`. The two redirect flows build
+  their pending record with `newPending`, the two form flows read their
+  values with `readFormOrThrow`. **`complete`** takes the pending record and
+  dispatches to `completeOAuth2` / `completeAppInstall`.
+- **`finalize`** runs the first discovery with the secret still in memory
+  (`firstDiscovery`), then writes (`persist`: create or reconnect, audited),
+  then records the discovery's outcome. Discovery policy per kind:
 
   | Policy                | Kind          | A failed discovery…                                                                        |
   | --------------------- | ------------- | ------------------------------------------------------------------------------------------ |
@@ -257,8 +286,10 @@ metadata })`. The credential text is the JSON `CredentialSecret`, sealed by
   same provider for a connection the actor owns and ends with
   `connections.reconnect()` — new credential, status `active`, same id, so
   missions keep working. Refused for a `revoked` connection
-  (`connection-revoked`) and for another provider (`provider-mismatch`).
-  Ownership is checked at start and again when a redirect flow completes.
+  (`connection-revoked`), for an `unowned` one (`connection-unowned`: spec
+  §2.3, nobody reconnects it until an owner is reassigned) and for another
+  provider (`provider-mismatch`). Ownership and status are checked at start
+  and again when a redirect flow completes.
   Reconnecting an `ssh-key` connection generates a new pair. Audit:
   `connection-reconnected`.
 
@@ -268,7 +299,7 @@ metadata })`. The credential text is the JSON `CredentialSecret`, sealed by
 `token-exchange-failed`, `installation-not-verified` (403),
 `installation-unverifiable` (409), `credential-rejected`,
 `provider-unreachable`, `not-found`, `connection-revoked`,
-`provider-mismatch`, `label-read-only`.
+`connection-unowned`, `provider-mismatch`, `label-read-only`.
 A connection of another owner is reported exactly like a missing one
 (`not-found`).
 
@@ -340,8 +371,17 @@ repository). It does not prove that this account administers it.
 `actor.groups` — the groups of the principal as recomputed on this request
 (spec §10 "authority recomputed from current membership"). `listFor` uses
 `connections.listOwnedBy([user, ...groups])`. P1.4 only creates user-owned
-connections; transfer to a group and `unowned` arrive with P2.2 behind the
-same check.
+connections; transfer to a group and the transition to `unowned` arrive
+with P2.2 behind the same check.
+
+`mapping.ts` is the one place a `ConnectionRecord` becomes a shape shown
+elsewhere: `connectionSummaryOf(record)` gives `{ id, provider,
+display_name, status }`, and `connectionOwnerOf(store, record)` gives the
+owner with its human name (the user's email or the group's name; `null`
+when it no longer exists, each caller wording that case). `ownerLabel` of
+the views uses it. The repository reads the `status` column through
+`parseEnum`, so a value outside the union is an `InvariantError`, not a
+silent cast.
 
 ## Connection states
 
@@ -352,15 +392,37 @@ same check.
 | `expired` → `active` | `connections.reconnect`                                                                         |
 | → `revoked`          | `connections.revoke`: terminal, `revoked_at` set, `credential_blob` / `key_version` set to NULL |
 
-`markExpired`, `refreshCredential` and `reconnect` are conditional updates
-(`WHERE status = 'active'`, `WHERE status <> 'revoked'`), so a refresh or a
-late callback racing a revocation never brings a revoked connection back.
+Which statuses serve calls is decided in one place,
+`isUnavailableConnectionStatus` of `@vaubaan/gateway-core`: `expired` and
+`revoked` do not, `active` and `unowned` do (spec §2.3: the missions of an
+unowned connection keep running). The broker and the repository both use
+it:
+
+| Status    | Broker `resolve` / `refresh` | `refreshCredential` | `reconnect`                    | `markExpired` |
+| --------- | ---------------------------- | ------------------- | ------------------------------ | ------------- |
+| `active`  | serves                       | written             | written                        | → `expired`   |
+| `unowned` | serves                       | written, stays so   | refused (`connection-unowned`) | no effect     |
+| `expired` | `ConnectionUnavailableError` | not written         | written, → `active`            | no effect     |
+| `revoked` | `ConnectionUnavailableError` | not written         | refused (`connection-revoked`) | no effect     |
+
+All three are conditional updates (`refreshCredential`: the serving
+statuses; `reconnect`: `active` or `expired`; `markExpired`: `active`), so a
+refresh or a late callback racing a revocation never brings a revoked
+connection back. Nothing sets `unowned` before P2.2. Open point for the
+spec: a rejected refresh leaves an `unowned` connection `unowned`
+(`markExpired` applies to `active` only, as spec §2.3 writes
+`active → expired`); the broker still throws `UpstreamAuthError`.
+
+`setCredential` and `setStatus` are deprecated leftovers of P0.3 with no
+production caller; they refuse (`InvariantError`) to take a connection out
+of `revoked`. `setStatus` is what test fixtures use to produce `unowned`;
+`setCredential` is only called by the test that proves this refusal.
 `ConnectionService.revoke` is idempotent and audited (`connection-revoked`).
 It does not withdraw the grant at the provider; the notice says so.
-Missions on a non-active connection are refused by the execution door
-(`connection-unavailable`; handbook [execution-door](execution-door.md)),
-which reads the status through `CredentialBroker.resolve`
-(`execution/upstream-stage.ts`).
+Missions on an `expired` or `revoked` connection are refused by the
+execution door (`connection-unavailable`; handbook
+[execution-door](execution-door.md)), which reads the status through
+`CredentialBroker.resolve` (`execution/upstream-stage.ts`).
 
 ## Credentials and refresh — `CredentialBroker`
 
@@ -381,8 +443,9 @@ try {
 ```
 
 - `resolve(id)` throws `ConnectionUnavailableError { connectionStatus }`
-  unless the connection is `active` (`missing` when it or its plugin is
-  gone). An `oauth2` access token expiring within `REFRESH_SKEW_MS` (60 s)
+  when the connection is `expired` or `revoked` (`missing` when it or its
+  plugin is gone); an `active` or `unowned` connection is served. An
+  `oauth2` access token expiring within `REFRESH_SKEW_MS` (60 s)
   is refreshed first when a refresh path exists.
 - `refresh(id)` is single-flight per connection (`refreshing` map, `//
 single-process only`: rotating refresh tokens are single use, a hosted
@@ -396,12 +459,12 @@ single-process only`: rotating refresh tokens are single use, a hosted
     old one, an absent one keeps it;
   - else (api key, ssh key, oauth2 without refresh token) → rejected.
 - Outcomes: success → `connections.refreshCredential` (sealed again, status
-  untouched; `false` means the connection stopped being `active` meanwhile
+  untouched; `false` means the connection stopped serving meanwhile
   → `ConnectionUnavailableError`). `UpstreamAuthError` from the plugin or a
   `rejected` token error → `markExpired` + `UpstreamAuthError` whose
   message names the provider and its error. Anything else (5xx, network,
   missing app configuration, a bug) → `ProviderUnreachableError`, the
-  connection stays `active`.
+  status is left alone.
 
 ## Resources
 
@@ -437,8 +500,9 @@ A ref the discovery no longer returns is **not deleted**: `stale_since` is
 set (kept at its first value by later discoveries) and cleared when the
 ref comes back. `ConnectionResourceRecord.metadata` is the effective
 metadata, `{ ...discovered, ...ownerMetadata }` — what `toPluginResource()`
-hands to `classify` / `execute`. `replaceResources` (P0.3, deletes missing
-refs and cascades to mission selections) is no longer used by any flow.
+hands to `classify` / `execute`. The destructive `replaceResources` of P0.3
+(it deleted missing refs and cascaded to mission selections) is gone from the
+repository: fixtures seed resources through `syncDiscoveredResources` too.
 
 Owner edits (`ConnectionService.updateResource` → `POST
 /connections/<id>/resources/<resourceId>`), all validated before the first
@@ -487,6 +551,8 @@ explicitly and refuses a stale one (handbook [missions](missions.md),
 plugin` badge, hidden checkbox, Save — inputs reach their per-row form
   through the `form` attribute); "Refresh discovery", "Reconnect", and
   "Revoke" (`RevokeConnection`: type the connection name, then a form POST).
+  An `unowned` connection has no "Reconnect" action (the server refuses it,
+  `connection-unowned`); the page says so instead.
 - **Shell.** `app/(app)/layout.tsx` renders `AppShell` for a web session
   (`currentPrincipal()`, a user or the bootstrap operator) and redirects
   anyone else to `/login`. `APP_NAV` in `AppShell.tsx` is the list of pages
@@ -509,10 +575,10 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 `src/server/provider-apps/service.test.ts`), all on `openTestStore()` and
 `mockFetch` through `connectionsHarness()`:
 
-- `oauth2.test.ts` (15) — authorization URL, RFC 7636 vector, the three
+- `oauth2.test.ts` (16) — authorization URL, RFC 7636 vector, the three
   client authentication methods, resource indicator, error mapping,
-  rotation.
-- `service.test.ts` (32) — the driver per credential kind against mocked
+  rotation, a PKCE exchange without a verifier refused before any request.
+- `service.test.ts` (33) — the driver per credential kind against mocked
   provider endpoints: state replay, foreign user, crossed provider,
   foreign return URL, denial, failed exchange, rate limit, the
   installation binding (id in the user's list on a second page accepted
@@ -522,17 +588,20 @@ Unit, co-located (`src/server/connections/*.test.ts`,
   `userVerification` refused unless accepted, also when the acceptance is
   withdrawn mid-flow), app-install
   rejection, api-key rejection storing nothing, ssh key pair, ownership
-  (user and group), reconnect, revoke, the resource merge (owner label,
+  (user and group), reconnect (an `unowned` connection refused), revoke, the resource merge (owner label,
   name, hidden, list settings kept; stale; plugin-set label read-only),
   failed discovery, expiry on a rejected credential.
-- `credentials.test.ts` (12) — resolve, skew refresh with rotation and
-  persistence, single flight, rejected → `expired`, unreachable → still
+- `credentials.test.ts` (15) — resolve, skew refresh with rotation and
+  persistence, an `unowned` connection served, refreshed and kept `unowned`
+  (also when its refresh is rejected), `expired` / `revoked` refused, single
+  flight, rejected → `expired`, unreachable → still
   `active`, no refresh path, revoke race, plugin `refresh()` override.
 - `install-verification.test.ts` (5) — bare list and Basic client
   authentication, ids as numbers or strings, malformed items, a spec header
   cannot replace `Authorization`, the page cap, refusal versus unreachable,
   no message carries the token or the client secret.
-- `pending.test.ts` (7), `input.test.ts` (17), `codec-and-keypair.test.ts`
+- `mapping.test.ts` (3) — the summary, the owner's name, a vanished owner.
+- `pending.test.ts` (7), `input.test.ts` (23), `codec-and-keypair.test.ts`
   (12, the generated key is parsed and used by `ssh2`),
   `shipped-providers.test.ts` (5, the real plugins through the driver; no
   shipped `app-install` plugin is unverifiable),
@@ -540,7 +609,7 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 
 Integration: `tests/integration/store/connections-shares.test.ts` (+2: the
 merge rule and the credential state transitions at the repository) and
-`tests/integration/connections/connect-flow.test.ts` (5) over `buildRoot`
+`tests/integration/connections/connect-flow.test.ts` (6) over `buildRoot`
 with the `:memory:` store and the **real** encryptor: operator registers
 the app → user connects → the blob and a dump of every table are scanned
 for the access token, refresh token, client secret, API key and SSH
@@ -551,7 +620,20 @@ and audited, the rightful user connects, and **the user token, the
 authorization code, the client secret and the private key are in no table
 and no log line**; an unverifiable plugin is refused until the operator
 accepts it through the handler (403 for a user, refused for a verifying
-provider, audited).
+provider, audited); an unknown provider is reported as unknown while a
+failure to read the app settings propagates and writes nothing.
+`tests/unit/server/connections/provider-app-handler.test.ts` (4): a saved
+provider app, and an accepted unverified installation, whose audit entry
+cannot be written still stand and are logged at `error` with the actor and
+the provider (never the secret); the entry is written when the audit works;
+a body that is not a form is 400 on `saveProviderApp`, `connect` and
+`updateResource` and writes nothing. The guard of every mutating handler is
+covered by `tests/unit/server/auth/mutation-guard.test.ts` (handbook
+[authentication](authentication.md)).
+`tests/integration/connections/repository-status.test.ts` (9): `revoked` is
+terminal through `setCredential` and `setStatus` too, and an `unowned`
+connection has its refreshed credential persisted, is not reconnected and
+can still be revoked.
 
 Not automated: a browser run against real providers
 ([e2e-tests](../tests/e2e-tests.md), "Manual — connect a provider").
@@ -602,9 +684,9 @@ rejected` with `detail` (the provider's error) and `marked_expired`.
   or the provider app configuration was removed (`ProviderAppNotConfigured`
   names the fields).
 - **An owner's label disappeared after a refresh** — it cannot through
-  `syncDiscoveredResources`; check that nothing still calls
-  `replaceResources`, and whether the plugin started returning `env`
-  (`env_source = 'plugin'` then wins).
+  `syncDiscoveredResources`, the only resource sync of the repository; check
+  whether the plugin started returning `env` (`env_source = 'plugin'` then
+  wins).
 - **`ssh-key`: discovery refused** — the public key shown on the detail
   page is not in `authorized_keys` of the login user, or the host key does
   not match the pinned fingerprint (the plugin's message says which).
@@ -623,8 +705,9 @@ rejected` with `detail` (the provider's error) and `marked_expired`.
   ships without the block and is connectable only once the operator accepts
   unverified installations.
 - **A new credential kind** — an ADR first (it changes the plugin
-  contract), then: the variant in `credential-codec.ts`, a case in
-  `ConnectionService.start` / `complete` with its discovery policy,
+  contract), then: the variant in `credential-codec.ts`, one private method
+  of `ConnectionService` with its discovery policy and its one-line case in
+  `start` (and in `complete` for a redirect flow),
   `appConfigFieldsOf`, the form branch in `new/[provider]/page.tsx`.
 - **A non-standard refresh** — the plugin implements `refresh(ctx)`; the
   broker calls it instead of the generic grant and persists the result.

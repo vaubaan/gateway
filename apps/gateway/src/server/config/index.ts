@@ -1,6 +1,7 @@
 export { loadInstanceConfig, MASTER_KEY_BYTES, type LoadOptions, type LoadedConfig } from './load';
 export { ConfigError, errorMessage, formatIssue, type ConfigIssue } from './errors';
 export { parseDuration } from './duration';
+export { buildInfoFromEnv, type BuildInfo } from './build-info';
 export { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 export {
   CONFIG_FILE_ENV,

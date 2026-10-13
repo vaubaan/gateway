@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { LocalDate } from '@/components/LocalDate';
+import { NeedsUser } from '@/components/auth/NeedsUser';
 import {
   Badge,
   Card,
@@ -23,12 +24,11 @@ import {
   Thead,
   Tr,
 } from '@/components/ui';
+import { currentUser } from '@/lib/auth/session';
 import { maskedToken } from '@/server/missions';
 import { reloadPhrase } from '@/server/missions/summary';
 
 import { BootstrapKitView } from '../bootstrap-kit-view';
-import { currentUser } from '../current-user';
-import { NeedsUser } from '../needs-user';
 import styles from '../missions.module.css';
 import { StateBadge } from '../state-badge';
 import { MissionActions } from './mission-actions';

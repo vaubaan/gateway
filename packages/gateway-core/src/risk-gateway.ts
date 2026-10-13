@@ -30,6 +30,7 @@ import {
   evaluateCall,
   type EnvResolver,
   type IndexedRiskCatalog,
+  type UNQUALIFIED,
 } from '@vaubaan/policy-engine';
 
 export type { ClassifyOutcome } from '@vaubaan/plugin-sdk';
@@ -38,8 +39,10 @@ export type { ClassifyOutcome } from '@vaubaan/plugin-sdk';
 export interface AcceptedRisksSnapshot {
   readonly id: string;
   readonly accepted_risks: readonly RiskId[];
-  /** v4 explicit opt-outs. v5 missions carry none; pass `[]`. */
-  readonly denied_risks: readonly RiskId[];
+  /** v4 explicit opt-outs; they trump acceptance. A v5 mission carries none:
+   *  leave the field out (or pass `[]`, as the callers written before it
+   *  became optional do). */
+  readonly denied_risks?: readonly RiskId[];
 }
 
 /** Verdict returned by `evaluateCallForToken`. */
@@ -85,8 +88,10 @@ export function evaluateCallForToken(input: {
   token: AcceptedRisksSnapshot;
   adapter: Classifier;
   catalog: IndexedRiskCatalog | undefined;
-  /** Defaults to `envResolverFor(resources, adapter.envOf)`. */
-  envResolver?: EnvResolver;
+  /** Defaults to `envResolverFor(resources, adapter.envOf)`. A resolver
+   *  replaces the default; `'unqualified'` asks for the engine's mode
+   *  without env qualification (catalog tooling and tests, never a host). */
+  envResolver?: EnvResolver | typeof UNQUALIFIED;
 }): CallVerdict {
   const { tool, args, resources, token, adapter, catalog } = input;
 
@@ -102,7 +107,7 @@ export function evaluateCallForToken(input: {
   const decision: RiskDecision = evaluateCall({
     executed_slices: classified.slices,
     token_accepted_risks: new Set(token.accepted_risks),
-    token_denied_risks: new Set(token.denied_risks),
+    token_denied_risks: new Set(token.denied_risks ?? []),
     catalog,
     envResolver: input.envResolver ?? envResolverFor(resources, adapter.envOf?.bind(adapter)),
   });

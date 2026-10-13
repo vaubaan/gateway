@@ -5,8 +5,12 @@
  * one per table), not the gateway's domain model: `@vaubaan/shared` owns the domain
  * vocabulary and every closed set below (statuses, gate, principal, request kind and
  * status, timestamps) is the shared type, re-exported under the store's names. The
- * record shapes themselves are mapped to the shared snake_case records by the domain
- * layer (P1), not here.
+ * records stay inside `server/**`: each service builds its own view from them, and only
+ * missions and counters are translated to the shared snake_case shapes, in
+ * `server/budget/mapping.ts`. The closed sets the store owns (statuses that exist only
+ * here) are `as const` lists from which the union is derived, so the row mappers validate
+ * against the list that defines the type; the lists of the shared unions are in
+ * `repositories/enums.ts`.
  */
 
 import type {
@@ -19,6 +23,7 @@ import type {
   RequestKind,
   RequestStatus,
   RiskId,
+  SessionEventDetails,
   ShareStatus,
 } from '@vaubaan/shared';
 
@@ -40,7 +45,8 @@ export type PrincipalKind = Principal['kind'];
 
 // --- identities ---------------------------------------------------------------------
 
-export type UserStatus = 'active' | 'removed';
+export const USER_STATUSES = ['active', 'removed'] as const;
+export type UserStatus = (typeof USER_STATUSES)[number];
 
 export interface UserRecord {
   readonly id: string;
@@ -136,7 +142,8 @@ export interface MissionPolicyEntry {
   readonly gate: Gate;
 }
 
-export type ResourceScope = 'all' | 'selected';
+export const RESOURCE_SCOPES = ['all', 'selected'] as const;
+export type ResourceScope = (typeof RESOURCE_SCOPES)[number];
 
 export interface MissionConnection {
   readonly connectionId: string;
@@ -165,7 +172,8 @@ export interface MissionRecord {
 
 /** The store distinguishes a token retired by rotation from a revoked one; the shared
  *  domain (`MissionTokenStatus` there) only knows `active | revoked`. */
-export type MissionTokenStatus = 'active' | 'rotated' | 'revoked';
+export const MISSION_TOKEN_STATUSES = ['active', 'rotated', 'revoked'] as const;
+export type MissionTokenStatus = (typeof MISSION_TOKEN_STATUSES)[number];
 
 export interface MissionTokenRecord {
   readonly id: string;
@@ -203,11 +211,27 @@ export interface EventRecord {
   readonly details: Record<string, unknown> | null;
 }
 
-export interface NewEvent {
+/**
+ * An event to write: a kind and the details of that kind (`SessionEventDetails`,
+ * `@vaubaan/shared`), so a writer cannot rename a stored key. Every writer of the
+ * gateway builds a `NewEvent`. `EventRecord` stays loose on purpose: a stored row is
+ * read back through `parseEventDetails`.
+ */
+export type NewEvent = SessionEventDetails & {
+  readonly riskId?: RiskId | null;
+  readonly actorUserId?: string | null;
+};
+
+/**
+ * What the `events` table can hold, whatever the kind. Only the sessions repository
+ * accepts it, for its own tests that store free-form rows; a writer builds a `NewEvent`.
+ */
+export interface UntypedNewEvent {
   readonly kind: string;
   readonly riskId?: RiskId | null;
   readonly actorUserId?: string | null;
-  readonly details?: Record<string, unknown> | null;
+  /** A JSON object, stored as text. */
+  readonly details?: object | null;
 }
 
 // --- requests and approvals ---------------------------------------------------------
@@ -256,7 +280,8 @@ export interface OAuthClientRecord {
   readonly createdAt: Iso;
 }
 
-export type DelegationStatus = 'active' | 'revoked';
+export const DELEGATION_STATUSES = ['active', 'revoked'] as const;
+export type DelegationStatus = (typeof DELEGATION_STATUSES)[number];
 
 export interface DelegationRecord {
   readonly id: string;
@@ -269,12 +294,15 @@ export interface DelegationRecord {
   readonly revokedAt: Iso | null;
 }
 
+export const CODE_CHALLENGE_METHODS = ['S256'] as const;
+export type CodeChallengeMethod = (typeof CODE_CHALLENGE_METHODS)[number];
+
 export interface OAuthCodeRecord {
   readonly id: string;
   readonly delegationId: string;
   readonly redirectUri: string;
   readonly codeChallenge: string;
-  readonly codeChallengeMethod: 'S256';
+  readonly codeChallengeMethod: CodeChallengeMethod;
   readonly createdAt: Iso;
   readonly expiresAt: Iso;
   readonly consumedAt: Iso | null;

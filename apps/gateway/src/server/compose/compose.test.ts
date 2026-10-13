@@ -1,5 +1,5 @@
 import { PluginRegistry } from '@vaubaan/plugin-sdk';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ConfigError, loadInstanceConfig } from '../config';
 import { validEnv } from '../config/testing';
@@ -158,6 +158,74 @@ describe('checkProviderApps', () => {
     expect(() =>
       checkProviderApps(config, new PluginRegistry([fakePlugin()]), logger),
     ).not.toThrow();
+  });
+});
+
+describe('buildRoot when a step fails after the store is opened', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('closes the store handle and stops the timers it had started, then rethrows', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let closes = 0;
+    let sweepersStarted = false;
+    const deps: RootDeps = {
+      ...quiet,
+      openStore: async ({ encryptor, catalog }) => {
+        const store = openMemoryStore({ encryptor, catalog });
+        const failing = {
+          ...store,
+          audit: {
+            ...store.audit,
+            // The first retention purge runs after the request sweeper and the
+            // retention timer are started: from here on, the wiring fails.
+            purgeByRetention: async (...args: Parameters<typeof store.audit.purgeByRetention>) => {
+              sweepersStarted = true;
+              return store.audit.purgeByRetention(...args);
+            },
+          },
+          close: async () => {
+            closes += 1;
+            await store.close();
+          },
+        };
+        Object.defineProperty(failing, 'sessions', {
+          get() {
+            if (sweepersStarted) throw new Error('late wiring failure');
+            return store.sessions;
+          },
+        });
+        return failing;
+      },
+    };
+
+    await expect(buildRoot(deps)).rejects.toThrow('late wiring failure');
+    expect(sweepersStarted).toBe(true);
+    expect(closes).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('a root that builds stops its timers and closes the store once on close()', async () => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+    let closes = 0;
+    const root = await buildRoot({
+      ...quiet,
+      openStore: async ({ encryptor, catalog }) => {
+        const store = openMemoryStore({ encryptor, catalog });
+        return {
+          ...store,
+          close: async () => {
+            closes += 1;
+            await store.close();
+          },
+        };
+      },
+    });
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    await root.close();
+    expect(closes).toBe(1);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });
 

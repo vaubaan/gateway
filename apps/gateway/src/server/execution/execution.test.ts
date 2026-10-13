@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { API_KEY_SPEC, fixturePlugin } from '../connections/testing';
 import type { TokenVerification } from '../missions';
+import { UNKNOWN_CLIENT } from '../http/client-ip';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import type { MissionRecord, MissionTokenRecord } from '../store/types';
 import { ConnectionCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
@@ -23,7 +24,12 @@ import {
 } from './request-meta';
 import { citedRefs } from './resource-stage';
 import { depotPlugin } from './testing';
-import { TokenVerifier, VERIFY_ATTEMPTS_PER_WINDOW, verifiedTokenCacheKey } from './token-verifier';
+import {
+  TokenVerifier,
+  VERIFIED_TOKEN_TTL_SECONDS,
+  VERIFY_ATTEMPTS_PER_WINDOW,
+  verifiedTokenCacheKey,
+} from './token-verifier';
 import { callableProviders, callableTools } from './tools';
 
 describe('agent label', () => {
@@ -73,6 +79,23 @@ describe('client origin', () => {
     expect(of('2001:db8::1')).toBeNull();
     expect(of('2001:db9::1, 2001:db8::1')).toBe('2001:db9::1');
     expect(of('')).toBeNull();
+  });
+
+  it('reads a hop written with a port or in brackets (the one rule of http/client-ip)', () => {
+    const proxies = trustedProxyList([' 10.0.0.0/8 ', '::1']);
+    const of = (xff: string) =>
+      clientOriginOf(new Headers({ 'x-forwarded-for': xff }), { proxies, configured: true }).ip;
+    expect(of('203.0.113.7:4711, 10.0.0.2')).toBe('203.0.113.7');
+    expect(of('[2001:db9::1]:4711, [::1]:443')).toBe('2001:db9::1');
+    expect(of('  203.0.113.7  ,10.0.0.2:80 ')).toBe('203.0.113.7');
+  });
+
+  it('skips an invalid trusted_proxies entry instead of throwing or trusting more', () => {
+    const proxies = trustedProxyList(['10.0.0.0/99', '10.0.0.0/', '10.0.0.0/x', '10.0.0.1']);
+    const of = (xff: string) =>
+      clientOriginOf(new Headers({ 'x-forwarded-for': xff }), { proxies, configured: true }).ip;
+    expect(of('203.0.113.7, 10.0.0.1')).toBe('203.0.113.7');
+    expect(of('203.0.113.7, 10.0.0.2')).toBe('10.0.0.2');
   });
 });
 
@@ -196,6 +219,57 @@ describe('verified-token cache', () => {
     expect(throttled.outcome).toBe('throttled');
     expect(throttled.outcome === 'throttled' && throttled.retryAfterMs).toBeGreaterThan(0);
     expect(verifyToken).toHaveBeenCalledTimes(VERIFY_ATTEMPTS_PER_WINDOW);
+  });
+
+  it('slides the proof on every hit: an agent that keeps calling never verifies again', async () => {
+    let nowMs = Date.parse('2026-10-13T09:00:00.000Z');
+    const verifyToken = vi.fn(
+      async (): Promise<TokenVerification> => ({ outcome: 'verified', token, mission }),
+    );
+    const verifier = new TokenVerifier({
+      missions: { verifyToken },
+      tokens: { findTokenByPrefix: async () => ({ token, mission }) },
+      cache: new MemoryCacheClient({ now: () => nowMs }),
+      rateLimiter: new SlidingWindowRateLimiter({ now: () => nowMs }),
+    });
+    const twoThirdsOfTheTtl = ((VERIFIED_TOKEN_TTL_SECONDS * 2) / 3) * 1000;
+    for (let call = 0; call < 6; call++) {
+      expect((await verifier.verify(BEARER)).outcome).toBe('verified');
+      nowMs += twoThirdsOfTheTtl;
+    }
+    expect(verifyToken).toHaveBeenCalledTimes(1);
+
+    // Silent for longer than the TTL: the proof is gone, one more verification.
+    nowMs += VERIFIED_TOKEN_TTL_SECONDS * 1000;
+    expect((await verifier.verify(BEARER)).outcome).toBe('verified');
+    expect(verifyToken).toHaveBeenCalledTimes(2);
+  });
+
+  it('throttles per prefix AND client address: a flood of wrong secrets locks out only its sender', async () => {
+    const verifyToken = vi.fn(
+      async (bearer: string): Promise<TokenVerification> =>
+        bearer === BEARER ? { outcome: 'verified', token, mission } : { outcome: 'unknown' },
+    );
+    const verifier = new TokenVerifier({
+      missions: { verifyToken },
+      tokens: { findTokenByPrefix: async () => ({ token, mission }) },
+      cache: new MemoryCacheClient(),
+      rateLimiter: new SlidingWindowRateLimiter(),
+    });
+    const wrong = (i: number) => `vbn_live_AbCd1234_${String(i).padStart(32, 'x')}`;
+    const ATTACKER = '203.0.113.7';
+    for (let i = 0; i < VERIFY_ATTEMPTS_PER_WINDOW; i++) {
+      expect((await verifier.verify(wrong(i), ATTACKER)).outcome).toBe('unknown');
+    }
+    expect((await verifier.verify(wrong(99), ATTACKER)).outcome).toBe('throttled');
+
+    // The real agent, cold cache, another address: verified, not 429.
+    expect((await verifier.verify(BEARER, '198.51.100.9')).outcome).toBe('verified');
+    // From the flooding address itself the window is still closed...
+    expect((await verifier.verify(wrong(100), ATTACKER)).outcome).toBe('throttled');
+    // ...and callers whose address cannot be resolved share one window of their own.
+    expect((await verifier.verify(wrong(101))).outcome).toBe('unknown');
+    expect((await verifier.verify(wrong(102), UNKNOWN_CLIENT)).outcome).toBe('unknown');
   });
 
   it('does not look anything up for a bearer that is not a mission token', async () => {

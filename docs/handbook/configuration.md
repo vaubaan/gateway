@@ -58,13 +58,12 @@ apps/gateway/src/
       registry.ts               buildEmptyRegistry(), RegistryCatalogIndex, checkProviderApps()
       shipped-plugins.ts        SHIPPED_PLUGINS, buildShippedRegistry(): the plugins the image ships
       store.ts                  openEmbeddedStore(): the SQLite store from store.path
-      root.ts                   buildRoot(), getRoot() (globalThis), resetRoot(); wires session/, auth/, missions/,
+      root.ts                   buildRoot(), getRoot() (globalThis), resetRoot(); wires auth/, missions/,
                                 rate-limit/, provider-apps/, connections/, requests/, audit/, budget/ and execution/
       boot.ts                   bootOrExit(): exit 78 on ConfigError, 1 otherwise
       testing.ts                memoryStoreDeps, fakePlugin() — tests only
     http/
-      healthz.ts                healthResponse(root), healthHandler(getRoot)
-    session/                    SqliteSessionStore — the SessionStore port over web_sessions (handbook authentication)
+      healthz.ts                healthResponse(deps: HealthDeps), healthHandler(getDeps) — the root satisfies HealthDeps
     auth/                       OIDC relying party, web session, bootstrap, admin rule (handbook authentication)
     provider-apps/              the company's app per provider: file or Admin page (handbook connections)
     connections/                connect flows, resources, credential broker (handbook connections)
@@ -113,8 +112,9 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      `store opened` carries `kind`, `path` and `schema_version`. A store
      that cannot open fails the boot with a message naming `store.path` and
      `VAUBAAN_STORE_PATH` (exit 1);
-   - the web `SessionStore`: `SqliteSessionStore` over the store's connection
-     (table `web_sessions`) unless `RootDeps.sessions` injects another one,
+   - the web `SessionStore`: the store's own repository `store.webSessions`
+     (table `web_sessions`, rows keyed by the SHA-256 of the session id)
+     unless `RootDeps.sessions` injects another one,
      then `createAuthModule()` → `root.auth` (`sessions`, `idp`,
      `bootstrap`, `relyingParties`, `authenticator`, `handlers`; handbook
      [authentication](authentication.md)), with `RootDeps.oidc` for the
@@ -150,6 +150,17 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      for the resolver that lets the door refuse delegated tokens by kind;
    - the boot line `composition root ready` (`store`, `schema_version`,
      `plugins`, `build`) closes the sequence.
+
+   `buildRoot()` itself is the short sequence above; the configuration line
+   is `logConfigurationSummary()` and everything from the web `SessionStore`
+   to the execution module is `wireModules()`. **A failure after the store is
+   opened releases what was opened**: the store handle and each timer are
+   registered as they open (`opened`), and a step that throws runs them in
+   reverse (retention timer, request sweeper, then `store.close()`) before
+   the error is rethrown. `getRoot()` retries a failed build, so a retry never
+   finds a second handle on the same SQLite file. `root.close()` runs the same
+   list.
+
 5. On `ConfigError`, `bootOrExit()` prints the error to stderr with a
    pointer to `deploy/config/` and exits with code **78** (`EX_CONFIG`);
    any other failure exits with 1. Next waits for `register()` before
@@ -160,7 +171,12 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
 `degraded` when the ping fails, 503 `unavailable` (with `reason`) when the
 root cannot be built. `version` and `commit` are frozen into the bundle by `next.config.ts`
 (`NEXT_PUBLIC_GATEWAY_VERSION`, `NEXT_PUBLIC_COMMIT_SHA`; `dev` outside a
-build).
+build) and read by `config/build-info.ts` (`buildInfoFromEnv()`), like every
+other read of the process environment. The handler does not take the root:
+`healthResponse(deps: HealthDeps)` needs the store's liveness (`kind`,
+`ping`), a logger, the build stamps, `startedAt` and an optional `now` (the
+wall clock by default, a fixed instant in tests). `GatewayRoot` satisfies
+`HealthDeps`, so the route passes `getRoot`.
 
 ## Framework
 
@@ -218,7 +234,11 @@ build).
 ## Configuration keys
 
 Both sources map to the same tree; the **file wins over the environment**
-key by key. The table below is `KEYS` in `sources.ts`; `(secret)` keys also
+key by key, silently; `deploy/config/gateway.example.yaml` therefore ships
+with every key commented out, so a copy of it overrides nothing until a key
+is uncommented (`load.test.ts` holds it to that: the example parses to an
+empty document, and loaded as `VAUBAAN_CONFIG_FILE` next to a valid
+environment every value still comes from the environment). The table below is `KEYS` in `sources.ts`; `(secret)` keys also
 accept `<VAR>_FILE`.
 
 | YAML path                       | Environment variable                   | Rule                                                                                                               |
@@ -313,7 +333,10 @@ shim `lib/crypto/index.ts` and the v4 `lib/` code that read their own
 (`time`, `level`, `msg`, bindings, fields) to stdout, errors to stderr. The
 whole line goes through the redactor: `vbn_(live|test)_<prefix8>_<secret32>`
 becomes `vbn_live_<prefix8>_[redacted]`, every configured secret (also in
-its JSON-escaped form, for PEM keys) becomes `[redacted]`. `child()` adds
+its JSON-escaped form, for PEM keys) becomes `[redacted]`. A master key is
+registered in every text form the loader accepts (standard base64 with and
+without padding, base64url), so the form the operator configured is the one
+redacted. `child()` adds
 bindings. `silentLogger` is for tests.
 
 ## Ports and their single-process implementations
@@ -324,7 +347,7 @@ bindings. `silentLogger` is for tests.
 | `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS` (`compose/shipped-plugins.ts`)                                                                                                         | same (static)                                                            |
 | `RateLimiter`    | `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)): the same instance holds the budget's windows; `MemoryRateLimiter` remains for tests | one Redis sorted set per key                                             |
 | `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded): verified-token proofs and the plugins' derived upstream credentials ([execution-door](execution-door.md))             | Redis for the proofs; upstream credentials stay per replica or encrypted |
-| `SessionStore`   | `SqliteSessionStore` (`server/session/`, table `web_sessions`, migration 0003); `MemorySessionStore` remains for unit tests                                                                    | Redis, or Postgres rows behind the same port                             |
+| `SessionStore`   | `store.webSessions` (`server/store/repositories/web-sessions.ts`, table `web_sessions`, migration 0003, rows keyed by SHA-256 of the id); `MemorySessionStore` remains for unit tests          | Redis, or Postgres rows behind the same port                             |
 
 `GatewayRoot.store` is the full store with its repositories
 (`StoreLiveness` of `ports.ts` is only the slice `/healthz` and `close()`
@@ -355,8 +378,10 @@ failures, https rule, precedence, admin rule, secret references, provider
 env parsing, key rotation; crypto: round trip, AD mismatch, tampering,
 `key_version`; logging: redaction; compose: the store receives the
 encryptor and a registry-backed catalog index, provider-app check as a
-warning then as a `ConfigError`, `getRoot()` memoisation, `bootOrExit()`
-exit codes, in-memory ports; http: `/healthz` states), the integration
+warning then as a `ConfigError`, a failure after the store is opened closes
+the handle and stops the timers, `close()` does the same once, `getRoot()` memoisation, `bootOrExit()`
+exit codes, in-memory ports; http: `/healthz` states, and `healthResponse` on
+plain `HealthDeps` with a fixed clock), the integration
 test `apps/gateway/tests/integration/compose/boot.test.ts` (the production
 wiring against a temporary SQLite file: database created, migrations
 applied, ping, `/healthz` reports `sqlite`, secrets sealed with the
@@ -366,7 +391,13 @@ unreadable `store.path` named in the exit
 message) plus
 the structural test `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`
 (no literal URL, secret or project ref in the v5 perimeter except
-`telemetry-default.ts` and `deploy/config/*.example*`) and
+`telemetry-default.ts` and `deploy/config/*.example*`),
+`apps/gateway/tests/unit/structural/example-config-providers.test.ts` (the
+`providers:` block of the example YAML and the `VAUBAAN_PROVIDER_*` lines of
+`.env.example`, commented or not, checked against the shipped plugins: no
+unknown provider, none that takes no app, no undeclared field, every
+required field shown, every non-experimental provider that takes an app
+present, the same providers in both files) and
 `apps/gateway/tests/integration/standalone-native-addons.test.ts` (skipped
 without a build: the `/healthz` route trace lists the `argon2` and
 `better-sqlite3` binaries, and both load from the standalone

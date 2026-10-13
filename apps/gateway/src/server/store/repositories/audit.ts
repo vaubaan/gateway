@@ -8,9 +8,7 @@
  */
 
 import type {
-  AdminAct,
   AdminAuditEntry,
-  AdminObjectType,
   AuditDecision,
   AuditEntry,
   CallAuditEntry,
@@ -31,9 +29,9 @@ import {
   toJson,
   type RepoContext,
 } from './context.ts';
+import { ADMIN_ACTS, ADMIN_OBJECT_TYPES, AUDIT_DECISIONS, AUDIT_KINDS } from './enums.ts';
 
 export const DEFAULT_AUDIT_RETENTION_DAYS = 90;
-const AUDIT_DECISIONS = ['allowed', 'refused'] as const satisfies readonly AuditDecision[];
 
 /** One `audit_risks` row: a risk's place in the call entry. */
 export interface AuditRiskRow {
@@ -265,6 +263,15 @@ function parseSlices(text: string | null): Slice[] {
   return value;
 }
 
+function riskToRecord(row: RiskRow): AuditRiskRow {
+  return {
+    riskId: row.risk_id,
+    accepted: row.accepted === 1,
+    touched: row.touched === 1,
+    remaining: row.remaining,
+  };
+}
+
 /** One row per risk in the accepted snapshot or touched by the call. */
 function riskRows(e: CallAuditEntry): AuditRiskRow[] {
   const accepted = new Set(e.accepted_risks_snapshot);
@@ -295,10 +302,11 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
 
   const { scope } = query;
   const owners = principalPredicate(scope.connectionOwners, 'owner_user_id', 'owner_group_id');
-  const ownMissions = 'SELECT id FROM missions WHERE creator_user_id = ?';
+  // No creator in the scope: an always-false subquery, as `principalPredicate` does for
+  // an empty owner list, rather than a placeholder value that happens to match nothing.
+  const creator = scope.missionCreatorUserId === null ? [] : [scope.missionCreatorUserId];
+  const ownMissions = `SELECT id FROM missions WHERE ${creator.length ? 'creator_user_id = ?' : '1 = 0'}`;
   const ownConnections = `SELECT id FROM connections WHERE ${owners.sql}`;
-  const creator = scope.missionCreatorUserId ?? '';
-  // A null creator matches no mission: `creator_user_id` is NOT NULL and never ''.
   add(
     `(
       (kind = 'call' AND (mission_id IN (${ownMissions}) OR connection_id IN (${ownConnections})))
@@ -309,11 +317,11 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
         OR (object_type = 'request' AND object_id IN (${REQUESTS_OF_MISSION} IN (${ownMissions})))
       ))
     )`,
-    creator,
+    ...creator,
     ...owners.params,
-    creator,
+    ...creator,
     ...owners.params,
-    creator,
+    ...creator,
   );
 
   if (query.missionId) {
@@ -396,20 +404,25 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
   );
 
   function toRecord(row: AuditRow): AuditRecord {
-    return row.kind === 'admin' ? toAdminRecord(row) : toCallRecord(row);
+    const kind = parseEnum(AUDIT_KINDS, row.kind, 'audit.kind');
+    return kind === 'admin' ? toAdminRecord(row) : toCallRecord(row);
   }
 
   function toAdminRecord(row: AuditRow): AuditRecord {
-    // `act` and `object_type` have no schema CHECK: gateway-core's unions are the only
-    // definition, so the store trusts what it wrote (the writer is typed).
+    // `act` and `object_type` have no schema CHECK: the lists written from gateway-core's
+    // unions are the only guard, so a value the code does not know is refused here.
     return {
       id: row.id,
       kind: 'admin',
       ts: row.ts,
       user_id: requireColumn(row.user_id, 'audit.user_id'),
-      act: requireColumn(row.act, 'audit.act') as AdminAct,
+      act: parseEnum(ADMIN_ACTS, requireColumn(row.act, 'audit.act'), 'audit.act'),
       object: {
-        type: requireColumn(row.object_type, 'audit.object_type') as AdminObjectType,
+        type: parseEnum(
+          ADMIN_OBJECT_TYPES,
+          requireColumn(row.object_type, 'audit.object_type'),
+          'audit.object_type',
+        ),
         id: requireColumn(row.object_id, 'audit.object_id'),
       },
       before: parseJson(row.before_json),
@@ -419,12 +432,8 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
   }
 
   function toCallRecord(row: AuditRow): AuditRecord {
-    const risks: AuditRiskRow[] = risksOf.all(row.id).map((r) => ({
-      riskId: r.risk_id,
-      accepted: r.accepted === 1,
-      touched: r.touched === 1,
-      remaining: r.remaining,
-    }));
+    // perf: one query per call entry; a Postgres port reads a page's risks in one statement.
+    const risks = risksOf.all(row.id).map(riskToRecord);
     const remaining = risks.filter((r) => r.remaining !== null);
     const refusalCode = row.refusal_code;
     if (refusalCode !== null && !isRefusalCode(refusalCode)) {

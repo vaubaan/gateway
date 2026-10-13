@@ -11,6 +11,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth';
 import { OwnerAuthorityService, type AuthorityService } from '../authority';
+import type { SessionService } from '../budget';
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
@@ -35,6 +36,8 @@ export interface MissionsModuleDeps {
   readonly authority?: AuthorityService;
   readonly clock?: Clock;
   readonly mint?: TokenMinter;
+  /** The budget's state read; defaults to the same read over `store.sessions`. */
+  readonly budget?: Pick<SessionService, 'stateOf'>;
 }
 
 export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
@@ -53,6 +56,7 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
     clock: deps.clock ?? systemClock,
     logger: deps.logger.child({ component: 'missions' }),
     mint: deps.mint,
+    budget: deps.budget,
   });
   const handlers = createMissionHandlers({
     publicUrl: deps.config.publicUrl,
@@ -91,15 +95,17 @@ export {
   type MissionDetail,
   type MissionDetailConnection,
   type MissionDetailRisk,
+  type MissionIssuedAudit,
   type MissionOverview,
   type MissionServiceDeps,
   type RevealedToken,
   type RevokeResult,
   type RotateResult,
   type TokenVerification,
+  type VerifiedToken,
 } from './mission-service';
 export type * from './model';
-export { PREVIEW_ISSUE_CODES, SEVERITY_LEVELS } from './model';
+export { PREVIEW_ISSUE_CODES, PREVIEW_NOTICE_CODES, SEVERITY_LEVELS } from './model';
 export { budgetProblem, previewConnection, previewDraft, uncoveredOf } from './preview';
 export { summarize } from './summary';
 export {

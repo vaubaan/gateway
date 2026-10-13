@@ -7,6 +7,11 @@
  * strings (Keycloak, Okta, Entra ID), a delimited string (space, comma or
  * semicolon separated, some SAML bridges), or absent (Google, which has no
  * groups claim).
+ *
+ * An email the IdP itself marks as unverified (`email_verified: false`) is
+ * refused: the address decides the admin rule and the domain filter, so it
+ * must not rest on a claim the IdP calls unproven. An absent claim is
+ * accepted (many IdPs never send it).
  */
 import type { IdpClaimMapping } from '../config/types';
 import { LoginError } from './errors';
@@ -24,6 +29,14 @@ export interface IdentityClaims {
 }
 
 const GROUP_DELIMITERS = /[\s,;]+/;
+/** The standard OIDC claim about the `email` claim (OpenID Connect Core §5.1). */
+const EMAIL_VERIFIED_CLAIM = 'email_verified';
+
+/** True for an explicit negative, in the boolean form or the string form some IdPs send. */
+function saysUnverified(value: unknown): boolean {
+  if (value === false || value === 0) return true;
+  return typeof value === 'string' && value.trim().toLowerCase() === 'false';
+}
 
 /** Reads the groups claim in any of its shapes; never throws. */
 export function parseGroupsClaim(value: unknown): string[] {
@@ -55,6 +68,12 @@ export function mapClaims(raw: RawClaims, mapping: IdpClaimMapping): IdentityCla
     throw new LoginError(
       'claims-missing',
       `claim(s) ${missing.join(', ')} missing or empty; check idp.claims in the instance configuration`,
+    );
+  }
+  if (saysUnverified(raw[EMAIL_VERIFIED_CLAIM])) {
+    throw new LoginError(
+      'email-not-verified',
+      `the identity provider marks the email of subject '${subject}' as unverified ('${EMAIL_VERIFIED_CLAIM}' is false)`,
     );
   }
   return {

@@ -7,6 +7,7 @@
 import type { AdminRule } from '../config/types';
 import type { Logger } from '../logging';
 import type { Store } from '../store';
+import { systemClock, toIso, type Clock } from '../store/clock';
 import type { GroupRecord, UserRecord } from '../store/types';
 import { isOperator } from './admin-rule';
 import type { BootstrapService } from './bootstrap';
@@ -28,6 +29,7 @@ export interface LoginDeps {
   readonly adminRule: AdminRule;
   readonly bootstrap: BootstrapService;
   readonly logger: Logger;
+  readonly clock?: Clock;
 }
 
 /** The user's authority right now, from the store (never from the session). */
@@ -44,9 +46,11 @@ export async function currentAuthority(
 }
 
 /**
- * Replaces the user's IdP-sourced memberships with the claim list. Local groups
- * (operator-kept) are never touched: a claim whose name collides with a local
- * group is skipped with a warning rather than silently granting it.
+ * Replaces the user's IdP-sourced memberships with the claim list, in one
+ * store transaction: a membership change is an authorization change, applied
+ * whole or not at all. Local groups (operator-kept) are never touched: a claim
+ * whose name collides with a local group is skipped with a warning rather
+ * than silently granting it.
  */
 export async function syncIdpGroups(
   store: Store,
@@ -54,21 +58,9 @@ export async function syncIdpGroups(
   claimedNames: readonly string[],
   logger: Logger,
 ): Promise<void> {
-  const current = await store.groups.groupsOf(userId);
-  const keep = new Set<string>();
-  for (const name of claimedNames) {
-    const group = await store.groups.getOrCreate(name, 'idp');
-    if (group.source !== 'idp') {
-      logger.warn('IdP group claim collides with a local group; claim ignored', { group: name });
-      continue;
-    }
-    await store.groups.addMember(group.id, userId);
-    keep.add(group.id);
-  }
-  for (const group of current) {
-    if (group.source === 'idp' && !keep.has(group.id)) {
-      await store.groups.removeMember(group.id, userId);
-    }
+  const { skipped } = await store.groups.syncIdpMemberships(userId, claimedNames);
+  for (const name of skipped) {
+    logger.warn('IdP group claim collides with a local group; claim ignored', { group: name });
   }
 }
 
@@ -90,7 +82,8 @@ export async function completeLogin(
     bootstrapRevoked = true;
     await deps.store.auditWriter.write({
       kind: 'admin',
-      ts: revoked.status === 'revoked' ? revoked.revokedAt : new Date().toISOString(),
+      ts:
+        revoked.status === 'revoked' ? revoked.revokedAt : toIso((deps.clock ?? systemClock).now()),
       user_id: user.id,
       act: 'config-changed',
       object: { type: 'instance-config', id: 'bootstrap' },

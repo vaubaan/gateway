@@ -5,6 +5,7 @@
 import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
+import { LocalDate } from '@/components/LocalDate';
 import styles from '@/components/auth/auth.module.css';
 import { Banner, Button, Card, CardBody, Field, Input } from '@/components/ui';
 import { currentPrincipal } from '@/lib/auth/session';
@@ -44,9 +45,17 @@ export default async function BootstrapPage({ searchParams }: Props) {
             <form method="post" action="/api/auth/bootstrap">
               <Field
                 label="Bootstrap token"
+                htmlFor="bootstrap-token"
                 hint="VAUBAAN_BOOTSTRAP_TOKEN or bootstrap_token in gateway.yaml"
               >
-                <Input type="password" name="token" required autoComplete="off" minLength={32} />
+                <Input
+                  id="bootstrap-token"
+                  type="password"
+                  name="token"
+                  required
+                  autoComplete="off"
+                  minLength={32}
+                />
               </Field>
               <Button type="submit" variant="primary">
                 Sign in as operator
@@ -55,9 +64,13 @@ export default async function BootstrapPage({ searchParams }: Props) {
           ) : (
             <>
               <p>
-                {state.status === 'revoked'
-                  ? `The bootstrap token was revoked on ${state.revokedAt}.`
-                  : 'This instance has no bootstrap token: the identity provider is set in its configuration.'}
+                {state.status === 'revoked' ? (
+                  <>
+                    The bootstrap token was revoked on <LocalDate ts={state.revokedAt} />.
+                  </>
+                ) : (
+                  'This instance has no bootstrap token: the identity provider is set in its configuration.'
+                )}
               </p>
               <p className={styles.muted}>
                 Operators now <Link href="/login">sign in through the identity provider</Link>.

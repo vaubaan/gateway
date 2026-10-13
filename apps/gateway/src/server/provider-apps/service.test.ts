@@ -136,6 +136,56 @@ describe('ProviderAppsService', () => {
     });
   });
 
+  it('saves the fields of a provider in one transaction: a failed write keeps the previous app whole', async () => {
+    const { service, store } = setup();
+    await service.save('verco', {
+      app_id: '42',
+      private_key: 'PEM-1',
+      app_slug: 'slug',
+      client_id: 'Iv1.first',
+      client_secret: 'first-secret',
+    });
+    const before = await service.hostAppConfig('verco');
+    store.db.exec(
+      `CREATE TRIGGER refuse_client_secret BEFORE INSERT ON instance_config
+       WHEN NEW.key = '${providerAppKey('verco', 'client_secret')}'
+       BEGIN SELECT RAISE(ABORT, 'disk full'); END`,
+    );
+    await expect(
+      service.save('verco', {
+        app_id: '43',
+        private_key: 'PEM-2',
+        app_slug: 'other',
+        client_id: 'Iv1.second',
+        client_secret: 'second-secret',
+      }),
+    ).rejects.toThrow(/disk full/);
+    // Not the new app id with the old client secret, nor any other mix.
+    expect(await service.hostAppConfig('verco')).toEqual(before);
+  });
+
+  it('clears a provider app in one transaction', async () => {
+    const { service, store } = setup();
+    await service.save('appco', { app_id: '42', private_key: 'PEM', app_slug: 'slug' });
+    await service.setAcceptUnverifiedInstallations('appco', true);
+    store.db.exec(
+      `CREATE TRIGGER refuse_flag_removal BEFORE DELETE ON instance_config
+       WHEN OLD.key = '${acceptUnverifiedKey('appco')}'
+       BEGIN SELECT RAISE(ABORT, 'disk full'); END`,
+    );
+    await expect(service.clear('appco')).rejects.toThrow(/disk full/);
+    expect(await service.status('appco')).toMatchObject({
+      configured: true,
+      installVerification: 'unverified-accepted',
+    });
+    store.db.exec('DROP TRIGGER refuse_flag_removal');
+    await service.clear('appco');
+    expect(await service.status('appco')).toMatchObject({
+      source: 'none',
+      installVerification: 'unverified-refused',
+    });
+  });
+
   it('reports every problem at once and writes nothing', async () => {
     const { service } = setup();
     const err = await service

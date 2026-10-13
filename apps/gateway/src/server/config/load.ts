@@ -5,9 +5,8 @@
  * over environment variables, key by key. Validation collects every problem
  * and throws one `ConfigError` naming each YAML path and its variable(s).
  */
-import { isIP } from 'node:net';
-
 import { KEY_BYTES } from '../crypto/aead';
+import { isTrustedProxyEntry } from '../http/client-ip';
 import { parseDuration } from './duration';
 import { ConfigError, IssueList } from './errors';
 import { type EnvSource, type FileReader, defaultFileReader } from './secret-refs';
@@ -250,7 +249,7 @@ function readPublicUrl(r: Reader): URL | undefined {
 function readTrustedProxies(r: Reader): string[] {
   const trustedProxies = r.stringList('trusted_proxies');
   for (const entry of trustedProxies) {
-    if (!isIpOrCidr(entry)) {
+    if (!isTrustedProxyEntry(entry)) {
       r.issues.add(
         'trusted_proxies',
         `"${entry}" is neither an IP address nor a CIDR block`,
@@ -420,17 +419,6 @@ function readProviders(r: Reader): ReadonlyMap<string, ProviderAppConfig> {
 /* ------------------------------------------------------------------------ */
 /* Helpers                                                                   */
 /* ------------------------------------------------------------------------ */
-
-function isIpOrCidr(entry: string): boolean {
-  const slash = entry.indexOf('/');
-  const address = slash === -1 ? entry : entry.slice(0, slash);
-  const family = isIP(address);
-  if (family === 0) return false;
-  if (slash === -1) return true;
-  const prefix = Number(entry.slice(slash + 1));
-  const max = family === 4 ? 32 : 128;
-  return Number.isInteger(prefix) && prefix >= 0 && prefix <= max;
-}
 
 function typeName(value: unknown): string {
   if (value === null) return 'null';

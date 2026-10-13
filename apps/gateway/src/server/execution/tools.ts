@@ -17,7 +17,7 @@
  */
 import type { MissionContext } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
-import type { McpToolDeclaration, RiskId } from '@vaubaan/shared';
+import type { ConnectionStatus, Gate, McpToolDeclaration, RiskId } from '@vaubaan/shared';
 import { parseRiskId } from '@vaubaan/shared/risk-id';
 
 import type { CurrentPeriod, MissionState } from '../budget';
@@ -61,7 +61,7 @@ export interface CatalogConnection {
   readonly id: string;
   readonly provider: string;
   readonly name: string;
-  readonly status: string;
+  readonly status: ConnectionStatus;
   readonly resources: readonly CatalogResource[];
 }
 
@@ -71,7 +71,7 @@ export interface CatalogBudgetLine {
   readonly consumed: number;
   readonly remaining: number;
   readonly rate_limit: { readonly max: number; readonly window_seconds: number };
-  readonly gate: string;
+  readonly gate: Gate;
 }
 
 export interface MissionCatalog {

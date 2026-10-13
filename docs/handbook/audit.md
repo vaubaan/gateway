@@ -103,6 +103,16 @@ following pages, and entries with the same timestamp are neither repeated nor sk
 - An audit entry never holds arguments: `arguments_hash` is
   `fingerprintArguments(args)` (sha256 of the canonical JSON, 64 hex — the fingerprint that
   also binds approvals) and nothing else is stored (gateway-core).
+- `upstream_error` never holds the provider's text. A provider error can echo the call's
+  input (a SQL fragment, an object id) and plugins quote the start of the provider's body
+  in the error they throw, so the entry stores a summary the host builds instead, cut at
+  `UPSTREAM_ERROR_SUMMARY_MAX_LENGTH` (200) characters. It is one of:
+  `<provider id> answered HTTP <status> (<error class>)` when the error carries a status,
+  `<provider id> call failed (<error class>)` when it does not, or
+  `connection-unavailable: <connection status>` when the credential was rejected for good.
+  The error class is the error's `name` when it is identifier-shaped, `Error` otherwise.
+  The provider's message goes to the agent that made the call, in the tool result, and is
+  stored nowhere ([execution door](execution-door.md), "Upstream stage").
 - `AuditCallView` / `AuditAdminView` are explicit field lists built by `toView`; nothing
   else of a record reaches a page.
 - `before` / `after` of an administrative entry pass through `withoutArguments`, which
@@ -110,8 +120,13 @@ following pages, and entries with the same timestamp are neither repeated nor sk
   depth, by `[not shown]` — defence in depth against a future writer's mistake.
 - The session timeline is built by `eventView`, which surfaces `tool`, `refusal_code`,
   `agent_label`, `remaining`, `risk_ids`, `request_id`, `request_kind`, `token_prefix`,
-  `credits`, `dimension`, `expires_at` and ignores the rest of the event's free-form
-  `details`.
+  `credits`, `dimension`, `expires_at` and ignores the rest of the event's `details`.
+  It reads them through `parseEventDetails` (`@vaubaan/shared`, see
+  [budget and sessions](budget-and-sessions.md)): each field comes from the kinds that
+  carry it, and an event whose stored details do not have the shape of its kind is listed
+  with its kind, time, risk and actor, every detail field `null`.
+- Open requests are those `isDecidable` (`server/requests/state.ts`) says are still open
+  as of now: the same rule as the inbox, not a second comparison of dates.
 - Open requests are listed **by link** to the creator's view of the request
   (`inboxRequestPath(id)` of `server/requests/url.ts` = `/requests/<id>`): kind, risk,
   opened, expires. The sealed arguments of an approval request stay with the requests

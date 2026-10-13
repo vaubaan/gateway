@@ -236,7 +236,9 @@ describe('evaluateCallForToken', () => {
     });
     expect(labelled.kind).toBe('allow');
 
-    // An explicit resolver replaces the default one.
+    // An explicit resolver replaces the default one. One that knows no
+    // environment leaves the env-scoped risk unqualified, where no mission
+    // can hold it : the call is refused.
     const unqualified = evaluateCallForToken({
       tool: 'supabase__bulk_update',
       args: {},
@@ -250,6 +252,44 @@ describe('evaluateCallForToken', () => {
     if (unqualified.kind === 'deny') {
       expect(unqualified.missing_risks).toEqual(['supabase.bulk-row-write']);
     }
+  });
+
+  test("`envResolver: 'unqualified'` names the mode without a resolver", () => {
+    const envCatalog = indexCatalog({
+      provider: 'supabase',
+      risks: [{ ...catalog.risks[2]!, acceptable_in_envs: ['staging', 'prod'] }],
+    });
+    const staging: Resource = {
+      provider: 'supabase',
+      ref: 'prj_x',
+      env: 'staging',
+      displayName: 'staging',
+    };
+    const verdict = evaluateCallForToken({
+      tool: 'supabase__bulk_update',
+      args: {},
+      resources: [staging],
+      token: { id: 'tok_u', accepted_risks: ['supabase.bulk-row-write'], denied_risks: [] },
+      adapter: makeAdapter('bulk'),
+      catalog: envCatalog,
+      envResolver: 'unqualified',
+    });
+    expect(verdict.kind).toBe('allow');
+    if (verdict.kind === 'allow') {
+      expect(verdict.risks_touched).toEqual(['supabase.bulk-row-write']);
+    }
+  });
+
+  test('`denied_risks` may be left out : a v5 mission carries none', () => {
+    const verdict = evaluateCallForToken({
+      tool: 'supabase__select',
+      args: {},
+      resources,
+      token: { id: 'tok3', accepted_risks: ['supabase.read-data'] },
+      adapter: makeAdapter('read'),
+      catalog: indexed,
+    });
+    expect(verdict.kind).toBe('allow');
   });
 
   test('classify-denied surfaces the adapter denial reason', () => {

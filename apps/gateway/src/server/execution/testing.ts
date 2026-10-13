@@ -325,7 +325,7 @@ export async function executionInstance(
     displayName: 'Depot main',
     credential: serializeSecret(depotSecret()),
   });
-  const resources = await root.store.connections.replaceResources(
+  const resources = await root.store.connections.syncDiscoveredResources(
     connection.id,
     (options.spaces ?? DEFAULT_SPACES).map((s) => ({
       ref: s.ref,

@@ -23,6 +23,18 @@ describe('MemoryCacheClient', () => {
     expect(cache.size).toBe(0);
   });
 
+  test('a TTL that is not a positive, finite number caches nothing', async () => {
+    // `NaN` would make an entry that never expires (`NaN <= now` is false) :
+    // the door caches verified mission contexts here.
+    const cache = new MemoryCacheClient({ now: clock().now });
+    for (const ttl of [NaN, Infinity, 0, -5]) {
+      await cache.set('k', 'fresh', 10);
+      await cache.set('k', 'stale-forever', ttl);
+      expect(await cache.get('k')).toBeNull();
+    }
+    expect(cache.size).toBe(0);
+  });
+
   test('del removes the key', async () => {
     const cache = new MemoryCacheClient();
     await cache.set('k', 1, 60);

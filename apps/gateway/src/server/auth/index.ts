@@ -66,7 +66,7 @@ export function createAuthModule(deps: AuthModuleDeps): AuthModule {
     bootstrap,
     relyingParties,
     authenticator,
-    login: { store: deps.store, adminRule: deps.config.admin, bootstrap, logger },
+    login: { store: deps.store, adminRule: deps.config.admin, bootstrap, logger, clock },
     audit: deps.store.auditWriter,
     logger,
     clock,
@@ -101,7 +101,21 @@ export {
   type LoginErrorCode,
 } from './errors';
 export {
+  guardMutation,
+  guardSession,
+  OPERATOR_REFUSALS,
+  refusalResponse,
+  type GuardDeps,
+  type GuardRefusal,
+  type GuardRefusalReason,
+  type GuardResult,
+  type GuardRole,
+  type RefusalWording,
+  type SessionGuardDeps,
+} from './guard';
+export {
   ADMIN_PAGE,
+  adminSignInPage,
   BOOTSTRAP_PAGE,
   IDP_PAGE,
   LOGIN_PAGE,
@@ -135,6 +149,8 @@ export {
   type RelyingPartyFactory,
 } from './relying-party';
 export {
+  isPendingLogin,
+  isWebSessionRecord,
   LOGIN_TTL_MS,
   SESSION_TTL_MS,
   SessionService,

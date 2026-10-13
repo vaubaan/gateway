@@ -1,4 +1,4 @@
-import type { CSSProperties, HTMLAttributes } from 'react';
+import type { HTMLAttributes } from 'react';
 
 export function Container({ children, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return (
@@ -19,22 +19,4 @@ export function Stack({
       {children}
     </div>
   );
-}
-
-export function Row({
-  gap = 'var(--space-3)',
-  align = 'center',
-  children,
-  style,
-  ...rest
-}: HTMLAttributes<HTMLDivElement> & { gap?: string; align?: CSSProperties['alignItems'] }) {
-  return (
-    <div {...rest} style={{ display: 'flex', gap, alignItems: align, ...style }}>
-      {children}
-    </div>
-  );
-}
-
-export function Spacer({ size = 'var(--space-4)' }: { size?: string }) {
-  return <div style={{ height: size }} />;
 }

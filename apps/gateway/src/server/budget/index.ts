@@ -33,7 +33,25 @@ export {
   type MissionStateInput,
   type PeriodCounter,
 } from './mission-state.ts';
-export { budgetMissionOf, policyEntryOf, sessionCounterOf, type BudgetMission } from './mapping.ts';
+export {
+  budgetMissionOf,
+  budgetPeriodOf,
+  isStale,
+  periodOf,
+  policyEntryOf,
+  policyEntryRecordOf,
+  sessionCounterOf,
+  statedPeriodOf,
+  type BudgetMission,
+  type StatedPeriod,
+} from './mapping.ts';
+export {
+  missionUsageReader,
+  readMissionUsage,
+  type MissionUsage,
+  type MissionUsageReader,
+  type MissionUsageSessions,
+} from './mission-usage.ts';
 export {
   SessionService,
   type RecordCallAllowed,

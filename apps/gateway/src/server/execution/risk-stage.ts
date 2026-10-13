@@ -26,12 +26,8 @@ export function createRiskStage(deps: { readonly registry: PluginRegistry }): Ri
         tool: call.tool,
         args: call.args,
         resources: ctx.resources.filter((r) => r.connection_id === target.connection.id),
-        token: {
-          id: ctx.token.id,
-          accepted_risks: acceptedRisksOf(ctx),
-          // v5 missions carry no explicit denies: the policy is the enumeration.
-          denied_risks: [],
-        },
+        // v5 missions carry no explicit denies: the policy is the enumeration.
+        token: { id: ctx.token.id, accepted_risks: acceptedRisksOf(ctx) },
         adapter: registered.plugin,
         catalog: registered.catalog,
       });

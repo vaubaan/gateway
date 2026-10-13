@@ -339,13 +339,16 @@ describe('eventView', () => {
         id: 'e-1',
         sessionId: 's-1',
         ts: '2026-10-13T09:00:00.000Z',
-        kind: 'approval',
+        kind: 'call-allowed',
         riskId: MERGE,
         actorUserId: 'u-1',
         details: {
           tool: 'github__merge_pull_request',
-          risk_ids: [MERGE, 7],
-          remaining: { [MERGE]: 1, bogus: 'x' },
+          fingerprint: 'sha256:abc',
+          risk_ids: [MERGE],
+          agent_label: null,
+          remaining: { [MERGE]: 1 },
+          approval_ids: ['a-1'],
           arguments: { secret: ARGUMENT_MARKER },
           args: ARGUMENT_MARKER,
           anything_else: ARGUMENT_MARKER,
@@ -356,7 +359,7 @@ describe('eventView', () => {
     expect(shown).toEqual({
       id: 'e-1',
       ts: '2026-10-13T09:00:00.000Z',
-      kind: 'approval',
+      kind: 'call-allowed',
       risk_ids: [MERGE],
       actor_email: 'ada@example.com',
       tool: 'github__merge_pull_request',
@@ -388,5 +391,43 @@ describe('eventView', () => {
         null,
       ),
     ).toMatchObject({ risk_ids: [], tool: null, remaining: null });
+  });
+
+  it('shows an event with malformed details without detail, and does not throw', () => {
+    const shown = eventView(
+      {
+        id: 'e-3',
+        sessionId: 's-1',
+        ts: '2026-10-13T09:00:00.000Z',
+        kind: 'call-allowed',
+        riskId: MERGE,
+        actorUserId: 'u-1',
+        // A list with a non-text entry, a count that is not a number, missing keys.
+        details: {
+          tool: 'github__merge_pull_request',
+          risk_ids: [MERGE, 7],
+          remaining: { [MERGE]: 1, bogus: 'x' },
+          args: ARGUMENT_MARKER,
+        },
+      },
+      'ada@example.com',
+    );
+    expect(shown).toEqual({
+      id: 'e-3',
+      ts: '2026-10-13T09:00:00.000Z',
+      kind: 'call-allowed',
+      risk_ids: [MERGE],
+      actor_email: 'ada@example.com',
+      tool: null,
+      refusal_code: null,
+      agent_label: null,
+      remaining: null,
+      request_id: null,
+      request_kind: null,
+      token_prefix: null,
+      credits: null,
+      dimension: null,
+      expires_at: null,
+    });
   });
 });

@@ -569,7 +569,10 @@ describe('RequestService', () => {
       await expect(
         f.store.requests.decideClaim(id, f.creatorId, (ctx) => {
           ctx.resetCounters(ANCHOR);
-          ctx.recordEvent({ kind: 'reset' });
+          ctx.recordEvent({
+            kind: 'reset',
+            details: { request_id: id, period_start: ANCHOR, period_end: null, credits: {} },
+          });
           throw new Error('boom');
         }),
       ).rejects.toThrow('boom');

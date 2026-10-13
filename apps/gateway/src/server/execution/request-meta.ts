@@ -11,19 +11,19 @@
  *     that multiplexes several agents over one connection.
  * When both are present the per-call value wins: it is the more specific.
  *
- * Client address — a web-standard `Request` carries no peer address, so the
- * only source is `X-Forwarded-For`, and it is believed only when the operator
- * declared the proxies in front of the instance (`trusted_proxies`): the
- * address is then the right-most entry that is not one of those proxies.
- * Without that declaration the header is client-controlled and is ignored.
+ * Client address — resolved by the instance's single trusted-proxy rule
+ * (`../http/client-ip`, shared with the request page): the right-most
+ * `X-Forwarded-For` entry that is not one of the declared `trusted_proxies`.
+ * The audit stores `null` where that rule answers "unknown".
  */
-import { BlockList, isIP } from 'node:net';
+import type { BlockList } from 'node:net';
 
 import type { ClientOrigin } from '@vaubaan/gateway-core';
 
+import { clientIpOf, trustedProxyList, UNKNOWN_CLIENT } from '../http/client-ip';
 import { AGENT_LABEL_HEADER, AGENT_LABEL_META_KEY } from '../missions/bootstrap-kit';
 
-export { AGENT_LABEL_HEADER, AGENT_LABEL_META_KEY };
+export { AGENT_LABEL_HEADER, AGENT_LABEL_META_KEY, trustedProxyList };
 export const AGENT_LABEL_MAX_LENGTH = 120;
 const USER_AGENT_MAX_LENGTH = 256;
 
@@ -44,45 +44,14 @@ export function agentLabelOf(headers: Headers, meta: unknown): string | null {
   return perCall ?? cleanAgentLabel(headers.get(AGENT_LABEL_HEADER));
 }
 
-function familyOf(address: string): 'ipv4' | 'ipv6' | null {
-  const version = isIP(address);
-  return version === 4 ? 'ipv4' : version === 6 ? 'ipv6' : null;
-}
-
-/** A matcher over the configured `trusted_proxies` (addresses and CIDR blocks). */
-export function trustedProxyList(entries: readonly string[]): BlockList {
-  const list = new BlockList();
-  for (const entry of entries) {
-    const [address = '', prefix] = entry.split('/');
-    const family = familyOf(address);
-    if (!family) continue;
-    if (prefix === undefined) list.addAddress(address, family);
-    else list.addSubnet(address, Number(prefix), family);
-  }
-  return list;
-}
-
 export function clientOriginOf(
   headers: Headers,
   trusted: { readonly proxies: BlockList; readonly configured: boolean },
 ): ClientOrigin {
   const userAgent = headers.get('user-agent');
+  const ip = clientIpOf(headers, trusted.proxies, trusted.configured);
   return {
-    ip: trusted.configured ? forwardedClient(headers, trusted.proxies) : null,
+    ip: ip === UNKNOWN_CLIENT ? null : ip,
     user_agent: userAgent ? userAgent.slice(0, USER_AGENT_MAX_LENGTH) : null,
   };
-}
-
-function forwardedClient(headers: Headers, proxies: BlockList): string | null {
-  const hops = (headers.get('x-forwarded-for') ?? '')
-    .split(',')
-    .map((hop) => hop.trim())
-    .filter((hop) => hop.length > 0);
-  for (let i = hops.length - 1; i >= 0; i--) {
-    const hop = hops[i] as string;
-    const family = familyOf(hop);
-    if (!family) return null; // a malformed chain is not evidence of anything
-    if (!proxies.check(hop, family)) return hop;
-  }
-  return null;
 }

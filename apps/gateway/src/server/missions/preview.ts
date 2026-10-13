@@ -13,6 +13,7 @@
  * selection), §3.2 (mandatory budget, presets), §0 "Resource" (env-qualified
  * ids resolve against the selected resources). Browser-safe: no IO.
  */
+import { budgetIssues, exceedsRateCeiling, type BudgetField } from '@vaubaan/policy-engine';
 import type {
   Gate,
   MissionPolicyEntry,
@@ -21,6 +22,7 @@ import type {
   RateLimit,
   RiskId,
 } from '@vaubaan/shared';
+import { GATES } from '@vaubaan/shared/domain';
 
 import { isResolvable } from './catalog-view';
 import type {
@@ -34,6 +36,7 @@ import type {
   MissionDraft,
   MissionPreview,
   PreviewIssue,
+  PreviewNotice,
   ResolvedDraftConnection,
   SkippedPresetEntry,
   UnresolvableEntry,
@@ -41,12 +44,10 @@ import type {
 import { summarize } from './summary';
 
 export const MISSION_NAME_MAX_LENGTH = 120;
-/** Shortest recurring period: an hour-scale reload is the finest the interface offers. */
+/** Shortest recurring period: one minute. */
 export const MIN_PERIOD_SECONDS = 60;
 export const MAX_PERIOD_SECONDS = 366 * 24 * 3600;
-export const SECONDS_PER_MINUTE = 60;
-
-const GATE_VALUES: readonly Gate[] = ['auto', 'approval'];
+export { SECONDS_PER_MINUTE } from '@vaubaan/policy-engine';
 
 export interface PreviewContext {
   /** Connections the creator holds a non-empty authority on. */
@@ -54,29 +55,31 @@ export interface PreviewContext {
   readonly now: Date;
 }
 
-function isPositiveInteger(value: unknown): value is number {
-  return typeof value === 'number' && Number.isInteger(value) && value >= 1;
-}
+/** The creator's wording of each field `budgetIssues` can reject. */
+const BUDGET_PROBLEMS: Readonly<Record<BudgetField, string>> = {
+  quota: 'quota must be a whole number of at least 1',
+  rate_limit: 'rate limit must be a whole number of at least 1',
+  'rate_limit.max': 'rate limit must be a whole number of at least 1',
+  'rate_limit.window_seconds': 'rate window must be a whole number of seconds, at least 1',
+  gate: `gate must be one of ${GATES.join(', ')}`,
+};
 
-/** Why a budget is not acceptable, or `null`. A quota is always a number ≥ 1 (spec §3.2). */
+/**
+ * Why a budget is not acceptable, or `null`. The rule itself — a positive
+ * integer quota, a positive integer rate over a positive integer window, a
+ * gate of the closed set (spec §3.2) — is `budgetIssues` of
+ * `@vaubaan/policy-engine`, the same function the plugin SDK's catalog loader
+ * applies to a preset. Issuance adds the catalog's rate ceiling.
+ */
 export function budgetProblem(
   entry: { quota: number; rate_limit: RateLimit; gate: Gate },
   risk: Pick<CatalogRisk, 'rate_ceiling_per_minute'>,
 ): string | null {
-  if (!isPositiveInteger(entry.quota)) return 'quota must be a whole number of at least 1';
-  if (!isPositiveInteger(entry.rate_limit.max)) {
-    return 'rate limit must be a whole number of at least 1';
-  }
-  if (!isPositiveInteger(entry.rate_limit.window_seconds)) {
-    return 'rate window must be a whole number of seconds, at least 1';
-  }
-  if (!GATE_VALUES.includes(entry.gate)) return `gate must be one of ${GATE_VALUES.join(', ')}`;
+  const [first] = budgetIssues(entry);
+  if (first) return BUDGET_PROBLEMS[first.field];
   const ceiling = risk.rate_ceiling_per_minute;
-  if (ceiling !== null) {
-    const perMinute = (entry.rate_limit.max * SECONDS_PER_MINUTE) / entry.rate_limit.window_seconds;
-    if (perMinute > ceiling) {
-      return `rate limit exceeds the catalog ceiling of ${ceiling} per minute`;
-    }
+  if (exceedsRateCeiling(entry.rate_limit, ceiling)) {
+    return `rate limit exceeds the catalog ceiling of ${ceiling} per minute`;
   }
   return null;
 }
@@ -213,26 +216,43 @@ export function expandPreset(
 interface ConnectionOutcome {
   readonly preview: ConnectionPreview;
   readonly issues: PreviewIssue[];
+  /** Non-blocking: what the creator should know about a selection that passes. */
+  readonly notices: PreviewNotice[];
+}
+
+/** Where an issue or a notice points: the draft line and the connection it resolved to. */
+interface Where {
+  readonly connection_index: number;
+  readonly connection_id: string;
 }
 
 function list(ids: readonly string[]): string {
   return ids.join(', ');
 }
 
-/** One connection of a draft against the creator's authority on it. */
-export function previewConnection(
+interface PresetResolution {
+  readonly preset: Preset | undefined;
+  /** The preset's lines on this connection, base ids expanded per reachable environment. */
+  readonly lines: readonly PresetEntry[];
+  /** Base ids of env-scoped risks no selected resource can resolve. */
+  readonly unresolved: readonly RiskId[];
+  /**
+   * Budget defaults of an explicit line: the preset's entry for that id, else
+   * the preset's entry for its base id ("in whatever environment").
+   */
+  readonly defaults: ReadonlyMap<RiskId, PresetEntry>;
+  readonly issues: PreviewIssue[];
+}
+
+/** The preset a draft names on a connection, expanded against the selected resources. */
+function resolvePreset(
   connection: IssuanceConnection,
   draft: DraftConnection,
-  index = 0,
-): ConnectionOutcome {
-  const where = { connection_index: index, connection_id: connection.id };
-  const issues: PreviewIssue[] = [];
-  const name = connection.display_name;
-
-  const resources = resolveResources(connection, draft, index);
-  issues.push(...resources.issues);
-
+  selected: readonly IssuanceResource[],
+  where: Where,
+): PresetResolution {
   const preset = draft.preset ? connection.presets.find((p) => p.id === draft.preset) : undefined;
+  const issues: PreviewIssue[] = [];
   if (draft.preset && !preset) {
     issues.push({
       code: 'unknown-preset',
@@ -243,74 +263,108 @@ export function previewConnection(
     });
   }
   const expanded = preset
-    ? expandPreset(preset, connection, resources.selected)
+    ? expandPreset(preset, connection, selected)
     : { lines: [], unresolved: [] };
-  // Defaults for an explicit line: the preset's entry for that id, else the
-  // preset's entry for its base id ("in whatever environment").
-  const presetEntries = new Map((preset?.entries ?? []).map((e) => [e.risk_id, e]));
-  for (const line of expanded.lines) presetEntries.set(line.risk_id, line);
+  const defaults = new Map((preset?.entries ?? []).map((e) => [e.risk_id, e]));
+  for (const line of expanded.lines) defaults.set(line.risk_id, line);
+  return { preset, lines: expanded.lines, unresolved: expanded.unresolved, defaults, issues };
+}
 
-  // A draft with explicit lines accepts exactly those; a draft with only a
-  // preset accepts the preset, bounded by what the creator holds and by what
-  // the selected resources can resolve.
-  const explicit = draft.policy ?? [];
-  const presetOnly = explicit.length === 0 && preset !== undefined;
-  const lines: readonly DraftPolicyEntry[] = presetOnly ? expanded.lines : explicit;
+/** Where each line of a connection's policy ends up. */
+interface LineBuckets {
+  /** Accepted, inside the authority, resolvable, with a valid resolved budget. */
+  readonly passes: MissionPolicyEntry[];
+  readonly exceeds: RiskId[];
+  readonly unknown: RiskId[];
+  readonly unresolvable: UnresolvableEntry[];
+  readonly missingBudget: RiskId[];
+  readonly duplicates: RiskId[];
+  /** Preset entries left out when the preset is applied as is. */
+  readonly skipped: SkippedPresetEntry[];
+  readonly invalid: { risk_id: RiskId; problem: string }[];
+}
 
+interface ClassifyInput {
+  readonly connection: IssuanceConnection;
+  readonly selected: readonly IssuanceResource[];
+  /** The preset applied as is: what the creator does not hold or cannot resolve is skipped. */
+  readonly presetOnly: boolean;
+  readonly preset: Pick<PresetResolution, 'defaults' | 'unresolved'>;
+}
+
+/**
+ * Sorts each line into exactly one bucket, first reason wins: duplicate,
+ * unknown to the catalog, outside the authority, unresolvable environment,
+ * no budget, invalid budget — otherwise it passes.
+ */
+function classifyLines(lines: readonly DraftPolicyEntry[], input: ClassifyInput): LineBuckets {
+  const { connection, selected, presetOnly, preset } = input;
   const catalog = new Map(connection.risks.map((r) => [r.risk_id, r]));
   const held = new Set(connection.authority);
   const seen = new Set<RiskId>();
-
-  const passes: MissionPolicyEntry[] = [];
-  const exceeds: RiskId[] = [];
-  const unknown: RiskId[] = [];
-  const unresolvable: UnresolvableEntry[] = [];
-  const missingBudget: RiskId[] = [];
-  const duplicates: RiskId[] = [];
-  const skipped: SkippedPresetEntry[] = presetOnly
-    ? expanded.unresolved.map((risk_id) => ({ risk_id, reason: 'unresolvable-env', env: null }))
-    : [];
-  const invalid: { risk_id: RiskId; problem: string }[] = [];
+  const buckets: LineBuckets = {
+    passes: [],
+    exceeds: [],
+    unknown: [],
+    unresolvable: [],
+    missingBudget: [],
+    duplicates: [],
+    skipped: presetOnly
+      ? preset.unresolved.map((risk_id) => ({ risk_id, reason: 'unresolvable-env', env: null }))
+      : [],
+    invalid: [],
+  };
 
   for (const line of lines) {
     if (seen.has(line.risk_id)) {
-      duplicates.push(line.risk_id);
+      buckets.duplicates.push(line.risk_id);
       continue;
     }
     seen.add(line.risk_id);
     const risk = catalog.get(line.risk_id);
     if (!risk) {
-      unknown.push(line.risk_id);
+      buckets.unknown.push(line.risk_id);
       continue;
     }
     if (!held.has(line.risk_id)) {
       if (presetOnly) {
-        skipped.push({ risk_id: line.risk_id, reason: 'outside-authority', env: risk.env });
-      } else exceeds.push(line.risk_id);
+        buckets.skipped.push({ risk_id: line.risk_id, reason: 'outside-authority', env: risk.env });
+      } else buckets.exceeds.push(line.risk_id);
       continue;
     }
-    if (!isResolvable(risk, connection, resources.selected)) {
+    if (!isResolvable(risk, connection, selected)) {
       if (presetOnly) {
-        skipped.push({ risk_id: line.risk_id, reason: 'unresolvable-env', env: risk.env });
-      } else unresolvable.push({ risk_id: line.risk_id, env: risk.env ?? '' });
+        buckets.skipped.push({ risk_id: line.risk_id, reason: 'unresolvable-env', env: risk.env });
+      } else buckets.unresolvable.push({ risk_id: line.risk_id, env: risk.env ?? '' });
       continue;
     }
     const entry = resolveEntry(
       line,
-      presetEntries.get(line.risk_id) ?? presetEntries.get(risk.base_id),
+      preset.defaults.get(line.risk_id) ?? preset.defaults.get(risk.base_id),
     );
     if (!entry) {
-      missingBudget.push(line.risk_id);
+      buckets.missingBudget.push(line.risk_id);
       continue;
     }
     const problem = budgetProblem(entry, risk);
     if (problem) {
-      invalid.push({ risk_id: line.risk_id, problem });
+      buckets.invalid.push({ risk_id: line.risk_id, problem });
       continue;
     }
-    passes.push(entry);
+    buckets.passes.push(entry);
   }
+  return buckets;
+}
 
+/** One issue per non-empty refusing bucket, in a fixed order. */
+function issuesOf(
+  buckets: LineBuckets,
+  connection: Pick<IssuanceConnection, 'display_name' | 'provider_label'>,
+  where: Where,
+): PreviewIssue[] {
+  const { unknown, duplicates, exceeds, unresolvable, missingBudget, invalid } = buckets;
+  const name = connection.display_name;
+  const issues: PreviewIssue[] = [];
   if (unknown.length > 0) {
     issues.push({
       code: 'unknown-risk',
@@ -362,10 +416,87 @@ export function previewConnection(
       ...where,
     });
   }
-  if (lines.length === 0 || (presetOnly && passes.length === 0)) {
+  return issues;
+}
+
+/**
+ * What the creator is not told by an issue: a selected resource on which no
+ * env-scoped risk can ever be touched. At call time an env-scoped risk
+ * touched on a resource whose label is absent, or is not an environment the
+ * risk is acceptable in, refuses the call (`risk-not-accepted`), whatever the
+ * mission accepts. Nothing to say when the plugin derives the environment
+ * from the call itself, or when the catalog has no env-scoped risk.
+ */
+export function envNotices(
+  connection: Pick<IssuanceConnection, 'risks' | 'derives_env' | 'display_name' | 'provider_label'>,
+  selected: readonly Pick<IssuanceResource, 'ref' | 'env'>[],
+  passes: readonly Pick<MissionPolicyEntry, 'risk_id'>[],
+  where: Where,
+): PreviewNotice[] {
+  if (connection.derives_env) return [];
+  const envScoped = connection.risks.filter((r) => r.env !== null);
+  if (envScoped.length === 0) return [];
+  const envs = [...new Set(envScoped.flatMap((r) => (r.env === null ? [] : [r.env])))];
+  const scopedIds = new Set(envScoped.map((r) => r.risk_id));
+  const accepted = passes.map((p) => p.risk_id).filter((id) => scopedIds.has(id));
+  const name = connection.display_name;
+  const consequence = `${connection.provider_label} risks that depend on the environment can never be touched there: a call that touches one is refused (risk-not-accepted), whatever the mission accepts${
+    accepted.length > 0 ? ` — including ${list(accepted)}` : ''
+  }.`;
+  const remedy = `Label the resource on the connection's page (${list(envs)}) or leave it out.`;
+
+  const notices: PreviewNotice[] = [];
+  const unlabelled = selected.filter((r) => r.env === null).map((r) => r.ref);
+  if (unlabelled.length > 0) {
+    notices.push({
+      code: 'resource-without-env',
+      message: `No environment label on ${list(unlabelled)} ("${name}"). ${consequence} ${remedy}`,
+      resource_refs: unlabelled,
+      risk_ids: accepted,
+      ...where,
+    });
+  }
+  const foreign = selected.filter((r) => r.env !== null && !envs.includes(r.env));
+  if (foreign.length > 0) {
+    notices.push({
+      code: 'resource-env-not-in-catalog',
+      message: `${list(foreign.map((r) => `${r.ref} (labelled "${r.env}")`))} on "${name}": no ${connection.provider_label} risk is acceptable in that environment. ${consequence} ${remedy}`,
+      resource_refs: foreign.map((r) => r.ref),
+      risk_ids: accepted,
+      ...where,
+    });
+  }
+  return notices;
+}
+
+/** One connection of a draft against the creator's authority on it. */
+export function previewConnection(
+  connection: IssuanceConnection,
+  draft: DraftConnection,
+  index = 0,
+): ConnectionOutcome {
+  const where: Where = { connection_index: index, connection_id: connection.id };
+  const resources = resolveResources(connection, draft, index);
+  const preset = resolvePreset(connection, draft, resources.selected, where);
+
+  // A draft with explicit lines accepts exactly those; a draft with only a
+  // preset accepts the preset, bounded by what the creator holds and by what
+  // the selected resources can resolve.
+  const explicit = draft.policy ?? [];
+  const presetOnly = explicit.length === 0 && preset.preset !== undefined;
+  const lines: readonly DraftPolicyEntry[] = presetOnly ? preset.lines : explicit;
+  const buckets = classifyLines(lines, {
+    connection,
+    selected: resources.selected,
+    presetOnly,
+    preset,
+  });
+
+  const issues = [...resources.issues, ...preset.issues, ...issuesOf(buckets, connection, where)];
+  if (lines.length === 0 || (presetOnly && buckets.passes.length === 0)) {
     issues.push({
       code: 'no-accepted-risk',
-      message: `Connection "${name}" accepts no risk: pick a preset or accept at least one risk, or leave the connection out.`,
+      message: `Connection "${connection.display_name}" accepts no risk: pick a preset or accept at least one risk, or leave the connection out.`,
       ...where,
     });
   }
@@ -374,18 +505,19 @@ export function previewConnection(
     preview: {
       connection_id: connection.id,
       provider: connection.provider,
-      display_name: name,
+      display_name: connection.display_name,
       resources: resources.selected,
       resources_total: resourcesTotal(connection, resources.selected),
-      preset: preset ? { id: preset.id, label: preset.label } : null,
-      passes,
-      exceeds,
-      unknown,
-      unresolvable,
-      missing_budget: missingBudget,
-      skipped_from_preset: skipped,
+      preset: preset.preset ? { id: preset.preset.id, label: preset.preset.label } : null,
+      passes: buckets.passes,
+      exceeds: buckets.exceeds,
+      unknown: buckets.unknown,
+      unresolvable: buckets.unresolvable,
+      missing_budget: buckets.missingBudget,
+      skipped_from_preset: buckets.skipped,
     },
     issues,
+    notices: envNotices(connection, resources.selected, buckets.passes, where),
   };
 }
 
@@ -481,6 +613,7 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
     issues.push({ code: 'no-connection', message: 'A mission carries at least one connection.' });
   }
 
+  const notices: PreviewNotice[] = [];
   const previews: ConnectionPreview[] = [];
   const used: IssuanceConnection[] = [];
   const seenConnections = new Set<string>();
@@ -524,6 +657,7 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
     }
     const outcome = previewConnection(connection, draftConnection, index);
     issues.push(...outcome.issues);
+    notices.push(...outcome.notices);
     previews.push(outcome.preview);
     used.push(connection);
   });
@@ -543,6 +677,7 @@ export function previewDraft(context: PreviewContext, draft: MissionDraft): Miss
   return {
     ok: issues.length === 0,
     issues,
+    notices,
     name,
     connections: previews,
     policy: previews.flatMap((p) => p.passes),

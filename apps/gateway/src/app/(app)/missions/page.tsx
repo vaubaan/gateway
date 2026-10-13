@@ -4,11 +4,11 @@
 import Link from 'next/link';
 
 import { LocalDate } from '@/components/LocalDate';
+import { NeedsUser } from '@/components/auth/NeedsUser';
 import { Card, Code, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
+import { currentUser } from '@/lib/auth/session';
 import { maskedToken } from '@/server/missions';
 
-import { currentUser } from './current-user';
-import { NeedsUser } from './needs-user';
 import styles from './missions.module.css';
 import { StateBadge } from './state-badge';
 

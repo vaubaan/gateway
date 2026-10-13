@@ -11,6 +11,7 @@ export const LOGIN_ERROR_CODES = [
   'state-mismatch',
   'idp-error',
   'claims-missing',
+  'email-not-verified',
   'email-domain-not-allowed',
   'bootstrap-refused',
   'bootstrap-unavailable',
@@ -30,6 +31,8 @@ export const LOGIN_ERROR_MESSAGES: Readonly<Record<LoginErrorCode, string>> = {
   'state-mismatch': 'The sign-in response did not match the attempt that started it. Start again.',
   'idp-error': 'The identity provider refused the sign-in.',
   'claims-missing': 'The identity provider did not return the claims this instance requires.',
+  'email-not-verified':
+    'The identity provider has not verified this email address. Verify it there, then sign in again.',
   'email-domain-not-allowed': 'This email domain is not allowed on this instance.',
   'bootstrap-refused': 'The bootstrap token was not accepted.',
   'bootstrap-unavailable': 'Bootstrap sign-in is no longer available on this instance.',

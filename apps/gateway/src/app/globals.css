@@ -76,11 +76,9 @@ pre {
   color: var(--gray-0);
 }
 
-/* Layout — every page wraps a <Container/> that resolves to .vbn-container.
-   Legacy pages use raw <main>; we give them the same envelope here so the
-   global look-and-feel is consistent without per-page rewrites. */
-.vbn-container,
-main {
+/* Layout — every page is wrapped in a <Container/>, which resolves to
+   .vbn-container. */
+.vbn-container {
   max-width: 1080px;
   margin: 0 auto;
   padding: var(--space-8) var(--space-6);
@@ -112,48 +110,4 @@ hr {
   border: 0;
   border-top: 1px solid var(--border-subtle);
   margin: var(--space-6) 0;
-}
-
-/* Top navigation */
-.vbn-topbar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-3) var(--space-6);
-  border-bottom: 1px solid var(--border-subtle);
-  background: var(--surface-base);
-  position: sticky;
-  top: 0;
-  z-index: 10;
-}
-.vbn-topbar a {
-  color: var(--text-foreground);
-}
-.vbn-topbar a:hover {
-  text-decoration: none;
-  color: var(--text-muted);
-}
-.vbn-brand {
-  font-weight: var(--font-weight-semibold);
-  letter-spacing: -0.01em;
-}
-.vbn-topbar nav {
-  display: flex;
-  gap: var(--space-4);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-/* Card variant used by sections that hold a wide table — we trim the body
-   padding so the table can use the full width before its scrollbar kicks
-   in (mostly for risk-catalog + tools-mapping tables on provider pages). */
-.vbn-card-flush > div:last-child {
-  padding: var(--space-3);
-}
-
-/* Provider pages get a slightly wider container so the wide risk tables
-   don't squeeze. Selector specificity matches the global `main` rule. */
-main.vbn-page-wide,
-.vbn-container.vbn-page-wide {
-  max-width: 1280px;
 }

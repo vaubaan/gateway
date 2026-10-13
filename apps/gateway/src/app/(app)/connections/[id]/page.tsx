@@ -8,6 +8,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { NeedsUser } from '@/components/auth/NeedsUser';
 import { RevokeConnection } from '@/components/connections/RevokeConnection';
 import styles from '@/components/connections/connections.module.css';
 import {
@@ -34,7 +35,7 @@ import {
   Thead,
   Tr,
 } from '@/components/ui';
-import { requireUser, takeNotice, type PageSearchParams } from '@/lib/connections/session';
+import { currentActor, takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import {
   ConnectError,
   connectionPath,
@@ -58,8 +59,10 @@ export default async function ConnectionPage({
   params: Promise<{ id: string }>;
   searchParams: PageSearchParams;
 }) {
+  const session = await currentActor();
+  if (!session) return <NeedsUser />;
+  const { root, principal, actor } = session;
   const { id } = await params;
-  const { root, principal, actor } = await requireUser();
   let detail: ConnectionDetail;
   try {
     detail = await root.connections.service.get(actor, id);
@@ -71,6 +74,8 @@ export default async function ConnectionPage({
   const { connection, resources } = detail;
   const base = connectionPath(connection.id);
   const revoked = connection.status === 'revoked';
+  // The server refuses to reconnect an unowned connection (`connection-unowned`).
+  const unowned = connection.status === 'unowned';
   const fields = Object.entries(detail.fields);
 
   return (
@@ -89,12 +94,14 @@ export default async function ConnectionPage({
         </div>
         {!revoked && (
           <div className={styles.actions}>
-            <Link
-              href={`${NEW_CONNECTION_PATH}/${encodeURIComponent(connection.provider)}?connection=${encodeURIComponent(connection.id)}`}
-              className={styles.linkButton}
-            >
-              Reconnect
-            </Link>
+            {!unowned && (
+              <Link
+                href={`${NEW_CONNECTION_PATH}/${encodeURIComponent(connection.provider)}?connection=${encodeURIComponent(connection.id)}`}
+                className={styles.linkButton}
+              >
+                Reconnect
+              </Link>
+            )}
             <RevokeConnection action={`${base}/revoke`} name={connection.displayName} />
           </div>
         )}
@@ -106,6 +113,12 @@ export default async function ConnectionPage({
         <Banner tone="warning" title="Expired">
           The provider rejected the stored credential and it could not be refreshed. Every call of
           the missions that carry this connection is refused until you reconnect.
+        </Banner>
+      )}
+      {unowned && (
+        <Banner tone="warning" title="No owner">
+          This connection cannot be reconnected: an operator must reassign an owner first. The
+          missions that carry it keep running meanwhile.
         </Banner>
       )}
       {revoked && (
@@ -251,9 +264,11 @@ function ResourceRow({
                 <Field
                   key={key}
                   label={key.replace(/_/g, ' ')}
+                  htmlFor={`${formId}-${key}`}
                   hint="One entry per line, or separated by spaces or commas."
                 >
                   <Textarea
+                    id={`${formId}-${key}`}
                     form={formId}
                     name={`${METADATA_PREFIX}${key}`}
                     rows={2}

@@ -70,15 +70,13 @@ export class Authenticator {
   /**
    * Admin surface: the bootstrap operator while the token is active, a user
    * matching the admin rule afterwards (and before, if one exists).
+   * `authenticate()` already decided whether a bootstrap session is still
+   * somebody (a revoked token makes it `null`), so a bootstrap principal is
+   * an operator here.
    */
   async authorizeAdmin(principal: Principal | null): Promise<AdminDecision> {
     if (!principal) return { ok: false, status: 401, reason: 'no session' };
-    if (principal.kind === 'bootstrap') {
-      const state = await this.bootstrap.state();
-      if (state.status === 'active') return { ok: true, principal };
-      await this.sessions.destroyById(principal.sessionId);
-      return { ok: false, status: 401, reason: `bootstrap token ${state.status}` };
-    }
+    if (principal.kind === 'bootstrap') return { ok: true, principal };
     if (!principal.isOperator) {
       return { ok: false, status: 403, reason: 'user does not match the admin rule' };
     }

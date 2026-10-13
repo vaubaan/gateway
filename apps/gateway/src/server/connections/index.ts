@@ -71,6 +71,7 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     publicUrl: deps.config.publicUrl,
     authenticator: deps.authenticator,
     connections: service,
+    registry: deps.registry,
     providerApps: deps.providerApps,
     notices,
     audit: deps.store.auditWriter,
@@ -160,4 +161,10 @@ export {
   type StartInput,
   type StartResult,
 } from './service';
+export {
+  connectionOwnerOf,
+  connectionSummaryOf,
+  type ConnectionSummary,
+  type ResolvedConnectionOwner,
+} from './mapping';
 export { generateEd25519KeyPair, type SshKeyPair } from './ssh-keypair';

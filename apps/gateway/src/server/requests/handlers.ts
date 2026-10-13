@@ -20,9 +20,11 @@
  *   5. the user is the mission's creator         → 403, with no detail
  */
 import {
-  forbiddenOriginResponse,
-  isSameOrigin,
+  guardMutation,
+  guardSession,
+  refusalResponse,
   type Authenticator,
+  type GuardResult,
   type UserPrincipal,
 } from '../auth';
 import type { RateLimiter } from '../compose/ports';
@@ -37,6 +39,13 @@ export const REQUEST_PAGE_RATE_WINDOW_MS = 60_000;
 
 /** The only sentence a non-creator ever reads (spec §3.4). */
 export const ADDRESSED_TO_CREATOR = 'This request is addressed to its creator.';
+
+/** The bootstrap operator is nobody's creator: the same sentence as any non-creator. */
+const REFUSALS = {
+  field: 'message',
+  noSession: 'Sign in first.',
+  forbidden: ADDRESSED_TO_CREATOR,
+} as const;
 
 const LOGIN_ROUTE = '/auth/login';
 const MS_PER_SECOND = 1000;
@@ -150,14 +159,9 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
     });
   }
 
-  /** Step 4 for the JSON routes. */
-  async function userOf(request: Request): Promise<UserPrincipal | Response> {
-    const principal = await deps.authenticator.authenticate(request.headers);
-    if (!principal) return json(401, { error: 'unauthenticated', message: 'Sign in first.' });
-    if (principal.kind !== 'user') {
-      return json(403, { error: 'forbidden', message: ADDRESSED_TO_CREATOR });
-    }
-    return principal;
+  /** Steps 3 and 4 as the JSON routes answer them (`guardMutation` / `guardSession`). */
+  function userOr(guard: GuardResult<UserPrincipal>): UserPrincipal | Response {
+    return guard.ok ? guard.principal : refusalResponse(guard, REFUSALS);
   }
 
   function decided(result: DecideResult, requestId: string, form: boolean): Response {
@@ -190,13 +194,13 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
     async open(request, requestId) {
       const early = (await limited(request)) ?? bearerRefusal(request);
       if (early) return early;
-      const principal = await deps.authenticator.authenticate(request.headers);
-      if (!principal) {
+      const guard = await guardSession(request, deps, 'user');
+      if (!guard.ok) {
+        // The bootstrap operator is nobody's creator.
+        if (guard.reason !== 'no-session') return forbiddenPage();
         return seeOther(`${LOGIN_ROUTE}?return_to=${encodeURIComponent(requestPath(requestId))}`);
       }
-      // The bootstrap operator is nobody's creator.
-      if (principal.kind !== 'user') return forbiddenPage();
-      const result = await deps.service.view(principal.user, requestId);
+      const result = await deps.service.view(guard.principal.user, requestId);
       if (result.outcome !== 'ok') return forbiddenPage();
       return seeOther(inboxRequestPath(requestId));
     },
@@ -204,7 +208,7 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
     async inbox(request) {
       const early = bearerRefusal(request);
       if (early) return early;
-      const principal = await userOf(request);
+      const principal = userOr(await guardSession(request, deps, 'user'));
       if (principal instanceof Response) return principal;
       return json(200, { requests: await deps.service.inbox(principal.user) });
     },
@@ -212,8 +216,7 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
     async decide(request, requestId) {
       const early = bearerRefusal(request);
       if (early) return early;
-      if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-      const principal = await userOf(request);
+      const principal = userOr(await guardMutation(request, deps, 'user'));
       if (principal instanceof Response) return principal;
 
       const form = wantsForm(request);

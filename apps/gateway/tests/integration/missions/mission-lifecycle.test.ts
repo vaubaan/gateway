@@ -5,46 +5,18 @@
  * repositories. Issue → the token verifies → rotate → the old token is
  * refused → revoke → `mission-inactive`.
  */
-import { checkMissionActive, type MissionContext } from '@vaubaan/gateway-core';
+import { checkMissionActive } from '@vaubaan/gateway-core';
 import { unqualifyRiskId } from '@vaubaan/policy-engine';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { budgetMissionOf } from '../../../src/server/budget';
 import type { GatewayRoot } from '../../../src/server/compose/root';
+import { loadMissionContext } from '../../../src/server/execution/mission-context';
 import { MissionService, type MissionDraft } from '../../../src/server/missions';
 import { catalogEnvs, seedConnection } from '../../../src/server/missions/testing';
 import { ManualClock } from '../../../src/server/store/clock';
-import type { MissionRecord } from '../../../src/server/store/types';
 import { buildTestRoot, seedInstance, type SeededInstance } from './support';
 
 const DAILY = { kind: 'recurring', length_seconds: 86_400 } as const;
-
-/** The pipeline's view of a mission, as the execution door will build it (P1.6). */
-function contextOf(mission: MissionRecord, prefix: string): MissionContext {
-  const budget = budgetMissionOf(mission);
-  return {
-    mission: {
-      id: mission.id,
-      name: mission.name,
-      status: mission.status,
-      creator_id: mission.creatorUserId,
-      expires_at: mission.expiresAt,
-      period:
-        mission.periodSeconds === null
-          ? { kind: 'one-off' }
-          : {
-              kind: 'recurring',
-              length_seconds: mission.periodSeconds,
-              anchor_at: mission.periodAnchor,
-            },
-    },
-    token: { id: 'token', prefix },
-    connections: [],
-    resources: [],
-    policy: budget.policy,
-    session: null,
-  };
-}
 
 describe('missions: issue, rotate, revoke', () => {
   let root: GatewayRoot;
@@ -81,12 +53,13 @@ describe('missions: issue, rotate, revoke', () => {
     expect(first.token.secret).toMatch(/^vbn_live_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}$/);
 
     const verified = await missions.verifyToken(first.token.secret);
-    expect(verified.outcome).toBe('verified');
-    expect(verified.outcome === 'verified' && verified.mission.id).toBe(first.mission.id);
-    expect(
-      verified.outcome === 'verified' &&
-        checkMissionActive(contextOf(verified.mission, first.token.prefix), new Date()),
-    ).toBeNull();
+    if (verified.outcome !== 'verified') throw new Error('expected a verified token');
+    expect(verified.mission.id).toBe(first.mission.id);
+    // The door gets the token's id and prefix, never the stored hash.
+    expect(Object.keys(verified.token).sort()).toEqual(['id', 'prefix']);
+    expect(verified.token.prefix).toBe(first.token.prefix);
+    const ctx = await loadMissionContext(root.store, verified.mission, verified.token);
+    expect(checkMissionActive(ctx, new Date(first.mission.createdAt))).toBeNull();
 
     const rotated = await missions.rotate(seeded.ada, first.mission.id);
     if (!rotated.ok) throw new Error('rotate refused');
@@ -104,7 +77,10 @@ describe('missions: issue, rotate, revoke', () => {
     const after = await missions.verifyToken(rotated.token.secret);
     expect(after).toMatchObject({ outcome: 'retired', reason: 'revoked' });
     if (after.outcome !== 'retired') throw new Error('expected a retired token');
-    const refusal = checkMissionActive(contextOf(after.mission, rotated.token.prefix), new Date());
+    const refusal = checkMissionActive(
+      await loadMissionContext(root.store, after.mission, after.token),
+      new Date(first.mission.createdAt),
+    );
     expect(refusal).toMatchObject({ code: 'mission-inactive', status: 'revoked' });
     // The token replaced by rotation stays what it was: replaced, not revoked.
     expect(await missions.verifyToken(first.token.secret)).toMatchObject({ reason: 'rotated' });
@@ -141,7 +117,7 @@ describe('missions: issue, rotate, revoke', () => {
 
   it('does not cover a resource discovered after issuance', async () => {
     const { mission } = await issued();
-    await root.store.connections.replaceResources(seeded.github.connection.id, [
+    await root.store.connections.syncDiscoveredResources(seeded.github.connection.id, [
       ...seeded.github.resources.map((r) => ({ ref: r.ref, displayName: r.displayName })),
       { ref: 'acme/new-repo', displayName: 'acme/new-repo' },
     ]);
@@ -153,6 +129,74 @@ describe('missions: issue, rotate, revoke', () => {
       'acme/infra',
       'acme/web',
     ]);
+  });
+
+  it('reaches nothing on a connection that had no resource at issuance, even once discovery finds some', async () => {
+    const empty = await seedConnection(root.store, {
+      provider: 'github',
+      owner: { kind: 'user', id: seeded.bob.id },
+      displayName: 'empty-org',
+      resources: [],
+    });
+    const { mission, token } = await issued(
+      {
+        name: 'Nothing to touch yet',
+        connections: [{ connection_id: empty.connection.id, preset: 'read-only' }],
+        period: DAILY,
+        expires_at: null,
+      },
+      seeded.bob,
+    );
+    expect(mission.connections).toEqual([
+      { connectionId: empty.connection.id, resourceScope: 'all', resourceIds: [] },
+    ]);
+
+    await root.store.connections.syncDiscoveredResources(empty.connection.id, [
+      { ref: 'acme/later', displayName: 'acme/later' },
+    ]);
+
+    // The door: scope `all` with no stored id is "none known at issuance".
+    const ctx = await loadMissionContext(root.store, mission, {
+      id: 'token',
+      prefix: token.prefix,
+    });
+    expect(ctx.resources).toEqual([]);
+    // The page and the kit say what the door enforces.
+    const detail = await missions.get(seeded.bob, mission.id);
+    expect(detail?.connections.map((c) => c.resources)).toEqual([[]]);
+    expect(detail?.kit?.agent_instructions).not.toContain('acme/later');
+    const rotated = await missions.rotate(seeded.bob, mission.id);
+    expect(rotated.ok && rotated.kit.agent_instructions).not.toContain('acme/later');
+  });
+
+  it('lists no hidden resource in the kit of a mission issued on "all" when every resource is hidden', async () => {
+    for (const resource of seeded.github.resources) {
+      await root.store.connections.setResourceHidden(resource.id, true);
+    }
+    const { mission, kit } = await issued();
+    expect(mission.connections[0]?.resourceIds).toEqual([]);
+    for (const resource of seeded.github.resources) {
+      expect(kit.agent_instructions).not.toContain(`\`${resource.ref}\``);
+    }
+    const detail = await missions.get(seeded.ada, mission.id);
+    expect(detail?.connections[0]?.resources).toEqual([]);
+  });
+
+  it('drops a resource that turned stale from the detail and the kit, like the door does', async () => {
+    const { mission, token } = await issued();
+    await root.store.connections.syncDiscoveredResources(seeded.github.connection.id, [
+      { ref: 'acme/app', displayName: 'acme/app' },
+      { ref: 'acme/infra', displayName: 'acme/infra' },
+    ]);
+    const ctx = await loadMissionContext(root.store, mission, {
+      id: 'token',
+      prefix: token.prefix,
+    });
+    const reachable = ctx.resources.map((r) => r.ref).sort();
+    expect(reachable).toEqual(['acme/app', 'acme/infra']);
+    const detail = await missions.get(seeded.ada, mission.id);
+    expect(detail?.connections[0]?.resources.map((r) => r.ref).sort()).toEqual(reachable);
+    expect(detail?.kit?.agent_instructions).not.toContain('`acme/web`');
   });
 
   it('resolves "all" without hidden and stale resources; a hidden one only when ticked', async () => {
@@ -231,6 +275,29 @@ describe('missions: issue, rotate, revoke', () => {
       user_id: seeded.ada.id,
       object: { type: 'mission', id: mission.id },
     });
+    // The audit is immutable: its payload is pinned, snake_case domain shapes
+    // only, never the store's camelCase record.
+    const developer = root.registry.presetsOf('github').find((p) => p.id === 'developer');
+    expect(entry?.kind === 'admin' && entry.after).toEqual({
+      name: 'Ship the billing page',
+      connections: [
+        {
+          connection_id: seeded.github.connection.id,
+          resource_ids: seeded.github.resources.map((r) => r.id).sort(),
+        },
+      ],
+      policy: mission.policy.map((e) => ({
+        risk_id: e.riskId,
+        quota: e.quota,
+        rate_limit: { max: e.rateLimit, window_seconds: e.rateWindowSeconds },
+        gate: e.gate,
+      })),
+      period: { kind: 'recurring', length_seconds: 86_400 },
+      expires_at: null,
+      token_prefix: token.prefix,
+    });
+    expect(mission.policy).toHaveLength(developer?.entries.length ?? -1);
+    expect(JSON.stringify(entry)).not.toMatch(/connectionId|resourceScope|resourceIds|riskId/);
     const secretPart = token.secret.slice(-32);
     expect(JSON.stringify(audit)).not.toContain(secretPart);
     const dump = root.store.db
@@ -568,8 +635,8 @@ describe('missions: issuance context', () => {
 
   it('leaves out revoked connections and keeps expired ones visible but unusable', async () => {
     const { service } = root.missions;
-    await root.store.connections.setStatus(seeded.vercel.connection.id, 'revoked');
-    await root.store.connections.setStatus(seeded.github.connection.id, 'expired');
+    await root.store.connections.revoke(seeded.vercel.connection.id);
+    expect(await root.store.connections.markExpired(seeded.github.connection.id)).toBe(true);
     const context = await service.issuanceContext(seeded.ada);
     expect(context.some((c) => c.provider === 'vercel')).toBe(false);
     expect(context.find((c) => c.provider === 'github')?.status).toBe('expired');
@@ -580,6 +647,40 @@ describe('missions: issuance context', () => {
       expires_at: null,
     });
     expect(preview.issues.map((i) => i.code)).toEqual(['connection-unavailable']);
+  });
+
+  it('tells the creator when a selected resource carries no environment label on an env-scoped catalog', async () => {
+    const { service } = root.missions;
+    const owner = { kind: 'user', id: seeded.bob.id } as const;
+    const { connection } = await seedConnection(root.store, {
+      provider: 'supabase',
+      owner,
+      displayName: 'supabase (bob)',
+      resources: [{ ref: 'unlabelled' }, { ref: 'stg', env: 'staging' }],
+    });
+    const preview = await service.preview(seeded.bob, {
+      name: 'One project without a label',
+      connections: [{ connection_id: connection.id, preset: 'staging-developer' }],
+      period: DAILY,
+      expires_at: null,
+    });
+    // It passes: the label is not required, the creator is told what it costs.
+    expect(preview.ok).toBe(true);
+    expect(preview.notices.map((n) => [n.code, n.resource_refs, n.connection_id])).toEqual([
+      ['resource-without-env', ['unlabelled'], connection.id],
+    ]);
+    expect(preview.notices[0]?.risk_ids.length).toBeGreaterThan(0);
+    expect(preview.notices[0]?.risk_ids.every((id) => id.includes('[staging]'))).toBe(true);
+    expect(preview.notices[0]?.message).toContain('risk-not-accepted');
+
+    // Vercel derives the environment from the call: nothing to say.
+    const vercel = await root.missions.service.preview(seeded.ada, {
+      name: 'Vercel',
+      connections: [{ connection_id: seeded.vercel.connection.id, preset: 'developer' }],
+      period: DAILY,
+      expires_at: null,
+    });
+    expect(vercel.notices).toEqual([]);
   });
 
   it('issues every preset of every registered plugin cleanly for an owner with labelled resources', async () => {

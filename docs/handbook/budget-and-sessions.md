@@ -40,8 +40,11 @@ apps/gateway/src/server/budget/
   fingerprint.ts      re-exports canonicalJson(), fingerprintArguments() from @vaubaan/gateway-core
   decide.ts           decide(input) → Allow | Refuse   (pure, no IO)
   mission-state.ts    deriveMissionState(), consumedInPeriod()  — active | exhausted | expired | …
-  mapping.ts          BudgetMission, budgetMissionOf(record), policyEntryOf(), sessionCounterOf()
-  session-service.ts  SessionService.recordCall() / stateOf()  — runs decide() in the store transaction
+  mapping.ts          store records ⇄ domain: BudgetMission, budgetMissionOf(), policyEntryOf() /
+                      policyEntryRecordOf(), periodOf() / statedPeriodOf() / budgetPeriodOf(),
+                      sessionCounterOf(), isStale()
+  mission-usage.ts    readMissionUsage(), missionUsageReader()  — "load counters, derive state", once
+  session-service.ts  SessionService.recordCall() / stateOf() / usageOf()  — runs decide() in the store transaction
   budget-stage.ts     createBudgetStage({ service, missions }) — gateway-core's BudgetStage
   consistency.ts      countersAgreeWithAudit(), CREDIT_EVENT_KINDS  — SUM(session_counters) + credits == COUNT(audit allowed)
 apps/gateway/src/server/rate-limit/
@@ -64,6 +67,29 @@ A mission policy is `readonly MissionPolicyEntry[]`, one entry per accepted risk
 `policyEntryOf` (`mapping.ts`). `BudgetMission` is what the service needs of a mission:
 `{ id, status, expires_at, period: PeriodSpec, policy }`, built from a `MissionRecord` by
 `budgetMissionOf`.
+
+### The one translation point (`mapping.ts`)
+
+`mapping.ts` is the only place where a mission's store record becomes a domain value, or
+the reverse, for the budget **and** for missions (handbook [missions](missions.md),
+"Records and views"); a connection's own shapes are `connections/mapping.ts`.
+
+| Function                     | From → to                                                                                     | Used by                                           |
+| ---------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `policyEntryOf(record)`      | store entry → shared `MissionPolicyEntry`                                                     | budget, missions, execution door, requests        |
+| `policyEntryRecordOf(entry)` | shared `MissionPolicyEntry` → store entry (the inverse, same file)                            | `MissionService.issue`                            |
+| `periodOf(record)`           | `periodAnchor` / `periodSeconds` → shared `Period` (the pipeline's; anchor only if recurring) | `loadMissionContext`                              |
+| `statedPeriodOf(record)`     | → `StatedPeriod` `{ kind, length_seconds? }`, no anchor                                       | drafts, detail page, kit, `mission-issued` audit  |
+| `budgetPeriodOf(record)`     | → `PeriodSpec` `{ anchor_at, length_seconds \| null }`                                        | `budgetMissionOf`                                 |
+| `sessionCounterOf(record)`   | `SessionCounterRecord` → shared `SessionCounter`                                              | `mission-usage.ts`, `consistency.ts`              |
+| `isStale(resource)`          | `staleSince !== null`                                                                         | `loadMissionContext`, mission detail, `draftFrom` |
+| `budgetMissionOf(record)`    | `MissionRecord` → `BudgetMission`                                                             | missions, requests, tests                         |
+
+Still outside it: `budget-stage.ts` rebuilds a `PeriodSpec` from the pipeline's `Period`
+(`periodSpecOf`) and re-reads the mission row for a one-off anchor — the shared one-off
+`Period` carries none (open question of the ADR). The store's camelCase entry is named
+`MissionPolicyEntry` like the shared type; the store's name is its contract, so this
+module aliases it (`MissionPolicyEntryRecord`) instead of renaming it.
 
 | Dimension | Where its state lives                                                       | Refusal             |
 | --------- | --------------------------------------------------------------------------- | ------------------- |
@@ -172,10 +198,22 @@ Result: `{ outcome: 'allowed', session_id, period, fingerprint, decrements, rema
 approval_ids }` (remaining computed from the committed counters) or `{ outcome: 'refused',
 session_id, period, fingerprint, refusal, request_id }`.
 
-Events (`events` table, free-form `kind` = shared `SessionEventKind`): `call-allowed`
+Events (`events` table, `kind` = shared `SessionEventKind`): `call-allowed`
 with `{ tool, fingerprint, risk_ids, agent_label, remaining, approval_ids }`,
 `call-refused` with `{ …, refusal_code, request_id }` and `riskId` set to the refusing
 risk, `request` with `{ request_id, request_kind, tool, fingerprint }`.
+
+**One contract for event details.** The details of each kind are one type,
+`SessionEventDetails` (`packages/shared/src/session-events.ts`): a union of
+`{ kind, details }` pairs with the stored snake_case keys. Writers (this service, the
+request service, the requests repository's expiry, the mission service's rotation and
+revocation) build a `NewEvent` (`store/types.ts`) on that union, so a renamed key does not
+compile. Readers (the request timeline, the session view, the structural check below) call
+`parseEventDetails(kind, details)`, the only code that reads stored details: it answers
+`null` for a kind without a details shape (`approval` and `gate-opened` have no writer
+yet) and for an object that does not have the shape of its kind. A `null` event is shown
+with its kind and no detail, and gives back no credit; nothing throws. Stored keys are
+part of the data: renaming one needs a migration of the `events` rows.
 
 **Not refunded.** The counter increment commits before the upstream call. An upstream
 failure leaves `decision: allowed` + `upstream_error` in the audit and the credit
@@ -183,8 +221,28 @@ consumed; the creator gives credit back through a claim (ADR). What happens to t
 request after this refusal — who may open its URL, the creator's four answers, their
 events, the expiry sweep — is [requests](requests.md).
 
-`stateOf(mission, now)` reads the session's counters and returns
-`deriveMissionState(...)`.
+### Reading the state (`mission-usage.ts`)
+
+"Load the session's counters, derive the state" is written once:
+`readMissionUsage(sessions, mission, now)` → `MissionUsage { session_id | null, period,
+consumed: Map<RiskId, number>, state }`. It computes the current period first and asks
+the store for **that period's counters only** (`sessions.counters(sessionId,
+period.start)`), so the read does not grow with the mission's age — a mission with a
+one-minute period no longer loads every past minute to discard it.
+
+`SessionService.usageOf(mission, now)` is that function over the service's repository and
+`stateOf(mission, now)` is its `state`. The consumers depend on a narrow type and never
+re-implement the read:
+
+| Consumer                                         | Dependency                        | For                                      |
+| ------------------------------------------------ | --------------------------------- | ---------------------------------------- |
+| `MissionService` (list, detail, rotate)          | `Pick<SessionService, 'stateOf'>` | the mission's state                      |
+| `RequestService.view` (the creator's claim page) | `Pick<SessionService, 'usageOf'>` | state, period, consumed per risk, events |
+
+Both take it as an optional `budget` dependency. The composition root builds those two
+modules before the `SessionService` (which needs the requests module's `requestUrl`), so
+it leaves `budget` out and they default to `missionUsageReader(store.sessions)`: the same
+function over the same store, not a second implementation.
 
 ## Mission state (`mission-state.ts`)
 
@@ -210,7 +268,7 @@ audit entry with `remaining_budget` and `approval_id` (gateway-core).
 ## Rate windows (`rate-limit/sliding-window.ts`)
 
 `SlidingWindowRateLimiter` keeps, per key, the ascending timestamps of its actions and
-prunes them to the window on every access. Two faces on one state:
+prunes that key to its window on every access. Two faces on one state:
 
 - `SlidingWindows` — `peek(key, windowMs, nowMs) → { count, retryAfterMs }` never
   records (`retryAfterMs` = when the oldest action leaves the window); `push(key,
@@ -224,8 +282,9 @@ windowMs, nowMs)` records one action. The budget peeks before `decide()` and pus
 Above `pruneThreshold` keys (10 000) every `push` sweeps keys whose newest action left
 their last window. `rateWindowKey(missionId, riskId)` = `mission:<id>:risk:<risk_id>`.
 
-`// single-process only` — hosted replacement: one Redis sorted set per key
-(`ZREMRANGEBYSCORE`, `ZCARD`, `ZADD`, `PEXPIRE` in a Lua script); the budget would probe
+`// single-process only` (module comment and class) — hosted replacement: a Redis
+implementation of the same two interfaces, `SlidingWindows` and `RateLimiter`, one sorted
+set per key (`ZREMRANGEBYSCORE`, `ZCARD`, `ZADD`, `PEXPIRE` in a Lua script); the budget would probe
 before its SQLite transaction and record after commit (ADR). The composition root builds one
 `SlidingWindowRateLimiter`: it is the budget's `rateWindows` and, unless a test injects
 another `RateLimiter`, the surface limiter of the execution door (`mcp:mission:<id>`,
@@ -237,9 +296,11 @@ the execution door, which wraps it with `createBudgetStage`
 ## Structural check (`consistency.ts`)
 
 `countersAgreeWithAudit({ sessions, audit }, mission, now)` returns, per accepted risk,
-`counted` (sum of `session_counters.consumed` for the current period), `credited` (the
+`counted` (sum of `session_counters.consumed` for the current period, through
+`sessionCounterOf` and `consumedInPeriod` like every other reader), `credited` (the
 actions granted claims gave back in the period: `details.credits` of the session's
-`reset` / `extension` events whose `details.period_start` is the period's, see
+`reset` / `extension` events whose `details.period_start` is the period's, read through
+`parseEventDetails` so that an event with malformed details is skipped, see
 [requests](requests.md)) and `audited`
 (`audit.countAllowedTouches(mission, risk, period.start, period.end ?? open-ended)`), plus
 `mismatches` (`counted + credited !== audited`). The integration suite asserts `mismatches` is empty after a mixed run
@@ -272,7 +333,7 @@ fingerprint applies to approval requests only). Nothing was renamed.
 - `tests/unit/server/rate-limit/sliding-window.test.ts` (8) — empty window, peek never
   records, sliding drop-out, key independence, invalid window, sweep above threshold,
   the `RateLimiter` port, `rateWindowKey`.
-- `tests/integration/budget/session-service.test.ts` (19, `:memory:` store) — session
+- `tests/integration/budget/session-service.test.ts` (20, `:memory:` store) — session
   born on first call and N counters; refusal decrements nothing and drops one claim with
   `claim_url` and events; replay reuses the open request, a decided one is replaced;
   whole-call refusal; rollover on read; reload hourly vs one-off never; **N=50 concurrent
@@ -281,7 +342,9 @@ fingerprint applies to approval requests only). Nothing was renamed.
   after the window); refusals record nothing in the windows; approval gate: sealed
   arguments and fingerprint on the request, consumption by an identical replay in another
   key order, single use, exact fingerprint, expiry, whole-call refusal, approved actions
-  count against the quota; invariant abort leaves no session; `stateOf`.
+  count against the quota; invariant abort leaves no session; `stateOf`; `usageOf` and
+  `missionUsageReader` read the current period's counters only (three periods recorded,
+  one read, keyed by the current `period_start`).
 - `tests/integration/budget/pipeline-consistency.test.ts` (5) — the stage inside the real
   `CallPipeline` with the store's `SqliteAuditWriter`: **`SUM(session_counters) ==
 COUNT(audit allowed)` per risk after a mixed run**, upstream failure keeps the credit, a

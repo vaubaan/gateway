@@ -7,17 +7,25 @@
  * the same answer, as on the mission detail page. Open requests are listed by
  * link to the creator's view of the request (`/requests/<id>`, P1.7): their
  * arguments stay there. An event shows the fields named below and nothing
- * else of its free-form details.
+ * else of its details, read through `parseEventDetails` (`@vaubaan/shared`):
+ * an event whose stored details do not have the shape of its kind is listed
+ * with its kind, time, risk and actor, and no detail.
  *
  * The counters are the store's, as they stand: a granted claim (period reset,
  * quota extension) lowers them, so "counted" can go down during a period. The
  * `reset` / `extension` events of the timeline say how much was given back.
  */
-import type { MissionPolicyEntry, RiskId } from '@vaubaan/shared';
+import {
+  parseEventDetails,
+  type MissionPolicyEntry,
+  type RiskId,
+  type SessionEventDetails,
+} from '@vaubaan/shared';
 
 import type { AuthoritySubject } from '../authority';
 import type { MissionState } from '../budget';
 import type { MissionDetail, MissionService, SeverityLevel } from '../missions';
+import { isDecidable } from '../requests/state';
 import { inboxRequestPath } from '../requests/url';
 import type { AgentLabelSeen, AuditCursor, Store } from '../store';
 import type { Clock } from '../store/clock';
@@ -124,7 +132,7 @@ export class MissionSessionService {
       : [];
     const shown = page.slice(0, SESSION_EVENTS_PAGE_SIZE);
     const last = shown.at(-1);
-    const now = this.deps.clock.now().toISOString();
+    const now = this.deps.clock.now();
     const requests = await store.requests.listForMission(missionId);
 
     return {
@@ -137,7 +145,7 @@ export class MissionSessionService {
       next_events:
         page.length > SESSION_EVENTS_PAGE_SIZE && last ? { ts: last.ts, id: last.id } : null,
       open_requests: requests
-        .filter((r) => r.state === 'open' && r.expiresAt > now)
+        .filter((r) => isDecidable(r, now))
         .map((r) => ({
           id: r.id,
           kind: r.kind,
@@ -220,48 +228,98 @@ function periodRows(
     }));
 }
 
-function text(details: Record<string, unknown> | null, key: string): string | null {
-  const value = details?.[key];
-  return typeof value === 'string' && value.length > 0 ? value : null;
+/** The detail fields of an event view, all absent. */
+const NO_DETAIL = {
+  tool: null,
+  refusal_code: null,
+  agent_label: null,
+  remaining: null,
+  request_id: null,
+  request_kind: null,
+  token_prefix: null,
+  credits: null,
+  dimension: null,
+  expires_at: null,
+} satisfies Partial<SessionEventView>;
+
+type EventDetailFields = Pick<SessionEventView, keyof typeof NO_DETAIL>;
+
+/** `null` for a table with no entry: the page shows nothing rather than an empty list. */
+function countsOrNull(counts: Readonly<Record<RiskId, number>>): Record<RiskId, number> | null {
+  return Object.keys(counts).length > 0 ? { ...counts } : null;
 }
 
-function riskIdsOf(event: EventRecord): RiskId[] {
-  const listed = event.details?.risk_ids;
-  const ids = Array.isArray(listed) ? listed.filter((v): v is string => typeof v === 'string') : [];
+function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
+  if (!parsed) return NO_DETAIL;
+  switch (parsed.kind) {
+    case 'call-allowed':
+      return {
+        ...NO_DETAIL,
+        tool: parsed.details.tool || null,
+        agent_label: parsed.details.agent_label || null,
+        remaining: countsOrNull(parsed.details.remaining),
+      };
+    case 'call-refused':
+      return {
+        ...NO_DETAIL,
+        tool: parsed.details.tool || null,
+        agent_label: parsed.details.agent_label || null,
+        refusal_code: parsed.details.refusal_code,
+        request_id: parsed.details.request_id,
+      };
+    case 'request':
+      return {
+        ...NO_DETAIL,
+        request_id: parsed.details.request_id,
+        request_kind: parsed.details.request_kind,
+        tool: 'tool' in parsed.details ? parsed.details.tool || null : null,
+      };
+    case 'reset':
+      return {
+        ...NO_DETAIL,
+        request_id: parsed.details.request_id,
+        credits: countsOrNull(parsed.details.credits),
+      };
+    case 'extension':
+      return parsed.details.dimension === 'quota'
+        ? {
+            ...NO_DETAIL,
+            request_id: parsed.details.request_id,
+            dimension: parsed.details.dimension,
+            credits: countsOrNull(parsed.details.credits),
+          }
+        : {
+            ...NO_DETAIL,
+            request_id: parsed.details.request_id,
+            dimension: parsed.details.dimension,
+            expires_at: parsed.details.expires_at,
+          };
+    case 'rotation':
+      return { ...NO_DETAIL, token_prefix: parsed.details.token_prefix };
+    case 'revocation':
+      return NO_DETAIL;
+  }
+}
+
+/** The risk of the event's own column, then those a call event lists. */
+function riskIdsOf(event: EventRecord, parsed: SessionEventDetails | null): RiskId[] {
+  const ids =
+    parsed && (parsed.kind === 'call-allowed' || parsed.kind === 'call-refused')
+      ? [...parsed.details.risk_ids]
+      : [];
   if (event.riskId && !ids.includes(event.riskId)) ids.unshift(event.riskId);
   return ids;
 }
 
-function countsOf(
-  details: Record<string, unknown> | null,
-  key: string,
-): Record<RiskId, number> | null {
-  const value = details?.[key];
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
-  const entries = Object.entries(value).filter(
-    (entry): entry is [string, number] => typeof entry[1] === 'number',
-  );
-  return entries.length > 0 ? Object.fromEntries(entries) : null;
-}
-
 /** The fields of an event the page shows; the rest of `details` is not surfaced. */
 export function eventView(event: EventRecord, actorEmail: string | null): SessionEventView {
-  const { details } = event;
+  const parsed = parseEventDetails(event.kind, event.details);
   return {
     id: event.id,
     ts: event.ts,
     kind: event.kind,
-    risk_ids: riskIdsOf(event),
+    risk_ids: riskIdsOf(event, parsed),
     actor_email: actorEmail,
-    tool: text(details, 'tool'),
-    refusal_code: text(details, 'refusal_code'),
-    agent_label: text(details, 'agent_label'),
-    remaining: countsOf(details, 'remaining'),
-    request_id: text(details, 'request_id'),
-    request_kind: text(details, 'request_kind'),
-    token_prefix: text(details, 'token_prefix'),
-    credits: countsOf(details, 'credits'),
-    dimension: text(details, 'dimension'),
-    expires_at: text(details, 'expires_at'),
+    ...detailFields(parsed),
   };
 }

@@ -9,6 +9,11 @@
  * return path). TTLs are absolute (no sliding window): a session ends
  * `SESSION_TTL_MS` after sign-in whatever the activity (spec §6 "web sessions
  * are short").
+ *
+ * What comes back from the store is `unknown` until a type guard has proven
+ * its shape: the rows outlive a restart and an upgrade, and the same store
+ * holds other record kinds. A record that fails its guard is deleted and
+ * reads as no session.
  */
 import { randomBytes } from 'node:crypto';
 
@@ -63,6 +68,33 @@ export function newSessionId(): string {
   return randomBytes(ID_BYTES).toString('base64url');
 }
 
+function isObject(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isStringArray(value: unknown): value is readonly string[] {
+  return Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+}
+
+export function isWebSessionRecord(value: unknown): value is WebSessionRecord {
+  if (!isObject(value) || typeof value.createdAt !== 'string') return false;
+  if (value.kind === 'bootstrap') return true;
+  if (value.kind !== 'user' || typeof value.userId !== 'string') return false;
+  const { login } = value;
+  return isObject(login) && typeof login.email === 'string' && isStringArray(login.groups);
+}
+
+export function isPendingLogin(value: unknown): value is PendingLogin {
+  return (
+    isObject(value) &&
+    typeof value.state === 'string' &&
+    typeof value.nonce === 'string' &&
+    typeof value.codeVerifier === 'string' &&
+    typeof value.returnTo === 'string' &&
+    typeof value.createdAt === 'string'
+  );
+}
+
 export class SessionService {
   private readonly clock: Clock;
 
@@ -88,7 +120,7 @@ export class SessionService {
   async read(headers: Headers): Promise<ReadSession | null> {
     const id = readCookie(headers, SESSION_COOKIE);
     if (!id) return null;
-    const record = (await this.store.get(sessionKey(id))) as WebSessionRecord | null;
+    const record = await this.readGuarded(sessionKey(id), isWebSessionRecord);
     return record ? { id, record } : null;
   }
 
@@ -117,13 +149,25 @@ export class SessionService {
   async takePending(headers: Headers): Promise<PendingLogin | null> {
     const id = readCookie(headers, LOGIN_COOKIE);
     if (!id) return null;
-    const pending = (await this.store.get(loginKey(id))) as PendingLogin | null;
+    const pending = await this.readGuarded(loginKey(id), isPendingLogin);
     if (pending) await this.store.delete(loginKey(id));
     return pending;
   }
 
   clearPendingCookie(): string {
     return clearCookie(LOGIN_COOKIE);
+  }
+
+  /** The value under `key` when it has the expected shape; otherwise the key is deleted. */
+  private async readGuarded<T>(
+    key: string,
+    guard: (value: unknown) => value is T,
+  ): Promise<T | null> {
+    const value: unknown = await this.store.get(key);
+    if (value === null || value === undefined) return null;
+    if (guard(value)) return value;
+    await this.store.delete(key);
+    return null;
   }
 }
 

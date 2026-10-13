@@ -1003,6 +1003,24 @@ describe('ownership, reconnection, revocation', () => {
     );
   });
 
+  it('refuses to reconnect an unowned connection until an owner is reassigned (spec §2.3)', async () => {
+    const h = harness();
+    const alice = await h.actor('alice@example.com');
+    const { connection } = connectedOf(await h.service.start(alice, 'keyco', { fields }));
+    await h.store.connections.setStatus(connection.id, 'unowned');
+
+    await expectConnectError(
+      h.service.start(alice, 'keyco', {
+        fields: { token: 'tok-2', team_id: 'team_a' },
+        reconnectId: connection.id,
+      }),
+      'connection-unowned',
+    );
+    expect((await h.store.connections.getById(connection.id))!.status).toBe('unowned');
+    expect(await h.store.connections.getCredential(connection.id)).not.toContain('tok-2');
+    expect(h.audit.admin.map((e) => e.act)).toEqual(['connection-created']);
+  });
+
   it('revokes terminally: status revoked, credential erased, audited once', async () => {
     const h = harness();
     const alice = await h.actor('alice@example.com');

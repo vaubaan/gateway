@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * Type-to-confirm modal for destructive actions (delete org, delete project).
+ * Type-to-confirm modal for terminal actions (revoke a mission, revoke a connection).
  *
  * Render conditionally: `{open && <DangerConfirm ... />}`. The component takes
  * a `phrase` the user must type literally before the Confirm button enables.
@@ -89,6 +89,7 @@ export function DangerConfirm({
         </div>
         <input
           ref={inputRef}
+          aria-label={`Type ${phrase} to confirm`}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           disabled={busy}

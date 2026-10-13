@@ -23,13 +23,16 @@
  */
 import { UpstreamAuthError, type CredentialKind } from '@vaubaan/shared';
 import type {
+  ApiKeyCredentialSpec,
   AppInstallCredentialSpec,
   ConnectionContext,
   CredentialField,
   CredentialSecret,
+  OAuth2CredentialSpec,
   PluginRegistry,
   ProviderPlugin,
   Resource,
+  SshKeyCredentialSpec,
 } from '@vaubaan/plugin-sdk';
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
@@ -61,6 +64,7 @@ import {
   parseListValue,
   readCredentialFields,
   resolveReturnTo,
+  type FieldValues,
 } from './input';
 import {
   InstallationRefused,
@@ -75,7 +79,8 @@ import {
   OAuth2TokenError,
   type OAuth2Client,
 } from './oauth2';
-import type { PendingConnect, PendingConnectStore } from './pending';
+import { connectionOwnerOf } from './mapping';
+import type { PendingConnect, PendingConnectStore, PendingFlowKind } from './pending';
 import { generateEd25519KeyPair } from './ssh-keypair';
 
 /** Connect attempts (starts, callbacks, form posts) one user may make per window. */
@@ -176,7 +181,8 @@ export interface ResourcePatch {
 }
 
 export interface ConnectionServiceDeps {
-  readonly store: Store;
+  /** The three repositories the service reads and writes; never the raw handle. */
+  readonly store: Pick<Store, 'connections' | 'users' | 'groups'>;
   readonly registry: PluginRegistry;
   readonly providerApps: ProviderAppsService;
   readonly broker: CredentialBroker;
@@ -199,6 +205,33 @@ type DiscoveryPolicy =
   | 'best-effort'
   /** Not attempted: the public key is not installed yet (ssh-key). */
   | 'deferred';
+
+/** What every credential kind needs to start a flow, resolved once by `start`. */
+interface FlowStart {
+  readonly actor: Actor;
+  readonly plugin: ProviderPlugin;
+  readonly displayName: string;
+  readonly returnTo: string | null;
+  /** The connection being re-authenticated, already checked as reconnectable. */
+  readonly reconnectId: string | null;
+}
+
+/** What `finalize` stores once a credential has been obtained. */
+interface FinalizeOptions {
+  readonly displayName: string;
+  readonly reconnectId: string | null;
+  readonly returnTo: string | null;
+  readonly discovery: DiscoveryPolicy;
+  readonly metadata: Record<string, unknown>;
+}
+
+/** The outcome of the discovery attempted before the connection is written. */
+interface FirstDiscovery {
+  /** `null` when the discovery was deferred or failed. */
+  readonly resources: readonly Resource[] | null;
+  /** The failure a `best-effort` policy tolerated, recorded on the connection. */
+  readonly error: string | null;
+}
 
 export class ConnectionService {
   constructor(private readonly deps: ConnectionServiceDeps) {}
@@ -269,96 +302,127 @@ export class ConnectionService {
     const reconnect = input.reconnectId
       ? await this.requireReconnectable(actor, input.reconnectId, providerId)
       : null;
-    const displayName =
-      cleanName(input.displayName) ?? reconnect?.displayName ?? plugin.displayName;
+    const flow: FlowStart = {
+      actor,
+      plugin,
+      displayName: cleanName(input.displayName) ?? reconnect?.displayName ?? plugin.displayName,
+      returnTo,
+      reconnectId: reconnect?.id ?? null,
+    };
     const spec = plugin.credential;
 
     switch (spec.kind) {
-      case 'oauth2': {
-        const client = await this.oauthClient(plugin);
-        const pending: PendingConnect = {
-          kind: 'oauth2',
-          providerId,
-          userId: actor.user.id,
-          displayName,
-          codeVerifier: spec.pkce ? newCodeVerifier() : null,
-          redirectUri: this.callbackUrl(providerId).href,
-          returnTo,
-          reconnectId: reconnect?.id ?? null,
-          createdAt: this.nowIso(),
-        };
-        const state = await this.deps.pending.create(pending);
-        const url = buildAuthorizationUrl(spec, client, {
-          redirectUri: pending.redirectUri,
-          state,
-          codeVerifier: pending.codeVerifier,
-        });
-        return { kind: 'redirect', url: url.href };
-      }
-      case 'app-install': {
-        const appConfig = await this.hostAppConfig(providerId);
-        // Refused before the user is sent anywhere; checked again on the callback.
-        if (
-          !spec.userVerification &&
-          (await this.deps.providerApps.installVerification(providerId)) !== 'unverified-accepted'
-        ) {
-          throw new ConnectError('installation-unverifiable');
-        }
-        const url = new URL(spec.installUrl(appConfig));
-        const state = await this.deps.pending.create({
-          kind: 'app-install',
-          providerId,
-          userId: actor.user.id,
-          displayName,
-          codeVerifier: null,
-          redirectUri: this.callbackUrl(providerId).href,
-          returnTo,
-          reconnectId: reconnect?.id ?? null,
-          createdAt: this.nowIso(),
-        });
-        url.searchParams.set('state', state);
-        return { kind: 'redirect', url: url.href };
-      }
-      case 'api-key': {
-        const read = readCredentialFields(spec.fields, input.fields ?? {});
-        if (read.problems.length > 0)
-          throw new ConnectError('invalid-input', read.problems.join('; '));
-        const secret: CredentialSecret = {
-          kind: 'api-key',
-          fields: read.values,
-          metadata: read.visible,
-        };
-        const connected = await this.finalize(actor, plugin, secret, {
-          displayName,
-          reconnectId: reconnect?.id ?? null,
-          returnTo,
-          discovery: 'required',
-          metadata: { fields: read.visible },
-        });
-        return { kind: 'connected', ...connected };
-      }
-      case 'ssh-key': {
-        const read = readCredentialFields(spec.fields, input.fields ?? {});
-        if (read.problems.length > 0)
-          throw new ConnectError('invalid-input', read.problems.join('; '));
-        const pair = generateEd25519KeyPair(SSH_KEY_COMMENT);
-        const secret: CredentialSecret = {
-          kind: 'ssh-key',
-          privateKeyPem: pair.privateKeyPem,
-          publicKey: pair.publicKey,
-          fields: read.values,
-          metadata: read.visible,
-        };
-        const connected = await this.finalize(actor, plugin, secret, {
-          displayName,
-          reconnectId: reconnect?.id ?? null,
-          returnTo,
-          discovery: 'deferred',
-          metadata: { fields: read.visible, public_key: pair.publicKey },
-        });
-        return { kind: 'connected', ...connected };
-      }
+      case 'oauth2':
+        return this.startOAuth2(flow, spec);
+      case 'app-install':
+        return this.startAppInstall(flow, spec);
+      case 'api-key':
+        return this.connectWithApiKey(flow, spec, input);
+      case 'ssh-key':
+        return this.connectWithSshKey(flow, spec, input);
     }
+  }
+
+  private async startOAuth2(flow: FlowStart, spec: OAuth2CredentialSpec): Promise<StartResult> {
+    const client = await this.oauthClient(flow.plugin);
+    const pending = this.newPending('oauth2', flow, spec.pkce ? newCodeVerifier() : null);
+    const state = await this.deps.pending.create(pending);
+    const url = buildAuthorizationUrl(spec, client, {
+      redirectUri: pending.redirectUri,
+      state,
+      codeVerifier: pending.codeVerifier,
+    });
+    return { kind: 'redirect', url: url.href };
+  }
+
+  private async startAppInstall(
+    flow: FlowStart,
+    spec: AppInstallCredentialSpec,
+  ): Promise<StartResult> {
+    const providerId = flow.plugin.id;
+    const appConfig = await this.hostAppConfig(providerId);
+    // Refused before the user is sent anywhere; checked again on the callback.
+    if (
+      !spec.userVerification &&
+      (await this.deps.providerApps.installVerification(providerId)) !== 'unverified-accepted'
+    ) {
+      throw new ConnectError('installation-unverifiable');
+    }
+    const url = new URL(spec.installUrl(appConfig));
+    const state = await this.deps.pending.create(this.newPending('app-install', flow, null));
+    url.searchParams.set('state', state);
+    return { kind: 'redirect', url: url.href };
+  }
+
+  private async connectWithApiKey(
+    flow: FlowStart,
+    spec: ApiKeyCredentialSpec,
+    input: StartInput,
+  ): Promise<StartResult> {
+    const read = this.readFormOrThrow(spec.fields, input);
+    const secret: CredentialSecret = {
+      kind: 'api-key',
+      fields: read.values,
+      metadata: read.visible,
+    };
+    const connected = await this.finalize(flow.actor, flow.plugin, secret, {
+      displayName: flow.displayName,
+      reconnectId: flow.reconnectId,
+      returnTo: flow.returnTo,
+      discovery: 'required',
+      metadata: { fields: read.visible },
+    });
+    return { kind: 'connected', ...connected };
+  }
+
+  private async connectWithSshKey(
+    flow: FlowStart,
+    spec: SshKeyCredentialSpec,
+    input: StartInput,
+  ): Promise<StartResult> {
+    const read = this.readFormOrThrow(spec.fields, input);
+    const pair = generateEd25519KeyPair(SSH_KEY_COMMENT);
+    const secret: CredentialSecret = {
+      kind: 'ssh-key',
+      privateKeyPem: pair.privateKeyPem,
+      publicKey: pair.publicKey,
+      fields: read.values,
+      metadata: read.visible,
+    };
+    const connected = await this.finalize(flow.actor, flow.plugin, secret, {
+      displayName: flow.displayName,
+      reconnectId: flow.reconnectId,
+      returnTo: flow.returnTo,
+      discovery: 'deferred',
+      metadata: { fields: read.visible, public_key: pair.publicKey },
+    });
+    return { kind: 'connected', ...connected };
+  }
+
+  /** The record a redirect flow leaves behind for its callback. */
+  private newPending(
+    kind: PendingFlowKind,
+    flow: FlowStart,
+    codeVerifier: string | null,
+  ): PendingConnect {
+    return {
+      kind,
+      providerId: flow.plugin.id,
+      userId: flow.actor.user.id,
+      displayName: flow.displayName,
+      codeVerifier,
+      redirectUri: this.callbackUrl(flow.plugin.id).href,
+      returnTo: flow.returnTo,
+      reconnectId: flow.reconnectId,
+      createdAt: this.nowIso(),
+    };
+  }
+
+  /** The form values of an `api-key` / `ssh-key` connect, or `invalid-input` naming each problem. */
+  private readFormOrThrow(fields: readonly CredentialField[], input: StartInput): FieldValues {
+    const read = readCredentialFields(fields, input.fields ?? {});
+    if (read.problems.length > 0) throw new ConnectError('invalid-input', read.problems.join('; '));
+    return read;
   }
 
   /**
@@ -374,64 +438,79 @@ export class ConnectionService {
     const spec = plugin.credential;
 
     if (pending.kind === 'oauth2' && spec.kind === 'oauth2') {
-      const denied = query.get('error');
-      if (denied) {
-        const description = query.get('error_description');
-        throw new ConnectError(
-          'provider-denied',
-          description ? `${denied}: ${description}` : denied,
-        );
-      }
-      const code = query.get('code');
-      if (!code) throw new ConnectError('provider-denied', 'no authorization code was returned');
-      let secret: CredentialSecret;
-      try {
-        secret = await exchangeCode(
-          spec,
-          await this.oauthClient(plugin),
-          { code, redirectUri: pending.redirectUri, codeVerifier: pending.codeVerifier },
-          { fetch: this.deps.fetch, now: () => this.deps.clock.now() },
-        );
-      } catch (err) {
-        if (err instanceof OAuth2TokenError) {
-          throw new ConnectError(
-            err.rejected ? 'token-exchange-failed' : 'provider-unreachable',
-            err.message,
-          );
-        }
-        throw err;
-      }
-      return this.finalize(actor, plugin, secret, {
-        displayName: pending.displayName,
-        reconnectId: pending.reconnectId,
-        returnTo: pending.returnTo,
-        discovery: 'best-effort',
-        metadata: {},
-      });
+      return this.completeOAuth2(actor, plugin, spec, pending, query);
     }
-
     if (pending.kind === 'app-install' && spec.kind === 'app-install') {
-      const installationId = query.get(spec.installationIdParam);
-      if (!installationId || !INSTALLATION_ID_PATTERN.test(installationId)) {
+      return this.completeAppInstall(actor, plugin, spec, pending, query);
+    }
+    throw new ConnectError('state-invalid');
+  }
+
+  private async completeOAuth2(
+    actor: Actor,
+    plugin: ProviderPlugin,
+    spec: OAuth2CredentialSpec,
+    pending: PendingConnect,
+    query: URLSearchParams,
+  ): Promise<Connected> {
+    const denied = query.get('error');
+    if (denied) {
+      const description = query.get('error_description');
+      throw new ConnectError('provider-denied', description ? `${denied}: ${description}` : denied);
+    }
+    const code = query.get('code');
+    if (!code) throw new ConnectError('provider-denied', 'no authorization code was returned');
+    let secret: CredentialSecret;
+    try {
+      secret = await exchangeCode(
+        spec,
+        await this.oauthClient(plugin),
+        { code, redirectUri: pending.redirectUri, codeVerifier: pending.codeVerifier },
+        { fetch: this.deps.fetch, now: () => this.deps.clock.now() },
+      );
+    } catch (err) {
+      if (err instanceof OAuth2TokenError) {
         throw new ConnectError(
-          'provider-denied',
-          'no installation was returned (it may be awaiting approval by an account owner)',
+          err.rejected ? 'token-exchange-failed' : 'provider-unreachable',
+          err.message,
         );
       }
-      const binding = await this.bindInstallation(actor, plugin, spec, pending, query, {
-        installationId,
-      });
-      const secret: CredentialSecret = { kind: 'app-install', installationId, metadata: {} };
-      return this.finalize(actor, plugin, secret, {
-        displayName: pending.displayName,
-        reconnectId: pending.reconnectId,
-        returnTo: pending.returnTo,
-        discovery: 'reject-auth-failure',
-        metadata: { installation_id: installationId, installation_verification: binding },
-      });
+      throw err;
     }
+    return this.finalize(actor, plugin, secret, {
+      displayName: pending.displayName,
+      reconnectId: pending.reconnectId,
+      returnTo: pending.returnTo,
+      discovery: 'best-effort',
+      metadata: {},
+    });
+  }
 
-    throw new ConnectError('state-invalid');
+  private async completeAppInstall(
+    actor: Actor,
+    plugin: ProviderPlugin,
+    spec: AppInstallCredentialSpec,
+    pending: PendingConnect,
+    query: URLSearchParams,
+  ): Promise<Connected> {
+    const installationId = query.get(spec.installationIdParam);
+    if (!installationId || !INSTALLATION_ID_PATTERN.test(installationId)) {
+      throw new ConnectError(
+        'provider-denied',
+        'no installation was returned (it may be awaiting approval by an account owner)',
+      );
+    }
+    const binding = await this.bindInstallation(actor, plugin, spec, pending, query, {
+      installationId,
+    });
+    const secret: CredentialSecret = { kind: 'app-install', installationId, metadata: {} };
+    return this.finalize(actor, plugin, secret, {
+      displayName: pending.displayName,
+      reconnectId: pending.reconnectId,
+      returnTo: pending.returnTo,
+      discovery: 'reject-auth-failure',
+      metadata: { installation_id: installationId, installation_verification: binding },
+    });
   }
 
   /**
@@ -523,75 +602,22 @@ export class ConnectionService {
     return 'user-authorization';
   }
 
+  /** First discovery, then the write, then the discovery's outcome on the connection. */
   private async finalize(
     actor: Actor,
     plugin: ProviderPlugin,
     secret: CredentialSecret,
-    options: {
-      readonly displayName: string;
-      readonly reconnectId: string | null;
-      readonly returnTo: string | null;
-      readonly discovery: DiscoveryPolicy;
-      readonly metadata: Record<string, unknown>;
-    },
+    options: FinalizeOptions,
   ): Promise<Connected> {
-    let discovered: readonly Resource[] | null = null;
-    let discoveryError: string | null = null;
-    if (options.discovery !== 'deferred') {
-      try {
-        discovered = await this.discoverWith(plugin, {
-          credential: secret,
-          appConfig: await this.deps.providerApps.pluginAppConfig(plugin.id),
-          fetch: this.deps.fetch,
-        });
-      } catch (err) {
-        const rejected = err instanceof UpstreamAuthError;
-        if (
-          options.discovery === 'required' ||
-          (options.discovery === 'reject-auth-failure' && rejected)
-        ) {
-          throw new ConnectError(
-            rejected || !isTransportFailure(err) ? 'credential-rejected' : 'provider-unreachable',
-            `${plugin.displayName}: ${errorMessage(err)}`,
-          );
-        }
-        discoveryError = oneLine(errorMessage(err));
-      }
-    }
-
-    const { connections } = this.deps.store;
-    const expiresAt = secret.kind === 'oauth2' ? secret.expiresAt : null;
-    const sealed = serializeSecret(secret);
-    const metadata = { credential_kind: secret.kind, ...options.metadata };
-    let connection: ConnectionRecord;
-    if (options.reconnectId) {
-      // Ownership is checked again: a redirect flow may complete minutes after it started.
-      await this.requireReconnectable(actor, options.reconnectId, plugin.id);
-      if (!(await connections.reconnect(options.reconnectId, sealed, expiresAt))) {
-        throw new ConnectError('connection-revoked');
-      }
-      const previous = await connections.getById(options.reconnectId);
-      connection = await connections.setMetadata(options.reconnectId, {
-        ...(previous?.metadata ?? {}),
-        ...metadata,
-      });
-      await this.audit(actor, 'connection-reconnected', connection, null);
-    } else {
-      connection = await connections.create({
-        provider: plugin.id,
-        owner: { kind: 'user', id: actor.user.id },
-        displayName: options.displayName,
-        credential: sealed,
-        credentialExpiresAt: expiresAt,
-        metadata,
-      });
-      await this.audit(actor, 'connection-created', connection, null);
-    }
+    const first = await this.firstDiscovery(plugin, secret, options.discovery);
+    const connection = await this.persist(actor, plugin, secret, options);
 
     let discovery: DiscoveryRecord | null = null;
-    if (discovered) discovery = await this.storeDiscovery(connection, plugin, discovered);
-    else if (discoveryError)
-      discovery = await this.recordDiscovery(connection.id, 0, discoveryError);
+    if (first.resources) {
+      discovery = await this.storeDiscovery(connection, plugin, first.resources);
+    } else if (first.error) {
+      discovery = await this.recordDiscovery(connection.id, 0, first.error);
+    }
 
     this.deps.logger.info(options.reconnectId ? 'connection reconnected' : 'connection created', {
       connection_id: connection.id,
@@ -601,11 +627,81 @@ export class ConnectionService {
       resources: discovery?.count ?? 0,
     });
     return {
-      connection: (await connections.getById(connection.id)) ?? connection,
+      connection: (await this.deps.store.connections.getById(connection.id)) ?? connection,
       discovery,
       reconnected: options.reconnectId !== null,
       returnTo: options.returnTo,
     };
+  }
+
+  /**
+   * Tries the credential that was just obtained, before anything is stored.
+   * Throws the `ConnectError` of a failure the policy does not tolerate.
+   */
+  private async firstDiscovery(
+    plugin: ProviderPlugin,
+    secret: CredentialSecret,
+    policy: DiscoveryPolicy,
+  ): Promise<FirstDiscovery> {
+    if (policy === 'deferred') return { resources: null, error: null };
+    try {
+      const resources = await this.discoverWith(plugin, {
+        credential: secret,
+        appConfig: await this.deps.providerApps.pluginAppConfig(plugin.id),
+        fetch: this.deps.fetch,
+      });
+      return { resources, error: null };
+    } catch (err) {
+      const rejected = err instanceof UpstreamAuthError;
+      if (policy === 'required' || (policy === 'reject-auth-failure' && rejected)) {
+        throw new ConnectError(
+          rejected || !isTransportFailure(err) ? 'credential-rejected' : 'provider-unreachable',
+          `${plugin.displayName}: ${errorMessage(err)}`,
+        );
+      }
+      return { resources: null, error: oneLine(errorMessage(err)) };
+    }
+  }
+
+  /** Creates the connection, or reconnects the one the flow named; audited either way. */
+  private async persist(
+    actor: Actor,
+    plugin: ProviderPlugin,
+    secret: CredentialSecret,
+    options: FinalizeOptions,
+  ): Promise<ConnectionRecord> {
+    const { connections } = this.deps.store;
+    const expiresAt = secret.kind === 'oauth2' ? secret.expiresAt : null;
+    const sealed = serializeSecret(secret);
+    const metadata = { credential_kind: secret.kind, ...options.metadata };
+    if (!options.reconnectId) {
+      const created = await connections.create({
+        provider: plugin.id,
+        owner: { kind: 'user', id: actor.user.id },
+        displayName: options.displayName,
+        credential: sealed,
+        credentialExpiresAt: expiresAt,
+        metadata,
+      });
+      await this.audit(actor, 'connection-created', created, null);
+      return created;
+    }
+    // Ownership is checked again: a redirect flow may complete minutes after it started.
+    await this.requireReconnectable(actor, options.reconnectId, plugin.id);
+    if (!(await connections.reconnect(options.reconnectId, sealed, expiresAt))) {
+      // The status changed between the check and the write.
+      const now = await connections.getById(options.reconnectId);
+      throw new ConnectError(
+        now?.status === 'unowned' ? 'connection-unowned' : 'connection-revoked',
+      );
+    }
+    const previous = await connections.getById(options.reconnectId);
+    const reconnected = await connections.setMetadata(options.reconnectId, {
+      ...(previous?.metadata ?? {}),
+      ...metadata,
+    });
+    await this.audit(actor, 'connection-reconnected', reconnected, null);
+    return reconnected;
   }
 
   // ── Resources ─────────────────────────────────────────────────────────────
@@ -774,6 +870,8 @@ export class ConnectionService {
     const connection = await this.requireOwned(actor, connectionId);
     if (connection.provider !== providerId) throw new ConnectError('provider-mismatch');
     if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
+    // Spec §2.3: nobody reconnects an unowned connection until an owner is reassigned.
+    if (connection.status === 'unowned') throw new ConnectError('connection-unowned');
     return connection;
   }
 
@@ -865,12 +963,9 @@ export class ConnectionService {
   }
 
   private async ownerLabel(connection: ConnectionRecord): Promise<string> {
-    if (connection.owner.kind === 'user') {
-      const user = await this.deps.store.users.getById(connection.owner.id);
-      return user?.email ?? 'unknown user';
-    }
-    const group = await this.deps.store.groups.getById(connection.owner.id);
-    return group ? `group ${group.name}` : 'unknown group';
+    const owner = await connectionOwnerOf(this.deps.store, connection);
+    if (owner.kind === 'user') return owner.name ?? 'unknown user';
+    return owner.name === null ? 'unknown group' : `group ${owner.name}`;
   }
 
   private async audit(

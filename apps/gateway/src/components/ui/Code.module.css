@@ -7,13 +7,3 @@
   padding: 1px 6px;
   color: var(--text-foreground);
 }
-.kbd {
-  font-family: var(--font-geist-mono);
-  font-size: 0.82em;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-subtle);
-  border-bottom-width: 2px;
-  border-radius: var(--radius-xs);
-  padding: 1px 6px;
-  color: var(--text-muted);
-}

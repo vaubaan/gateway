@@ -3,8 +3,12 @@
  * proxy. Web-standard `Response` so any host (Next route handler today,
  * another server tomorrow) can mount it. Reveals build stamps and the store
  * kind, never configuration values.
+ *
+ * It takes the four things it reports on (`HealthDeps`), not the composition
+ * root; the root satisfies the interface, so a host passes it as is.
  */
-import type { GatewayRoot } from '../compose/root';
+import type { StoreLiveness } from '../compose/ports';
+import type { Logger } from '../logging';
 
 export interface HealthBody {
   readonly status: 'ok' | 'degraded' | 'unavailable';
@@ -15,22 +19,33 @@ export interface HealthBody {
   readonly reason?: string;
 }
 
-const HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
+export interface HealthDeps {
+  readonly store: Pick<StoreLiveness, 'kind' | 'ping'>;
+  readonly logger: Pick<Logger, 'error'>;
+  readonly build: { readonly version: string; readonly commit: string };
+  readonly startedAt: Date;
+  /** Defaults to the wall clock; tests inject a fixed instant. */
+  readonly now?: () => Date;
+}
 
-export async function healthResponse(root: GatewayRoot): Promise<Response> {
+const HEADERS = { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' };
+const MS_PER_SECOND = 1000;
+
+export async function healthResponse(deps: HealthDeps): Promise<Response> {
   let storeStatus: 'ok' | 'error' = 'ok';
   try {
-    await root.store.ping();
+    await deps.store.ping();
   } catch (err) {
     storeStatus = 'error';
-    root.logger.error('store ping failed', { err });
+    deps.logger.error('store ping failed', { err });
   }
+  const now = (deps.now ?? (() => new Date()))();
   const body: HealthBody = {
     status: storeStatus === 'ok' ? 'ok' : 'degraded',
-    version: root.build.version,
-    commit: root.build.commit,
-    uptime_seconds: Math.floor((Date.now() - root.startedAt.getTime()) / 1000),
-    store: { kind: root.store.kind, status: storeStatus },
+    version: deps.build.version,
+    commit: deps.build.commit,
+    uptime_seconds: Math.floor((now.getTime() - deps.startedAt.getTime()) / MS_PER_SECOND),
+    store: { kind: deps.store.kind, status: storeStatus },
   };
   return new Response(JSON.stringify(body), {
     status: storeStatus === 'ok' ? 200 : 503,
@@ -47,15 +62,15 @@ export function unavailableResponse(): Response {
   return new Response(JSON.stringify(body), { status: 503, headers: HEADERS });
 }
 
-/** Mounts `/healthz` on any host that provides the root lazily. */
-export function healthHandler(getRoot: () => Promise<GatewayRoot>): () => Promise<Response> {
+/** Mounts `/healthz` on any host that provides its dependencies lazily (the root satisfies them). */
+export function healthHandler(getDeps: () => Promise<HealthDeps>): () => Promise<Response> {
   return async () => {
-    let root: GatewayRoot;
+    let deps: HealthDeps;
     try {
-      root = await getRoot();
+      deps = await getDeps();
     } catch {
       return unavailableResponse();
     }
-    return healthResponse(root);
+    return healthResponse(deps);
   };
 }

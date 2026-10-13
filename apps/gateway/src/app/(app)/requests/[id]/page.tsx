@@ -11,6 +11,7 @@
 import Link from 'next/link';
 
 import { LocalDate } from '@/components/LocalDate';
+import { NeedsUser } from '@/components/auth/NeedsUser';
 import {
   Badge,
   Banner,
@@ -29,7 +30,7 @@ import {
   Tr,
   type BadgeTone,
 } from '@/components/ui';
-import { currentPrincipal } from '@/lib/auth/session';
+import { currentUser } from '@/lib/auth/session';
 import {
   ADDRESSED_TO_CREATOR,
   INBOX_PATH,
@@ -72,11 +73,11 @@ interface Props {
 }
 
 export default async function RequestPage({ params, searchParams }: Props) {
-  const { root, principal } = await currentPrincipal();
+  const session = await currentUser();
+  if (!session) return <NeedsUser />;
   const { id } = await params;
-  const result =
-    principal?.kind === 'user' ? await root.requests.service.view(principal.user, id) : null;
-  if (result?.outcome !== 'ok') {
+  const result = await session.root.requests.service.view(session.user, id);
+  if (result.outcome !== 'ok') {
     return <Banner tone="warning">{ADDRESSED_TO_CREATOR}</Banner>;
   }
   const { view } = result;

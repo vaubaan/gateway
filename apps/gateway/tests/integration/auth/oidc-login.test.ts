@@ -5,7 +5,7 @@
  * (`openid-client`) talking to the in-process `FakeIdp` through `customFetch`,
  * the host-agnostic handlers driven with web-standard `Request`s.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
 
 import { BOOTSTRAP_REVOKED_KEY, IDP_CONFIG_KEYS, SESSION_COOKIE } from '../../../src/server/auth';
@@ -375,6 +375,94 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     expect(noEmail.headers.get('location')).toBe('/login?error=claims-missing');
   });
 
+  it('refuses a sign-in whose email the IdP marks as unverified: no user, no operator, token still active', async () => {
+    await configureIdp();
+    const b: Browser = { cookies: new Map() };
+    // `ops@example.com` is on the admin list: an unverified claim must not make an operator.
+    const res = await signIn(b, {
+      sub: 'idp|mallory',
+      email: 'ops@example.com',
+      email_verified: false,
+    });
+    expect(res.headers.get('location')).toBe('/login?error=email-not-verified');
+    expect(b.cookies.has(SESSION_COOKIE)).toBe(false);
+    expect(await root.store.users.getBySubject('idp|mallory')).toBeNull();
+    expect(await root.auth.bootstrap.state()).toEqual({ status: 'active' });
+
+    const verified = await signIn(b, {
+      sub: 'idp|ops',
+      email: 'ops@example.com',
+      email_verified: true,
+    });
+    expect(verified.headers.get('location')).toBe('/admin');
+  });
+
+  it('a sign-in replaces the session the browser already had', async () => {
+    await configureIdp();
+    const b: Browser = { cookies: new Map() };
+    await signIn(b, { sub: 'idp|ada', email: 'ada@example.com' });
+    const first = headersOf(b);
+    expect(await root.auth.authenticator.authenticate(first)).not.toBeNull();
+    await signIn(b, { sub: 'idp|ada', email: 'ada@example.com' });
+    expect(await root.auth.authenticator.authenticate(first)).toBeNull();
+    expect(await root.auth.authenticator.authenticate(headersOf(b))).not.toBeNull();
+  });
+
+  it('an IdP save whose audit entry cannot be written is reported at error, not lost in silence', async () => {
+    const b: Browser = { cookies: new Map() };
+    const login = await root.auth.handlers.bootstrapLogin(
+      new Request(`${PUBLIC_URL}/api/auth/bootstrap`, {
+        method: 'POST',
+        headers: { origin: PUBLIC_URL, 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ token: TEST_BOOTSTRAP_TOKEN }).toString(),
+      }),
+    );
+    absorbCookies(b, login);
+    vi.spyOn(root.store.auditWriter, 'write').mockRejectedValueOnce(new Error('audit down'));
+    const saved = await root.auth.handlers.saveIdpSettings(
+      new Request(`${PUBLIC_URL}/api/admin/identity-provider`, {
+        method: 'POST',
+        headers: headersOf(b, {
+          origin: PUBLIC_URL,
+          'content-type': 'application/x-www-form-urlencoded',
+        }),
+        body: new URLSearchParams({
+          issuer: idp.issuer.href,
+          client_id: CLIENT.clientId,
+          client_secret: CLIENT.clientSecret,
+          claim_sub: 'sub',
+          claim_email: 'email',
+          claim_groups: 'groups',
+          allowed_email_domains: '',
+        }).toString(),
+      }),
+    );
+    vi.restoreAllMocks();
+    // The settings are stored (one transaction); the missing entry is an error line naming the actor.
+    expect(saved.headers.get('location')).toBe('/admin/identity-provider?saved=1');
+    expect((await root.auth.idp.current())?.settings.clientId).toBe(CLIENT.clientId);
+    const errorLine = lines.find((l) => l.includes('audit entry not written'));
+    expect(errorLine).toBeDefined();
+    expect(JSON.parse(errorLine ?? '{}')).toMatchObject({
+      level: 'error',
+      actor: BOOTSTRAP_ACTOR_ID,
+      object: 'idp',
+    });
+    expect(errorLine).not.toContain(CLIENT.clientSecret);
+  });
+
+  it('answers 400 to a body that is not a form instead of failing', async () => {
+    const notAForm = (path: string) =>
+      new Request(`${PUBLIC_URL}${path}`, {
+        method: 'POST',
+        headers: { origin: PUBLIC_URL, 'content-type': 'application/json' },
+        body: '{"token":"x"}',
+      });
+    expect((await root.auth.handlers.bootstrapLogin(notAForm('/api/auth/bootstrap'))).status).toBe(
+      400,
+    );
+  });
+
   it('merges userinfo claims under the ID token claims', async () => {
     const withUserinfo = new FakeIdp({ ...CLIENT, userinfoOnly: ['groups', 'email'] });
     await root.close();
@@ -428,9 +516,14 @@ describe('OIDC login, web session, bootstrap token and admin rule', () => {
     await configureIdp();
     const b: Browser = { cookies: new Map() };
     await signIn(b, { sub: 'idp|hal', email: 'hal@example.com' });
-    const n = root.store.db
-      .prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM web_sessions')
-      .get()?.n;
-    expect(n).toBe(1);
+    expect(await root.store.webSessions.count()).toBe(1);
+    // Keyed by a digest: the cookie value is not in the table.
+    const dump = root.store.db
+      .prepare<[], { id: string }>('SELECT id FROM web_sessions')
+      .all()
+      .map((r) => r.id);
+    expect(dump).toHaveLength(1);
+    expect(dump.join()).not.toContain(b.cookies.get(SESSION_COOKIE));
+    expect(dump[0]).toMatch(/^[0-9a-f]{64}$/);
   });
 });

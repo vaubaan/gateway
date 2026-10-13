@@ -18,7 +18,7 @@ import {
   Input,
   Stack,
 } from '@/components/ui';
-import { adminDecision } from '@/lib/auth/session';
+import { requireOperator } from '@/lib/auth/session';
 import { DEFAULT_CLAIM_MAPPING } from '@/server/auth';
 
 export const dynamic = 'force-dynamic';
@@ -30,12 +30,11 @@ interface Props {
 const RETURN_AFTER_TEST = '/admin/identity-provider?tested=1';
 
 export default async function IdentityProviderPage({ searchParams }: Props) {
+  const { root, principal } = await requireOperator();
   const params = await searchParams;
   const problems = ([] as string[]).concat(params.problem ?? []);
   const saved = params.saved === '1';
   const tested = params.tested === '1';
-  const { root, decision } = await adminDecision();
-  const principal = decision.ok ? decision.principal : null;
   const idp = root.auth.idp;
   const current = await idp.current();
   const stored = await idp.stored();
@@ -68,7 +67,7 @@ export default async function IdentityProviderPage({ searchParams }: Props) {
           </ul>
         </Banner>
       )}
-      {tested && principal?.kind === 'user' && (
+      {tested && principal.kind === 'user' && (
         <Banner tone="info" title="Test login result">
           <dl className={styles.dl}>
             <dt>Email</dt>
@@ -108,9 +107,11 @@ export default async function IdentityProviderPage({ searchParams }: Props) {
               <Stack gap="var(--space-4)">
                 <Field
                   label="Issuer URL"
+                  htmlFor="idp-issuer"
                   hint="The OpenID issuer identifier; discovery runs against <issuer>/.well-known/openid-configuration"
                 >
                   <Input
+                    id="idp-issuer"
                     name="issuer"
                     type="url"
                     required
@@ -118,8 +119,9 @@ export default async function IdentityProviderPage({ searchParams }: Props) {
                     placeholder="https://login.example.com/realms/acme"
                   />
                 </Field>
-                <Field label="Client ID">
+                <Field label="Client ID" htmlFor="idp-client-id">
                   <Input
+                    id="idp-client-id"
                     name="client_id"
                     required
                     defaultValue={values?.clientId ?? ''}
@@ -128,6 +130,7 @@ export default async function IdentityProviderPage({ searchParams }: Props) {
                 </Field>
                 <Field
                   label="Client secret"
+                  htmlFor="idp-client-secret"
                   hint={
                     stored?.hasClientSecret
                       ? 'A secret is stored; leave blank to keep it.'
@@ -135,6 +138,7 @@ export default async function IdentityProviderPage({ searchParams }: Props) {
                   }
                 >
                   <Input
+                    id="idp-client-secret"
                     name="client_secret"
                     type="password"
                     autoComplete="new-password"
@@ -171,9 +175,11 @@ export default async function IdentityProviderPage({ searchParams }: Props) {
                 </Field>
                 <Field
                   label="Allowed email domains"
+                  htmlFor="idp-allowed-email-domains"
                   hint="Optional, space or comma separated. Empty: any domain the IdP authenticates."
                 >
                   <Input
+                    id="idp-allowed-email-domains"
                     name="allowed_email_domains"
                     defaultValue={values?.allowedEmailDomains.join(' ') ?? ''}
                     placeholder="example.com"

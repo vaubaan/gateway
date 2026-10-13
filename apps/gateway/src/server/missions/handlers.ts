@@ -12,12 +12,7 @@
  * check, `Cache-Control: no-store` (spec §6). A mission always has an
  * identified human behind it, so the bootstrap operator cannot issue one.
  */
-import {
-  forbiddenOriginResponse,
-  isSameOrigin,
-  type Authenticator,
-  type UserPrincipal,
-} from '../auth';
+import { guardMutation, refusalResponse, type Authenticator, type UserPrincipal } from '../auth';
 import { parseMissionDraft } from './draft-schema';
 import type { MissionService } from './mission-service';
 import type { MissionDraft } from './model';
@@ -42,22 +37,19 @@ function json(status: number, body: unknown): Response {
   });
 }
 
+const REFUSALS = {
+  field: 'message',
+  noSession: 'Sign in first.',
+  forbidden: 'A mission is issued by an identified user; sign in through the identity provider.',
+} as const;
+
 const NOT_FOUND = { error: 'not-found', message: 'No such mission among yours.' };
 
 export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers {
   /** The signed-in user behind a mutation, or the response that refuses it. */
   async function userOf(request: Request): Promise<UserPrincipal | Response> {
-    if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-    const principal = await deps.authenticator.authenticate(request.headers);
-    if (!principal) return json(401, { error: 'unauthenticated', message: 'Sign in first.' });
-    if (principal.kind !== 'user') {
-      return json(403, {
-        error: 'forbidden',
-        message:
-          'A mission is issued by an identified user; sign in through the identity provider.',
-      });
-    }
-    return principal;
+    const guard = await guardMutation(request, deps, 'user');
+    return guard.ok ? guard.principal : refusalResponse(guard, REFUSALS);
   }
 
   async function draftOf(request: Request): Promise<MissionDraft | Response> {

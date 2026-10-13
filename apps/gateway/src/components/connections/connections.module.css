@@ -174,8 +174,3 @@
   text-align: center;
   color: var(--text-muted);
 }
-
-.sectionTitle {
-  margin: 0;
-  font-size: var(--text-lg);
-}

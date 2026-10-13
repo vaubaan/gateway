@@ -93,6 +93,27 @@ describe('IdpSettingsService', () => {
     await expect(lax.save({ ...INPUT, issuer: 'http://idp.test' })).resolves.toBeDefined();
   });
 
+  it('saves every key in one transaction: a failed write keeps the previous settings whole', async () => {
+    const s = new IdpSettingsService(null, t.store.config);
+    const first = await s.save(INPUT);
+    t.store.db.exec(
+      `CREATE TRIGGER refuse_domains BEFORE INSERT ON instance_config
+       WHEN NEW.key = '${IDP_CONFIG_KEYS.allowedEmailDomains}'
+       BEGIN SELECT RAISE(ABORT, 'disk full'); END`,
+    );
+    await expect(
+      s.save({
+        issuer: 'https://other-idp.example.com',
+        clientId: 'other-client',
+        clientSecret: 'other-secret',
+        claims: { sub: 'oid', email: 'upn', groups: 'roles' },
+        allowedEmailDomains: ['other.example.com'],
+      }),
+    ).rejects.toThrow(/disk full/);
+    // Not the new issuer with the old secret, nor any other mix.
+    expect((await s.current())?.settings).toEqual(first);
+  });
+
   it('is read-only when the mounted configuration sets the IdP, which then wins', async () => {
     const fromFile: IdpConfig = {
       issuer: new URL('https://file.example.com'),

@@ -8,6 +8,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
   BudgetInvariantError,
   fingerprintArguments,
+  missionUsageReader,
+  SessionService,
   type RecordCallAllowed,
   type RecordCallRefused,
   type RecordCallResult,
@@ -353,6 +355,53 @@ describe('SessionService.stateOf', () => {
       period: { index: 1 },
       exhausted: [],
     });
+  });
+
+  it('reads the counters of the current period only, however old the mission is', async () => {
+    for (const now of [NOW, at('2026-10-14T09:00:00.000Z'), at('2026-10-15T09:00:00.000Z')]) {
+      await f.service.recordCall({
+        mission: f.mission,
+        tool: 'github__get_file',
+        args: { repo: 'acme/app' },
+        risks_touched: [READ],
+        now,
+      });
+    }
+    const session = await f.store.sessions.getByMission(f.mission.id);
+    expect(await f.store.sessions.counters(session?.id ?? '')).toHaveLength(3);
+
+    const reads: (string | undefined)[] = [];
+    const sessions = {
+      getByMission: (missionId: string) => f.store.sessions.getByMission(missionId),
+      counters: async (sessionId: string, periodStart?: string) => {
+        reads.push(periodStart);
+        return f.store.sessions.counters(sessionId, periodStart);
+      },
+      decideAndDecrement: f.store.sessions.decideAndDecrement.bind(f.store.sessions),
+    };
+    const service = new SessionService({
+      sessions,
+      requests: f.store.requests,
+      rateWindows: f.rateWindows,
+      requestUrl: f.requestUrl,
+      requestExpirySeconds: REQUEST_EXPIRY_SECONDS,
+    });
+    const later = at('2026-10-15T10:00:00.000Z');
+    const usage = await service.usageOf(f.mission, later);
+    expect(usage).toMatchObject({
+      session_id: session?.id,
+      period: { index: 2, start: '2026-10-15T00:00:00.000Z' },
+      state: { kind: 'active', remaining: { [READ]: 9 } },
+    });
+    expect([...usage.consumed]).toEqual([[READ, 1]]);
+    expect(reads).toEqual(['2026-10-15T00:00:00.000Z']);
+
+    // The Missions pages and the request page use the same read through this reader.
+    const reader = missionUsageReader(sessions);
+    expect(await reader.usageOf(f.mission, later)).toEqual(usage);
+    expect(await reader.stateOf(f.mission, later)).toEqual(await service.stateOf(f.mission, later));
+    expect(reads).toHaveLength(4);
+    expect(new Set(reads)).toEqual(new Set(['2026-10-15T00:00:00.000Z']));
   });
 
   it('expiry and stored statuses', async () => {

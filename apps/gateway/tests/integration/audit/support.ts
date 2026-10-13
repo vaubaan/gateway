@@ -9,10 +9,13 @@
 import { fingerprintArguments, type CallAuditEntry } from '@vaubaan/gateway-core';
 import type { RiskId } from '@vaubaan/shared';
 
-import { budgetMissionOf, SessionService, type RecordCallResult } from '../../../src/server/budget';
+import {
+  budgetMissionOf,
+  type RecordCallResult,
+  type SessionService,
+} from '../../../src/server/budget';
 import type { GatewayRoot } from '../../../src/server/compose/root';
 import type { MissionDraft } from '../../../src/server/missions';
-import { SlidingWindowRateLimiter } from '../../../src/server/rate-limit';
 import type { MissionRecord, UserRecord } from '../../../src/server/store/types';
 import { buildTestRoot, seedInstance, type SeededInstance } from '../missions/support';
 
@@ -37,14 +40,8 @@ export interface OperatorRig extends AuditRig {
 
 /** The rig over a root that already exists (the browser tests' ephemeral instance). */
 export function auditRigOn(root: GatewayRoot, seeded: SeededInstance): AuditRig {
-  const budget = new SessionService({
-    sessions: root.store.sessions,
-    requests: root.store.requests,
-    rateWindows: new SlidingWindowRateLimiter(),
-    requestUrl: root.requests.requestUrl,
-    requestExpirySeconds: root.config.requests.expirySeconds,
-  });
-  return { root, seeded, budget };
+  // The service the execution door decides with, not a second one over the same store.
+  return { root, seeded, budget: root.budget };
 }
 
 export async function openAuditRig(): Promise<OperatorRig> {

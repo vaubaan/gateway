@@ -20,7 +20,9 @@ import { createAuthModule, type AuthModule, type OidcOptions } from '../auth';
 import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
+  buildInfoFromEnv,
   loadInstanceConfig,
+  type BuildInfo,
   type InstanceConfig,
   type LoadedConfig,
   secretValues,
@@ -36,7 +38,6 @@ import { ProviderAppsService } from '../provider-apps';
 import { createMissionsModule, type MissionsModule } from '../missions';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
-import { SqliteSessionStore } from '../session';
 import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkProviderApps, RegistryCatalogIndex } from './registry';
@@ -77,10 +78,7 @@ export interface GatewayRoot {
   close(): Promise<void>;
 }
 
-export interface BuildInfo {
-  readonly version: string;
-  readonly commit: string;
-}
+export type { BuildInfo };
 
 /**
  * Injection points. The defaults are the production wiring (SQLite store at
@@ -112,16 +110,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     write: deps.logWrite,
   }).child({ component: 'gateway' });
   const build = deps.build ?? buildInfoFromEnv();
-
-  logger.info('configuration loaded', {
-    source: configFile ? `file ${configFile} over environment` : 'environment',
-    public_url: config.publicUrl.origin,
-    idp: config.idp ? config.idp.issuer.origin : 'not configured',
-    admin_rule: config.admin.group ? 'group' : `emails (${config.admin.emails.length})`,
-    providers: [...config.providers.keys()],
-    telemetry: config.telemetry.enabled ? 'enabled' : 'disabled',
-    key_version: config.encryption.keyVersion,
-  });
+  logConfigurationSummary(logger, config, configFile);
 
   const encryptor = await createEncryptor(config.encryption);
 
@@ -137,10 +126,92 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     catalog: new RegistryCatalogIndex(registry),
   });
 
-  // Web sessions live in the embedded store (table `web_sessions`) so they
-  // survive a restart and are revocable; a hosted deployment injects a shared
-  // `SessionStore` instead.
-  const sessions = deps.sessions ?? new SqliteSessionStore({ db: store.db });
+  // Everything opened from here on is registered as it opens (the store
+  // handle, then each timer), so a late failure closes it: `getRoot` retries
+  // a failed build, and a retry must not find a second handle on the same file.
+  const opened: Closer[] = [() => store.close()];
+  try {
+    const modules = await wireModules({ config, logger, registry, store, build }, deps, opened);
+    const root: GatewayRoot = {
+      config,
+      configFile,
+      logger,
+      encryptor,
+      store,
+      registry,
+      ...modules,
+      build,
+      startedAt: new Date(),
+      close: () => closeAll(opened),
+    };
+    logger.info('composition root ready', {
+      store: store.kind,
+      schema_version: store.schemaVersion,
+      plugins: registry.ids,
+      build,
+    });
+    return root;
+  } catch (err) {
+    await closeAfterFailedBuild(opened, logger);
+    throw err;
+  }
+}
+
+function logConfigurationSummary(
+  logger: Logger,
+  config: InstanceConfig,
+  configFile: string | null,
+): void {
+  logger.info('configuration loaded', {
+    source: configFile ? `file ${configFile} over environment` : 'environment',
+    public_url: config.publicUrl.origin,
+    idp: config.idp ? config.idp.issuer.origin : 'not configured',
+    admin_rule: config.admin.group ? 'group' : `emails (${config.admin.emails.length})`,
+    providers: [...config.providers.keys()],
+    telemetry: config.telemetry.enabled ? 'enabled' : 'disabled',
+    key_version: config.encryption.keyVersion,
+  });
+}
+
+/** Releases one thing the build opened: a handle to close, a timer to stop. */
+type Closer = () => Promise<void> | void;
+
+/** What the modules are wired from: everything built before them. */
+interface RootBase {
+  readonly config: InstanceConfig;
+  readonly logger: Logger;
+  readonly registry: PluginRegistry;
+  readonly store: Store;
+  readonly build: BuildInfo;
+}
+
+type RootModules = Pick<
+  GatewayRoot,
+  | 'rateLimiter'
+  | 'cache'
+  | 'sessions'
+  | 'auth'
+  | 'providerApps'
+  | 'connections'
+  | 'missions'
+  | 'requests'
+  | 'audit'
+  | 'budget'
+  | 'execution'
+>;
+
+/**
+ * Wires the feature modules over the base. Each timer a module starts is
+ * pushed on `opened` at once, so the caller can stop it whether the build
+ * completes (`close()`) or a later step throws.
+ */
+async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Promise<RootModules> {
+  const { config, logger, registry, store, build } = base;
+
+  // Web sessions live in the embedded store (`store.webSessions`, table
+  // `web_sessions`) so they survive a restart and are revocable; a hosted
+  // deployment injects a shared `SessionStore` instead.
+  const sessions: SessionStore = deps.sessions ?? store.webSessions;
   const auth = createAuthModule({ config, store, sessions, logger, oidc: deps.oidc });
   const missions = createMissionsModule({
     config,
@@ -168,7 +239,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     logger,
     fetch: deps.providerFetch,
   });
-  // Starts the expiry sweeper of the inbox; `close()` stops it.
+  // Starts the expiry sweeper of the inbox.
   const requests = createRequestsModule({
     config,
     store,
@@ -177,10 +248,13 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     rateLimiter,
     logger,
   });
+  opened.push(() => requests.sweeper.stop());
 
   // The retention purge runs once before the instance serves, then on a timer
-  // that `close()` stops (handbook audit).
+  // (handbook audit). Registered before it starts: `start()` sets the timer
+  // first, and `stop()` is safe on a sweeper that never started.
   const audit = createAuditModule({ config, store, missions: missions.service, logger });
+  opened.push(() => audit.retention.stop());
   await audit.retention.start();
   const budget = new SessionService({
     sessions: store.sessions,
@@ -205,13 +279,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     delegations: deps.delegatedTokens,
   });
 
-  const root: GatewayRoot = {
-    config,
-    configFile,
-    logger,
-    encryptor,
-    store,
-    registry,
+  return {
     rateLimiter,
     cache,
     sessions,
@@ -223,21 +291,33 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     audit,
     budget,
     execution,
-    build,
-    startedAt: new Date(),
-    async close() {
-      requests.sweeper.stop();
-      await audit.retention.stop();
-      await store.close();
-    },
   };
-  logger.info('composition root ready', {
-    store: store.kind,
-    schema_version: store.schemaVersion,
-    plugins: registry.ids,
-    build,
-  });
-  return root;
+}
+
+/**
+ * Releases what was opened, last opened first (timers, then the store they
+ * write to). Every closer runs even when one fails; the first failure is
+ * rethrown once all have run.
+ */
+async function closeAll(opened: readonly Closer[]): Promise<void> {
+  let failure: { readonly error: unknown } | null = null;
+  for (const close of [...opened].reverse()) {
+    try {
+      await close();
+    } catch (error) {
+      failure ??= { error };
+    }
+  }
+  if (failure) throw failure.error;
+}
+
+/** Same release after a build that threw: the build error is the one the caller sees. */
+async function closeAfterFailedBuild(opened: readonly Closer[], logger: Logger): Promise<void> {
+  try {
+    await closeAll(opened);
+  } catch (err) {
+    logger.error('could not release everything a failed build had opened', { err });
+  }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -281,12 +361,4 @@ export async function resetRoot(): Promise<void> {
       // a root that failed to build has nothing to close
     }
   }
-}
-
-/** Build stamps frozen into the bundle by `next.config.ts`; `dev` outside a build. */
-function buildInfoFromEnv(): BuildInfo {
-  return {
-    version: process.env.NEXT_PUBLIC_GATEWAY_VERSION || 'dev',
-    commit: process.env.NEXT_PUBLIC_COMMIT_SHA || 'dev',
-  };
 }

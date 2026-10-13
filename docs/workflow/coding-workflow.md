@@ -156,15 +156,16 @@ The cutover acceptance scenario itself is manual and is never run by CI
 ## Docker image
 
 `deploy/docker/Dockerfile` is a multi-stage build (`manifests` → `deps` →
-`build` → `runner`) on `node:22-bookworm-slim` (glibc, for the prebuilt
-`argon2` and `better-sqlite3` addons). The runner stage copies the Next.js
+`build` → `runner`) on `node:22.23.3-bookworm-slim`, pinned by digest (glibc,
+for the prebuilt `argon2` and `better-sqlite3` addons). The runner stage copies the Next.js
 standalone output, runs as uid 10001, exposes `PORT` (3000), declares the
 `/data` volume and a `HEALTHCHECK` on `/healthz`. Build arguments:
-`NODE_VERSION`, `GIT_COMMIT_SHA`. The `deps` stage runs `npm ci` (the
+`NODE_IMAGE` (base image reference, tag and digest; see `deploy/README.md`),
+`GIT_COMMIT_SHA`. The `deps` stage runs `npm ci` (the
 optional private dependency is skipped without `NPM_READ_TOKEN`), where the
 CI `check` job runs `npm install`. `.dockerignore` keeps `.git`, docs, test
-artefacts and every `.env*` file except `.env.example` out of the build
-context. Operator
+artefacts, every `.env*` file except `.env.example` and every `*.pem` out of
+the build context. Operator
 documentation: [`deploy/README.md`](../../deploy/README.md).
 
 ## Database migrations

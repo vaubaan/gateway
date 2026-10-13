@@ -1,14 +1,16 @@
 import { assertKnownRiskIds } from '../catalog-index.ts';
 import { withImmediateTransaction } from '../db.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
-import type { Principal, RiskId, ShareRecord, ShareStatus } from '../types.ts';
+import type { Principal, RiskId, ShareRecord } from '../types.ts';
 import {
   nowIso,
+  parseEnum,
   principalColumns,
   principalFromColumns,
   principalPredicate,
   type RepoContext,
 } from './context.ts';
+import { SHARE_STATUSES } from './enums.ts';
 
 export interface CreateShareInput {
   readonly connectionId: string;
@@ -69,7 +71,7 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
       connectionId: row.connection_id,
       target: principalFromColumns(row.target_kind, row.target_user_id, row.target_group_id),
       restriction: risksOf.all(row.id).map((r) => r.risk_id),
-      status: row.status as ShareStatus,
+      status: parseEnum(SHARE_STATUSES, row.status, 'shares.status'),
       createdByUserId: row.created_by_user_id,
       createdAt: row.created_at,
       revokedAt: row.revoked_at,

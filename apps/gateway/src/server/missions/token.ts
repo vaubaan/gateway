@@ -35,7 +35,7 @@ export function prefixOfBearer(bearer: string): string | null {
   return parsed.prefix;
 }
 
-/** Constant-work verification of a presented Bearer against a stored hash. */
+/** argon2id verification of a presented Bearer against a stored hash. */
 export async function bearerMatches(hash: string, bearer: string): Promise<boolean> {
   return verifyApiKey(hash, bearer.trim());
 }
