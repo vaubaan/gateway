@@ -42,6 +42,7 @@ import type {
 } from '../authority';
 import {
   budgetMissionOf,
+  currentPeriod,
   GATE_EVENT_KINDS,
   isStale,
   missionUsageReader,
@@ -49,6 +50,7 @@ import {
   policyEntryOf,
   policyEntryRecordOf,
   statedPeriodOf,
+  type CurrentPeriod,
   type MissionState,
   type SessionService,
 } from '../budget';
@@ -173,7 +175,7 @@ export type SetGateResult =
   | {
       readonly ok: false;
       readonly reason: 'inactive';
-      readonly state: Exclude<MissionState['kind'], 'active'>;
+      readonly state: 'revoked' | 'orphaned';
     };
 
 /**
@@ -271,18 +273,17 @@ export interface MissionDetailRisk extends MissionPolicyEntry {
 }
 
 /**
- * The states in which a mission's gates are not edited: every one in which it refuses
- * every call (spec §2.3). The state is the derived one (`stateOf`): the edit is open
- * again as soon as an orphaned mission's authority is back, and closed for good once
- * the mission is revoked or its expiry has passed — an expired mission never serves
- * again, so an edit there, or an opening left open, would change nothing a call could
- * meet. `setGate` refuses on it and the mission page reads it from
- * `MissionDetail.gates_editable`.
+ * The statuses on which a mission's gates are not edited: the ones from which it does
+ * not come back by itself (spec §2.3). `status` is the derived one, so the edit is
+ * open again as soon as an orphaned mission's authority is back. An EXPIRED mission is
+ * not in the list: its creator can extend the expiry (a claim's `extend-expiry`), and
+ * the gates they set meanwhile are the ones it serves with again. `setGate` refuses on
+ * it and the mission page reads it from `MissionDetail.gates_editable`.
  */
 export function gateEditBlockedBy(
-  state: Pick<MissionState, 'kind'>,
-): Exclude<MissionState['kind'], 'active'> | null {
-  return state.kind === 'active' ? null : state.kind;
+  mission: Pick<MissionRecord, 'status'>,
+): 'revoked' | 'orphaned' | null {
+  return mission.status === 'revoked' || mission.status === 'orphaned' ? mission.status : null;
 }
 
 export interface MissionDetail extends MissionOverview {
@@ -681,12 +682,20 @@ export class MissionService {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
     if (!isGate(gate)) return { ok: false, reason: 'invalid-gate' };
-    const state = await this.stateOf(mission);
-    const blocked = gateEditBlockedBy(state);
+    const blocked = gateEditBlockedBy(mission);
     if (blocked) return { ok: false, reason: 'inactive', state: blocked };
     // "Ask me again" on a risk that is gated but open for the period must end the
     // opening: the stored gate would not move, so the store is told what was found.
-    const openNow = gate === 'approval' && (await this.openGatesOf(mission, state)).has(riskId);
+    // The opening is looked for in the period that runs NOW, whether or not the mission
+    // serves at this instant: an expired mission whose expiry is then extended in the
+    // same period would otherwise come back with the opening the creator just closed.
+    //
+    // single-process only: the read and the write are two store calls, so an opening
+    // granted between them is missed. Not reachable while every store call is
+    // synchronous in one process; with a second process, decide inside
+    // `MissionsRepo.setGate`'s transaction (it owns the session's events).
+    const openNow =
+      gate === 'approval' && (await this.openGatesIn(mission, this.periodNow(mission))).has(riskId);
     const changed = await this.deps.store.missions.setGate(mission.id, riskId, gate, user.id, {
       closeOpening: openNow,
     });
@@ -886,7 +895,7 @@ export class MissionService {
     });
     return {
       ...overview,
-      gates_editable: inspected.role === 'creator' && gateEditBlockedBy(overview.state) === null,
+      gates_editable: inspected.role === 'creator' && gateEditBlockedBy(overview.mission) === null,
       connections,
       policy,
       period: statedPeriodOf(mission),
@@ -905,16 +914,31 @@ export class MissionService {
     mission: MissionRecord,
     state: MissionState,
   ): Promise<Map<RiskId, Iso8601>> {
+    // What the page shows: a mission that serves no call has no gate "open" to show.
+    return state.kind === 'active' ? this.openGatesIn(mission, state.period) : new Map();
+  }
+
+  /** The period that runs at this instant, whatever the mission's state. */
+  private periodNow(mission: MissionRecord): CurrentPeriod {
+    return currentPeriod(budgetMissionOf(mission).period, this.deps.clock.now());
+  }
+
+  /** The gates opened for `period`, read from the session's gate events since it started. */
+  private async openGatesIn(
+    mission: MissionRecord,
+    period: CurrentPeriod,
+  ): Promise<Map<RiskId, Iso8601>> {
     const open = new Map<RiskId, Iso8601>();
-    if (state.kind !== 'active' || state.period.end === null) return open;
+    // A one-off mission has no period end: a gate is never opened "for the period" on it.
+    if (period.end === null) return open;
     if (!mission.policy.some((entry) => entry.gate === 'approval')) return open;
     const session = await this.deps.store.sessions.getByMission(mission.id);
     if (!session) return open;
     const events = await this.deps.store.sessions.listEvents(session.id, {
       kinds: GATE_EVENT_KINDS,
-      since: state.period.start,
+      since: period.start,
     });
-    for (const riskId of openedGatesOf(events, state.period)) open.set(riskId, state.period.end);
+    for (const riskId of openedGatesOf(events, period)) open.set(riskId, period.end);
     return open;
   }
 

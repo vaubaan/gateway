@@ -178,44 +178,44 @@ describe('editing a gate after issuance', () => {
     expect(await gateEdits()).toEqual([]);
   });
 
-  it('an expired mission takes no gate edit: nothing moves, nothing is written, and the page says so', async () => {
+  it('"ask me again" on an EXPIRED mission closes the opening too: it must not be found open when the expiry is extended', async () => {
     // The creator opened MERGE for the period while the mission was alive.
     const asked = await call(MERGE);
     if (asked.outcome !== 'refused' || !asked.request_id) throw new Error('expected a request');
     await rig.root.requests.service.decide(rig.seeded.ada, asked.request_id, {
       resolution: 'open-gate',
     });
-    const eventsBefore = (await events()).length;
+    expect((await call(MERGE, { n: 2 })).outcome).toBe('allowed');
 
-    // The expiry passes (the column still says `active`: expiry is read from the date).
+    // The expiry passes. The stored gate still reads `approval`, the opening still stands.
     await rig.root.store.missions.setExpiresAt(mission.id, '2020-01-01T00:00:00.000Z');
-
-    for (const [riskId, gate] of [
-      [MERGE, 'approval'],
-      [MERGE, 'auto'],
-      [READ, 'approval'],
-    ] as const) {
-      expect(await service().setGate(rig.seeded.ada, mission.id, riskId, gate)).toEqual({
-        ok: false,
-        reason: 'inactive',
-        state: 'expired',
-      });
-    }
-    expect(await gateOf(MERGE)).toBe('approval');
-    expect(await gateOf(READ)).toBe('auto');
-    expect(await gateEdits()).toEqual([]);
-    expect((await events()).length).toBe(eventsBefore);
     const detail = await service().get(rig.seeded.ada, mission.id);
-    expect(detail?.gates_editable).toBe(false);
+    expect(detail?.state.kind).toBe('expired');
+    // An expired mission comes back when its expiry is extended: its gates stay editable.
+    expect(detail?.gates_editable).toBe(true);
 
-    const response = await rig.root.missions.handlers.setGate(
-      gateRequest(await sessionHeaders(rig.root, rig.seeded.ada), { risk_id: MERGE, gate: 'auto' }),
-      mission.id,
-    );
-    expect(response.status).toBe(409);
-    expect(await response.json()).toMatchObject({
-      message: 'The mission is expired; every call is refused whatever its gates.',
+    const result = await service().setGate(rig.seeded.ada, mission.id, MERGE, 'approval');
+
+    expect(result).toMatchObject({ ok: true, previous: 'approval', opening_closed: true });
+    expect(await gateEdits()).toHaveLength(1);
+    expect((await gateEdits())[0]).toMatchObject({
+      before: { risk_id: MERGE, gate: 'approval', open_for_period: true },
+      after: { risk_id: MERGE, gate: 'approval', open_for_period: false },
     });
+
+    // The creator extends the expiry, in the same period: the next call asks again.
+    await rig.root.store.missions.setExpiresAt(mission.id, null);
+    const after = await call(MERGE, { n: 3 });
+    // Refused with a new approval request: the gate asks again.
+    expect(after.outcome).toBe('refused');
+    expect(after.outcome === 'refused' && after.request_id).toBeTruthy();
+  });
+
+  it('on an expired mission with no opening, a repeated `approval` writes nothing', async () => {
+    await rig.root.store.missions.setExpiresAt(mission.id, '2020-01-01T00:00:00.000Z');
+    const result = await service().setGate(rig.seeded.ada, mission.id, MERGE, 'approval');
+    expect(result).toMatchObject({ ok: true, previous: 'approval', opening_closed: false });
+    expect(await gateEdits()).toEqual([]);
   });
 
   it('asking for `approval` on a risk whose gate is open for the period closes the opening: one entry, one event', async () => {

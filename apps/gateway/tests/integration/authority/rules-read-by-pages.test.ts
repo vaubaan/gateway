@@ -49,14 +49,15 @@ describe('the predicates, on every status', () => {
     }
   });
 
-  it('the gates of a mission are edited while it serves calls, and only then', () => {
+  it('the gates of a mission are not edited once it is revoked or orphaned, and only then', () => {
     const blocked = Object.fromEntries(
-      MISSION_STATUSES.map((kind) => [kind, gateEditBlockedBy({ kind })]),
+      MISSION_STATUSES.map((status) => [status, gateEditBlockedBy({ status })]),
     );
     expect(blocked).toEqual({
       active: null,
-      // Expired never serves again: an edit, or an opening left open, would change nothing.
-      expired: 'expired',
+      // An expired mission serves again once its creator extends the expiry (a claim's
+      // `extend-expiry`): its gates stay theirs to set meanwhile.
+      expired: null,
       orphaned: 'orphaned',
       revoked: 'revoked',
     });
