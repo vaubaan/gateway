@@ -1,0 +1,331 @@
+/**
+ * `/connections/<id>` — one connection: its state, the public key of an SSH
+ * connection, and its resources (spec §0 "Resource", §4.2). The owner edits a
+ * resource's display name, environment label and hidden flag inline; the
+ * label is read-only when the plugin sets it at discovery. Edits survive
+ * "Refresh discovery"; a resource that vanished upstream is marked stale.
+ */
+import Link from 'next/link';
+import { notFound } from 'next/navigation';
+
+import { RevokeConnection } from '@/components/connections/RevokeConnection';
+import styles from '@/components/connections/connections.module.css';
+import {
+  credentialKindLabel,
+  ExperimentalBadge,
+  NoticeBanner,
+  StateBadge,
+} from '@/components/connections/parts';
+import {
+  Badge,
+  Banner,
+  Button,
+  Card,
+  CardBody,
+  CardHeader,
+  CardTitle,
+  Field,
+  Stack,
+  Table,
+  Tbody,
+  Td,
+  Textarea,
+  Th,
+  Thead,
+  Tr,
+} from '@/components/ui';
+import { requireUser, takeNotice, type PageSearchParams } from '@/lib/connections/session';
+import {
+  ConnectError,
+  connectionPath,
+  CONNECTIONS_PATH,
+  editableMetadataKeys,
+  METADATA_PREFIX,
+  NEW_CONNECTION_PATH,
+  type ConnectionDetail,
+} from '@/server/connections';
+import type { ConnectionResourceRecord } from '@/server/store';
+
+export const dynamic = 'force-dynamic';
+
+const ENV_LABEL_HTML_PATTERN = '[a-z][a-z0-9\\-]*';
+const MAX_NAME_LENGTH = 80;
+
+export default async function ConnectionPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ id: string }>;
+  searchParams: PageSearchParams;
+}) {
+  const { id } = await params;
+  const { root, principal, actor } = await requireUser();
+  let detail: ConnectionDetail;
+  try {
+    detail = await root.connections.service.get(actor, id);
+  } catch (err) {
+    if (err instanceof ConnectError && err.code === 'not-found') notFound();
+    throw err;
+  }
+  const notice = await takeNotice(root, principal.sessionId, await searchParams);
+  const { connection, resources } = detail;
+  const base = connectionPath(connection.id);
+  const revoked = connection.status === 'revoked';
+  const fields = Object.entries(detail.fields);
+
+  return (
+    <Stack gap="var(--space-6)">
+      <div className={styles.header}>
+        <div>
+          <p className={styles.muted}>
+            <Link href={CONNECTIONS_PATH}>Connections</Link> / {connection.displayName}
+          </p>
+          <h1>{connection.displayName}</h1>
+          <span className={styles.badges}>
+            <span>{detail.providerLabel}</span>
+            <StateBadge status={connection.status} />
+            {detail.experimental && <ExperimentalBadge />}
+          </span>
+        </div>
+        {!revoked && (
+          <div className={styles.actions}>
+            <Link
+              href={`${NEW_CONNECTION_PATH}/${encodeURIComponent(connection.provider)}?connection=${encodeURIComponent(connection.id)}`}
+              className={styles.linkButton}
+            >
+              Reconnect
+            </Link>
+            <RevokeConnection action={`${base}/revoke`} name={connection.displayName} />
+          </div>
+        )}
+      </div>
+
+      <NoticeBanner notice={notice} />
+
+      {connection.status === 'expired' && (
+        <Banner tone="warning" title="Expired">
+          The provider rejected the stored credential and it could not be refreshed. Every call of
+          the missions that carry this connection is refused until you reconnect.
+        </Banner>
+      )}
+      {revoked && (
+        <Banner tone="info" title="Revoked">
+          This connection was revoked
+          {connection.revokedAt ? ` on ${day(connection.revokedAt)}` : ''}; its credential is
+          erased. Revocation is final.
+        </Banner>
+      )}
+
+      <Card>
+        <CardBody>
+          <dl className={styles.dl}>
+            <dt>Owner</dt>
+            <dd>{detail.ownerLabel}</dd>
+            <dt>Credential</dt>
+            <dd>{credentialKindLabel(detail.credentialKind)} — encrypted at rest</dd>
+            <dt>Connected</dt>
+            <dd>{day(connection.createdAt)}</dd>
+            {fields.map(([name, value]) => (
+              <FieldFact key={name} name={name} value={value} />
+            ))}
+            <dt>Last discovery</dt>
+            <dd>
+              {detail.discovery ? (
+                <>
+                  {day(detail.discovery.at)} —{' '}
+                  {detail.discovery.ok
+                    ? `${detail.discovery.count} reachable`
+                    : `failed: ${detail.discovery.error ?? 'no reason given'}`}
+                </>
+              ) : (
+                'never'
+              )}
+            </dd>
+          </dl>
+        </CardBody>
+      </Card>
+
+      {detail.publicKey && !revoked && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Public key to install</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <Stack gap="var(--space-3)">
+              <p className={styles.muted}>
+                Append this line to <code>~/.ssh/authorized_keys</code> of the login user on the
+                host, then use &quot;Refresh discovery&quot; to verify the access. The private key
+                never leaves this instance.
+              </p>
+              <code className={styles.keyBlock}>{detail.publicKey}</code>
+            </Stack>
+          </CardBody>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Resources</CardTitle>
+          {!revoked && (
+            <form method="post" action={`${base}/discover`} className={styles.inlineForm}>
+              <Button type="submit" variant="secondary" size="sm">
+                Refresh discovery
+              </Button>
+            </form>
+          )}
+        </CardHeader>
+        {resources.length === 0 ? (
+          <div className={styles.empty}>
+            No resource discovered yet.
+            {!revoked && ' Use "Refresh discovery" once the provider is reachable.'}
+          </div>
+        ) : (
+          <div className={styles.tableWrap}>
+            <Table>
+              <Thead>
+                <Tr>
+                  <Th>Ref</Th>
+                  <Th>Display name</Th>
+                  <Th>Environment</Th>
+                  <Th>Hidden</Th>
+                  <Th />
+                </Tr>
+              </Thead>
+              <Tbody>
+                {resources.map((resource) => (
+                  <ResourceRow
+                    key={resource.id}
+                    resource={resource}
+                    action={`${base}/resources/${encodeURIComponent(resource.id)}`}
+                    readOnly={revoked}
+                  />
+                ))}
+              </Tbody>
+            </Table>
+          </div>
+        )}
+      </Card>
+    </Stack>
+  );
+}
+
+function FieldFact({ name, value }: { name: string; value: string }) {
+  return (
+    <>
+      <dt>{name.replace(/_/g, ' ')}</dt>
+      <dd>
+        <code>{value}</code>
+      </dd>
+    </>
+  );
+}
+
+/**
+ * One resource, edited in place. A `<form>` cannot wrap table cells, so the
+ * inputs name their form through the `form` attribute.
+ */
+function ResourceRow({
+  resource,
+  action,
+  readOnly,
+}: {
+  resource: ConnectionResourceRecord;
+  action: string;
+  readOnly: boolean;
+}) {
+  const formId = `resource-${resource.id}`;
+  const listKeys = editableMetadataKeys(resource.metadata);
+  const pluginSetsEnv = resource.envSource === 'plugin';
+  return (
+    <Tr className={resource.staleSince ? styles.staleRow : undefined}>
+      <Td>
+        <span className={styles.ref}>{resource.ref}</span>{' '}
+        {resource.staleSince && (
+          <Badge tone="warning">stale since {day(resource.staleSince)}</Badge>
+        )}
+        {listKeys.length > 0 && (
+          <details className={styles.settings}>
+            <summary>Settings ({listKeys.length})</summary>
+            <div className={styles.settingsBody}>
+              {listKeys.map((key) => (
+                <Field
+                  key={key}
+                  label={key.replace(/_/g, ' ')}
+                  hint="One entry per line, or separated by spaces or commas."
+                >
+                  <Textarea
+                    form={formId}
+                    name={`${METADATA_PREFIX}${key}`}
+                    rows={2}
+                    disabled={readOnly}
+                    spellCheck={false}
+                    defaultValue={listOf(resource.metadata?.[key]).join('\n')}
+                  />
+                </Field>
+              ))}
+            </div>
+          </details>
+        )}
+      </Td>
+      <Td>
+        <input
+          form={formId}
+          name="display_name"
+          className={styles.cellInput}
+          defaultValue={resource.displayName}
+          maxLength={MAX_NAME_LENGTH}
+          disabled={readOnly}
+          aria-label={`Display name of ${resource.ref}`}
+        />
+      </Td>
+      <Td>
+        {pluginSetsEnv ? (
+          <span className={styles.badges}>
+            <Badge mono>{resource.env ?? '—'}</Badge>
+            <span className={styles.muted}>set by the plugin</span>
+          </span>
+        ) : (
+          <input
+            form={formId}
+            name="env"
+            className={styles.envInput}
+            defaultValue={resource.env ?? ''}
+            placeholder="prod, staging…"
+            pattern={ENV_LABEL_HTML_PATTERN}
+            title="Lower-case letters, digits and dashes, starting with a letter"
+            disabled={readOnly}
+            aria-label={`Environment of ${resource.ref}`}
+          />
+        )}
+      </Td>
+      <Td>
+        <label className={styles.checkbox}>
+          <input
+            form={formId}
+            type="checkbox"
+            name="hidden"
+            defaultChecked={resource.hidden}
+            disabled={readOnly}
+          />
+          hidden
+        </label>
+      </Td>
+      <Td>
+        <form id={formId} method="post" action={action}>
+          <input type="hidden" name="hidden_present" value="1" />
+          <Button type="submit" variant="secondary" size="sm" disabled={readOnly}>
+            Save
+          </Button>
+        </form>
+      </Td>
+    </Tr>
+  );
+}
+
+function listOf(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [];
+}
+
+function day(iso: string): string {
+  return iso.slice(0, 10);
+}

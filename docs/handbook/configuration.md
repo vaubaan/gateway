@@ -54,14 +54,18 @@ apps/gateway/src/
       ports.ts                  StoreLiveness, RateLimiter, SessionStore; re-exports gateway-core's CacheClient
       memory.ts                 MemoryRateLimiter, MemorySessionStore  // single-process only
       registry.ts               buildEmptyRegistry(), RegistryCatalogIndex, checkProviderApps()
+      shipped-plugins.ts        SHIPPED_PLUGINS, buildShippedRegistry(): the plugins the image ships
       store.ts                  openEmbeddedStore(): the SQLite store from store.path
-      root.ts                   buildRoot(), getRoot() (globalThis), resetRoot(); wires session/ and auth/
+      root.ts                   buildRoot(), getRoot() (globalThis), resetRoot(); wires session/, auth/,
+                                provider-apps/ and connections/
       boot.ts                   bootOrExit(): exit 78 on ConfigError, 1 otherwise
       testing.ts                memoryStoreDeps, fakePlugin() — tests only
     http/
       healthz.ts                healthResponse(root), healthHandler(getRoot)
     session/                    SqliteSessionStore — the SessionStore port over web_sessions (handbook authentication)
     auth/                       OIDC relying party, web session, bootstrap, admin rule (handbook authentication)
+    provider-apps/              the company's app per provider: file or Admin page (handbook connections)
+    connections/                connect flows, resources, credential broker (handbook connections)
   lib/crypto/index.ts           LEGACY v4 shim over the new encryptor (deleted in Phase 1)
 scripts/gen-master-key.mjs      prints 32 random bytes, base64
 deploy/config/                  gateway.example.yaml, .env.example (every key documented)
@@ -86,12 +90,14 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      key version — never a secret);
    - `createEncryptor(config.encryption)` (awaits libsodium);
    - the plugin registry (`@vaubaan/plugin-sdk`'s `PluginRegistry`) from
-     `RootDeps.buildRegistry`, by default **empty** until the plugins
-     migrate (P1.2);
+     `RootDeps.buildRegistry`, by default `buildShippedRegistry`: the
+     ten plugins imported by `compose/shipped-plugins.ts` (P1.4). A
+     plugin that fails `definePlugin` or a duplicate id fails the boot;
    - `checkProviderApps`: every `providers.<id>` must name a registered
-     plugin. While the registry is empty the mismatch is a warning; once
-     plugins are registered it is a `ConfigError` naming
-     `providers.<id>` and `VAUBAAN_PROVIDER_<ID>_*` (exit 78);
+     plugin, otherwise a `ConfigError` naming `providers.<id>` and
+     `VAUBAAN_PROVIDER_<ID>_*` (exit 78). Only a root built with an
+     empty registry (tests, `buildEmptyRegistry`) downgrades the
+     mismatch to a warning;
    - the embedded store from `RootDeps.openStore`, by default
      `openEmbeddedStore`: `openStore()` of [store](store.md) on `config.store.path`
      with the encryptor just built and a `RegistryCatalogIndex` (the store
@@ -106,9 +112,15 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      bootstrap, authenticator, handlers; handbook
      [authentication](authentication.md)), with `RootDeps.oidc` for the
      relying party's outbound `fetch` and the test-only insecure issuer;
+   - the in-memory rate limiter and cache unless injected;
+   - `ProviderAppsService(config.providers, store.config, registry)` →
+     `root.providerApps`, then `createConnectionsModule()` →
+     `root.connections` (`service`, `credentials`, `notices`,
+     `handlers`; handbook [connections](connections.md)), with
+     `RootDeps.providerFetch` for the outbound HTTP of the connect flows
+     and of plugin discovery (tests inject `mockFetch`);
    - the boot line `composition root ready` (`store`, `schema_version`,
-     `plugins`, `build`) closes the sequence;
-   - in-memory rate limiter and cache unless injected.
+     `plugins`, `build`) closes the sequence.
 5. On `ConfigError`, `bootOrExit()` prints the error to stderr with a
    pointer to `deploy/config/` and exits with code **78** (`EX_CONFIG`);
    any other failure exits with 1. Next waits for `register()` before
@@ -221,8 +233,13 @@ Invalid instance configuration (2 problems):
 
 The provider list is **not** known to the loader: any `providers.<id>` is
 accepted structurally and the root compares ids with the `PluginRegistry`
-(`checkProviderApps`): a warning while no plugin is registered, a
-configuration error (exit 78) as soon as the registry holds plugins.
+(`checkProviderApps`): a configuration error (exit 78) for an id no
+shipped plugin has. Which fields a provider's app needs is the plugin's
+`CredentialSpec`; a `providers.<id>` block is the whole app configuration
+of that provider and makes Admin → Provider apps read-only for it
+(handbook [connections](connections.md), "Provider apps"); a block that
+lacks a required field does not fail the boot — the provider is shown
+`incomplete` and cannot be connected.
 
 ## Crypto at rest
 
@@ -265,14 +282,14 @@ bindings. `silentLogger` is for tests.
 | Port             | Today                                                                                                                                                                                       | Hosted replacement                                               |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
 | `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                        | Postgres behind the same repositories                            |
-| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2                                                                                                                                          | same (static)                                                    |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS` (`compose/shipped-plugins.ts`)                                                                                                      | same (static)                                                    |
 | `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`); `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)) also satisfies it | Redis `INCR` + `PEXPIRE`, or a sorted set for the sliding window |
 | `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded); one definition                                                                                                     | Redis                                                            |
 | `SessionStore`   | `MemorySessionStore`, built on `MemoryCacheClient` (TTL in ms at the port)                                                                                                                  | store-backed rows or Redis                                       |
 | Port             | Today                                                                                                                                                                                       | Hosted replacement                                               |
 | ---------------- | ---------------------------------------------------------------------------------------------------------------------------                                                                 | --------------------------------------------                     |
 | `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                        | Postgres behind the same repositories                            |
-| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2                                                                                                                                          | same (static)                                                    |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry over `SHIPPED_PLUGINS`                                                                                                                                     | same (static)                                                    |
 | `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`)                                                                                                                              | Redis `INCR` + `PEXPIRE`                                         |
 | `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded); one definition                                                                                                     | Redis                                                            |
 | `SessionStore`   | `SqliteSessionStore` (`server/session/`, table `web_sessions`, migration 0003); `MemorySessionStore` remains for unit tests                                                                 | Redis, or Postgres rows behind the same port                     |
@@ -283,10 +300,14 @@ need); the `globalThis` handle of `getRoot()` is per process by design
 (`// single-process only`: every replica builds its own root);
 `GatewayRoot.registry` is the SDK registry itself, so every provider list
 derives from one object; `GatewayRoot.auth` is the authentication module
-(P1.1). Features plug their factories through `RootDeps`
+(P1.1); `GatewayRoot.providerApps` and `GatewayRoot.connections` are the
+provider-app settings and the connections module (P1.4), which share the
+root's `SessionStore` (keys `connect:<state>` and `notice:<id>` next to
+`session:` and `login:`) and its `RateLimiter` (key `connect:<userId>`).
+Features plug their factories through `RootDeps`
 (`openStore(ctx: { config, logger, encryptor, catalog })`,
 `buildRegistry(config, logger)`, `rateLimiter`, `cache`, `sessions`, `oidc`
-(`fetch`, `allowInsecureIssuer`), plus
+(`fetch`, `allowInsecureIssuer`), `providerFetch`, plus
 `loadConfig`, `logWrite` and `build` that tests override);
 tests use `memoryStoreDeps` (the `:memory:` store) and `fakePlugin()` from
 `compose/testing.ts`, and call `resetRoot()` between cases.

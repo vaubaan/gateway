@@ -60,11 +60,12 @@ are absent.
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`              |                                            4 |
 | `apps/gateway/tests/integration/budget/session-service.test.ts`                   |                                           19 |
 | `apps/gateway/tests/integration/compose/boot.test.ts`                             |                                            4 |
+| `apps/gateway/tests/integration/connections/connect-flow.test.ts`                 |                                            3 |
 | `apps/gateway/tests/integration/standalone-native-addons.test.ts`                 |                                            3 |
 | `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`               |                                            2 |
 | `apps/gateway/tests/integration/store/audit.test.ts`                              |                                           13 |
 | `apps/gateway/tests/integration/store/config.test.ts`                             |                                            4 |
-| `apps/gateway/tests/integration/store/connections-shares.test.ts`                 |                                           11 |
+| `apps/gateway/tests/integration/store/connections-shares.test.ts`                 |                                           13 |
 | `apps/gateway/tests/integration/store/delegations.test.ts`                        |                                            7 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                         |                                            7 |
 | `apps/gateway/tests/integration/store/missions.test.ts`                           |                                            8 |
@@ -87,7 +88,7 @@ are absent.
 | `apps/gateway/tests/unit/server/store/db.test.ts`                                 |                                            2 |
 | `apps/gateway/tests/unit/server/store/ids.test.ts`                                |                                            6 |
 | `apps/gateway/tests/unit/server/store/migrate.test.ts`                            |                                            9 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts` (one per file)   |                                           83 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts` (one per file)   |                                          111 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                                  |                                            6 |
 | `packages/gateway-core/tests/unit/authenticate.test.ts`                           |                                           11 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                                  |                                            6 |
@@ -635,7 +636,7 @@ build` integration.
   the boot log carries `store opened`; a store secret is sealed with the
   encryptor built from the configuration (blob not clear text, current
   `key_version`) and reopens after a second boot without re-migrating; a
-  risk id the empty registry does not know is refused
+  risk id the registry does not know is refused
   (`UnknownRiskIdError`); an unreadable `store.path` exits 1 with a
   message naming `store.path` and `VAUBAAN_STORE_PATH`.
 - **`apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`**
@@ -643,7 +644,9 @@ build` integration.
   Stripe / mission token, private key or JWT in `apps/gateway/src/server`,
   `instrumentation.ts`, `app/healthz`, `next.config.ts`, `deploy/`,
   `scripts/`, `.github/workflows`; only `telemetry-default.ts` and
-  `deploy/config/*.example*` are exempt. Scope widens as v4 code is deleted.
+  `deploy/config/*.example*` are exempt. Scope widens as v4 code is deleted;
+  P1.4 added the Connections and Provider apps pages and their components
+  (111 files at P1.4).
 - **`apps/gateway/tests/integration/standalone-native-addons.test.ts`** (3,
   P0.6) — reads the build output and is skipped when `.next/standalone` is
   absent (CI builds before testing): the `/healthz` route handler trace lists
@@ -923,6 +926,132 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   next call `budget-exhausted`); a one-off mission's open-ended period
   (anchor read from the store); a mission with no session yet reports zero
   everywhere.
+
+## v5 — Connections, resources, provider apps (P1.4)
+
+> Covers: spec §0 (Connection, Resource), §2.3 connection states, §4.2
+> Connections and Administration, §6 (encryption at rest, anti-replay and
+> anti-redirect, per-user rate limit on connection flows), §7.2. Handbook
+> [[connections]], ADR [[connect-driver-and-resource-curation]]. No test
+> reaches a provider: outbound HTTP is `mockFetch`, which rejects any
+> request no route covers; plugins are `fixturePlugin()` (one
+> `CredentialSpec` per kind) except in `shipped-providers.test.ts`.
+
+Unit, co-located under `apps/gateway/src/server/connections/` and
+`apps/gateway/src/server/provider-apps/` (102):
+
+- **`oauth2.test.ts`** (15) — authorization URL (code flow, state, S256
+  challenge, RFC 7636 appendix B vector, resource indicator, extra
+  parameters that cannot override the core ones, PKCE required when the
+  spec says so); code exchange with `client_secret_basic` (form-encoded
+  Basic), `client_secret_post`, public client; `resource` on the token
+  request; `expires_in` and comma-delimited scopes; a rejected grant
+  carries the provider's `error: description` and never the client
+  secret; an error body under HTTP 200; 5xx / network / missing
+  `access_token` are not rejections; refresh rotates the refresh token,
+  keeps it when none is returned, is a rejection without one.
+- **`service.test.ts`** (24) — the connect driver per credential kind:
+  - `oauth2`: redirect URI on `public_url`, the verifier of the exchange
+    matches the challenge of the redirect, the credential is stored and
+    the plugin discovers with the fresh token and without the client
+    secret; **a replayed callback is refused** (`state-invalid`, token
+    endpoint called once); a state that is unknown, absent, **of another
+    user**, or of another provider is refused; **a foreign return URL is
+    refused at the start** (`https://evil…`, `//evil…`, `/\evil…`) and one
+    inside `public_url` is honoured; `app-not-configured`; a provider
+    denial consumes the state; a failed exchange shows the provider's
+    wording; a failed first discovery keeps the connection; the per-user
+    rate limit (10 per minute, other users unaffected, window reset);
+  - `app-install`: installation URL with the state, installation id
+    stored, the plugin receives the app's private key; replay, missing id
+    ("awaiting approval"), malformed id and an installation the provider
+    rejects store nothing;
+  - `api-key`: field validation by label, secret never echoed; a rejected
+    key stores nothing and shows the provider's error (the Resend
+    "restricted to only send emails" case); an unreachable provider is
+    reported as such; foreign-provider and ref-less resources ignored;
+  - `ssh-key`: key pair generated, private key only in the sealed
+    credential, public key on the view, discovery deferred then run by
+    the owner;
+  - ownership (owner only, strangers get `not-found` everywhere, members
+    of an owner group are owners), the `experimental` flag on the picker
+    and the view, reconnect in place (expired → active, same id;
+    `provider-mismatch`; `connection-revoked`), revoke (terminal, blob
+    erased, idempotent, audited once);
+  - resources: **owner label, display name, hidden flag and list settings
+    survive a re-discovery** while provider facts are refreshed; a
+    vanished resource is marked stale (first date kept) and cleared when
+    it returns; a plugin-set environment is read-only and follows the
+    plugin, an invalid plugin label is dropped; edits are validated
+    before any write; a failed refresh changes nothing; a rejected
+    credential that cannot be refreshed expires the connection.
+- **`credentials.test.ts`** (12) — `resolve` hands the decrypted secret
+  and an app config without the client secret; a token inside the 60 s
+  skew is refreshed, the rotated refresh token is persisted (sealed again)
+  and presented at the next refresh; a non-active connection is refused;
+  no expiry / no refresh token → used as is; concurrent refreshes run one
+  grant; `invalid_grant` → `expired` + `UpstreamAuthError`; 503 → still
+  `active`; missing app configuration → still `active`; api key and
+  oauth2 without refresh token → `expired`; a revocation during the
+  refresh is never undone; a plugin `refresh()` replaces the generic
+  grant; a rejecting plugin refresh expires, any other failure does not.
+- **`pending.test.ts`** (7) — state single use, bound to the user, burnt
+  by a foreign attempt, malformed / unknown refused, TTL, two concurrent
+  callbacks → exactly one; notices read once by their web session.
+- **`input.test.ts`** (17) — field reading; `resolveReturnTo` (nine
+  refused shapes including userinfo, port and scheme tricks); names;
+  environment labels; editable metadata keys; list parsing.
+- **`codec-and-keypair.test.ts`** (12) — the four `CredentialSecret` kinds
+  round-trip, malformed stored text refused; the generated ed25519 key is
+  parsed by `ssh2`, matches its public line and signs.
+- **`shipped-providers.test.ts`** (4) — the plugins the image ships:
+  registered once; every provider-app field is expressible in the mounted
+  configuration; redirect-flow providers are offered only once their app
+  is configured, forms need nothing; a valid https redirect with state,
+  PKCE, resource indicator and extra parameters for each.
+- **`provider-apps/service.test.ts`** (11) — fields per credential kind;
+  one entry per plugin; a secret sealed under
+  `instance_config:provider_apps.<id>.<field>` and never returned; blank
+  keeps the stored secret; every problem at once; the client secret goes
+  to the host only (an `app-install` plugin keeps its private key);
+  missing fields named; **the mounted configuration wins** and makes the
+  provider read-only; an incomplete file block is not completed from the
+  store; clear.
+
+Integration:
+
+- **`tests/integration/store/connections-shares.test.ts`** (+2, P1.4) —
+  `syncDiscoveredResources` at the repository (merge rule, stale, plugin
+  label that stops being set, name handed back to discovery) and the
+  conditional transitions `refreshCredential` / `markExpired` /
+  `reconnect` / `revoke` (a revoked connection is never brought back).
+- **`tests/integration/connections/connect-flow.test.ts`** (3) —
+  `buildRoot` over the `:memory:` store with the **real encryptor**, a
+  fixture registry and a mocked provider, driven through the HTTP
+  handlers:
+  1. the operator registers the provider app (403 for a non-operator, 401
+     without a session, audit entry without the secret) → the user starts
+     the flow → the callback arrives on the internal host and lands on
+     `/connections/<id>?notice=<id>` (no message in the URL; the notice
+     is read once) → **the credential blob and a dump of every table
+     contain neither the access token, the refresh token nor the client
+     secret**, and the blob does not open under another connection id →
+     resources discovered → an owner edit survives a refresh that renames
+     one resource upstream and drops another (marked stale) → the
+     replayed callback is refused → a stranger and a cross-origin request
+     cannot revoke → revoke: `revoked`, blob NULL, resources kept, audit
+     `config-changed` / `connection-created` / `connection-revoked`;
+  2. an API key and an SSH private key are absent from the dump; a
+     plugin-set label is marked and its edit refused;
+  3. guards: no session, no origin, bootstrap operator on a user endpoint,
+     callback without a session → `/login`, unconfigured app, foreign
+     `return_to`, unknown provider, a notice unreadable from another
+     session.
+
+Not covered here: the pages themselves (server components; walked by hand,
+see [`e2e-tests.md`](./e2e-tests.md)), a real provider, and
+`connection-unavailable` refusals of missions on a revoked connection
+(P1.6).
 
 ## Out of scope for these tests
 

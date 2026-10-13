@@ -1,0 +1,92 @@
+/**
+ * The generic driver against the plugins the image actually ships: every
+ * connect form and every provider-app form is derived from a real
+ * `CredentialSpec`. No request leaves the process (`mockFetch` with no route).
+ */
+import { createRegistry } from '@vaubaan/plugin-sdk';
+import { describe, expect, it } from 'vitest';
+
+import { SHIPPED_PLUGINS } from '../compose/shipped-plugins';
+import { PROVIDER_APP_FIELDS } from '../config/types';
+import { appConfigFieldsOf, APP_FIELD_NAME_PATTERN } from '../provider-apps';
+import { connectionsHarness, stateOf } from './testing';
+
+describe('shipped plugins through the generic connect driver', () => {
+  it('registers every shipped plugin once', () => {
+    const registry = createRegistry(SHIPPED_PLUGINS);
+    expect(registry.size).toBe(SHIPPED_PLUGINS.length);
+    expect(registry.size).toBeGreaterThanOrEqual(10);
+  });
+
+  it('can express every provider-app field in the mounted configuration', () => {
+    // A field a plugin asks for but `providers.<id>.<field>` cannot carry would
+    // force the operator through the Admin page; today none exists.
+    for (const plugin of SHIPPED_PLUGINS) {
+      for (const field of appConfigFieldsOf(plugin.credential)) {
+        expect(field.name, `${plugin.id}.${field.name}`).toMatch(APP_FIELD_NAME_PATTERN);
+        expect(PROVIDER_APP_FIELDS as readonly string[], `${plugin.id}.${field.name}`).toContain(
+          field.name,
+        );
+      }
+    }
+  });
+
+  it('offers a provider only once its company app is configured, and flags experimental ones', async () => {
+    const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
+    const before = await h.service.providers();
+    const byKind = (kind: string) => before.filter((p) => p.kind === kind);
+    // Redirect flows need the company app; forms need nothing from the operator.
+    for (const p of [...byKind('oauth2'), ...byKind('app-install')]) {
+      expect(p.configured, p.id).toBe(false);
+      expect(p.fields, p.id).toEqual([]);
+    }
+    for (const p of [...byKind('api-key'), ...byKind('ssh-key')]) {
+      expect(p.configured, p.id).toBe(true);
+      expect(p.fields.length, p.id).toBeGreaterThan(0);
+    }
+    expect(byKind('oauth2').length).toBeGreaterThan(0);
+    expect(byKind('app-install').length).toBeGreaterThan(0);
+    expect(byKind('ssh-key').length).toBeGreaterThan(0);
+    expect(before.filter((p) => p.experimental).map((p) => p.id)).toEqual(
+      SHIPPED_PLUGINS.filter((p) => p.experimental === true).map((p) => p.id),
+    );
+  });
+
+  it('builds a valid authorization or installation redirect for every redirect-flow plugin', async () => {
+    const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
+    const alice = await h.actor('alice@example.com');
+    const redirectFlows = SHIPPED_PLUGINS.filter(
+      (p) => p.credential.kind === 'oauth2' || p.credential.kind === 'app-install',
+    );
+    for (const plugin of redirectFlows) {
+      // Fill every declared field with a value of the declared shape.
+      const values: Record<string, string> = {};
+      for (const field of appConfigFieldsOf(plugin.credential)) {
+        values[field.name] = field.pattern?.includes('[0-9]+') ? '12345' : 'value-1';
+      }
+      await h.providerApps.save(plugin.id, values);
+
+      const result = await h.service.start(alice, plugin.id);
+      if (result.kind !== 'redirect') throw new Error(`${plugin.id}: expected a redirect`);
+      const url = new URL(result.url);
+      expect(url.protocol, plugin.id).toBe('https:');
+      expect(stateOf(result.url), plugin.id).toMatch(/^[A-Za-z0-9_-]{43}$/);
+      if (plugin.credential.kind === 'oauth2') {
+        const spec = plugin.credential;
+        expect(`${url.origin}${url.pathname}`, plugin.id).toBe(spec.authorizationUrl);
+        expect(url.searchParams.get('redirect_uri'), plugin.id).toBe(
+          h.service.callbackUrl(plugin.id).href,
+        );
+        expect(url.searchParams.get('client_id'), plugin.id).toBe('value-1');
+        expect(url.searchParams.has('code_challenge'), plugin.id).toBe(spec.pkce);
+        expect(url.searchParams.get('resource'), plugin.id).toBe(spec.resourceIndicator ?? null);
+        for (const [name, value] of Object.entries(spec.extraAuthorizationParams ?? {})) {
+          expect(url.searchParams.get(name), `${plugin.id}.${name}`).toBe(value);
+        }
+        // The client secret is for the token endpoint only.
+        expect(result.url, plugin.id).not.toContain('client_secret');
+      }
+    }
+    expect(h.fetch.calls).toHaveLength(0);
+  });
+});

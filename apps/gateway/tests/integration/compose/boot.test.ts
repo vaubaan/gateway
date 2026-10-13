@@ -14,6 +14,7 @@ import { loadInstanceConfig } from '../../../src/server/config';
 import { validEnv } from '../../../src/server/config/testing';
 import { healthResponse } from '../../../src/server/http/healthz';
 import { UnknownRiskIdError } from '../../../src/server/store';
+import { SHIPPED_PLUGINS } from '../../../src/server/compose/shipped-plugins';
 
 describe('composition root over the embedded SQLite store', () => {
   const dirs: string[] = [];
@@ -50,13 +51,13 @@ describe('composition root over the embedded SQLite store', () => {
 
     expect(existsSync(path)).toBe(true);
     expect(root.store.kind).toBe('sqlite');
-    expect(root.store.schemaVersion).toBe(3);
+    expect(root.store.schemaVersion).toBe(4);
     expect(
       root.store.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()
         ?.n,
-    ).toBe(3);
+    ).toBe(4);
     await expect(root.store.ping()).resolves.toBeUndefined();
-    expect(root.registry.size).toBe(0);
+    expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
 
     const res = await healthResponse(root);
     expect(res.status).toBe(200);
@@ -67,7 +68,7 @@ describe('composition root over the embedded SQLite store', () => {
 
     const log = lines.join('\n');
     expect(log).toContain('"msg":"store opened"');
-    expect(log).toContain('"schema_version":3');
+    expect(log).toContain('"schema_version":4');
     expect(log).toContain('"msg":"composition root ready"');
   });
 
@@ -88,16 +89,16 @@ describe('composition root over the embedded SQLite store', () => {
 
     // Same master key (validEnv is stable per process), same file: the secret opens.
     const second = await boot(path);
-    expect(second.store.schemaVersion).toBe(3);
+    expect(second.store.schemaVersion).toBe(4);
     expect(
       second.store.db
         .prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations')
         .get()?.n,
-    ).toBe(3);
+    ).toBe(4);
     await expect(second.store.config.getSecret('idp.client_secret')).resolves.toBe('s3cret-value');
   });
 
-  it('refuses to persist a risk id the (empty) registry does not know', async () => {
+  it('refuses to persist a risk id the registry does not know', async () => {
     const root = await boot(join(tempDir(), 'gateway.db'));
     const owner = await root.store.users.upsertFromIdp({ subject: 'u1', email: 'u1@example.test' });
     const connection = await root.store.connections.create({

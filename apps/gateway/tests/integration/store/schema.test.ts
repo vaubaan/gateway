@@ -87,7 +87,7 @@ describe('store schema v1', () => {
   it('creates every table of the plan on an in-memory database', () => {
     const { store } = openTestStore();
     opened.push(store);
-    expect(store.schemaVersion).toBe(3);
+    expect(store.schemaVersion).toBe(4);
     expect(tableNames(store)).toEqual(EXPECTED_TABLES);
   });
 
@@ -126,10 +126,10 @@ describe('store schema v1', () => {
     opened.splice(opened.indexOf(first), 1);
 
     const second = fileStore(path);
-    expect(second.schemaVersion).toBe(3);
+    expect(second.schemaVersion).toBe(4);
     expect(
       second.db.prepare<[], { n: number }>('SELECT COUNT(*) AS n FROM schema_migrations').get()?.n,
-    ).toBe(3);
+    ).toBe(4);
   });
 
   it('serializes two writers on the same file with BEGIN IMMEDIATE', async () => {

@@ -3,8 +3,8 @@
  *
  * The registry itself is `@vaubaan/plugin-sdk`'s `PluginRegistry` (ADR
  * plugin-contract-and-credential-spec D6): the root builds it once from the
- * plugins the image ships and derives everything else from it. Until P1.2
- * migrates the plugins, the default registry is empty.
+ * plugins the image ships (`shipped-plugins.ts`, the default
+ * `RootDeps.buildRegistry`) and derives everything else from it.
  *
  * Two derivations live here because they bridge the registry with another
  * port of the root:
@@ -21,7 +21,7 @@ import { ConfigError, providerEnvName, type ConfigIssue, type InstanceConfig } f
 import type { Logger } from '../logging';
 import type { CatalogIndex } from '../store';
 
-/** The default `RootDeps.buildRegistry`: no plugin yet (P1.2 adds them). */
+/** A registry with no plugin — tests of the root that need no provider. */
 export async function buildEmptyRegistry(): Promise<PluginRegistry> {
   return new PluginRegistry([]);
 }

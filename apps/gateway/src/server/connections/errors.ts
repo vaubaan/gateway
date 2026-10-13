@@ -1,0 +1,111 @@
+/**
+ * Errors of the connect flows. A `ConnectError` carries a closed code (what the
+ * UI keys its sentence on), an HTTP status, and an optional `detail` that is
+ * safe to show to the connecting user: the provider's own error message or a
+ * validation sentence — never a credential, never a token.
+ */
+import type { ConnectionStatus } from '@vaubaan/shared';
+
+export const CONNECT_ERROR_CODES = [
+  'provider-unknown',
+  'app-not-configured',
+  'invalid-input',
+  'return-url-refused',
+  'rate-limited',
+  'state-invalid',
+  'provider-denied',
+  'token-exchange-failed',
+  'credential-rejected',
+  'provider-unreachable',
+  'not-found',
+  'connection-revoked',
+  'provider-mismatch',
+  'label-read-only',
+] as const;
+
+export type ConnectErrorCode = (typeof CONNECT_ERROR_CODES)[number];
+
+export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> = {
+  'provider-unknown': 'This provider is not available on this instance.',
+  'app-not-configured':
+    'An operator must register the company app for this provider first (Administration → Provider apps).',
+  'invalid-input': 'Some values are missing or do not have the expected format.',
+  'return-url-refused': 'The return address is outside this instance and was refused.',
+  'rate-limited': 'Too many connection attempts. Wait a minute and retry.',
+  'state-invalid':
+    'This authorization attempt has expired, was already used, or was started by another session. Start again from Connections.',
+  'provider-denied': 'The provider did not grant the authorization.',
+  'token-exchange-failed': 'The provider refused to exchange the authorization for a credential.',
+  'credential-rejected': 'The provider rejected this credential.',
+  'provider-unreachable': 'The provider could not be reached. Retry in a moment.',
+  'not-found': 'This connection does not exist or is not yours.',
+  'connection-revoked': 'This connection is revoked; revocation is final. Create a new connection.',
+  'provider-mismatch': 'This connection belongs to another provider.',
+  'label-read-only':
+    'The environment of this resource is set by the provider plugin and cannot be edited.',
+};
+
+const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
+  'provider-unknown': 404,
+  'app-not-configured': 409,
+  'invalid-input': 400,
+  'return-url-refused': 400,
+  'rate-limited': 429,
+  'state-invalid': 400,
+  'provider-denied': 400,
+  'token-exchange-failed': 502,
+  'credential-rejected': 400,
+  'provider-unreachable': 502,
+  'not-found': 404,
+  'connection-revoked': 409,
+  'provider-mismatch': 409,
+  'label-read-only': 409,
+};
+
+const MAX_DETAIL_CHARS = 300;
+
+export class ConnectError extends Error {
+  readonly status: number;
+  /** Shown to the user next to the code's sentence; truncated, single line. */
+  readonly detail: string | null;
+
+  constructor(
+    readonly code: ConnectErrorCode,
+    detail?: string | null,
+    readonly retryAfterMs: number = 0,
+  ) {
+    super(detail ? `${code}: ${detail}` : code);
+    this.name = 'ConnectError';
+    this.status = STATUS_BY_CODE[code];
+    this.detail = detail ? oneLine(detail) : null;
+  }
+}
+
+/** The connection cannot serve a call: it is `expired`, `revoked` or `unowned`, or gone. */
+export class ConnectionUnavailableError extends Error {
+  constructor(
+    readonly connectionId: string,
+    readonly connectionStatus: ConnectionStatus | 'missing',
+  ) {
+    super(`connection ${connectionId} is ${connectionStatus}`);
+    this.name = 'ConnectionUnavailableError';
+  }
+}
+
+/** The provider did not answer a refresh (network, 5xx): nothing was changed, retry later. */
+export class ProviderUnreachableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ProviderUnreachableError';
+  }
+}
+
+export function oneLine(text: string): string {
+  const flat = text.replace(/\s+/g, ' ').trim();
+  return flat.length > MAX_DETAIL_CHARS ? `${flat.slice(0, MAX_DETAIL_CHARS - 1)}…` : flat;
+}
+
+/** A message from an unknown thrown value, for a log line or a `detail`. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}

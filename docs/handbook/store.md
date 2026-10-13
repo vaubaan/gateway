@@ -27,6 +27,8 @@ apps/gateway/migrations/
   0001_schema.sql                 schema v1 (27 tables + schema_migrations from the runner, 4 triggers)
   0002_audit_risks_purge_guard.sql audit_risks delete guard compares with the purge cutoff (schema version 2)
   0003_web_sessions.sql           web_sessions: the human web-session rows (schema version 3, P1.1)
+  0004_connection_resource_curation.sql  connection_resources: metadata, owner metadata, env source,
+                                  renamed / hidden / stale flags (schema version 4, P1.4)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           better-sqlite3 handle, pragmas, withImmediateTransaction, backupTo
@@ -75,9 +77,9 @@ const store = openStore({
 the registry's catalogs: a base id exists when its provider is registered
 and the catalog has the entry; an env-qualified id (`acme[prod].thing-write`)
 exists when the entry is env-scoped and lists that environment in
-`acceptable_in_envs`. With the empty registry of today every write of a
-risk id is refused (`UnknownRiskIdError`), which is correct: no plugin, no
-mission. `SetCatalogIndex` remains for tests. `root.store` is this object;
+`acceptable_in_envs`. The registry holds the plugins the image ships
+(`compose/shipped-plugins.ts`); a risk id of a provider it does not hold is
+refused (`UnknownRiskIdError`). `SetCatalogIndex` remains for tests. `root.store` is this object;
 `GET /healthz` pings it and reports `kind`.
 
 `openStore()`:
@@ -142,26 +144,53 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql`, `0002_audit_risks_purge_guard.sql`, `0003_web_sessions.sql`)
+## Schema (`0001_schema.sql` … `0004_connection_resource_curation.sql`)
 
-Schema version 3. `0001` creates every table and trigger; `0002` only replaces the
-`audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`.
+Schema version 4. `0001` creates every table and trigger; `0002` only replaces the
+`audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
+owner-curation columns of `connection_resources` (plain `ADD COLUMN`s).
 
-| Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                              |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Instance    | `instance_config`, `schema_migrations`                                                                                     | key → clear `value` **or** `secret_blob`+`key_version`, never both                                                                                                                                                                                                                 |
-| Web session | `web_sessions`                                                                                                             | `id` = cookie value, `value_json`, `expires_at`; owned by `server/session/SqliteSessionStore` (handbook [authentication](authentication.md)), not by a repository                                                                                                                  |
-| Identities  | `users`, `groups`, `group_members`                                                                                         | `users.subject` unique (IdP), `status active\|removed`; `groups.source idp\|local`                                                                                                                                                                                                 |
-| Delegations | `oauth_clients`, `oauth_client_redirect_uris`, `delegations`, `oauth_codes`, `oauth_refresh_tokens`, `oauth_access_tokens` | all secrets stored as hashes by the caller; codes single-use; refresh tokens chain through `replaced_by_id`                                                                                                                                                                        |
-| Connections | `connections`, `connection_resources`                                                                                      | owner = `owner_kind` + `owner_user_id`/`owner_group_id` with a CHECK; status `active\|expired\|revoked\|unowned`; resources unique per `(connection_id, ref)` with an `env` label                                                                                                  |
-| Shares      | `shares`, `share_restrictions`                                                                                             | target principal like owner; one `risk_id` row per restriction entry                                                                                                                                                                                                               |
-| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`                                 | status `active\|expired\|orphaned\|revoked` (`exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; partial unique index = one `active` token per mission |
-| Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details                                                                                                                                    |
-| Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, encrypted `args_blob`; one approval per request, consumed via `consumed_at`                                                                                        |
-| Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                          |
+| Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                     |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Instance    | `instance_config`, `schema_migrations`                                                                                     | key → clear `value` **or** `secret_blob`+`key_version`, never both                                                                                                                                                                                                                                                                                                        |
+| Web session | `web_sessions`                                                                                                             | `id` = cookie value, `value_json`, `expires_at`; owned by `server/session/SqliteSessionStore` (handbook [authentication](authentication.md)), not by a repository                                                                                                                                                                                                         |
+| Identities  | `users`, `groups`, `group_members`                                                                                         | `users.subject` unique (IdP), `status active\|removed`; `groups.source idp\|local`                                                                                                                                                                                                                                                                                        |
+| Delegations | `oauth_clients`, `oauth_client_redirect_uris`, `delegations`, `oauth_codes`, `oauth_refresh_tokens`, `oauth_access_tokens` | all secrets stored as hashes by the caller; codes single-use; refresh tokens chain through `replaced_by_id`                                                                                                                                                                                                                                                               |
+| Connections | `connections`, `connection_resources`                                                                                      | owner = `owner_kind` + `owner_user_id`/`owner_group_id` with a CHECK; status `active\|expired\|revoked\|unowned`; resources unique per `(connection_id, ref)` with an `env` label, its `env_source` (`owner`\|`plugin`), `metadata_json` (provider facts) and `owner_metadata_json` (owner edits), `display_name_edited`, `hidden`, `stale_since` (see Connections below) |
+| Shares      | `shares`, `share_restrictions`                                                                                             | target principal like owner; one `risk_id` row per restriction entry                                                                                                                                                                                                                                                                                                      |
+| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`                                 | status `active\|expired\|orphaned\|revoked` (`exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; partial unique index = one `active` token per mission                                                                                        |
+| Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details                                                                                                                                                                                                                           |
+| Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, encrypted `args_blob`; one approval per request, consumed via `consumed_at`                                                                                                                                                                               |
+| Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                                                                                                                 |
 
 SQLite-only constructs are marked `-- sqlite:` in the file (`STRICT`, `RAISE(ABORT)`);
 the ADR lists the Postgres replacement for each.
+
+## Connections and resources
+
+Beyond the P0.3 primitives (`create`, `getById`, `list`, `listOwnedBy`,
+`getCredential`, `setCredential`, `setStatus`, `transferOwner`, `setMetadata`,
+`replaceResources`, `listResources`, `getResource`, `setResourceEnv`), the repository
+carries the operations the connect flows need (P1.4, handbook
+[connections](connections.md)). All are additive; the state changes are single
+conditional `UPDATE`s whose `changes` is the answer:
+
+| Method                                          | Effect                                                                                                               |
+| ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `reconnect(id, credential, expiresAt?)`         | new sealed credential, status `active` — `WHERE status <> 'revoked'`; `false` when revoked                           |
+| `refreshCredential(id, credential, expiresAt?)` | new sealed credential, status untouched — `WHERE status = 'active'`; `false` otherwise                               |
+| `markExpired(id)`                               | `active` → `expired` only; `false` otherwise                                                                         |
+| `revoke(id)`                                    | `revoked`, `revoked_at` kept if already set, `credential_blob` / `key_version` / `credential_expires_at` set NULL    |
+| `syncDiscoveredResources(connectionId, list)`   | the discovery merge: provider facts refreshed, owner fields kept, missing refs marked `stale_since`, nothing deleted |
+| `setResourceDisplayName(id, name \| null)`      | owner rename (`display_name_edited = 1`); `null` hands the name back to discovery                                    |
+| `setResourceHidden(id, hidden)`                 | owner flag                                                                                                           |
+| `setResourceOwnerMetadata(id, object \| null)`  | owner edits overlaid on the discovered metadata                                                                      |
+
+`setResourceEnv` also sets `env_source = 'owner'`. `ConnectionResourceRecord` exposes
+`envSource`, `metadata` (the effective merge `{ ...discovered, ...owner }`),
+`ownerMetadata`, `displayNameEdited`, `hidden`, `staleSince`; `listResources` returns
+every row, hidden and stale included. `replaceResources` still **deletes** refs it is
+not given (cascading to `mission_resources`); no flow calls it any more.
 
 ## Audit
 
@@ -240,7 +269,7 @@ capture both files atomically are also fine.
   uniqueness.
 - `tests/unit/server/store/migrate.test.ts` — file naming, ordering, duplicate
   versions, idempotent re-run, incremental apply, checksum immutability, rollback of a
-  failing file, downgrade refused (a recorded migration with no file), the three shipped
+  failing file, downgrade refused (a recorded migration with no file), the four shipped
   files.
 - `tests/unit/server/store/db.test.ts` — `isSqliteVersionAtLeast`.
 - `tests/integration/store/schema.test.ts` — all 29 tables, every table `STRICT`,

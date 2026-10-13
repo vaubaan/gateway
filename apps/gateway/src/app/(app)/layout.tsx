@@ -1,4 +1,6 @@
 import { redirect } from 'next/navigation';
+import { AppShell } from '@/components/shell/AppShell';
+import { currentPrincipal } from '@/lib/auth/session';
 import { getSupabaseServer } from '@/lib/supabase/server';
 import { Sidebar, type SidebarOrg, type SidebarProject } from '@/components/sidebar/Sidebar';
 import styles from '@/components/sidebar/Sidebar.module.css';
@@ -17,6 +19,16 @@ interface ProjectRow {
 }
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
+  // v5: a web session of the instance (OIDC or bootstrap) gets the v5 shell.
+  // What follows is the v4 Supabase layout, kept for the v4 pages until the
+  // cutover deletes them (P1.6); without its variables there is nothing to
+  // fall back to and the visitor signs in.
+  const { principal } = await currentPrincipal();
+  if (principal) return <AppShell principal={principal}>{children}</AppShell>;
+  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+    redirect('/login');
+  }
+
   const supabase = await getSupabaseServer();
   const { data: userRes } = await supabase.auth.getUser();
   if (!userRes.user) redirect('/login');

@@ -97,6 +97,63 @@ tester; `bootstrap_token` set, `idp` **not** set in the configuration.
    `bootstrap token revoked after the first operator sign-in`, and never
    the client secret or the bootstrap token.
 
+## Manual — connect a provider (v5, P1.4, by hand)
+
+> Covers: plan P1.4 DoD ("Renaud connects GitHub, Vercel, Supabase, Railway
+> on his instance with apps he registered"), spec §7.1 last step, §7.2.
+> Handbook [[connections]]. The automated counterpart runs against mocked
+> provider endpoints ([`integration-tests.md`](./integration-tests.md));
+> this check is the only one that touches real providers and is never part
+> of CI.
+
+Prerequisites: the instance of the previous section, signed in as an
+operator; at each redirect-flow provider, an app registered by the company
+with the URL shown on `/admin/provider-apps`
+(`<public_url>/connections/callback/<provider>`) as OAuth redirect URI
+(Supabase, Railway, Gmail) or as setup URL with "redirect on update"
+(GitHub App).
+
+1. **Provider apps** — `/admin/provider-apps`: one card per provider that
+   needs an app, `not configured`. Save GitHub (app id, private key PEM,
+   slug) and Supabase / Railway (client id, secret) → `configured`; the
+   secrets are never shown again ("A value is stored; leave blank to keep
+   it"). A provider set through `providers.<id>.*` in the mounted
+   configuration is read-only with its badge.
+2. **Picker** — `/connections/new` lists the configured providers and the
+   key-based ones (Vercel, Stripe, Cloudflare DNS, Resend, Upstash Redis,
+   SSH); Gmail carries the `experimental` badge once its app is saved; the
+   unconfigured ones are named in the muted line.
+3. **OAuth** — Supabase: "Continue to Supabase" → consent → back on
+   `/connections/<id>` with "Connected" and the projects in the resources
+   table. Same for Railway.
+4. **App installation** — GitHub: install the App on the organisation →
+   back with the repositories as resources.
+5. **API key** — Vercel with a token and a team id → connected with the
+   projects. Resend with a sending-only key → "Not connected", with
+   Resend's own error; with a full-access key → domains and segments.
+   Stripe: the `test` / `live` resources show their environment as "set by
+   the plugin", not editable.
+6. **SSH** — fill host, user, fingerprint → the detail page shows the
+   public key; "Refresh discovery" fails with the plugin's message until
+   the key is in `authorized_keys`, then lists the host.
+7. **Curate** — label a Supabase project `prod`, rename it, hide another;
+   on a Resend domain open "Settings" and fill `internal domains`; "Refresh
+   discovery" → everything is kept. Delete a project at the provider →
+   after a refresh it is `stale since <date>`, still listed.
+8. **Replay** — reopen the callback URL of step 3 from the browser history
+   → "Not connected: this authorization attempt has expired, was already
+   used…"; no second connection.
+9. **Refresh** — wait for a Supabase access token to expire (one hour) and
+   use "Refresh discovery": it succeeds, and the log carries `credential
+refreshed`. Revoke the app's access at the provider, refresh again →
+   the connection turns `expired`; "Reconnect" brings it back with the
+   same id.
+10. **Revoke** — "Revoke", type the connection name → `revoked`, no action
+    left on the page; the list shows the state.
+11. **Logs and store** — the log never shows a token, a key or a client
+    secret; `sqlite3 gateway.sqlite "select hex(credential_blob) from
+connections"` shows blobs starting with `01`, never readable text.
+
 ## Playwright harness
 
 `playwright.config.ts` defines two projects over `apps/gateway/tests/e2e/`:

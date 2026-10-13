@@ -7,8 +7,9 @@ import { openMemoryStore, type CatalogIndex } from '../store';
 import { bootOrExit, EXIT_CONFIG_ERROR } from './boot';
 import { silentLogger } from '../logging';
 import { MemoryRateLimiter, MemorySessionStore } from './memory';
-import { checkProviderApps, RegistryCatalogIndex } from './registry';
+import { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
 import { buildRoot, getRoot, resetRoot, type RootDeps } from './root';
+import { SHIPPED_PLUGINS } from './shipped-plugins';
 import { fakePlugin, memoryStoreDeps } from './testing';
 
 const quiet: RootDeps = {
@@ -22,15 +23,20 @@ afterEach(async () => {
 });
 
 describe('buildRoot', () => {
-  it('builds config, logger, encryptor, an empty registry and the store from configuration alone', async () => {
+  it('builds config, logger, encryptor, the shipped registry and the store from configuration alone', async () => {
     const root = await buildRoot(quiet);
     expect(root.config.publicUrl.origin).toBe('https://gateway.example.com');
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(3);
-    expect(root.registry.size).toBe(0);
-    expect(root.registry.labels()).toEqual([]);
+    expect(root.store.schemaVersion).toBe(4);
+    expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
+    expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
+    expect(new Set(root.registry.ids).size).toBe(root.registry.size);
+    expect((await root.providerApps.list()).map((a) => a.providerId)).toEqual(root.registry.ids);
+    expect((await root.connections.service.providers()).map((p) => p.id)).toEqual(
+      root.registry.ids,
+    );
     expect(root.build).toEqual({ version: 'dev', commit: 'dev' });
     const sealed = await root.encryptor.encrypt('conn-1', 'hello');
     await expect(root.encryptor.decrypt('conn-1', sealed)).resolves.toBe('hello');
@@ -82,6 +88,7 @@ describe('buildRoot', () => {
           }),
         }),
       logWrite: (_lvl, line) => lines.push(line),
+      buildRegistry: buildEmptyRegistry,
     });
     const warnings = lines.filter((l) => l.includes('"level":"warn"'));
     expect(warnings).toHaveLength(2);

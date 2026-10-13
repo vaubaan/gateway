@@ -42,6 +42,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             Vaubaan · Administration
           </Link>
           <Link href="/admin/identity-provider">Identity provider</Link>
+          <Link href="/admin/provider-apps">Provider apps</Link>
         </nav>
         <div className={styles.actions}>
           <span className={styles.muted}>{who}</span>

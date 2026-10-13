@@ -50,6 +50,7 @@ export function PrincipalCard({ principal }: { principal: Principal }) {
           </div>
           <div className={styles.actions}>
             <OperatorBadge principal={principal} />
+            {principal.kind === 'user' && <Link href="/connections">Connections</Link>}
             {(principal.kind === 'bootstrap' || principal.isOperator) && (
               <Link href="/admin">Administration</Link>
             )}
