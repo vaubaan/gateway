@@ -44,6 +44,13 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   (429). **Do not go back to an older image after this one has served calls**: it
   reads argon2id only and would refuse every token that has been moved or issued
   since.
+- **A delegation now ends 90 days after the consent.** An application you authorized
+  on the Delegations page used to stay authorized for as long as it renewed its token.
+  It is now refused 90 days after you consented, whatever it renewed, and sends you to
+  the consent screen again; the missions it issued are untouched. **Delegations
+  granted more than 90 days ago stop at the first renewal after the upgrade.** The
+  page shows the date for each. Operators set another duration with
+  `oauth.delegation_max_lifetime` (`VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME`).
 - **Supabase: reading `auth`, `vault` or `storage` through SQL is a risk of its
   own.** `supabase__execute_sql` now needs `supabase[<env>].read-managed-schemas`
   on top of `supabase.read-data` when the query names a schema Supabase manages, and

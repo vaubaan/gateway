@@ -18,6 +18,7 @@ import type {
   UserRecord,
 } from '../store/types';
 import type { ClientRegistry, ClientStatus } from './clients';
+import type { DelegationLifetime } from './delegation-lifetime';
 
 /** Who ended a delegation, and why. */
 export interface DelegationEnding {
@@ -188,9 +189,24 @@ async function missionsToReviewOf(
 /**
  * `active`: a token of the delegation is live. `idle`: the consent stands but
  * no token is left (never redeemed, or unused past the refresh lifetime): the
- * client must ask again. `revoked`: ended, with the reason.
+ * client must ask again. `expired`: the delegation reached its absolute
+ * lifetime (`oauth.delegation_max_lifetime` after the consent) — derived, the
+ * stored row still reads `active`; nothing is issued or accepted under it and
+ * the client must obtain the consent again. `revoked`: ended, with the reason.
  */
-export type DelegationState = 'active' | 'idle' | 'revoked';
+export type DelegationState = 'active' | 'idle' | 'expired' | 'revoked';
+
+/** The state of a delegation at `now`. A revocation is said before an expiry: it has a reason. */
+export function delegationStateOf(
+  delegation: Pick<DelegationRecord, 'status'>,
+  over: boolean,
+  liveUntil: string | null,
+  now: string,
+): DelegationState {
+  if (delegation.status === 'revoked') return 'revoked';
+  if (over) return 'expired';
+  return liveUntil !== null && liveUntil > now ? 'active' : 'idle';
+}
 
 export interface DelegationView {
   readonly delegation: DelegationRecord;
@@ -201,6 +217,11 @@ export interface DelegationView {
   readonly lastTokenAt: string | null;
   /** Until when it can keep acting without the user (the latest live token). */
   readonly liveUntil: string | null;
+  /**
+   * When the delegation reaches its absolute lifetime, as configured now: the
+   * client then needs the user's consent again, whatever it renewed.
+   */
+  readonly expiresAt: string;
   /** The missions issued through this delegation, in the user's name. */
   readonly missions: readonly MissionRecord[];
   /** True when the instance revoked it on a replayed code or refresh token. */
@@ -223,6 +244,8 @@ export interface DelegationServiceDeps {
   readonly repo: DelegationsRepo;
   readonly missions: Pick<MissionsRepo, 'listForCreator'>;
   readonly clients: ClientRegistry;
+  /** The absolute lifetime of a delegation, as configured now. */
+  readonly lifetime: Pick<DelegationLifetime, 'deadlineOf' | 'isOver'>;
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -233,7 +256,7 @@ export class DelegationService {
 
   /** The user's delegations, most recent first, each with its client and its missions. */
   async listFor(user: UserRecord): Promise<DelegationView[]> {
-    const { repo, missions, clients, clock } = this.deps;
+    const { repo, missions, clients, clock, lifetime } = this.deps;
     const delegations = await repo.listForUser(user.id);
     if (delegations.length === 0) return [];
     const activity = await repo.activityOf(delegations.map((d) => d.id));
@@ -253,18 +276,16 @@ export class DelegationService {
       if (!client) continue;
       const tokens = activity.get(delegation.id);
       const liveUntil = tokens?.liveUntil ?? null;
+      const state = delegationStateOf(delegation, lifetime.isOver(delegation), liveUntil, now);
       views.push({
         delegation,
-        state:
-          delegation.status === 'revoked'
-            ? 'revoked'
-            : liveUntil !== null && liveUntil > now
-              ? 'active'
-              : 'idle',
+        state,
         client,
         clientStatus: clients.statusOf(client),
         lastTokenAt: tokens?.lastTokenAt ?? null,
-        liveUntil: delegation.status === 'revoked' ? null : liveUntil,
+        // A token row may outlive a lifetime the operator shortened: it is worth nothing.
+        liveUntil: state === 'revoked' || state === 'expired' ? null : liveUntil,
+        expiresAt: toIso(lifetime.deadlineOf(delegation)),
         missions: issued.filter((mission) => mission.delegationId === delegation.id),
         replayed: endedByReplay(delegation.revokeReason),
         toReview: endedByReplay(delegation.revokeReason)

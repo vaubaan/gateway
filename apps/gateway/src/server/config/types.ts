@@ -125,6 +125,12 @@ export interface OAuthConfig {
   /** Lifetime of a refresh token; each rotation starts it again. */
   readonly refreshTokenTtlSeconds: number;
   /**
+   * Absolute lifetime of a delegation, counted from the user's consent (spec §0
+   * "Delegation"): past it no token of the delegation is issued or accepted,
+   * whatever was renewed, and the client must obtain the consent again.
+   */
+  readonly delegationMaxLifetimeSeconds: number;
+  /**
    * For how long the refresh token that was just rotated may be presented once
    * more without ending the delegation (two processes sharing one stored token
    * and renewing together). 0 disables the window; at most 60.

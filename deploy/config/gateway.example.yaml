@@ -183,6 +183,12 @@
 #   # left unused for this long ends by itself. Must be longer than access_token_ttl.
 #   # env: VAUBAAN_OAUTH_REFRESH_TOKEN_TTL
 #   refresh_token_ttl: 30d
+#   # Absolute lifetime of a delegation, counted from the day the user gave
+#   # their consent. Past it the client must ask for the consent again,
+#   # however recently it renewed its token: no agent keeps a standing
+#   # authorization forever. Must be longer than access_token_ttl.
+#   # env: VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME
+#   delegation_max_lifetime: 90d
 #   # For how many seconds the refresh token that was just rotated may be
 #   # presented once more without ending the delegation: two sessions of one
 #   # agent sharing a stored token and renewing at the same moment. Any other

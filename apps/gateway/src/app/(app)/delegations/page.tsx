@@ -1,7 +1,8 @@
 /**
  * `/delegations` — the agents I authorized to manage my missions (spec §4.2
- * "Delegations", §4.1 bis): the client holding each delegation, the missions
- * it issued in my name, and its revocation in one click.
+ * "Delegations", §4.1 bis): the client holding each delegation, the day its
+ * absolute lifetime ends, the missions it issued in my name, and its
+ * revocation in one click.
  */
 
 import { LocalDate } from '@/components/LocalDate';
@@ -36,8 +37,22 @@ export const dynamic = 'force-dynamic';
 const STATE: Readonly<Record<DelegationState, { label: string; tone: BadgeTone }>> = {
   active: { label: 'active', tone: 'success' },
   idle: { label: 'idle', tone: 'neutral' },
+  expired: { label: 'expired', tone: 'warning' },
   revoked: { label: 'revoked', tone: 'danger' },
 };
+
+const SECONDS_PER_DAY = 86_400;
+const SECONDS_PER_HOUR = 3_600;
+
+/** A lifetime in the largest unit that says it exactly enough: days, else hours. */
+function lifetimeInWords(seconds: number): string {
+  if (seconds >= SECONDS_PER_DAY) {
+    const days = Math.round(seconds / SECONDS_PER_DAY);
+    return `${days} ${days === 1 ? 'day' : 'days'}`;
+  }
+  const hours = Math.max(1, Math.round(seconds / SECONDS_PER_HOUR));
+  return `${hours} ${hours === 1 ? 'hour' : 'hours'}`;
+}
 
 const REVOKE_REASON: Readonly<Record<DelegationRevokeReason, string>> = {
   user: 'revoked by you',
@@ -56,7 +71,7 @@ function destinations(view: DelegationView): string[] {
   return [...new Set(labels)];
 }
 
-function DelegationCard({ view }: { view: DelegationView }) {
+function DelegationCard({ view, lifetime }: { view: DelegationView; lifetime: string }) {
   const { delegation, client, state, missions } = view;
   const badge = STATE[state];
   return (
@@ -102,9 +117,27 @@ function DelegationCard({ view }: { view: DelegationView }) {
             <dd>{view.lastTokenAt ? <LocalDate ts={view.lastTokenAt} /> : 'never used'}</dd>
             {state === 'active' && (
               <>
-                <dt>Ends by itself</dt>
+                <dt>Ends if unused</dt>
                 <dd>
                   <LocalDate ts={view.liveUntil} /> unless the application renews it before
+                </dd>
+              </>
+            )}
+            {(state === 'active' || state === 'idle') && (
+              <>
+                <dt>Consent ends</dt>
+                <dd>
+                  <LocalDate ts={view.expiresAt} /> — {lifetime} after you granted it. The
+                  application will then have to ask you again, however recently it renewed.
+                </dd>
+              </>
+            )}
+            {state === 'expired' && (
+              <>
+                <dt>Expired</dt>
+                <dd>
+                  <LocalDate ts={view.expiresAt} /> — a delegation lasts {lifetime}. The application
+                  can no longer act on your behalf; it must ask you for your consent again.
                 </dd>
               </>
             )}
@@ -215,6 +248,7 @@ export default async function DelegationsPage({
   const params = await searchParams;
   const views = await session.root.oauth.delegations.listFor(session.user);
   const door = session.root.oauth.endpoints.resource;
+  const lifetime = lifetimeInWords(session.root.config.oauth.delegationMaxLifetimeSeconds);
 
   return (
     <Stack gap="var(--space-4)">
@@ -225,7 +259,8 @@ export default async function DelegationsPage({
           management door <Code>{door}</Code>. A delegated application can read your connections and
           missions, issue missions in your name, rotate the token of the missions it issued and
           revoke any of your missions; it can never answer a request, touch a connection or call a
-          provider.
+          provider. A delegation lasts {lifetime} at most: after that the application asks for your
+          consent again.
         </p>
       </div>
 
@@ -248,7 +283,9 @@ export default async function DelegationsPage({
           </div>
         </Card>
       ) : (
-        views.map((view) => <DelegationCard key={view.delegation.id} view={view} />)
+        views.map((view) => (
+          <DelegationCard key={view.delegation.id} view={view} lifetime={lifetime} />
+        ))
       )}
     </Stack>
   );

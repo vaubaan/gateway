@@ -22,6 +22,7 @@ import {
   type ClientDocumentFetcher,
 } from './client-metadata-document';
 import { ClientRegistry } from './clients';
+import { delegationLifetime } from './delegation-lifetime';
 import { DelegationService } from './delegations';
 import { oauthEndpoints, type OAuthEndpoints } from './endpoints';
 import {
@@ -95,6 +96,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     clock,
     logger,
   });
+  const lifetime = delegationLifetime(config.oauth.delegationMaxLifetimeSeconds, clock);
   const tokens = new TokenService({
     repo: store.delegations,
     users: store.users,
@@ -111,6 +113,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     repo: store.delegations,
     missions: store.missions,
     clients,
+    lifetime,
     audit,
     clock,
     logger,
@@ -119,6 +122,7 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     repo: store.delegations,
     users: store.users,
     clients,
+    lifetime,
   });
   const handlers = createOAuthHandlers({
     publicUrl: config.publicUrl,

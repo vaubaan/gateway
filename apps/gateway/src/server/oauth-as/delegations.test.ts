@@ -3,7 +3,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { silentLogger } from '../logging';
 import type { OAuthClientRecord } from '../store/types';
 import { ClientRegistry } from './clients';
-import { endDelegation } from './delegations';
+import { delegationLifetime } from './delegation-lifetime';
+import { delegationStateOf, endDelegation } from './delegations';
 import { mintAccessToken } from './secrets';
 import {
   DEFAULT_TEST_OAUTH,
@@ -102,6 +103,42 @@ describe('DelegationService', () => {
     rig.clock.advance(31 * 86_400_000);
     [view] = await rig.delegations.listFor(rig.bob);
     expect(view).toMatchObject({ delegation: { id: delegationId }, state: 'idle' });
+  });
+
+  it('shows when the consent ends, and reads a delegation past its lifetime as expired without writing anything', async () => {
+    const { delegationId } = await rig.issue(rig.ada, client);
+    const consentedAt = rig.clock.now().getTime();
+    const deadline = new Date(consentedAt + 90 * 86_400_000).toISOString();
+
+    let [view] = await rig.delegations.listFor(rig.ada);
+    expect(view).toMatchObject({ state: 'active', expiresAt: deadline });
+
+    // Unused for 31 days: idle, and the consent still ends on the same day.
+    rig.clock.advance(31 * 86_400_000);
+    [view] = await rig.delegations.listFor(rig.ada);
+    expect(view).toMatchObject({ state: 'idle', expiresAt: deadline });
+
+    rig.clock.advance(59 * 86_400_000);
+    [view] = await rig.delegations.listFor(rig.ada);
+    expect(view).toMatchObject({ state: 'expired', expiresAt: deadline, liveUntil: null });
+    expect((await rig.store.delegations.getById(delegationId))?.status).toBe('active');
+    expect(rig.audit.admin.filter((entry) => entry.act === 'delegation-revoked')).toEqual([]);
+
+    // The user may still close it for good; a revocation is said before an expiry.
+    expect((await rig.delegations.revoke(rig.ada, delegationId)).outcome).toBe('revoked');
+    [view] = await rig.delegations.listFor(rig.ada);
+    expect(view?.state).toBe('revoked');
+  });
+
+  it('derives the state in one place: revoked, then expired, then active or idle', () => {
+    const now = '2026-10-13T09:00:00.000Z';
+    const later = '2026-10-13T09:10:00.000Z';
+    expect(delegationStateOf({ status: 'revoked' }, true, later, now)).toBe('revoked');
+    expect(delegationStateOf({ status: 'revoked' }, false, later, now)).toBe('revoked');
+    expect(delegationStateOf({ status: 'active' }, true, later, now)).toBe('expired');
+    expect(delegationStateOf({ status: 'active' }, false, later, now)).toBe('active');
+    expect(delegationStateOf({ status: 'active' }, false, now, now)).toBe('idle');
+    expect(delegationStateOf({ status: 'active' }, false, null, now)).toBe('idle');
   });
 
   it('revokes in one call: the tokens stop at once and the entry names the user', async () => {
@@ -398,6 +435,7 @@ describe('DelegatedTokenVerifier', () => {
         repo: rig.store.delegations,
         users: rig.store.users,
         clients,
+        lifetime: delegationLifetime(DEFAULT_TEST_OAUTH.delegationMaxLifetimeSeconds, rig.clock),
       });
     }
 

@@ -170,6 +170,13 @@ const KEY_TABLE = [
     default: '30d',
   },
   {
+    path: 'oauth.delegation_max_lifetime',
+    env: 'VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME',
+    kind: 'string',
+    format: 'duration',
+    default: '90d',
+  },
+  {
     path: 'oauth.refresh_reuse_window_seconds',
     env: 'VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS',
     kind: 'int',

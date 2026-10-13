@@ -54,6 +54,9 @@ Twenty-eight terms, distinct and not interchangeable.
   on the management surface, through an OAuth consent given once in the
   interface. The agent receives a **delegated token**, short-lived,
   revocable, bounded by the user's authority and by mission management.
+  A delegation has an **absolute lifetime** (ninety days unless the
+  operator sets another): past it the agent must obtain the user's
+  consent again, however recently it renewed its token.
   A delegated token is neither a mission token nor a human session: it
   can neither execute a provider tool nor answer a request.
 
@@ -629,7 +632,8 @@ token, not only at consent: disabling a client stops its delegations at
 the next request.
 
 A user sees their delegations in the interface, with the client holding
-each one and the missions it issued, and may revoke them in one click.
+each one, the date its absolute lifetime ends, and the missions it
+issued, and may revoke them in one click.
 
 ### 4.2 Human surface
 
@@ -694,6 +698,9 @@ a mounted file, never committing anything:
   who is operator once the bootstrap token is revoked;
 - the **telemetry opt-in** and the collector URL (default supplied,
   overridable, disableable).
+
+Optional keys have defaults; among them the **absolute lifetime of a
+delegation** (ninety days) and the **audit retention** (ninety days).
 
 Anything missing makes startup fail with a message naming the variable.
 
@@ -775,7 +782,9 @@ command.
   therefore neither claim for itself, nor approve itself, nor modify its
   mission, even if it also holds a delegated token of its creator.
 - **Short, traceable delegated tokens.** Short lifetime, renewal through
-  a revocable refresh token, scope limited to management, and every
+  a revocable refresh token, scope limited to management, an absolute
+  lifetime of the delegation itself after which the user consents again
+  (ninety days by default, a configuration key), and every
   mission issued by delegation carries in the audit the identity of the
   delegated client and of the delegating user.
 - **Authoritative, atomic counting.** The budget decision and the

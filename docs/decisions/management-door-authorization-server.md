@@ -141,7 +141,9 @@ collides with the mission token's `vbn_live_`.
 The access token lifetime is configurable and **capped at one hour** by the
 loader: a longer one is no longer the "short lifetime" of spec §6. The
 refresh lifetime restarts at every renewal, so a delegation ends by itself
-after `oauth.refresh_token_ttl` without use.
+after `oauth.refresh_token_ttl` without use. (Amended 2026-10-13 by
+[delegation-absolute-lifetime](./delegation-absolute-lifetime.md): it also
+ends `oauth.delegation_max_lifetime` after the consent, whatever was renewed.)
 
 ### D4 — One consent is one delegation is one token family; replay ends it
 

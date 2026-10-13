@@ -11,8 +11,11 @@ import {
   REFRESH_TOKEN_PREFIX,
 } from './secrets';
 import { openOAuthRig, pkcePair, WEB_REDIRECT, type Granted, type OAuthRig } from './testing';
+import { delegationLifetime } from './delegation-lifetime';
+import { DelegatedTokenVerifier } from './verifier';
 import {
   clientCredentialsOf,
+  DELEGATION_LIFETIME_REACHED,
   PURGE_GRACE_MS,
   PURGE_INTERVAL_MS,
   RENEWAL_WINDOW_MS,
@@ -600,8 +603,8 @@ describe('TokenService', () => {
     it('each rotation starts the refresh lifetime again', async () => {
       const { tokens } = await rig.issue(rig.ada, client);
       let current = tokens.refresh_token;
-      // Renewed every 20 days for 100 days: never idle for the 30 days it lasts.
-      for (let i = 0; i < 5; i += 1) {
+      // Renewed every 20 days for 80 days: never idle for the 30 days it lasts.
+      for (let i = 0; i < 4; i += 1) {
         rig.clock.advance(20 * 86_400_000);
         current = (await rig.tokens.refresh(client, refreshForm(current))).refresh_token;
       }
@@ -609,6 +612,163 @@ describe('TokenService', () => {
       expect((await refusal(() => rig.tokens.refresh(client, refreshForm(current)))).code).toBe(
         'invalid_grant',
       );
+    });
+
+    describe('the delegation has an absolute lifetime', () => {
+      const DAY_MS = 86_400_000;
+      const LIFETIME_DAYS = 90;
+
+      /** Renews every 20 days until `days` have passed since the consent. */
+      async function renewedFor(days: number): Promise<{ refresh: string; delegationId: string }> {
+        const { tokens, delegationId } = await rig.issue(rig.ada, client);
+        let refresh = tokens.refresh_token;
+        for (let elapsed = 20; elapsed <= days; elapsed += 20) {
+          rig.clock.advance(20 * DAY_MS);
+          refresh = (await rig.tokens.refresh(client, refreshForm(refresh))).refresh_token;
+        }
+        rig.clock.advance((days % 20) * DAY_MS);
+        return { refresh, delegationId };
+      }
+
+      it('a delegation renewed faithfully still ends 90 days after the consent: the client must ask again', async () => {
+        const { refresh, delegationId } = await renewedFor(80);
+        // Day 89: still renewed.
+        rig.clock.advance(9 * DAY_MS);
+        const last = await rig.tokens.refresh(client, refreshForm(refresh));
+        // Day 90, to the millisecond: nothing more.
+        rig.clock.advance(DAY_MS);
+        const err = await refusal(() =>
+          rig.tokens.refresh(client, refreshForm(last.refresh_token)),
+        );
+        expect(err.code).toBe('invalid_grant');
+        expect(err.message).toBe(DELEGATION_LIFETIME_REACHED);
+        expect(await rig.verifier.resolve(last.access_token)).toBeNull();
+        // Derived, never written: the row is as it was and no entry says "revoked".
+        expect((await rig.store.delegations.getById(delegationId))?.status).toBe('active');
+        expect(revocations()).toEqual([]);
+        // Asking again changes nothing and ends nothing.
+        await refusal(() => rig.tokens.refresh(client, refreshForm(last.refresh_token)));
+        expect((await rig.store.delegations.getById(delegationId))?.status).toBe('active');
+      });
+
+      it('one millisecond before the deadline a renewal still passes, and what it issues dies at the deadline', async () => {
+        const { refresh, delegationId } = await renewedFor(80);
+        rig.clock.advance(10 * DAY_MS - 1);
+        const pair = await rig.tokens.refresh(client, refreshForm(refresh));
+        // The access token is announced for what it is really worth: under a second.
+        expect(pair.expires_in).toBe(0);
+        const deadline = new Date(
+          Date.parse((await rig.store.delegations.getById(delegationId))!.createdAt) +
+            LIFETIME_DAYS * DAY_MS,
+        ).toISOString();
+        const rows = rig.store.db
+          .prepare(
+            `SELECT expires_at FROM oauth_refresh_tokens WHERE delegation_id = ? AND revoked_at IS NULL
+             UNION ALL
+             SELECT expires_at FROM oauth_access_tokens WHERE delegation_id = ? ORDER BY expires_at DESC LIMIT 2`,
+          )
+          .all(delegationId, delegationId) as { expires_at: string }[];
+        expect(rows.map((r) => r.expires_at)).toEqual([deadline, deadline]);
+        expect(await rig.verifier.resolve(pair.access_token)).not.toBeNull();
+        rig.clock.advance(1);
+        expect(await rig.verifier.resolve(pair.access_token)).toBeNull();
+      });
+
+      it('no token ever expires after the deadline: a pair obtained on day 80 does not carry the delegation to day 110', async () => {
+        const { delegationId } = await renewedFor(80);
+        const deadline = new Date(
+          Date.parse((await rig.store.delegations.getById(delegationId))!.createdAt) +
+            LIFETIME_DAYS * DAY_MS,
+        ).toISOString();
+        const latest = rig.store.db
+          .prepare(
+            'SELECT MAX(expires_at) AS until FROM oauth_refresh_tokens WHERE delegation_id = ?',
+          )
+          .get(delegationId) as { until: string };
+        expect(latest.until).toBe(deadline);
+      });
+
+      it('the first pair of a delegation is bounded too', async () => {
+        const short = await openOAuthRig({
+          ttl: { delegationMaxLifetimeSeconds: 600, accessTokenTtlSeconds: 900 },
+        });
+        try {
+          const shortClient = await short.registerClient();
+          const { tokens, delegationId } = await short.issue(short.ada, shortClient);
+          expect(tokens.expires_in).toBe(600);
+          const row = short.store.db
+            .prepare('SELECT expires_at FROM oauth_refresh_tokens WHERE delegation_id = ?')
+            .get(delegationId) as { expires_at: string };
+          expect(Date.parse(row.expires_at) - short.clock.now().getTime()).toBe(600_000);
+          short.clock.advance(600_000);
+          expect(await short.verifier.resolve(tokens.access_token)).toBeNull();
+        } finally {
+          await short.close();
+        }
+      });
+
+      it('a consent left unredeemed past the lifetime issues nothing, and its code is spent', async () => {
+        const short = await openOAuthRig({ ttl: { delegationMaxLifetimeSeconds: 30 } });
+        try {
+          const shortClient = await short.registerClient();
+          const granted = await short.grant(short.ada, shortClient);
+          short.clock.advance(30_000);
+          const form = short.form({
+            grant_type: 'authorization_code',
+            code: granted.code,
+            code_verifier: granted.pkce.verifier,
+            redirect_uri: granted.redirectUri,
+          });
+          const err = await refusal(() => short.tokens.exchangeCode(shortClient, form));
+          expect(err.code).toBe('invalid_grant');
+          expect(err.message).toBe(DELEGATION_LIFETIME_REACHED);
+          expect(
+            short.store.db.prepare('SELECT COUNT(*) AS n FROM oauth_refresh_tokens').get(),
+          ).toEqual({ n: 0 });
+        } finally {
+          await short.close();
+        }
+      });
+
+      it('the reuse window gives nothing past the deadline: the replay ends the family as any replay does', async () => {
+        const { refresh, delegationId } = await renewedFor(80);
+        rig.clock.advance((LIFETIME_DAYS - 80) * DAY_MS - 5_000);
+        // Rotated five seconds before the deadline...
+        await rig.tokens.refresh(client, refreshForm(refresh));
+        rig.clock.advance(5_000);
+        // ...and presented again inside the reuse window, but past the lifetime.
+        const err = await refusal(() => rig.tokens.refresh(client, refreshForm(refresh)));
+        expect(err.code).toBe('invalid_grant');
+        expect((await rig.store.delegations.getById(delegationId))?.revokeReason).toBe(
+          'refresh-token-replay',
+        );
+      });
+
+      it('consenting again gives a new delegation with a lifetime of its own', async () => {
+        const { refresh } = await renewedFor(80);
+        rig.clock.advance(10 * DAY_MS);
+        await refusal(() => rig.tokens.refresh(client, refreshForm(refresh)));
+        const again = await rig.issue(rig.ada, client);
+        expect(await rig.verifier.resolve(again.tokens.access_token)).not.toBeNull();
+        rig.clock.advance(20 * DAY_MS);
+        await expect(
+          rig.tokens.refresh(client, refreshForm(again.tokens.refresh_token)),
+        ).resolves.toBeTruthy();
+      });
+
+      it('a lifetime the operator shortened applies at once to tokens already issued', async () => {
+        const { tokens } = await rig.issue(rig.ada, client);
+        rig.clock.advance(2 * DAY_MS);
+        const strict = new DelegatedTokenVerifier({
+          repo: rig.store.delegations,
+          users: rig.store.users,
+          clients: rig.clients,
+          lifetime: delegationLifetime(DAY_MS / 1000, rig.clock),
+        });
+        const renewed = await rig.tokens.refresh(client, refreshForm(tokens.refresh_token));
+        expect(await rig.verifier.resolve(renewed.access_token)).not.toBeNull();
+        expect(await strict.resolve(renewed.access_token)).toBeNull();
+      });
     });
 
     it('replay revokes the whole family and the delegation, and is audited', async () => {

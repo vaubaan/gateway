@@ -174,13 +174,13 @@ reverse proxy must route `/.well-known/oauth-authorization-server/<path>` to
 
 ## Secrets (`secrets.ts`)
 
-| Secret             | Shape                                | Lifetime                                       |
-| ------------------ | ------------------------------------ | ---------------------------------------------- |
-| authorization code | 43 base64url characters              | `AUTHORIZATION_CODE_TTL_MS`, 60 s, single use  |
-| access token       | `vbn_dat_` + 43 base64url characters | `oauth.access_token_ttl`, 15 min (at most 1 h) |
-| refresh token      | `vbn_drt_` + 43 base64url characters | `oauth.refresh_token_ttl`, 30 d, single use    |
-| client secret      | `vbn_dcs_` + 43 base64url characters | the life of the client                         |
-| client id          | `vbn_client_` + 22 characters        | not a secret                                   |
+| Secret             | Shape                                | Lifetime                                                                             |
+| ------------------ | ------------------------------------ | ------------------------------------------------------------------------------------ |
+| authorization code | 43 base64url characters              | `AUTHORIZATION_CODE_TTL_MS`, 60 s, single use                                        |
+| access token       | `vbn_dat_` + 43 base64url characters | `oauth.access_token_ttl`, 15 min (at most 1 h); never past the delegation's deadline |
+| refresh token      | `vbn_drt_` + 43 base64url characters | `oauth.refresh_token_ttl`, 30 d, single use; never past the delegation's deadline    |
+| client secret      | `vbn_dcs_` + 43 base64url characters | the life of the client                                                               |
+| client id          | `vbn_client_` + 22 characters        | not a secret                                                                         |
 
 All are 32 random bytes; only `digestOf(secret)` (SHA-256, hex) is stored and
 looked up. A value of another shape is refused before anything is hashed
@@ -548,6 +548,46 @@ anything else changes nothing. Always `200`.
 **Sweep.** At most once an hour, an issuance deletes codes and tokens expired
 for more than a day (`DelegationsRepo.purgeExpired`). A rotated refresh token
 is kept as long as its successor lives, so its replay is still recognised.
+
+### Absolute lifetime of a delegation (`delegation-lifetime.ts`)
+
+A delegation ends `oauth.delegation_max_lifetime` (90 days by default) after
+the user's consent — `delegations.created_at` — **whatever was renewed
+since** (spec §0 "Delegation"; ADR
+[delegation-absolute-lifetime](../decisions/delegation-absolute-lifetime.md)).
+A refresh token renewed every week no longer keeps an agent authorized for
+ever: on day 90 the client is refused and starts the authorization flow again,
+and the user sees the consent screen again.
+
+The deadline is **derived, never stored**: `delegationDeadline(delegation,
+maxLifetimeSeconds)` = consent + lifetime, computed from the row and the
+configuration of this instant. Nothing is written when it passes — the stored
+status stays `active`, there is no `delegation-revoked` entry (nobody
+revoked), no timer and no sweep. Three places ask, all through
+`DelegationLifetime`:
+
+| Where                                            | What it does past the deadline                                                                                                                                                                                                                            |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TokenService.refresh` (`requireWithinLifetime`) | `invalid_grant`, `this delegation reached its maximum lifetime; start the authorization flow again so that the user consents again` (`DELEGATION_LIFETIME_REACHED`); one `info` log line, `delegated tokens refused: the delegation reached its lifetime` |
+| `TokenService.exchangeCode`                      | the same refusal, judged with the code spent (a consent left unredeemed for longer than the lifetime — only with a very short key)                                                                                                                        |
+| the reuse window of a rotated refresh token      | gives nothing: the presentation is a plain replay and ends the family                                                                                                                                                                                     |
+| `DelegatedTokenVerifier.resolve`                 | `null`: the access token is worth nothing at the management door, and is an unknown bearer at the execution door                                                                                                                                          |
+| `DelegationService.listFor`                      | state `expired`, `liveUntil: null`                                                                                                                                                                                                                        |
+
+**Before the deadline every token expires at the deadline at the latest**
+(`expiryWithin`): a refresh token minted on day 80 expires on day 90, not on
+day 110, and an access token minted in the last quarter of an hour expires
+with the delegation. `expires_in` of the token response is what the access
+token is really worth (`min(access TTL, time to the deadline)`).
+
+Because the rule is computed, an operator who shortens the key shortens every
+delegation at once, tokens already issued included (the verifier asks at every
+call), and one who lengthens it revives nothing by itself: the tokens of a
+delegation that had reached the old deadline expired there, so the client has
+to ask again all the same.
+
+Consenting again creates a **new** delegation with its own date; the expired
+one stays in the list, and the missions it issued stay the user's.
 
 ### Error responses
 
@@ -982,8 +1022,15 @@ administrative entries whose object is one of **their** delegations.
   The introduction says what a delegated application can do: read the user's
   connections and missions, issue missions in their name, rotate the token of
   the missions it issued and revoke any of their missions.
-  States: `active` (a token is live), `idle` (the consent stands but no token
-  is left: never redeemed, or unused past the refresh lifetime), `revoked`
+  Each card of a delegation that is not over shows **Consent ends**: the date
+  its absolute lifetime ends, and the sentence "the application will then have
+  to ask you again, however recently it renewed". The introduction says how
+  long a delegation lasts at most (the configured lifetime, in days).
+  States: `active` (a token is live; also shows "Ends if unused", the latest
+  live token), `idle` (the consent stands but no token is left: never
+  redeemed, or unused past the refresh lifetime), `expired` (past its
+  absolute lifetime: the date, and that the application must ask again; the
+  Revoke button stays, to close it for good), `revoked`
   with the reason in words (one sentence per `DelegationRevokeReason`,
   `user-deactivated` included). A delegation revoked for a replay
   (`view.replayed`) carries a banner: `danger`, "Review the mission(s) this
@@ -1002,14 +1049,15 @@ administrative entries whose object is one of **their** delegations.
 
 ## Configuration
 
-| YAML path                                         | Default             | Rule                                                         |
-| ------------------------------------------------- | ------------------- | ------------------------------------------------------------ |
-| `oauth.access_token_ttl`                          | `15m`               | duration, at most `1h`                                       |
-| `oauth.refresh_token_ttl`                         | `30d`               | duration, longer than the access token's                     |
-| `oauth.refresh_reuse_window_seconds`              | `30`                | integer 0 to 60; 0: every replay revokes                     |
-| `oauth.client_registration.policy`                | `operator-approved` | `open`, `operator-approved`, `closed`                        |
-| `oauth.client_registration.auto_approve_loopback` | `true`              | under `operator-approved` only                               |
-| `oauth.client_registration.metadata_documents`    | `false`             | when true the instance fetches documents over outbound https |
+| YAML path                                         | Default             | Rule                                                                 |
+| ------------------------------------------------- | ------------------- | -------------------------------------------------------------------- |
+| `oauth.access_token_ttl`                          | `15m`               | duration, at most `1h`                                               |
+| `oauth.refresh_token_ttl`                         | `30d`               | duration, longer than the access token's                             |
+| `oauth.delegation_max_lifetime`                   | `90d`               | duration, longer than the access token's; absolute, from the consent |
+| `oauth.refresh_reuse_window_seconds`              | `30`                | integer 0 to 60; 0: every replay revokes                             |
+| `oauth.client_registration.policy`                | `operator-approved` | `open`, `operator-approved`, `closed`                                |
+| `oauth.client_registration.auto_approve_loopback` | `true`              | under `operator-approved` only                                       |
+| `oauth.client_registration.metadata_documents`    | `false`             | when true the instance fetches documents over outbound https         |
 
 Environment names in [configuration](configuration.md).
 

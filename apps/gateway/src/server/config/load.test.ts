@@ -542,6 +542,7 @@ describe('loadInstanceConfig — authorization server of the management door', (
     expect(config.oauth).toEqual({
       accessTokenTtlSeconds: 900,
       refreshTokenTtlSeconds: 30 * 86_400,
+      delegationMaxLifetimeSeconds: 90 * 86_400,
       refreshReuseWindowSeconds: 30,
       clientRegistration: {
         policy: 'operator-approved',
@@ -556,6 +557,7 @@ describe('loadInstanceConfig — authorization server of the management door', (
       env: validEnv({
         VAUBAAN_OAUTH_ACCESS_TOKEN_TTL: '5m',
         VAUBAAN_OAUTH_REFRESH_TOKEN_TTL: '7d',
+        VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME: '30d',
         VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS: '0',
         VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY: 'closed',
         VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK: 'false',
@@ -565,6 +567,7 @@ describe('loadInstanceConfig — authorization server of the management door', (
     expect(config.oauth).toEqual({
       accessTokenTtlSeconds: 300,
       refreshTokenTtlSeconds: 7 * 86_400,
+      delegationMaxLifetimeSeconds: 30 * 86_400,
       refreshReuseWindowSeconds: 0,
       clientRegistration: { policy: 'closed', autoApproveLoopback: false, metadataDocuments: true },
     });

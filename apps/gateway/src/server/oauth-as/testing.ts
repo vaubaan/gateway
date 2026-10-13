@@ -20,6 +20,7 @@ import type { OAuthClientRecord, UserRecord } from '../store/types';
 import { AuthorizationService } from './authorization';
 import type { ClientDocumentFetcher } from './client-metadata-document';
 import { ClientRegistry } from './clients';
+import { delegationLifetime } from './delegation-lifetime';
 import { DelegationService } from './delegations';
 import { oauthEndpoints, type OAuthEndpoints } from './endpoints';
 import { challengeOf } from './pkce';
@@ -33,6 +34,7 @@ export const WEB_REDIRECT = 'https://agent.example.net/oauth/callback';
 export const DEFAULT_TEST_OAUTH: OAuthConfig = {
   accessTokenTtlSeconds: 900,
   refreshTokenTtlSeconds: 30 * 86_400,
+  delegationMaxLifetimeSeconds: 90 * 86_400,
   refreshReuseWindowSeconds: 30,
   clientRegistration: {
     policy: 'operator-approved',
@@ -46,7 +48,10 @@ export interface OAuthRigOptions {
   readonly ttl?: Partial<
     Pick<
       OAuthConfig,
-      'accessTokenTtlSeconds' | 'refreshTokenTtlSeconds' | 'refreshReuseWindowSeconds'
+      | 'accessTokenTtlSeconds'
+      | 'refreshTokenTtlSeconds'
+      | 'refreshReuseWindowSeconds'
+      | 'delegationMaxLifetimeSeconds'
     >
   >;
   readonly fetchDocument?: ClientDocumentFetcher;
@@ -128,6 +133,7 @@ export async function openOAuthRig(options: OAuthRigOptions = {}): Promise<OAuth
     clock,
     logger,
   });
+  const lifetime = delegationLifetime(config.delegationMaxLifetimeSeconds, clock);
   const tokens = new TokenService({
     repo: store.delegations,
     users: store.users,
@@ -144,6 +150,7 @@ export async function openOAuthRig(options: OAuthRigOptions = {}): Promise<OAuth
     repo: store.delegations,
     missions: store.missions,
     clients,
+    lifetime,
     audit,
     clock,
     logger,
@@ -152,6 +159,7 @@ export async function openOAuthRig(options: OAuthRigOptions = {}): Promise<OAuth
     repo: store.delegations,
     users: store.users,
     clients,
+    lifetime,
   });
   const ada = await store.users.upsertFromIdp({
     issuer: 'http://idp.test',

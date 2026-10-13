@@ -3196,6 +3196,8 @@ Unit, beside the code (`apps/gateway/src/server/oauth-as/`):
   confidential, waiting, disabled; Basic or body, never both); the sweep.
 - **`delegations.test.ts`** (26) — a user's delegations with their client, most
   recent first, with the missions each issued; `idle` when no token is left;
+  the date the consent ends, and `expired` past the absolute lifetime with
+  nothing written; the state derived in one place;
   **revoke cascades** to every token, with its entry, once; not another
   user's; the verifier: what resolves, what never does (a refresh token, a
   code, a client id, a mission-token shape), revocation and a removed user at
