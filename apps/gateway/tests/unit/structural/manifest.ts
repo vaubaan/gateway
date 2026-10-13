@@ -447,6 +447,66 @@ export const INVARIANTS: readonly Invariant[] = [
     ],
   },
   {
+    id: 'plugin-identifiers-shared-grammar',
+    statement:
+      'In every plugin, an identifier that reaches a path, a query, a header, a GraphQL variable, an SQL text or a command is validated by one grammar shared by classify and execute, which refuses instead of escaping: what is executed is what was classified.',
+    source: 'ADR plugin-identifiers-one-grammar-for-classify-and-execute',
+    proofs: [
+      {
+        file: `${STRUCTURAL}/plugin-identifier-tests.test.ts`,
+        tests: ['%s has a test feeding hostile identifiers to classify and to execute'],
+      },
+      {
+        file: 'plugins/github/tests/unit/injection.test.ts',
+        tests: ['identifier positions — classify and execute agree on every hostile value'],
+      },
+      {
+        file: 'plugins/gmail/tests/unit/injection.test.ts',
+        tests: ['identifier positions — hostile values'],
+      },
+      {
+        file: 'plugins/ssh/tests/unit/injection.test.ts',
+        tests: ['cmd — what is sent is what was classified'],
+      },
+      {
+        file: 'plugins/vercel/tests/unit/identifier-injection.test.ts',
+        tests: ['vercel identifiers — the dot-segment reproductions'],
+      },
+      {
+        file: 'plugins/railway/tests/unit/identifier-injection.test.ts',
+        tests: ['railway identifiers — execute runs on the target the classifier resolved'],
+      },
+      {
+        file: 'plugins/supabase/tests/unit/identifier-injection.test.ts',
+        tests: ['supabase identifiers — the dot-segment reproductions'],
+      },
+      {
+        file: 'plugins/stripe/tests/unit/identifiers.test.ts',
+        tests: ['`id` — a segment of the request path'],
+      },
+      {
+        file: 'plugins/resend/tests/unit/identifiers.test.ts',
+        tests: ['a contact selector — an id or an email address in the request path'],
+      },
+      {
+        file: 'plugins/resend/tests/unit/addresses.test.ts',
+        tests: ['a string that could carry a second recipient is not an address'],
+      },
+      {
+        file: 'plugins/cloudflare-dns/tests/unit/identifiers.test.ts',
+        tests: ['`record_id` — the record segment of the request path'],
+      },
+      {
+        file: 'plugins/upstash-redis/tests/unit/identifiers.test.ts',
+        tests: ['the database — a segment of the Management API path'],
+      },
+      {
+        file: 'plugins/_template/tests/unit/plugin.test.ts',
+        tests: ["'..'"],
+      },
+    ],
+  },
+  {
     id: 'base-images-pinned',
     statement:
       'Every base image is pinned by full version and digest, the documentation quotes the pinned versions, and the refresh procedure is written down.',

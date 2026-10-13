@@ -92,6 +92,45 @@ describe('the structural suite is indexed', () => {
     expect(stale, 'manifest quotes that are not in spec §10 any more').toEqual([]);
   });
 
+  describe('the threat-model handbook cites proofs that exist', () => {
+    const HANDBOOK = 'docs/handbook/threat-model.md';
+    const handbook = readFileSync(resolve(REPO, HANDBOOK), 'utf8');
+
+    it('every [inv: id] it cites is an invariant of the index', () => {
+      const cited = [...handbook.matchAll(/\[inv: ([a-z0-9-]+)\]/g)].map((match) => match[1]);
+      expect(cited.length).toBeGreaterThan(15);
+      const known = new Set(INVARIANTS.map((invariant) => invariant.id));
+      expect([...new Set(cited)].filter((id) => id !== undefined && !known.has(id))).toEqual([]);
+    });
+
+    it('every test file it names exists', () => {
+      // `tests/…` is under apps/gateway, `src/…` under apps/gateway/src/server; other
+      // paths (packages/, plugins/, deploy/, scripts/) are from the repository root.
+      const named = [
+        ...handbook.matchAll(
+          /`((?:tests|src|packages|plugins|apps|scripts|deploy)\/[^`\s]*\.(?:test\.(?:ts|tsx|mjs)|sh))`/g,
+        ),
+      ].map((match) => match[1] ?? '');
+      expect(named.length).toBeGreaterThan(25);
+      const pathOf = (cited: string): string =>
+        cited.startsWith('tests/')
+          ? `apps/gateway/${cited}`
+          : cited.startsWith('src/')
+            ? `apps/gateway/src/server/${cited.slice('src/'.length)}`
+            : cited;
+      const missing = [...new Set(named)].filter(
+        (cited) => !existsSync(resolve(REPO, pathOf(cited))),
+      );
+      expect(missing).toEqual([]);
+    });
+
+    it('numbers its accepted risks once each, in order', () => {
+      const numbers = [...handbook.matchAll(/^\| A(\d+) /gm)].map((match) => Number(match[1]));
+      expect(numbers.length).toBeGreaterThan(10);
+      expect(numbers).toEqual(numbers.map((_, index) => index + 1));
+    });
+  });
+
   it('a proof file is never a file that cannot fail: each one is run by a test runner or by CI', () => {
     const RUN_BY = /\.test\.(?:ts|tsx|mjs)$|^deploy\/docker\/smoke\.sh$/;
     const files = INVARIANTS.flatMap((invariant) => invariant.proofs.map((proof) => proof.file));
