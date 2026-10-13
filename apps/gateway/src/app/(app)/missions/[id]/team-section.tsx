@@ -127,7 +127,7 @@ export function TeamSection({
       id: 'holder',
       header: 'Holder',
       // The same place on every mission, whatever the names: the eye finds the second column.
-      width: '40%',
+      width: '34%',
       cell: (row) => (
         <KeyHolder
           name={row.name}
@@ -145,6 +145,7 @@ export function TeamSection({
     {
       id: 'calls',
       header: 'Calls',
+      width: '32%',
       cell: (row) => {
         if (!row.token) {
           return (
