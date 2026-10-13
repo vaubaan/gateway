@@ -1,43 +1,57 @@
 'use client';
 
 /**
- * Preset mode of one connection (spec §4.2, §3.2): the plugin's presets as an
- * explicit choice, and — for the one picked — what it allows, what waits for
- * an approval and what it leaves out, on this connection, with the resources
- * selected and the creator's authority. The lists are the policy the mission
- * would get, not a summary of it.
+ * What an agent may do on one account (spec §4.2, §3.2): the presets of the
+ * service first, as one choice in a row, then what the chosen one means here.
  *
- * Picking a preset spreads its reading out. The screen keeps one reading
- * spread out at a time by default — the preset just picked — and shows the
- * others as their description and their counts, with a button that spreads
- * them out again: three connections stay about two viewports (spec §4.2).
+ * - A preset says beside its name how many permissions it yields on this
+ *   account, with the resources selected and what the reader may allow. One
+ *   that would yield **nothing** is not offered silently: it is drawn as
+ *   unavailable and says why ("needs a selected resource labelled "prod":
+ *   none selected").
+ * - "Custom" starts from an empty list.
+ * - Under the row: one sentence — what the preset allows and what it asks
+ *   first — then the policy as it stands, counted (runs freely, asks first,
+ *   not included), and the link that opens the permissions one by one.
+ *
+ * Whatever is chosen, the mission stores the explicit list, never the preset.
  */
+import { ChoiceChip, ChoiceRow, GateMark } from '@/components/ui';
+import { MISSION_ACTIONS } from '@/lib/vocabulary';
 import type { IssuanceConnection } from '@/server/missions/model';
 import { presetReferencePath, providerPath } from '@/server/providers/links';
 
 import styles from '../missions.module.css';
 import {
+  describeSkipped,
   explainPreset,
-  presetChoiceLabel,
-  presetDigest,
+  policyCounts,
+  presetSkipped,
+  presetUnavailable,
+  presetWidth,
   type ConnectionState,
   type PresetExplanation,
 } from './form-state';
-import { FamilyList, lineOf, PolicyLines, SkippedList } from './policy-lines';
+
+/** The value of the "Custom" chip in the radio group of an account. */
+export const CUSTOM_CHOICE = '__custom';
 
 export function PresetPanel({
   connection,
   state,
-  expanded,
+  editorOpen,
   onPick,
-  onExpand,
+  onCustom,
+  onEditor,
 }: {
   connection: IssuanceConnection;
   state: ConnectionState;
-  /** The reading of the chosen preset is spread out (lists and budgets), not only counted. */
-  expanded: boolean;
+  /** The granular editor of this account is open under the panel. */
+  editorOpen: boolean;
   onPick: (presetId: string) => void;
-  onExpand: (expanded: boolean) => void;
+  /** "Custom, start empty". */
+  onCustom: () => void;
+  onEditor: (open: boolean) => void;
 }) {
   const name = `${connection.provider_label} ${connection.display_name}`;
   const explanations = connection.presets.flatMap((preset): PresetExplanation[] => {
@@ -45,99 +59,110 @@ export function PresetPanel({
     return explanation ? [explanation] : [];
   });
   const chosen = explanations.find((e) => e.preset.id === state.presetId) ?? null;
+  const adjusted = state.mode === 'custom' && state.edited;
+  const custom = state.mode === 'custom' && state.presetId === '';
+  const counts = policyCounts(connection, state);
+  const total = counts.free + counts.asks;
+  // What the untouched preset could not bring here: said, never dropped silently.
+  const skipped = chosen && !adjusted ? describeSkipped(presetSkipped(connection, state)) : null;
 
   return (
-    <div className={styles.policyBody} data-testid={`preset-${connection.provider}`}>
-      <fieldset className={styles.choices}>
-        <legend className={styles.visuallyHidden}>Preset for {name}</legend>
+    <div className={styles.accountBody} data-testid={`preset-${connection.provider}`}>
+      <ChoiceRow legend={`Preset for ${name}`}>
         {explanations.map((explanation) => {
           const { preset } = explanation;
           const checked = preset.id === state.presetId;
           return (
-            <label
+            <ChoiceChip
               key={preset.id}
-              className={[styles.choice, checked ? styles.choiceOn : ''].join(' ')}
+              name={`preset-${connection.id}`}
+              value={preset.id}
+              checked={checked}
+              onChange={onPick}
+              label={preset.label}
+              hint={checked && adjusted ? `${total} · adjusted` : String(presetWidth(explanation))}
+              // The chosen one stays a choice even if it yields nothing now: it must be undoable.
+              unavailable={checked ? null : presetUnavailable(explanation)}
               title={preset.description}
-              data-kind="preset"
-            >
-              <input
-                type="radio"
-                name={`preset-${connection.id}`}
-                value={preset.id}
-                checked={checked}
-                onChange={() => onPick(preset.id)}
-              />
-              <span className={styles.choiceText}>
-                <strong>{preset.label}</strong>
-                <span className={styles.choiceWidth}>{presetChoiceLabel(explanation)}</span>
-              </span>
-            </label>
+            />
           );
         })}
-      </fieldset>
+        <ChoiceChip
+          name={`preset-${connection.id}`}
+          value={CUSTOM_CHOICE}
+          checked={custom}
+          onChange={onCustom}
+          label="Custom"
+          hint={custom ? `${total} chosen` : 'start empty'}
+        />
+      </ChoiceRow>
 
       {chosen ? (
-        <div className={styles.presetDetail} data-testid={`preset-detail-${connection.provider}`}>
-          <p className={styles.presetDescription}>{chosen.preset.description}</p>
-          <p className={styles.digest} data-testid={`preset-digest-${connection.provider}`}>
-            <span>{presetDigest(chosen)}</span>
-            <button
-              type="button"
-              className={styles.linkButton}
-              aria-expanded={expanded}
-              aria-controls={`preset-lists-${connection.id}`}
-              onClick={() => onExpand(!expanded)}
-            >
-              {expanded ? 'Hide the lists' : 'Show what it allows, with quotas'}
-            </button>
-            <a
-              href={presetReferencePath(connection.provider, chosen.preset.id)}
-              target="_blank"
-              rel="noreferrer"
-              className={styles.refLink}
-            >
-              What these risks mean — {connection.provider_label} reference (new tab)
-            </a>
-          </p>
-          {expanded && (
-            <div id={`preset-lists-${connection.id}`} className={styles.presetLists}>
-              <PolicyLines
-                title="Allowed without asking"
-                lines={chosen.auto.map(lineOf)}
-                empty="Nothing: every risk of this preset waits for your approval."
-                testId={`preset-allowed-${connection.provider}`}
-              />
-              <PolicyLines
-                title="Needs your approval, action by action"
-                lines={chosen.approval.map(lineOf)}
-                empty="Nothing: the agent never has to ask you."
-                testId={`preset-approval-${connection.provider}`}
-              />
-              <FamilyList
-                title="Not included"
-                families={chosen.leftOut}
-                empty="Nothing: this preset accepts every risk you can accept here."
-                testId={`preset-excluded-${connection.provider}`}
-              />
-              <SkippedList
-                families={chosen.skipped}
-                testId={`preset-skipped-${connection.provider}`}
-              />
-            </div>
-          )}
-        </div>
+        <p
+          className={styles.presetDescription}
+          data-testid={`preset-detail-${connection.provider}`}
+        >
+          {chosen.preset.description}{' '}
+          <a
+            href={presetReferencePath(connection.provider, chosen.preset.id)}
+            target="_blank"
+            rel="noreferrer"
+            className={styles.link}
+          >
+            In the reference (new tab)
+          </a>
+        </p>
+      ) : custom ? (
+        <p className={styles.presetDescription} data-testid={`custom-${connection.provider}`}>
+          Your own list: nothing here comes from a preset. It is the explicit list this mission
+          would carry.
+        </p>
       ) : (
-        <p className={styles.panelFoot}>
-          Pick a preset to read what it allows, or switch to Custom to accept risks one by one.{' '}
+        <p className={styles.presetDescription}>
+          Pick a preset to read what it allows, or Custom to choose the permissions one by one.{' '}
           <a
             href={`${providerPath(connection.provider)}#presets`}
             target="_blank"
             rel="noreferrer"
-            className={styles.refLink}
+            className={styles.link}
           >
-            Compare the {connection.provider_label} presets
-          </a>{' '}
-          (opens in a new tab).
+            Compare the presets (new tab)
+          </a>
+        </p>
+      )}
+
+      {(chosen || custom) && (
+        <div className={styles.counts} data-testid={`preset-digest-${connection.provider}`}>
+          <GateMark gate="free">{counts.free} run freely</GateMark>
+          {/* Amber is for what will need the person: nothing asks, nothing is coloured. */}
+          <GateMark gate={counts.asks === 0 ? 'off' : 'ask'}>
+            {counts.asks} {counts.asks === 1 ? 'asks' : 'ask'} you first
+          </GateMark>
+          <GateMark gate="off">{counts.notIncluded} not included</GateMark>
+          <button
+            type="button"
+            className={styles.countsLink}
+            aria-expanded={editorOpen}
+            aria-controls={`editor-${connection.id}`}
+            onClick={() => onEditor(!editorOpen)}
+          >
+            {editorOpen ? MISSION_ACTIONS.hideEditor : MISSION_ACTIONS.editOneByOne}
+          </button>
+        </div>
+      )}
+      {skipped && (
+        <p className={styles.skipped} data-testid={`preset-skipped-${connection.provider}`}>
+          {skipped}
+        </p>
+      )}
+      {chosen && !adjusted && total === 0 && (
+        <p
+          className={styles.skipped}
+          role="status"
+          data-testid={`preset-empty-${connection.provider}`}
+        >
+          This preset allows nothing here: {presetUnavailable(chosen) ?? 'it holds no permission'}.
+          Pick another preset, change the resources, or leave this account out.
         </p>
       )}
     </div>

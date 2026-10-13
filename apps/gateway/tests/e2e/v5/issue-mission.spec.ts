@@ -1,28 +1,42 @@
 /**
- * "Issue a mission" in a browser, against an ephemeral instance with a
- * simulated IdP (spec §7.4, §4.2, §4.4).
+ * "New mission" in a browser, against an ephemeral instance with a simulated
+ * IdP (spec §7.4, §4.2, §4.4).
  *
- * The signed-in user owns a GitHub, a Supabase and a Vercel connection (and
- * an experimental Gmail one). The first test issues a three-connection
- * mission and checks the screen is the one-page flow the spec asks for —
- * compact by default, a preset that says what it contains, the granular
- * Custom editor one click away —, then follows the token through rotation
- * and revocation; the second covers the two other ways to start: an agent's
- * proposal and a duplicate; the third reads the provider reference.
+ * The signed-in person owns a GitHub, a Supabase and a Vercel account (and an
+ * experimental Gmail one). The first test creates a three-account mission and
+ * checks the screen is the one the redesign asks for — presets first, each
+ * saying what it yields; the summary and the one action in a rail that stays
+ * in view; the permissions one by one a click away; a confirmation that lists
+ * every permission with its limit — then follows the key through its
+ * replacement and the mission to its stop; the second covers the two other
+ * ways to start: an agent's proposal and a copy; the third reads the
+ * reference.
  */
 import { expect, test, type Page } from '@playwright/test';
 
 import { checkToken, routeToInstance, signInAs } from './browser';
 import { E2E_USER } from './instance';
+import {
+  confirmByTyping,
+  createMission,
+  includeWithPreset,
+  missionMenu,
+  openCreatedMission,
+  permissionRow,
+  pickPreset,
+  presetChoice,
+  resourcesButton,
+  revealedKey,
+  savedKey,
+  showPermissions,
+} from './mission-pages';
 
-const TOKEN = /vbn_live_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}/;
 /**
- * "About two viewports" (spec §4.2) for the default state of a mission on
- * three connections: every preset described and counted, the one just picked
- * spread out with its quotas. Measured at 1280 x 800, where that state is a
- * little over two screens, the build footer included.
+ * The default state of a mission on three accounts — every preset counted,
+ * one sentence each — fits in less than two screens at 1280 x 800, the build
+ * footer included (spec §4.2 asks for "about two viewports").
  */
-const COMPACT_SCREENS = 2.25;
+const COMPACT_SCREENS = 2;
 
 /** Keeps a screenshot of a step when `E2E_V5_SCREENSHOT_DIR` names a folder (design review). */
 async function snap(page: Page, name: string): Promise<void> {
@@ -45,111 +59,80 @@ async function signIn(page: Page): Promise<void> {
   await expect(page.getByText(E2E_USER.email)).toBeVisible();
 }
 
-async function includeWithPreset(page: Page, connection: string, preset: string): Promise<void> {
-  await page.getByLabel(`Include ${connection}`).check();
-  await page
-    .getByRole('group', { name: `Preset for ${connection}` })
-    .getByRole('radio', { name: new RegExp(`^${preset}\\b`) })
-    .check();
-}
-
-/** Preset | Custom, the mode switch of one connection. */
-async function switchTo(page: Page, connection: string, mode: 'Preset' | 'Custom'): Promise<void> {
-  await page
-    .getByRole('group', { name: `Policy for ${connection}` })
-    .getByRole('radio', { name: mode })
-    .click();
-}
-
-async function revealedToken(page: Page): Promise<string> {
-  const env = await page.getByRole('dialog').getByTestId('kit-env').innerText();
-  const match = TOKEN.exec(env);
-  if (!match) throw new Error(`no token in the env snippet: ${env}`);
-  return match[0];
-}
-
-test('issue a three-connection mission on one page, then rotate and revoke', async ({
+test('create a three-account mission on one page, then replace its key and stop it', async ({
   page,
   request,
 }) => {
   await signIn(page);
   await page.getByRole('link', { name: 'New mission' }).first().click();
-  await expect(page.getByRole('heading', { name: 'New mission' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'New mission', level: 1 })).toBeVisible();
 
-  // Experimental plugins stay out of issuance until the creator asks for them.
+  // Experimental services stay out until the person asks for them.
   await expect(page.getByTestId('connection-gmail')).toHaveCount(0);
-  await page.getByLabel('Show experimental providers').check();
+  await page.getByLabel('Show experimental services').check();
   await expect(page.getByTestId('connection-gmail')).toBeVisible();
-  await page.getByLabel('Show experimental providers').uncheck();
+  await page.getByLabel('Show experimental services').uncheck();
   await expect(page.getByTestId('connection-gmail')).toHaveCount(0);
 
-  // Nothing is issuable before a name, a connection and a preset.
-  const issue = page.getByRole('button', { name: 'Issue mission' });
-  await expect(issue).toBeDisabled();
+  // Nothing can be created before a name, an account and a preset; the rail says what is missing.
+  const create = page.getByRole('button', { name: 'Create mission' });
+  await expect(create).toBeDisabled();
+  await expect(page.getByTestId('issues')).toContainText('Give the mission a name.');
+  await expect(page.getByTestId('issues')).toContainText('Include at least one account.');
 
   await page.getByLabel('Mission name').fill('Ship the billing page');
-  await includeWithPreset(page, 'GitHub acme-org', 'Developer');
+  await page.getByLabel('Include GitHub acme-org').check();
+  // An account without a preset allows nothing, and the rail says so in the interface's words.
+  await expect(page.getByTestId('issues')).toContainText(
+    'GitHub · acme-org allows nothing yet: pick a preset or a permission, or leave the account out.',
+  );
+  await pickPreset(page, 'GitHub acme-org', 'Developer');
   await includeWithPreset(page, 'Supabase Acme Supabase', 'Staging developer');
   await includeWithPreset(page, 'Vercel Acme Vercel', 'Developer');
+  await expect(page.getByTestId('issues')).toHaveCount(0);
 
-  // Resources: all selected by default, folded behind one link per connection.
-  await expect(page.getByRole('button', { name: '3 of 3 resources' })).toBeVisible();
+  // Resources: all selected by default, the list behind "Change".
+  await expect(resourcesButton(page, 'GitHub acme-org', '3 of 3')).toBeVisible();
   await expect(page.getByLabel('Resource acme/app')).toHaveCount(0);
 
-  // The three-line summary says it all.
-  await expect(page.getByTestId('summary-can')).toContainText('GitHub "acme-org"');
-  await expect(page.getByTestId('summary-can')).toContainText('Supabase "Acme Supabase"');
-  await expect(page.getByTestId('summary-can')).toContainText('Vercel "Acme Vercel"');
-  await expect(page.getByTestId('summary-can')).toContainText('on 3 of 3 resources');
-  await expect(page.getByTestId('summary-cannot')).toContainText('withheld');
-  await expect(page.getByTestId('summary-quantities')).toContainText('per day');
-  await expect(page.getByTestId('summary-quantities')).toContainText('never expires');
-  await expect(issue).toBeEnabled();
+  // The rail says, per account, what is allowed, what asks first and what it cannot do.
+  const rail = page.getByTestId('summary');
+  await expect(page.getByTestId('summary-github')).toContainText('acme/app');
+  await expect(page.getByTestId('summary-github')).toContainText('Can');
+  await expect(page.getByTestId('summary-github')).toContainText('Asks you');
+  await expect(page.getByTestId('summary-github')).toContainText('Cannot');
+  await expect(page.getByTestId('summary-github')).toContainText('8 permissions.');
+  await expect(page.getByTestId('summary-supabase')).toBeVisible();
+  await expect(page.getByTestId('summary-vercel')).toBeVisible();
+  await expect(page.getByTestId('summary-carries')).toContainText('explicit permissions');
+  await expect(page.getByTestId('summary-carries')).toContainText('limits reset every day');
+  await expect(page.getByTestId('summary-carries')).toContainText('never expires');
+  await expect(rail).not.toContainText(/\b(risk|quota|budget|gate)\b/i);
+  await expect(create).toBeEnabled();
 
-  // A preset says what it means, on the page. The one just picked (Vercel) is
-  // spread out; the others keep their description and their counts, and
-  // spread out again on one click.
-  await expect(page.getByTestId('preset-allowed-vercel')).toContainText('Allowed without asking');
-  const digest = page.getByTestId('preset-digest-github');
+  // A preset says what it means, on the page: one sentence, then the policy counted.
   await expect(page.getByTestId('preset-detail-github')).toContainText(
     'One mission per code repository',
   );
-  await expect(digest).toContainText(
-    '8 allowed without asking · 2 need your approval · 5 not included',
-  );
-  await expect(page.getByTestId('preset-allowed-github')).toHaveCount(0);
-  await digest.getByRole('button', { name: 'Show what it allows, with quotas' }).click();
-  // What passes, what waits for an approval, what it leaves out: each risk by
-  // its human label, with its quota and its rate limit.
-  const allowed = page.getByTestId('preset-allowed-github');
-  await expect(allowed).toContainText('Allowed without asking (8)');
-  await expect(allowed).toContainText('Read code, branches, commits, files');
-  await expect(allowed).toContainText('10000 · 240/min');
-  const gated = page.getByTestId('preset-approval-github');
-  await expect(gated).toContainText('Needs your approval, action by action (2)');
-  await expect(gated).toContainText('Modify a GitHub Actions workflow');
-  const excluded = page.getByTestId('preset-excluded-github');
-  // What it leaves out is counted on the page, and named one click away, in place.
-  await expect(excluded.locator('summary')).toContainText('Not included (5)');
-  await expect(excluded.getByText('Write on main / master / release-*')).toBeHidden();
-  await excluded.locator('summary').click();
-  await expect(excluded.getByText('Write on main / master / release-*')).toBeVisible();
-  await excluded.locator('summary').click();
+  const digest = page.getByTestId('preset-digest-github');
+  await expect(digest).toContainText('8 run freely');
+  await expect(digest).toContainText('2 ask you first');
+  // Fifteen ids on GitHub: ten chosen, four left out, and the fallback, which no preset
+  // holds and nobody counts as something a preset "left out".
+  await expect(digest).toContainText('4 not included');
   await expect(
-    page.getByTestId('preset-detail-github').getByRole('link', { name: /GitHub reference/ }),
+    page.getByTestId('preset-detail-github').getByRole('link', { name: /In the reference/ }),
   ).toHaveAttribute('href', '/reference/github#preset-developer');
-  // The choice itself carries the width of each preset.
-  await expect(
-    page.getByRole('group', { name: 'Preset for GitHub acme-org' }).getByRole('radio'),
-  ).toHaveCount(3);
-  await expect(page.getByTestId('preset-github')).toContainText('10 risks · 2 need approval');
-  await digest.getByRole('button', { name: 'Hide the lists' }).click();
-  await expect(page.getByTestId('preset-allowed-github')).toHaveCount(0);
+  // The choice itself carries the width of each preset; "Custom" is one of the choices.
+  const githubChoices = page.getByRole('group', { name: 'Preset for GitHub acme-org' });
+  await expect(githubChoices.getByRole('radio')).toHaveCount(4);
+  await expect(githubChoices.locator('[data-choice="developer"]')).toHaveText(/Developer\s*10/);
+  await expect(presetChoice(page, 'GitHub acme-org', 'Custom')).not.toBeChecked();
 
-  // Compact by default: with three connections filled in, no editor is open,
-  // there is no wall of checkboxes, and the whole form is about two screens.
+  // Compact by default: no editor is open, there is no wall of checkboxes, the form is
+  // under two screens, and the one action is in view without scrolling.
   await expect(page.getByTestId('risks-github')).toHaveCount(0);
-  await expect(page.locator('[data-risk]')).toHaveCount(0);
+  await expect(page.locator('[data-permission]')).toHaveCount(0);
   const layout = await page.evaluate(() => ({
     pageHeight: document.documentElement.scrollHeight,
     viewport: window.innerHeight,
@@ -157,108 +140,145 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
       el.checkVisibility(),
     ).length,
   }));
-  await snap(page, 'creation-three-connections');
+  await snap(page, 'creation-three-accounts');
   expect(layout.pageHeight).toBeLessThanOrEqual(COMPACT_SCREENS * layout.viewport);
   expect(layout.checkboxes).toBeLessThanOrEqual(6);
-  await expect(issue).toBeInViewport();
+  await expect(create).toBeInViewport();
+  await page.mouse.wheel(0, 2000);
+  await expect(create).toBeInViewport();
+  await page.mouse.wheel(0, -2000);
 
   // Deselecting the staging project drops the staging-only entries of the preset, and says so.
-  await page.getByRole('button', { name: '2 of 2 resources' }).first().click();
+  await resourcesButton(page, 'Supabase Acme Supabase', '2 of 2').click();
   await page.getByLabel('Resource stgprojectref').uncheck();
-  const supabaseDigest = page.getByTestId('preset-digest-supabase');
-  await expect(supabaseDigest).toContainText('of the preset left out here');
-  await supabaseDigest.getByRole('button', { name: 'Show what it allows, with quotas' }).click();
   await expect(page.getByTestId('preset-skipped-supabase')).toContainText('left out here');
   await expect(page.getByTestId('preset-skipped-supabase')).toContainText('labelled "staging"');
   await page.getByLabel('Resource stgprojectref').check();
   await expect(page.getByTestId('preset-skipped-supabase')).toHaveCount(0);
-  await expect(supabaseDigest).not.toContainText('left out here');
 
-  // Custom, one click away: the full editor opens in place on the preset's values.
-  await switchTo(page, 'GitHub acme-org', 'Custom');
+  // The permissions one by one, a click away: the editor opens in place on the preset's values.
+  const githubPanel = page.getByTestId('preset-github');
+  await githubPanel.getByRole('button', { name: 'Edit the permissions one by one' }).click();
   const editor = page.getByTestId('risks-github');
   await expect(editor).toBeVisible();
-  await expect(page.getByTestId('preset-detail-github')).toHaveCount(0);
-  // Every risk of the catalog is there, by its label, with why it is a risk and its vector.
-  await expect(editor.locator('[data-risk]')).toHaveCount(15);
-  const merge = editor.locator('[data-risk="github.merge-protected"]');
+  // By default it lists what the person may allow here: on an account they own, everything.
+  await expect(editor.locator('[data-permission]')).toHaveCount(15);
+  const merge = permissionRow(editor, 'github.merge-protected');
   await expect(merge).toContainText('Write on main / master / release-*');
-  await expect(merge).toContainText('The canonical branch');
-  // The vector is a six-cell strip: each cell writes its value and names its axis in full.
-  await expect(merge.locator('[aria-label="Reversibility: costly"]')).toHaveText(/costly/);
-  // The reason is one line that unfolds in place.
-  const why = merge.locator('details');
-  await expect(why).not.toHaveAttribute('open', '');
-  await why.locator('summary').click();
-  await expect(why).toHaveAttribute('open', '');
-  await expect(merge.getByRole('link', { name: 'github.merge-protected' })).toHaveAttribute(
-    'href',
-    '/reference/github#risk-github.merge-protected',
-  );
-  await expect(page.getByLabel('Accept risk github.merge-protected')).not.toBeChecked();
-  await expect(page.getByLabel('Accept risk github.read-code')).toBeChecked();
-  await expect(page.getByLabel('Quota for github.read-code')).toHaveValue('10000');
+  // The id is printed as the protocol spells it; the severity is one word.
+  await expect(merge).toContainText('github.merge-protected');
+  await expect(merge.locator('[data-severity]')).toHaveText(/low|medium|high|critical/);
+  // "why?" is closed; behind it, the reason, the six words and the reference in a new tab.
+  await expect(editor.getByText('The canonical branch')).toBeHidden();
+  await merge.getByRole('button', { name: 'why?' }).click();
+  await expect(editor.getByText('The canonical branch')).toBeVisible();
+  await expect(editor.getByText('Undo', { exact: true }).first()).toBeVisible();
+  await expect(editor.getByText('Blast radius', { exact: true }).first()).toBeVisible();
+  const reference = editor.getByRole('link', { name: /Full entry in the reference/ }).first();
+  await expect(reference).toHaveAttribute('href', '/reference/github#risk-github.merge-protected');
+  await expect(reference).toHaveAttribute('target', '_blank');
+  await merge.getByRole('button', { name: 'hide' }).click();
+  await expect(page.getByLabel('Allow github.merge-protected')).not.toBeChecked();
+  await expect(page.getByLabel('Allow github.read-code')).toBeChecked();
+  await expect(page.getByLabel('Limit for github.read-code')).toHaveValue('10000');
+  await expect(page.getByLabel('Per minute for github.read-code')).toHaveValue('240');
   await expect(page.getByTestId('risks-count-github')).toHaveText(
-    '10 accepted of 15 you can accept here',
+    '10 chosen of 15 you may allow here',
   );
-  // Adjust one quota and one gate.
-  await page.getByLabel('Quota for github.read-code').fill('42');
-  await page.getByLabel('Gate for github.create-pr').selectOption('approval');
-  await expect(page.getByTestId('summary-quantities')).toContainText(
-    '3 risks need your approval for each action',
-  );
-  // Going back to Preset would drop those edits: the screen asks first.
-  await switchTo(page, 'GitHub acme-org', 'Preset');
-  await expect(page.getByTestId('discard-github')).toContainText('discards what you changed');
-  await page.getByRole('button', { name: 'Keep editing' }).click();
-  await expect(page.locator('[data-testid^="discard-"]')).toHaveCount(0);
-  await expect(page.getByLabel('Quota for github.read-code')).toHaveValue('42');
+  // Adjust one limit and one "ask me first": the choice says it was adjusted, the counts follow.
+  await page.getByLabel('Limit for github.read-code').fill('42');
+  await page.getByLabel('ask me first: github.create-pr').check();
+  await expect(githubChoices.locator('[data-choice="developer"]')).toContainText('adjusted');
+  await expect(digest).toContainText('7 run freely');
+  await expect(digest).toContainText('3 ask you first');
+  // Another preset would drop those edits: the screen asks first, and states the consequence.
+  await pickPreset(page, 'GitHub acme-org', 'Read-only');
+  const discard = page.getByTestId('discard-dialog');
+  await expect(discard).toContainText('Discard what you changed?');
+  await expect(discard).toContainText('Another preset replaces');
+  await discard.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page.getByLabel('Limit for github.read-code')).toHaveValue('42');
+  await expect(presetChoice(page, 'GitHub acme-org', 'Developer')).toBeChecked();
+  await snap(page, 'creation-editor');
+  await githubPanel.getByRole('button', { name: 'Hide the permissions' }).click();
+  await expect(page.getByTestId('risks-github')).toHaveCount(0);
 
-  // A long catalog is searchable; what no selected resource can resolve is
-  // listed with the reason and cannot be ticked.
-  await switchTo(page, 'Supabase Acme Supabase', 'Custom');
+  // A long catalog is searchable; what no selected resource can carry is one filter away,
+  // listed with the reason and without a usable tick.
+  await page
+    .getByTestId('preset-supabase')
+    .getByRole('button', { name: 'Edit the permissions one by one' })
+    .click();
   const supabase = page.getByTestId('risks-supabase');
-  const all = await supabase.locator('[data-risk]').count();
-  await supabase.getByLabel('Search the risks of Supabase Acme Supabase').fill('bulk row');
-  const found = await supabase.locator('[data-risk]').count();
+  const available = await supabase.locator('[data-permission]').count();
+  await supabase.getByRole('button', { name: 'All', exact: true }).click();
+  const all = await supabase.locator('[data-permission]').count();
+  expect(all).toBeGreaterThan(available);
+  await supabase.getByLabel('Search the permissions of Supabase Acme Supabase').fill('bulk row');
+  const found = await supabase.locator('[data-permission]').count();
   expect(found).toBeGreaterThan(0);
   expect(found).toBeLessThan(all);
-  await expect(page.getByLabel('Accept risk supabase[preview].bulk-row-write')).toBeDisabled();
-  await expect(supabase.locator('[data-risk="supabase[preview].bulk-row-write"]')).toContainText(
+  await expect(page.getByLabel('Allow supabase[preview].bulk-row-write')).toBeDisabled();
+  await expect(permissionRow(supabase, 'supabase[preview].bulk-row-write')).toContainText(
     'Not available: no selected resource is labelled "preview"',
   );
-  await supabase.getByLabel('Search the risks of Supabase Acme Supabase').fill('');
-  // A provider with several planes can be sliced by one, in the editor too.
-  const plane = supabase.getByLabel('Plane of the risks of Supabase Acme Supabase');
+  await supabase.getByLabel('Search the permissions of Supabase Acme Supabase').fill('');
+  // A service with several planes can be sliced by one, in the editor too.
+  const plane = supabase.getByLabel('Plane of the permissions of Supabase Acme Supabase');
   await plane.selectOption('storage');
-  const storage = await supabase.locator('[data-risk]').count();
+  const storage = await supabase.locator('[data-permission]').count();
   expect(storage).toBeGreaterThan(0);
   expect(storage).toBeLessThan(all);
-  await expect(supabase.locator('[data-risk*="migration-write"]')).toHaveCount(0);
-  await expect(supabase.locator('[data-risk*="storage.object-read"]')).toHaveCount(1);
-  await snap(page, 'creation-custom-plane');
+  await expect(supabase.locator('[data-permission*="migration-write"]')).toHaveCount(0);
+  await expect(supabase.locator('[data-permission*="storage.object-read"]')).toHaveCount(1);
+  await snap(page, 'creation-editor-plane');
   await plane.selectOption('all');
-  expect(await supabase.locator('[data-risk]').count()).toBe(all);
+  expect(await supabase.locator('[data-permission]').count()).toBe(all);
+  // Untouched, the Supabase policy is still the preset's: nothing says "adjusted".
+  await expect(
+    page.getByRole('group', { name: 'Preset for Supabase Acme Supabase' }),
+  ).not.toContainText('adjusted');
+  await page
+    .getByTestId('preset-supabase')
+    .getByRole('button', { name: 'Hide the permissions' })
+    .click();
   // GitHub has one plane: no plane filter there.
-  await expect(page.getByLabel('Plane of the risks of GitHub acme-org')).toHaveCount(0);
-  // The helper of the editor is one line; the rest is on demand.
-  await expect(supabase.getByText('it leaves out deprecated entries')).toBeHidden();
-  await snap(page, 'creation-custom-mode');
-  // Untouched, the Supabase policy is still the preset's: going back asks nothing.
-  await switchTo(page, 'Supabase Acme Supabase', 'Preset');
-  await expect(page.locator('[data-testid^="discard-"]')).toHaveCount(0);
-  await expect(page.getByTestId('preset-detail-supabase')).toBeVisible();
+  await githubPanel.getByRole('button', { name: 'Edit the permissions one by one' }).click();
+  await expect(page.getByLabel('Plane of the permissions of GitHub acme-org')).toHaveCount(0);
+  await githubPanel.getByRole('button', { name: 'Hide the permissions' }).click();
 
-  await page.getByLabel('Period').selectOption({ label: 'Quotas reload every week' });
-  await page.getByLabel('Expiry').selectOption({ label: 'Expires in 30 days' });
-  await expect(page.getByTestId('summary-quantities')).toContainText('per week');
+  await page.getByLabel('Limits reset').selectOption({ label: 'Every week' });
+  await page.getByLabel('Expires', { exact: true }).selectOption({ index: 3 });
+  await expect(page.getByTestId('summary-carries')).toContainText('limits reset every week');
+  await expect(page.getByTestId('summary-carries')).toContainText(/expires \d+ \w+/);
 
-  await issue.click();
+  // "Create mission" asks once, and what is confirmed is the explicit list: every
+  // permission by its name and its id, with its limit, and what asks first.
+  await create.click();
+  const confirm = page.getByTestId('confirm-create');
+  await expect(confirm).toContainText('Create “Ship the billing page”?');
+  await expect(confirm).toContainText('This is the explicit list the key will carry');
+  const list = confirm.getByTestId('explicit-list');
+  const confirmed = await list.locator('[data-permission]').count();
+  expect(confirmed).toBeGreaterThan(20);
+  const readCodeLine = permissionRow(list, 'github.read-code');
+  await expect(readCodeLine).toContainText('Read code, branches, commits, files');
+  await expect(readCodeLine).toContainText('42 a week');
+  await expect(readCodeLine).toContainText('240 a minute');
+  await expect(permissionRow(list, 'github.create-pr')).toContainText('ask me first');
+  await expect(permissionRow(list, 'github.read-code')).toContainText('runs freely');
+  await snap(page, 'creation-confirm');
+  // Nothing was created yet: going back changes nothing.
+  await confirm.getByRole('button', { name: 'Back to the form' }).click();
+  await expect(confirm).toBeHidden();
 
-  // Reveal once, with the bootstrap kit.
-  const dialog = page.getByRole('dialog');
-  await expect(dialog).toContainText('Mission “Ship the billing page” issued');
-  const token = await revealedToken(page);
+  // The key, shown once, on the page that follows, with the kit.
+  const token = await createMission(page);
+  await expect(
+    page.getByRole('heading', { name: 'Ship the billing page', level: 1 }),
+  ).toBeVisible();
+  await expect(page.getByTestId('created')).toContainText('Shown once.');
+  await expect(page.getByTestId('created')).toContainText(`${confirmed} permissions on GitHub`);
   await expect(page.getByTestId('kit-mcp')).toContainText('"url": "https://gateway.e2e.test/mcp"');
   await expect(page.getByTestId('kit-mcp')).toContainText('Bearer ${VAUBAAN_MISSION_TOKEN}');
   await expect(page.getByTestId('kit-mcp')).not.toContainText(token);
@@ -268,58 +288,89 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
   await expect(page.getByTestId('kit-instructions')).toContainText('Never work around a refusal');
   await expect(page.getByTestId('kit-verify')).toContainText('"method":"tools/list"');
   expect(await checkToken(request, token)).toMatchObject({ outcome: 'verified' });
-  await snap(page, 'reveal-once-dialog');
+  await snap(page, 'created-key-and-kit');
 
-  // The revisited page shows the prefix, never the secret.
-  await page.getByRole('button', { name: 'I copied the token' }).click();
-  await expect(page.getByRole('heading', { name: /Ship the billing page/ })).toBeVisible();
-  await expect(page.getByText('active', { exact: true })).toBeVisible();
-  const prefix = token.split('_')[2] ?? '';
-  await expect(page.getByText(`vbn_live_${prefix}_…`).first()).toBeVisible();
+  // The mission page shows the masked key, never the key.
+  await openCreatedMission(page, 'Ship the billing page');
   expect(await page.content()).not.toContain(token);
-  const readCode = page.getByRole('row', { name: /github\.read-code/ });
-  await expect(readCode).toContainText('42');
-  await expect(page.getByRole('row', { name: /github\.create-pr/ })).toContainText('approval');
-  // The policy table explains each risk the way the editor did.
+  // A running mission is not labelled: only an exception gets a mark beside the title.
+  await expect(page.getByTestId('mission-state')).toHaveCount(0);
+  await expect(page.getByTestId('mission-allows')).toContainText('Can');
+  await expect(page.getByTestId('mission-allows')).toContainText('Asks you first');
+  await expect(page.getByTestId('mission-allows')).toContainText('Cannot');
+  await expect(page.getByTestId('mission-allows')).toContainText('Nothing is near its limit');
+  // The key is a detail of "People and keys".
+  const prefix = token.split('_')[2] ?? '';
+  await expect(page.getByText(`vbn_live_${prefix}_…`)).toBeHidden();
+  await page.getByTestId('team-section').getByRole('button', { name: 'Show details' }).click();
+  await expect(page.getByText(`vbn_live_${prefix}_…`).first()).toBeVisible();
+
+  // The explicit list is one click away, with what was used; each row explains itself.
+  const permissions = await showPermissions(page);
+  await expect(permissions.locator('tr[data-permission]')).toHaveCount(confirmed);
+  const readCode = permissionRow(permissions, 'github.read-code');
   await expect(readCode).toContainText('Read code, branches, commits, files');
-  await expect(readCode).toContainText('Reads may leak secrets');
-  await expect(readCode.locator('[aria-label="Data: data"]')).toBeVisible();
-  // Outside the provider reference too, a name carries the colour of its kind.
-  await expect(readCode.getByRole('link', { name: 'github.read-code' })).toHaveAttribute(
-    'data-kind',
-    'risk',
-  );
-  await expect(page.locator('[data-kind="resource"]').first()).toContainText('acme/');
-  await expect(page.locator('[data-kind="token"]').first()).toContainText('vbn_live_');
-
+  await expect(readCode).toContainText('0 / 42');
+  await expect(permissionRow(permissions, 'github.create-pr')).toContainText('ask me first');
+  await expect(permissions.getByRole('columnheader', { name: 'Used this week' })).toBeVisible();
+  await readCode.getByRole('button', { name: 'why?' }).click();
+  await expect(permissions.getByText('Reads may leak secrets')).toBeVisible();
   await snap(page, 'mission-detail');
-
-  // Each risk id links to its entry in the provider reference.
+  // "why?" leads to the entry in the reference.
   const missionUrl = page.url();
-  await readCode.getByRole('link', { name: 'github.read-code' }).click();
+  await permissions.getByRole('link', { name: 'Full entry in the reference' }).first().click();
   await expect(page).toHaveURL(/\/reference\/github#risk-github\.read-code$/);
   await expect(page.getByTestId('risk-github.read-code')).toBeInViewport();
-  await expect(page.getByTestId('risk-github.read-code')).toContainText(
-    'Read code, branches, commits, files',
-  );
   await page.goto(missionUrl);
-  await expect(page.getByRole('heading', { name: /Ship the billing page/ })).toBeVisible();
+  await expect(
+    page.getByRole('heading', { name: 'Ship the billing page', level: 1 }),
+  ).toBeVisible();
+  // The page remembered that this mission's permissions were open.
+  await expect(page.getByTestId('permissions-table')).toBeVisible();
 
-  // Rotate: a new secret, shown once; the old token is refused.
-  await page.getByRole('button', { name: 'Rotate token' }).click();
-  await expect(page.getByRole('dialog')).toContainText('New token for');
-  const rotated = await revealedToken(page);
+  // The kit is on the mission page, without the key.
+  await page.getByRole('button', { name: 'Setup kit' }).click();
+  const kit = page.getByTestId('kit-dialog');
+  await expect(kit.getByTestId('kit-env')).toContainText(`vbn_live_${prefix}_…`);
+  await expect(kit).not.toContainText(token);
+  await kit.getByRole('button', { name: 'Close' }).click();
+
+  // Replace key: it asks first and states the consequence; cancelling changes nothing.
+  await missionMenu(page, 'Replace my key');
+  const replace = page.getByTestId('replace-key-dialog').filter({ hasText: 'Replace your key?' });
+  await expect(replace).toContainText('Your current key stops working at once');
+  await expect(replace).toContainText('refused from its next call');
+  await expect(replace).toContainText('same permissions, same limits, same people');
+  await replace.getByRole('button', { name: 'Cancel' }).click();
+  expect(await checkToken(request, token)).toMatchObject({ outcome: 'verified' });
+  // Confirmed: a new key, shown once; the old one is refused.
+  await missionMenu(page, 'Replace my key');
+  await replace.getByRole('button', { name: 'Replace key' }).click();
+  await expect(page.getByTestId('reveal-dialog')).toContainText('Your new key for');
+  const rotated = await revealedKey(page);
   expect(rotated).not.toBe(token);
   expect(await checkToken(request, token)).toMatchObject({ outcome: 'retired', reason: 'rotated' });
   expect(await checkToken(request, rotated)).toMatchObject({ outcome: 'verified' });
-  await page.getByRole('button', { name: 'I copied the token' }).click();
+  // Escape does not close a dialog whose key cannot be shown again.
+  await page.keyboard.press('Escape');
+  await expect(page.getByTestId('reveal-dialog')).toBeVisible();
+  await savedKey(page);
 
-  // Revoke: the mission refuses everything from now on.
-  await page.getByRole('button', { name: 'Revoke mission' }).click();
-  await page.getByRole('dialog').getByRole('textbox').fill('Ship the billing page');
-  await page.getByRole('button', { name: 'Revoke', exact: true }).click();
-  await expect(page.getByText('revoked', { exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Rotate token' })).toHaveCount(0);
+  // Stop the mission: the person types its name; every key is refused from then on.
+  await missionMenu(page, 'Stop the mission');
+  await expect(page.getByRole('dialog')).toContainText('Every key of the mission stops working');
+  await expect(
+    page.getByRole('dialog').getByRole('button', { name: 'Stop the mission' }),
+  ).toBeDisabled();
+  await confirmByTyping(page, 'Ship the billing page', 'Stop the mission');
+  await expect(page.getByTestId('mission-state')).toHaveText('stopped');
+  // A stopped mission offers nothing that would be refused.
+  await page.getByTestId('mission-menu').click();
+  await expect(page.getByRole('menuitem', { name: 'Replace my key' })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: 'Stop the mission' })).toHaveCount(0);
+  await expect(page.getByRole('menuitem', { name: 'Duplicate' })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('button', { name: 'Add people' })).toHaveCount(0);
   expect(await checkToken(request, rotated)).toMatchObject({
     outcome: 'retired',
     reason: 'revoked',
@@ -330,7 +381,13 @@ test('issue a three-connection mission on one page, then rotate and revoke', asy
     .getByRole('navigation', { name: 'Main' })
     .getByRole('link', { name: 'Missions' })
     .click();
-  await expect(page.getByRole('row', { name: /Ship the billing page/ })).toContainText('revoked');
+  await expect(page.getByRole('row', { name: /Ship the billing page/ })).toContainText('stopped');
+  // The list holds four columns by default; the key and the day of creation are details.
+  const table = page.getByTestId('missions-created-table');
+  await expect(table.locator('thead th:visible')).toHaveCount(4);
+  await page.getByRole('button', { name: 'Show details' }).click();
+  await expect(table.locator('thead th:visible')).toHaveCount(6);
+  await page.getByRole('button', { name: 'Hide details' }).click();
 });
 
 test('start from an agent’s proposal, then duplicate the mission', async ({ page, request }) => {
@@ -369,49 +426,43 @@ test('start from an agent’s proposal, then duplicate the mission', async ({ pa
   await page.getByRole('button', { name: 'Check and load' }).click();
 
   // What passes fills the form; what cannot resolve is listed, not loaded.
-  await expect(page.getByText(/Loaded \d+ risks on 2 connections/)).toBeVisible();
-  await expect(
-    page.getByText(/No selected resource of "Acme Supabase" is labelled "preview"/),
-  ).toBeVisible();
+  const report = page.getByTestId('proposal-report');
+  await expect(report).toContainText(/Loaded \d+ permissions on 2 accounts/);
+  await expect(report).toContainText('no selected resource carries the environment of');
+  await expect(report).toContainText('supabase[preview].bulk-row-write');
   await expect(page.getByLabel('Mission name')).toHaveValue('Review the pricing PR');
   await expect(page.getByLabel('Include GitHub acme-org')).toBeChecked();
-  await expect(page.getByRole('button', { name: '1 of 3 resources' })).toBeVisible();
-  // A loaded policy is a custom one: shown as the explicit list, edited on demand.
-  await expect(
-    page.getByRole('group', { name: 'Policy for GitHub acme-org' }).getByRole('radio', {
-      name: 'Custom',
-    }),
-  ).toBeChecked();
-  await expect(page.getByTestId('custom-github')).toContainText('Custom policy, as loaded');
-  await expect(page.getByTestId('custom-github')).toContainText(
-    'Read code, branches, commits, files',
-  );
+  await expect(resourcesButton(page, 'GitHub acme-org', '1 of 3')).toBeVisible();
+  // A loaded list is the person's own until they pick a preset over it: the choice names
+  // the preset it came from as adjusted, and the editor is closed until asked for.
+  await expect(page.getByTestId('preset-digest-github')).toContainText('run freely');
   await expect(page.getByTestId('risks-github')).toHaveCount(0);
   await page
-    .getByTestId('custom-github')
-    .getByRole('button', { name: 'Edit risk by risk' })
+    .getByTestId('preset-github')
+    .getByRole('button', { name: 'Edit the permissions one by one' })
     .click();
-  await expect(page.getByLabel('Accept risk github.read-code')).toBeChecked();
-  await expect(page.getByLabel('Period')).toHaveValue('one-off');
-  await expect(page.getByTestId('summary-quantities')).toContainText('in total');
+  await expect(page.getByLabel('Allow github.read-code')).toBeChecked();
+  await expect(page.getByLabel('Limits reset')).toHaveValue('one-off');
+  await expect(page.getByTestId('summary-carries')).toContainText('limits do not reset');
+  // A mission whose limits never reset heads its limit column "In total".
+  await expect(
+    page.getByTestId('risks-github').getByRole('columnheader', { name: 'In total' }),
+  ).toBeVisible();
 
-  const issue = page.getByRole('button', { name: 'Issue mission' });
-  await expect(issue).toBeEnabled();
-  await issue.click();
-  const first = await revealedToken(page);
+  const first = await createMission(page);
   await expect(page.getByTestId('kit-instructions')).toContainText('`acme/app`');
   await expect(page.getByTestId('kit-instructions')).not.toContainText('`acme/web`');
-  await page.getByRole('button', { name: 'I copied the token' }).click();
-  await expect(page.getByRole('heading', { name: /Review the pricing PR/ })).toBeVisible();
+  await openCreatedMission(page, 'Review the pricing PR');
 
-  // Duplicate: same policy, its own token.
-  await page.getByRole('link', { name: 'Duplicate' }).click();
-  await expect(page.getByText('Duplicating “Review the pricing PR”')).toBeVisible();
+  // Duplicate: same policy, its own key.
+  await missionMenu(page, 'Duplicate');
+  await expect(page.getByTestId('duplicating')).toContainText(
+    'Duplicating “Review the pricing PR”',
+  );
   await expect(page.getByLabel('Mission name')).toHaveValue('Review the pricing PR (copy)');
   await expect(page.getByLabel('Include Supabase Acme Supabase')).toBeChecked();
-  await expect(page.getByRole('button', { name: '1 of 3 resources' })).toBeVisible();
-  await page.getByRole('button', { name: 'Issue mission' }).click();
-  const second = await revealedToken(page);
+  await expect(resourcesButton(page, 'GitHub acme-org', '1 of 3')).toBeVisible();
+  const second = await createMission(page);
   expect(second).not.toBe(first);
   expect(await checkToken(request, first)).toMatchObject({ outcome: 'verified' });
   expect(await checkToken(request, second)).toMatchObject({ outcome: 'verified' });

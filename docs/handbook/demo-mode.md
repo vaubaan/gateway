@@ -133,8 +133,8 @@ The list the command prints (`tour.ts`), without the values of the run
 (port, tokens, request URLs):
 
 1. **Sign in as Alice.** Missions lists the seeded missions in every state:
-   active, quota spent, waiting for an approval, expired, revoked, issued by
-   an agent.
+   running, waiting for you (a limit reached, a yes to give), expired,
+   stopped, prepared by an agent.
 2. **Connect a provider**: Connections → Connect a provider.
 
    | Provider   | What to type                                              |
@@ -153,13 +153,13 @@ The list the command prints (`tour.ts`), without the values of the run
    to, then four tabs: its presets side by side against the risks, each risk
    with the reason it is a risk and its six-cell profile, its data model, its
    tools. Supabase adds a plane control (db, storage, auth, functions).
-4. **Issue a mission on one screen**: Missions → New mission. Include a
-   connection and pick a preset: the block says what it allows, what waits
-   for your approval and what it leaves out. Switch to **Custom** to accept
-   risks one by one, each with its quota, rate limit and gate; then Issue.
-5. **Open the bootstrap kit** shown right after issuing: the token (shown
-   once), the MCP client configuration, the instructions for the agent, a
-   `curl`.
+4. **Create a mission on one screen**: Missions → New mission. Include an
+   account and pick a preset: it says what it yields here, and the rail says
+   what the mission will be able to do. **Edit the permissions one by one**
+   opens every permission with its limits and "ask me first". **Create
+   mission** lists every permission with its limit before anything exists.
+5. **Read what follows the creation**: the key (shown once), then the kit —
+   the MCP client configuration, the instructions for the agent, a `curl`.
 6. **Call `tools/list` on `/mcp`** with a mission token: the kit's own
    command, or the one the tour prints for the seeded mission "Ship the
    billing page" (`$VAUBAAN_MISSION_TOKEN`).
@@ -181,22 +181,23 @@ The list the command prints (`tour.ts`), without the values of the run
     same mission comes back, same token, same counters.
 11. **Work on a mission as a team.** Alice added Bob as a member of "Ship the
     billing page" and created the named token "CI runner". Sign in as Bob:
-    Missions → "Shared with me" → that mission. He reads it and cannot change
-    it. In "Members and tokens", **Rotate my token**: his new token is shown
-    once, to him, with the bootstrap kit; Alice never sees it. Copy the
-    export line of the dialog, then ask the gateway whose token it is
+    Missions → "Shared with you" → that mission. He reads it and cannot
+    change it. Behind "···", **Replace my key**: the dialog says his current
+    key stops at once; his new key is shown once, to him, with the kit; Alice
+    never sees it. Copy the export line of the dialog, then ask the gateway
+    whose key it is
     (`curl …/mcp/catalog` with `$VAUBAAN_MISSION_TOKEN`, printed by the
     tour): the answer reads
     `"token": { "kind": "member", "holder": "bob@…" }`. The machine's token
-    (`$VAUBAAN_CI_TOKEN`) answers with its name. Sign in as Alice: the same
-    section lists Bob and "CI runner" with when each token was last used;
-    "Session" has "Calls per token holder", and each call of the timeline
-    names its holder. Remove Bob: his token is refused at once (401, reason
-    `holder-removed`), the others keep working.
+    (`$VAUBAAN_CI_TOKEN`) answers with its name. Sign in as Alice: "People
+    and keys" lists Bob and "CI runner" with what each key did today;
+    "Everything this mission did" has "Who called", and each call of the
+    timeline names its holder. Remove Bob (you type his address): his key is
+    refused at once (401, reason `holder-removed`), the others keep working.
 12. **Audit**: every call and every administrative act, with filters
-    (mission, token holder, agent label, decision). On a mission, "Session"
-    shows the calls of the current period per token holder and per agent
-    label (`planner`, `coder`).
+    (mission, token holder, agent label, decision). On a mission,
+    "Everything this mission did" shows the calls of the current period per
+    key holder and per agent label (`planner`, `coder`).
 13. **Admin**, as Alice (she is the operator): Identity provider, Provider
     apps (the GitHub App), Groups ("GitHub admins", "Contractors"),
     Connections without owner, OAuth clients ("Claude Code (demo)"),

@@ -1,20 +1,71 @@
 'use client';
 
 /**
- * The one-page mission creation screen (spec §4.2, §7.4), in this order:
- * name (or duplicate a mission, or paste an agent's proposal) → connections
- * and, within each, resources (all by default, folded) and the policy, built
- * in one of two modes: **Preset** — an explicit choice among the plugin's
- * presets, with what the chosen one allows, gates and leaves out always
- * visible — or **Custom** — the granular editor, every risk with its budget
- * and gate → a three-line summary → period and expiry → issue. The decision
- * shown here is `previewDraft`, the function the server runs again at
- * issuance; the browser's copy only saves a round trip.
+ * "New mission" on one screen (spec §4.2, §7.4): a form in three steps and a
+ * rail that says, as the form changes, what the mission would be able to do.
+ *
+ *   1. Name — or start from one of your missions, or paste an agent's proposal.
+ *   2. Accounts and permissions — per account: its resources (all by default,
+ *      "Change" opens the list), then a preset, each saying what it yields
+ *      here; the permissions one by one are a click away (`CustomEditor`).
+ *   3. Limits and lifetime — how often the limits reset, when the mission
+ *      ends. People are added once it exists.
+ *
+ * "Create mission" asks once: the dialog lists **every permission with its
+ * limit**, by account, and that list is what is created — a preset is never
+ * stored. The decision shown is `previewDraft`, the function the server runs
+ * again at creation; the browser's copy only saves a round trip.
+ *
+ * Once created, the screen becomes the key, shown once, with the kit
+ * (`KeyReveal`): the key exists nowhere else, so nothing navigates away
+ * until the person asks to open the mission.
  */
-import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { useMemo, useState } from 'react';
 
-import { Badge, Banner, Button, Input, Select, Slug, Textarea } from '@/components/ui';
+import {
+  Button,
+  ButtonLink,
+  Callout,
+  Card,
+  CardBody,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  Checkbox,
+  ConfirmDialog,
+  Dialog,
+  EnvTag,
+  Field,
+  FormColumns,
+  FormStep,
+  FormWithRail,
+  Input,
+  PageHeader,
+  Row,
+  Rows,
+  Section,
+  Select,
+  StatusMark,
+  Tag,
+  Textarea,
+} from '@/components/ui';
+import {
+  ACTIONS,
+  count,
+  expiresOn,
+  limitColumn,
+  limitsResetEvery,
+  listed,
+  mayAllow,
+  MISSION_ACTIONS,
+  MISSION_WORDS,
+  PAGES,
+  ROUTES,
+  shortDate,
+  TERMS,
+  WAITING,
+} from '@/lib/vocabulary';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 import type {
   DraftPeriod,
@@ -27,7 +78,7 @@ import type {
 import { defaultResources, previewDraft } from '@/server/missions/preview';
 import type { RiskPlanes } from '@/server/providers/planes';
 
-import { RevealDialog } from '../bootstrap-kit-view';
+import { KeyReveal, revealedOf } from '../bootstrap-kit-view';
 import { messageOf } from '../message-of';
 import styles from '../missions.module.css';
 import { CustomEditor } from './custom-editor';
@@ -38,36 +89,40 @@ import {
   draftOf,
   enterCustom,
   EXPIRY_CHOICES,
+  expiryOf,
   initialFormState,
+  issueSentence,
   loadResolved,
   PERIOD_CHOICES,
   periodChoiceOf,
   periodOf,
   setIncluded,
   setResources,
-  startFromPreset,
+  startEmpty,
   type ConnectionState,
   type ExpiryChoice,
   type FormState,
   type PeriodChoice,
-  type PolicyMode,
 } from './form-state';
-import { linesOfState, PolicyLines } from './policy-lines';
+import { ExplicitList, RailSummary, type IncludedAccount } from './policy-lines';
 import { PresetPanel } from './preset-panel';
 
 export interface InitialDraft {
   readonly name: string;
   readonly period: DraftPeriod;
   readonly resolved: readonly ResolvedDraftConnection[];
-  /** What could not be carried over from the source (a risk no longer held, a vanished resource). */
+  /** What could not be carried over from the source (a permission no longer held, a vanished resource). */
   readonly issues: readonly PreviewIssue[];
   readonly sourceName: string;
 }
 
-interface Issued {
+interface Created {
   readonly missionId: string;
   readonly name: string;
+  readonly secret: string;
   readonly kit: BootstrapKit;
+  readonly permissions: number;
+  readonly services: readonly string[];
 }
 
 function isChoice<T extends string>(choices: readonly { id: T }[], raw: string): raw is T {
@@ -79,7 +134,7 @@ function startState(
   initial: InitialDraft | null,
 ): FormState {
   const blank = initialFormState(context);
-  // A single usable connection is the obvious one: include it up front.
+  // A single usable account is the obvious one: include it up front.
   const usable = context.filter((c) => !c.experimental);
   const [only] = usable;
   const onlyState = only ? blank.connections[only.id] : undefined;
@@ -96,17 +151,13 @@ function startState(
 }
 
 /**
- * An edit the screen holds back until the creator confirms it, because it
- * would throw away what they typed in the Custom editor.
+ * A choice the screen holds back until the person confirms it, because it
+ * would throw away what they changed in the editor of one account.
  */
 type PendingDiscard =
-  | { readonly kind: 'back-to-preset' }
-  | { readonly kind: 'start-from'; readonly presetId: string };
-
-const MODES: readonly { id: PolicyMode; label: string }[] = [
-  { id: 'preset', label: 'Preset' },
-  { id: 'custom', label: 'Custom' },
-];
+  | { readonly kind: 'reset'; readonly connectionId: string }
+  | { readonly kind: 'preset'; readonly connectionId: string; readonly presetId: string }
+  | { readonly kind: 'empty'; readonly connectionId: string };
 
 const EMPTY: ConnectionState = {
   included: false,
@@ -117,6 +168,8 @@ const EMPTY: ConnectionState = {
   edited: false,
 };
 
+const UNREACHABLE = 'The gateway could not be reached.';
+
 export function MissionForm({
   context,
   missions,
@@ -124,27 +177,21 @@ export function MissionForm({
   planes,
 }: {
   context: readonly IssuanceConnection[];
-  /** Per provider id: the planes of its data model, for the providers that have several. */
+  /** Per service id: the planes of its data model, for the services that have several. */
   planes: Readonly<Record<string, RiskPlanes>>;
   missions: readonly { id: string; name: string }[];
   initial: InitialDraft | null;
 }) {
-  const router = useRouter();
   const [state, setState] = useState<FormState>(() => startState(context, initial));
   const [openResources, setOpenResources] = useState<ReadonlySet<string>>(new Set());
-  // A policy loaded from a mission or a proposal is read first, edited on demand.
-  const [readOnly, setReadOnly] = useState<ReadonlySet<string>>(
-    () => new Set(initial?.resolved.map((line) => line.connection_id) ?? []),
-  );
-  const [pending, setPending] = useState<Readonly<Record<string, PendingDiscard>>>({});
-  // Connections whose preset reading is spread out. Picking a preset spreads its own
-  // reading out and counts the others; the creator may spread out as many as they like.
-  const [spread, setSpread] = useState<ReadonlySet<string>>(new Set());
+  const [openEditors, setOpenEditors] = useState<ReadonlySet<string>>(new Set());
+  const [pending, setPending] = useState<PendingDiscard | null>(null);
   const [now] = useState(() => new Date());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [serverIssues, setServerIssues] = useState<readonly PreviewIssue[]>([]);
-  const [issued, setIssued] = useState<Issued | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [created, setCreated] = useState<Created | null>(null);
   const [proposalOpen, setProposalOpen] = useState(false);
   const [proposalText, setProposalText] = useState('');
   const [proposalReport, setProposalReport] = useState<MissionPreview | null>(null);
@@ -156,6 +203,14 @@ export function MissionForm({
     [context, state, now],
   );
   const issues = serverIssues.length > 0 ? serverIssues : preview.issues;
+  const included: IncludedAccount[] = context.flatMap((connection) => {
+    const cs = state.connections[connection.id];
+    return cs?.included ? [{ connection, state: cs }] : [];
+  });
+  const period = periodOf(state.period);
+  const periodSeconds = period.kind === 'recurring' ? period.length_seconds : null;
+  const expiresAt = expiryOf(state, now);
+  const carries = `${count(preview.policy.length, { one: 'explicit permission', many: 'explicit permissions' })}, ${limitsResetEvery(periodSeconds)}, ${expiresAt && Number.isNaN(Date.parse(expiresAt)) ? 'no end date yet' : expiresOn(expiresAt, now)}.`;
 
   function patch(next: Partial<FormState>) {
     setServerIssues([]);
@@ -165,63 +220,59 @@ export function MissionForm({
     setServerIssues([]);
     setState((s) => ({ ...s, connections: { ...s.connections, [id]: next } }));
   }
-  function forget(id: string) {
-    setPending((current) =>
-      Object.fromEntries(Object.entries(current).filter(([key]) => key !== id)),
-    );
+  function toggle(set: (update: (open: ReadonlySet<string>) => ReadonlySet<string>) => void) {
+    return (id: string, open?: boolean) =>
+      set((current) => {
+        const next = new Set(current);
+        if (open ?? !next.has(id)) next.add(id);
+        else next.delete(id);
+        return next;
+      });
   }
-  function openEditor(id: string, open: boolean) {
-    setReadOnly((current) => {
-      const next = new Set(current);
-      if (open) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-  /** Preset | Custom. Leaving Custom with edits asks first; nothing is dropped silently. */
-  function switchMode(connection: IssuanceConnection, cs: ConnectionState, mode: PolicyMode) {
-    if (mode === cs.mode) return;
-    if (mode === 'custom') {
-      forget(connection.id);
-      openEditor(connection.id, true);
-      patchConnection(connection.id, enterCustom(cs));
-    } else if (discardsEdits(cs)) {
-      setPending((current) => ({ ...current, [connection.id]: { kind: 'back-to-preset' } }));
-    } else {
-      patchConnection(connection.id, backToPreset(connection, cs));
-    }
-  }
-  function startFrom(connection: IssuanceConnection, cs: ConnectionState, presetId: string) {
+  const toggleResources = toggle(setOpenResources);
+  const toggleEditor = toggle(setOpenEditors);
+
+  /** A preset chip. Changing it over edits asks first; nothing is dropped silently. */
+  function pickPreset(connection: IssuanceConnection, cs: ConnectionState, presetId: string) {
     if (discardsEdits(cs)) {
-      setPending((current) => ({
-        ...current,
-        [connection.id]: { kind: 'start-from', presetId },
-      }));
-    } else {
-      patchConnection(connection.id, startFromPreset(connection, cs, presetId));
+      setPending({ kind: 'preset', connectionId: connection.id, presetId });
+      return;
     }
+    patchConnection(connection.id, applyPreset(connection, { ...cs, mode: 'preset' }, presetId));
   }
-  function confirmDiscard(connection: IssuanceConnection, cs: ConnectionState) {
-    const wanted = pending[connection.id];
-    if (!wanted) return;
-    forget(connection.id);
-    patchConnection(
-      connection.id,
-      wanted.kind === 'back-to-preset'
-        ? backToPreset(connection, cs)
-        : startFromPreset(connection, cs, wanted.presetId),
-    );
+  function pickCustom(connection: IssuanceConnection, cs: ConnectionState) {
+    if (discardsEdits(cs)) {
+      setPending({ kind: 'empty', connectionId: connection.id });
+      return;
+    }
+    patchConnection(connection.id, startEmpty(cs));
+    toggleEditor(connection.id, true);
   }
-  function toggleResources(id: string) {
-    setOpenResources((open) => {
-      const next = new Set(open);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+  function openEditor(connection: IssuanceConnection, cs: ConnectionState, open: boolean) {
+    // The editor opens on what is there: the preset's values are its starting point.
+    if (open && cs.mode === 'preset') patchConnection(connection.id, enterCustom(cs));
+    toggleEditor(connection.id, open);
+  }
+  function confirmDiscard() {
+    if (!pending) return;
+    const connection = context.find((c) => c.id === pending.connectionId);
+    const cs = connection ? state.connections[connection.id] : undefined;
+    setPending(null);
+    if (!connection || !cs) return;
+    if (pending.kind === 'reset') patchConnection(connection.id, backToPreset(connection, cs));
+    if (pending.kind === 'preset') {
+      patchConnection(
+        connection.id,
+        applyPreset(connection, { ...cs, mode: 'preset' }, pending.presetId),
+      );
+    }
+    if (pending.kind === 'empty') {
+      patchConnection(connection.id, startEmpty(cs));
+      toggleEditor(connection.id, true);
+    }
   }
 
-  async function issue() {
+  async function create() {
     setBusy(true);
     setError(null);
     try {
@@ -231,15 +282,24 @@ export function MissionForm({
         body: JSON.stringify(draftOf(context, state, new Date())),
       });
       const body: unknown = await res.json().catch(() => null);
-      if (res.status === 201 && isIssuedBody(body)) {
-        setIssued({ missionId: body.mission.id, name: body.mission.name, kit: body.kit });
+      const made = revealedOf(body);
+      if (res.status === 201 && isCreatedBody(body) && made) {
+        setConfirming(false);
+        setCreated({
+          missionId: body.mission.id,
+          name: body.mission.name,
+          ...made,
+          permissions: preview.policy.length,
+          services: included.map(({ connection }) => connection.provider_label),
+        });
       } else if (res.status === 422 && isRefusedBody(body)) {
+        setConfirming(false);
         setServerIssues(body.preview.issues);
       } else {
         setError(problemsOf(body) ?? messageOf(body, res.status));
       }
     } catch {
-      setError('The instance could not be reached.');
+      setError(UNREACHABLE);
     } finally {
       setBusy(false);
     }
@@ -286,223 +346,281 @@ export function MissionForm({
         });
         setServerIssues([]);
         setProposalReport(body.preview);
-        setPending({});
-        setReadOnly(new Set(body.preview.resolved.map((line) => line.connection_id)));
+        setPending(null);
+        // A loaded list is read first, edited on demand.
+        setOpenEditors(new Set());
       } else {
         setError(problemsOf(body) ?? messageOf(body, res.status));
       }
     } catch {
-      setError('The instance could not be reached.');
+      setError(UNREACHABLE);
     } finally {
       setBusy(false);
     }
   }
 
+  if (created)
+    return <CreatedView created={created} period={periodSeconds} expiresAt={expiresAt} now={now} />;
+
+  const crumbs = [{ label: 'Missions', href: ROUTES.missions }, { label: PAGES.newMission.title }];
+
   if (context.length === 0) {
     return (
-      <Banner tone="info" title="No connection yet">
-        A mission is issued on connections you own. Connect a provider under{' '}
-        <a href="/accounts">Accounts</a>, then come back.
-      </Banner>
+      <>
+        <PageHeader crumbs={crumbs} title={PAGES.newMission.title} lede={PAGES.newMission.lede} />
+        <Callout
+          tone="info"
+          title="Connect an account first"
+          action={<ButtonLink href={ROUTES.accounts}>{ACTIONS.connectAccount}</ButtonLink>}
+          testId="no-account"
+        >
+          A mission is created on accounts you own or were given access to. You have none yet.
+        </Callout>
+      </>
     );
   }
 
   return (
     <>
+      <PageHeader crumbs={crumbs} title={PAGES.newMission.title} lede={PAGES.newMission.lede} />
+
       {initial && (
-        <Banner
-          tone={initial.issues.length > 0 ? 'warning' : 'info'}
-          title={`Duplicating “${initial.sourceName}”`}
-        >
-          Same connections, resources, risks and budgets; it gets its own token and its own budget.
-          {initial.issues.length > 0 && (
-            <ul className={styles.issues}>
-              {initial.issues.map((i) => (
-                <li key={i.message}>{i.message}</li>
-              ))}
-            </ul>
-          )}
-        </Banner>
+        <div className={styles.block}>
+          <Callout
+            tone={initial.issues.length > 0 ? 'warn' : 'info'}
+            title={`Duplicating “${initial.sourceName}”`}
+            testId="duplicating"
+          >
+            Same accounts, resources, permissions and limits; the copy gets its own key and counts
+            on its own.
+            {initial.issues.length > 0 && (
+              <ul className={styles.issueList}>
+                {initial.issues.map((i) => (
+                  <li key={i.message}>{issueSentence(i, context)}</li>
+                ))}
+              </ul>
+            )}
+          </Callout>
+        </div>
       )}
 
       <form
-        className={styles.form}
         onSubmit={(e) => {
           e.preventDefault();
-          void issue();
+          if (preview.ok) setConfirming(true);
         }}
       >
-        <section>
-          <h2 className={styles.step}>1 · Name</h2>
-          <div className={styles.nameRow}>
-            <Input
-              value={state.name}
-              onChange={(e) => patch({ name: e.target.value })}
-              placeholder="What is this mission for? e.g. Ship the billing page"
-              aria-label="Mission name"
-              maxLength={120}
-              autoFocus
-            />
-            {missions.length > 0 && (
-              <Select
-                value=""
-                aria-label="Duplicate from a mission"
-                onChange={(e) => {
-                  if (e.target.value) router.push(`/missions/new?from=${e.target.value}`);
-                }}
-              >
-                <option value="">Duplicate from…</option>
-                {missions.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name}
-                  </option>
-                ))}
-              </Select>
-            )}
-            <Button type="button" size="sm" onClick={() => setProposalOpen((o) => !o)}>
-              Paste an agent’s proposal
-            </Button>
-          </div>
-          {proposalOpen && (
-            <div className={styles.proposal}>
-              <Textarea
-                value={proposalText}
-                onChange={(e) => setProposalText(e.target.value)}
-                aria-label="Agent proposal (JSON)"
-                placeholder='{"connections":[{"provider":"github","preset":"developer","resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
-                spellCheck={false}
-              />
-              <div className={styles.actions}>
-                <Button
-                  type="button"
-                  size="sm"
-                  onClick={checkProposal}
-                  disabled={busy || proposalText.trim() === ''}
-                >
-                  Check and load
+        <FormWithRail
+          rail={
+            <Card>
+              <CardHeader>
+                <CardTitle>{MISSION_WORDS.railTitle}</CardTitle>
+              </CardHeader>
+              <CardBody>
+                <RailSummary accounts={included} carries={carries} />
+                {issues.length > 0 && (
+                  <ul
+                    className={serverIssues.length > 0 ? styles.railRefused : styles.railIssues}
+                    data-testid="issues"
+                  >
+                    {issues.map((i) => (
+                      <li key={`${i.code}:${i.message}`}>{issueSentence(i, context)}</li>
+                    ))}
+                  </ul>
+                )}
+                {error && !confirming && (
+                  <p className={styles.railRefused} role="alert" data-testid="create-error">
+                    Not created: {error}
+                  </p>
+                )}
+              </CardBody>
+              <CardFooter>
+                <Button type="submit" variant="primary" size="lg" disabled={busy || !preview.ok}>
+                  {ACTIONS.createMission}
                 </Button>
-                <span className={styles.muted}>
-                  Nothing is issued: what passes your authority fills the form, the rest is listed.
-                </span>
-              </div>
-              {proposalReport && (
-                <Banner
-                  tone={proposalReport.ok ? 'success' : 'warning'}
-                  title={`Loaded ${proposalReport.policy.length} risks on ${proposalReport.connections.length} connections`}
+                <ButtonLink href={ROUTES.missions} variant="ghost">
+                  {ACTIONS.cancel}
+                </ButtonLink>
+                <span className={styles.railHint}>{MISSION_WORDS.keyAtTheEnd}</span>
+              </CardFooter>
+            </Card>
+          }
+        >
+          <FormStep n={1} title="Name" hint="How you will find it again.">
+            <div className={styles.nameRow}>
+              <Input
+                value={state.name}
+                onChange={(e) => patch({ name: e.target.value })}
+                placeholder="What is this mission for? Ship the billing page"
+                aria-label="Mission name"
+                maxLength={120}
+                autoFocus
+              />
+              {missions.length > 0 && (
+                <Select
+                  value=""
+                  className={styles.startFrom}
+                  aria-label="Start from one of your missions"
+                  onChange={(e) => {
+                    // A full navigation: the form starts again from the copy, not from this state.
+                    if (e.target.value) {
+                      window.location.assign(
+                        `${ROUTES.newMission}?from=${encodeURIComponent(e.target.value)}`,
+                      );
+                    }
+                  }}
                 >
-                  {proposalReport.issues.length === 0 ? (
-                    'Everything the proposal asks for is within your authority.'
-                  ) : (
-                    <ul className={styles.issues}>
-                      {proposalReport.issues.map((i) => (
-                        <li key={i.message}>{i.message}</li>
-                      ))}
-                    </ul>
-                  )}
-                </Banner>
+                  <option value="">{MISSION_ACTIONS.startFrom}</option>
+                  {missions.map((m) => (
+                    <option key={m.id} value={m.id}>
+                      {m.name}
+                    </option>
+                  ))}
+                </Select>
               )}
+              <Button
+                type="button"
+                aria-expanded={proposalOpen}
+                onClick={() => setProposalOpen((o) => !o)}
+              >
+                {MISSION_ACTIONS.pasteProposal}
+              </Button>
             </div>
-          )}
-        </section>
-
-        <section>
-          <h2 className={styles.step}>
-            <span>2 · Connections, resources, policy</span>
-            {hasExperimental && (
-              <label className={styles.stepTools}>
-                <input
-                  type="checkbox"
-                  checked={state.showExperimental}
-                  onChange={(e) => patch({ showExperimental: e.target.checked })}
-                />
-                Show experimental providers
-              </label>
-            )}
-          </h2>
-          <div className={styles.panel}>
-            {visible.map((connection) => {
-              const cs = state.connections[connection.id] ?? EMPTY;
-              const name = `${connection.provider_label} ${connection.display_name}`;
-              // "N of M": M is "all resources" (neither hidden nor stale) plus
-              // the hidden ones the creator ticked on purpose.
-              const total =
-                defaultResources(connection).length +
-                connection.resources.filter((r) => r.hidden && cs.resourceIds.includes(r.id))
-                  .length;
-              const listed = connection.resources.length;
-              const wanted = pending[connection.id];
-              const reading = cs.mode === 'custom' && readOnly.has(connection.id);
-              const custom = linesOfState(connection.risks, cs);
-              return (
-                <div
-                  key={connection.id}
-                  className={[styles.conn, cs.included ? '' : styles.connOff].join(' ')}
-                  data-testid={`connection-${connection.provider}`}
+            {proposalOpen && (
+              <div className={styles.proposal}>
+                <Field
+                  label="What the agent proposed"
+                  htmlFor="mission-proposal"
+                  shape="JSON, as its management tools print it"
+                  hint="Nothing is created: what you may allow fills the form, the rest is listed."
                 >
-                  <div className={styles.connHead}>
-                    <label className={styles.connName}>
-                      <input
-                        type="checkbox"
+                  <Textarea
+                    id="mission-proposal"
+                    mono
+                    value={proposalText}
+                    onChange={(e) => setProposalText(e.target.value)}
+                    aria-label="Agent proposal (JSON)"
+                    placeholder='{"connections":[{"provider":"github","preset":"developer","resources":{"scope":"selected","resource_refs":["acme/app"]}}]}'
+                    spellCheck={false}
+                  />
+                </Field>
+                <div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => void checkProposal()}
+                    disabled={busy || proposalText.trim() === ''}
+                  >
+                    Check and load
+                  </Button>
+                </div>
+                {proposalReport && (
+                  <Callout
+                    tone={proposalReport.ok ? 'ok' : 'warn'}
+                    title={`Loaded ${count(proposalReport.policy.length, TERMS.risk)} on ${count(proposalReport.connections.length, TERMS.connection)}`}
+                    testId="proposal-report"
+                  >
+                    {proposalReport.issues.length === 0 ? (
+                      'Everything the proposal asks for is within what you may allow.'
+                    ) : (
+                      <ul className={styles.issueList}>
+                        {proposalReport.issues.map((i) => (
+                          <li key={i.message}>{issueSentence(i, context)}</li>
+                        ))}
+                      </ul>
+                    )}
+                  </Callout>
+                )}
+              </div>
+            )}
+          </FormStep>
+
+          <FormStep n={2} title="Accounts and permissions" hint={MISSION_WORDS.explicitList}>
+            <div className={styles.accounts}>
+              {visible.map((connection) => {
+                const cs = state.connections[connection.id] ?? EMPTY;
+                const name = `${connection.provider_label} ${connection.display_name}`;
+                // "N of M": M is "all resources" (neither hidden nor stale) plus
+                // the hidden ones the person ticked on purpose.
+                const total =
+                  defaultResources(connection).length +
+                  connection.resources.filter((r) => r.hidden && cs.resourceIds.includes(r.id))
+                    .length;
+                const listedCount = connection.resources.length;
+                const selected = connection.resources.filter((r) => cs.resourceIds.includes(r.id));
+                const envs = [...new Set(selected.flatMap((r) => (r.env ? [r.env] : [])))];
+                const editorOpen = openEditors.has(connection.id);
+                const notices = preview.notices.filter((n) => n.connection_id === connection.id);
+                return (
+                  <div
+                    key={connection.id}
+                    className={[styles.account, cs.included ? '' : styles.accountOff].join(' ')}
+                    data-testid={`connection-${connection.provider}`}
+                  >
+                    <div className={styles.accountHead}>
+                      <Checkbox
                         checked={cs.included}
                         aria-label={`Include ${name}`}
                         onChange={(e) =>
                           patchConnection(connection.id, setIncluded(cs, e.target.checked))
                         }
                       />
-                      <strong>{connection.provider_label}</strong>
-                      <span>{connection.display_name}</span>
-                      {connection.experimental && <Badge tone="warning">experimental</Badge>}
+                      <span className={styles.accountName}>
+                        {connection.provider_label} · {connection.display_name}
+                      </span>
+                      <span className={styles.accountHint}>
+                        {connection.basis === 'owner'
+                          ? 'you own it'
+                          : `access given to you · may allow ${mayAllow(connection.authority.length, connection.risks.length)}`}
+                      </span>
+                      {connection.experimental && <Tag tone="warn">experimental</Tag>}
                       {connection.status !== 'active' && (
-                        <Badge tone="danger">{connection.status}</Badge>
+                        <StatusMark tone="bad">{connection.status}</StatusMark>
                       )}
-                    </label>
-                    {cs.included ? (
-                      <>
-                        <button
-                          type="button"
-                          className={styles.linkButton}
-                          aria-expanded={openResources.has(connection.id)}
-                          onClick={() => toggleResources(connection.id)}
-                        >
-                          {listed === 0
-                            ? 'No resource'
-                            : `${cs.resourceIds.length} of ${total} ${total === 1 ? 'resource' : 'resources'}`}
-                        </button>
-                        <fieldset className={styles.modes}>
-                          <legend className={styles.visuallyHidden}>Policy for {name}</legend>
-                          {MODES.map((mode) => (
-                            <label
-                              key={mode.id}
-                              className={[
-                                styles.mode,
-                                cs.mode === mode.id ? styles.modeOn : '',
-                              ].join(' ')}
+                      <span className={styles.accountResources}>
+                        {!cs.included ? (
+                          'not in this mission'
+                        ) : listedCount === 0 ? (
+                          'the account itself, no resource'
+                        ) : (
+                          <>
+                            <span className={styles.resourceNames}>
+                              {selected.length === 0
+                                ? 'No resource'
+                                : listed(
+                                    selected.map((r) => r.display_name || r.ref),
+                                    2,
+                                  )}
+                            </span>
+                            {envs.map((env) => (
+                              <EnvTag key={env} env={env} />
+                            ))}
+                            <span className={styles.resourceCount}>
+                              {cs.resourceIds.length} of {total}
+                            </span>
+                            <Button
+                              type="button"
+                              size="sm"
+                              aria-expanded={openResources.has(connection.id)}
+                              aria-label={`${MISSION_ACTIONS.change} the resources of ${name}: ${cs.resourceIds.length} of ${total} ${total === 1 ? 'resource' : 'resources'}`}
+                              onClick={() => toggleResources(connection.id)}
                             >
-                              <input
-                                type="radio"
-                                name={`mode-${connection.id}`}
-                                value={mode.id}
-                                checked={cs.mode === mode.id}
-                                onChange={() => switchMode(connection, cs, mode.id)}
-                              />
-                              {mode.label}
-                            </label>
-                          ))}
-                        </fieldset>
-                      </>
-                    ) : (
-                      <>
-                        <span />
-                        <span />
-                      </>
-                    )}
-                  </div>
-                  {cs.included && openResources.has(connection.id) && listed > 0 && (
-                    <div className={styles.resources}>
-                      {connection.resources.map((r) => (
-                        <label key={r.id}>
-                          <input
-                            type="checkbox"
+                              {MISSION_ACTIONS.change}
+                            </Button>
+                          </>
+                        )}
+                      </span>
+                    </div>
+
+                    {cs.included && openResources.has(connection.id) && listedCount > 0 && (
+                      <div
+                        className={styles.resources}
+                        role="group"
+                        aria-label={`Resources of ${name}`}
+                      >
+                        {connection.resources.map((r) => (
+                          <Checkbox
+                            key={r.id}
                             checked={cs.resourceIds.includes(r.id)}
                             // Discovery no longer returns it: never part of a new mission.
                             disabled={r.stale}
@@ -519,212 +637,251 @@ export function MissionForm({
                                 ),
                               )
                             }
-                          />
-                          <Slug kind="resource">{r.ref}</Slug>
-                          {r.env && <Badge mono>{r.env}</Badge>}
-                          {r.hidden && <Badge>hidden</Badge>}
-                          {r.stale && <Badge tone="warning">stale</Badge>}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  {cs.included && wanted && (
-                    <div
-                      className={styles.discard}
-                      role="alert"
-                      data-testid={`discard-${connection.provider}`}
-                    >
-                      <span>
-                        {wanted.kind === 'back-to-preset'
-                          ? 'Going back to Preset discards what you changed in the editor on this connection.'
-                          : 'Starting from another preset replaces what you changed in the editor on this connection.'}
-                      </span>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="danger"
-                        onClick={() => confirmDiscard(connection, cs)}
-                      >
-                        Discard my changes
-                      </Button>
-                      <Button type="button" size="sm" onClick={() => forget(connection.id)}>
-                        Keep editing
-                      </Button>
-                    </div>
-                  )}
-                  {cs.included && cs.mode === 'preset' && (
-                    <PresetPanel
-                      connection={connection}
-                      state={cs}
-                      expanded={spread.has(connection.id)}
-                      onPick={(presetId) => {
-                        setSpread(new Set([connection.id]));
-                        patchConnection(connection.id, applyPreset(connection, cs, presetId));
-                      }}
-                      onExpand={(expanded) =>
-                        setSpread((current) => {
-                          const next = new Set(current);
-                          if (expanded) next.add(connection.id);
-                          else next.delete(connection.id);
-                          return next;
-                        })
-                      }
-                    />
-                  )}
-                  {cs.included && reading && (
-                    <div
-                      className={styles.policyBody}
-                      data-testid={`custom-${connection.provider}`}
-                    >
-                      <div className={styles.presetDetail}>
-                        <p className={styles.presetDescription}>
-                          Custom policy, as loaded. Nothing below comes from a preset reference: it
-                          is the explicit list this mission would carry.{' '}
-                          <button
-                            type="button"
-                            className={styles.linkButton}
-                            aria-expanded={false}
-                            onClick={() => openEditor(connection.id, true)}
                           >
-                            Edit risk by risk
-                          </button>
-                        </p>
-                        <PolicyLines
-                          title="Allowed without asking"
-                          lines={custom.auto}
-                          empty="Nothing."
-                        />
-                        <PolicyLines
-                          title="Needs your approval, action by action"
-                          lines={custom.approval}
-                          empty="Nothing: the agent never has to ask you."
+                            <span className={styles.resource}>
+                              {r.display_name || r.ref}
+                              {r.display_name && r.display_name !== r.ref && (
+                                <span className={styles.quietText}> {r.ref}</span>
+                              )}
+                              <EnvTag env={r.env} />
+                              {r.hidden && <Tag>hidden by its owner</Tag>}
+                              {r.stale && <Tag tone="warn">no longer found</Tag>}
+                            </span>
+                          </Checkbox>
+                        ))}
+                      </div>
+                    )}
+
+                    {cs.included && (
+                      <PresetPanel
+                        connection={connection}
+                        state={cs}
+                        editorOpen={editorOpen}
+                        onPick={(presetId) => pickPreset(connection, cs, presetId)}
+                        onCustom={() => pickCustom(connection, cs)}
+                        onEditor={(open) => openEditor(connection, cs, open)}
+                      />
+                    )}
+                    {cs.included &&
+                      notices.map((n) => (
+                        <details
+                          key={`${n.code}:${n.resource_refs.join(',')}`}
+                          className={styles.notice}
+                          data-testid="notices"
+                        >
+                          <summary>{noticeHeadline(n, connection)}</summary>
+                          {n.message}
+                        </details>
+                      ))}
+                    {cs.included && editorOpen && (
+                      <div id={`editor-${connection.id}`}>
+                        <CustomEditor
+                          connection={connection}
+                          state={cs}
+                          planes={planes[connection.provider] ?? null}
+                          limitLabel={limitColumn(periodSeconds)}
+                          onChange={(next) => patchConnection(connection.id, next)}
+                          onReset={
+                            cs.presetId && cs.edited
+                              ? () => setPending({ kind: 'reset', connectionId: connection.id })
+                              : null
+                          }
                         />
                       </div>
-                    </div>
-                  )}
-                  {cs.included && cs.mode === 'custom' && !reading && (
-                    <CustomEditor
-                      connection={connection}
-                      state={cs}
-                      planes={planes[connection.provider] ?? null}
-                      onChange={(next) => patchConnection(connection.id, next)}
-                      onStartFrom={(presetId) => startFrom(connection, cs, presetId)}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            {hasExperimental && (
+              <div className={styles.afterLine}>
+                <Checkbox
+                  checked={state.showExperimental}
+                  onChange={(e) => patch({ showExperimental: e.target.checked })}
+                >
+                  Show experimental services
+                </Checkbox>
+              </div>
+            )}
+          </FormStep>
 
-        <section>
-          <h2 className={styles.step}>3 · Summary</h2>
-          <dl className={[styles.panel, styles.summary].join(' ')} data-testid="summary">
-            <div className={styles.summaryLine}>
-              <dt>Can</dt>
-              <dd data-testid="summary-can">{preview.summary.can}</dd>
-            </div>
-            <div className={styles.summaryLine}>
-              <dt>Cannot</dt>
-              <dd data-testid="summary-cannot">{preview.summary.cannot}</dd>
-            </div>
-            <div className={styles.summaryLine}>
-              <dt>Quantities</dt>
-              <dd data-testid="summary-quantities">{preview.summary.quantities}</dd>
-            </div>
-          </dl>
-        </section>
-
-        <footer className={styles.footer}>
-          <div className={styles.footerRow}>
-            <h2 className={styles.step}>4 · Period and expiry</h2>
-            <div className={styles.asideControls}>
-              <Select
-                value={state.period}
-                aria-label="Period"
-                onChange={(e) => {
-                  if (isChoice<PeriodChoice>(PERIOD_CHOICES, e.target.value)) {
-                    patch({ period: e.target.value });
-                  }
-                }}
-              >
-                {PERIOD_CHOICES.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </Select>
-              <Select
-                value={state.expiry}
-                aria-label="Expiry"
-                onChange={(e) => {
-                  if (isChoice<ExpiryChoice>(EXPIRY_CHOICES, e.target.value)) {
-                    patch({ expiry: e.target.value });
-                  }
-                }}
-              >
-                {EXPIRY_CHOICES.map((x) => (
-                  <option key={x.id} value={x.id}>
-                    {x.label}
-                  </option>
-                ))}
-              </Select>
-              {state.expiry === 'custom' && (
-                <Input
-                  type="datetime-local"
-                  value={state.expiryCustom}
-                  aria-label="Expiry date"
-                  onChange={(e) => patch({ expiryCustom: e.target.value })}
-                />
-              )}
-            </div>
-            <Button
-              type="submit"
-              variant="primary"
-              className={styles.issueButton}
-              disabled={busy || !preview.ok}
-            >
-              {busy ? 'Issuing…' : 'Issue mission'}
-            </Button>
-          </div>
-          {issues.length > 0 && (
-            <ul
-              className={serverIssues.length > 0 ? styles.issues : styles.notes}
-              data-testid="issues"
-            >
-              {issues.map((i) => (
-                <li key={`${i.code}:${i.message}`}>{i.message}</li>
-              ))}
-            </ul>
-          )}
-          {preview.notices.length > 0 && (
-            <ul className={styles.notices} data-testid="notices">
-              {preview.notices.map((n) => (
-                <li key={`${n.code}:${n.connection_index ?? ''}:${n.resource_refs.join(',')}`}>
-                  <details>
-                    <summary>{noticeHeadline(n, context)}</summary>
-                    {n.message}
-                  </details>
-                </li>
-              ))}
-            </ul>
-          )}
-          {error && (
-            <Banner tone="danger" title="Not issued">
-              {error}
-            </Banner>
-          )}
-        </footer>
+          <FormStep
+            n={3}
+            title="Limits and lifetime"
+            hint="Limits that reset every day suit an agent that works every day."
+          >
+            <FormColumns>
+              <Field label="Limits reset" htmlFor="mission-period">
+                <Select
+                  id="mission-period"
+                  value={state.period}
+                  onChange={(e) => {
+                    if (isChoice<PeriodChoice>(PERIOD_CHOICES, e.target.value)) {
+                      patch({ period: e.target.value });
+                    }
+                  }}
+                >
+                  {PERIOD_CHOICES.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Expires" htmlFor="mission-expiry">
+                <Select
+                  id="mission-expiry"
+                  value={state.expiry}
+                  onChange={(e) => {
+                    if (isChoice<ExpiryChoice>(EXPIRY_CHOICES, e.target.value)) {
+                      patch({ expiry: e.target.value });
+                    }
+                  }}
+                >
+                  {EXPIRY_CHOICES.map((x) => (
+                    <option key={x.id} value={x.id}>
+                      {x.days === null
+                        ? x.label
+                        : `${x.label} · ${shortDate(new Date(now.getTime() + x.days * 86_400_000), now)}`}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="People">
+                <p className={styles.people}>{MISSION_WORDS.peopleLater}</p>
+              </Field>
+            </FormColumns>
+            {state.expiry === 'custom' && (
+              <div className={styles.expiryDate}>
+                <Field label="Expires on" htmlFor="mission-expiry-date" shape="your local time">
+                  <Input
+                    id="mission-expiry-date"
+                    type="datetime-local"
+                    value={state.expiryCustom}
+                    onChange={(e) => patch({ expiryCustom: e.target.value })}
+                  />
+                </Field>
+              </div>
+            )}
+          </FormStep>
+        </FormWithRail>
       </form>
 
-      {issued && (
-        <RevealDialog
-          title={`Mission “${issued.name}” issued`}
-          kit={issued.kit}
-          onDone={() => router.push(`/missions/${issued.missionId}`)}
-        />
-      )}
+      <Dialog
+        open={confirming}
+        onClose={() => setConfirming(false)}
+        width="lg"
+        divided
+        dismissible={!busy}
+        title={`Create “${state.name.trim()}”?`}
+        description={
+          <>
+            This is the explicit list the key will carry: {carries} Anything else is refused. You
+            get the key next, shown once.
+          </>
+        }
+        hint={WAITING.recorded}
+        testId="confirm-create"
+        footer={
+          <>
+            <Button type="button" variant="primary" loading={busy} onClick={() => void create()}>
+              {busy ? 'Creating…' : ACTIONS.createMission}
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              disabled={busy}
+              onClick={() => setConfirming(false)}
+            >
+              Back to the form
+            </Button>
+          </>
+        }
+      >
+        <ExplicitList accounts={included} periodSeconds={periodSeconds} />
+        {error && confirming && (
+          <p className={styles.railRefused} role="alert">
+            Not created: {error}
+          </p>
+        )}
+      </Dialog>
+
+      <ConfirmDialog
+        open={pending !== null}
+        title="Discard what you changed?"
+        consequence={
+          pending?.kind === 'reset'
+            ? 'The permissions, limits and "ask me first" you changed on this account go back to the preset as it is.'
+            : pending?.kind === 'empty'
+              ? 'Custom starts from an empty list: the permissions, limits and "ask me first" you changed on this account are dropped.'
+              : 'Another preset replaces the permissions, limits and "ask me first" you changed on this account.'
+        }
+        confirmLabel="Discard my changes"
+        tone="danger"
+        onConfirm={confirmDiscard}
+        onCancel={() => setPending(null)}
+        testId="discard-dialog"
+      />
     </>
+  );
+}
+
+/** Right after "Create mission": the key, once, and what the agent needs to start. */
+function CreatedView({
+  created,
+  period,
+  expiresAt,
+  now,
+}: {
+  created: Created;
+  period: number | null;
+  expiresAt: string | null;
+  now: Date;
+}) {
+  const missionPath = `${ROUTES.missions}/${created.missionId}`;
+  return (
+    <div data-testid="created">
+      <PageHeader
+        width="narrow"
+        crumbs={[{ label: 'Missions', href: ROUTES.missions }, { label: created.name }]}
+        title={created.name}
+        lede={`Created just now · ${count(created.permissions, TERMS.risk)} on ${listed([...created.services], 3)} · ${limitsResetEvery(period)} · ${expiresOn(expiresAt, now)}`}
+        secondary={[
+          <ButtonLink key="open" href={missionPath}>
+            {MISSION_ACTIONS.openMission}
+          </ButtonLink>,
+        ]}
+      />
+      <Section first title="Your key" note={MISSION_WORDS.keyShownOnce}>
+        <KeyReveal secret={created.secret} kit={created.kit} />
+      </Section>
+      <Section title="Working with others?">
+        <Rows>
+          <Row
+            title="Add a teammate"
+            description="They sign in and generate their own key; every call they make is in their name. Same permissions, same limits."
+            end={
+              <ButtonLink href={`${missionPath}#people`} size="sm">
+                {ACTIONS.addPeople}
+              </ButtonLink>
+            }
+          />
+          <Row
+            title="Add a machine key"
+            description="For CI or a shared machine that has no account. Named by you, revoked on its own."
+            end={
+              <ButtonLink href={`${missionPath}#people`} size="sm">
+                {ACTIONS.newMachineKey}
+              </ButtonLink>
+            }
+          />
+        </Rows>
+      </Section>
+      <p className={styles.quiet}>
+        Leaving this page hides the key for good. <Link href={missionPath}>The mission page</Link>{' '}
+        keeps the kit, without the key.
+      </p>
+    </div>
   );
 }
 
@@ -741,26 +898,22 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * The one line of a notice; its full sentence (consequence, remedy) unfolds
- * below it. A resource is named as its owner named it, as on every page; its
- * ref (a UUID at some providers) is on the connection's page.
+ * below it. A resource is named as its owner named it, as on every page.
  */
-function noticeHeadline(notice: PreviewNotice, context: readonly IssuanceConnection[]): string {
-  const resources = context.find((c) => c.id === notice.connection_id)?.resources ?? [];
+function noticeHeadline(notice: PreviewNotice, connection: IssuanceConnection): string {
   const refs = notice.resource_refs
-    .map((ref) => resources.find((r) => r.ref === ref)?.display_name || ref)
+    .map((ref) => connection.resources.find((r) => r.ref === ref)?.display_name || ref)
     .join(', ');
   switch (notice.code) {
     case 'resource-without-env':
-      return `Warning: no environment label on ${refs}. Environment-scoped risks are refused there.`;
+      return `No environment label on ${refs}: permissions tied to an environment are refused there.`;
     case 'resource-env-not-in-catalog':
-      return `Warning: the environment label of ${refs} is not one the catalog knows. Environment-scoped risks are refused there.`;
+      return `The environment label of ${refs} is not one this service knows: permissions tied to an environment are refused there.`;
   }
 }
 
-function isIssuedBody(
-  body: unknown,
-): body is { mission: { id: string; name: string }; kit: BootstrapKit } {
-  return isRecord(body) && isRecord(body.mission) && isRecord(body.kit);
+function isCreatedBody(body: unknown): body is { mission: { id: string; name: string } } {
+  return isRecord(body) && isRecord(body.mission) && typeof body.mission.id === 'string';
 }
 
 function isRefusedBody(body: unknown): body is { preview: MissionPreview } {

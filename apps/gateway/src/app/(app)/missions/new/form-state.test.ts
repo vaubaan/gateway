@@ -19,9 +19,12 @@ import {
   explainPreset,
   filterRows,
   initialFormState,
+  issueSentence,
   loadResolved,
-  presetChoiceLabel,
-  presetDigest,
+  policyCounts,
+  presetUnavailable,
+  presetWidth,
+  startEmpty,
   startFromPreset,
   periodChoiceOf,
   periodOf,
@@ -161,7 +164,7 @@ describe('creation form — presets', () => {
     const prodOnly = setResources(acme, included('developer'), ['res-app-prod']);
     expect(Object.keys(prodOnly.entries)).toEqual(['acme.read']);
     expect(describeSkipped(presetSkipped(acme, prodOnly))).toBe(
-      '2 preset entries left out: 2 need a selected resource labelled "staging".',
+      '2 permissions of the preset left out here: 2 need a selected resource labelled "staging".',
     );
     const back = setResources(acme, prodOnly, ['res-app-prod', 'res-app-staging']);
     expect(Object.keys(back.entries)).toHaveLength(3);
@@ -188,7 +191,7 @@ describe('creation form — presets', () => {
     const unlabelled = setResources(acme, included('writer'), ['res-scratch']);
     expect(unlabelled.entries).toEqual({});
     expect(describeSkipped(presetSkipped(acme, unlabelled))).toBe(
-      '1 preset entry left out: 1 needs a selected resource with an environment label.',
+      '1 permission of the preset left out here: 1 needs a selected resource with an environment label.',
     );
   });
 
@@ -197,7 +200,7 @@ describe('creation form — presets', () => {
     const cs = applyPreset(narrow, included(), 'developer');
     expect(Object.keys(cs.entries)).toEqual(['acme.read']);
     expect(describeSkipped(presetSkipped(narrow, cs))).toBe(
-      '2 preset entries left out: 2 outside your authority.',
+      '2 permissions of the preset left out here: 2 outside what you may allow.',
     );
   });
 
@@ -374,10 +377,11 @@ describe('creation form — a preset explains itself', () => {
       ['acme.uncategorized-write', [null]],
     ]);
     expect(developer.skipped).toEqual([]);
-    expect(presetChoiceLabel(developer)).toBe('3 risks · 1 needs approval');
-    expect(presetDigest(developer)).toBe(
-      '2 allowed without asking · 1 needs your approval · 4 not included',
-    );
+    expect(presetWidth(developer)).toBe(3);
+    expect(presetUnavailable(developer)).toBeNull();
+    // The counts under the choice are the policy as it stands in the form: the fallback
+    // and the deprecated entry are never counted as something the preset "left out".
+    expect(policyCounts(acme, included('developer'))).toEqual({ free: 2, asks: 1, notIncluded: 2 });
   });
 
   it('is the policy the preset fills: the card and the entries cannot disagree', () => {
@@ -405,9 +409,7 @@ describe('creation form — a preset explains itself', () => {
       'acme.legacy-export',
       'acme.uncategorized-write',
     ]);
-    expect(presetDigest(developer)).toBe(
-      '1 allowed without asking · 0 need your approval · 4 not included · 2 entries of the preset left out here',
-    );
+    expect(presetWidth(developer)).toBe(1);
     // A base-id entry no selected resource can resolve names every environment it could use.
     const unlabelled = setResources(acme, included(), ['res-scratch']);
     expect(explained(unlabelled, 'writer').skipped.map((f) => f.why)).toEqual([
@@ -419,11 +421,26 @@ describe('creation form — a preset explains itself', () => {
     const narrow = acmeConnection({ authority: ['acme.read'] });
     const developer = explained(included(), 'developer', narrow);
     expect(developer.skipped.map((f) => f.why)).toEqual([
-      'outside your authority',
-      'outside your authority',
+      'outside what you may allow',
+      'outside what you may allow',
     ]);
     expect(developer.leftOut).toEqual([]);
-    expect(presetChoiceLabel(developer)).toBe('1 risk');
+    expect(presetWidth(developer)).toBe(1);
+  });
+
+  it('says why a preset would allow nothing, instead of offering an empty mission', () => {
+    // No selected resource carries an environment: every entry of "writer" needs one.
+    const unlabelled = setResources(acme, included(), ['res-scratch']);
+    const writer = explained(unlabelled, 'writer');
+    expect(presetWidth(writer)).toBe(0);
+    expect(presetUnavailable(writer)).toBe(
+      'needs a selected resource labelled "staging" or "prod": none selected',
+    );
+    // Nothing of the preset is within what the reader may allow.
+    const none = acmeConnection({ authority: [] });
+    expect(presetUnavailable(explained(included(), 'developer', none))).toBe(
+      'outside what you may allow',
+    );
   });
 
   it('answers null for an id that is not a preset of the plugin', () => {
@@ -492,7 +509,7 @@ describe('creation form — the Custom editor', () => {
     const status = Object.fromEntries(rows.map((r) => [r.risk.risk_id, r.unavailable]));
     expect(status['acme.read']).toBeNull();
     expect(status['acme[staging].write']).toBe('no selected resource is labelled "staging"');
-    expect(status['acme.admin']).toBe('outside your authority');
+    expect(status['acme.admin']).toBe('outside what you may allow');
     expect(rows.filter((r) => r.accepted).map((r) => r.risk.risk_id)).toEqual(['acme.read']);
   });
 
@@ -508,7 +525,7 @@ describe('creation form — the Custom editor', () => {
     expect(ids('nothing matches this')).toEqual([]);
   });
 
-  it('filters on what is accepted, what could be, and what is unavailable', () => {
+  it('filters on what the reader can act on, what is chosen, and what is not available', () => {
     const narrow = acmeConnection({
       authority: ['acme.read', 'acme[staging].write', 'acme[prod].write'],
     });
@@ -516,7 +533,8 @@ describe('creation form — the Custom editor', () => {
     const ids = (filter: Parameters<typeof filterRows>[2]) =>
       filterRows(rows, '', filter).map((r) => r.risk.risk_id);
     expect(ids('accepted')).toEqual(['acme.read', 'acme[staging].write']);
-    expect(ids('available')).toEqual(['acme[prod].write']);
+    // Available to you: what may be ticked, and what is ticked (so that it can be unticked).
+    expect(ids('available')).toEqual(['acme.read', 'acme[staging].write', 'acme[prod].write']);
     expect(ids('unavailable')).toEqual([
       'acme[staging].bulk-delete',
       'acme.admin',
@@ -526,5 +544,45 @@ describe('creation form — the Custom editor', () => {
     expect(filterRows(rows, 'write', 'accepted').map((r) => r.risk.risk_id)).toEqual([
       'acme[staging].write',
     ]);
+  });
+});
+
+describe('creation form — Custom, start empty', () => {
+  it('empties the list and ties it to no preset, with nothing to lose', () => {
+    const empty = startEmpty(included('developer'));
+    expect(empty).toMatchObject({ mode: 'custom', presetId: '', entries: {}, edited: false });
+    expect(discardsEdits(empty)).toBe(false);
+    expect(policyCounts(acme, empty)).toEqual({ free: 0, asks: 0, notIncluded: 5 });
+  });
+});
+
+describe('creation form — what stands in the way, in the words of the interface', () => {
+  it('says each blocking reason without a protocol word, and names the account', () => {
+    const blank = previewOf(included());
+    const sentences = blank.issues.map((issue) => issueSentence(issue, context));
+    expect(sentences).toContain(
+      `${acme.provider_label} · ${acme.display_name} allows nothing yet: pick a preset or a permission, or leave the account out.`,
+    );
+    expect(issueSentence({ code: 'name-missing', message: 'x' }, context)).toBe(
+      'Give the mission a name.',
+    );
+    expect(
+      issueSentence(
+        { code: 'missing-budget', message: 'x', connection_id: acme.id, risk_ids: ['acme.read'] },
+        context,
+      ),
+    ).toBe(`${acme.provider_label} · ${acme.display_name}: give a limit to acme.read.`);
+    for (const sentence of sentences) {
+      expect(sentence).not.toMatch(/\b(risk|quota|budget|connection|authority)\b/i);
+    }
+  });
+
+  it('prints what the server said when it has no sentence of its own', () => {
+    expect(issueSentence({ code: 'unknown-risk', message: 'As the server says.' }, context)).toBe(
+      'As the server says.',
+    );
+    expect(
+      issueSentence({ code: 'exceeds-authority', message: 'No account named.' }, context),
+    ).toBe('No account named.');
   });
 });

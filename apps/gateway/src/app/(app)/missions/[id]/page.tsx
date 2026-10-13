@@ -1,277 +1,449 @@
 /**
- * `/missions/<id>` — one mission: state, connections and resources, policy
- * per risk — each explained (label, reason, vector) and linked to its entry
- * in the provider reference — with what is left this period and its gate,
- * which the creator edits here after issuance (spec §3.5), token prefix with
- * Rotate, the
- * bootstrap kit with the secret masked (spec §4.2, §4.4), and the link to the
- * mission's session page, and the mission's members and tokens (`TeamSection`).
+ * `/missions/<id>` — one mission (spec §4.2, §4.4), in the order a person
+ * needs it:
  *
- * The creator and the members of a mission read this page (spec §0 "Mission
- * member"). A member reads it as it is: no Duplicate / Rotate / Revoke, no gate
- * control — what they can do is in "Members and tokens": their own token.
+ *   1. what it is and the state it is in (the header);
+ *   2. what waits for an answer on this mission, with a link to answer — the
+ *      one filled box of the page — or, for a teammate, whose answer it waits for;
+ *   3. Can / Asks first / Cannot, and the one limit that is near;
+ *   4. people and keys, with what each key did in the current period;
+ *   5. permissions and usage — the explicit list, one click away — where the
+ *      creator changes "ask me first";
+ *   6. activity: a line of counts, the last calls one click away, the whole
+ *      record on the mission's activity page.
+ *
+ * The creator and the teammates of a mission read this page (spec §0 "Mission
+ * member"). Each sees the acts the server would take from them and no other:
+ * a teammate generates, replaces and revokes their own key; the creator adds
+ * and removes people, makes machine keys, stops the mission.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
-import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import {
-  Badge,
-  Banner,
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
-  Code,
-  Stack,
-  Table,
-  Tbody,
-  Td,
-  Th,
-  Thead,
-  Tr,
-  Slug,
+  AllowSummary,
+  AnswerList,
+  AnswerRow,
+  Avatar,
+  ButtonLink,
   Callout,
+  Disclosure,
+  EnvTag,
+  Hint,
+  Meter,
+  Mono,
+  PageHeader,
+  Section,
+  StatusMark,
+  SummaryLine,
 } from '@/components/ui';
-import { GateBadge } from '@/components/risk/RiskBadges';
-import { RiskExplain, RiskIdLink } from '@/components/risk/RiskExplain';
 import { currentUser } from '@/lib/auth/session';
-import { maskedToken } from '@/server/missions';
+import {
+  ACTIONS,
+  agoSentence,
+  asksFirst,
+  count,
+  expiresOn,
+  limitsResetEvery,
+  listed,
+  MISSION_ACTIONS,
+  MISSION_WORDS,
+  periodWord,
+  ROUTES,
+  SECTIONS,
+  shortDate,
+  TERMS,
+  waitingFor,
+  WAITING,
+} from '@/lib/vocabulary';
+import { enumerateCatalog, groupVariants } from '@/server/missions/catalog-view';
 import { explainOrphan } from '@/server/missions/orphan-reason';
-import { formatRate } from '@/server/missions/catalog-view';
-import { reloadPhrase } from '@/server/missions/summary';
-import { providerPath } from '@/server/providers/links';
 import { riskExplainer } from '@/server/providers/reference';
+import { inboxRequestPath } from '@/server/requests/url';
 
-import { BootstrapKitView } from '../bootstrap-kit-view';
 import styles from '../missions.module.css';
-import { StateBadge } from '../state-badge';
-import { GateControl } from './gate-control';
-import { MissionActions } from './mission-actions';
-import { TeamSection } from './team-section';
+import { allowLines, createdBy, missionMark, nearestLimit } from '../mission-view';
+import { ActivityTable } from './activity-table';
+import { ActButton, GenerateKeyButton, MissionActsProvider, MissionMenu } from './mission-actions';
+import { PermissionsUsage } from './permissions-usage';
+import { TeamSection, type HolderCalls } from './team-section';
 
 export const dynamic = 'force-dynamic';
 
+/** How many of the last events the page shows; the rest is on the activity page. */
+const LAST_EVENTS = 8;
+
 interface Props {
   params: Promise<{ id: string }>;
+}
+
+/** What waits on this mission, as the banner shows it. */
+interface Waiting {
+  readonly id: string;
+  readonly kind: 'claim' | 'approval';
+  readonly labels: readonly string[];
+  readonly tool: string | null;
+  readonly created_at: string;
+  /** Where the creator answers; `null` for a teammate. */
+  readonly path: string | null;
 }
 
 export default async function MissionPage({ params }: Props) {
   const session = await currentUser();
   if (!session) return <NeedsUser />;
   const { id } = await params;
-  const detail = await session.root.missions.service.get(session.user, id);
+  const { root, user } = session;
+  const detail = await root.missions.service.get(user, id);
   if (!detail) notFound();
-  const { mission, state, token, orphan, issuedVia } = detail;
+  const { mission, state, orphan, issuedVia } = detail;
   const isCreator = detail.role === 'creator';
-  const team = await session.root.missions.team.team(session.user, id);
-  // The service's own rule (`gateEditBlockedBy`): the control shows when `setGate` would act.
-  const gatesEditable = detail.gates_editable;
+  const now = new Date();
+  const [team, activity, inbox] = await Promise.all([
+    root.missions.team.team(user, id),
+    root.audit.sessions.get(user, id),
+    isCreator ? root.requests.service.inbox(user) : Promise.resolve([]),
+  ]);
+  if (!team || !activity) notFound();
+
+  const creatorName = isCreator ? null : (detail.creator.email ?? 'the creator');
+  const labelOf = new Map(detail.policy.map((entry) => [entry.risk_id, entry.label]));
+  const waiting: Waiting[] = isCreator
+    ? inbox
+        .filter((request) => request.mission.id === mission.id)
+        .map((request) => ({
+          id: request.id,
+          kind: request.kind,
+          labels: request.risks.map((risk) => risk.label),
+          tool: request.tool,
+          created_at: request.created_at,
+          path: inboxRequestPath(request.id),
+        }))
+    : activity.open_requests.map((request) => ({
+        id: request.id,
+        kind: request.kind,
+        labels: [labelOf.get(request.risk_id) ?? request.risk_id],
+        tool: null,
+        created_at: request.created_at,
+        path: null,
+      }));
+
+  const mark = missionMark(state, waiting.length, creatorName);
   const orphanExplanation = orphan && explainOrphan(orphan, detail.connections);
-  // The catalog row behind each persisted id: what the risk means, not only what it is called.
-  const explain = riskExplainer(session.root.registry);
+  const periodSeconds = detail.period.kind === 'recurring' ? detail.period.length_seconds : null;
+  const period = periodWord(periodSeconds);
+
+  // What the mission does not hold, by what it would have allowed: the "Cannot" line.
+  const held = new Set<string>(detail.policy.map((entry) => entry.risk_id));
+  const notIncluded = detail.connections.flatMap((connection) => {
+    const registered = root.registry.get(connection.provider);
+    if (!registered) return [];
+    const left = enumerateCatalog(registered.plugin.catalog)
+      .filter((risk) => !held.has(risk.risk_id) && !risk.deprecated && !risk.fallback)
+      .sort((a, b) => b.severity - a.severity);
+    return groupVariants(left).map((family) => family.label);
+  });
+  const lines = allowLines(detail.policy, notIncluded);
+  const near = state.kind === 'active' ? nearestLimit(detail.policy) : null;
+  const explain = riskExplainer(root.registry);
+
+  const calls: HolderCalls[] = activity.holder_activity.flatMap((entry) =>
+    entry.holder
+      ? [
+          {
+            kind: entry.holder.kind,
+            key: entry.holder.key,
+            allowed: entry.allowed,
+            refused: entry.refused,
+            last_seen_at: entry.last_seen_at,
+          },
+        ]
+      : [],
+  );
+  const allowed = activity.holder_activity.reduce((sum, entry) => sum + entry.allowed, 0);
+  const refused = activity.holder_activity.reduce((sum, entry) => sum + entry.refused, 0);
+  const lastCall = activity.holder_activity
+    .map((entry) => entry.last_seen_at)
+    .sort()
+    .at(-1);
+  const activityPath = `${ROUTES.missions}/${mission.id}/session`;
+  const stoppable = isCreator && state.kind !== 'revoked';
+  const needsMyKey = team.issuable && !team.my_token;
+
+  const [first, ...others] = waiting;
+  const answersOf = (request: Waiting) =>
+    request.path ? (
+      <ButtonLink href={request.path} variant="primary">
+        Review and answer
+      </ButtonLink>
+    ) : undefined;
+  const titleOf = (request: Waiting) => (
+    <>
+      {request.kind === 'claim'
+        ? `${listed([...request.labels], 2)} reached its limit`
+        : listed([...request.labels], 2)}{' '}
+      · {request.kind === 'claim' && isCreator ? 'asks you for more room' : waitingFor(creatorName)}
+    </>
+  );
+  const descriptionOf = (request: Waiting) => (
+    <>
+      {request.tool && (
+        <>
+          <Mono>{request.tool}</Mono> ·{' '}
+        </>
+      )}
+      {askerOf(request)?.agent_label && `${askerOf(request)?.agent_label} · `}
+      asked {agoSentence(request.created_at, now)}
+      {!isCreator && ' · only the creator of the mission answers'}
+    </>
+  );
+  // Who asked is the holder of the key the refused call presented, when the event is still listed.
+  const askerOf = (request: Waiting) =>
+    activity.events.find((event) => event.request_id === request.id && event.holder !== null);
+  const whoAsks = (request: Waiting) => {
+    const holder = askerOf(request)?.holder;
+    return holder ? (
+      <Avatar name={holder.label} kind={holder.kind === 'named' ? 'machine' : 'person'} size="md" />
+    ) : (
+      <Avatar name="agent" kind="machine" size="md" />
+    );
+  };
+
+  const secondary: React.ReactNode[] = [];
+  if (isCreator && state.kind !== 'revoked') {
+    secondary.push(
+      <ActButton key="people" act="add-people">
+        {ACTIONS.addPeople}
+      </ActButton>,
+    );
+  }
+  if (team.my_token) {
+    secondary.push(
+      <ActButton key="kit" act="kit">
+        {ACTIONS.setupKit}
+      </ActButton>,
+    );
+  }
 
   return (
-    <Stack gap="var(--space-5)">
-      <div className={styles.pageHead}>
-        <div>
-          <p className={styles.muted}>
-            <Link href="/missions">Missions</Link> /
-          </p>
-          <h1>
-            {mission.name} <StateBadge state={state} />
-          </h1>
-        </div>
-        <div className={styles.actions}>
-          <Link href={`/missions/${mission.id}/session`} className={styles.secondaryLink}>
-            Session
-          </Link>
-          {isCreator && (
-            <MissionActions
-              missionId={mission.id}
-              name={mission.name}
-              active={state.kind === 'active'}
-              revocable={state.kind !== 'revoked'}
-            />
-          )}
-        </div>
-      </div>
+    <MissionActsProvider team={team} kit={detail.kit}>
+      <PageHeader
+        crumbs={[{ label: 'Missions', href: ROUTES.missions }, { label: mission.name }]}
+        title={mission.name}
+        status={
+          mark.tone ? (
+            <StatusMark tone={mark.tone} testId="mission-state">
+              {mark.label}
+            </StatusMark>
+          ) : mark.over ? (
+            <StatusMark testId="mission-state">{mark.label}</StatusMark>
+          ) : undefined
+        }
+        lede={
+          <>
+            <span title={mission.createdAt}>
+              {createdBy(detail.creator.email, isCreator)} on {shortDate(mission.createdAt, now)}
+            </span>
+            {detail.connections.map((connection) => (
+              <span key={connection.id}>
+                {' · '}
+                {connection.provider_label}{' '}
+                {connection.resources.length === 0
+                  ? connection.display_name
+                  : listed(
+                      connection.resources.map((r) => r.display_name || r.ref),
+                      2,
+                    )}
+                {[...new Set(connection.resources.flatMap((r) => (r.env ? [r.env] : [])))].map(
+                  (env) => (
+                    <span key={env} className={styles.inlineTag}>
+                      <EnvTag env={env} />
+                    </span>
+                  ),
+                )}
+              </span>
+            ))}
+            {' · '}
+            {limitsResetEvery(periodSeconds)} ·{' '}
+            <span title={mission.expiresAt ?? undefined}>{expiresOn(mission.expiresAt, now)}</span>
+          </>
+        }
+        primary={needsMyKey ? <GenerateKeyButton /> : undefined}
+        secondary={
+          secondary.length === 2
+            ? [secondary[0], secondary[1]]
+            : secondary.length === 1
+              ? [secondary[0]]
+              : undefined
+        }
+        more={<MissionMenu missionId={mission.id} duplicable={isCreator} stoppable={stoppable} />}
+      />
 
       {!isCreator && (
-        <div data-testid="shared-with-me">
-          <Callout tone="info" icon="member" title="Shared with you">
-            {detail.creator.email ?? 'Its creator'} created this mission and added you as a member.
-            You use it as it is — same resources, same policy, same budget as every other holder —
-            with your own token, below. You cannot change it; its requests are answered by its
-            creator alone.
+        <p className={styles.headNote} data-testid="shared-with-me">
+          {MISSION_WORDS.teammateRule} What its agents ask is answered by{' '}
+          {detail.creator.email ?? 'its creator'} alone.
+        </p>
+      )}
+
+      {issuedVia && (
+        <p className={styles.headNote} data-testid="issued-via">
+          Prepared for you by {issuedVia.client_name},{' '}
+          <Link href={`${ROUTES.connectedApps}#${issuedVia.delegation_id}`}>a connected app</Link> (
+          <Mono quiet>{issuedVia.client_id}</Mono>). The name is what the app said about itself; it
+          is not verified. You are the creator of this mission and the only one who answers what its
+          agents ask.
+        </p>
+      )}
+
+      {orphanExplanation && (
+        <div className={styles.block}>
+          <Callout
+            tone={orphanExplanation.reversible ? 'warn' : 'bad'}
+            title={orphanExplanation.title}
+            testId="orphan-callout"
+          >
+            {orphanExplanation.lines.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
           </Callout>
         </div>
       )}
 
-      {orphanExplanation && (
-        <Banner
-          tone={orphanExplanation.reversible ? 'warning' : 'danger'}
-          title={orphanExplanation.title}
-        >
-          {orphanExplanation.lines.map((line) => (
-            <p key={line}>{line}</p>
-          ))}
-        </Banner>
-      )}
-
-      <Card>
-        <CardBody>
-          <dl className={styles.facts}>
-            <dt>Your token</dt>
-            <dd>
-              {token ? (
+      {first && !orphanExplanation && (
+        <div className={styles.block}>
+          <AnswerRow
+            boxed
+            who={whoAsks(first)}
+            title={titleOf(first)}
+            description={descriptionOf(first)}
+            answers={answersOf(first)}
+            testId="mission-waiting"
+          />
+          {others.length > 0 && (
+            <Hint>
+              {isCreator ? (
                 <>
-                  <Slug kind="token">{maskedToken(token.prefix)}</Slug>{' '}
-                  <span className={styles.muted}>
-                    issued <LocalDate ts={token.createdAt} /> — shown once; rotate to replace it
-                  </span>
+                  And {count(others.length, TERMS.request)} more on this mission, in{' '}
+                  <Link href={ROUTES.waiting}>{SECTIONS.waiting}</Link>.
                 </>
               ) : (
-                'no active token'
+                `And ${count(others.length, TERMS.request)} more, also ${waitingFor(creatorName)}.`
               )}
-            </dd>
-            {!isCreator && (
-              <>
-                <dt>Creator</dt>
-                <dd>{detail.creator.email ?? 'unknown'}</dd>
-              </>
-            )}
-            <dt>Period</dt>
-            <dd>{reloadPhrase(detail.period)}</dd>
-            <dt>Expiry</dt>
-            <dd>{mission.expiresAt ? <LocalDate ts={mission.expiresAt} /> : 'never'}</dd>
-            <dt>Created</dt>
-            <dd>
-              <LocalDate ts={mission.createdAt} />
-            </dd>
-            {issuedVia && (
-              <>
-                <dt>Issued by</dt>
-                <dd data-testid="issued-via">
-                  <Badge tone="info">delegated</Badge> {issuedVia.client_name}, on your behalf —{' '}
-                  <Link href={`/delegations#${issuedVia.delegation_id}`}>its delegation</Link>
-                  <div className={styles.muted}>
-                    Client <Code>{issuedVia.client_id}</Code>. The name is the one the application
-                    gave itself; it is not verified. You are the creator of this mission and the
-                    only one who answers its requests.
-                  </div>
-                </dd>
-              </>
-            )}
-          </dl>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Connections and resources</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <dl className={styles.facts}>
-            {detail.connections.map((c) => (
-              <div key={c.id} style={{ display: 'contents' }}>
-                <dt>
-                  <Link href={providerPath(c.provider)} className={styles.refLink}>
-                    {c.provider_label}
-                  </Link>{' '}
-                  <Slug kind="connection" mono={false}>
-                    {c.display_name}
-                  </Slug>{' '}
-                  {c.status !== 'active' && <Badge tone="danger">{c.status}</Badge>}
-                </dt>
-                <dd>
-                  {c.resources.length === 0
-                    ? 'no resource (account-level tools only)'
-                    : c.resources.map((r) => (
-                        <span key={r.id}>
-                          <Slug kind="resource">{r.ref}</Slug>{' '}
-                          {r.env && <Badge mono>{r.env}</Badge>}{' '}
-                        </span>
-                      ))}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Policy — {detail.policy.length} accepted risks</CardTitle>
-          <span className={styles.muted}>The explicit list this mission carries.</span>
-        </CardHeader>
-        <Table>
-          <Thead>
-            <Tr>
-              <Th>Risk</Th>
-              <Th>Quota</Th>
-              <Th>Left this period</Th>
-              <Th>Rate limit</Th>
-              <Th>Gate</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {detail.policy.map((entry) => {
-              const risk = explain(entry.risk_id);
-              return (
-                <Tr key={entry.risk_id} data-testid={`policy-${entry.risk_id}`}>
-                  <Td className={styles.policyRisk}>
-                    {risk ? (
-                      <RiskExplain risk={risk} />
-                    ) : (
-                      <>
-                        {entry.label}
-                        <div>
-                          <RiskIdLink riskId={entry.risk_id} />
-                        </div>
-                      </>
-                    )}
-                  </Td>
-                  <Td>{entry.quota}</Td>
-                  <Td>{entry.remaining ?? '—'}</Td>
-                  <Td className={styles.nowrap}>{formatRate(entry.rate_limit)}</Td>
-                  <Td>
-                    <div className={styles.gateCell} data-testid={`gate-${entry.risk_id}`}>
-                      <GateBadge gate={entry.gate} />
-                      {entry.gate_open_until && (
-                        <span className={styles.muted}>
-                          open until <LocalDate ts={entry.gate_open_until} />
-                        </span>
-                      )}
-                      {gatesEditable && (
-                        <GateControl
-                          missionId={mission.id}
-                          riskId={entry.risk_id}
-                          gate={entry.gate}
-                        />
-                      )}
-                    </div>
-                  </Td>
-                </Tr>
-              );
-            })}
-          </Tbody>
-        </Table>
-      </Card>
-
-      {team && <TeamSection team={team} />}
-
-      {detail.kit && state.kind === 'active' && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Bootstrap kit</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <BootstrapKitView kit={detail.kit} />
-          </CardBody>
-        </Card>
+            </Hint>
+          )}
+        </div>
       )}
-    </Stack>
+      {first && orphanExplanation && (
+        <div className={styles.block}>
+          <AnswerList label={SECTIONS.waiting} testId="mission-waiting">
+            {waiting.map((request) => (
+              <AnswerRow
+                key={request.id}
+                who={whoAsks(request)}
+                title={titleOf(request)}
+                description={descriptionOf(request)}
+                answers={answersOf(request)}
+              />
+            ))}
+          </AnswerList>
+        </div>
+      )}
+
+      <AllowSummary
+        can={lines.can}
+        asks={lines.asks}
+        cannot={lines.cannot}
+        asksLabel={asksFirst(creatorName)}
+        limits={
+          state.kind !== 'active' ? undefined : near ? (
+            <>
+              <Meter used={near.used} limit={near.limit} threshold={0} label={near.label} />
+              {near.near === 1
+                ? ' · the only one near its limit'
+                : ` · the closest of ${near.near} near their limit`}
+            </>
+          ) : (
+            `Nothing is near its limit · ${limitsResetEvery(periodSeconds)}.`
+          )
+        }
+        testId="mission-allows"
+      />
+
+      <TeamSection team={team} calls={calls} period={period} me={user.id} now={now.toISOString()} />
+
+      <Section
+        id="permissions"
+        title={SECTIONS.permissionsAndUsage}
+        count={detail.policy.length}
+        note={
+          isCreator && detail.gates_editable
+            ? 'The explicit list this mission carries. You choose what asks you first.'
+            : 'The explicit list this mission carries.'
+        }
+        testId="mission-permissions"
+      >
+        <Disclosure
+          id={`mission:${mission.id}:permissions`}
+          show={`All ${count(detail.policy.length, TERMS.risk)}, with what was used`}
+          hide="Hide the permissions"
+          testId="permissions-disclosure"
+        >
+          <PermissionsUsage
+            detail={detail}
+            explain={explain}
+            periodSeconds={periodSeconds}
+            editable={isCreator && detail.gates_editable}
+          />
+          <Hint>Not in this mission, therefore refused with the reason: {lines.cannot}</Hint>
+        </Disclosure>
+      </Section>
+
+      <Section
+        id="activity"
+        title={MISSION_ACTIONS.activity}
+        note={<Link href={activityPath}>Everything this mission did</Link>}
+        testId="mission-activity"
+      >
+        {state.kind !== 'active' ? (
+          <p className={styles.quiet}>
+            No call is served: the mission is {mark.label.toLowerCase()}. What it did stays in its
+            activity.
+          </p>
+        ) : allowed + refused === 0 ? (
+          <p className={styles.quiet}>
+            No call {period} yet. {WAITING.recorded}
+          </p>
+        ) : (
+          <SummaryLine
+            items={[
+              { label: `${count(allowed + refused, TERMS.call)} ${period}` },
+              ...(refused > 0 ? [{ label: `${refused} refused` }] : []),
+              ...(lastCall ? [{ label: `last call ${agoSentence(lastCall, now)}` }] : []),
+            ]}
+          />
+        )}
+        {activity.events.length > 0 && (
+          <div className={styles.afterLine}>
+            <Disclosure
+              id={`mission:${mission.id}:activity`}
+              show="Show the last events"
+              hide="Hide the last events"
+              testId="activity-disclosure"
+            >
+              <ActivityTable
+                events={activity.events.slice(0, LAST_EVENTS)}
+                openRequests={activity.open_requests}
+                labels={labelOf}
+                creator={creatorName}
+                caption="The last events of this mission"
+                empty={null}
+                testId="mission-events"
+              />
+            </Disclosure>
+          </div>
+        )}
+      </Section>
+    </MissionActsProvider>
   );
 }

@@ -17,8 +17,8 @@ import { expect, test, type Page } from '@playwright/test';
 import { connectAgent, kitToolsList, type Agent } from './agent';
 import { routeToInstance, signInAs, upstreamLog } from './browser';
 import { E2E_CUTOVER_USER, MOCK_GITHUB, PUBLIC_URL } from './instance';
+import { createMission, openCreatedMission, pickPreset, resourcesButton } from './mission-pages';
 
-const TOKEN = /vbn_live_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}/;
 const CONNECTION = 'Cutover org';
 const MISSION = 'Cutover — acme/app';
 const READ_CODE = 'github.read-code';
@@ -87,36 +87,29 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
   await page.goto('/missions/new');
   await page.getByLabel('Mission name').fill(MISSION);
   await page.getByLabel(`Include GitHub ${CONNECTION}`).check();
-  await page
-    .getByRole('group', { name: `Preset for GitHub ${CONNECTION}` })
-    .getByRole('radio', { name: /^Developer\b/ })
-    .check();
-  await expect(page.getByTestId('summary-can')).toContainText(`GitHub "${CONNECTION}"`);
+  await pickPreset(page, `GitHub ${CONNECTION}`, 'Developer');
+  await expect(page.getByTestId('summary-github')).toContainText('permissions.');
   // One code project, one repository: the other one is left out of the mission.
-  await page.getByRole('button', { name: '2 of 2 resources' }).click();
+  await resourcesButton(page, `GitHub ${CONNECTION}`, '2 of 2').click();
   await page.getByLabel(`Resource ${LEFT_OUT}`).uncheck();
-  await expect(page.getByTestId('summary-can')).toContainText('on 1 of 2 resources');
-  await expect(page.getByTestId('summary-quantities')).toContainText('never expires');
-  // The one adjustment: a quota small enough to run out in this test.
-  // Custom mode opens the editor on the preset's values.
-  await page
-    .getByRole('group', { name: `Policy for GitHub ${CONNECTION}` })
-    .getByRole('radio', { name: 'Custom' })
-    .check();
-  await page.getByLabel(`Quota for ${READ_CODE}`).fill(String(QUOTA));
-  await page.getByRole('button', { name: 'Issue mission' }).click();
+  await expect(resourcesButton(page, `GitHub ${CONNECTION}`, '1 of 2')).toBeVisible();
+  await expect(page.getByTestId('summary-github')).toContainText('Nor the other 1 resource.');
+  await expect(page.getByTestId('summary-carries')).toContainText('never expires');
+  // The one adjustment: a limit small enough to be reached in this test.
+  // The editor opens on the preset's values.
+  await page.getByRole('button', { name: 'Edit the permissions one by one' }).click();
+  await page.getByLabel(`Limit for ${READ_CODE}`).fill(String(QUOTA));
 
-  // The bootstrap kit, revealed once: the token and the client configuration.
-  const kit = page.getByRole('dialog');
-  const token = TOKEN.exec(await kit.getByTestId('kit-env').innerText())?.[0];
-  if (!token) throw new Error('no mission token in the bootstrap kit');
+  // The key, shown once, with the kit: the client configuration and the instructions.
+  const token = await createMission(page);
+  const kit = page.getByTestId('created');
   await expect(kit.getByTestId('kit-mcp')).toContainText(`${PUBLIC_URL}/mcp`);
   await expect(kit.getByTestId('kit-mcp')).not.toContainText(token);
   await expect(kit.getByTestId('kit-verify')).toContainText('tools/list');
   await expect(kit.getByTestId('kit-instructions')).toContainText(`\`${REPOSITORY}\``);
   await expect(kit.getByTestId('kit-instructions')).not.toContainText(`\`${LEFT_OUT}\``);
   await snap(page, 'cutover-bootstrap-kit');
-  await page.getByRole('button', { name: 'I copied the token' }).click();
+  await openCreatedMission(page, MISSION);
   await expect(page).toHaveURL(/\/missions\/[0-9a-f-]{36}$/);
   const missionId = new URL(page.url()).pathname.split('/').pop() ?? '';
 
@@ -231,28 +224,29 @@ test('cutover smoke: sign in, connect, issue, call through the door, exhaust, cl
 
   // ── 9. …and on the mission's session page ─────────────────────────────────
   await page.goto(`/missions/${missionId}`);
-  await page.getByRole('link', { name: 'Session', exact: true }).click();
+  // The mission says its limit is reached, beside its title and in its summary.
+  await expect(page.getByTestId('mission-allows')).toContainText('Limit reached');
+  await page.getByRole('link', { name: 'Everything this mission did' }).click();
   await expect(page).toHaveURL(new RegExp(`/missions/${missionId}/session$`));
-  const budget = page.locator('table').nth(0);
-  const readCode = budget.locator('tr', { hasText: READ_CODE });
-  await expect(readCode).toContainText('exhausted');
-  await expect(readCode.locator('td').nth(3)).toContainText('0');
-  await expect(page.locator('dd', { hasText: AGENT_LABEL })).toBeVisible();
-  const timeline = page.locator('table').last();
-  // The session holds what went through the budget: three allowed calls with
-  // what was left after each, the two refusals, and the creator's decision.
-  await expect(timeline.locator('tr', { hasText: 'call-allowed' })).toHaveCount(3);
-  await expect(timeline.locator('tr', { hasText: 'call-allowed' }).last()).toContainText(
-    `${READ_CODE} → 1`,
-  );
-  await expect(timeline.locator('tr', { hasText: 'call-refused' })).toHaveCount(2);
-  await expect(timeline.locator('tr', { hasText: 'call-refused' }).first()).toContainText(
-    'budget-exhausted',
-  );
+  const permissions = page.getByTestId('session-permissions');
+  await permissions.getByRole('button', { name: /^All \d+ permissions?/ }).click();
+  const readCode = permissions.locator(`tr[data-permission="${READ_CODE}"]`);
+  await expect(readCode).toContainText('Limit reached');
+  await expect(page.getByTestId('label-activity')).toContainText(AGENT_LABEL);
+  const timeline = page.getByTestId('timeline').locator('table');
+  const outcome = (words: string) =>
+    timeline.locator('tbody tr').filter({ has: page.getByText(words, { exact: true }) });
+  // The activity holds what was counted: three allowed calls with what was left
+  // after each, the two refusals, and the creator's decision.
+  await expect(outcome('allowed')).toHaveCount(3);
+  await expect(outcome('allowed').last()).toContainText(READ_CODE);
+  await expect(outcome('allowed').last()).toContainText('1 left');
+  await expect(outcome('limit reached')).toHaveCount(2);
+  await expect(outcome('limit reached').first()).toContainText('budget-exhausted');
   await expect(timeline.locator('tr', { hasText: '+1 given back' })).toContainText(
     E2E_CUTOVER_USER.email,
   );
   // The last refusal opened a claim of its own: the first one is closed.
-  await expect(timeline.getByRole('link', { name: 'open claim' }).first()).toBeVisible();
-  await snap(page, 'cutover-session');
+  await expect(timeline.getByRole('link', { name: 'Review and answer' }).first()).toBeVisible();
+  await snap(page, 'cutover-activity');
 });

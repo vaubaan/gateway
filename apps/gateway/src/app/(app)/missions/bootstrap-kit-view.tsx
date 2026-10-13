@@ -1,121 +1,159 @@
 'use client';
 
 /**
- * The bootstrap kit (spec §4.4): three numbered snippets to copy and a
- * verification command. Rendered with the secret right after issuance or
- * rotation (reveal-once dialog) and with the masked prefix on the mission
- * page.
+ * The key and the setup kit (spec §4.4).
+ *
+ * - `KitSteps` — what an agent needs to start: three snippets to copy and a
+ *   check. With the key in the first snippet right after it was made; with
+ *   its masked form on a page opened later.
+ * - `KeyReveal` — the key, whole, in the one filled box of the view, then the
+ *   kit. The only place a key is ever displayed.
+ * - `RevealDialog` — `KeyReveal` in a dialog that Escape does not close: the
+ *   key it shows cannot be shown again, and one stray key press would lose it.
+ *
+ * The commands, the variable and the MCP configuration keep the names the
+ * protocol gives them; the words around them are the interface's.
  */
-import { useEffect, useRef, useState } from 'react';
-
-import { Button } from '@/components/ui';
+import { Button, CodeBlock, Dialog, SecretBox, StepMark } from '@/components/ui';
+import { MISSION_ACTIONS, MISSION_WORDS } from '@/lib/vocabulary';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 
 import styles from './missions.module.css';
 
-function Snippet({
-  number,
+function KitStep({
+  n,
   title,
+  hint,
   text,
+  label,
+  wrap = false,
   testId,
 }: {
-  number: string;
+  n: number;
   title: string;
+  hint: string;
   text: string;
+  label: string;
+  wrap?: boolean;
   testId: string;
 }) {
-  const [copied, setCopied] = useState(false);
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // Clipboard unavailable (insecure context, denied permission): the text stays selectable.
-      setCopied(false);
-    }
-  }
   return (
     <div className={styles.kitStep}>
       <div className={styles.kitHead}>
-        <span>
-          <span className={styles.kitNumber}>{number}</span>
-          {title}
-        </span>
-        <Button type="button" size="sm" onClick={copy}>
-          {copied ? 'Copied' : 'Copy'}
-        </Button>
+        <StepMark n={n} />
+        <h3 className={styles.kitTitle}>{title}</h3>
+        <span className={styles.kitHint}>{hint}</span>
       </div>
-      <pre className={styles.snippet} data-testid={testId}>
+      <CodeBlock label={label} wrap={wrap} testId={testId}>
         {text}
-      </pre>
+      </CodeBlock>
     </div>
   );
 }
 
-export function BootstrapKitView({ kit }: { kit: BootstrapKit }) {
+export function KitSteps({ kit }: { kit: BootstrapKit }) {
   return (
-    <div className={styles.kit}>
-      <Snippet
-        number="1"
-        title={
+    <div className={styles.kit} data-testid="kit">
+      <KitStep
+        n={1}
+        title="Put the key in the agent’s environment"
+        hint={
           kit.reveals_secret
-            ? 'Set the mission token in the environment of the agent'
-            : 'Environment variable (the secret was shown once; rotate to get a new one)'
+            ? 'never in a file you commit'
+            : 'the key was shown once: replace it to get a new one'
         }
         text={kit.env}
+        label="Environment variable"
         testId="kit-env"
       />
-      <Snippet
-        number="2"
-        title="MCP configuration (.mcp.json) — refers to the variable, never holds the secret"
+      <KitStep
+        n={2}
+        title="Point the agent at the gateway"
+        hint="any MCP client; it names the variable, never the key"
         text={kit.mcp_json}
+        label="MCP configuration"
         testId="kit-mcp"
       />
-      <Snippet
-        number="3"
-        title="Instructions for the agent (CLAUDE.md, AGENTS.md or the system prompt)"
+      <KitStep
+        n={3}
+        title="Tell the agent what it has"
+        hint="paste into its instructions"
         text={kit.agent_instructions}
+        label="Instructions for the agent"
+        wrap
         testId="kit-instructions"
       />
-      <Snippet number="✓" title="Check that it works" text={kit.verify} testId="kit-verify" />
+      <KitStep
+        n={4}
+        title="Check it works"
+        hint="lists the tools this key can call"
+        text={kit.verify}
+        label="Verification command"
+        testId="kit-verify"
+      />
     </div>
   );
 }
 
-/** The reveal-once dialog: the only place the secret is ever displayed. */
-export function RevealDialog({
-  title,
+export function KeyReveal({
+  secret,
   kit,
-  onDone,
+  label = 'Your key',
 }: {
-  title: string;
+  secret: string;
   kit: BootstrapKit;
-  onDone: () => void;
+  /** Whose key it is: "Your key", "The machine key CI runner". */
+  label?: string;
 }) {
-  // Focus moves into the dialog when it opens. Escape does not close it, on purpose:
-  // the token it shows cannot be shown again, and one stray key would lose it.
-  const dialog = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    dialog.current?.focus();
-  }, []);
   return (
-    <div className={styles.overlay} role="dialog" aria-modal="true" aria-labelledby="reveal-title">
-      <div className={styles.dialog} ref={dialog} tabIndex={-1}>
-        <div>
-          <h2 id="reveal-title">{title}</h2>
-          <p className={styles.muted}>
-            The token is shown once. Copy snippet 1 now; afterwards this page only shows its prefix,
-            and “Rotate” issues a new token.
-          </p>
-        </div>
-        <BootstrapKitView kit={kit} />
-        <div className={styles.dialogFoot}>
-          <Button type="button" variant="primary" onClick={onDone}>
-            I copied the token
-          </Button>
-        </div>
-      </div>
+    <div className={styles.reveal}>
+      <SecretBox value={secret} label={label} testId="revealed-key" />
+      <KitSteps kit={kit} />
     </div>
   );
+}
+
+/** A key that was just made, with what it came with. */
+export interface RevealedKey {
+  readonly title: string;
+  readonly secret: string;
+  readonly kit: BootstrapKit;
+  readonly label?: string;
+}
+
+export function RevealDialog({ revealed, onDone }: { revealed: RevealedKey; onDone: () => void }) {
+  return (
+    <Dialog
+      open
+      width="lg"
+      divided
+      // The key cannot be shown again: only the button closes the dialog.
+      dismissible={false}
+      onClose={onDone}
+      title={revealed.title}
+      description={MISSION_WORDS.keyShownOnce}
+      testId="reveal-dialog"
+      footer={
+        <Button type="button" variant="primary" onClick={onDone}>
+          {MISSION_ACTIONS.savedKey}
+        </Button>
+      }
+    >
+      <KeyReveal secret={revealed.secret} kit={revealed.kit} label={revealed.label} />
+    </Dialog>
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null;
+}
+
+/** The key and the kit of an answer that carries a secret, once; `null` for any other body. */
+export function revealedOf(
+  body: unknown,
+): { readonly secret: string; readonly kit: BootstrapKit } | null {
+  if (!isRecord(body) || !isRecord(body.token) || !isRecord(body.kit)) return null;
+  const { secret } = body.token;
+  if (typeof secret !== 'string') return null;
+  return { secret, kit: body.kit as unknown as BootstrapKit };
 }

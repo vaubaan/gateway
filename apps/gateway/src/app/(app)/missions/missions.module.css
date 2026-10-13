@@ -1,821 +1,472 @@
-/* Missions pages. The creation screen is one page, one column, in reading
-   order: name; connections, each with its resources and its policy — a
-   preset with what it means, or the granular editor —; the three-line
-   summary; then period, expiry and the Issue button in a bar that stays in
-   view at the bottom. */
+/*
+ * The mission pages: the list, "New mission", one mission, its activity.
+ * Everything drawn here is laid out from the design system's components;
+ * this sheet only places them (a row of the form, the blocks of the rail)
+ * and holds the few quiet texts a page writes itself. Tokens only.
+ */
 
-.pageHead {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--space-4);
-  flex-wrap: wrap;
-  margin-bottom: var(--space-4);
-}
-.pageHead h1 {
+/* ── Shared small texts ──────────────────────────────────────────────────── */
+.quiet {
+  max-width: var(--measure);
   margin: 0;
-}
-.muted {
   color: var(--ink-3);
   font-size: var(--text-sm);
 }
-.mono {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
+.quietText {
   color: var(--ink-3);
 }
-
-/* ── Creation form ─────────────────────────────────────────────────────── */
-
-.form {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: var(--space-4);
-  max-width: 1080px;
-}
-.form > section {
-  min-width: 0;
-}
-
-.step {
+.sub {
+  display: block;
+  color: var(--ink-3);
   font-size: var(--text-xs);
+}
+.name {
+  color: var(--ink);
   font-weight: var(--weight-strong);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--ink-3);
-  margin: 0 0 var(--space-2);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
 }
-.stepTools {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: var(--weight-regular);
-}
-
-.nameRow {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: var(--space-3);
-  align-items: center;
-}
-.nameRow select {
-  width: auto;
-  max-width: 240px;
-}
-@media (max-width: 640px) {
-  .nameRow {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-.panel {
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  background: var(--paper);
-}
-
-.conn {
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--line);
-}
-.conn:last-child {
-  border-bottom: 0;
-}
-.connOff {
-  opacity: 0.75;
-}
-.connHead {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto auto;
-  gap: var(--space-3);
-  align-items: center;
-}
-@media (max-width: 640px) {
-  .connHead {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.connName {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  min-width: 0;
-  cursor: pointer;
-}
-.connName span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.linkButton {
+.link {
+  padding: 0;
+  border: 0;
   background: none;
-  border: 0;
-  padding: 0;
-  color: var(--ink-3);
-  font-size: var(--text-sm);
+  color: var(--accent);
+  font-size: inherit;
+  text-align: left;
   cursor: pointer;
+}
+.link:hover {
   text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.linkButton:hover {
-  color: var(--ink);
-}
-.resources {
-  margin: var(--space-2) 0 0 calc(16px + var(--space-2));
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1) var(--space-4);
-  font-size: var(--text-sm);
-}
-.resources label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  cursor: pointer;
-}
-
-/* ── Summary (the three lines) ─────────────────────────────────────────── */
-
-.summary {
-  padding: var(--space-3) var(--space-4);
-  display: grid;
-  gap: var(--space-2);
-  font-size: var(--text-sm);
-  line-height: 1.45;
-}
-.summaryLine {
-  display: grid;
-  grid-template-columns: 84px minmax(0, 1fr);
-  gap: var(--space-2);
-}
-.summaryLine dt {
-  font-weight: var(--weight-strong);
-  color: var(--ink-3);
-}
-.summaryLine dd {
-  margin: 0;
-}
-.footer {
-  position: sticky;
-  bottom: 0;
-  z-index: 5;
-  padding: var(--space-3) 0 var(--space-4);
-  background: var(--paper);
-  border-top: 1px solid var(--line);
-  display: grid;
-  gap: var(--space-2);
-}
-.footer .step {
-  margin: 0;
-  white-space: nowrap;
-}
-.footerRow {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  flex-wrap: wrap;
-}
-.asideControls {
-  display: flex;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  flex: 1;
-}
-.asideControls select,
-.asideControls input {
-  width: auto;
-}
-.issues {
-  margin: 0;
-  padding-left: var(--space-4);
-  font-size: var(--text-xs);
-  color: var(--bad);
-  display: grid;
-  gap: 2px;
-}
-.notes {
-  margin: 0;
-  padding-left: var(--space-4);
-  font-size: var(--text-xs);
-  color: var(--ink-3);
-  display: grid;
-  gap: 2px;
-}
-/* Non-blocking: the mission can be issued as written. One line each, the detail unfolds. */
-.notices {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  font-size: var(--text-xs);
-  color: var(--warn);
-  display: grid;
-  /* The one column never grows past the form: a long line is cut, not pushed out. */
-  grid-template-columns: minmax(0, 1fr);
-  gap: 2px;
-}
-.notices summary {
-  cursor: pointer;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.notices details[open] summary {
-  white-space: normal;
-}
-.issueButton {
-  min-width: 180px;
-}
-
-/* ── Policy of one connection: Preset | Custom ─────────────────────────── */
-
-/* Read by assistive technology, not drawn: the legend of a radio group whose
-   purpose the row already makes visible. */
-.visuallyHidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: -1px;
-  padding: 0;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-  border: 0;
-}
-
-/* The mode switch: two native radios, side by side. */
-.modes {
-  display: inline-flex;
-  margin: 0;
-  padding: 0;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  overflow: hidden;
-}
-.mode {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1) var(--space-3);
-  font-size: var(--text-sm);
-  cursor: pointer;
-  color: var(--ink-3);
-}
-.mode + .mode {
-  border-left: 1px solid var(--line);
-}
-.modeOn {
-  background: var(--fill);
-  color: var(--ink);
-  font-weight: var(--weight-regular);
-}
-
-.policyBody {
-  margin: var(--space-2) 0 0 calc(16px + var(--space-2));
-  display: grid;
-  gap: var(--space-2);
-}
-@media (max-width: 640px) {
-  .policyBody {
-    margin-left: 0;
-  }
-}
-
-/* The presets as an explicit choice: one radio each, with its width. */
-.choices {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-.choice {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  background: var(--paper);
-  font-size: var(--text-sm);
-  cursor: pointer;
-}
-.choice:hover {
-  border-color: var(--line-strong);
-}
-/* Chosen: the preset colour as the tag, and a full border. */
-.choiceOn {
-  border-color: var(--ink-2);
-  background: var(--fill);
-}
-.choiceText {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-.choiceWidth {
-  color: var(--ink-3);
-  font-size: var(--text-xs);
-}
-
-/* What the chosen preset means here: always visible, never a tooltip. */
-.presetDetail {
-  display: grid;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-3);
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  background: var(--paper);
-}
-.presetDescription {
-  margin: 0;
-  font-size: var(--text-sm);
-  line-height: 1.45;
-}
-.digest {
-  margin: 0;
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-1) var(--space-3);
-  flex-wrap: wrap;
-  font-size: var(--text-sm);
-  font-weight: var(--weight-regular);
-}
-.presetLists {
-  display: grid;
-  gap: var(--space-2);
-}
-.lineGroup {
-  display: grid;
-  gap: 2px;
-}
-.lineTitle {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--space-3);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-strong);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--ink-3);
-}
-.lineCaption {
-  font-weight: var(--weight-regular);
-  text-transform: none;
-  letter-spacing: 0;
-}
-.count {
-  font-weight: var(--weight-regular);
-  color: var(--ink-3);
-}
-.lineEmpty {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--ink-3);
-}
-.lines,
-.skipped {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 1px var(--space-5);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-}
-.lines li,
-.skipped li {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--space-3);
-  min-width: 0;
-}
-.lineLabel {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-1);
-  flex-wrap: wrap;
-  min-width: 0;
-}
-.lineBudget {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  font-family: var(--font-mono);
-  color: var(--ink-3);
-  white-space: nowrap;
-}
-.lineFold > summary {
-  cursor: pointer;
-  justify-content: flex-start;
-}
-.lineFold[open] > summary {
-  margin-bottom: 2px;
-}
-.skippedWhy {
-  color: var(--warn);
-  text-align: right;
-}
-.families {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px var(--space-4);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  color: var(--ink-3);
-}
-.families li {
-  display: inline-flex;
-  align-items: baseline;
-  gap: var(--space-1);
-}
-@media (max-width: 900px) {
-  .lines,
-  .skipped {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.panelFoot {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--ink-3);
-  line-height: 1.5;
-}
-/* A link out to the reference: underlined, so it reads as a link at rest. */
-.refLink {
-  color: var(--ink);
-  text-decoration: underline;
-  text-decoration-color: var(--line-strong);
-  text-underline-offset: 3px;
-}
-
-/* Asked before the editor's changes are thrown away. */
-.discard {
-  margin: var(--space-2) 0 0 calc(16px + var(--space-2));
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--radius-md);
-  background: var(--warn-soft);
-  color: var(--warn);
-  font-size: var(--text-sm);
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-.discard > span {
-  flex: 1 1 320px;
-}
-
-/* ── Custom mode: the granular editor ──────────────────────────────────── */
-
-.riskTools {
-  display: flex;
-  gap: var(--space-3);
-  align-items: center;
-  flex-wrap: wrap;
-  font-size: var(--text-sm);
-}
-.riskTools select {
-  width: auto;
-  padding-top: 3px;
-  padding-bottom: 3px;
-}
-.toolsNote {
-  margin: 0;
-  font-size: var(--text-xs);
-  color: var(--ink-3);
-  line-height: 1.5;
-}
-.riskSearch {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) repeat(3, auto);
-  gap: var(--space-3);
-  align-items: center;
-}
-.riskSearch select {
-  width: auto;
-}
-@media (max-width: 640px) {
-  .riskSearch {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-.kindTitle {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  margin: var(--space-3) 0 var(--space-1);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-strong);
-}
-.kindHint {
-  font-size: var(--text-xs);
-  font-weight: var(--weight-regular);
-  color: var(--ink-3);
-}
-.familyStack {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--line-strong);
-  border-radius: var(--radius-md);
-  background: var(--paper);
-}
-/* The captions of the three budget columns, once per group, above the inputs. */
-.budgetHead {
-  display: grid;
-  grid-template-columns: 92px 192px 112px;
-  gap: var(--space-2);
-  box-sizing: content-box;
-  width: 416px;
-  margin-left: auto;
-  padding-right: calc(var(--space-3) + 1px);
-  font-size: var(--text-xs);
-  font-weight: var(--weight-regular);
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-@media (max-width: 900px) {
-  .budgetHead {
-    display: none;
-  }
-}
-.family {
-  padding: var(--space-2) var(--space-3);
-  border-bottom: 1px solid var(--line);
-  display: grid;
-  gap: var(--space-2);
-}
-.family:last-child {
-  border-bottom: 0;
-}
-.familyHead {
-  display: grid;
-  gap: 2px;
-}
-.familyLabel {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-  font-weight: var(--weight-regular);
-}
-.familyReason {
-  color: var(--ink-3);
-  font-size: var(--text-sm);
-  line-height: 1.45;
-}
-.riskRow {
-  display: grid;
-  grid-template-columns: 16px minmax(0, 1fr) 416px;
-  gap: var(--space-2) var(--space-3);
-  align-items: center;
-  font-size: var(--text-sm);
-}
-.riskRow > input[type='checkbox'] {
-  align-self: start;
-  margin-top: 4px;
-}
-.riskRowOff {
-  color: var(--ink-3);
-}
-.riskCell {
-  display: grid;
-  gap: var(--space-1);
-  min-width: 0;
-}
-.budget {
-  display: grid;
-  grid-template-columns: 92px 192px 112px;
-  gap: var(--space-2);
-  align-items: end;
-}
-.budget input[type='number'],
-.budget select {
-  padding: 3px 8px;
-  font-size: var(--text-sm);
-}
-.budget select {
-  padding-right: 28px;
-}
-.budgetField {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-.budgetOff {
-  font-size: var(--text-xs);
-  color: var(--ink-3);
-  line-height: 1.5;
-}
-.rate {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr auto;
-  gap: 4px;
-  align-items: center;
-  color: var(--ink-3);
-  font-size: var(--text-xs);
 }
 .refused {
+  margin-left: var(--space-2);
   color: var(--bad);
   font-size: var(--text-xs);
+  white-space: normal;
 }
-.unavailableWhy {
+.tone_bad {
+  color: var(--bad);
+}
+.tone_warn {
+  color: var(--warn);
+}
+.inlineTag {
+  margin-left: 6px;
+}
+
+/* A sentence right under the header: who else this mission concerns. */
+.headNote {
+  max-width: var(--measure);
+  margin: -10px 0 22px;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.headNote a {
+  color: var(--accent);
+}
+
+/* A block between the header and the first section. */
+.block {
+  margin-bottom: 28px;
+}
+.afterLine {
+  margin-top: var(--space-3);
+}
+
+/* ── One mission ─────────────────────────────────────────────────────────── */
+.noteText {
+  min-width: 0;
+}
+.rowActions {
+  display: inline-flex;
+  gap: 6px;
+}
+.openUntil {
+  margin-left: 6px;
   color: var(--ink-3);
   font-size: var(--text-xs);
 }
-@media (max-width: 900px) {
-  .riskRow {
-    grid-template-columns: 16px minmax(0, 1fr);
-  }
-  .budget,
-  .budgetOff {
-    grid-column: 2;
-  }
+.permissionLine {
+  display: block;
 }
-/* The gate of a risk on the mission page: its value, an opening, the edit. */
-.gateCell {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
+.permissionLine + .permissionLine {
+  margin-top: var(--space-1);
+}
+.rowLinks {
+  display: inline-flex;
   flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+}
+.rowLinks a {
+  color: var(--accent);
+}
+.pager {
+  display: flex;
+  gap: var(--space-4);
+  margin: var(--space-3) 0 0;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.pager a {
+  color: var(--accent);
 }
 
-/* ── Proposal box ──────────────────────────────────────────────────────── */
-
-.proposal {
-  margin-top: var(--space-3);
+/* ── The key and its kit ─────────────────────────────────────────────────── */
+.reveal {
   display: grid;
-  gap: var(--space-2);
+  gap: var(--space-5);
 }
-.proposal textarea {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  min-height: 120px;
-}
-
-/* ── Bootstrap kit ─────────────────────────────────────────────────────── */
-
 .kit {
   display: grid;
-  gap: var(--space-4);
+  gap: 18px;
+  min-width: 0;
 }
 .kitStep {
-  display: grid;
-  gap: var(--space-1);
+  min-width: 0;
 }
 .kitHead {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-3);
-  font-size: var(--text-sm);
-  font-weight: var(--weight-regular);
+  gap: 10px;
+  margin-bottom: var(--space-2);
 }
-.kitNumber {
-  display: inline-grid;
-  place-items: center;
+.kitHead > :first-child {
   width: 20px;
   height: 20px;
-  border-radius: var(--radius-full);
-  background: var(--fill);
-  border: 1px solid var(--line);
-  font-size: var(--text-xs);
-  margin-right: var(--space-2);
 }
-.snippet {
+.kitTitle {
   margin: 0;
-  padding: var(--space-3);
-  background: var(--fill);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-md);
-  font-size: var(--text-xs);
-  line-height: 1.5;
-  overflow: auto;
-  max-height: 220px;
-  white-space: pre-wrap;
-  word-break: break-word;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
+}
+.kitHint {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+/* The instructions are long: they scroll in place, the kit stays one screen. */
+.kitStep pre {
+  max-height: 232px;
 }
 
-.overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--scrim);
+/* ── New mission ─────────────────────────────────────────────────────────── */
+.nameRow {
   display: grid;
-  place-items: center;
-  z-index: 100;
-  padding: var(--space-4);
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-2);
+  align-items: center;
 }
-.dialog {
-  width: 100%;
-  max-width: 760px;
-  max-height: calc(100vh - 2 * var(--space-4));
-  overflow: auto;
-  background: var(--paper-side);
-  border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
+.startFrom {
+  width: 190px;
+}
+.proposal {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.issueList {
+  margin: var(--space-1) 0 0;
+  padding-left: 18px;
+}
+
+.accounts {
+  border-bottom: 1px solid var(--line);
+}
+.account {
+  padding: var(--space-3) 0 14px;
+  border-top: 1px solid var(--line);
+}
+.accountOff {
+  color: var(--ink-3);
+}
+.accountHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--control-sm);
+  font-size: var(--text-sm);
+}
+.accountName {
+  font-size: var(--text-base);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+}
+.accountHint {
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+.resourceNames {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.resourceCount {
+  flex: none;
+  color: var(--ink-3);
+  white-space: nowrap;
+}
+
+/* What is confirmed before a mission exists: every permission, with its limit. */
+.explicit {
   display: grid;
   gap: var(--space-4);
 }
-/* Focused by script when it opens, so that the keyboard starts inside it: no ring on the panel. */
-.dialog:focus {
-  outline: none;
-}
-.dialog h2 {
+.explicitAccount {
   margin: 0;
-  font-size: var(--text-base);
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--line);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-strong);
 }
-.dialogFoot {
-  display: flex;
-  justify-content: flex-end;
-  gap: var(--space-2);
-}
-
-/* ── List and detail ───────────────────────────────────────────────────── */
-
-.rowLink {
+.explicitNote {
+  margin-left: var(--space-2);
+  color: var(--ink-3);
   font-weight: var(--weight-regular);
 }
-.facts {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: var(--space-2) var(--space-4);
+.explicitRows {
   margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.explicitRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 130px 110px;
+  gap: var(--space-3);
+  align-items: start;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
   font-size: var(--text-sm);
 }
-.facts dt {
-  color: var(--ink-3);
+.explicitRow:last-child {
+  border-bottom: 0;
 }
-.facts dd {
-  margin: 0;
+.explicitLimits {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
 }
-.actions {
+.figure {
+  font-variant-numeric: tabular-nums;
+}
+.accountResources {
   display: flex;
-  gap: var(--space-2);
   align-items: center;
-  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  min-width: 0;
+  margin-left: auto;
+  color: var(--ink-2);
+  text-align: right;
 }
-.empty {
-  padding: var(--space-8) var(--space-4);
-  text-align: center;
+.accountOff .accountResources {
   color: var(--ink-3);
+}
+.resources {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 6px var(--space-4);
+  margin: 10px 0 0 27px;
+  padding: 10px var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--paper-side);
+  font-size: var(--text-sm);
+}
+.resource {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+.accountBody {
+  padding: 10px 0 0 27px;
+}
+.presetDescription {
+  max-width: var(--measure);
+  margin: 10px 0 0;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.counts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-4);
+  margin-top: var(--space-2);
+}
+.counts > span {
+  font-size: var(--text-sm);
+}
+.countsLink {
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+.countsLink:hover {
+  text-decoration: underline;
+}
+.skipped {
+  max-width: var(--measure);
+  margin: 6px 0 0;
+  color: var(--warn);
+  font-size: var(--text-sm);
+}
+.notice {
+  margin: 6px 0 0 27px;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.notice summary {
+  color: var(--warn);
+  cursor: pointer;
 }
 
-/* A link that reads as a button (navigation, not a form action). */
-.primaryLink,
-.secondaryLink {
+.editor {
+  margin: var(--space-3) 0 0;
+}
+.ownLine {
+  display: block;
+  margin-top: var(--space-1);
+}
+.editorTools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+.editorFilter {
+  margin-left: auto;
+}
+.planeSelect {
+  width: 150px;
+}
+.editorBulk {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-2) 0;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+}
+.editorShown {
+  margin-left: auto;
+}
+.limitInput {
+  width: 84px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.windowInput {
+  width: 56px;
+  text-align: right;
+}
+.rate {
   display: inline-flex;
   align-items: center;
-  height: 32px;
-  padding: 8px 14px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
+  justify-content: flex-end;
+  gap: var(--space-1);
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.unavailableWhy,
+.refusedWhy {
+  display: block;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+}
+.refusedWhy {
+  color: var(--bad);
+}
+
+.people {
+  margin: 0;
+  padding-top: 6px;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.expiryDate {
+  max-width: 260px;
+  margin-top: var(--space-3);
+}
+
+/* The rail: what the mission will be able to do. */
+.railBlock {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+  font-size: var(--text-sm);
+}
+.railBlock:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+.railBlock:last-child {
+  padding-bottom: 0;
+}
+.railAccount {
+  margin-bottom: var(--space-1);
+  font-weight: var(--weight-strong);
+}
+.railResources {
+  display: block;
+  color: var(--ink-3);
   font-weight: var(--weight-regular);
+}
+.railCarries {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+}
+.railCarries dt {
   color: var(--ink);
-  white-space: nowrap;
 }
-.primaryLink {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--on-accent);
+.railCarries dd {
+  margin: 0;
+  color: var(--ink-2);
 }
-.primaryLink:hover,
-.secondaryLink:hover {
-  text-decoration: none;
+.railEmpty {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
 }
-.primaryLink:hover {
-  background: var(--accent-ink);
+.railIssues,
+.railRefused {
+  margin: var(--space-3) 0 0;
+  padding: var(--space-3) 0 0 18px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-3);
+  font-size: var(--text-sm);
 }
-.secondaryLink:hover {
-  border-color: var(--line-strong);
+.railRefused {
+  color: var(--bad);
+}
+p.railRefused {
+  padding-left: 0;
+}
+.railHint {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  line-height: 1.3;
+  text-align: right;
 }
 
-/* The policy table of a mission: the risk column takes the room, the numbers stay narrow. */
-.policyRisk {
-  min-width: 320px;
-}
-.nowrap {
-  white-space: nowrap;
-}
-
-/* The two lists of /missions: created by me, shared with me. */
-.listTitle {
-  margin: var(--space-5) 0 var(--space-2);
-  font-size: var(--text-base, var(--text-sm));
-  font-weight: 600;
+@media (max-width: 900px) {
+  .nameRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .startFrom {
+    width: 100%;
+  }
+  .accountHead {
+    flex-wrap: wrap;
+  }
+  .accountResources {
+    width: 100%;
+    margin-left: 27px;
+    justify-content: flex-start;
+    text-align: left;
+  }
 }
