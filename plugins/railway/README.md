@@ -5,7 +5,9 @@ rewraps the official Railway MCP server (`https://mcp.railway.com/`, 10
 tools) and adds four GraphQL-backed environment-variable tools, under the
 `railway__` prefix. Written against `@vaubaan/plugin-sdk` only. Maintainer
 handbook: [`docs/handbook/providers/railway.md`](../../docs/handbook/providers/railway.md);
-decisions: [`railway-rewrap-remote-mcp`](../../docs/decisions/railway-rewrap-remote-mcp.md).
+decisions: [`railway-rewrap-remote-mcp`](../../docs/decisions/railway-rewrap-remote-mcp.md),
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
+Plugin version 3.0.0, catalog version 3.
 
 ## Data model
 
@@ -20,7 +22,8 @@ account → agent-session                                     (the railway-agent
 
 The **resource** a connection exposes is the Railway **project** (UUID).
 `discoverResources` lists the projects the connected workspace member can
-see, with their environments in `metadata.environments` (`[{ id, name }]`).
+see, with their environments in `metadata.environments` and their services
+in `metadata.services` (`[{ id, name }]` each, empty lists included).
 The owner labels each project with an environment (`prod`, `staging`,
 `preview`, `dev`); that label is what env-qualified risks resolve against.
 
@@ -55,16 +58,33 @@ When omitted, the mission's single Railway project is used; `accept-deploy`
 carries only `environmentId`, which the classifier maps back to the project
 whose discovered environments contain it. In every case an `environmentId`
 argument must be one of the discovered environments of the resolved
-project, or the call is refused — refresh the connection's resources after
-creating an environment.
+project, and a `serviceId` argument one of its discovered services, or the
+call is refused — refresh the connection's resources after creating an
+environment or a service. A project discovered before services were
+recorded carries no service list and refuses every `serviceId` until its
+resources are refreshed once.
+
+A tool takes the arguments its schema declares and nothing else: the
+rewrapped tools forward their arguments whole, so an undeclared argument is
+denied by `classify` and refused by `execute` (`undeclaredArgument`).
+`projectId` is the one exception — it is read for every project-scoped tool,
+then written where the tool takes one and dropped where it does not.
 
 `execute` resolves the call with the classifier's own `resolveTarget` and
 `readVariableWrite` and writes `projectId`, `environmentId`, `serviceId` and
 `deploymentId` from their answer : a Railway id is `[A-Za-z0-9_-]{1,64}`,
 anything else is denied and refused before any request. No id reaches a URL
-(JSON-RPC arguments, GraphQL variables of a constant document). `serviceId`
-and `deploymentId` are checked for their shape only : discovery stores the
-environments of a project, not its services or deployments.
+(JSON-RPC arguments, GraphQL variables of a constant document).
+`deploymentId` is checked for its shape only and the `threadId` of
+`railway-agent` is forwarded as given : neither is bound to the mission's
+project, a deployment cannot be listed ahead of the call (handbook,
+"Identifiers" ; threat model, A18).
+
+What `execute` declines — an unknown tool, an undeclared argument, a target
+the mission cannot resolve, a malformed id or variable name — is an
+`isError` result returned before any request. What Railway fails is thrown:
+`UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed
+status, an `Error` for a JSON-RPC error frame or GraphQL `errors`.
 
 ## Catalog and presets
 
@@ -92,9 +112,8 @@ Presets are default suggestions copied into a mission policy at issuance;
    never `localhost`).
 3. Copy `client_id` and `client_secret` into the instance configuration
    under the Railway provider app (Admin → Provider apps, or the mounted
-   config file). The plugin reads them as `appConfig.client_id` /
-   `appConfig.client_secret` for refresh and fails fast naming the missing
-   key.
+   config file). The host uses them for the authorization-code flow and
+   for refresh; the plugin reads neither.
 
 The gateway then runs the authorization-code flow declared by
 `railwayCredentialSpec`: scopes `openid offline_access workspace:member`,
@@ -108,7 +127,7 @@ after an `UpstreamAuthError`.
 ## Development
 
 ```
-npx vitest run plugins/railway     # 111 tests, no network
+npx vitest run plugins/railway     # 427 tests, no network
 npx tsc -p plugins/railway/tsconfig.json --noEmit
 ```
 

@@ -22,7 +22,7 @@ SDK handbook: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md)
 | `src/identity.ts`           | `PROVIDER_ID`, the tool names derived from it (`TOOL`), the credential field name. The one place ids are written.   |
 | `src/data-model.ts`         | The entities a slice path can name, per plane, with containment and cardinalities.                                  |
 | `src/risk-catalog.yaml`     | The risks, their slice patterns, the six-axis vector, the `fallback: true` entry, and at least one preset.          |
-| `src/tools.ts`              | The MCP tools, named `<prefix>__<verb>_<noun>`, with their JSON input schema.                                       |
+| `src/tools.ts`              | The MCP tools, named `<prefix><verb>_<noun>` (`template__list_widgets`), with their JSON input schema.              |
 | `src/classify.ts`           | `(tool, args, resources) → slices`. The security-critical part: pure, fails closed, tested branch by branch.        |
 | `src/execute.ts`            | The calls to the provider with the credential the gateway hands over, and `discoverResources`.                      |
 | `src/index.ts`              | `definePlugin({...})`: the wiring, the `CredentialSpec`, the default export the gateway registers.                  |

@@ -36,8 +36,8 @@
  *   - `deploymentId` is checked for its shape only : discovery stores the
  *     environments and the services of a project, not its deployments, so
  *     nothing here can tell which project owns one. A `serviceId` is bound
- *     to the project by `execute`, from the services discovery stored
- *     (`servicesOf`, `readService`) ; the classifier checks its shape.
+ *     to the project from the services discovery stored (`servicesOf`,
+ *     `readService`, through `resolveTarget`), here and in `execute`.
  *
  * Crucial cases :
  *   1. Variable writes emit `service-var[K1,K2,…].W`, which matches

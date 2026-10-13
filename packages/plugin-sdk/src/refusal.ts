@@ -1,7 +1,7 @@
 /**
  * What an executor declines itself, as opposed to what its provider failed.
  *
- * Handbook : docs/handbook/plugin-sdk.md ("What `execute` returns and throws").
+ * Handbook : docs/handbook/plugin-sdk.md ("Errors of `execute`").
  *
  * `execute` has three ways out, and the host reads them differently :
  *

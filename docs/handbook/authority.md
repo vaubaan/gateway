@@ -8,6 +8,9 @@ tracks:
   - apps/gateway/src/server/shares/
   - apps/gateway/src/server/groups/
   - apps/gateway/src/server/users/service.ts
+  - apps/gateway/src/server/missions/mission-service.ts
+  - apps/gateway/src/server/missions/team-service.ts
+  - apps/gateway/src/server/store/membership.ts
   - apps/gateway/src/server/connections/service.ts
   - apps/gateway/src/server/connections/notice-redirect.ts
   - apps/gateway/src/server/execution/door.ts
@@ -39,7 +42,9 @@ Principal, Connection, Share, Restriction), §2.3 (states), §3.1 (the chain),
 (structural: never a snapshot), §11.2 (v1 assumptions). Decisions:
 [orphaned-missions-and-ownerless-connections](../decisions/orphaned-missions-and-ownerless-connections.md),
 [share-to-a-current-owner-refused](../decisions/share-to-a-current-owner-refused.md),
-[operator-deactivates-a-user](../decisions/operator-deactivates-a-user.md).
+[operator-deactivates-a-user](../decisions/operator-deactivates-a-user.md),
+[one-membership-rule-checked-in-the-token-insert](../decisions/one-membership-rule-checked-in-the-token-insert.md)
+(who is on a mission; what a reactivation closes first).
 Neighbours: [connections](connections.md) (the connection, its statuses, the
 credential broker), [missions](missions.md) (issuance checks the authority),
 [execution-door](execution-door.md) (the door re-checks it),
@@ -145,10 +150,11 @@ shape and replays the same question around membership changes.
 A share is `(connection, target, restriction)`; rows `shares` +
 `share_restrictions` (one row per `RiskId`, [store](store.md)).
 
-- **Only an owner shares.** Every method starts from
-  `ConnectionService.get(actor, id)`, which answers `not-found` to anyone who
-  does not own the connection now. A beneficiary therefore cannot share
-  further, list or revoke (no transitive sharing, spec §11.2).
+- **Only an owner shares.** `contextFor`, `share` and `revoke` go through
+  `ConnectionService.get(actor, id)` (`owned`; `revoke` after loading the
+  share), which answers `not-found` to anyone who does not own the connection
+  now. A beneficiary therefore cannot share further, list or revoke (no
+  transitive sharing, spec §11.2); `received` is the only read open to them.
 - **The restriction is risks only**: no quantity, no gate, no resource.
   `restrictionOf` refuses a connection whose provider has no registered plugin
   (`provider-unknown`), an empty list (`restriction-empty`) and any id that
@@ -231,9 +237,10 @@ whose name is held by a local group is skipped with a warning
 actor (`auditActorId(principal)`, so the bootstrap operator is `bootstrap`).
 
 - `create(actorId, name)`: 1–80 characters, no control character
-  (`name-invalid`); refused when a group of any source holds the name
-  (`name-taken`, `GroupsRepo.createLocal` returns `null`) and when it is the
-  group of the admin rule (`name-reserved`).
+  (`name-invalid`); refused when it is the group of the admin rule
+  (`name-reserved`) and when a group of any source holds the name
+  (`name-taken`, `GroupsRepo.createLocal` returns `null`). Writes
+  `group-created`.
 - `addMember(actorId, groupId, email)`: local groups only (`not-local`), a
   known active user (`user-unknown`, `user-ambiguous`); idempotent. Writes
   `group-member-added` only when the membership was added
@@ -272,10 +279,20 @@ The admin rule counts **IdP-claimed** groups only (`currentAuthority` in
   removal the gateway performs: the operator removing a member of a local
   group, each sign-in (which may have dropped IdP-sourced memberships), and
   the operator deactivating a user (`UserAdminService.deactivate`, which
-  removes the user from every group — handbook
-  [authentication](authentication.md), "Deactivating a user").
+  removes the user from every group, revokes their delegations and the member
+  tokens they hold on missions of other creators — handbook
+  [authentication](authentication.md), "Deactivating a user"). The watch is on
+  the missions that user **created** (`watchCreator`): a mission they are only
+  a member of is not orphaned by their deactivation, their token on it stops.
+  `UserAdminService.reactivate` runs the same three closings once more
+  (`closeHeldBy`) **before** it takes its watch and restores the status: each
+  is a no-op after a complete deactivation, and one that fails stops the
+  reactivation, so a user never comes back holding a group membership, a
+  delegation or a member token that a half-failed deactivation left open (ADR
+  [one-membership-rule-checked-in-the-token-insert](../decisions/one-membership-rule-checked-in-the-token-insert.md),
+  D4).
 - An `unowned` connection **keeps serving** ([connections](connections.md),
-  "Status and credential"). Missions still grounded — those of share
+  "Connection states"). Missions still grounded — those of share
   beneficiaries — keep running; missions that were grounded on membership of
   the emptied group are orphaned from that instant, and audited by the same
   settlement. Nobody passes the
@@ -339,13 +356,14 @@ is ungrounded, with the reason (`cause`, `connectionId`, `uncovered`);
 `revoked` or `expired` is returned as it is, without a read. Nothing is
 written, and no administrative entry: no human is behind a read.
 
-| Reader                                                                                              | Call                                                                                                                                                                                                      |
-| --------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| the execution door, every request                                                                   | `grounds.inspect` (`execution/door.ts`)                                                                                                                                                                   |
-| `MissionService`: list, detail, session page, gate, rotate, revoke, `draftFrom` / `duplicate`       | `grounds.inspect` (`ownInspected`, `list`)                                                                                                                                                                |
-| `RequestService`: view, claim and approval decisions                                                | `grounds.derive` (`own`)                                                                                                                                                                                  |
-| the Delegations listing                                                                             | `derivedMissionReads(store.missions, grounds)`, wrapped by the composition root                                                                                                                           |
-| the management door (`list_my_missions`, `issue_mission`, `rotate_mission_token`, `revoke_mission`) | none of its own: it is handed `MissionService` methods as a port (`compose/management.ts`, `managementMissionsOf`), so the state and `MissionOverview.orphan` reach `management/views.ts` already derived |
+| Reader                                                                                                                         | Call                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| the execution door, every request                                                                                              | `grounds.inspect` (`execution/door.ts`)                                                                                                                                                                   |
+| `MissionService`: list, detail and session page (creator or member); gate, rotate, revoke, `draftFrom` / `duplicate` (creator) | `grounds.inspect` (`access` for the reads, `ownInspected` for the creator's acts, `list`; `stateAfterRefusal` for the state reported when the store refused a token insert)                               |
+| `MissionTeamService`: team, members, tokens                                                                                    | none of its own: every method that reads a mission starts from `MissionService.access`, so it holds the mission already derived; after a refused token insert it asks `MissionService.stateAfterRefusal`  |
+| `RequestService`: view, claim and approval decisions                                                                           | `grounds.derive` (`own`)                                                                                                                                                                                  |
+| the Delegations listing                                                                                                        | `derivedMissionReads(store.missions, grounds)`, wrapped by the composition root                                                                                                                           |
+| the management door (`list_my_missions`, `issue_mission`, `rotate_mission_token`, `revoke_mission`)                            | none of its own: it is handed `MissionService` methods as a port (`compose/management.ts`, `managementMissionsOf`), so the state and `MissionOverview.orphan` reach `management/views.ts` already derived |
 
 A record loaded from `store.missions` carries the **stored** status. A new
 reader that shows or decides on the status must go through `inspect` /
@@ -357,7 +375,24 @@ While orphaned: every call is refused `mission-inactive` (`status: orphaned`),
 no gate is edited and no token rotated (`inactive`), no claim or approval is
 granted (`mission-closed`; a refusal can still be recorded), and the creator
 can still revoke — stored, terminal. `/missions/<id>` shows the reason and
-whether it can come back ([missions](missions.md)).
+whether it can come back ([missions](missions.md)). The gate edit is closed on
+`revoked` and `orphaned` only (`gateEditBlockedBy`): an **expired** mission
+keeps its gates editable, since its creator can extend the expiry
+([missions](missions.md), "Editing a gate after issuance").
+
+The verdict is about the **creator** alone, whoever holds the token
+([missions](missions.md), "Members and tokens"): a member works under the
+creator's authority and needs no share of the mission's connections, so a
+member's own shares or groups never orphan or restore a mission. An orphaned
+mission is orphaned for every holder at once and comes back for every holder
+at once, same tokens. While it lasts no token is generated and no named token
+created (`mission-inactive`); a member can still be added or removed and a
+token revoked. A holder whose own token stopped (rotated, revoked on its own,
+member removed or deactivated) is answered the 401 of that reason, not
+`mission-inactive`: the token is judged before the mission. Who counts as a
+member is one rule, `membershipOf` (`store/membership.ts`), read by
+`MissionService.access`, by the token's standing and by the token insert
+([missions](missions.md), "Who is on a mission").
 
 **Audit: a watch around each human act.** With nothing stored, "this act
 orphaned that mission" is a difference between two verdicts. The services take
@@ -428,8 +463,11 @@ returns `{ unowned, orphaned, restored }`.
 
 `ExecutionDoor.credentialResolver` (`execution/door.ts`) calls
 `grounds.inspect(verified.mission)` between the token verification and
-`loadMissionContext`, on every request (`tools/list`, `tools/call`, the
-catalog endpoint). The pipeline's `checkMissionActive` then refuses an
+`loadMissionContext`, on every request whose token authenticates
+(`tools/list`, `tools/call`, the catalog endpoint). A token that stopped on
+its own — rotated, revoked alone, its member removed or deactivated — is
+answered 401 before that, and the mission is not inspected
+([execution-door](execution-door.md), "Token holders"). The pipeline's `checkMissionActive` then refuses an
 orphaned mission with `mission-inactive`, `status: 'orphaned'`; the refusal's
 hint tells the agent that the same token works again once the authority is
 back. The door logs `mission orphaned at the execution door` (info: `cause`,
@@ -507,23 +545,23 @@ A page that catches a service error matches it by shape (`isShareError(err,
 
 ### Tests
 
-| File                                                      | Covers                                                                                                                                                                                                                                                                                                                                                |
-| --------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/server/authority/authority-service.test.ts`          | owner, union of shares, per-connection subsets, `gapsOf`, cheap path, `uncoveredRisks`                                                                                                                                                                                                                                                                |
-| `src/server/authority/mission-grounds.test.ts`            | every cause (`connection-missing` included), partition, `inspect` / `derive`, watches, two acts under way at once (one change, one entry; an older equal entry does not hold a new one back; the mirror case), `MembershipSettler`, `derivedMissionReads`                                                                                             |
-| `src/server/missions/orphan-reason.test.ts`               | the sentences of the mission page, per cause                                                                                                                                                                                                                                                                                                          |
-| `src/server/shares/*.test.ts`                             | restriction helpers, share service (`connection-unowned`, `provider-unknown`, the route's connection, a revocation lost to another one, settlement when the entry fails), error shape                                                                                                                                                                 |
-| `src/server/groups/service.test.ts`                       | local groups (one entry per change, settlement when the entry fails), admin rule and local groups, `findActiveUserByEmail`                                                                                                                                                                                                                            |
-| `src/server/missions/catalog-view.test.ts`                | the catalog view is the authority enumeration, an entry the authority cannot enumerate included                                                                                                                                                                                                                                                       |
-| `tests/integration/authority/share-and-orphan.test.ts`    | share → issue within R1 → exceed → revoke → orphaned → refused; lose → regain: same token, session, counters; revoked connection stays orphaned; a claim and an approval request on an orphaned mission expire on the normal delay ([requests](requests.md))                                                                                          |
-| `tests/integration/authority/ownership.test.ts`           | transfer, unowned, reassignment (restores), a group claim missing at one sign-in then back at the next; a share to oneself or to a fellow member of the owner group refused (`target-is-owner`, nothing stored), so leaving the group orphans the member's missions; a share to a former member and a share to a group the sharer belongs to accepted |
-| `tests/integration/auth/deactivate-user.test.ts`          | a deactivated user holds nothing: mission `orphaned` with nothing written on it, own connection `unowned` and reassigned by the operator, `mission-restored` on reactivation ([authentication](authentication.md))                                                                                                                                    |
-| `tests/integration/authority/handlers.test.ts`            | the form posts and their notices                                                                                                                                                                                                                                                                                                                      |
-| `tests/integration/authority/rules-read-by-pages.test.ts` | what a page reads is what the act answers: `ownerActRefusal` and `ShareContext.unshareable`, `transferTargets`, `ConnectionService.reassignTargets()`, `gateEditBlockedBy` and `MissionDetail.gates_editable`, on every status                                                                                                                        |
-| `tests/integration/store/ownership-and-orphans.test.ts`   | the repository transitions; migration `0007` (reset, triggers)                                                                                                                                                                                                                                                                                        |
-| `tests/integration/store/audit-guarded-append.test.ts`    | `AuditRepo.appendUnlessLatest`: two writers, one entry; per object, within the guarded acts, not for an older equal entry                                                                                                                                                                                                                             |
-| `tests/unit/structural/authority-not-snapshotted.test.ts` | spec §10: no state in the module, every check follows the store; no stored orphan verdict, every reader of a mission record classified                                                                                                                                                                                                                |
-| `tests/e2e/v5/share-and-orphan.spec.ts`                   | the dialog, Shares received, revocation, restoration by a new share, the ownership loop (browser)                                                                                                                                                                                                                                                     |
+| File                                                      | Covers                                                                                                                                                                                                                                                                                                                                                           |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/server/authority/authority-service.test.ts`          | owner, union of shares, per-connection subsets, `gapsOf`, cheap path, `uncoveredRisks`                                                                                                                                                                                                                                                                           |
+| `src/server/authority/mission-grounds.test.ts`            | every cause (`connection-missing` included), partition, `inspect` / `derive`, watches, two acts under way at once (one change, one entry; an older equal entry does not hold a new one back; the mirror case), `MembershipSettler`, `derivedMissionReads`                                                                                                        |
+| `src/server/missions/orphan-reason.test.ts`               | the sentences of the mission page, per cause                                                                                                                                                                                                                                                                                                                     |
+| `src/server/shares/*.test.ts`                             | restriction helpers, share service (`connection-unowned`, `provider-unknown`, the route's connection, a revocation lost to another one, settlement when the entry fails), error shape                                                                                                                                                                            |
+| `src/server/groups/service.test.ts`                       | local groups (one entry per change, settlement when the entry fails), admin rule and local groups, `findActiveUserByEmail`                                                                                                                                                                                                                                       |
+| `src/server/missions/catalog-view.test.ts`                | the catalog view is the authority enumeration, an entry the authority cannot enumerate included                                                                                                                                                                                                                                                                  |
+| `tests/integration/authority/share-and-orphan.test.ts`    | share → issue within R1 → exceed → revoke → orphaned → refused; lose → regain: same token, session, counters; revoked connection stays orphaned; a claim and an approval request on an orphaned mission expire on the normal delay ([requests](requests.md))                                                                                                     |
+| `tests/integration/authority/ownership.test.ts`           | transfer, unowned, reassignment (restores), a group claim missing at one sign-in then back at the next; a share to oneself or to a fellow member of the owner group refused (`target-is-owner`, nothing stored), so leaving the group orphans the member's missions; a share to a former member and a share to a group the sharer belongs to accepted            |
+| `tests/integration/auth/deactivate-user.test.ts`          | a deactivated user holds nothing: mission `orphaned` with nothing written on it, own connection `unowned` and reassigned by the operator, `mission-restored` on reactivation; what a half-failed deactivation left open is closed before the user is active again, and a reactivation that cannot close it does not happen ([authentication](authentication.md)) |
+| `tests/integration/authority/handlers.test.ts`            | the form posts and their notices                                                                                                                                                                                                                                                                                                                                 |
+| `tests/integration/authority/rules-read-by-pages.test.ts` | what a page reads is what the act answers: `ownerActRefusal` and `ShareContext.unshareable`, `transferTargets`, `ConnectionService.reassignTargets()`, `gateEditBlockedBy` and `MissionDetail.gates_editable`, on every status                                                                                                                                   |
+| `tests/integration/store/ownership-and-orphans.test.ts`   | the repository transitions; migration `0007` (reset, triggers)                                                                                                                                                                                                                                                                                                   |
+| `tests/integration/store/audit-guarded-append.test.ts`    | `AuditRepo.appendUnlessLatest`: two writers, one entry; per object, within the guarded acts, not for an older equal entry                                                                                                                                                                                                                                        |
+| `tests/unit/structural/authority-not-snapshotted.test.ts` | spec §10: no state in the module, every check follows the store; no stored orphan verdict, every reader of a mission record classified                                                                                                                                                                                                                           |
+| `tests/e2e/v5/share-and-orphan.spec.ts`                   | the dialog, Shares received, revocation, restoration by a new share, the ownership loop (browser)                                                                                                                                                                                                                                                                |
 
 ## How to debug
 

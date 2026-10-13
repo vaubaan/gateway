@@ -14,6 +14,7 @@ tracks:
   - CONTRIBUTING.md
   - deploy/docker/Dockerfile
   - deploy/docker/smoke.sh
+  - scripts/audit-gate.mjs
   - scripts/release-lib.mjs
   - scripts/release-prepare.mjs
   - scripts/release-plan.mjs
@@ -25,7 +26,7 @@ tracks:
 
 How the repository is laid out, what runs locally and in CI, how branches
 and releases work during the v5 build. The v4 SaaS workflow (Vercel
-preview deploys, Supabase migrations) is gone with P0.1; see the ADR
+preview deploys, Supabase migrations) is gone; see the ADR
 [repository-layout-and-contribution-workflow](../decisions/repository-layout-and-contribution-workflow.md).
 
 ## Layout
@@ -35,7 +36,7 @@ The repository is an npm workspaces monorepo with three roots:
 ```
 apps/gateway/            the deployable: server + Next.js UI       @vaubaan/gateway-app (private)
 packages/shared/         risk types, api-key, data-model            @vaubaan/shared
-packages/policy-engine/  slice DSL, matcher, evaluator, runtime     @vaubaan/policy-engine
+packages/policy-engine/  slices, matching, the risk decision, the validity rule of a budget  @vaubaan/policy-engine
 packages/plugin-sdk/     plugin contract, registry, test kit        @vaubaan/plugin-sdk
 packages/gateway-core/   pipeline, decisions, refusals, audit       @vaubaan/gateway-core
 packages/telemetry/      opt-in telemetry report, queue, client     @vaubaan/telemetry
@@ -43,7 +44,7 @@ plugins/<provider>/      one provider plugin per folder             @vaubaan/plu
 plugins/_template/       scaffold for a new plugin                  @vaubaan/plugin-template
 deploy/                  Dockerfile, compose, Caddy, example config, telemetry collector SQL
 docs/                    spec, decisions, handbook, tests, workflow
-scripts/                 gen-master-key.mjs (npm run gen-master-key), release-*.mjs (npm run release:prepare, release.yml)
+scripts/                 gen-master-key.mjs (npm run gen-master-key), audit-gate.mjs (CI job audit), release-*.mjs and release-image-index.sh (npm run release:prepare, release.yml)
 ```
 
 - `workspaces`: `apps/*`, `packages/*`, `plugins/*`. A new library goes
@@ -54,8 +55,8 @@ scripts/                 gen-master-key.mjs (npm run gen-master-key), release-*.
 type-check` at the root fans out to all of them.
 - Root files for contributors: `README.md`, `LICENSE` (Apache-2.0),
   `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `SECURITY.md`, `CHANGELOG.md`,
-  three issue forms under `.github/ISSUE_TEMPLATE/` (`bug_report`,
-  `feature_request`, `plugin_request`; blank issues disabled) and
+  four issue forms under `.github/ISSUE_TEMPLATE/` (`bug_report`,
+  `feature_request`, `plugin_request`, `catalog_correction`; blank issues disabled) and
   `.github/PULL_REQUEST_TEMPLATE.md` (checklist: spec, ADR, handbook, tests,
   English, no hard-coded configuration, `npm run ci`, CHANGELOG).
 - Historical v4 documents are marked `status: legacy` or moved to
@@ -63,7 +64,7 @@ type-check` at the root fans out to all of them.
   [legacy-status-of-v4-adrs-and-handbooks](../decisions/legacy-status-of-v4-adrs-and-handbooks.md)).
 - Nothing in the repository depends on Vercel or Supabase: the v4
   application code and its `@supabase/*` dependencies were deleted with
-  P1.6.
+  the v4 application.
 
 ## TypeScript and lint baseline
 
@@ -81,22 +82,22 @@ type-check` at the root fans out to all of them.
 
 ## Scripts
 
-| Script                             | What it does                                                                    |
-| ---------------------------------- | ------------------------------------------------------------------------------- |
-| `npm run ci`                       | type-check, lint, format:check, build, test — CI's `check` job gate             |
-| `npm run type-check`               | `tsc --noEmit` in every workspace                                               |
-| `npm run lint` / `lint:fix`        | ESLint over the repository                                                      |
-| `npm run format` / `format:check`  | Prettier write / check                                                          |
-| `npm run build`                    | every workspace `build` (today: `next build` of `apps/gateway`)                 |
-| `npm run test` / `test:watch`      | Vitest, whole suite                                                             |
-| `npm run test:e2e` (`test:e2e:v5`) | builds `apps/gateway`, then Playwright on the ephemeral instance (CI job `e2e`) |
-| `npm run dev`                      | `next dev` of `apps/gateway`                                                    |
-| `npm run demo`                     | builds, then the demo instance on `http://localhost:3210` (handbook demo-mode)  |
-| `npm run gen-master-key`           | prints a fresh 32-byte base64 master key                                        |
-| `npm run docker:build`             | builds `deploy/docker/Dockerfile` as `vaubaan-gateway:local`                    |
-| `npm run docker:smoke`             | runs `deploy/docker/smoke.sh` against that image                                |
-| `npm run release:prepare -- <v>`   | cuts the changelog section and sets the version; creates no commit and no tag   |
-| `prepare`                          | installs the husky hook (`husky \|\| true`, never fails an install)             |
+| Script                             | What it does                                                                                            |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `npm run ci`                       | type-check, lint, format:check, build, test — CI's `check` job gate                                     |
+| `npm run type-check`               | `tsc --noEmit` in every workspace                                                                       |
+| `npm run lint` / `lint:fix`        | ESLint over the repository                                                                              |
+| `npm run format` / `format:check`  | Prettier write / check                                                                                  |
+| `npm run build`                    | every workspace `build` (today: `next build` of `apps/gateway`)                                         |
+| `npm run test` / `test:watch`      | Vitest, whole suite                                                                                     |
+| `npm run test:e2e` (`test:e2e:v5`) | builds `apps/gateway`, then Playwright on the ephemeral instance (CI job `e2e`)                         |
+| `npm run dev`                      | `next dev` of `apps/gateway`                                                                            |
+| `npm run demo`                     | builds when the sources changed, then the demo instance on `http://localhost:3210` (handbook demo-mode) |
+| `npm run gen-master-key`           | prints a fresh 32-byte base64 master key                                                                |
+| `npm run docker:build`             | builds `deploy/docker/Dockerfile` as `vaubaan-gateway:local`                                            |
+| `npm run docker:smoke`             | runs `deploy/docker/smoke.sh` against that image                                                        |
+| `npm run release:prepare -- <v>`   | cuts the changelog section and sets the version; creates no commit and no tag                           |
+| `prepare`                          | installs the husky hook (`husky \|\| true`, never fails an install)                                     |
 
 Tests: Vitest collects `apps/*/tests/{unit,integration}`,
 `packages/*/tests/{unit,integration}`, `plugins/*/tests/unit` (`.test.ts`;
@@ -127,9 +128,12 @@ and `workflow_call` — the release pipeline calls this file as its gates
 group per workflow and ref with `cancel-in-progress` (`github.workflow` is
 the caller's name in a called run, so a release and the CI of the same ref
 never cancel each other); `permissions: contents: read`. Single Linux runner,
-Node 22, `npm install --no-audit --no-fund` (not `npm ci`, because
-`@sbw-vaubaan/harness` is an optional dependency from a private registry
-that is skipped without `NPM_READ_TOKEN`; see `CONTRIBUTING.md`).
+Node 22, `npm ci --no-audit --no-fund`: exactly the lockfile, or a failure
+(`@sbw-vaubaan/harness` is an optional dependency from a private registry
+that npm skips without `NPM_READ_TOKEN`, with `npm ci` as with
+`npm install`; see `CONTRIBUTING.md`). Every action is pinned by commit, as
+in `release.yml`, with the release it is in a comment: a tag can be moved, a
+commit cannot.
 
 ```yaml
 jobs:
@@ -165,21 +169,30 @@ compared with the reviewed allowlist `.github/audit-allowlist.json`. Because
 the release pipeline calls `ci.yml`, the same gate stands in front of every
 release.
 
-| What the run finds                                                        | Result                                      |
-| ------------------------------------------------------------------------- | ------------------------------------------- |
-| no advisory, or only allowlisted ones                                     | pass                                        |
-| an advisory of severity `moderate`, `high` or `critical` not in the list  | **fail**, one error annotation per advisory |
-| an allowlisted advisory whose `review_by` date has passed                 | **fail**: the review lapsed                 |
-| an advisory of severity `low` or `info`                                   | pass, listed as a notice                    |
-| an allowlist entry that matches nothing in this tree                      | pass, notice (prune it)                     |
-| the registry does not answer after four attempts (2 s, 8 s, 20 s between) | pass, with a **warning** annotation         |
-| the allowlist is invalid, or the output is neither a report nor an outage | fail (exit 2): the gate itself is broken    |
+| What the run finds                                                                                                                                | Result                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| no advisory, or only allowlisted ones                                                                                                             | pass                                                   |
+| an advisory not in the list, of any severity other than `info` and `low` (`moderate`, `high`, `critical`, and any level the script does not know) | **fail**, one error annotation per advisory            |
+| an advisory the list names for another package than the report does                                                                               | **fail**: an entry covers one package                  |
+| an allowlisted advisory whose `review_by` date has passed                                                                                         | **fail**: the review lapsed                            |
+| an advisory of severity `low` or `info`                                                                                                           | pass, listed as a notice                               |
+| an allowlist entry that matches nothing in this tree                                                                                              | pass, notice (prune it)                                |
+| the registry does not answer after four attempts (2 s, 8 s, 20 s between)                                                                         | pass, with a **warning** annotation                    |
+| the allowlist is invalid; `npm audit` printed nothing or could not be started; the output is neither a report nor an outage                       | fail (exit 2, `unreadable`): the gate itself is broken |
 
 A registry outage is not a vulnerability: it never fails a merge or a
 release, and the warning says that no advisory was checked by that run. The
 two cases are told apart by what `npm audit --json` printed (a report, or an
 `error` whose code or text is a network or registry failure —
-`parseAuditOutput`), never by the exit code.
+`parseAuditOutput`), never by the exit code. An outage is recognised on what
+was written, never on silence: an empty output, or one that cannot be parsed
+and names no registry failure, is `unreadable` and exits 2.
+
+Advisories are compared per pair (advisory id, package): one advisory that
+names several packages is checked once for each, and an allowlist entry,
+which names one id and one package, covers that pair only. Only `info` and
+`low` are listed without gating (`UNGATED_SEVERITIES`); a severity the script
+does not know is gated, not read as harmless.
 
 **When the gate fails**, in this order:
 
@@ -204,7 +217,7 @@ longer match anything are removed in the same pass. Before every release,
 `node scripts/audit-gate.mjs` is run once by hand so a lapsed review is not
 discovered by the release pipeline.
 
-The `e2e` job (P1.9) runs the browser tests of
+The `e2e` job runs the browser tests of
 `apps/gateway/tests/e2e/v5/` — the cutover smoke among them — against an
 ephemeral instance: the built app on the real composition root with the
 `:memory:` store, a simulated identity provider and a mocked provider. It
@@ -223,8 +236,8 @@ standalone output, runs as uid 10001, exposes `PORT` (3000), declares the
 `/data` volume and a `HEALTHCHECK` on `/healthz`. Build arguments:
 `NODE_IMAGE` (base image reference, tag and digest; see `deploy/README.md`),
 `GIT_COMMIT_SHA`. The `deps` stage runs `npm ci` (the
-optional private dependency is skipped without `NPM_READ_TOKEN`), where the
-CI `check` job runs `npm install`. `.dockerignore` keeps `.git`, docs, test
+optional private dependency is skipped without `NPM_READ_TOKEN`), as the
+CI jobs do. `.dockerignore` keeps `.git`, docs, test
 artefacts, every `.env*` file except `.env.example` and every `*.pem` out of
 the build context. Operator
 documentation: [`deploy/README.md`](../../deploy/README.md).
@@ -393,7 +406,7 @@ in a comment.
 | Job       | Runs on      | Permissions                                                                                               | What it does                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | --------- | ------------ | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `plan`    | tag, dry run | `contents: read`                                                                                          | `scripts/release-plan.mjs`: the tag names the version of `package.json`, is the highest release so far, and `CHANGELOG.md` has its dated section; the tagged commit is on `main` (a pre-release: or on `v5`). Outputs the version, the image tags and the release notes.                                                                                                                                                                                                 |
-| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `check`, `e2e`, `docker`. A release passes what a pull request passes, by construction.                                                                                                                                                                                                                                                                                                                                         |
+| `gates`   | tag, dry run | `contents: read`                                                                                          | Calls `ci.yml` itself (`workflow_call`): `check`, `audit`, `e2e`, `docker`. A release passes what a pull request passes, by construction.                                                                                                                                                                                                                                                                                                                                |
 | `image`   | tag, dry run | `contents: read`                                                                                          | One native runner per architecture (`ubuntu-24.04`, `ubuntu-24.04-arm`; no emulation): builds the image without reading any cache, runs `deploy/docker/smoke.sh` on it with the expected version, commit and architecture, writes its SBOM (SPDX, Syft) as a workflow artefact.                                                                                                                                                                                          |
 | `push`    | tag only     | `contents: read`, `packages: write`                                                                       | Per architecture, after `gates` and `image`: pushes the image to GHCR **by digest, without a tag**, from the layers `image` built in this run, with BuildKit's SBOM and provenance (`mode=max`) attached; pulls that digest back and runs the smoke test on it; writes the SBOM of what was pushed.                                                                                                                                                                      |
 | `publish` | tag only     | `contents: read`, `packages: write`, `id-token: write`, `attestations: write`, `artifact-metadata: write` | `scripts/release-image-index.sh`: assembles the two digests into one multi-architecture image under `<version>`, with its OCI annotations; signs a build-provenance attestation for its digest (`actions/attest`, stored on GitHub and next to the image); only then points the aliases of a final release (`<major>.<minor>`, `latest`) at that digest. A version tag never moves: an existing one is kept when it holds the same images (a re-run), refused otherwise. |
@@ -477,7 +490,7 @@ proposes the bump automatically.
 The base stays a Debian (glibc) image of the Node 22 line. Another Node
 major changes the ABI the prebuilt addons are downloaded for: it is a minor
 release at least, and both architectures must pass the smoke test first.
-The actions of `release.yml` are refreshed the same way: the commit and the
+The actions of `ci.yml` and `release.yml` are refreshed the same way: the commit and the
 version comment change together.
 
 ### Cutover of `v5` to `main`
@@ -487,15 +500,18 @@ version comment change together.
 feature branch, workflow or agent merges into `main`, pushes to it or opens
 that pull request.
 
-1. Before: Phase 3 is merged into `v5`, CI is green on `v5`, the manual
+1. Before: the work planned for the first release is merged into `v5`, CI is green on `v5`, the manual
    cutover acceptance scenario of
    [`docs/tests/e2e-tests.md`](../tests/e2e-tests.md) has been run, and the
    tag `v4-final` exists.
 2. Renaud opens the pull request `v5` → `main` and merges it with a **merge
    commit** — the one exception to the squash rule: the history of the build
    is kept.
-3. After: CI is green on `main`. Work branches start from `main` from then
-   on. `v5` is kept until `2.0.0` is released, then deleted, and
+3. After: CI is green on `main`, and the two links of
+   `.github/ISSUE_TEMPLATE/config.yml` (`…/tree/main/docs`,
+   `…/blob/main/plugins/README.md`) resolve — GitHub reads the issue forms
+   from the default branch, so they take effect with this step. Work
+   branches start from `main` from then on. `v5` is kept until `2.0.0` is released, then deleted, and
    `PRERELEASE_BRANCH` leaves `release.yml` with it.
 
 Cutting over an existing v4 _deployment_ is a different matter:

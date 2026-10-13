@@ -333,7 +333,10 @@ your tools really do is checked in step 8, by `assertCatalogCoverage`.
 `toolPrefixFor(PROVIDER_ID)` as `<prefix><verb>_<noun>`; `tools.ts` gives each
 a description and a JSON input schema. Every tool that acts on a resource
 takes the resource's `ref` (the identifier `discoverResources` returns,
-step 6) as an explicit argument.
+step 6) as an explicit argument. The `properties` of the schema are the
+whole argument surface of the tool: an argument is declared there before
+the classifier or the executor may use it (see "Only declared arguments"
+below).
 
 **Classifier.** `classify(tool, args, resources)` returns
 `{ slices: Slice[] }` or `{ denied: string }`. `resources` are the mission's
@@ -360,17 +363,72 @@ The rules the template already applies and a plugin must keep:
   mission's single resource for a ref the caller named
   (`resolveWorkspace` in the template). An absent ref may fall back to the
   single resource; none or several is refused.
-- **Validate every identifier** before it enters a slice. One that will also
-  reach a URL path must be a single path segment
-  (`pathIdent`, `^[A-Za-z0-9_-]{1,64}$`): `..` survives `encodeURIComponent`
-  and would redirect the request away from what the slice named.
+- **Identifiers: one grammar function per kind, shared by `classify` and
+  `execute`; refuse, never repair**
+  ([ADR](../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+  Every identifier a call carries — an argument, a resource ref, connection
+  metadata, a value the provider answered — is read by the grammar function
+  of its kind, which returns the value or `null` (`pathIdent` in the
+  template). A value outside its grammar is `denied` here and refused in
+  `execute` before any request: it is never trimmed, escaped, replaced or
+  read as absent.
+- **Choose the grammar for where the value lands**, not for the slice. A URL
+  path segment: `pathIdent`, `^[A-Za-z0-9_-]{1,64}$` — no dot-only value, no
+  separator, no `%` (`..` survives `encodeURIComponent`, and the URL parser
+  then removes it: the request would leave what the slice named). A value
+  that is legitimately dotted or multi-segment (a domain, a file path, a git
+  ref, a bucket name) gets a grammar of its own that forbids empty and
+  dot-only segments, backslashes and control characters, and bounds the
+  length. A query is built with `URLSearchParams`; a GraphQL value is a
+  variable, never part of the document; an SQL identifier has a closed
+  grammar, no quoting; a string the provider could split (a recipient) is
+  one value.
+- **An identifier the slice grammar cannot carry is written as "any".** A
+  slice identifier holds `[a-zA-Z0-9_./~-]` only, and your grammar may
+  rightly accept more (`@` in an address, `:` in a secret name, `+`). Build
+  the segment with `identSegment(value)` of the SDK: it returns the
+  identifier when the slice can carry it and `ANY_IDENT` (`[*]`) otherwise.
+  The call is then classified on every instance of the entity, so only a
+  mission whose pattern covers them all accepts it. Never drop the
+  identifier (the slice would match a narrower pattern than the call
+  deserves) and never escape it (the slice would no longer be the name an
+  owner writes). The value sent to the provider is unchanged.
+- **No glob inside an executed identifier.** A slice your classifier emits
+  names what the call touches: a `*` inside an identifier (`feature/*`), or
+  in a value of a list, is read by the matcher as a pattern, and the gateway
+  refuses the call. Refuse such a value in its grammar. The whole-segment
+  `[*]` (`ANY_IDENT`) is the only way to say "every instance".
 - **Say everything the call does.** A call touching several entities returns
   several slices. A tool whose effect depends on an argument (a SQL
   statement, a shell command, a `force` flag) is classified from that
   argument, and refused when it cannot be read. A call that hands out a
   credential (a token, a signed URL) is a write.
-- **One function for both sides.** Export what resolves the target and call
-  it from `execute` too, so the call runs on exactly what was classified.
+- **One reader for both sides.** Export the function that reads the
+  identifiers of a call (the target and every other one) and call it from
+  `execute` too: `execute` builds its request from what that function
+  returned, never from `args`, and is safe when called alone.
+- **Only declared arguments.** An argument the classifier does not read was
+  priced by no rule. Whether you must refuse it depends on how `execute`
+  builds its request
+  ([ADR](../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md)):
+  - `execute` **forwards the arguments it was given** — a JSON body or a
+    query string built from `args`, a rewrapped upstream tool that receives
+    them whole: an undeclared argument would reach the provider unseen. Call
+    `undeclaredArgumentDenial(declared, tool, args, routing?)` of the SDK
+    **in `classify` and in `execute`**, with
+    `declared = declaredArgumentsOf(tools)` built once. In `classify` the
+    answer is a denial, so the call is refused before the budget and audited
+    as a refusal; in `execute` it is the second lock, for a caller that did
+    not go through `classify` (decline with the same sentence, step 7).
+    Export one function of your own that wraps the call, so both sides
+    apply the same rule.
+  - `execute` **builds its request field by field** from the declared
+    arguments, as the template does (`{ name: args.name }`): it never reads
+    another argument, and needs no check.
+
+  `routing` is the set of arguments your plugin reads itself whatever the
+  tool declares, and writes again or drops before the call leaves — the
+  project or the team a mission pins. Nothing else belongs there.
 
 ## Step 5 — Credential (`credential` in `src/index.ts`)
 
@@ -469,7 +527,8 @@ return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w
 - Do not set `env` unless the provider itself tells production from test
   (Stripe's live and test modes): the environment is the owner's label.
 - **The provider's answer is untrusted.** Check it with a type guard, never
-  cast it; refuse a payload you do not recognise.
+  cast it; refuse a payload you do not recognise, and pass every id it
+  carries through the grammar of its kind before it becomes a `ref`.
 - Follow the provider's pagination up to a ceiling, a named constant of the
   plugin that the README states ("at most 500 zones"). When the endpoint is
   not paginated, say so in the README.
@@ -492,9 +551,30 @@ It runs only after the gateway allowed the call and counted it.
   invalid: the gateway then tries a refresh and otherwise marks the
   connection expired.
 - **`isError: true` is for what your executor declines itself**, before any
-  request: an unknown tool, an argument it cannot read, a target outside the
-  mission. Never catch a provider failure into an `isError` result: the audit
-  would say the call went through.
+  request: an unknown tool, an argument it cannot read, an undeclared
+  argument, a target outside the mission, a guard that does not hold. Never
+  catch a provider failure into an `isError` result: the audit would say the
+  call went through.
+- **Decline with `ExecutorRefusal`, never with a plain `Error`.** A refusal
+  thrown as an `Error` is read as a provider failure: the audit records an
+  upstream error although no request left, and the agent gets a transport
+  error instead of a sentence it can act on. Return
+  `refusalResult(message)` where the refusal is decided at the entry point,
+  as the template's `refused` does; when it is decided deeper, throw
+  `new ExecutorRefusal(message)` and wrap the body of `execute` in
+  `declining(...)`, which turns that one error into the `isError` result and
+  lets every other throw through:
+
+  ```ts
+  export function executeAcme(ctx, tool, args) {
+    return declining(async () => {
+      const id = pathIdent(args.widget_id);
+      if (!id) throw new ExecutorRefusal(MALFORMED_WIDGET_ID); // declined: an isError result
+      return text(await request(ctx, 'GET', `/widgets/${id}`)); // a failed status is thrown by request
+    });
+  }
+  ```
+
 - The provider's base URL is a constant of the plugin: it is a fact about the
   provider, not configuration of the instance.
 - A success without content (a 204 after a `DELETE`) is not JSON: return a
@@ -525,7 +605,19 @@ never streams ignores `emitPart`; no shipped plugin uses it yet
 **Environment in the call.** When the environment is part of the call rather
 than a label on the resource (Vercel's `env[prod]` segment), declare
 `envOf: envFromSliceSegment('env')` in `definePlugin`, or a pure function of
-your own. Otherwise declare nothing.
+your own. Otherwise declare nothing. An `envOf` has three answers, and the
+gateway reads them differently:
+
+| `envOf` returns | When                                                                                                                | The gateway                                                                        |
+| --------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| a label         | the slice touches that one environment                                                                              | qualifies the touched risks with it                                                |
+| `undefined`     | the slice says nothing about its environment                                                                        | falls back to the owner's label on the resource                                    |
+| `NO_SINGLE_ENV` | the slice names its environment but not exactly one: a wildcard, a list, a glob, a label the provider does not have | resolves no environment, never the label: every env-scoped risk touched is refused |
+
+Never answer `undefined` for the third case: the owner's label would price a
+call that reaches production as whatever the resource happens to be
+labelled. `envFromSliceSegment` already answers `NO_SINGLE_ENV` there
+([ADR](../docs/decisions/decision-stages-fail-closed-and-audited.md), D3).
 
 ## Step 8 — Wire and test (`src/index.ts`, `tests/unit/`)
 
@@ -589,8 +681,10 @@ expect(report.risksUntouched).toEqual([]); // or the entries you knowingly leave
 ```
 
 `assertCatalogCoverage` fails when a tool has no sample, when a sample is
-refused without `expectDenied` (or the reverse), and when a slice matches no
-risk of the catalog. `fallbackHits` lists the samples only the fallback
+refused without `expectDenied` (or the reverse), when a slice matches no
+risk of the catalog, when a slice does not read back as itself once written
+(an identifier holds a character the slice grammar cannot carry: use
+`identSegment`), and when a slice carries `*` inside an identifier. `fallbackHits` lists the samples only the fallback
 covered: add the missing catalog entry. Coverage looks at which risks a slice
 matches, not at the environment: samples on one resource are enough, and an
 env-scoped risk counts as touched whatever the label.
@@ -613,12 +707,25 @@ Then write, in the same folder:
 
 - **Classifier tests: one case per branch of `classify.ts`**, every refusal
   included (unknown tool, resource outside the mission, ambiguous resource,
-  malformed identifier, `..`). Build the cases from the provider's public
-  documentation or recorded answers. This is where review time goes.
+  malformed identifier, undeclared argument). Build the cases from the
+  provider's public documentation or recorded answers. This is where review
+  time goes.
+- **Hostile identifiers, fed to both sides**: `..`, `.`, `a/../b`, `%2e%2e`,
+  `%2f`, an empty value, an overlong value, a line break and `?x=1#y`, in
+  every identifier position of `classify` **and** of `execute`. A refused
+  value sends no request (`fetch.calls` stays empty); an accepted one names
+  exactly the classified resource. The gateway's structural suite fails for
+  a plugin without such a test
+  (`apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`).
 - **`execute` and `discoverResources` against `mockFetch([...routes])`**: the
   request sent (method, URL, headers, body), the two thrown failures, the
   `isError` refusals with no request sent, a payload discovery must refuse.
-  An unmatched request fails the test.
+  An unmatched request fails the test. `refusalText(execute(...))` of the
+  kit awaits the call, requires an `isError` result and returns its text; a
+  refusal that is thrown fails the test as the provider failure it would be.
+  In a table that feeds one argument object to several tools,
+  `declaredOnly(plugin, tool, args)` keeps the entries each tool declares,
+  so the undeclared-argument rule does not hide the rule under test.
 
 **No test ever calls a real provider**, and none needs a credential.
 
@@ -639,7 +746,10 @@ resources, Tools, Catalog (one line per risk), Presets, Tests.
 
 **`docs/handbook/providers/<id>.md`** — for the reviewer and the next
 maintainer: the model and the reasons behind it. Start it with this
-frontmatter and write the six sections every provider handbook has:
+frontmatter and cover these six subjects (the shipped handbooks do, under
+headings of their own), plus an "Identifiers" paragraph that lists each
+grammar and where the value lands, and a line saying whether the plugin
+refuses undeclared arguments or builds its requests field by field:
 
 ```markdown
 ---
@@ -729,6 +839,13 @@ reports, so one version never designates two different classifiers.
 | A new tool, risk or preset; a widened pattern                                                                            | minor        | patch                 |
 | A removed tool; a stricter classification (calls once allowed are refused); a change of what `execute` throws or returns | major        | minor (`0.2` → `0.3`) |
 
+The third row is the one that is forgotten. A classification that became
+stricter, or an executor that now refuses what it used to forward or
+declines where it used to throw, changes what an agent's call does: it is a
+major version, or a minor one before `1.0.0`. Closing the argument surface
+of a plugin, binding an identifier to its resource, or pricing a statement
+on a more severe risk are all breaking steps.
+
 **Catalog version** — `catalog_version` in the YAML, an integer, independent
 of the plugin version. Bump it and set `catalog_date` on every reviewed
 change of the catalog's content: an entry, a pattern, a vector, a limit, a
@@ -777,18 +894,22 @@ change yourself:
 
 ## When something fails
 
-| Message                                                                 | Cause and fix                                                                                                       |
-| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| `Cannot find package '@vaubaan/plugin-<id>'`                            | The workspace is not linked: run `npm install` at the root.                                                         |
-| `Invalid risk catalog '…'` followed by bullets                          | Read every bullet; each path is exact (`risks[3].vector.blast`, `presets[1].entries[2].risk_id`).                   |
-| `exactly one fallback entry per catalog, found 2`                       | A second entry matches `<id>.**.W` or carries the flag: give it a narrower pattern.                                 |
-| `… is the fallback — a preset must not pre-accept uncategorized writes` | Remove the fallback from the preset; the writes you meant are covered by their own entries.                         |
-| `PluginDefinitionError … must start with '<prefix>'`                    | A tool name was written by hand: build it in `identity.ts` with `toolPrefixFor`.                                    |
-| `assertCatalogCoverage … no catalog risk matches it`                    | The classifier emits a slice outside every `matches`. A read needs its own entry: the fallback only catches writes. |
-| `report.fallbackHits` is not empty                                      | A realistic call is covered by the fallback alone: add the catalog entry.                                           |
-| `mockFetch: unexpected GET …`                                           | The plugin requested a URL no route covers: add the route or fix the URL.                                           |
-| `next build` fails reading `risk-catalog.yaml`                          | The catalog is loaded with `new URL(…, import.meta.url)`: use `catalogPathNextTo(import.meta.url)`.                 |
-| `example-config-providers.test.ts` fails                                | An `oauth2` or `app-install` plugin is registered without its settings in `deploy/config/*.example*` (step 10).     |
+| Message                                                                               | Cause and fix                                                                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Cannot find package '@vaubaan/plugin-<id>'`                                          | The workspace is not linked: run `npm install` at the root.                                                                                                                                                                                                                                                                                        |
+| `Invalid risk catalog '…'` followed by bullets                                        | Read every bullet; each path is exact (`risks[3].vector.blast`, `presets[1].entries[2].risk_id`).                                                                                                                                                                                                                                                  |
+| `exactly one fallback entry per catalog, found 2`                                     | A second entry matches `<id>.**.W` or carries the flag: give it a narrower pattern.                                                                                                                                                                                                                                                                |
+| `… is the fallback — a preset must not pre-accept uncategorized writes`               | Remove the fallback from the preset; the writes you meant are covered by their own entries.                                                                                                                                                                                                                                                        |
+| `PluginDefinitionError … must start with '<prefix>'`                                  | A tool name was written by hand: build it in `identity.ts` with `toolPrefixFor`.                                                                                                                                                                                                                                                                   |
+| `assertCatalogCoverage … no catalog risk matches it`                                  | The classifier emits a slice outside every `matches`. A read needs its own entry: the fallback only catches writes.                                                                                                                                                                                                                                |
+| `assertCatalogCoverage … cannot be read back` or `… carries '*' inside an identifier` | The classifier wrote a raw value into an identifier segment: refuse it in its grammar, or emit `identSegment(value)` (step 4).                                                                                                                                                                                                                     |
+| `<name>: not an argument of '<tool>' — nothing classifies it, so it is not sent.`     | The call (or a test sample) carries an argument the tool's schema does not declare: declare and classify it, or remove it; `declaredOnly` for shared test tables (step 8).                                                                                                                                                                         |
+| The audit shows `upstream_error` for a call that sent nothing                         | `execute` threw a plain `Error` to decline: throw `ExecutorRefusal` under `declining`, or return `refusalResult` (step 7).                                                                                                                                                                                                                         |
+| `report.fallbackHits` is not empty                                                    | A realistic call is covered by the fallback alone: add the catalog entry.                                                                                                                                                                                                                                                                          |
+| `mockFetch: unexpected GET …`                                                         | The plugin requested a URL no route covers: add the route or fix the URL.                                                                                                                                                                                                                                                                          |
+| `next build` fails reading `risk-catalog.yaml`                                        | The catalog is loaded with `new URL(…, import.meta.url)`: use `catalogPathNextTo(import.meta.url)`.                                                                                                                                                                                                                                                |
+| `example-config-providers.test.ts` fails                                              | An `oauth2` or `app-install` plugin is registered without its settings in `deploy/config/*.example*` (step 10).                                                                                                                                                                                                                                    |
+| `plugin-identifier-tests.test.ts` fails for `<id>`                                    | No test file of the plugin feeds `'..'` and an encoded or separator form (`%2e%2e`, `%2f`, `../`) to both `classify` and `execute` (step 8). The file is read with the TypeScript parser: the values must be string literals of the code, the classifier and the executor must be called, and at least one test must run (not `skip`, not `todo`). |
 
 More cases: SDK handbook,
 ["How to debug"](../docs/handbook/plugin-sdk.md#how-to-debug).

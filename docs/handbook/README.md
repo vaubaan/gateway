@@ -21,27 +21,29 @@ follow can be detected as drift.
 
 ## Running an instance
 
-| Handbook                              | What it covers                                                                                                                            |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| [configuration](configuration.md)     | Instance configuration, crypto and the composition root: how the process starts from configuration alone.                                 |
-| [store](store.md)                     | The embedded SQLite store: one file on the mounted volume, schema and migrations applied at boot, repository interfaces.                  |
-| [cutover-from-v4](cutover-from-v4.md) | The procedure to move the one real user of the v4 SaaS onto a v5 instance and switch v4 off: what to prepare, the checklist, live checks. |
-| [demo-mode](demo-mode.md)             | `npm run demo`: the real application in a browser with a simulated identity provider, simulated providers and seeded data.                |
+| Handbook                                  | What it covers                                                                                                                                                             |
+| ----------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [configuration](configuration.md)         | Instance configuration, crypto and the composition root: how the process starts from configuration alone.                                                                  |
+| [store](store.md)                         | The embedded SQLite store: one file on the mounted volume, schema and migrations applied at boot, repository interfaces.                                                   |
+| [cutover-from-v4](cutover-from-v4.md)     | The procedure to move the one real user of the v4 SaaS onto a v5 instance and switch v4 off: what to prepare, the checklist, live checks.                                  |
+| [demo-mode](demo-mode.md)                 | `npm run demo`: the real application in a browser with a simulated identity provider, simulated providers and seeded data.                                                 |
+| [threat-model](threat-model.md)           | What the gateway defends, against whom, with which control, and which test proves the control is still there: the security reading of the spec and of the other handbooks. |
+| [known-limitations](known-limitations.md) | What a reader should know before relying on this version: what has not been done, and what is not there.                                                                   |
 
 Packaging and deployment (image, compose file, reverse proxy) are in
 [`deploy/README.md`](../../deploy/README.md).
 
 ## Humans
 
-| Handbook                            | What it covers                                                                                                                                                               |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [authentication](authentication.md) | How a human gets a session: OIDC sign-in, the web session, the bootstrap token, and how "operator" is decided (the admin rule).                                              |
-| [authority](authority.md)           | What a user may accept on a connection right now: owners, shares, local groups, and what follows when it changes (orphaned missions, unowned connections).                   |
-| [connections](connections.md)       | Connect flows through the company's own provider app, credential storage and refresh, resource discovery and curation, provider apps.                                        |
-| [missions](missions.md)             | How a connection owner issues a mission (a per-risk budget and gate on selected resources): authority, presets, resources, members and per-holder tokens, the bootstrap kit. |
-| [requests](requests.md)             | Claims and approval requests once a refusal dropped them into the creator's inbox: the request URL, who may open it, the decision, events, expiry.                           |
-| [audit](audit.md)                   | How what happened is made visible: the Audit page's search, the Mission session page, the retention sweeper, administrative entries.                                         |
-| [web-app](web-app.md)               | The frame of the human surface: route map, layouts, the application bar, session helpers, UI primitives.                                                                     |
+| Handbook                            | What it covers                                                                                                                                                                                  |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [authentication](authentication.md) | How a human gets a session: OIDC sign-in, the web session, the bootstrap token, and how "operator" is decided (the admin rule).                                                                 |
+| [authority](authority.md)           | What a user may accept on a connection right now: owners, shares, local groups, and what follows when it changes (orphaned missions, unowned connections).                                      |
+| [connections](connections.md)       | Connect flows through the company's own provider app, credential storage and refresh, resource discovery and curation, provider apps.                                                           |
+| [missions](missions.md)             | How a connection owner issues a mission (a per-risk budget and gate on selected resources): authority, presets, resources, members and per-holder tokens, the bootstrap kit.                    |
+| [requests](requests.md)             | Claims and approval requests once a refusal dropped them into the creator's inbox: the request URL, who may open it, the decision, events, expiry.                                              |
+| [audit](audit.md)                   | How what happened is made visible: the Audit page's search, the Mission session page, the retention sweeper, administrative entries.                                                            |
+| [web-app](web-app.md)               | The frame of the human surface: route map, layouts, the shell of the application and of Administration, session helpers, UI primitives and type colours; the provider reference (`/providers`). |
 
 ## Agents
 

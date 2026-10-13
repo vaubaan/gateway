@@ -122,8 +122,10 @@ export interface MissionsRepo {
    * Issues a token to one holder. A member's previous active token becomes `rotated`
    * in the same transaction (at most one active token per member of a mission); the
    * tokens of the other holders are untouched. A named token whose name an active
-   * token of the mission already carries is refused (`InvariantError`): a name
-   * identifies one token.
+   * token of the mission already carries is refused
+   * (`TokenNotIssuableError('name-taken')`): a name identifies one token. So is a
+   * token on a mission whose stored status is not `active`, or for a holder who is
+   * not on the mission: both are read again inside the transaction.
    */
   issueToken(input: IssueTokenInput): Promise<IssuedToken>;
   findTokenByPrefix(

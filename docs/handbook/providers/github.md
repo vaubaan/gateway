@@ -93,9 +93,11 @@ for the two search tools). `installationTokenForCall(ctx, repo)`
 repository through the host-provided `ExecuteContext.credentialCache`, so
 the diagram above is the cache-miss path; without a cache every call mints.
 `github__mint_install_token` never uses the cache: the token it hands out
-is always minted for that call. 401/403 anywhere → `UpstreamAuthError`. No
+is always minted for that call. 401/403 anywhere → `UpstreamAuthError`;
+any other failed status of the token mint or of the repository listing of
+discovery → `UpstreamHttpError` carrying the status. No
 PAT path. `execute` reads the call first (`readGithubCall`, see
-"Identifiers") and throws on a refusal **before** the mint: a call without
+"Identifiers") and declines on a refusal **before** the mint: a call without
 a well-formed repository of the mission never obtains a token, scoped or
 installation-wide. The installation id is a segment of the mint path and
 must be decimal digits (`installationIdOf` in `src/app-install.ts`, at most
@@ -106,17 +108,17 @@ number` and nothing is sent.
 
 | File                      | Role                                                                                                                                                                                                                                                                                                       |
 | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v2.0.0.                                                                                                                                                                                                                                                                    |
-| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets, `catalog_version: 3`.                                                                                                                                                                                                                                                      |
-| `src/data-model.ts`       | Plane `repo`, 16 entities; `branch` is `envScopable`.                                                                                                                                                                                                                                                      |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v3.0.0.                                                                                                                                                                                                                                                                    |
+| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets, `catalog_version: 4`.                                                                                                                                                                                                                                                      |
+| `src/data-model.ts`       | Plane `repo`, 17 entities (`delete` under `release` is a verb leaf); `branch` is `envScopable`.                                                                                                                                                                                                            |
 | `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                                                                                                                                                                                |
 | `src/call.ts`             | The grammar of every identifier (`ownerName`, `repoName`, `repoFullName`, `repoPath`, `revision`, `branchName`, `tagName`, `pullRequestHead`, `positiveInteger`, `workflowRef`) and `readGithubCall`, the one reader `classify` and `execute` share; the refusal wording (`repositoryNotSelectedMessage`). |
 | `src/classify.ts`         | `classifyGithub(tool, args, resources)` = `readGithubCall` then `slicesOf(call)`; `isWorkflowPath`.                                                                                                                                                                                                        |
 | `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                                                                                                                                                                 |
 | `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `installationIdOf`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                                                                                                                                                       |
-| `src/execute.ts`          | `executeGithub`, `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                                                               |
+| `src/execute.ts`          | `executeGithub` (the body run under the SDK's `declining`), `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                                                                                                                                    |
 | `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                                                                                                                                                                              |
-| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and refuses a base other than the declared one.                                                                                                                                              |
+| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, call, args)`: checked call → Octokit call; reads the pull request before a merge and declines (`ExecutorRefusal`) a base other than the declared one.                                                                                                                         |
 
 ## Tool → slice mapping
 
@@ -150,7 +152,7 @@ one spelling the classifier reasons about, or checked against GitHub:
   endpoint takes none). The dispatcher first reads the pull request
   (`GET /repos/{owner}/{repo}/pulls/{n}`) and merges only when its real
   base equals the declared one (`main` when absent); otherwise the call
-  fails without a merge and the error names the real base.
+  is declined without a merge and the answer names the real base.
 
 ### Identifiers
 
@@ -159,10 +161,16 @@ missionRepos)` (`src/call.ts`) reads the arguments once, against the
 mission's repositories, and returns a `GithubCall` whose every identifier
 was checked by the grammar of its kind, or the refusal. `classifyGithub`
 turns that call into slices (`slicesOf`), `executeGithub` hands the same
-call to the dispatcher, which builds its requests from the call and never
-from the raw arguments. A value outside its grammar refuses the call —
-`denied` for the classifier, a thrown error before the token mint for the
-executor; nothing is escaped, trimmed, repaired or defaulted on one side
+call to the dispatcher, which takes every identifier of its requests —
+repository, branch, path, revision, number — from the call and never from
+the raw arguments. `args` only supplies what is neither classified nor an
+identifier: contents, titles, messages, flags, page sizes, the search
+query `q`, and the blob `sha` of `create_or_update_file` / `delete_file`,
+which is forwarded as given. Each request is built field by field from
+those declared arguments: an argument no tool declares is never read, so it
+is ignored, not refused. A value outside its grammar refuses the call —
+`denied` for the classifier, an `isError` result before the token mint for
+the executor; nothing is escaped, trimmed, repaired or defaulted on one side
 only (ADR
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
 
@@ -174,7 +182,7 @@ only (ADR
 | `branch`, `from_branch`, `base`                                 | `branchName` — a git ref name (`git check-ref-format`: no `..`, no component starting with `.` or ending in `.lock`, no blank, none of `~ ^ : ? * [ \`), ≤ 255, not a ref spelling | URL path, query or body, slice `branch[b]` / `branch-protection[b]`           |
 | `head` (`create_pull_request`)                                  | `pullRequestHead` — a `branchName`, or `owner:branch` for a fork                                                                                                                   | body, slice `branch[head]`                                                    |
 | `tag_name`                                                      | `tagName` — a git ref name, never `refs/…`                                                                                                                                         | body, slice `tag[name]`                                                       |
-| `ref`, `sha`, `target_commitish`                                | `revision` — a branch, a tag, a full ref or a SHA, optionally with `~N` / `^N`                                                                                                     | URL path (`/commits/{sha}`), query or body, slice `branch[…]` / `commit[sha]` |
+| `ref`, `sha` (`list_commits`, `get_commit`), `target_commitish` | `revision` — a branch, a tag, a full ref or a SHA, optionally with `~N` / `^N`                                                                                                     | URL path (`/commits/{sha}`), query or body, slice `branch[…]` / `commit[sha]` |
 | `pull_number`, `issue_number`, `release_id`                     | `positiveInteger` — a number, a positive safe integer                                                                                                                              | URL path, slice ident                                                         |
 | `workflow_id`                                                   | `workflowRef` — a positive integer, or one file name (no `/` or `\`, not `.` or `..`, ≤ 255)                                                                                       | URL path, slice `workflow[id]`                                                |
 | the installation id of the connection                           | `installationIdOf` (`src/app-install.ts`) — decimal digits, ≤ 20                                                                                                                   | URL path of the token mint                                                    |
@@ -211,7 +219,7 @@ nothing is created.
 | `merge_pull_request`                      | `repo[X].pull_request[N].W` + `repo[X].branch[base ?? main].merge-into.W`                            |
 | `add_issue_comment`                       | `repo[X].issue[N].comment.W` (issue/PR number space is unified)                                      |
 | `create_release`                          | `repo[X].release.W` + `repo[X].tag[name].W`                                                          |
-| `delete_release`                          | `repo[X].release[id].W`                                                                              |
+| `delete_release`                          | `repo[X].release[id].delete.W`                                                                       |
 | `update_branch_protection`                | `repo[X].branch-protection[branch].W`                                                                |
 | `mint_install_token`                      | `repo[X].install-token[clone\|push].W` for `repoFullName`, or one per GitHub resource of the mission |
 
@@ -235,15 +243,22 @@ outside the ident class before it reaches a slice.
   branch would have passed on `feature-branch-write` alone. Without the
   field the risk is always touched and must be accepted explicitly; a
   workflow write on `main` additionally touches `merge-protected`.
-- **Fallback widened to `github.**.W`** (was `github.repo[**].W`), per the
-risk-model spec §4.3 wording. The fallback counts only when no specific
-entry matched the write (policy-engine rule settled with P1.2-SDK); no
-preset offers it, the creator adds it for unconventional branch names
-(`plugin.test.ts`checks both: a`wip-x` write falls to the fallback alone,
-  and no preset lists it).
-- `create-release` and `delete-release` both match `release[**].W`: each of
-  the two tools touches both risks, so a mission must accept both (the
-  `release-manager` preset does).
+- The fallback was widened to `github.**.W` (was `github.repo[**].W`), per
+  the risk-model spec §4.3 wording. It counts only when no specific entry
+  matched the write (policy-engine rule settled with P1.2-SDK); no preset
+  offers it, the creator adds it for unconventional branch names
+  (`risk-catalog.test.ts` pins a `wip-x` write on the fallback alone;
+  `plugin.test.ts` checks that its slice is a fallback hit and that no
+  preset lists the fallback).
+- **Publishing and deleting a release are two risks, each touched by its own
+  tool.** `create_release` emits `release.W` and `tag[name].W`, the patterns
+  of `create-release` (`repo[**].release.W`, `repo[**].tag[**].W`).
+  `delete_release` emits `release[id].delete.W`: `delete` is a verb leaf the
+  data model declares under `release`, and `delete-release` matches
+  `repo[**].release[**].delete.W`. Neither pattern matches the other tool's
+  slice, so a mission that accepts `create-release` alone cannot delete a
+  release, and the reverse; `release-manager` carries both, each under
+  `approval`.
 - Two mint risks (`clone` vs `push`): the push token leaves the gateway's
   perimeter with write permissions, hence a separate, approval-gated entry.
 - `merge_pull_request` is classified on the declared `base`, `main` when
@@ -290,10 +305,11 @@ plugins. `branch-protection-write` is in no preset.
   kind mismatch, 401 → `UpstreamAuthError`), Octokit over `mockFetch`
   (per-call repository scoping, installation-wide for search, JSON body,
   403 → `UpstreamAuthError`), branch-protection and release tools, the merge
-  bound to the declared base (read then merge; no merge on a mismatch or an
-  unreadable base), `push_files` refusing malformed `files`, mint tool
-  (clone/push permission sets, fan-out over mission resources, refusals
-  before any call), discovery (metadata, paging to `total_count`, 401).
+  bound to the declared base (read then merge; a mismatch is declined with
+  no merge, an unreadable base throws), `push_files` declining malformed
+  `files`, mint tool (clone/push permission sets, fan-out over mission
+  resources, refusals before any call, as `isError` results), discovery
+  (metadata, paging to `total_count`, 401).
 - `injection.test.ts` (415): every identifier position fed `..`, `.`,
   `a/../b`, encoded forms, an empty, an overlong and a multi-line value, to
   `classify` and to `execute` — refused by both with nothing sent (not even
@@ -362,15 +378,28 @@ plugins. `branch-protection-write` is in no preset.
   tool 'github__push_files' requires 'files' to be a non-empty array of { path, content } strings
   ```
 
-- **A merge fails although the mission accepts it** — the call was
+- **A merge is declined although the mission accepts it** — the call was
   classified on the declared base and the pull request targets another
-  branch; nothing was merged. Calling again with the real base classifies
+  branch; nothing was merged, and the answer is an `isError` result, not an
+  upstream failure. Calling again with the real base classifies
   the merge on it (`merge-protected` for a protected branch).
 
   ```text
   github__merge_pull_request: pull request #7 targets 'main', not the declared base 'feature/x'. Call again with base 'main'.
   ```
 
+- **A call the mission accepts comes back `isError` with no
+  `upstream_error` in the audit** — the executor declined it
+  (`ExecutorRefusal`): the reader refused an argument, or the merge guard
+  did not hold. The text is the reason. What GitHub itself fails is thrown
+  (`UpstreamAuthError`, `UpstreamHttpError`, Octokit's own error) and
+  recorded as an upstream failure; so are the conditions the executor
+  still throws as plain errors: an installation id that is not a number, a
+  missing app-configuration key, a pull request whose base cannot be read
+  and a default branch GitHub answers that is not a branch name.
+- **`delete_release` is refused with `github.delete-release` missing on a
+  mission that holds `create-release`** — they are separate risks (catalog
+  v4); add `delete-release`.
 - **A write is refused with `github.uncategorized-write` missing** — the
   branch matches neither the feature/\* conventions nor a protected name,
   so only the fallback caught it. Rename the branch, or have the creator

@@ -8,22 +8,25 @@ the risks it accepts.
 
 Handbook: [`docs/handbook/providers/github.md`](../../docs/handbook/providers/github.md).
 Contract: [`docs/handbook/plugin-sdk.md`](../../docs/handbook/plugin-sdk.md),
-ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
+ADRs [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md),
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../docs/decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md),
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../docs/decisions/plugin-arguments-closed-surface-and-typed-refusals.md).
+Plugin version 3.0.0, catalog version 4.
 
 ## Layout
 
-| File                      | Role                                                                                                             |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin({...})` → `githubPlugin` (default export).                                                         |
-| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets. Loaded by the SDK at boot; the only catalog artefact.                            |
-| `src/data-model.ts`       | Plane `repo`: repo → branch → file / commit; tag, release, pull_request, issue → comment, workflow → run, rules. |
-| `src/tools.ts`            | 26 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                             |
-| `src/call.ts`             | The grammar of every identifier and `readGithubCall`, the one reader `classify` and `execute` share.             |
-| `src/classify.ts`         | Pure `(tool, args, resources) → slices \| denied`. The security-critical file.                                   |
-| `src/credential.ts`       | `app-install` `CredentialSpec`, app-config keys, `installationTokenFor(ctx, scope)`.                             |
-| `src/app-install.ts`      | RS256 App JWT → `POST /app/installations/{id}/access_tokens` (scoped to repositories and permissions).           |
-| `src/execute.ts`          | `execute` (per-call token + Octokit over `ctx.fetch`), `mint_install_token`, `discoverResources` (paged).        |
-| `src/octokit-dispatch.ts` | Checked call → Octokit call; a merge first checks the pull request's real base against the declared one.         |
+| File                      | Role                                                                                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/index.ts`            | `definePlugin({...})` → `githubPlugin` (default export).                                                                                   |
+| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets. Loaded by the SDK at boot; the only catalog artefact.                                                      |
+| `src/data-model.ts`       | Plane `repo`: repo → branch → file / commit; tag, release (→ `delete`, a verb leaf), pull_request, issue → comment, workflow → run, rules. |
+| `src/tools.ts`            | 26 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                                                       |
+| `src/call.ts`             | The grammar of every identifier and `readGithubCall`, the one reader `classify` and `execute` share.                                       |
+| `src/classify.ts`         | Pure `(tool, args, resources) → slices \| denied`. The security-critical file.                                                             |
+| `src/credential.ts`       | `app-install` `CredentialSpec`, app-config keys, `installationTokenFor(ctx, scope)`.                                                       |
+| `src/app-install.ts`      | RS256 App JWT → `POST /app/installations/{id}/access_tokens` (scoped to repositories and permissions).                                     |
+| `src/execute.ts`          | `execute` (per-call token + Octokit over `ctx.fetch`), `mint_install_token`, `discoverResources` (paged).                                  |
+| `src/octokit-dispatch.ts` | Checked call → Octokit call; a merge first checks the pull request's real base against the declared one and declines a mismatch.           |
 
 The plugin imports the SDK only (plus `@octokit/rest` and `jose`); nothing
 from `apps/` or `@vaubaan/gateway-core`.
@@ -35,27 +38,28 @@ environment of files and commits** (`branch[main]` ≠ `branch[feature/x]`),
 which is why the catalog distinguishes protected branches by name rather
 than by the owner's environment label. Virtual leaves carry intentions that
 are not entities: `branch[X].merge-into`, `branch[X].propose-to[Y]`,
-`branch[X].workflow-via-file`, `branch[X].files-bulk`.
+`branch[X].workflow-via-file`, `branch[X].files-bulk`,
+`release[id].delete`.
 
 ## Catalog
 
-| Risk                              | Covers                                                                                 |
-| --------------------------------- | -------------------------------------------------------------------------------------- |
-| `github.read-code`                | branches, files, commits, tags (reads)                                                 |
-| `github.read-meta`                | PRs, issues, comments, releases, workflows and runs, branch protection (reads)         |
-| `github.search-global`            | `search_code`, `search_issues` — account-shaped, not bounded to mission resources      |
-| `github.feature-branch-write`     | branch, file and bulk writes on `feature/*, fix/*, chore/*, bug/*, docs/*, refactor/*` |
-| `github.merge-protected`          | any write or PR merge into `main, master, prod, production, release-*`                 |
-| `github.workflow-write-via-file`  | a file write under `.github/workflows/*.yml` (privilege-escalation vector)             |
-| `github.bulk-file-write`          | `push_files` with 2+ files                                                             |
-| `github.create-pr`                | `create_pull_request`                                                                  |
-| `github.comment-write`            | `add_issue_comment`                                                                    |
-| `github.create-release`           | `create_release` (release record + tag)                                                |
-| `github.delete-release`           | `delete_release`                                                                       |
-| `github.branch-protection-write`  | `update_branch_protection` (posture shift)                                             |
-| `github.mint-install-token-clone` | `mint_install_token` with `purpose=clone`                                              |
-| `github.mint-install-token-push`  | `mint_install_token` with `purpose=push`                                               |
-| `github.uncategorized-write`      | fallback `github.**.W` — counts only when no specific entry matched the write          |
+| Risk                              | Covers                                                                                        |
+| --------------------------------- | --------------------------------------------------------------------------------------------- |
+| `github.read-code`                | branches, files, commits, tags (reads)                                                        |
+| `github.read-meta`                | PRs, issues, comments, releases, workflows and runs, branch protection (reads)                |
+| `github.search-global`            | `search_code`, `search_issues` — account-shaped, not bounded to mission resources             |
+| `github.feature-branch-write`     | branch, file and bulk writes on `feature/*, fix/*, chore/*, bug/*, docs/*, refactor/*`        |
+| `github.merge-protected`          | any write or PR merge into `main, master, prod, production, release-*`                        |
+| `github.workflow-write-via-file`  | a file write under `.github/workflows/*.yml` (privilege-escalation vector)                    |
+| `github.bulk-file-write`          | `push_files` with 2+ files                                                                    |
+| `github.create-pr`                | `create_pull_request`                                                                         |
+| `github.comment-write`            | `add_issue_comment`                                                                           |
+| `github.create-release`           | `create_release` (release record + tag): `release.W`, `tag[**].W`                             |
+| `github.delete-release`           | `delete_release`: `release[**].delete.W`, its own verb leaf — not covered by `create-release` |
+| `github.branch-protection-write`  | `update_branch_protection` (posture shift)                                                    |
+| `github.mint-install-token-clone` | `mint_install_token` with `purpose=clone`                                                     |
+| `github.mint-install-token-push`  | `mint_install_token` with `purpose=push`                                                      |
+| `github.uncategorized-write`      | fallback `github.**.W` — counts only when no specific entry matched the write                 |
 
 A write on `main` touches `merge-protected`; a write on `feature/x`
 touches `feature-branch-write`; a write on `wip-x` matches no specific
@@ -66,15 +70,23 @@ The classifier refuses what it cannot place exactly: a file path that is
 not canonical (leading `/`, empty, `.` or `..` segment, backslash), a ref
 where a branch name is expected (`refs/heads/main`), a malformed `files`
 list. `merge_pull_request` is classified on the declared `base` (`main`
-when absent) and the merge is refused when the pull request targets
+when absent) and the merge is declined when the pull request targets
 another branch.
 
 What is classified is what is sent. `readGithubCall` (`src/call.ts`) reads
 the arguments once, against the mission's repositories, and both
-`classify` and `execute` start from the call it returns; `execute` refuses
-— it throws, before the token mint — whatever `classify` refuses. Each
-kind of identifier has one grammar, and a value outside it is refused,
-never escaped or repaired:
+`classify` and `execute` start from the call it returns; `execute` declines
+— an `isError` result, before the token mint — whatever `classify` refuses.
+Each kind of identifier has one grammar, and a value outside it is refused,
+never escaped or repaired. Requests are built field by field from declared
+arguments, so an argument no tool declares is never read.
+
+`execute` has two ways out besides its result. What it declines itself —
+the reader's refusal, a merge whose pull request targets another base — is
+thrown inside as the SDK's `ExecutorRefusal` and turned into an `isError`
+result by `declining` at the entry point. What GitHub fails is thrown out:
+`UpstreamAuthError` on 401/403, `UpstreamHttpError` (with the status) for
+any other failed status of the token mint or of the repository listing.
 
 | Identifier                                  | Grammar                                                                                                                                                |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -166,7 +178,8 @@ npx vitest run plugins/github
   row whenever a tool, a classifier branch or a catalog pattern changes.
 - `classify.test.ts` — the classifier's security suite: `(tool, args, resources)` → exact slices or denial.
 - `execute.test.ts` — JWT claims, mint request shape, per-call scoping,
-  Octokit over `mockFetch`, `UpstreamAuthError`, mint tool, paged discovery.
+  Octokit over `mockFetch`, `UpstreamAuthError`, declined calls as `isError`
+  results, mint tool, paged discovery.
 - `injection.test.ts` — every identifier position fed `..`, `.`, `a/../b`,
   encoded forms, an empty, an overlong and a multi-line value, to `classify`
   and to `execute`: refused by both with nothing sent, or sent as the exact
@@ -174,4 +187,4 @@ npx vitest run plugins/github
 - `data-model.test.ts` — data-model integrity.
 - `token-cache.test.ts` — connection-scoped reuse of installation tokens.
 
-No test reaches GitHub.
+585 tests; none reaches GitHub.

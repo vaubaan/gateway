@@ -198,7 +198,7 @@ Preconditions: section 1 done; v4 untouched and serving.
       expected version and commit.
 - [ ] **A2 — Identity provider.** Open `/admin/bootstrap` with the bootstrap
       token; configure the IdP on Administration → Identity provider; "Test
-      login" shows your email and `Operator: yes`; sign in through the IdP;
+      login" shows your email and Operator "yes (matches the admin rule)"; sign in through the IdP;
       `/admin` shows the bootstrap token as revoked.
 - [ ] **A3 — Provider apps.** Enter each app of §1.3 on Administration →
       Provider apps; every card reads `configured` (GitHub also reads
@@ -348,7 +348,10 @@ by the automated smoke — never with the client the cutover is for.
 - If the server does not connect: `curl` the kit's verification first. A 401
   with a fresh token means the `Authorization` header does not reach the
   instance (the variable is not exported where Claude Code runs, or the
-  reverse proxy strips the header). A 403 on every request means the client
+  reverse proxy strips the header). A 401 whose `error.data.reason` is set
+  (`token-rotated`, `token-revoked`, `holder-removed`, `holder-deactivated`)
+  means the token authenticated before and no longer does: a newer token of
+  the same holder replaced it, or it was revoked; export the current one. A 403 on every request means the client
   sends an `Origin` header; the door answers no CORS. Then read
   [execution-door](execution-door.md), "How to debug".
 - [ ] Answer: \_\_\_\_ Claude Code version: \_\_\_\_

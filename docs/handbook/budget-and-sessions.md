@@ -41,7 +41,7 @@ apps/gateway/src/server/budget/
   decide.ts           decide(input) → Allow | Refuse   (pure, no IO)
   gates.ts            GATE_EVENT_KINDS, openedGatesOf(events, period) — the gates opened for the period;
                       effectiveGate(entry, openedGates) — the gate that applies to a risk now          (pure)
-  mission-state.ts    deriveMissionState(), consumedInPeriod()  — active | exhausted | expired | …
+  mission-state.ts    deriveMissionState(), consumedInPeriod()  — revoked | orphaned | expired | active (+ exhausted risks)
   mapping.ts          store records ⇄ domain: BudgetMission, budgetMissionOf(), policyEntryOf() /
                       policyEntryRecordOf(), periodOf() / statedPeriodOf() / budgetPeriodOf(),
                       sessionCounterOf(), isStale()
@@ -76,16 +76,16 @@ A mission policy is `readonly MissionPolicyEntry[]`, one entry per accepted risk
 the reverse, for the budget **and** for missions (handbook [missions](missions.md),
 "Records and views"); a connection's own shapes are `connections/mapping.ts`.
 
-| Function                     | From → to                                                                                     | Used by                                           |
-| ---------------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------- |
-| `policyEntryOf(record)`      | store entry → shared `MissionPolicyEntry`                                                     | budget, missions, execution door, requests        |
-| `policyEntryRecordOf(entry)` | shared `MissionPolicyEntry` → store entry (the inverse, same file)                            | `MissionService.issue`                            |
-| `periodOf(record)`           | `periodAnchor` / `periodSeconds` → shared `Period` (the pipeline's; anchor only if recurring) | `loadMissionContext`                              |
-| `statedPeriodOf(record)`     | → `StatedPeriod` `{ kind, length_seconds? }`, no anchor                                       | drafts, detail page, kit, `mission-issued` audit  |
-| `budgetPeriodOf(record)`     | → `PeriodSpec` `{ anchor_at, length_seconds \| null }`                                        | `budgetMissionOf`                                 |
-| `sessionCounterOf(record)`   | `SessionCounterRecord` → shared `SessionCounter`                                              | `mission-usage.ts`, `consistency.ts`              |
-| `isStale(resource)`          | `staleSince !== null`                                                                         | `loadMissionContext`, mission detail, `draftFrom` |
-| `budgetMissionOf(record)`    | `MissionRecord` → `BudgetMission`                                                             | missions, requests, tests                         |
+| Function                     | From → to                                                                                     | Used by                                             |
+| ---------------------------- | --------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `policyEntryOf(record)`      | store entry → shared `MissionPolicyEntry`                                                     | budget, missions, execution door, requests          |
+| `policyEntryRecordOf(entry)` | shared `MissionPolicyEntry` → store entry (the inverse, same file)                            | `MissionService.issue`                              |
+| `periodOf(record)`           | `periodAnchor` / `periodSeconds` → shared `Period` (the pipeline's; anchor only if recurring) | `loadMissionContext`                                |
+| `statedPeriodOf(record)`     | → `StatedPeriod` `{ kind, length_seconds? }`, no anchor                                       | drafts, detail page, kit, `mission-issued` audit    |
+| `budgetPeriodOf(record)`     | → `PeriodSpec` `{ anchor_at, length_seconds \| null }`                                        | `budgetMissionOf`                                   |
+| `sessionCounterOf(record)`   | `SessionCounterRecord` → shared `SessionCounter`                                              | `mission-usage.ts`, `consistency.ts`                |
+| `isStale(resource)`          | `staleSince !== null`                                                                         | `loadMissionContext`, mission detail, `draftFrom`   |
+| `budgetMissionOf(record)`    | `MissionRecord` → `BudgetMission`                                                             | missions, requests, execution door (catalog), tests |
 
 Still outside it: `budget-stage.ts` rebuilds a `PeriodSpec` from the pipeline's `Period`
 (`periodSpecOf`) and re-reads the mission row for a one-off anchor — the shared one-off
@@ -154,7 +154,14 @@ approval for this fingerprint). The first failing risk names the refusal; a refu
 risk refuses the whole call (spec §3.5). An approved action still passes quota and rate
 first ("the gate does not replace the budget"). A touched risk absent from the policy
 throws `BudgetInvariantError`: the risk stage guarantees `risks_touched ⊆ accepted`, so
-this is a bug, not a refusal, and it rolls the transaction back.
+this is a bug, not a budget refusal, and it rolls the transaction back. The caller is
+refused all the same: `CallPipeline` runs the budget stage, like the resource and risk
+stages, through one `attempt`, and a stage that throws becomes a `rejected` call with its
+audit entry — the reason names the stage and the error's class, never its message
+(`stageFailureReason`) — while the thrown value goes to the host's log through
+`onStageError` ([gateway-core](gateway-core.md); ADR
+[decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md),
+D1).
 
 ## Gates opened for the period (`gates.ts`)
 
@@ -182,7 +189,11 @@ opening:
 - **a later edit** — `gate-changed` is recorded when the creator sets the risk's gate on
   the mission page ([missions](missions.md), "Editing a gate"). An opening is in force
   only if no `gate-changed` of that risk has a timestamp greater than **or equal to** its
-  own: on a tie the edit wins and the gate stays closed.
+  own: on a tie the edit wins and the gate stays closed. The edit finds an opening to
+  close with this same function over the period that runs now (`currentPeriod`),
+  whether or not the mission serves at that instant: an expired mission keeps its gates
+  editable, and an opening closed there stays closed if the expiry is extended later in
+  the period.
 
 An event whose details do not have the shape of its kind opens nothing
 (`parseEventDetails`). The request page and the mission page show "open until …" from the
@@ -255,15 +266,19 @@ risk, `request` with `{ request_id, request_kind, tool, fingerprint }`.
 **One contract for event details.** The details of each kind are one type,
 `SessionEventDetails` (`packages/shared/src/session-events.ts`): a union of
 `{ kind, details }` pairs with the stored snake_case keys. Writers (this service, the
-request service, the requests repository's expiry, the mission service's rotation and
-revocation) build a `NewEvent` (`store/types.ts`) on that union, so a renamed key does not
+request service, the requests repository's expiry, the mission service and the team service
+for `rotation` and `revocation`) build a `NewEvent` (`store/types.ts`) on that union, so a renamed key does not
 compile. Readers (the request timeline, the session view, the structural check below) call
 `parseEventDetails(kind, details)`, the only code that reads stored details: it answers
 `null` for a kind it does not know and for an object that does not have the shape of its
 kind. Since P2.1 every kind has a shape: `approval` `{ request_id, approval_id, tool,
 fingerprint, expires_at }` and `gate-opened` `{ request_id, period_start, period_end }`
 (written by the request service), `gate-changed` `{ gate, gate_before }` (written by the
-missions repository in the transaction that edits the gate). A `null` event is shown
+missions repository in the transaction that edits the gate), `rotation` `{ token_prefix, token_kind, holder,
+replaced_prefix }` (a token issued to one holder: the creator's rotation, a member's own token, a named token)
+and `revocation` `{ tokens_revoked }`, plus `{ token_prefix, token_kind, holder }` when one token was revoked on
+its own (handbook [missions](missions.md), "Members and tokens"); the holder fields are optional when read, so
+an event stored before tokens had a holder still parses. A `null` event is shown
 with its kind and no detail, and gives back no credit; nothing throws. Stored keys are
 part of the data: renaming one needs a migration of the `events` rows.
 
@@ -310,12 +325,16 @@ one-minute period no longer loads every past minute to discard it.
 `stateOf(mission, now)` is its `state`. The consumers depend on a narrow type and never
 re-implement the read:
 
-| Consumer                                         | Dependency                        | For                                      |
-| ------------------------------------------------ | --------------------------------- | ---------------------------------------- |
-| `MissionService` (list, detail, rotate)          | `Pick<SessionService, 'stateOf'>` | the mission's state                      |
-| `RequestService.view` (the creator's claim page) | `Pick<SessionService, 'usageOf'>` | state, period, consumed per risk, events |
+| Consumer                                                         | Dependency                                     | For                                                                                          |
+| ---------------------------------------------------------------- | ---------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `MissionService` (list, detail, rotate, `stateAfterRefusal`)     | `Pick<SessionService, 'stateOf'>`              | the mission's state                                                                          |
+| `MissionTeamService` (team, `generateToken`, `createNamedToken`) | `MissionService.stateOf` / `stateAfterRefusal` | whether a token can be issued now, and the state to report when the store refused the insert |
+| `RequestService.view` (the creator's claim and approval pages)   | `Pick<SessionService, 'usageOf'>`              | state, period, consumed per risk, events                                                     |
+| the execution door (`GET /mcp/catalog`)                          | `Pick<SessionService, 'stateOf'>`              | state, period and what is left per risk                                                      |
 
-Both take it as an optional `budget` dependency. The composition root builds those two
+`MissionService` and `RequestService` take it as an optional `budget` dependency (the door is handed the
+`SessionService` itself). The gate edit is not in the table: `MissionService.setGate` needs the period, not the
+state, and computes it with `currentPeriod`. The composition root builds those two
 modules before the `SessionService` (which needs the requests module's `requestUrl`), so
 it leaves `budget` out and they default to `missionUsageReader(store.sessions)`: the same
 function over the same store, not a second implementation.
@@ -398,13 +417,23 @@ a claim) and `riskEvents({ kinds, riskIds, since })` (the session's events about
 risks, oldest first, details as stored). `consumeApproval` takes the same `ApprovalKey`
 as `findApproval`.
 
+A call event is also indexed by who made it. At insert the sessions repository copies, for `call-allowed` and
+`call-refused` only, `details.agent_label` into `events.agent_label` (`agentLabelColumn`, migration 0008) and
+`details.token_kind` / `details.holder` into `events.token_kind` / `events.token_holder` (`holderColumns`,
+migration 0010; `NULL` on every other kind and on a call stored before tokens had a holder). The details stay
+the source: the columns are never returned in an `EventRecord`. They serve `listRecentEvents(sessionId, {
+calls })`, the timeline of one label (`{ agentLabel }`) or of one token holder (`{ holder: { kind, holder } }`),
+through the indexes `events_session_label_ts` and `events_session_holder_ts` ([audit](audit.md), "Mission
+session view"). A `rotation` or `revocation` event names its holder in its details only.
+
 ## Tests
 
 - `tests/unit/server/budget/period.test.ts` (8) — `periodIndex` across boundaries and
   before the anchor, invalid lengths, `currentPeriod` recurring / one-off / canonical
   anchor / boundary, `periodSpecOf`.
-- `packages/gateway-core/tests/unit/fingerprint.test.ts` (8) — the fingerprint, next to its
-  implementation ([gateway-core](gateway-core.md)).
+- `packages/gateway-core/tests/unit/fingerprint.test.ts` (12) — the canonical JSON, the fingerprint and
+  `unfaithfulArgument` (a value JSON would rewrite), next to their implementation
+  ([gateway-core](gateway-core.md)).
 - `tests/unit/server/budget/decide.test.ts` (15) — N risks → N decrements, no risk,
   remaining, approval to consume, opened gate; `budget-exhausted` (recurring and one-off),
   whole-call refusal, `rate-limited` (≥ 1 s), `approval-required`, multi-risk gate

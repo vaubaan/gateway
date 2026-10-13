@@ -97,7 +97,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/audit/session-event-detail.test.ts`                                              |       10 |
 | `apps/gateway/src/server/auth/admin-rule.test.ts`                                                         |        5 |
 | `apps/gateway/src/server/auth/bootstrap.test.ts`                                                          |        3 |
-| `apps/gateway/src/server/auth/claims.test.ts`                                                             |       16 |
+| `apps/gateway/src/server/auth/claims.test.ts`                                                             |       22 |
 | `apps/gateway/src/server/auth/guard.test.ts`                                                              |       10 |
 | `apps/gateway/src/server/auth/handlers.test.ts`                                                           |        9 |
 | `apps/gateway/src/server/auth/idp-settings.test.ts`                                                       |        8 |
@@ -129,7 +129,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/management/output-schemas.test.ts`                                               |       10 |
 | `apps/gateway/src/server/management/tools.test.ts`                                                        |       32 |
 | `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                  |       16 |
-| `apps/gateway/src/server/missions/catalog-view.test.ts`                                                   |       19 |
+| `apps/gateway/src/server/missions/catalog-view.test.ts`                                                   |       21 |
 | `apps/gateway/src/server/missions/orphan-reason.test.ts`                                                  |        4 |
 | `apps/gateway/src/server/missions/preview.test.ts`                                                        |       44 |
 | `apps/gateway/src/server/missions/summary.test.ts`                                                        |        8 |
@@ -140,13 +140,14 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/oauth-as/clients.test.ts`                                                        |       40 |
 | `apps/gateway/src/server/oauth-as/delegations.test.ts`                                                    |       26 |
 | `apps/gateway/src/server/oauth-as/endpoints.test.ts`                                                      |       15 |
-| `apps/gateway/src/server/oauth-as/pages.test.ts`                                                          |        9 |
+| `apps/gateway/src/server/oauth-as/pages.test.ts`                                                          |       12 |
 | `apps/gateway/src/server/oauth-as/pkce.test.ts`                                                           |       13 |
 | `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                                                   |       52 |
 | `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                        |        6 |
 | `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                  |       58 |
 | `apps/gateway/src/server/provider-apps/service.test.ts`                                                   |       15 |
-| `apps/gateway/src/server/providers/reference.test.ts`                                                     |       18 |
+| `apps/gateway/src/server/providers/planes.test.ts`                                                        |        9 |
+| `apps/gateway/src/server/providers/reference.test.ts`                                                     |       20 |
 | `apps/gateway/src/server/requests/approval.test.ts`                                                       |       28 |
 | `apps/gateway/src/server/requests/claim.test.ts`                                                          |       38 |
 | `apps/gateway/src/server/requests/client-ip.test.ts`                                                      |        2 |
@@ -156,6 +157,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/shares/errors.test.ts`                                                           |        4 |
 | `apps/gateway/src/server/shares/restriction.test.ts`                                                      |        8 |
 | `apps/gateway/src/server/shares/service.test.ts`                                                          |       24 |
+| `apps/gateway/src/server/store/membership.test.ts`                                                        |       12 |
 | `apps/gateway/src/server/telemetry/outcome.test.ts`                                                       |       30 |
 | `apps/gateway/src/server/telemetry/settings.test.ts`                                                      |        7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                                                         |       11 |
@@ -164,8 +166,8 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                         |        3 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`                                            |       21 |
 | `apps/gateway/tests/integration/audit/retention.test.ts`                                                  |       10 |
-| `apps/gateway/tests/integration/auth/deactivate-user.test.ts`                                             |       10 |
-| `apps/gateway/tests/integration/auth/oidc-login.test.ts`                                                  |       17 |
+| `apps/gateway/tests/integration/auth/deactivate-user.test.ts`                                             |       12 |
+| `apps/gateway/tests/integration/auth/oidc-login.test.ts`                                                  |       22 |
 | `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`                                     |        1 |
 | `apps/gateway/tests/integration/authority/handlers.test.ts`                                               |       11 |
 | `apps/gateway/tests/integration/authority/ownership.test.ts`                                              |       13 |
@@ -177,22 +179,25 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/connections/connect-flow.test.ts`                                         |        6 |
 | `apps/gateway/tests/integration/connections/reassign-and-settle.test.ts`                                  |        5 |
 | `apps/gateway/tests/integration/connections/repository-status.test.ts`                                    |        6 |
+| `apps/gateway/tests/integration/demo/build-stamp.test.ts`                                                 |       10 |
 | `apps/gateway/tests/integration/demo/demo-safety.test.ts`                                                 |       13 |
 | `apps/gateway/tests/integration/demo/demo-smoke.test.ts`                                                  |       17 |
+| `apps/gateway/tests/integration/demo/demo-vercel.test.ts`                                                 |        3 |
 | `apps/gateway/tests/integration/execution/agent-label.test.ts`                                            |        6 |
 | `apps/gateway/tests/integration/execution/approval-door.test.ts`                                          |        7 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                      |        4 |
 | `apps/gateway/tests/integration/execution/door-http.test.ts`                                              |       21 |
-| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                               |       23 |
+| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                               |       24 |
 | `apps/gateway/tests/integration/execution/streaming.test.ts`                                              |       13 |
 | `apps/gateway/tests/integration/execution/team-door.test.ts`                                              |       11 |
 | `apps/gateway/tests/integration/management/hard-deny.test.ts`                                             |        6 |
 | `apps/gateway/tests/integration/management/management-door.test.ts`                                       |       34 |
 | `apps/gateway/tests/integration/management/output-schemas.test.ts`                                        |        9 |
-| `apps/gateway/tests/integration/missions/gate.test.ts`                                                    |       18 |
+| `apps/gateway/tests/integration/missions/gate.test.ts`                                                    |       20 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                        |        8 |
 | `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                       |       28 |
-| `apps/gateway/tests/integration/missions/team.test.ts`                                                    |       27 |
+| `apps/gateway/tests/integration/missions/team-interleaving.test.ts`                                       |        6 |
+| `apps/gateway/tests/integration/missions/team.test.ts`                                                    |       28 |
 | `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                   |       18 |
 | `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`                                            |       66 |
 | `apps/gateway/tests/integration/oauth-as/mcp-client-flow.test.ts`                                         |        4 |
@@ -211,19 +216,22 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                               |       14 |
 | `apps/gateway/tests/integration/store/delegations.test.ts`                                                |       20 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                                                 |       11 |
-| `apps/gateway/tests/integration/store/missions.test.ts`                                                   |       15 |
+| `apps/gateway/tests/integration/store/missions.test.ts`                                                   |       17 |
 | `apps/gateway/tests/integration/store/oauth-clients.test.ts`                                              |       16 |
 | `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`                                      |       13 |
 | `apps/gateway/tests/integration/store/requests-approvals.test.ts`                                         |       10 |
 | `apps/gateway/tests/integration/store/schema.test.ts`                                                     |        6 |
 | `apps/gateway/tests/integration/store/sessions.test.ts`                                                   |       11 |
 | `apps/gateway/tests/integration/store/token-holders.test.ts`                                              |        4 |
+| `apps/gateway/tests/integration/store/users-issuer.test.ts`                                               |       14 |
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`                                               |        8 |
 | `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                              |       18 |
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                         |       63 |
 | `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      121 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                       |        3 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        6 |
+| `apps/gateway/tests/unit/app/item-kinds.test.ts`                                                          |        5 |
+| `apps/gateway/tests/unit/app/risk-explain.test.tsx`                                                       |        9 |
 | `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      287 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                    |       15 |
 | `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                     |        9 |
@@ -235,14 +243,14 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/server/store/ids.test.ts`                                                        |        6 |
 | `apps/gateway/tests/unit/server/store/migrate.test.ts`                                                    |        9 |
 | `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`                                    |       27 |
-| `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                           |        4 |
+| `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                           |        5 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                        |       12 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                     |       10 |
-| `apps/gateway/tests/unit/structural/index.test.ts`                                                        |       96 |
+| `apps/gateway/tests/unit/structural/index.test.ts`                                                        |       99 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                         |        3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      326 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      343 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                       |       10 |
-| `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       12 |
+| `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       13 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                              |       41 |
 | `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                   |        7 |
 | `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                       |        3 |
@@ -252,21 +260,23 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/gateway-core/tests/unit/cache.test.ts`                                                          |        7 |
 | `packages/gateway-core/tests/unit/errors.test.ts`                                                         |       31 |
 | `packages/gateway-core/tests/unit/fingerprint.test.ts`                                                    |       12 |
-| `packages/gateway-core/tests/unit/pipeline.test.ts`                                                       |       30 |
+| `packages/gateway-core/tests/unit/pipeline.test.ts`                                                       |       38 |
 | `packages/gateway-core/tests/unit/risk-gateway.test.ts`                                                   |        9 |
 | `packages/gateway-core/tests/unit/token-holder.test.ts`                                                   |        3 |
+| `packages/plugin-sdk/tests/unit/arguments.test.ts`                                                        |       10 |
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                   |       31 |
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                     |        4 |
 | `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                    |       26 |
-| `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                           |        3 |
+| `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                           |        8 |
 | `packages/plugin-sdk/tests/unit/registry.test.ts`                                                         |       11 |
+| `packages/plugin-sdk/tests/unit/slices.test.ts`                                                           |       21 |
 | `packages/plugin-sdk/tests/unit/streaming.test.ts`                                                        |        9 |
 | `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                                                      |       14 |
 | `packages/policy-engine/tests/unit/budget.test.ts`                                                        |       25 |
-| `packages/policy-engine/tests/unit/qualify.test.ts`                                                       |       29 |
+| `packages/policy-engine/tests/unit/qualify.test.ts`                                                       |       33 |
 | `packages/policy-engine/tests/unit/risk-evaluator.test.ts`                                                |       20 |
 | `packages/policy-engine/tests/unit/risk-policy.test.ts`                                                   |        9 |
-| `packages/policy-engine/tests/unit/risk-runtime.test.ts`                                                  |       28 |
+| `packages/policy-engine/tests/unit/risk-runtime.test.ts`                                                  |       33 |
 | `packages/policy-engine/tests/unit/slice-dsl.test.ts`                                                     |       23 |
 | `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                 |       29 |
 | `packages/shared/src/api-key.test.ts`                                                                     |        9 |
@@ -281,7 +291,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/cloudflare-dns/tests/unit/classify.test.ts`                                                      |       33 |
 | `plugins/cloudflare-dns/tests/unit/data-model.test.ts`                                                    |        9 |
 | `plugins/cloudflare-dns/tests/unit/identifiers.test.ts`                                                   |       59 |
-| `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                        |       42 |
+| `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                        |       50 |
 | `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts`                                                  |       38 |
 | `plugins/github/tests/unit/classify.test.ts`                                                              |       69 |
 | `plugins/github/tests/unit/data-model.test.ts`                                                            |        1 |
@@ -290,7 +300,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/github/tests/unit/plugin.test.ts`                                                                |       14 |
 | `plugins/github/tests/unit/risk-catalog.test.ts`                                                          |       56 |
 | `plugins/github/tests/unit/token-cache.test.ts`                                                           |        5 |
-| `plugins/gmail/tests/unit/classify.test.ts`                                                               |      105 |
+| `plugins/gmail/tests/unit/classify.test.ts`                                                               |      108 |
 | `plugins/gmail/tests/unit/data-model.test.ts`                                                             |        5 |
 | `plugins/gmail/tests/unit/injection.test.ts`                                                              |      190 |
 | `plugins/gmail/tests/unit/plugin.test.ts`                                                                 |       26 |
@@ -298,7 +308,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                           |       45 |
 | `plugins/railway/tests/unit/classify.test.ts`                                                             |       22 |
 | `plugins/railway/tests/unit/data-model.test.ts`                                                           |        1 |
-| `plugins/railway/tests/unit/identifier-injection.test.ts`                                                 |      288 |
+| `plugins/railway/tests/unit/identifier-injection.test.ts`                                                 |      316 |
 | `plugins/railway/tests/unit/plugin.test.ts`                                                               |       30 |
 | `plugins/railway/tests/unit/policy.test.ts`                                                               |       39 |
 | `plugins/railway/tests/unit/risk-catalog.test.ts`                                                         |       19 |
@@ -322,9 +332,9 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/stripe/tests/unit/plugin.test.ts`                                                                |       31 |
 | `plugins/stripe/tests/unit/policy.test.ts`                                                                |       30 |
 | `plugins/stripe/tests/unit/risk-catalog.test.ts`                                                          |       20 |
-| `plugins/supabase/tests/unit/classify.test.ts`                                                            |      109 |
+| `plugins/supabase/tests/unit/classify.test.ts`                                                            |      133 |
 | `plugins/supabase/tests/unit/data-model.test.ts`                                                          |        1 |
-| `plugins/supabase/tests/unit/execute.test.ts`                                                             |       35 |
+| `plugins/supabase/tests/unit/execute.test.ts`                                                             |       42 |
 | `plugins/supabase/tests/unit/identifier-injection.test.ts`                                                |     1337 |
 | `plugins/supabase/tests/unit/mission-evaluation.test.ts`                                                  |       34 |
 | `plugins/supabase/tests/unit/plugin.test.ts`                                                              |       22 |
@@ -332,7 +342,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/upstash-redis/tests/unit/classify.test.ts`                                                       |       30 |
 | `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                  |       88 |
 | `plugins/upstash-redis/tests/unit/data-model.test.ts`                                                     |        1 |
-| `plugins/upstash-redis/tests/unit/execute.test.ts`                                                        |       11 |
+| `plugins/upstash-redis/tests/unit/execute.test.ts`                                                        |       33 |
 | `plugins/upstash-redis/tests/unit/identifiers.test.ts`                                                    |       42 |
 | `plugins/upstash-redis/tests/unit/plugin.test.ts`                                                         |       26 |
 | `plugins/upstash-redis/tests/unit/policy.test.ts`                                                         |       24 |
@@ -342,17 +352,17 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/data-model.test.ts`                                                            |        1 |
 | `plugins/vercel/tests/unit/firewall.test.ts`                                                              |       11 |
 | `plugins/vercel/tests/unit/identifier-injection.test.ts`                                                  |      315 |
-| `plugins/vercel/tests/unit/plugin.test.ts`                                                                |       35 |
+| `plugins/vercel/tests/unit/plugin.test.ts`                                                                |       48 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                                                          |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                              |       99 |
-| `scripts/audit-gate.test.mjs`                                                                             |       28 |
+| `scripts/audit-gate.test.mjs`                                                                             |       29 |
 | `scripts/release-lib.test.mjs`                                                                            |       50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-13, with a build; 257 files; 9023 passed, 1 skipped) | **9024** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-13, with a build; 267 files; 9298 passed, 1 skipped) | **9299** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 9023 passed and 1 was skipped in that
+report's number of tests, of which 9298 passed and 1 was skipped in that
 run, made with a build (as `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
@@ -366,7 +376,8 @@ classifier suite, `classify.test.ts`, on its v5 entry point
 The plugins with env-scoped risks or a binding to enforce also carry a suite
 that evaluates calls through the real catalog and the policy engine
 (`policy.test.ts`, `mission-evaluation.test.ts`, and the per-concern suites
-listed under "Scenarios — Provider plugins").
+listed under "Scenarios — Provider plugins"), and every plugin has a suite
+that feeds hostile identifiers to its classifier and to its executor.
 
 ## Run
 
@@ -401,7 +412,7 @@ npx vitest run packages/policy-engine     # one package
 - **`risk-policy.test.ts`** (9) — `checkAcceptableInEnv` (no env, env not in
   the list, ok) + `prepareCatalog` (duplicate id, regex failure, fallback
   warning through the injectable `warn`, `hasFallbackRisk`).
-- **`risk-runtime.test.ts`** (25) — `evaluateCall` allow (feature branch
+- **`risk-runtime.test.ts`** (33) — `evaluateCall` allow (feature branch
   alone, an uncategorized write needing the fallback and only it, read
   code), deny (missing risk, explicit deny, empty slices, no catalog match),
   multi-slice (all risks covered, one missing fails), env qualification
@@ -415,13 +426,28 @@ npx vitest run packages/policy-engine     # one package
   label outside `acceptable_in_envs`, a broad co-touched risk no longer
   carries the call alone; a multi-slice call is refused whole; holding the
   unqualified id does not open an unlabelled resource; the same slices pass
-  where every touched risk is acceptable and accepted.
-- **`qualify.test.ts`** (29) — `isEnvScopedEntry` (true when
+  where every touched risk is acceptable and accepted. **An executed slice
+  carries no glob in an identifier** (ADR
+  [[decision-stages-fail-closed-and-audited]] D4): `feature/*`, `ma*n`, a
+  list entry holding a `*` or a `*` as a list entry are refused
+  `risk-not-accepted` with no missing risk and a hint naming the `*`,
+  whatever the mission accepts; the whole-segment `[*]` and `[**]` a
+  classifier emits for "any", and the `*` placeholder identifier, still
+  pass. **A slice no catalog entry matches denies the call** although
+  another slice is covered and accepted, and a slice of another provider is
+  not dropped: it denies.
+- **`qualify.test.ts`** (33) — `isEnvScopedEntry` (true when
   `acceptable_in_envs` is non-empty), `qualifyRiskId` (injects `[env]`
   before the first `.`, idempotent, no-op when account-scoped, env-scoped
   cases via `test.each`), `unqualifyRiskId` (strip + idempotent), round-trip
   property, `resourceEnvResolver` / `noEnvResolver` (ref match, provider
-  mismatch, no env label), `resolveVector` (the override of the env replaces
+  mismatch, no env label; **the resources one slice cites must agree**: two
+  identifiers or list values naming resources of different environments, or
+  a labelled and an unlabelled one, resolve to no environment, several of
+  one environment keep it), `envResolverFor` (the plugin hook first, the
+  resource label next; **`NO_SINGLE_ENV` from the hook resolves to none and
+  the label does not stand in**, while `undefined`, `null` or an empty
+  string defer to the label), `resolveVector` (the override of the env replaces
   its axes, the others inherit, the base vector is not mutated).
 - **`budget.test.ts`** (25) — the one budget rule every catalog reader
   shares: `isPositiveInteger`; `budgetIssues` accepts a legal budget with
@@ -505,9 +531,34 @@ npx vitest run packages/policy-engine     # one package
 - **`catalog-path.test.ts`** (4) — `catalogPathNextTo`: default file name,
   `URL` input, the fixture resolving to a readable file, the two Turbopack
   rewrite shapes raising the named error.
-- **`env-of.test.ts`** (3) — `envFromSliceSegment`: the identifier after the
-  named entity, `undefined` on wildcards, lists, absent or terminal
-  segment, no confusion with an identifier equal to the entity name.
+- **`env-of.test.ts`** (8) — `envFromSliceSegment`: the identifier after the
+  named entity; `undefined` when the entity is absent, terminal or followed
+  by another entity; **`NO_SINGLE_ENV` when the environment segment is a
+  wildcard, a recursive wildcard, a glob or a list**; composed by the host
+  (`envResolverFor`), a slice spanning several environments of a resource
+  labelled `staging` resolves to none while an env-less slice still takes
+  the label; no confusion with an identifier equal to the entity name.
+- **`arguments.test.ts`** (10) — **the argument surface of a tool is closed**
+  (ADR [[plugin-arguments-closed-surface-and-typed-refusals]] D1):
+  `undeclaredArgumentDenial` lets every declared argument through, in any
+  number; refuses the first argument the schema does not declare, naming it
+  and the tool; a tool that declares nothing takes nothing; `undefined` is
+  an absent argument while `null`, `false`, `0` and `""` are values; another
+  spelling of a declared argument (case, a space, `_id`) is another
+  argument; inherited names (`constructor`, `__proto__` as an own key) are
+  not declared; a key that is not name-shaped is described, never quoted;
+  routing arguments are accepted whatever the tool declares, and nothing
+  else; an unknown tool is not this rule's to refuse. `declaredOnly`, the
+  test-table helper: keeps the declared entries, throws on an unknown tool.
+- **`slices.test.ts`** (21) — **what a classifier may write into a slice**
+  (same ADR, D2): `identSegment` writes an identifier of grammar characters
+  as given (`feature/x`, `a.ts`, `v1~2`) and anything else — an e-mail
+  address, a `+`, a colon, a space, a comma, a closing bracket, a glob, a
+  lone star, a newline, a non-ASCII letter, the empty string — as "any
+  identifier" (`[*]`). `sliceRoundTripIssues`: an identifier outside the
+  grammar cannot be read back; one that reads back as something else (a
+  comma becoming a list) is reported with both forms; wildcard segments and
+  the placeholder read back as themselves.
 
 ## Scenarios — Shared
 
@@ -529,9 +580,11 @@ npx vitest run packages/policy-engine     # one package
   `vbn_mgmt_` prefix, an unknown prefix, wrong lengths and a prefix or a
   secret outside base62; `hashApiKey` / `verifyApiKey` round trip, a key
   with one more character refused, `false` on a hash it cannot read.
-- **`session-events.test.ts`** (28) — `parseEventDetails`, the one parser
+- **`session-events.test.ts`** (30) — `parseEventDetails`, the one parser
   of the typed union of session event details: every kind that carries
-  details is read from a well-formed sample (allowed and refused call,
+  details is read from a well-formed sample (allowed and refused call, a
+  call with the token it presented and its holder and a call stored before
+  tokens had one, a token issued to a holder, one token revoked on its own,
   dropped and closed request, granted approval, gate opened for the period,
   gate edited on the mission, period reset, quota and expiry extension,
   rotation, revocation) and answers `null` for a malformed one; a kind
@@ -568,7 +621,25 @@ class, never the cheapest one) and that an env-scoped risk is refused on a
 resource without a usable environment label. Counts per plugin are the
 `plugins/<id>` totals of the table above.
 
-**Template** (18) — `plugin.test.ts`: the kit on the scaffold (every named
+**The identifier suite of each plugin** (`injection.test.ts`,
+`identifier-injection.test.ts` or `identifiers.test.ts`; ADR
+[[plugin-identifiers-one-grammar-for-classify-and-execute]]) feeds every
+value of the arguments or of the connection that reaches a request path, a
+query string or a request body the same hostile values — the dot segments,
+their encoded forms, separators, control characters, oversized strings — to
+`classify` **and** to `execute`. The rule under test: what is sent is
+exactly what was classified. A value is refused by both, and then nothing
+is sent, or accepted by both, and then every request names the resource of
+the slice. `plugin-identifier-tests.test.ts` (structural) holds that every
+plugin directory has one. Since ADR
+[[plugin-arguments-closed-surface-and-typed-refusals]], the plugins whose
+executor forwards arguments (Cloudflare DNS, Vercel, Railway, Supabase)
+also assert that **an argument the tool does not declare is refused by
+`classify` and by `execute`, with nothing sent**, and what an executor
+declines by itself is read through the kit's `refusalText` (an `isError`
+result carrying the sentence, never a thrown provider failure).
+
+**Template** (25) — `plugin.test.ts`: the kit on the scaffold (every named
 risk touched), a classifier case per convention (ref from the arguments,
 single-resource default, ambiguity denied, a workspace outside the mission's
 resources refused by `classify` and by `execute` through the one shared
@@ -577,7 +648,7 @@ as `UpstreamAuthError`, another status as `UpstreamHttpError`), the catalog
 path resolved with
 `catalogPathNextTo` and present on disk.
 
-**GitHub** (170) — `plugin.test.ts` (14): structural kit (26 tools, the 14
+**GitHub** (585) — `plugin.test.ts` (14): structural kit (26 tools, the 14
 named risks touched), the fallback lint, presets `read-only` / `developer` /
 `release-manager`, the `app-install` credential spec with its five app
 settings and the declarative `userVerification` (GitHub token endpoint,
@@ -593,23 +664,35 @@ denials, and 34 cases of **what it cannot place exactly** (non-canonical
 workflow paths, `refs/…` branch names, malformed identifiers), all refused.
 `risk-catalog` (56): one `[tool, args, risks]` row per call shape, evaluated
 through the shipped catalog — the risks each tool touches, exactly.
+`injection.test.ts` (415): the identifier suite — every identifier position
+against every hostile value (319), numbers, what a legitimate value still
+reaches, more refusals by both sides, the connection.
 `token-cache` (5), `data-model` (1). No `envOf`: the catalog has no
 env-scoped risk.
 
-**Vercel** (293) — `plugin.test.ts` (35): kit (31 tools; every named risk
+**Vercel** (622) — `plugin.test.ts` (48): kit (31 tools; every named risk
 touched but `toolbar-write`, unreachable while the thread tools are
 refused), project resolution against the mission's resources, `vercelEnvOf`
 and the plugin's `envOf` composed with `envResolverFor` (the slice's
-`env[prod]` wins over an owner label, an env-less slice falls back to it),
+`env[prod]` wins over an owner label, an env-less slice falls back to it;
+**a slice whose environment segment is a wildcard, a list, a glob or a name
+outside the triad is `NO_SINGLE_ENV`**: none is resolved and the label is
+not used, and no slice the classifier emits names several environments),
 `api-key` credential spec, `execute` (rewrap of mcp.vercel.com and the
 custom REST tools; **a provider failure is thrown, with its status when it
 has one, and a network failure as it is — never an `isError` result** —
 while what the executor declines itself stays an `isError` result with no
-network call) and `discoverResources` against `mockFetch`.
+network call; **an argument a tool does not declare is refused on both
+sides and nothing is sent** — a stray field, a field of the provider's own
+API, `project_id` beside `projectId`, `target` on the deploy tool, any
+argument of a tool that declares none) and `discoverResources` against
+`mockFetch`.
 `risk-catalog` (55): YAML structural validation, every pattern parses,
-coverage lint, saliency checks. `classify` (42): per-tool slices,
-`deploy_to_vercel` always on `env[prod]` whatever `target` says, the env-var
-fan-out, one spelling per argument. `binding.test.ts` (50): **a
+coverage lint, saliency checks. `classify` (43): per-tool slices,
+`deploy_to_vercel` on `env[prod]` (the upstream tool has no target, and a
+call that names one is refused: a deploy that reads "preview" would still
+go to prod), the env-var fan-out, `project_id` not an argument (the call
+that carries it is refused), one spelling per argument. `binding.test.ts` (50): **a
 deployment- or URL-addressed tool runs only on a deployment of the mission's
 project** — a foreign deployment is refused and nothing reaches the
 provider; a lookup the provider fails (5xx) is an upstream failure, thrown,
@@ -619,30 +702,51 @@ request carries the team of the credential** and a `teamId` argument that is
 not exactly that team is refused, for every declared tool (the sample table
 is the tool list; the tools that cannot carry a team are reviewed one by
 one). `firewall.test.ts` (11): slices, risks and request shapes of the
-firewall tools. `data-model` (1).
+firewall tools. `identifier-injection.test.ts` (315): the identifier suite
+(271 hostile values over every position, the dot-segment reproductions,
+the deployment segment read like `execute` reads it, values that only
+travel in a JSON body or a query, a project ref that is not path-safe
+never used). `data-model` (1).
 
-**Supabase** (245) — `plugin.test.ts` (22): kit with one sample per tool
+**Supabase** (1613) — `plugin.test.ts` (22): kit with one sample per tool
 (44 tools; `row-write-one` and `auth.bulk-user-write` knowingly unreached),
 presets, `oauth2` credential spec (PKCE, Basic client auth, `refreshable`
 with no plugin `refresh`), `execute` (read-only `execute_sql`) and
 `discoverResources` against `mockFetch`. `risk-catalog` (44): loaded shape,
 posture-sensitive entries, coverage lint, cardinality mutual exclusion,
-decision-level spot checks. `classify` (109), of which 74 on **the SQL of
+decision-level spot checks. `classify` (133), of which 91 on **the SQL of
 `apply_migration`**: the reader is an allow-list of statement shapes — plain
 DDL stays on the schema write, row writes, drops, RLS, privileges and
 extensions each add their risk, and anything it cannot read statement by
-statement needs every write class. `execute` (35): Management API and
-data-plane request shapes, and **the target project resolved exactly as the
-classifier resolves it** (a non-string `project_ref`, an alias spelling).
+statement needs every write class; **what follows a line comment ended by a
+carriage return is read** (PostgreSQL ends `--` at a line feed or a carriage
+return), inside a block comment or a string as well; **a column type change
+adds the bulk row write** (`ALTER COLUMN … TYPE`, with or without `USING`,
+`SET DATA TYPE`) while other column alterations stay on the schema write.
+Outside the SQL: an identifier the slice grammar cannot carry (an e-mail
+address, a `+`, a colon) is classified as "any" and the slice reads back as
+itself; `deploy_function` without files is still a body write, and refuses
+`files` in another shape and an undeclared argument. `execute` (42):
+Management API and data-plane request shapes, **the target project resolved
+exactly as the classifier resolves it** (a non-string `project_ref`, an
+alias spelling), and **the body built from declared arguments only** (five
+real fields of the provider's API that no rule reads are refused and
+nothing is sent; `upload_object` refuses a content that is absent or not
+base64 text before any request and sends the decoded bytes otherwise).
 `mission-evaluation.test.ts` (34): on a project **without an environment
 label** every write and the user listing are refused whatever the mission
 holds, account-scoped reads stay allowed; on **prod**, a migration embedding
 DML, dropping a table or unreadable is refused, a plain DDL migration needs
 `migration-write` only; the three presets decided call by call on labelled
 projects (`migration-operator`: any migration on staging, plain DDL and RLS
-only on prod, behind an approval). `data-model` (1).
+only on prod, behind an approval).
+`identifier-injection.test.ts` (1337): the identifier suite (1287 hostile
+values over every position, the dot-segment reproductions, one argument
+naming the target for both sides, legitimate shapes, the query strings and
+SQL text the plugin builds, the project ref as a host label).
+`data-model` (1).
 
-**Railway** (111) — `plugin.test.ts` (30): kit (the nine named risks
+**Railway** (427) — `plugin.test.ts` (30): kit (the nine named risks
 touched, no fallback hit), `classifyRailway` on `Resource[]` (project and
 environment resolution, denials), `oauth2` credential spec (PKCE,
 `resourceIndicator`, `prompt=consent`, no plugin `refresh`), `executeRailway`
@@ -657,9 +761,22 @@ touches `upsert-variable` alone and only a replace touches
 **`list-variables` with the read-only preset is refused on a prod, an
 unlabelled and a free-text-labelled project**; an `environmentId` must
 belong to the resolved project (`accept-deploy`, `redeploy`, the agent
-tool). `data-model` (1).
+tool).
+`identifier-injection.test.ts` (316): a malformed id refused by `classify`
+and by `execute` (252), variable names, `execute` running on the target
+the classifier resolved, a project id discovery would refuse; **a tool
+takes what its schema declares, nothing else** (8; `projectId` on a tool
+that takes none is checked, then not sent); **`serviceId` is bound to the
+project the mission holds** (20, threat model A18): a service of another
+project is refused by both sides and nothing is sent, the project's own
+service is sent as given, a service of another project _of the same
+mission_ is still not the named project's, a project discovered before
+services were recorded refuses with what to do, a project with no service
+refuses every `serviceId`, a malformed list in the metadata binds nothing.
+`deploymentId` and `threadId` are not bound (known limitation).
+`data-model` (1).
 
-**SSH** (609) — `plugin.test.ts` (299): kit (every catalog risk touched by
+**SSH** (696) — `plugin.test.ts` (299): kit (every catalog risk touched by
 one `ssh__exec` sample); `classifySsh`: host resolution against the
 mission's resources (single host default, explicit ref, foreign / ambiguous
 / malformed denied), read vs write, `secret-file` marker, `destructive` /
@@ -690,10 +807,13 @@ command; a pin of another key, or one that is absent, empty, blank,
 malformed, truncated, in another case, MD5 or not a string never
 authenticates (no socket for a target without a usable pin); there is no
 trust on first use; `execute` and `discoverResources` refuse a credential
-without a normalised SHA256 pin before the transport. `classify` (90),
-`data-model` (2). No test reaches a real host.
+without a normalised SHA256 pin before the transport.
+`injection.test.ts` (87): the host is a hostname or an IPv4 address and
+nothing else (54); the command sent is the command classified (27); a
+character outside the BMP does not hide a glob or a brace (6).
+`classify` (90), `data-model` (2). No test reaches a real host.
 
-**Resend** (161) — `plugin.test.ts` (43): kit (the two deprecated v4 ids
+**Resend** (232) — `plugin.test.ts` (43): kit (the two deprecated v4 ids
 knowingly unreached), the `from` domain as the resource, recipient zones
 (a single send is its zone slice, never a count marker), batch sends,
 domains / segments / contacts, broadcasts verified against the named
@@ -709,9 +829,15 @@ envelope headers and the like, refused). `mission-evaluation.test.ts` (15):
 an external-unbounded send from a prod or unlabelled domain is refused
 whatever the mission accepted, one external recipient among internal ones is
 enough, a mixed batch is refused whole; each shipped preset decided call by
-call. `data-model` (6).
+call.
+`identifiers.test.ts` (58): the grammars, the id of an email or a broadcast
+and a contact selector in the request path, `segment_id` in the path, the
+query and the body, the domain whose path carries its `domain_id`, an id
+the provider answers. `addresses.test.ts` (13): **a string that could carry
+a second recipient is not an address** (a recipient is classified on the
+address it parses to and sent as the string given). `data-model` (6).
 
-**Upstash Redis** (229) — `plugin.test.ts` (26): kit with one sample per
+**Upstash Redis** (293) — `plugin.test.ts` (26): kit with one sample per
 tool (21 tools, every named risk touched, no fallback hit), presets,
 database resolution against the mission's resources (single-database
 default; ambiguous, missing, foreign or malformed refused; account-level
@@ -734,9 +860,18 @@ is arbitrary execution; the dedicated tools cost what the same command
 costs through `execute`. `policy.test.ts` (24): every write is refused on a
 database with no label or a label the catalog does not list, reads pass;
 the three presets per environment (`DEL` needs `delete-data` through either
-tool). `classify` (30), `execute` (11), `data-model` (1).
+tool). `classify` (30), `data-model` (1). `execute` (33): the management
+tools, the Redis command each data tool builds, and **the database token is
+posted to an Upstash REST host only**: nineteen `rest_url` / `endpoint`
+shapes the Management API could answer — another domain, a look-alike
+suffix, the bare suffix, a sub-domain chain, plain http, a port,
+credentials or a host through userinfo, a path, a query, another scheme,
+an IP address — fail before any request with an error that holds no token,
+and the four legitimate shapes post to the host. `identifiers.test.ts`
+(42): the grammar of a database ref, the database as a segment of the
+Management API path, Redis keys and command words in the JSON body only.
 
-**Stripe** (160) — `plugin.test.ts` (31): kit (every named risk touched, no
+**Stripe** (219) — `plugin.test.ts` (31): kit (every named risk touched, no
 fallback hit), resource resolution and `modeOf` (ref suffix, metadata; the
 env label is never a source of the mode), argument handling, `execute`
 (form-encoded REST v1) and `discoverResources` (one resource per mode)
@@ -754,9 +889,11 @@ costs the stronger risk** (`cancel_at*` → `subscription-cancel`,
 events need `read-customer-pii`; `expand` and any undeclared argument are
 refused); a resource with no resolvable mode, or a label contradicting the
 key's mode, is refused; the three presets on their mode and nothing on the
-other. `data-model` (8).
+other. `identifiers.test.ts` (59): the grammars, `id` as a segment of the
+request path, identifiers that travel in the query string or the form
+body, `account` as the resource the call runs on. `data-model` (8).
 
-**Cloudflare DNS** (122) — `plugin.test.ts` (42): kit (15 tools, every risk
+**Cloudflare DNS** (189) — `plugin.test.ts` (50): kit (15 tools, every risk
 touched), zone resolution (single zone default, explicit `zone_id`, foreign
 provider denied), record writes with the `critical` / `delete` overlays (an
 under-specified write or deletion is critical by default),
@@ -764,15 +901,23 @@ under-specified write or deletion is critical by default),
 declared ordinary reads the record first and is refused on an apex, MX or
 NS record; a path-unsafe record or zone id never reaches the API; 401 and
 403 become `UpstreamAuthError`, another failed status an `UpstreamHttpError`,
-and what the executor refuses itself is an `isError` result) and
+and what the executor refuses itself is an `isError` result; **an argument
+a tool does not declare is refused by `classify` and by `execute` and
+nothing is sent** — real fields of the provider's API on the record, DNSSEC
+and purge writes, a filter of a listing, a `zone_id` on the account-wide
+listing, a key that is not name-shaped) and
 `discoverResources` (one resource per zone) against `mockFetch`, `api-key`
 credential spec and presets `read-only` / `dns-operator` / `zone-admin`.
 `risk-catalog` (38): shape (11 named risks + fallback at catalog v2, no env
 scoping, no cap), `prepareCatalog`, **every tool touches exactly its
 risks**, `risksTouchedBy` sanity checks (`zone-delete` only on the zone
-itself). `classify` (33), `data-model` (9).
+itself). `identifiers.test.ts` (59): the grammars, `zone_id` and
+`record_id` as segments of the request path, the `account_id` of a zone as
+a slice identifier and never a request, a record `name` and `type` in the
+critical-record verdict, list filters in the query string. `classify`
+(33), `data-model` (9).
 
-**Gmail** (213, experimental) — `plugin.test.ts` (26): kit, the experimental
+**Gmail** (406, experimental) — `plugin.test.ts` (26): kit, the experimental
 shape (`experimental: true`, version below 1.0, no tool exposed), coverage
 through a tool-exposing variant of the plugin
 (`draft-to-zone-external-unbounded` and `bulk-label-write` knowingly
@@ -781,12 +926,17 @@ credential spec (Google, PKCE, `client_secret_post`, offline consent, no
 plugin `refresh`), `discoverResources` and the structured `not_implemented`
 answer of `execute` against `mockFetch`, presets `read-only` / `developer`.
 `risk-catalog` (45): loaded catalog lint, pattern parsing, per-tool
-coverage, `risksTouchedBy` spot checks. `classify` (105): a search bounded
-by a positive `from:` is its zone, **a query the parser cannot bound is the
+coverage, `risksTouchedBy` spot checks. `classify` (108): a search bounded
+by a positive `from:` is its zone, **a no-reply or alerts local part makes a
+sender `automated` only on a domain or an address the owner listed** (on a
+domain nobody listed the local part is chosen by the sender: `unknown`), **a query the parser cannot bound is the
 unknown zone plus the bulk marker**, sensitive labels fail closed on reads,
 a draft to an external recipient or to a recipient that cannot be parsed is
 refused, label tools need well-formed ids. `q-parser` (32, unions and
-groupings reported, never read as a conjunction), `data-model` (5).
+groupings reported, never read as a conjunction), `injection.test.ts`
+(190: hostile values over the identifier positions; `gmailId` is one path
+segment with no dot, separator or escape; `labelRef` is a label id or a
+label name, never a dot segment), `data-model` (5).
 
 **Structural — `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`**
 (12) — ADR [[scope-caps-not-enforced-in-v5-0]]: the v5.0 door has no cap
@@ -814,12 +964,19 @@ enforced limits is pinned to what the code enforces today.
   `denied_risks` may be left out (a v5 mission carries none).
   The decision is
   unchanged since v4; its inputs are the v5 `Resource[]` and the plugin's
-  `classify` (P0.R).
-- **`errors.test.ts`** (29) — the eight refusal codes: exactly eight in
+  `classify`.
+- **`errors.test.ts`** (31) — the eight refusal codes: exactly eight in
   `REFUSAL_CODES`, one builder sample per code, every field of every code,
   `hint` non-empty and serializable, `isRefusal` guard, JSON-RPC mapping
   (`-32603`, refusal in `data`, code in the message); `mission-inactive` for
-  an orphaned mission tells how long an earlier request stays grantable.
+  an orphaned mission tells how long an earlier request stays grantable;
+  **a mission token that stopped working** is an authentication failure
+  with its reason (`token-rotated`, `token-revoked`, `holder-removed`,
+  `holder-deactivated`), never a refusal code, and an unknown bearer carries
+  no reason.
+- **`token-holder.test.ts`** (3) — who a token belongs to: the audit keeps the
+  id of a member and the name of a named token; a reader is shown the email
+  of a member and the name of a named token; the two kinds are a closed set.
 - **`fingerprint.test.ts`** (12) — the one argument hash (audit entry,
   approvals): recursive key sorting, arrays in order, `undefined` dropped,
   `toJSON`, BigInt refused, known sha256 vector, key order vs one-byte
@@ -838,7 +995,7 @@ enforced limits is pinned to what the code enforces today.
   token at execution, session at either) → `wrong-credential-kind` with
   door/presented/expected; `parseBearer`; `DoorAuthenticator` end to end;
   unknown bearer → `AuthError`, not a refusal.
-- **`pipeline.test.ts`** (28) — `checkMissionActive` (status, passed and
+- **`pipeline.test.ts`** (38) — `checkMissionActive` (status, passed and
   future `expires_at`, **an unreadable `expires_at` is expired: the check
   fails closed**), `checkConnectionAvailable`; `CallPipeline` over a
   context built from the shared types (`ConnectionResource`, policy entry
@@ -860,7 +1017,23 @@ enforced limits is pinned to what the code enforces today.
   audit, the stored summary is bounded and `upstreamErrorClassName` is an
   identifier, never free text. **An audit write that fails after a
   successful forward is not recorded as an upstream failure** and
-  propagates, as it does after an upstream failure.
+  propagates, as it does after an upstream failure. **The audit copy of a
+  refusal reason holds no argument value**: a classifier denial that quotes
+  an argument reaches the agent whole and the audit with `[argument]` in its
+  place, redacted in one pass (a short value is not found inside a
+  placeholder already written), a value with pattern characters replaced as
+  text, the stored reason bounded. **A stage that throws before the decision
+  is refused and audited** (ADR [[decision-stages-fail-closed-and-audited]]
+  D1, invariant `every-refused-call-audited`): a classifier that throws
+  leaves one entry — `refused`, no code, the connection, the resource, the
+  tool, the argument hash and the token as known, the reason naming the
+  stage and the error class and never the message — with no budget asked
+  and nothing sent upstream, and the host is told through `onStageError`;
+  the resource stage throwing is audited with no target; the budget stage
+  throwing is audited with the risks the call touched; a thrown value that
+  is not an error and a free-text error name both read `Error`; an observer
+  that throws does not un-audit the refusal; the audit write of that
+  refusal failing still propagates.
   The real stages — resource, risk, upstream — and the door are tested in
   "Scenarios — Execution door" below; the budget stage in "Scenarios — Budget
   and sessions".
@@ -925,7 +1098,7 @@ enforced limits is pinned to what the code enforces today.
   `time`, `level` or `msg` does not overwrite the line's own; level
   threshold and stderr routing.
 - **`compose/compose.test.ts`** (17) — `buildRoot` from configuration
-  alone over the `:memory:` store (schema version 9, the shipped registry); the store
+  alone over the `:memory:` store (schema version 11, the shipped registry); the store
   receives the root's encryptor and a `RegistryCatalogIndex` (base ids,
   env-qualified ids within `acceptable_in_envs`, unknown provider,
   wildcard refused) and is closed with the root; with an injected empty
@@ -1005,11 +1178,12 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > §10 integration "simulated IdP" and structural "authority recomputed from
 > current membership". Handbook [[authentication]], ADRs
 > [[oidc-relying-party-and-web-session]],
-> [[sign-in-hardening-host-cookies-group-overage]] and
+> [[sign-in-hardening-host-cookies-group-overage]],
+> [[users-keyed-by-issuer-and-subject]] and
 > [[operator-deactivates-a-user]]. Co-located under
 > `apps/gateway/src/` unless a path says otherwise.
 
-- **`server/auth/claims.test.ts`** (16) — groups claim as array (trimmed,
+- **`server/auth/claims.test.ts`** (22) — groups claim as array (trimmed,
   de-duplicated, non-strings dropped), as space/comma/semicolon delimited
   string, absent or of another type; default and custom (Entra-style)
   mapping; email lower-cased, `name` → display name; missing `sub` /
@@ -1024,13 +1198,21 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   groups claim next to the pointer; the configured claim name is followed (a
   pointer for another claim is not an overage); a token with no groups and no
   pointer passes.
+  **The issuer is required**: a user is (issuer, subject), a token without
+  `iss` or with a blank one is `claims-missing`, and `iss` is never read
+  from a mapped claim although the subject may be. **When the userinfo
+  request failed** (`userinfoFailed`): a groups claim absent from the ID
+  token is refused with `groups-unavailable`, naming the configured claim —
+  unknown is not "none"; an ID token that carries the groups itself, even an
+  empty list, signs in; a missing identity claim is reported first; without
+  a failure, an absent groups claim is an IdP that sends none.
 - **`server/auth/admin-rule.test.ts`** (5) — group match, email match
   (case-insensitive), neither, either half of a combined rule,
   `describeAdminRule` without secrets.
 - **`server/auth/origin.test.ts`** (5) — matching `Origin`; another origin,
   scheme or the internal host refused; `Referer` fallback; neither header
   or `Origin: null` refused; 403 body `origin-mismatch`.
-- **`server/auth/session-service.test.ts`** (9) — cookie attributes
+- **`server/auth/session-service.test.ts`** (11) — cookie attributes
   (`HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age`), malformed values
   ignored; **both cookies are named with the `__Host-` prefix** and keep what
   it requires (`Secure`, `Path=/`, no `Domain`), and writing or clearing a
@@ -1065,12 +1247,13 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   bootstrap operator; the `operator` role follows the admin rule.
   `guardSession` checks session and role without the origin (reads);
   `refusalResponse` words each refusal and is never cached.
-- **`tests/unit/server/auth/mutation-guard.test.ts`** (242) — **structural:
+- **`tests/unit/server/auth/mutation-guard.test.ts`** (287) — **structural:
   the guard covers every mutating handler.** Every handler of the human
-  surfaces is classified and every mutating route of the app (27 route
+  surfaces is classified and every mutating route of the app (32 route
   files) is found from the source and must delegate to a guarded mutation;
-  then, table-driven over the 27 mutating handlers (missions preview / issue
-  / rotate / revoke / gate edit, request decide, connection connect /
+  then, table-driven over the 32 mutating handlers (missions preview / issue
+  / rotate / revoke / gate edit, member add / remove, token generate /
+  create named / revoke, request decide, connection connect /
   discover / revoke / resource edit / transfer / reassign, provider app,
   share create / revoke, group create / add member / remove member, user
   deactivate / reactivate, OAuth
@@ -1097,11 +1280,24 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   controls, no label element without a label, the error shown in place of
   the hint; `CredentialFieldInputs` binds every label, textarea included,
   with ids that stay unique when two lists share a page.
+- **`tests/unit/app/item-kinds.test.ts`** (5) — the type colours: every kind
+  named with a label and a meaning for the legend; three tokens per kind in
+  both themes and the `data-kind` scope that applies them; no kind borrows a
+  status hue and each has a hue of its own; the current section of the
+  application bar is the entry the path is under, and no other.
+- **`tests/unit/app/risk-explain.test.tsx`** (9) — static markup of the
+  shared risk components: a `Slug` carries its kind as an attribute, a glyph
+  and a word for assistive technology, is a link when given a target, prints
+  a risk id linked to its catalog entry, and every kind has a legend entry;
+  `VectorStrip` writes the six values and names each axis in full;
+  `RiskExplain` in three lines, the class left out of a list already grouped
+  by class; help rendered closed with its button; a callout with a title, an
+  icon and the role of a note.
 - **`src/components/auth/principal.test.ts`** (2) — `isOperatorPrincipal`,
   the interface's one statement of who is shown as an operator (the
   Administration link, the Audit page's sentence): true for the bootstrap
   token and for a user the admin rule matches, false for any other user.
-- **`tests/integration/auth/oidc-login.test.ts`** (17) — the composition
+- **`tests/integration/auth/oidc-login.test.ts`** (22) — the composition
   root over the `:memory:` store with the real `openid-client` relying
   party and the in-process **`FakeIdp`** (`fake-idp.ts`: discovery, JWKS,
   token, userinfo through `customFetch`; ES256 ID tokens; PKCE S256
@@ -1148,8 +1344,29 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   17. **group overage**: a sign-in whose groups the IdP moved out of the
       token is refused (`/login?error=groups-overage`, no session); the
       memberships of a known user are kept, not emptied, and an unknown
-      user is not created.
-- **`tests/integration/auth/deactivate-user.test.ts`** (9) — **the operator
+      user is not created;
+  18. **groups that could not be read refuse the sign-in**: with an IdP that
+      sends the groups through userinfo only and a userinfo endpoint that is
+      down, the sign-in answers `/login?error=groups-unavailable` with no
+      session; nothing is synced (the user keeps both groups, the session
+      they already had keeps its operator marker), the refusal is logged,
+      somebody never seen before is not created, and the sign-in passes
+      again once userinfo answers;
+  19. userinfo down does not refuse a sign-in whose ID token carries the
+      groups (the failed request is logged);
+  20. **a user is (issuer, subject)**: after the operator points the
+      instance at another IdP, the same subject is a new person — a new
+      account with no group, the first account not refreshed, not signed
+      into, its groups intact;
+  21. an account deactivated here stays closed to its issuer
+      (`account-deactivated`) and does not close the same subject at
+      another issuer;
+  22. **accounts from before the issuer was recorded are bound by the first
+      sign-in, all of them, once**: the returning user finds their own
+      account, the count is logged, the one who did not sign in is bound
+      too with their deactivation, and nothing is left for another issuer
+      to take.
+- **`tests/integration/auth/deactivate-user.test.ts`** (12) — **the operator
   deactivates a user**, on the real root (`:memory:` store, simulated IdP,
   the instance's HTTP surface) with a user who holds one of everything: a
   web session, a delegation with live tokens, a mission issued through it on
@@ -1178,11 +1395,23 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   6. refusals that write nothing: one's own account
      (`cannot-deactivate-self`), an unknown user, an active user to
      reactivate, a user already deactivated;
-  7. the bootstrap operator deactivates anyone, an operator included;
-  8. over HTTP, an operator's `POST /admin/users/<id>/deactivate` and
-     `…/reactivate` answer 303 to `/admin/users` with a notice;
-  9. a plain user, a foreign origin and no session are refused, and nobody
-     is deactivated.
+  7. a deactivation of which one step fails closes everything it can, then
+     reports the failure: the audit entry and the settlement do not depend
+     on the delegations;
+  8. **what a half-failed deactivation left open is closed before the user
+     is active again** (ADR
+     [[one-membership-rule-checked-in-the-token-insert]] D4): the
+     delegation still `active` in the store is revoked by the reactivation
+     (`user-deactivated`), its refresh token answers 400 and its access
+     token 401 — the user consents again;
+  9. a reactivation that cannot close what was left open does not happen:
+     the user stays `removed`, no `user-reactivated` entry, and the
+     operator's second attempt goes through once the store answers;
+  10. the bootstrap operator deactivates anyone, an operator included;
+  11. over HTTP, an operator's `POST /admin/users/<id>/deactivate` and
+      `…/reactivate` answer 303 to `/admin/users` with a notice;
+  12. a plain user, a foreign origin and no session are refused, and nobody
+      is deactivated.
 
 ## Scenarios — Store
 
@@ -1190,7 +1419,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > §3.5, §6 ("encryption at rest", "authoritative, atomic counting",
 > "immutable audit"), §8, §10 (structural tests). Handbook [[store]]. ADR
 > [[embedded-store-sqlite-and-migrations]]. Every suite runs on an
-> ephemeral `:memory:` store with the real migrations (`0001`-`0010`), a
+> ephemeral `:memory:` store with the real migrations (`0001`-`0011`), a
 > `ManualClock`, a `StubEncryptor` and a five-id `SetCatalogIndex`
 > (`apps/gateway/src/server/store/testing.ts`); the two file-based cases
 > use a temp directory. Paths are relative to `apps/gateway/tests/`.
@@ -1204,12 +1433,12 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   idempotent re-run, incremental apply of a new file, checksum
   immutability of an applied file (boot refused), full rollback of a
   failing file (nothing recorded, no table left), a database carrying a
-  migration this image does not ship is refused, the nine shipped
-  migrations `0001`-`0010` in the default directory.
+  migration this image does not ship is refused, the eleven shipped
+  migrations `0001`-`0011` in the default directory.
 - **`unit/server/store/db.test.ts`** (2) — `isSqliteVersionAtLeast`
   against `MIN_SQLITE_VERSION`: major, minor and patch compared in order;
   a missing or malformed component counts as zero.
-- **`integration/store/schema.test.ts`** (6) — the 29 tables exist; every table is `STRICT`; the store satisfies the composition root's
+- **`integration/store/schema.test.ts`** (6) — the 30 tables exist; every table is `STRICT`; the store satisfies the composition root's
   `Store` port (`kind`, `ping()`, `close()`); boot against an empty file sets WAL,
   `foreign_keys`, `synchronous=NORMAL` and reopens without re-migrating;
   two writers on one file serialize under `BEGIN IMMEDIATE` (second gets
@@ -1254,6 +1483,23 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   user and leaves local groups alone, skips and reports a name held by a
   local group, and is one transaction (a failure keeps the previous
   memberships and creates no group).
+- **`integration/store/users-issuer.test.ts`** (14) — **users keyed by
+  (issuer, subject)**, migration `0011` (ADR
+  [[users-keyed-by-issuer-and-subject]]): the same subject at another
+  issuer is another user and the first account is not refreshed by the
+  second person's sign-in; a deactivated account of one issuer says nothing
+  about the same subject elsewhere; the key is injective (an issuer holds
+  no space); an issuer that is empty, holds a space or a newline, has no
+  scheme or is a bare host is refused by `upsertFromIdp`, `getByIdentity`
+  and `bindUnboundTo`, and so is an empty subject. **Accounts from before
+  the migration**, on a database the previous image wrote: every row is
+  kept with its subject, no issuer and the key `unbound <subject>`, what
+  referenced the user still does (foreign keys checked); an unbound account
+  matches no sign-in, and `unbound` is not an issuer. **Binding**
+  (`bindUnboundTo`): all the unbound accounts at once, the deactivated one
+  included, and only once — a later issuer finds nothing to take; a
+  returning user finds their own account; an account that would collide
+  with one already bound to that issuer is left unbound.
 - **`integration/store/connections-shares.test.ts`** (13) — connection
   credential sealed with the connection id as associated data and
   unreadable under another id; ciphertext never on the record; group
@@ -1263,7 +1509,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   wildcard risk ids refused by the catalog check** (`*`, `github.*`,
   unknown, empty) and **by the schema `CHECK`** when bypassed, empty
   restriction allowed, active-for-targets listing and revocation.
-- **`integration/store/missions.test.ts`** (15) — creation with
+- **`integration/store/missions.test.ts`** (17) — creation with
   connections and policy rows, resource selection per connection,
   inconsistent selections refused (`selected` without resources, `all`
   with resources, resource of another connection, no connection), policy
@@ -1280,7 +1526,13 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   granularity. **Members**: added, listed, `listForMember` (never the
   creator's own missions), the creator refused as a row; removing a member
   revokes their token in the same step and only theirs, and adding them
-  again leaves it revoked; `revokeMemberTokensOf` revokes a user's tokens on
+  again leaves it revoked; **a token is inserted only for a mission that
+  serves and a holder who is on it, checked in the insert**
+  (`TokenNotIssuableError`: `holder-not-a-member` for a user never added,
+  removed, deactivated or unknown; `name-taken`; `mission-not-active` for
+  every holder of a revoked mission, the creator included; the creator
+  needs no row); **adding a member revokes a working token of theirs that
+  predates the membership** (`tokenRevoked`); `revokeMemberTokensOf` revokes a user's tokens on
   the missions they did not create and leaves their own missions' tokens.
 - **`integration/store/token-holders.test.ts`** (4) — **migration `0010`** on
   a database an earlier image wrote: every token becomes a member token of
@@ -1487,7 +1739,7 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
     denial consumes the state; a failed exchange shows the provider's
     wording; a failed first discovery keeps the connection; the per-user
     rate limit (10 per minute, other users unaffected, window reset);
-  - `app-install`, installation binding (P1.4b): installation URL with
+  - `app-install`, installation binding: installation URL with
     the state; **an installation id in the authorizing user's list (on the
     second page) is accepted**, the code exchanged with the app's client
     and no `redirect_uri`, the list read with the user token and the
@@ -1555,7 +1807,7 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
 - **`codec-and-keypair.test.ts`** (12) — the four `CredentialSecret` kinds
   round-trip, malformed stored text refused; the generated ed25519 key is
   parsed by `ssh2`, matches its public line and signs.
-- **`install-verification.test.ts`** (5, P1.4b) — `verifyInstallation`
+- **`install-verification.test.ts`** (5) — `verifyInstallation`
   alone: a bare list in one request with Basic client authentication, ids
   as numbers or strings; an absent id, a longer id with the same prefix and
   malformed items refused; a spec header cannot replace `Authorization`;
@@ -1612,7 +1864,7 @@ Integration:
   whatever happens to the entry of the act**: a revocation whose own audit
   entry fails still writes `mission-orphaned`.
 - **`tests/integration/connections/connect-flow.test.ts`** (6; the two
-  `app-install` scenarios are P1.4b: a foreign installation id and a
+  `app-install` scenarios are the installation binding: a foreign installation id and a
   callback without code are refused through the handlers with a
   `connection-refused` audit row each, the rightful user connects, and
   **the user token, the authorization code, the client secret and the
@@ -1689,17 +1941,19 @@ Unit, co-located (129 with the authority suite):
   nothing is said when every resource is labelled, when the plugin derives
   the environment or when the catalog has no env-scoped risk; a draft with a
   notice and no issue is issuable.
-- **`catalog-view.test.ts`** (19) — explicit enumeration equal to the owner
+- **`catalog-view.test.ts`** (21) — explicit enumeration equal to the owner
   authority, and built on it (an entry the authority cannot enumerate has no
   row); base id, env, fallback, deprecated, rate ceiling; per-env vector;
   `SEVERITY_RANKS` equal to `RISK_VECTOR_AXES`; score bounds and levels;
   `isResolvable`; `presetWidth` and its one-liner; **explaining a risk**: the
   vector resolved per environment on each row, `VECTOR_AXES` in the order of
-  the shared vocabulary, `vectorBadges` (text and weight per axis),
+  the shared vocabulary and a short name per axis for the compact strip, a
+  note printed without its lead where the lead is already the title,
+  `vectorBadges` (text and weight per axis),
   `riskKindOf` (read by the patterns, destructive by the vector),
   `groupVariants` (one variant per environment), `groupByKind` (reads, writes,
   irreversible writes; every row in one group), `formatRate`.
-- **`src/server/providers/reference.test.ts`** (18) — the provider reference.
+- **`src/server/providers/reference.test.ts`** (20) — the provider reference.
   Links: a risk id, qualified or not, points at its catalog entry; provider,
   preset and section paths. `describePattern`: action and path in words, the
   catch-all write named, an unparseable pattern left as written.
@@ -1715,13 +1969,23 @@ included` equals the catalog; where the environment comes from (Vercel: the
   call; Supabase: the resource label; GitHub and Cloudflare DNS: none); a
   tool's required and optional arguments; **the tool and the two risks that
   hand a token to the agent are marked on GitHub, from the plugin's
-  declaration, and nowhere else**; `null` for an unknown provider.
+  declaration, and nowhere else**; a card says the planes of the model and
+  the environments of the catalog; each risk names the presets that include
+  it and the tools declared for it; `null` for an unknown provider.
   `riskExplainer`: the row of an explicit id, `null` for an id no catalog
   declares.
+- **`src/server/providers/planes.test.ts`** (9) — the plane of a risk and of a
+  tool on the provider reference: a pattern is filed under the plane of its
+  first entity that one plane alone declares; every plane the patterns reach,
+  in the order of the model; `other` for a pattern or a tool name that names
+  no entity of a single plane, or two planes at the same length — never a
+  guess. **Over the shipped plugins**: a plane control only for a model with
+  several planes; every Supabase risk under a plane and the two catch-alls
+  under `other`; the per-plane counts of risks and tools.
 - **`summary.test.ts`** (8) — the three lines (can / cannot / quantities) for a
   recurring and a one-off mission, the empty form, label truncation, period and
   expiry phrases.
-- **`bootstrap-kit.test.ts`** (13) — the secret only in the env snippet; MCP
+- **`bootstrap-kit.test.ts`** (16) — the secret only in the env snippet; MCP
   configuration with the instance URL and `${VAUBAAN_MISSION_TOKEN}`; the agent
   block (connections, refs, risks, budget); **sub-agents and agent labels**
   (the same configuration and token, never one per agent; both carriers and
@@ -1811,7 +2075,7 @@ connections and resources seeded through the repositories (36):
   what is refused with the rule stated (empty, too long, leading punctuation,
   an email, a slash, a colon, a line break, markup, non-ASCII, anything that
   is not text), and never a name with an `@`.
-- **`tests/integration/missions/team.test.ts`** (27) — on the real root:
+- **`tests/integration/missions/team.test.ts`** (28) — on the real root:
   - **members**: the creator is a member by construction; adding a user makes
     the mission appear in their list as `member` with the creator's email;
     candidates are the active users not on the mission, for the creator only;
@@ -1828,7 +2092,10 @@ connections and resources seeded through the repositories (36):
     name free again once revoked); one token revoked on its own by its holder
     or by the creator, idempotent, with `by-holder` / `by-creator` in the
     audit; revoking the mission revokes every token; a session event for each
-    token issued or revoked;
+    token issued or revoked; **a creator who revoked their own token is issued
+    one under the same act by either way** (`mission-token-issued` through
+    "Rotate token" of the mission header and through "Rotate my token" of the
+    team section: nothing is replaced, so it is an issue, not a rotation);
   - **a member uses the mission as it is**: reads it with nothing editable;
     cannot edit a gate, rotate the creator's token, revoke or duplicate the
     mission, add or remove a member, create a named token (each `not-found`,
@@ -1860,9 +2127,31 @@ connections and resources seeded through the repositories (36):
   reason, the others served; a revoked mission is `mission-inactive` for its
   holders and tells a removed member nothing; a deactivated creator orphans
   every holder and reactivation restores every token.
+- **`src/server/store/membership.test.ts`** (12) — **the one rule of who is on
+  a mission** (`membershipOf`, ADR
+  [[one-membership-rule-checked-in-the-token-insert]] D1), as a table: the
+  creator is `creator` whatever their own status or a stray member row; an
+  active user is `member` with a current row, `removed` once the row is
+  removed, `none` without one; a deactivated or unknown user with a row is
+  `deactivated` — told before removal — and `none` without one; only the
+  creator and a current member are on the mission (`isOnMission` over
+  `MEMBERSHIPS`).
+- **`tests/integration/missions/team-interleaving.test.ts`** (6) — **a token
+  insert that lost the race is refused** (same ADR, D2). The competing act
+  runs inside the minter, exactly between the service's check and the
+  insert: a member removed while the hash was computed gets no token, and
+  none appears when they are added back; removed while rotating, the old
+  token is revoked by the removal (`holder-removed`, then `revoked` once
+  added again) and the new one is not inserted; deactivated meanwhile, no
+  token, none on reactivation, and a new one generated the ordinary way;
+  the mission revoked meanwhile answers `inactive` / `revoked` for a member
+  token and a named one, with no active token left; two creations of one
+  name at once give one token and `name-taken`; with nothing in between the
+  token is issued as before.
 - **`tests/integration/store/token-holders.test.ts`** (4) and
-  **`store/missions.test.ts`** — migration `0010` and the repository: see
-  "Scenarios — Store".
+  **`store/missions.test.ts`** — migration `0010` and the repository (the
+  check inside the insert, the stale token revoked when a member is added):
+  see "Scenarios — Store".
 - **`src/server/execution/execution.test.ts`** — the verified-token cache asks
   the mission service on every hit: a cached proof never outlives a removed or
   deactivated holder; one proof and one throttle window per token.
@@ -1898,7 +2187,7 @@ account-level tool, an env-scoped risk, a risk to gate, an `execute` and a
 `refresh` the test scripts), missions issued through `MissionService.issue`,
 calls sent as JSON-RPC to `root.execution.handlers.mcp`.
 
-- **`src/server/execution/execution.test.ts`** (24) — agent label (header,
+- **`src/server/execution/execution.test.ts`** (26) — agent label (header,
   `_meta.agent` wins; the accepted shape up to 64 characters, trimmed;
   absent, empty and blank hold nothing; too long, a character outside the
   list, a non-string are **rejected with their reason, never repaired**; the
@@ -1917,7 +2206,7 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   locks out only its sender —, a non-token bearer costs nothing); upstream
   credential cache (scoped per connection, dropped on demand, unreachable
   after the connection row changed, lifetime capped).
-- **`integration/execution/pipeline.test.ts`** (23)
+- **`integration/execution/pipeline.test.ts`** (24)
   - _allowed call_: forwarded to the plugin, the touched risk decremented,
     one audit entry with connection, resource ref, canonical
     `arguments_hash`, `remaining_budget`; the decrypted credential reaches
@@ -1943,7 +2232,15 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
     calls an account-level tool.
   - _structural rejections_ (`-32602`, audit `refused` with no code):
     unknown tool, a provider the mission has no connection for, unplaceable
-    arguments.
+    arguments. **A classifier that throws** (invariant
+    `every-refused-call-audited`): the call is refused with "the risk stage
+    failed (TypeError)" and nothing reaches the plugin; **one audit entry**
+    (`refused`, no code, the tool, the argument hash, the token holder, the
+    connection, no risk, no remaining budget); nothing is counted — the
+    next good call still has the whole quota; one `error` log line
+    ("call refused: a decision stage failed") with the stage, the tool, the
+    error class and stack frames; and the text the error quoted is in
+    neither the answer, the audit nor the log.
   - _upstream_: a provider failure is a tool error and the call stays
     allowed and counted; 401 → refresh → retry with the new credential; 401
     and a rejected refresh → connection `expired`, the agent reads
@@ -2088,7 +2385,7 @@ Unit, beside the code (102):
   `creator-removed`; `connection-missing` when a connection of the mission
   is no longer in the store; each connection checked against its own partition
   (`partitionOf`), a share of one connection never covering another.
-  `inspect` / `derive` (P2.2b): grounded untouched with no reason;
+  `inspect` / `derive`: grounded untouched with no reason;
   ungrounded → the mission **read** `orphaned` with the reason, **the stored
   row unchanged and no admin entry**; **reversible** — the same mission reads
   `active` once the share is back; a revoked connection stays orphaned
@@ -2173,7 +2470,7 @@ operator):
   half grounded. **Seen by the door when nobody watched** (membership removed
   straight in the store): refused, the creator's page reads `orphaned`, the
   row still `active`, no admin entry, the call audited. **Derived and
-  reversible (P2.2b)**: **lose → refused → regain — the same token serves the
+  reversible**: **lose → refused → regain — the same token serves the
   next call on the same session, counters 2 → 2 → 3, the token still `active`,
   `mission-orphaned` then `mission-restored` under the owner's name, call
   entries allowed, allowed, refused, refused, allowed**; restored only when
@@ -2276,7 +2573,7 @@ a session or the auth module, nor keeps a module-level map; then one
 long-lived instance follows membership changes made in the store at
 issuance, in the web session (whose `login.groups` still lists the group),
 in the owner check of the Share dialog, and at the execution door.
-**Extended by P2.2b to the `orphaned` state itself (spec §2.3 "never stored
+**Extended to the `orphaned` state itself (spec §2.3 "never stored
 as a verdict")**: three rounds of leave / join at the door and on the
 creator's page with the `missions` row (`status`, `updated_at`, `closed_at`)
 byte-identical throughout and the refused calls consuming nothing; no
@@ -2332,7 +2629,7 @@ expired`, the three terminal for every transition; an open request past
   shared client-address rule, not a copy of it (the rule itself is tested in
   `http/client-ip.test.ts`, "Instance configuration" above); every caller
   shares one key when no proxy is trusted.
-- **`events.test.ts`** (6) — one line per event kind, total for unknown
+- **`events.test.ts`** (7) — one line per event kind, total for unknown
   kinds and missing details; an event with malformed details is shown
   without detail and does not throw.
 - **`sweeper.test.ts`** (4) — ticks on the interval until stopped; a failing
@@ -2397,7 +2694,7 @@ asserted in "Scenarios — Execution door" (`budget-exhausted`).
 > after decision" and "integration: approval and replay". Handbooks
 > [[requests]] ("Approvals"), [[budget-and-sessions]] ("Gates opened for the
 > period"), [[missions]] ("Editing a gate"). ADR [[atomic-budget-accounting]]
-> (amendment "the approval gate"). Feature P2.1.
+> (amendment "the approval gate").
 
 Unit:
 
@@ -2506,7 +2803,7 @@ Integration, the real composition root:
   file outside `.github/workflows` never meets the gate; the gate opened for
   the period; the gate set to `auto` on the mission; the sealed blob does
   not read as the arguments, and neither audit, events nor logs hold them.
-- **`tests/integration/missions/gate.test.ts`** (18) — **the gate edited
+- **`tests/integration/missions/gate.test.ts`** (20) — **the gate edited
   after issuance**: `auto → approval` makes the next call ask and leaves the
   rest of the policy untouched; `approval → auto` lets calls pass and leaves
   the open request open; one `gate-changed` entry with before / after and a
@@ -2515,7 +2812,11 @@ Integration, the real composition root:
   opening** (`opening_closed: true`, `previous: 'approval'`): the next call
   is `approval-required` again, `gate_open_until` is `null`, one entry
   carries `open_for_period: true → false` and one `gate-changed` event is
-  recorded; asked again, nothing is written;
+  recorded; asked again, nothing is written; **the gates of an expired
+  mission stay editable** (`gates_editable`) and "ask me again" closes the
+  opening there too, so that it is not found open when the expiry is
+  extended — the next call asks again; on an expired mission with no
+  opening, a repeated `approval` writes nothing;
   creator only (`not-found` for an operator and another user); a value that
   is not a gate, a risk outside the policy, a revoked mission; the detail's
   `gate_open_until`; `POST /api/missions/:id/gate` 200 / 400 / 404 / 422 /
@@ -2547,13 +2848,14 @@ produces them — `SessionService.recordCall` (session, counters, events, reques
 store's audit writer — rather than through the execution door; entries written by the door
 itself are asserted in "Scenarios — Execution door".
 
-- **`apps/gateway/src/server/audit/filters.test.ts`** (18, unit) — **audit filters**: every parameter
+- **`apps/gateway/src/server/audit/filters.test.ts`** (20, unit) — **audit filters**: every parameter
   read and trimmed; first value of a repeated parameter; decision and kind outside their
   closed sets dropped and reported; unreadable or impossible dates dropped; a reversed
   period ignored; a single day is `[00:00, next 00:00)` UTC; oversized value refused;
   cursor round trip and every malformed cursor refused; `auditQueryString`; `scopeOf` for
-  a user, an operator and the bootstrap operator; `withoutArguments`.
-- **`apps/gateway/src/server/audit/session-event-detail.test.ts`** (8, unit) —
+  a user, an operator and the bootstrap operator; `withoutArguments`; the token holder in a
+  query string (`member:<id>` / `named:<name>` round trip, anything else names nobody).
+- **`apps/gateway/src/server/audit/session-event-detail.test.ts`** (10, unit) —
   `eventDetailLines`, what the session page writes under an event: an
   allowed call says when it consumed an approval and nothing otherwise; a
   refused call names the request it pointed to once that request is closed;
@@ -2562,8 +2864,10 @@ itself are asserted in "Scenarios — Execution door".
   says until when, a gate edit says both gates; a reset and a quota
   extension list what was given back, an expiry extension the new expiry; a
   rotation shows the token prefix, a revocation how many tokens it retired;
+  a token issued to a holder names the holder and the token it replaced; one
+  token revoked on its own names it and its holder;
   nothing for malformed details or a kind of a later version.
-- **`audit-query.test.ts`** (24) — **by agent label**: exact and
+- **`audit-query.test.ts`** (25) — **by agent label**: exact and
   case-sensitive, call entries only (no administrative entry), narrowed by
   the other filters, and never a way into someone else's audit (the scope
   comes first). **Visibility**: a creator sees the calls and acts of their
@@ -2585,7 +2889,7 @@ itself are asserted in "Scenarios — Execution door".
   `0008`**: the events an earlier image stored are backfilled, call events
   only; the copy made at insert follows the rule of the backfill; the calls
   of one label, or the unlabelled ones, are read newest first by keyset.
-- **`mission-session.test.ts`** (20) — **agent labels**: the calls of the
+- **`mission-session.test.ts`** (21) — **agent labels**: the calls of the
   current period per label, allowed and refused, the unlabelled ones apart,
   **beside counters that stay per risk and per mission**; calls of past
   periods left out and nothing for a mission that is not active; the
@@ -2613,15 +2917,17 @@ itself are asserted in "Scenarios — Execution door".
   interval, stop; a failing purge is logged and retried; concurrent sweeps share one
   purge; the composition root starts the sweeper with `retention_days` and `close()`
   stops it; default 90 days.
-- **`admin-mutations.test.ts`** (46) — **structural: every administrative mutation writes an
+- **`admin-mutations.test.ts`** (52) — **structural: every administrative mutation writes an
   admin audit entry.** The public methods of every class under
   `server/{connections,provider-apps,missions,auth,requests,telemetry,authority,shares,groups,users,oauth-as,management}`
   are enumerated from the source with the TypeScript parser; each must be classified (read,
   mutation, exempt with a reason), with no unclassified method and no stale rule. Each of the
-  39 mutations is driven on an ephemeral instance, must go through the method under test (spy)
+  45 mutations is driven on an ephemeral instance, must go through the method under test (spy)
   and leave exactly one entry with the expected act, object and acting user: connection created
   (key and OAuth callback), resources discovered, resource edited, connection revoked,
   transferred, reassigned; mission issued (issue and duplicate), rotated, revoked, gate changed;
+  member added and removed, a member's token generated, a named token issued, a token revoked
+  (by its holder or the creator, and for a deactivated holder);
   mission orphaned (`MissionGrounds.watchConnection`, `watchCreator`) and restored
   (`MembershipSettler.watch`); share created and revoked; group created, member added and
   removed; user deactivated and reactivated (`UserAdminService`, through the two routes);
@@ -2819,11 +3125,16 @@ Unit, beside the code (`apps/gateway/src/server/oauth-as/`):
   management scope may be named); a token opens the door when its scopes
   include the management scope; the first resource that is not the
   management door is named; both refusals are worded from the constants.
-- **`pages.test.ts`** (9) — the consent screen names the client, the user, the
+- **`pages.test.ts`** (12) — the consent screen names the client, the user, the
   scope and where the code goes; says the name is a claim; warns per
   destination kind; posts an opaque id with Deny first; **escapes** a hostile
   name, client id, email and destination; never cached, never framed, no
-  script, a fresh style nonce.
+  script, a fresh style nonce; message pages answer with the status, the
+  title and the sentence, escaped, under the same headers. **The build
+  footer**: on the consent screen and on a message page, with the two
+  stamps `/healthz` answers (version, commit); the stamps are escaped and
+  add nothing the content policy would have to allow (`default-src
+'none'`, no script); absent when the handlers were given no build.
 - **`clients.test.ts`** (40) — registration of a public and of a confidential
   client (secret returned once, digest stored); what a registration cannot
   decide; every refusal; unused clients forgotten after a month; **the three
@@ -2913,7 +3224,7 @@ surface as one `fetch`):
   token expires and **the client renews by itself**, the refresh token
   rotated; the user revokes and the client is sent back to the browser; a
   refusal reaches it as `access_denied`.
-- **`credential-separation.test.ts`** (17) — **the three real credentials on one
+- **`credential-separation.test.ts`** (18) — **the three real credentials on one
   instance**: a delegated token at `/mcp` → `wrong-credential-kind`; a
   mission token at `/mcp/manage` → `wrong-credential-kind`; a web session at
   `/mcp/manage`, as cookie or as bearer → `wrong-credential-kind`; `401` with
@@ -2975,7 +3286,7 @@ method of the module's classes and drives the four that leave an entry.
 
 Unit, beside the code (`apps/gateway/src/server/management/`):
 
-- **`tools.test.ts`** (31) — **every act is the delegating user's**: each of the
+- **`tools.test.ts`** (32) — **every act is the delegating user's**: each of the
   seven methods calls the mission service with `{ id: actor.userId }`;
   `issue` carries `{ delegation: { id, clientId } }`. **A draft beyond the
   authority is refused before anything is issued, with the uncovered list**,
@@ -3046,7 +3357,7 @@ composition root on the `:memory:` store with the shipped plugins and the
 simulated IdP; the agent is the official MCP client holding a delegated token
 obtained through registration, sign-in, consent and code exchange):
 
-- **`management-door.test.ts`** (33)
+- **`management-door.test.ts`** (34)
   - The door lists exactly the seven tools, each with a description and a
     strict input schema; the server instructions carry the rules.
   - **Reading**: an owner sees their connections with the whole catalog,
@@ -3133,6 +3444,8 @@ and `rotateSuccessorOf`; the refresh reuse window is in
 > D6, D7. Spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §10 ("no
 > integration test against a real provider, ever": every provider request of
 > the demo is answered from memory). `apps/gateway/tests/integration/demo/`.
+> Only `demo-smoke` and the last four tests of `demo-safety` need a build;
+> `demo-vercel` and `build-stamp` need none and open no listener.
 
 - **`demo-smoke.test.ts`** (17; needs a build) — **the command, as a human
   runs it**: spawns `tests/demo/main.ts` on a port the system picks
@@ -3167,6 +3480,24 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   standalone output holds `server.js`, **no file from a `tests/` or `demo/`
   folder** and no file naming `/__demo`; the route manifest has `/missions`
   and no route under the prefix.
+- **`demo-vercel.test.ts`** (3) — **the simulated Vercel**, the shipped
+  plugin run against the demo's `fetch` double: a connection made with the
+  tour's values discovers one team and its two projects, each with the
+  three environments (`prod`, `preview`, `development`); a REST tool
+  (`vercel__list_env_vars`) and a rewrapped tool
+  (`vercel__list_deployments`) are answered from memory; discovery never
+  dials the provider — every recorded call was answered by a simulated
+  route.
+- **`build-stamp.test.ts`** (10) — **`npm run demo` serves the existing build
+  only when it is the build of the sources as they are**
+  (`tests/demo/build-stamp.ts`), in a temporary tree: an unstamped build is
+  never fresh; a stamped one stays fresh while no input changed, whatever
+  the file dates (the stamp is a digest of contents); an application source,
+  a workspace package, a plugin catalog or the lockfile changing makes the
+  next start build again, and so does a file added with the same contents;
+  tests, dependencies and the build itself are not inputs; a matching stamp
+  without a build is not fresh; the stamp lives inside the build directory
+  and the inputs it names exist.
 
 ## Scenarios — Release
 
@@ -3230,8 +3561,18 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   tests per invariant; the count is in the table above) — **the index of
   the structural suite**. `manifest.ts` lists the invariants (an id, a
   statement, a source, the proofs: a file and the titles of the tests that
-  prove it). The index fails when an invariant has no proof, a proof names a
-  file that is gone or a test title its file no longer contains, a test file
+  prove it); 26 invariants today, `every-refused-call-audited` the latest
+  (a call refused because a decision stage threw leaves its entry; proofs in
+  the two `pipeline.test.ts`). **A proof is a test the runner will run**:
+  the proof files are read with the TypeScript parser, so a title that
+  survives only in a comment or in a string that is not a title, or only on
+  `it.skip` / `it.todo`, does not count; a proof that runs on a condition
+  (`describe.skipIf`, `it.runIf`) must say so in the manifest
+  (`conditional`: what it needs and who runs it with that), and one that
+  says so must be one; a shell proof (the image smoke test) is still matched
+  by the message of its step. The index fails when an invariant has no
+  proof, a proof names a file that is gone or a title no running test of its
+  file carries, a test file
   of the folder is in no invariant, a bullet of the spec's "Structural" list
   has no invariant (or the manifest quotes a bullet the spec no longer has),
   a proof file is not one a test runner or CI runs, or the threat-model
@@ -3247,29 +3588,48 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
   could hold a preset; `missions.status` cannot hold `orphaned` (the two
   triggers of migration `0007` exist).
 - **`no-arguments-in-logs.test.ts`** (3) — with the TypeScript parser, every
-  logger call of the server and of the packages it runs: none is handed an
+  logger call of the server and of the packages it runs (`.debug`, `.info`,
+  `.warn`, `.error`, `.child`, and a local name bound to one of them): none
+  is handed — in its message when it is built from values, or after it — an
   identifier named like call arguments, a request body or a secret, unless
   the name says it is a non-secret derivative (`token_prefix`,
-  `arguments_hash`); the scan finds log calls at all, and a planted offence
-  is reported.
+  `arguments_hash`), and a key named like a derivative does not vouch for a
+  value named like the secret itself; no object that carries them handed
+  over whole (`headers`, `request`, `call`, `ctx`), as a value, a shorthand
+  or a spread; no `reason` of a refused call (the lines whose reason is a
+  closed code are listed one by one); the scan finds log calls at all, and
+  planted offences are reported through the scan itself.
 - **`plugin-identifier-tests.test.ts`** (one test per plugin directory,
-  plus 1) — the directories under `plugins/` are read, the template among
+  plus 2) — the directories under `plugins/` are read, the template among
   them, and every shipped plugin is one of them; each has a test file that
   feeds hostile identifiers (the dot segment, an encoded or separator form)
-  to both its classifier and its executor (ADR
+  to both its classifier and its executor, **read with the TypeScript
+  parser**: the hostile values are string literals of the code, the
+  classifier and the executor are called, and at least one test of the file
+  runs — an import, a comment, the word in a title or a skipped test is not
+  a proof, which the suite checks on a planted file (ADR
   [[plugin-identifiers-one-grammar-for-classify-and-execute]]; the proofs
   themselves are the plugins' own suites).
-- **`base-images-pinned.test.ts`** (4) — the Dockerfile builds every stage
-  from the one `NODE_IMAGE`, pinned by full version and digest; the Compose
+- **`base-images-pinned.test.ts`** (5) — the Dockerfile builds every stage
+  from the one `NODE_IMAGE`, pinned by full version and digest; **nothing
+  else runs in the build**: no `# syntax=` frontend unless pinned the same
+  way (the file declares none), and every `COPY --from=` / `--mount=…from=`
+  names a stage of the file, never an image; the Compose
   file pins every image it pulls; the documentation quotes the pinned
   versions; the refresh procedure is written where the pins point to.
-- **`scripts/audit-gate.test.mjs`** (28) — **the dependency audit gate**
+- **`scripts/audit-gate.test.mjs`** (29) — **the dependency audit gate**
   (`scripts/audit-gate.mjs`, CI job `audit`), on recorded outputs, no
   network: `parseAuditOutput` reads each advisory once by its GHSA id and a
   clean report as none, tells a registry that does not answer from an
   advisory by what `npm audit` printed, and does not take a broken tree or an
-  unknown output for an outage; `decide` fails on a gated advisory the
-  allowlist does not name (a low one is a notice), passes an allowlisted one
+  unknown output for an outage — **nor silence**: no output at all, or
+  blank output, is `unreadable` (`npm` missing, killed or crashed), a broken
+  gate and not a registry that did not answer; **one advisory per package**:
+  the same id on a second package is kept, not dropped, so each pair meets
+  the allowlist; `decide` fails on a gated advisory the
+  allowlist does not name (a low one is a notice), **gates a severity it
+  does not know** (`unknown`, an empty one, `severe`, `CRITICAL` — only
+  `info` and `low` are notices), passes an allowlisted one
   until its review date, that day included, fails once the date has passed,
   does not let an id allowlisted for one package cover another, and reports
   entries that matched nothing without failing; `parseAllowlist` accepts an
@@ -3281,10 +3641,11 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).
-- **UI rendering** (React components) — two static-markup suites only
+- **UI rendering** (React components) — three static-markup suites only
   (`apps/gateway/tests/unit/app/field.test.tsx`, label binding;
-  `build-footer.test.tsx`, the build stamps); the pages are walked by
-  Playwright.
+  `build-footer.test.tsx`, the build stamps; `risk-explain.test.tsx`, the
+  slug, the vector strip, the three-line risk, help and callout); the pages
+  are walked by Playwright.
 - **Accounting rules** (period arithmetic, quota/rate comparison, gates) —
   "Scenarios — Budget and sessions" tests them against the store's
   `decideAndDecrement`.

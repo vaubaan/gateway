@@ -53,14 +53,17 @@ executor forwards arguments calls it **in `classify` and in `execute`**:
   did not go through `classify` cannot widen the call either.
 
 `routing` names the arguments the host or the executor adds itself (`teamId`
-and `projectId` for Vercel, `projectId` for Railway). The check runs after the
-identifier checks, so a call wrong on both counts is told about the identifier
-first.
+and `projectId` for Vercel, `projectId` for Railway). Where the check sits
+among a plugin's other checks is the plugin's: Vercel and Supabase run it after
+their identifier checks, so a call wrong on both counts is told about the
+identifier first; Railway runs it first.
 
-Cloudflare DNS, Vercel, Railway and Supabase apply it. GitHub, Stripe, Resend,
-Gmail, Upstash Redis and SSH build their upstream request field by field from
-declared arguments and forward nothing else: an undeclared argument is never
-read, so it is ignored, not refused.
+Cloudflare DNS, Vercel, Railway and Supabase apply it on both sides. Stripe
+refuses an undeclared argument in `classify` with a check of its own; its
+executor, like those of GitHub, Resend, Gmail, Upstash Redis and SSH, builds
+the upstream request field by field from declared arguments and forwards
+nothing else, so an undeclared argument that reached it would be ignored, not
+sent.
 
 ### D2. An identifier the grammar cannot carry is classified as "any"
 
@@ -83,8 +86,12 @@ to say "I will not run this, and nothing failed at the provider".
 is a provider failure and reaches the host unchanged (`UpstreamAuthError`,
 `UpstreamHttpError`).
 
-Stripe, Resend, GitHub and Railway were moved to it; Vercel and Supabase already
-declined this way with a local class of the same shape.
+Stripe, Resend and GitHub were moved to it. The contract is the result, not
+the class: Vercel keeps a local class of the same shape, and Railway, Supabase
+and SSH return the `isError` result directly where they decline. GitHub and
+Upstash Redis still throw a plain `Error` for a few conditions that are not the
+provider's failure (an installation id that is not a number, a database answer
+without a usable REST endpoint); they are recorded as upstream failures.
 
 ### D4. Railway binds a service to its project; a deployment stays unbound
 

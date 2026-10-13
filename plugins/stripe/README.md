@@ -104,6 +104,14 @@ percent-escape or any other character is refused by `classify` and by
 `<account id>` or `<account id>/<mode>` (`stripeAccountRef`) and never
 reaches the request.
 
+What `execute` declines itself — an account outside the mission, a malformed
+identifier, a mode the connection holds no key for, an unknown tool — is an
+`isError` result carrying the reason (`ExecutorRefusal` under the SDK's
+`declining`), returned before any request: nothing failed at Stripe and the
+audit records no upstream failure. What Stripe fails is thrown
+(`UpstreamAuthError` on 401/403, `UpstreamHttpError` otherwise). Plugin
+version 0.4.0.
+
 Reads whose answer carries customer fields — `list_invoices`,
 `list_charges`, `list_payment_intents`, and `list_events` unless `type`
 names a family without customer payload (`payout.*`, `balance.*`,
@@ -112,7 +120,7 @@ need `read-customer-pii`.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 3: 16 named risks and the
+`src/risk-catalog.yaml`, version 4: 16 named risks and the
 `stripe.uncategorized-write` fallback. Every risk is env-scoped on the mode
 (`acceptable_in_envs: [test, live]`), so the runtime qualifies
 `stripe[live].refund-create` vs `stripe[test].refund-create` from the
@@ -152,12 +160,13 @@ entry matched a write.
 
 ## Tests
 
-`npx vitest run plugins/stripe` — 160 tests: the SDK kit
+`npx vitest run plugins/stripe` — 219 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
 `assertPresetsValid`), the classifier's tool-by-tool security suite
 (`classify.test.ts`), the decision path through the real catalog and the
 engine — stronger risk on `cancel_at*` / `auto_advance`, PII overlay, mode
 resolution, each preset on test and live (`policy.test.ts`), the request
 shapes sent to Stripe (`execute.test.ts`), `execute` and `discoverResources`
-against `mockFetch`, the credential spec and presets, and catalog
-invariants. No test ever calls Stripe.
+against `mockFetch`, the credential spec and presets, catalog
+invariants, and hostile identifiers fed to `classify` and `execute`
+(`identifiers.test.ts`). No test ever calls Stripe.

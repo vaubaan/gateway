@@ -50,8 +50,8 @@ body:
       description: The tool and its arguments (redacted), the risk ids the call touches or the refusal you got, or the catalog entry as it is written.
       placeholder: |
         Tool: github__create_branch { owner, repo, branch: "feature/x" }
-        Touches: github.branch-write
-        Entry: matches 'github.repo[**].branch[**].W'
+        Touches: github.feature-branch-write
+        Entry: matches 'github.repo[**].branch[feature/*,fix/*,chore/*,bug/*,docs/*,refactor/*].W'
     validations:
       required: true
   - type: textarea

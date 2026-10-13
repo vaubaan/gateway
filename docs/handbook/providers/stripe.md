@@ -16,8 +16,11 @@ tracks:
 
 # Stripe provider — modelling and runtime
 
-`@vaubaan/plugin-stripe` on the v5 Plugin SDK (feature P1.2e). Contract :
-ADR [[plugin-contract-and-credential-spec]] ; spec
+`@vaubaan/plugin-stripe` (version 0.4.0) on the v5 Plugin SDK (feature
+P1.2e). Contract : ADR [[plugin-contract-and-credential-spec]] ; what the
+executor declines : ADR
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md)
+D3 ; spec
 [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §3.2, §5 and
 [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2, §4, §7.
 Contributor-facing details (fields, tools list, preset table) :
@@ -75,7 +78,9 @@ flowchart LR
   then `metadata.mode` — both written by discovery from the key itself. The
   `env` label is never a source of the mode. The classifier and `execute`
   both refuse a resource whose mode cannot be determined
-  (`account: cannot determine the test/live mode of '<ref>'`).
+  (`account: cannot determine the test/live mode of '<ref>'` from the
+  classifier ; `execute` declines with the same text under the `stripe:`
+  prefix instead of `account:`).
 - **The label must equal the mode.** Every Stripe risk is env-scoped on
   `[test, live]` and the engine qualifies it from the resource's `env`
   label, while `execute` picks the key from the mode. The classifier
@@ -106,11 +111,11 @@ All slices are rooted at `account[<ref>].mode[<mode>]`.
 never escaped (ADR
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
 
-| Argument                                                    | Grammar                                                                           | Where it lands                             | Outside the grammar                                                               |
-| ----------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
-| `id`                                                        | `stripeId` — `STRIPE_ID = ^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$`                     | URL path segment (as it is), slice ident   | `denied` `id: malformed identifier` ; `execute` throws `id: missing or malformed` |
-| `product`, `customer`, `coupon`, `charge`, `payment_intent` | `stripeId`                                                                        | query string or form body, slice ident     | `denied` `<arg>: malformed identifier` ; `execute` throws the same                |
-| `account`                                                   | `stripeAccountRef` — `STRIPE_ACCOUNT_REF = ^[A-Za-z0-9_-]{1,64}(/(test\|live))?$` | slice `account[<ref>]` ; never the request | `denied` `account: malformed ref`                                                 |
+| Argument                                                    | Grammar                                                                           | Where it lands                             | Outside the grammar                                                                              |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `id`                                                        | `stripeId` — `STRIPE_ID = ^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$`                     | URL path segment (as it is), slice ident   | `denied` `id: malformed identifier` ; `execute` declines with `stripe: id: missing or malformed` |
+| `product`, `customer`, `coupon`, `charge`, `payment_intent` | `stripeId`                                                                        | query string or form body, slice ident     | `denied` `<arg>: malformed identifier` ; `execute` declines with the same, prefixed `stripe:`    |
+| `account`                                                   | `stripeAccountRef` — `STRIPE_ACCOUNT_REF = ^[A-Za-z0-9_-]{1,64}(/(test\|live))?$` | slice `account[<ref>]` ; never the request | `denied` `account: malformed ref`                                                                |
 
 `readIdArgs` reads the six identifier arguments at once, for the classifier
 (which turns each into a slice ident) and for `execute` (which sends
@@ -128,8 +133,11 @@ refuses a call carrying any other key
 (`expand: not an argument of 'stripe__list_invoices' — nothing classifies it`)
 and `execute` forwards the declared ones only, so a Stripe parameter nobody
 classified — `expand`, `collection_method`, an undeclared filter — neither
-passes nor is silently dropped. Declaring a new property means deciding, in
-`classify.ts`, what it costs.
+passes nor is silently dropped. The refusal is the classifier's own check
+(a key outside `declaredArgsOf(tool)`), not the SDK's
+`undeclaredArgumentDenial` ; `execute`, called alone, builds its request
+from the declared arguments and never reads another. Declaring a new
+property means deciding, in `classify.ts`, what it costs.
 
 | Tool                                  | Slice(s)                                                                                                        |
 | ------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -216,12 +224,20 @@ call touches the fallback.
 Stripe takes form-urlencoded bodies with bracket notation
 (`items[0][price]=…`) and query parameters on GET ; `ROUTES` in
 `execute.ts` maps each tool to method + path, with the id in the path and
-removed from the body. 401/403 → `UpstreamAuthError`. Only the arguments
-the tool declares are forwarded ; `account` is consumed by the gateway.
-A path id that is missing or not a `stripeId`, or any other identifier
-argument `readIdArgs` refuses, throws before any request ; the path id is
-interpolated as it is. Unknown tool → `isError` result. Discovery refuses a
-`GET /v1/account` answer without an account id.
+removed from the body. Only the arguments the tool declares are forwarded ;
+`account` is consumed by the gateway. The path id is interpolated as it is.
+
+**What the executor declines is an `isError` result, never a throw.** The
+body of `executeStripe` runs under the SDK's `declining` : an account
+outside the mission or ambiguous, a resource whose mode cannot be
+determined, a mode the connection holds no key for, a path id that is
+missing or not a `stripeId`, any other identifier argument `readIdArgs`
+refuses — each is thrown inside as `ExecutorRefusal` and comes out as the
+result carrying `stripe: <reason>`, before any request. An unknown tool is
+the same kind of result (`refusalResult`) ; a tool name that is only an
+inherited property (`constructor`) is unknown. What Stripe fails is thrown :
+401/403 → `UpstreamAuthError`, any other failed status → `UpstreamHttpError`.
+Discovery refuses a `GET /v1/account` answer without an account id.
 
 ## How to debug
 
@@ -230,7 +246,8 @@ interpolated as it is. Unknown tool → `isError` result. Discovery refuses a
 - **`this connection has no live-mode key`** — the mission selected the live
   resource of a connection whose credential has only `test_key` ; that
   resource should not exist (discovery creates one per key) : re-run
-  discovery.
+  discovery. Like every refusal of the executor it is an `isError` result :
+  the audit shows no `upstream_error`, nothing was sent to Stripe.
 - **`stripe: test_key must be a test-mode key (sk_test_… or rk_test_…)`** — the owner pasted a live key in
   the test field.
 - **`<arg>: not an argument of '<tool>' — nothing classifies it`** — the

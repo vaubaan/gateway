@@ -101,9 +101,12 @@ wrong without letting anything through, is not a vulnerability: use the
 1. **One instance, one company, one trust domain.** Whoever operates the
    instance can reach decrypted credentials in the memory of the running
    process. The gateway does not defend against its own operator.
-2. **An agent never holds a provider credential.** It holds a mission token;
-   the gateway decrypts the credential for the duration of one call and
-   returns only the result.
+2. **An agent never holds a connection's stored credential.** It holds a
+   mission token; the gateway decrypts the credential for the duration of one
+   call and returns only the result. One deliberate exception: a tool whose
+   purpose is to hand out a short-lived, repository-scoped token for `git`
+   (`github__mint_install_token`) — a risk of its own that a mission must
+   accept, counted and audited like any call.
 3. **The gateway decides from the plugin's classification.** A call is
    allowed when every risk it touches was accepted by the mission, within its
    budget and gate. A wrong classification is therefore a vulnerability.

@@ -11,6 +11,7 @@ tracks:
   - deploy/collector/
   - .github/workflows/ci.yml
   - .github/workflows/release.yml
+  - apps/gateway/tests/unit/structural/base-images-pinned.test.ts
   - scripts/gen-master-key.mjs
 ---
 
@@ -203,6 +204,14 @@ environment.
   needs nothing else; a major one says what to change first
   ([versioning policy](../docs/workflow/coding-workflow.md#versioning-policy)).
   There is no downgrade: an older image refuses a newer database.
+- **Changing the identity provider**: a user is the pair (issuer, subject),
+  so another identity provider means new accounts for everybody; the earlier
+  ones keep their connections and missions and are reached by nobody. When
+  you upgrade an instance that already has users, let somebody sign in once
+  **before** you change `idp.*`: the existing accounts are bound to the
+  issuer of the first sign-in after the upgrade (handbook
+  [configuration](../docs/handbook/configuration.md), "Changing the identity
+  provider").
 - **Smoke test an image**: `npm run docker:build && npm run docker:smoke`
   (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
   checks the fail-fast exit (within 60 seconds), the https rule,
@@ -211,11 +220,16 @@ environment.
   shipped. `SMOKE_EXPECT_VERSION`, `SMOKE_EXPECT_COMMIT` and
   `SMOKE_EXPECT_ARCH` (`x64`, `arm64`) make it also check what `/healthz`
   answers and the architecture of the image, as the release pipeline does.
+  The version and the commit are compared with the body of one more
+  `/healthz` answer, which the script keeps and prints when a stamp is not
+  the expected one.
 - **Declare your reverse proxy** (`trusted_proxies`). Without it the instance
-  believes no client address: the per-address limits become one window shared
-  by all callers, and the audit records no address. It says so in one warning
-  at boot. The reference Compose file sets it to Docker's address pool; narrow
-  it to your proxy.
+  believes no client address: the per-address limits (the request page, the
+  token verification of the execution door, client registration and token
+  requests of the authorization server) become one window shared by all
+  callers, and the audit records no address. It says so in one warning
+  at boot. `deploy/config/.env.example` sets it to Docker's address pool (the
+  Caddy container of the reference Compose file); narrow it to your proxy.
 - **Management door**: the instance is also the OAuth authorization server of
   `/mcp/manage` (handbook
   [management-door](../docs/handbook/management-door.md)). Defaults: access
@@ -265,6 +279,13 @@ their binaries and runtime files explicitly (`outputFileTracingIncludes`)
 and the smoke test loads both inside the image. Build-time arguments:
 `NODE_IMAGE` (the whole base image reference, tag and digest; it replaces
 the former `NODE_VERSION`) and `GIT_COMMIT_SHA` (shown by `/healthz`).
+
+The Dockerfile has no `# syntax=` line: it is built by the frontend built
+into BuildKit (it uses no heredoc, no `--mount` and no `--link`), so no
+frontend image is pulled and run at build time. Every `COPY --from=` names a
+stage of the file, never an image. The structural test
+`apps/gateway/tests/unit/structural/base-images-pinned.test.ts` holds both:
+a frontend line that appears must be pinned by digest like the base images.
 
 Both base images are pinned by full version and by digest, so one commit
 builds one image: `node:22.23.3-bookworm-slim` in the Dockerfile and

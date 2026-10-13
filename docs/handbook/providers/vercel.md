@@ -18,11 +18,14 @@ tracks:
 
 # Vercel provider — plugin and risk model
 
-`@vaubaan/plugin-vercel` (`plugins/vercel`), migrated to the v5 Plugin SDK in
-P1.2b. Spec: [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5 (plugins),
+`@vaubaan/plugin-vercel` (`plugins/vercel`, version 3.0.0), migrated to the
+v5 Plugin SDK in P1.2b. Spec: [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5 (plugins),
 §3.2 (presets); [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2,
 §4, §7. ADRs: [[plugin-contract-and-credential-spec]],
-[[rewrap-official-mcps]], [[vercel-augment-with-rest-tools]]. Contributor
+[[rewrap-official-mcps]], [[vercel-augment-with-rest-tools]],
+[`plugin-arguments-closed-surface-and-typed-refusals`](../../decisions/plugin-arguments-closed-surface-and-typed-refusals.md),
+[`decision-stages-fail-closed-and-audited`](../../decisions/decision-stages-fail-closed-and-audited.md)
+(D3, the environment of a slice). Contributor
 guide: [`plugins/vercel/README.md`](../../../plugins/vercel/README.md).
 
 The v4 research document this handbook replaces (French, 2026-07-01) remains
@@ -60,6 +63,7 @@ flowchart TB
 | `domain`, `firewall-rule`, `ip-rule`   | bounded      | Project-scoped posture entities with public effect.                               |
 | `env`                                  | bounded      | Closed triad. `envScopable: true`; its ident **is** the environment label.        |
 | `deployment`, `runtime-log`            | unbounded    | Vercel keeps history.                                                             |
+| `build-log`                            | one          | One build log per deployment.                                                     |
 | `env-var`, `bypass-token`, `toolbar-*` | bounded      | Per environment / per deployment.                                                 |
 | `env-var-fan-out`                      | one          | Emitted when one env-var write touches several environments in a single call.     |
 
@@ -77,9 +81,20 @@ Four account-level tools need no project (`search_vercel_documentation`,
 `list_teams`, `list_projects`, `check_domain_availability_and_price`) but
 still refuse a foreign `projectId`. `execute` resolves the project with the
 same function (`resolveProject`) and overwrites the argument with the result,
-so the slice and the request name the same project (§5). Only the spelling of
-the tool's schema is read: `project_id`, `thread_id`, `message_id` are not
-arguments.
+so the slice and the request name the same project (§5).
+
+**Only declared arguments.** The rewrapped tools forward their arguments
+whole, so the argument surface of a tool is closed: once the rules below
+have judged the arguments they read, in their own words,
+`undeclaredArgument(tool, args)` (over the SDK's `undeclaredArgumentDenial`)
+denies a call carrying an argument the tool's schema does not declare:
+`<name>: not an argument of '<tool>' — nothing classifies it, so it is not sent.`
+Another spelling is another argument: `project_id`, `thread_id`,
+`message_id` are refused. `teamId` and `projectId` are the two routing
+arguments, read for every tool whatever its schema declares and never
+forwarded as given (§5). Two upstream schemas are open (`deploy_to_vercel`,
+`list_teams`) and declare no property: apart from the two routing
+arguments, they take none.
 
 **Environment.** The environment is read from the arguments only where the
 provider receives them. `upsert_env_var` honours the whole `target` array
@@ -89,7 +104,8 @@ three; a `target` that is not an array, or that holds any other literal, is
 **refused** (the array is forwarded as is, so a part the classifier cannot
 read is never dropped). `deploy_to_vercel` is **always classified on
 `prod`**: the upstream tool declares no argument, so a `target` would select
-the risk here and be ignored there. `delete_env_var` always emits the three
+the risk here and be ignored there — and a call carrying one is refused as
+an undeclared argument. `delete_env_var` always emits the three
 environments plus the marker: the Vercel API removes the variable from every
 environment it lives in, whatever the hint.
 
@@ -100,14 +116,14 @@ by `classify` and refused by `execute` before any request, never escaped
 (ADR
 [`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
 
-| Value                                                             | Grammar                                                                                                                                                             | Where it lands                                                                             | Outside the grammar                                                                     |
-| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
-| `projectId`, the project resource ref                             | `pathIdent` — `PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`, inside `resolveProject`                                                                                         | REST path `/projects/{id}`, query or arguments of the upstream tool, slice `project[P]`    | `projectId: malformed project ref`                                                      |
-| `id` of `delete_env_var`                                          | `pathIdent`                                                                                                                                                         | REST path `/env/{id}`, slice `env-var[ID]`                                                 | `id: missing or malformed env var id`                                                   |
-| `domain` of `verify_project_domain` / `remove_project_domain`     | `domainName` — dot-separated labels of letters, digits and inner hyphens, optional leading `*.`, at most 253 characters                                             | REST path `/domains/{domain}` (as it is), slice `domain[*]` or `domain[N]`                 | `domain: missing or malformed domain name`                                              |
-| `name` of `add_project_domain`                                    | `domainName`                                                                                                                                                        | JSON body, slice `domain[*]` or `domain[N]`                                                | `name: missing or malformed domain name`                                                |
-| `idOrUrl`, `deploymentId`, `url` of a rewrapped tool              | `readDeploymentTargets` — a deployment id or hostname (`[A-Za-z0-9][A-Za-z0-9._-]{0,252}`), or a plain `http(s)` URL without credentials whose host is one of those | REST path of the ownership lookup (§5), then the upstream arguments; slice `deployment[D]` | `<arg>: malformed deployment id.` and its siblings; `<arg>: not an argument of <tool>.` |
-| `key` of `upsert_env_var`, `ruleId`, `id` of `manage_ip_blocking` | none required — JSON body only                                                                                                                                      | JSON body; slice ident when a `pathIdent`, `[*]` otherwise                                 | —                                                                                       |
+| Value                                                             | Grammar                                                                                                                                                             | Where it lands                                                                             | Outside the grammar                                                                                                                          |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `projectId`, the project resource ref                             | `pathIdent` — `PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`, inside `resolveProject`                                                                                         | REST path `/projects/{id}`, query or arguments of the upstream tool, slice `project[P]`    | `projectId: malformed project ref` (the argument); `projectId: the project ref of this mission is not a path-safe identifier` (the resource) |
+| `id` of `delete_env_var`                                          | `pathIdent`                                                                                                                                                         | REST path `/env/{id}`, slice `env-var[ID]`                                                 | `id: missing or malformed env var id`                                                                                                        |
+| `domain` of `verify_project_domain` / `remove_project_domain`     | `domainName` — dot-separated labels of letters, digits and inner hyphens, optional leading `*.`, at most 253 characters                                             | REST path `/domains/{domain}` (as it is), slice `domain[*]` or `domain[N]`                 | `domain: missing or malformed domain name`                                                                                                   |
+| `name` of `add_project_domain`                                    | `domainName`                                                                                                                                                        | JSON body, slice `domain[*]` or `domain[N]`                                                | `name: missing or malformed domain name`                                                                                                     |
+| `idOrUrl`, `deploymentId`, `url` of a rewrapped tool              | `readDeploymentTargets` — a deployment id or hostname (`[A-Za-z0-9][A-Za-z0-9._-]{0,252}`), or a plain `http(s)` URL without credentials whose host is one of those | REST path of the ownership lookup (§5), then the upstream arguments; slice `deployment[D]` | `<arg>: malformed deployment id.` and its siblings; `<arg>: not an argument of <tool>.`                                                      |
+| `key` of `upsert_env_var`, `ruleId`, `id` of `manage_ip_blocking` | none required — JSON body only                                                                                                                                      | JSON body; slice ident when a `pathIdent`, `[*]` otherwise                                 | —                                                                                                                                            |
 
 `readDeploymentTargets` is schema-driven: every deployment argument the tool
 declares is read (a required one must be there), and one the tool does
@@ -137,9 +153,10 @@ them needs a verified thread → project lookup.
 | `check_domain_availability_and_price`                                    | `account.domain-registrar.R`                                                | read-account                                        |
 | `get_project`                                                            | `project[P].project-settings.R`                                             | read-account                                        |
 | `list_project_domains`                                                   | `project[P].domain[*].R`                                                    | read-account                                        |
-| `list_deployments` / `get_deployment`                                    | `project[P].deployment[D].R`                                                | read-deployment                                     |
+| `list_deployments`                                                       | `project[P].deployment[*].R`                                                | read-deployment                                     |
+| `get_deployment`                                                         | `project[P].deployment[D].R`                                                | read-deployment                                     |
 | `get_deployment_build_logs` / `get_runtime_logs`                         | `project[P].deployment[D].{build-log,runtime-log}.R`                        | read-deployment                                     |
-| `web_fetch_vercel_url`                                                   | `project[P].deployment[D].fetch.R`                                          | fetch-deployment-url                                |
+| `web_fetch_vercel_url`                                                   | `project[P].deployment[D].fetch.R`                                          | read-deployment + fetch-deployment-url              |
 | `list_toolbar_threads`                                                   | `project[P].deployment[*].toolbar-thread[*].R`                              | read-deployment                                     |
 | `list_env_vars`                                                          | `project[P].env-var[*].R` (+ `…env-var[*].plaintext.R` when `decrypt=true`) | read-env-var (+ read-env-var-plaintext)             |
 | `get_firewall_config`                                                    | `project[P].firewall.R`                                                     | firewall-read                                       |
@@ -180,14 +197,15 @@ settings, domains and firewall affect every environment at once;
 
 ### Presets
 
-| Preset      | Entries                                                                                                                                                                                                                                                                                                                                    |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `read-only` | read-account, read-deployment, read-env-var, fetch-deployment-url, firewall-read — all `auto`.                                                                                                                                                                                                                                             |
-| `developer` | The reads above (larger quotas) + `vercel[preview].deploy`, `vercel[development].deploy`, `vercel[preview].env-var-write`, `vercel[development].env-var-write`, toolbar-write, mint-bypass-token — all `auto`. No production configuration of any kind, so `deploy_to_vercel` (always `vercel[prod].deploy`) is refused under this preset. |
-| `operator`  | Developer + `vercel[prod].deploy`, `vercel[prod].env-var-write`, env-var-fan-out, project-settings-write, domain-write, firewall-read, firewall-write, firewall-rule-write, ip-rule-write, read-env-var-plaintext. Every production-affecting entry is gated `approval`.                                                                   |
+| Preset      | Entries                                                                                                                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read-only` | read-account, read-deployment, read-env-var, fetch-deployment-url, firewall-read — all `auto`.                                                                                                                                                                                                                                                                                                                                                                                |
+| `developer` | read-account, read-deployment, read-env-var, fetch-deployment-url (larger quotas) — **not** firewall-read, so `get_firewall_config` is refused under this preset — + `vercel[preview].deploy`, `vercel[development].deploy`, `vercel[preview].env-var-write`, `vercel[development].env-var-write`, toolbar-write, mint-bypass-token — all `auto`. No production configuration of any kind, so `deploy_to_vercel` (always `vercel[prod].deploy`) is refused under this preset. |
+| `operator`  | Developer + `vercel[prod].deploy`, `vercel[prod].env-var-write`, env-var-fan-out, project-settings-write, domain-write, firewall-read, firewall-write, firewall-rule-write, ip-rule-write, read-env-var-plaintext. Every production-affecting entry is gated `approval`.                                                                                                                                                                                                      |
 
 Values: account and deployment reads 2 000–5 000 per period at 120/min, the
-other reads (env vars, URL fetch, firewall) 200–1 000 at 30–60/min; preview
+other encrypted reads (env vars, URL fetch, firewall) 200–1 000 at
+30–60/min, the plaintext env-var read 20 at 5/min under `approval`; preview
 and development writes 200 per period at 10–20/min; `toolbar-write` 500 at
 30/min and `mint-bypass-token` 50–100 at 5–10/min; production and posture
 writes 20–50 per period at 5/min, except `firewall-rule-write` (50 at
@@ -203,12 +221,24 @@ Vercel project (spanning all three environments) is meaningless: a project
 labelled `prod` would qualify a preview deploy as `vercel[prod].deploy`, and
 an unlabelled project would never qualify anything, so the env-qualified
 preset entries above would not match `risks_touched`. The plugin therefore
-declares `envOf` (`vercelEnvOf(slice)`: reads the `env[<label>]` segment;
-`null` when env-less, wired as
-`envOf: (slice) => vercelEnvOf(slice) ?? undefined`), which the host's default resolver
+declares `envOf`, wired as
+`envOf: (slice) => vercelEnvOf(slice) ?? undefined`, which the host's default resolver
 (`envResolverFor(resources, plugin.envOf)`) asks before the resource label
-([[plugin-sdk]], "Environment resolution"). `discoverResources` notes the
-axis in `metadata.environments`.
+([[plugin-sdk]], "Environment resolution"). `vercelEnvOf(slice)` has three
+answers:
+
+| The slice                                                                                                                                  | `vercelEnvOf`                      | The host                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| has `env` followed by one label of the triad (`env[prod]`)                                                                                 | that label                         | qualifies the touched risks with it                                                                        |
+| has no `env` segment, or `env` followed by another entity name (project settings, domains, firewall, env-less deployment reads)            | `null`, handed over as `undefined` | falls back to the owner's label on the project                                                             |
+| has `env` followed by anything else: a wildcard, a list, a glob, a label outside the triad (`env[*]`, `env[prod,preview]`, `env[staging]`) | `NO_SINGLE_ENV`                    | resolves no environment and does not consult the label: every env-scoped risk the slice touches is refused |
+
+The third answer exists because such a slice reaches several environments,
+or one the provider does not have: no env-scoped risk can be priced on it,
+and the owner's label must not stand in. The classifier emits no such slice
+today (a multi-environment write is one slice per environment plus the
+fan-out marker); the rule is what keeps a future one from failing open.
+`discoverResources` notes the axis in `metadata.environments`.
 
 ## 4. Credential
 
@@ -245,9 +275,10 @@ the list against the schemas, so a tool added later is covered or fails.
 - Rewrapped tools: `POST https://mcp.vercel.com/` with a JSON-RPC
   `tools/call` (prefix stripped), SSE-framed answer, one frame per response.
   The upstream result is already an `McpToolResult` and is passed through.
-- Custom tools: REST on `https://api.vercel.com` (`/v9/projects`,
-  `/v10/projects/{id}/env`, `/v9|v10/projects/{id}/domains`,
-  `/v1/security/firewall/config`), bodies whitelisted field by field. The
+- Custom tools: REST on `https://api.vercel.com` (`/v9/projects/{id}`,
+  `/v10/projects/{id}/env`, `/v9/projects/{id}/env/{envVarId}` for the
+  delete, `/v9|v10/projects/{id}/domains`, `/v1/security/firewall/config`
+  and `…/config/active` for the read), bodies whitelisted field by field. The
   project, the env var id and the domain are read again with the
   classifier's `pathIdent` / `domainName` and interpolated as they are —
   nothing is percent-encoded, since `encodeURIComponent` leaves `.` and `..`
@@ -255,12 +286,17 @@ the list against the schemas, so a tool added later is covered or fails.
 - Argument pinning (`pinArgs`, no network): an unknown tool and the five
   thread-addressed tools are refused; `teamId` is checked against the
   credential (§4); the project is resolved by `resolveProject`, the function
-  the classifier uses. The caller's `teamId` and `projectId` are then dropped
-  and written again — from the credential and from the resolved project —
-  wherever the tool can receive them (declared property, or open schema). A
+  the classifier uses; then an argument the tool does not declare is refused
+  by the classifier's own `undeclaredArgument` — the second lock, for a
+  caller that did not go through `classify`. The caller's `teamId` and `projectId` are then dropped
+  and written again — `teamId` from the credential wherever the tool can
+  receive it (declared property, or open schema), `projectId` from the
+  resolved project on a project-rooted tool that can receive it. The four
+  account-level tools never get a `projectId`, even one that was checked. A
   closed schema without the property gets neither, so `projectId` may be
   passed to any project-rooted tool to name the project of a multi-project
-  mission.
+  mission. Everything else is forwarded as given, which is why only declared
+  arguments may be there.
 - Deployment binding (`bindDeployments`): a rewrapped tool whose schema
   declares `idOrUrl`, `deploymentId` or `url` (`get_deployment`,
   `get_deployment_build_logs`, `get_runtime_logs`,
@@ -289,9 +325,11 @@ the list against the schemas, so a tool added later is covered or fails.
   network failure → as it comes. The host records it as `upstream_error` in
   the audit (`vercel answered HTTP 500 (UpstreamHttpError)`) and tells the
   agent `Upstream error: …`. An `isError: true` result is returned only for
-  what the executor declines itself (`ExecutorRefusal` in `src/execute.ts`):
-  `pinArgs` refusals, an unreadable or unbound deployment argument, a missing
-  or malformed argument of a custom tool. A rewrapped tool whose upstream
+  what the executor declines itself (`ExecutorRefusal`, a class local to
+  `src/execute.ts` with the shape of the SDK's, caught at the entry point):
+  `pinArgs` refusals — an undeclared argument among them —, an unreadable or
+  unbound deployment argument, a missing or malformed argument of a custom
+  tool. A rewrapped tool whose upstream
   answers an `isError` result is passed through as it is.
 - `discoverResources`: `GET /v2/teams/{team_id}` then `GET /v10/projects`
   paged by `pagination.next` → `until`, 100 per page, 10 pages at most. A
@@ -305,7 +343,7 @@ not a path-safe identifier`): no call could name it.
 3. `upsert_env_var` fans out; `delete_env_var` always touches the three environments.
 4. One `domain-write` risk for add / verify / remove (option A of the research).
 5. Deployment Protection (SSO / password) cannot be changed by API tokens; no tool.
-6. `deploy_to_vercel` upstream declares no argument (it deploys "the current project" from CLI context); it is classified on **prod** and the mission project whatever the arguments, and forwarded with the pinned `teamId` and the resolved `projectId` (its schema is open; whether the upstream tool honours them is not verified). Its usefulness through a remote rewrap is doubtful — kept for parity, to be re-evaluated when the upstream tool list is refreshed.
+6. `deploy_to_vercel` upstream declares no argument (it deploys "the current project" from CLI context); it is classified on **prod** and the mission project, takes no argument but the two routing ones (anything else is refused as undeclared), and is forwarded with the pinned `teamId` and the resolved `projectId` (its schema is open; whether the upstream tool honours them is not verified). Its usefulness through a remote rewrap is doubtful — kept for parity, to be re-evaluated when the upstream tool list is refreshed.
 7. A second identifier is never trusted: deployments are verified against the mission project before the call, thread-addressed tools are refused (§2, §5).
 8. `upsert_env_var` with a `target` the classifier cannot read is refused, not classified on the readable part.
 
@@ -330,6 +368,12 @@ not a path-safe identifier`): no call could name it.
 - **`target: expected an array of 'production', 'preview' or 'development'`** —
   `upsert_env_var` received another literal (`prod`, `Production`) or a
   non-array.
+- **`<name>: not an argument of 'vercel__…'`** — the call carries an
+  argument the tool's schema does not declare: another spelling
+  (`project_id`), a `target` on `deploy_to_vercel`, a field of Vercel's own
+  API. Remove it.
+- **`get_firewall_config` refused under the `developer` preset** — that
+  preset does not carry `firewall-read`; `read-only` and `operator` do.
 - **`deploy_to_vercel` refused under the `developer` preset** — it is always
   `vercel[prod].deploy`; use `operator` or add that risk to the mission.
 - **Every preview deploy refused as `vercel[prod].deploy` (or never qualified)** —
@@ -346,8 +390,9 @@ not a path-safe identifier`): no call could name it.
 
 ## References
 
-- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (609 tests:
-  35 `plugin.test.ts`, 43 `classify.test.ts`, 55 `risk-catalog.test.ts`,
+- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (622 tests:
+  48 `plugin.test.ts` — the undeclared arguments on `classify` and `execute`
+  and the three answers of `vercelEnvOf` among them —, 43 `classify.test.ts`, 55 `risk-catalog.test.ts`,
   99 `team-pin.test.ts`, 50 `binding.test.ts`, 11 `firewall.test.ts`,
   315 `identifier-injection.test.ts` — dot segments, separators and encoded
   forms in every identifier position of `classify` and `execute` —,

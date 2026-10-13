@@ -14,13 +14,14 @@
  * The slice DSL has no notion of cardinality, so the classifier encodes it
  * as literal identifiers in the identifier position :
  *
- *   row[one]    bounded write on a single identified row
- *   row[bulk]   unbounded write (multi-row UPDATE/DELETE, TRUNCATE, …)
+ *   row[bulk]   a write of rows (UPDATE/DELETE, TRUNCATE, a column rewrite…).
+ *               No tool writes one identified row : `row[one]` is emitted by
+ *               nothing, and the catalog entry it matched is deprecated.
  *   object[one] / object[bulk]   idem for storage paths
  *   user[one]   / user[bulk]     idem for GoTrue users
  *
- * The catalog patterns use the same literals, so `row[one].W` fires
- * `row-write-one` but not `bulk-row-write`, and vice versa. Where the value
+ * The catalog patterns use the same literals, so `user[one].W` fires the
+ * single-user write and not the bulk one, and vice versa. Where the value
  * does not matter for the risk (a schema or table name in a migration), the
  * literal `any` is emitted ; the catalog uses `[*]` there.
  *

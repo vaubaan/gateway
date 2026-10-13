@@ -72,9 +72,13 @@ and revoke **their own** token. Nothing else: not the mission, its gates, its
 members, its named tokens, nor its requests. The rule is enforced where it
 already was — every mutation of `MissionService` and every read or decision of
 `RequestService` knows the creator only — and the new `MissionTeamService`
-answers `not-found` to a member for the creator's acts. Reading goes through
-one new function, `MissionService.access`, which is the only place that knows
-members.
+answers `not-found` to a member for the creator's acts. Reading one mission
+goes through one new function, `MissionService.access`. What a member is —
+the rule `access` applies — is stated once, `membershipOf` in
+`store/membership.ts`, and read besides by the listing (`MissionService.list`),
+by the token's standing (`standingOf`, D5) and by the token insert
+(`MissionsRepo.issueToken`): ADR
+[one-membership-rule-checked-in-the-token-insert](one-membership-rule-checked-in-the-token-insert.md).
 
 ### D3 — A member works under the creator's authority
 

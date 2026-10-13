@@ -140,7 +140,7 @@ Twenty-eight terms, distinct and not interchangeable.
 - **Preset** — a named policy fragment **shipped by a plugin** in its
   catalog: a list of `RiskId`s of that provider, each with a default
   budget and a default gate, plus a label and a one-line description
-  (`github: reviewer`, `github: developer`, `github: release manager`;
+  (`github: read-only`, `github: developer`, `github: release manager`;
   `supabase: read-only analyst`, `supabase: staging developer`…). A
   preset is UI sugar: it pre-fills the policy of a mission for one
   connection, the creator adjusts, and the persisted policy is always the
@@ -908,8 +908,8 @@ automated suite. Trust comes from usage.
 - **Opt-in per instance**, disabled at installation, enabled by the
   operator, visible in the interface.
 - **Content of a report**: plugin identifier, plugin version, gateway
-  version, tool name, outcome (`success`, `upstream error`,
-  `classification error`, `execution error`), normalized error class.
+  version, tool name, outcome (`success`, `upstream-error`,
+  `classification-error`, `execution-error`), normalized error class.
   Nothing else.
 - **Never**: arguments, argument hashes, resource refs, mission
   identifiers, user identifiers, stable instance identifier, network
