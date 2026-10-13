@@ -14,8 +14,10 @@
  * in-memory ports the root still implements itself.
  */
 
+export type { CacheClient } from '@vaubaan/gateway-core';
+
 /** What `/healthz` and `close()` need from the store; the embedded `Store` satisfies it. */
-export interface Store {
+export interface StoreLiveness {
   /** `sqlite`, `memory`, `postgres`… for the boot log and `/healthz`. */
   readonly kind: string;
   /** Cheap liveness probe (`SELECT 1`); rejects when the store is unusable. */
@@ -36,12 +38,9 @@ export interface RateLimiter {
   take(key: string, limit: number, windowMs: number): Promise<RateLimitDecision>;
 }
 
-/** Short-lived cache for verified contexts (plan §3.5, risk 27). */
-export interface CacheClient {
-  get<T>(key: string): Promise<T | undefined>;
-  set<T>(key: string, value: T, ttlMs: number): Promise<void>;
-  delete(key: string): Promise<void>;
-}
+// The short-lived cache for verified contexts (plan §3.5, risk 27) is
+// `@vaubaan/gateway-core`'s `CacheClient` (TTL in seconds, `del`), re-exported
+// above: the door consumes it through gateway-core, so it has one definition.
 
 /** Opaque web sessions keyed by cookie value (P1.1 decides the record shape). */
 export interface SessionStore<T = unknown> {

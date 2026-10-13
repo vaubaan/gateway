@@ -6,7 +6,7 @@
  */
 
 import { withImmediateTransaction } from '../db.ts';
-import { openText, sealText } from '../encryptor.ts';
+import { openSealedColumn, sealText } from '../encryptor.ts';
 import { nowIso, type RepoContext } from './context.ts';
 
 export interface ConfigRepo {
@@ -52,11 +52,8 @@ export function createConfigRepo(ctx: RepoContext): ConfigRepo {
     },
     async getSecret(key) {
       const row = getRow.get(key);
-      if (!row?.secret_blob || row.key_version === null) return null;
-      return openText(encryptor, secretAd(key), {
-        blob: row.secret_blob,
-        keyVersion: row.key_version,
-      });
+      if (!row) return null;
+      return openSealedColumn(encryptor, secretAd(key), row.secret_blob, row.key_version);
     },
     async setSecret(key, plain) {
       const sealed = await sealText(encryptor, secretAd(key), plain);

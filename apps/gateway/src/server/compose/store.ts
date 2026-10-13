@@ -6,7 +6,7 @@
  * schema. `openMemoryStore` (the `:memory:` mode) is what tests inject
  * instead; see `testing.ts`.
  */
-import { envNamesFor, type InstanceConfig } from '../config';
+import { envNamesFor, errorMessage, formatIssue, type InstanceConfig } from '../config';
 import type { Encryptor } from '../crypto';
 import type { Logger } from '../logging';
 import { openStore, type CatalogIndex, type Store } from '../store';
@@ -26,9 +26,12 @@ export async function openEmbeddedStore(ctx: StoreContext): Promise<Store> {
   try {
     store = openStore({ path, encryptor: ctx.encryptor, catalog: ctx.catalog });
   } catch (err) {
-    const reason = err instanceof Error ? err.message : String(err);
     throw new Error(
-      `store.path '${path}' (env: ${envNamesFor('store.path').join(' or ')}): cannot open the embedded store: ${reason}`,
+      formatIssue({
+        path: 'store.path',
+        env: envNamesFor('store.path'),
+        message: `cannot open the embedded store at '${path}': ${errorMessage(err)}`,
+      }),
       { cause: err },
     );
   }

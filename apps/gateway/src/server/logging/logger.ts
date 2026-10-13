@@ -38,7 +38,8 @@ export function createLogger(options: LoggerOptions, bindings: LogFields = {}): 
 
   function emit(level: LogLevel, message: string, fields?: LogFields): void {
     if (ORDER[level] < threshold) return;
-    const record = { time: now().toISOString(), level, msg: message, ...bindings, ...fields };
+    // Reserved keys last: a field named `level` or `msg` must not overwrite them.
+    const record = { ...bindings, ...fields, time: now().toISOString(), level, msg: message };
     write(level, options.redact(JSON.stringify(record, errorReplacer)) + '\n');
   }
 

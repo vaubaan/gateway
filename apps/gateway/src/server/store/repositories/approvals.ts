@@ -1,7 +1,6 @@
 import { withImmediateTransaction } from '../db.ts';
-import { NotFoundError } from '../errors.ts';
 import type { ApprovalRecord, Iso, RiskId } from '../types.ts';
-import { nowIso, type RepoContext } from './context.ts';
+import { nowIso, requireRow, type RepoContext } from './context.ts';
 
 export interface CreateApprovalInput {
   readonly missionId: string;
@@ -51,10 +50,14 @@ function toRecord(row: ApprovalRow): ApprovalRecord {
   };
 }
 
-export function getApprovalRecord(ctx: RepoContext, id: string): ApprovalRecord | null {
-  const row = ctx.db
-    .prepare<[string], ApprovalRow>(`SELECT ${COLUMNS} FROM approvals WHERE id = ?`)
-    .get(id);
+const SELECT_BY_ID = `SELECT ${COLUMNS} FROM approvals WHERE id = ?`;
+const SELECT_CANDIDATE = `SELECT id FROM approvals
+  WHERE mission_id = ? AND risk_id = ? AND fingerprint = ? AND consumed_at IS NULL AND expires_at > ?
+  ORDER BY expires_at LIMIT 1`;
+const CONSUME = 'UPDATE approvals SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL';
+
+function getApprovalRecord(ctx: RepoContext, id: string): ApprovalRecord | null {
+  const row = ctx.db.prepare<[string], ApprovalRow>(SELECT_BY_ID).get(id);
   return row ? toRecord(row) : null;
 }
 
@@ -69,19 +72,14 @@ export function consumeApprovalSync(
   fingerprint: string,
   now: Iso,
 ): ApprovalRecord | null {
+  // better-sqlite3 caches prepared statements per connection, so preparing by SQL text
+  // here (the only way for a helper shared with another repository's transaction) costs
+  // a map lookup, not a parse.
   const candidate = ctx.db
-    .prepare<[string, string, string, string], { id: string }>(
-      `SELECT id FROM approvals
-       WHERE mission_id = ? AND risk_id = ? AND fingerprint = ? AND consumed_at IS NULL AND expires_at > ?
-       ORDER BY expires_at LIMIT 1`,
-    )
+    .prepare<[string, string, string, string], { id: string }>(SELECT_CANDIDATE)
     .get(missionId, riskId, fingerprint, now);
   if (!candidate) return null;
-  const result = ctx.db
-    .prepare<
-      [string, string]
-    >('UPDATE approvals SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL')
-    .run(now, candidate.id);
+  const result = ctx.db.prepare<[string, string]>(CONSUME).run(now, candidate.id);
   if (result.changes === 0) return null;
   return getApprovalRecord(ctx, candidate.id);
 }
@@ -109,9 +107,7 @@ export function createApprovalsRepo(ctx: RepoContext): ApprovalsRepo {
         nowIso(ctx),
         input.expiresAt,
       );
-      const record = getApprovalRecord(ctx, id);
-      if (!record) throw new NotFoundError('approval', id);
-      return record;
+      return requireRow(getApprovalRecord(ctx, id) ?? undefined, 'approval', id);
     },
     async getById(id) {
       return getApprovalRecord(ctx, id);

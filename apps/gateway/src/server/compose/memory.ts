@@ -6,10 +6,18 @@
  * (acceptable per ADR D1 for rate-limit windows and caches). The comment on
  * each class names the interface a hosted deployment implements instead.
  */
-import type { CacheClient, RateLimitDecision, RateLimiter, SessionStore } from './ports';
+import { MemoryCacheClient } from '@vaubaan/gateway-core';
+
+import type { RateLimitDecision, RateLimiter, SessionStore } from './ports';
 
 export type Clock = () => number;
 const wallClock: Clock = () => Date.now();
+
+/** Above this many live windows, expired ones are swept on every `take`. */
+const RATE_LIMIT_PRUNE_THRESHOLD = 10_000;
+/** Bound on concurrently remembered web sessions. */
+const SESSION_STORE_MAX_ENTRIES = 50_000;
+const MS_PER_SECOND = 1000;
 
 // single-process only — hosted replacement: a Redis `RateLimiter` (INCR + PEXPIRE).
 export class MemoryRateLimiter implements RateLimiter {
@@ -27,7 +35,7 @@ export class MemoryRateLimiter implements RateLimiter {
       return { allowed: false, remaining: 0, retryAfterMs: Math.max(0, w.resetAt - t) };
     }
     w.count += 1;
-    if (this.windows.size > 10_000) this.prune(t);
+    if (this.windows.size > RATE_LIMIT_PRUNE_THRESHOLD) this.prune(t);
     return { allowed: true, remaining: limit - w.count, retryAfterMs: 0 };
   }
 
@@ -36,51 +44,21 @@ export class MemoryRateLimiter implements RateLimiter {
   }
 }
 
-// single-process only — hosted replacement: a Redis `CacheClient` (SET PX / GET / DEL).
-export class MemoryCache implements CacheClient {
-  private readonly entries = new Map<string, { value: unknown; expiresAt: number }>();
-  constructor(
-    private readonly maxEntries = 5_000,
-    private readonly now: Clock = wallClock,
-  ) {}
-
-  async get<T>(key: string): Promise<T | undefined> {
-    const e = this.entries.get(key);
-    if (!e) return undefined;
-    if (e.expiresAt <= this.now()) {
-      this.entries.delete(key);
-      return undefined;
-    }
-    return e.value as T;
-  }
-
-  async set<T>(key: string, value: T, ttlMs: number): Promise<void> {
-    if (this.entries.size >= this.maxEntries && !this.entries.has(key)) {
-      // Bounded: evict the oldest insertion (Map preserves insertion order).
-      const oldest = this.entries.keys().next().value;
-      if (oldest !== undefined) this.entries.delete(oldest);
-    }
-    this.entries.set(key, { value, expiresAt: this.now() + ttlMs });
-  }
-
-  async delete(key: string): Promise<void> {
-    this.entries.delete(key);
-  }
-}
-
 // single-process only — hosted replacement: a store-backed or Redis `SessionStore`.
+// Built on gateway-core's bounded `MemoryCacheClient` (the single cache
+// implementation); the session port keeps its millisecond TTL.
 export class MemorySessionStore<T = unknown> implements SessionStore<T> {
-  private readonly cache: MemoryCache;
+  private readonly cache: MemoryCacheClient;
   constructor(now: Clock = wallClock) {
-    this.cache = new MemoryCache(50_000, now);
+    this.cache = new MemoryCacheClient({ maxEntries: SESSION_STORE_MAX_ENTRIES, now });
   }
   async get(id: string): Promise<T | null> {
-    return (await this.cache.get<T>(id)) ?? null;
+    return this.cache.get<T>(id);
   }
   async set(id: string, value: T, ttlMs: number): Promise<void> {
-    await this.cache.set(id, value, ttlMs);
+    await this.cache.set(id, value, ttlMs / MS_PER_SECOND);
   }
   async delete(id: string): Promise<void> {
-    await this.cache.delete(id);
+    await this.cache.del(id);
   }
 }

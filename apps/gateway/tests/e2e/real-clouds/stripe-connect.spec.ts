@@ -1,9 +1,16 @@
 import { expect, test, type Page } from '@playwright/test';
 
+// Legacy v4 spec (see docs/tests/e2e-tests.md): credentials come from the
+// environment, never from the repository; the whole file skips without them.
 const BASE = process.env.E2E_BASE_URL ?? 'http://localhost:3000';
-const TEST_EMAIL = 'renaud.pelissier@gmail.com';
-const TEST_PASSWORD = 'VaubaanTest!2026';
-const ORG_SLUG = 'sbw-vaubaan';
+const TEST_EMAIL = process.env.E2E_USER_EMAIL ?? '';
+const TEST_PASSWORD = process.env.E2E_USER_PASSWORD ?? '';
+const ORG_SLUG = process.env.E2E_ORG_SLUG ?? '';
+
+test.skip(
+  !TEST_EMAIL || !TEST_PASSWORD || !ORG_SLUG,
+  'E2E_USER_EMAIL, E2E_USER_PASSWORD and E2E_ORG_SLUG are required',
+);
 
 async function login(page: Page) {
   await page.goto(`${BASE}/login`);

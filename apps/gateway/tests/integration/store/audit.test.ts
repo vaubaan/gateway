@@ -167,6 +167,26 @@ describe('audit repository', () => {
     }).toThrow(/retention purge/);
   });
 
+  it('cannot delete the risk rows of a recent entry inside a purge window either (0002)', async () => {
+    const recent = await store.audit.append(callEntry('2026-10-12T00:00:00.000Z'));
+    expect(() => {
+      store.db.transaction(() => {
+        store.db
+          .prepare('INSERT INTO audit_purge_guard (id, cutoff) VALUES (1, ?)')
+          .run('2026-10-01T00:00:00.000Z');
+        store.db.prepare('DELETE FROM audit_risks WHERE audit_id = ?').run(recent.id);
+      })();
+    }).toThrow(/retention purge/);
+    expect(
+      store.db
+        .prepare<
+          [string],
+          { n: number }
+        >('SELECT COUNT(*) AS n FROM audit_risks WHERE audit_id = ?')
+        .get(recent.id)?.n,
+    ).toBe(2);
+  });
+
   it('computes the retention cutoff from the clock, default 90 days', async () => {
     t.clock.set('2026-10-13T00:00:00.000Z');
     await store.audit.append(callEntry('2026-07-14T00:00:00.000Z')); // 91 days old

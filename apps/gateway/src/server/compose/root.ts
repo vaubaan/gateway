@@ -12,6 +12,7 @@
  * This file never imports `next`; the root is host-agnostic so a hosted
  * deployment can build the same root from another HTTP host.
  */
+import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import {
@@ -23,7 +24,7 @@ import {
 import { createEncryptor, type Encryptor } from '../crypto';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import type { Store } from '../store';
-import { MemoryCache, MemoryRateLimiter, MemorySessionStore } from './memory';
+import { MemoryRateLimiter, MemorySessionStore } from './memory';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
 import { openEmbeddedStore, type StoreContext } from './store';
@@ -34,7 +35,7 @@ export interface GatewayRoot {
   readonly configFile: string | null;
   readonly logger: Logger;
   readonly encryptor: Encryptor;
-  /** The embedded store with its repositories (P0.3); satisfies the `Store` port of `ports.ts`. */
+  /** The embedded store with its repositories (P0.3); satisfies `StoreLiveness` of `ports.ts`. */
   readonly store: Store;
   /** The single provider list (P0.2); empty until the plugins migrate (P1.2). */
   readonly registry: PluginRegistry;
@@ -108,7 +109,7 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     store,
     registry,
     rateLimiter: deps.rateLimiter ?? new MemoryRateLimiter(),
-    cache: deps.cache ?? new MemoryCache(),
+    cache: deps.cache ?? new MemoryCacheClient(),
     sessions: deps.sessions ?? new MemorySessionStore(),
     build,
     startedAt: new Date(),
@@ -129,14 +130,18 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
 /* Process-wide handle                                                       */
 /* ------------------------------------------------------------------------ */
 
+// single-process only — the handle is per process by design: every replica of
+// a hosted deployment builds its own root from the same configuration, so no
+// shared replacement is needed.
 const GLOBAL_KEY = Symbol.for('vaubaan.gateway.root');
 
 type GlobalWithRoot = typeof globalThis & { [GLOBAL_KEY]?: Promise<GatewayRoot> };
 
 /**
- * The process-wide root. The first caller builds it; concurrent and later
- * callers share the same promise. A failed build is forgotten so the next
- * call retries (the boot path exits the process on failure anyway).
+ * The process-wide root. The first caller builds it (with its `deps`);
+ * concurrent and later callers share the same promise and their `deps` are
+ * not consulted. A failed build is forgotten so the next call retries (the
+ * boot path exits the process on failure anyway).
  */
 export function getRoot(deps?: RootDeps): Promise<GatewayRoot> {
   const g = globalThis as GlobalWithRoot;

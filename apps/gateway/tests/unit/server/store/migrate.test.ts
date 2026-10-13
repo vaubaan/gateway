@@ -96,8 +96,21 @@ describe('migration runner', () => {
     expect(tables).not.toContain('a');
   });
 
-  it('ships 0001_schema.sql in the default directory', () => {
+  it('refuses to boot a database that carries a migration this image does not ship', () => {
+    write('0001_first.sql', 'CREATE TABLE a (id TEXT NOT NULL PRIMARY KEY) STRICT;');
+    write('0002_second.sql', 'ALTER TABLE a ADD COLUMN label TEXT;');
+    runMigrations(db, loadMigrations(dir), clock);
+    rmSync(join(dir, '0002_second.sql'));
+    expect(() => runMigrations(db, loadMigrations(dir), clock)).toThrow(
+      /does not know: 0002_second/,
+    );
+  });
+
+  it('ships 0001_schema.sql and 0002_audit_risks_purge_guard.sql in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
-    expect(shipped[0]).toMatchObject({ version: 1, name: 'schema' });
+    expect(shipped.map((m) => [m.version, m.name])).toEqual([
+      [1, 'schema'],
+      [2, 'audit_risks_purge_guard'],
+    ]);
   });
 });

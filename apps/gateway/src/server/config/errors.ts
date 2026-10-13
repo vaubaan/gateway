@@ -33,6 +33,11 @@ function formatIssues(issues: readonly ConfigIssue[]): string {
   return [`Invalid instance configuration (${issues.length} ${noun}):`, ...lines].join('\n');
 }
 
+/** The message of anything thrown, for error reports. */
+export function errorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 /** Accumulates issues during loading and validation. */
 export class IssueList {
   readonly items: ConfigIssue[] = [];

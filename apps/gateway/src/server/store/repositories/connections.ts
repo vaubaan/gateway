@@ -1,5 +1,5 @@
 import { withImmediateTransaction } from '../db.ts';
-import { openText, sealText } from '../encryptor.ts';
+import { openSealedColumn, sealText } from '../encryptor.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
 import type {
   ConnectionRecord,
@@ -11,7 +11,7 @@ import type {
 } from '../types.ts';
 import {
   nowIso,
-  parseJson,
+  parseJsonObject,
   placeholders,
   principalColumns,
   principalFromColumns,
@@ -97,7 +97,7 @@ function toRecord(row: ConnectionRow): ConnectionRecord {
     status: row.status as ConnectionStatus,
     keyVersion: row.key_version,
     credentialExpiresAt: row.credential_expires_at,
-    metadata: parseJson<Record<string, unknown>>(row.metadata_json),
+    metadata: parseJsonObject(row.metadata_json, 'connections.metadata_json'),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revokedAt: row.revoked_at,
@@ -141,22 +141,25 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
        status, credential_blob, key_version, credential_expires_at, metadata_json, created_at, updated_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   );
-  const credential = db.prepare<
+  const credentialStmt = db.prepare<
     [string],
     { credential_blob: Buffer | null; key_version: number | null }
   >('SELECT credential_blob, key_version FROM connections WHERE id = ?');
-  const setCredential = db.prepare<[Buffer, number, string | null, string, string]>(
+  const setCredentialStmt = db.prepare<[Buffer, number, string | null, string, string]>(
     `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
        status = 'active', updated_at = ? WHERE id = ?`,
   );
-  const setStatus = db.prepare<[string, string | null, string, string]>(
+  const setStatusStmt = db.prepare<[string, string | null, string, string]>(
     `UPDATE connections SET status = ?, revoked_at = COALESCE(?, revoked_at), updated_at = ? WHERE id = ?`,
   );
-  const setOwner = db.prepare<[string, string | null, string | null, string, string]>(
+  const setOwnerStmt = db.prepare<[string, string | null, string | null, string, string]>(
     `UPDATE connections SET owner_kind = ?, owner_user_id = ?, owner_group_id = ?, updated_at = ? WHERE id = ?`,
   );
-  const setMetadata = db.prepare<[string | null, string, string]>(
+  const setMetadataStmt = db.prepare<[string | null, string, string]>(
     'UPDATE connections SET metadata_json = ?, updated_at = ? WHERE id = ?',
+  );
+  const deleteResources = db.prepare<[string]>(
+    'DELETE FROM connection_resources WHERE connection_id = ?',
   );
   const resourcesOf = db.prepare<[string], ResourceRow>(
     `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE connection_id = ? ORDER BY ref`,
@@ -176,7 +179,7 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     'UPDATE connection_resources SET env = ? WHERE id = ?',
   );
 
-  function require(id: string): ConnectionRecord {
+  function requireConnection(id: string): ConnectionRecord {
     const row = byId.get(id);
     if (!row) throw new NotFoundError('connection', id);
     return toRecord(row);
@@ -210,7 +213,7 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
         now,
         now,
       );
-      return require(id);
+      return requireConnection(id);
     },
     async getById(id) {
       const row = byId.get(id);
@@ -243,46 +246,53 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
         .map(toRecord);
     },
     async getCredential(id) {
-      const row = credential.get(id);
+      const row = credentialStmt.get(id);
       if (!row) throw new NotFoundError('connection', id);
-      if (!row.credential_blob || row.key_version === null) return null;
-      return openText(encryptor, id, { blob: row.credential_blob, keyVersion: row.key_version });
+      return openSealedColumn(encryptor, id, row.credential_blob, row.key_version);
     },
     async setCredential(id, plain, expiresAt = null) {
       const sealed = await sealText(encryptor, id, plain);
-      const result = setCredential.run(sealed.blob, sealed.keyVersion, expiresAt, nowIso(ctx), id);
+      const result = setCredentialStmt.run(
+        sealed.blob,
+        sealed.keyVersion,
+        expiresAt,
+        nowIso(ctx),
+        id,
+      );
       if (result.changes === 0) throw new NotFoundError('connection', id);
-      return require(id);
+      return requireConnection(id);
     },
     async setStatus(id, status) {
       const now = nowIso(ctx);
-      const result = setStatus.run(status, status === 'revoked' ? now : null, now, id);
+      const result = setStatusStmt.run(status, status === 'revoked' ? now : null, now, id);
       if (result.changes === 0) throw new NotFoundError('connection', id);
-      return require(id);
+      return requireConnection(id);
     },
     async transferOwner(id, owner) {
-      const current = require(id);
-      if (current.status === 'revoked') {
-        throw new InvariantError('a revoked connection cannot change owner');
-      }
       const cols = principalColumns(owner);
-      setOwner.run(cols.kind, cols.userId, cols.groupId, nowIso(ctx), id);
-      return require(id);
+      const now = nowIso(ctx);
+      // Check and write in one transaction: a revocation between the two is impossible.
+      return withImmediateTransaction(db, () => {
+        const current = requireConnection(id);
+        if (current.status === 'revoked') {
+          throw new InvariantError('a revoked connection cannot change owner');
+        }
+        setOwnerStmt.run(cols.kind, cols.userId, cols.groupId, now, id);
+        return requireConnection(id);
+      });
     },
     async setMetadata(id, metadata) {
-      const result = setMetadata.run(toJson(metadata), nowIso(ctx), id);
+      const result = setMetadataStmt.run(toJson(metadata), nowIso(ctx), id);
       if (result.changes === 0) throw new NotFoundError('connection', id);
-      return require(id);
+      return requireConnection(id);
     },
     async replaceResources(connectionId, resources) {
-      require(connectionId);
+      requireConnection(connectionId);
       const now = nowIso(ctx);
       withImmediateTransaction(db, () => {
         const refs = resources.map((r) => r.ref);
         if (refs.length === 0) {
-          db.prepare<[string]>('DELETE FROM connection_resources WHERE connection_id = ?').run(
-            connectionId,
-          );
+          deleteResources.run(connectionId);
         } else {
           db.prepare<string[]>(
             `DELETE FROM connection_resources WHERE connection_id = ? AND ref NOT IN (${placeholders(refs.length)})`,

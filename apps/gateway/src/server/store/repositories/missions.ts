@@ -12,7 +12,7 @@ import type {
   MissionTokenStatus,
   ResourceScope,
 } from '../types.ts';
-import { nowIso, type RepoContext } from './context.ts';
+import { nowIso, requireRow, type RepoContext } from './context.ts';
 
 export interface CreateMissionInput {
   readonly name: string;
@@ -109,6 +109,36 @@ function tokenToRecord(row: TokenRow): MissionTokenRecord {
   };
 }
 
+/** Every connection either takes all its resources or an explicit, consistent selection. */
+function assertConnectionSelections(
+  ctx: RepoContext,
+  connections: readonly MissionConnection[],
+): void {
+  if (connections.length === 0) {
+    throw new InvariantError('a mission carries at least one connection');
+  }
+  const resourceConnection = ctx.db.prepare<[string], { connection_id: string }>(
+    'SELECT connection_id FROM connection_resources WHERE id = ?',
+  );
+  for (const c of connections) {
+    if (c.resourceScope === 'selected' && c.resourceIds.length === 0) {
+      throw new InvariantError(`connection ${c.connectionId}: selected scope with no resource`);
+    }
+    if (c.resourceScope === 'all' && c.resourceIds.length > 0) {
+      throw new InvariantError(`connection ${c.connectionId}: 'all' scope lists resources`);
+    }
+    for (const resourceId of c.resourceIds) {
+      const owner = resourceConnection.get(resourceId);
+      if (!owner) throw new NotFoundError('connection_resource', resourceId);
+      if (owner.connection_id !== c.connectionId) {
+        throw new InvariantError(
+          `resource ${resourceId} does not belong to connection ${c.connectionId}`,
+        );
+      }
+    }
+  }
+}
+
 function validatePolicy(ctx: RepoContext, policy: readonly MissionPolicyEntry[]): void {
   const ids = policy.map((p) => p.riskId);
   if (new Set(ids).size !== ids.length) throw new InvariantError('duplicate risk id in policy');
@@ -151,9 +181,6 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const insertResource = db.prepare<[string, string, string]>(
     'INSERT INTO mission_resources (mission_id, connection_id, resource_id) VALUES (?, ?, ?)',
   );
-  const resourceConnection = db.prepare<[string], { connection_id: string }>(
-    'SELECT connection_id FROM connection_resources WHERE id = ?',
-  );
   const insertPolicy = db.prepare<[string, string, number, number, number, string]>(
     `INSERT INTO mission_policy (mission_id, risk_id, quota, rate_limit, rate_window_seconds, gate)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -169,7 +196,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const resourcesOf = db.prepare<[string, string], { resource_id: string }>(
     'SELECT resource_id FROM mission_resources WHERE mission_id = ? AND connection_id = ? ORDER BY resource_id',
   );
-  const setStatus = db.prepare<[string, string | null, string, string]>(
+  const setStatusStmt = db.prepare<[string, string | null, string, string]>(
     'UPDATE missions SET status = ?, closed_at = COALESCE(?, closed_at), updated_at = ? WHERE id = ?',
   );
   const setExpiry = db.prepare<[string | null, string, string]>(
@@ -192,7 +219,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const tokensOf = db.prepare<[string], TokenRow>(
     `SELECT ${TOKEN_COLUMNS} FROM mission_tokens WHERE mission_id = ? ORDER BY created_at`,
   );
-  const revokeTokens = db.prepare<[string, string]>(
+  const revokeTokensStmt = db.prepare<[string, string]>(
     `UPDATE mission_tokens SET status = 'revoked', retired_at = ? WHERE mission_id = ? AND status = 'active'`,
   );
 
@@ -224,7 +251,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     };
   }
 
-  function require(id: string): MissionRecord {
+  function requireMission(id: string): MissionRecord {
     const row = byId.get(id);
     if (!row) throw new NotFoundError('mission', id);
     return toRecord(row);
@@ -238,27 +265,8 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
 
   return {
     async create(input) {
-      if (input.connections.length === 0) {
-        throw new InvariantError('a mission carries at least one connection');
-      }
       validatePolicy(ctx, input.policy);
-      for (const c of input.connections) {
-        if (c.resourceScope === 'selected' && c.resourceIds.length === 0) {
-          throw new InvariantError(`connection ${c.connectionId}: selected scope with no resource`);
-        }
-        if (c.resourceScope === 'all' && c.resourceIds.length > 0) {
-          throw new InvariantError(`connection ${c.connectionId}: 'all' scope lists resources`);
-        }
-        for (const resourceId of c.resourceIds) {
-          const owner = resourceConnection.get(resourceId);
-          if (!owner) throw new NotFoundError('connection_resource', resourceId);
-          if (owner.connection_id !== c.connectionId) {
-            throw new InvariantError(
-              `resource ${resourceId} does not belong to connection ${c.connectionId}`,
-            );
-          }
-        }
-      }
+      assertConnectionSelections(ctx, input.connections);
       const id = ctx.newId();
       const now = nowIso(ctx);
       withImmediateTransaction(db, () => {
@@ -280,7 +288,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
         }
         writePolicy(id, input.policy);
       });
-      return require(id);
+      return requireMission(id);
     },
     async getById(id) {
       const row = byId.get(id);
@@ -295,47 +303,46 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     async setStatus(id, status) {
       const now = nowIso(ctx);
       const terminal = status === 'revoked' || status === 'expired' || status === 'orphaned';
-      const result = setStatus.run(status, terminal ? now : null, now, id);
+      const result = setStatusStmt.run(status, terminal ? now : null, now, id);
       if (result.changes === 0) throw new NotFoundError('mission', id);
-      return require(id);
+      return requireMission(id);
     },
     async setExpiresAt(id, expiresAt) {
       const result = setExpiry.run(expiresAt, nowIso(ctx), id);
       if (result.changes === 0) throw new NotFoundError('mission', id);
-      return require(id);
+      return requireMission(id);
     },
     async replacePolicy(id, policy) {
-      require(id);
       validatePolicy(ctx, policy);
-      withImmediateTransaction(db, () => {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        requireMission(id);
         deletePolicy.run(id);
         writePolicy(id, policy);
-        touch.run(nowIso(ctx), id);
+        touch.run(now, id);
+        return requireMission(id);
       });
-      return require(id);
     },
     async issueToken(input) {
-      require(input.missionId);
       const id = ctx.newId();
       const now = nowIso(ctx);
       withImmediateTransaction(db, () => {
+        requireMission(input.missionId);
         retireActive.run(now, input.missionId);
         insertToken.run(id, input.missionId, input.prefix, input.hash, input.hashAlg, now);
       });
-      const row = tokenById.get(id);
-      if (!row) throw new NotFoundError('mission_token', id);
-      return tokenToRecord(row);
+      return tokenToRecord(requireRow(tokenById.get(id), 'mission_token', id));
     },
     async findTokenByPrefix(prefix) {
       const row = tokenByPrefix.get(prefix);
       if (!row) return null;
-      return { token: tokenToRecord(row), mission: require(row.mission_id) };
+      return { token: tokenToRecord(row), mission: requireMission(row.mission_id) };
     },
     async listTokens(missionId) {
       return tokensOf.all(missionId).map(tokenToRecord);
     },
     async revokeTokens(missionId) {
-      return revokeTokens.run(nowIso(ctx), missionId).changes;
+      return revokeTokensStmt.run(nowIso(ctx), missionId).changes;
     },
   };
 }

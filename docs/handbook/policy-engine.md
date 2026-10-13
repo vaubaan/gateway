@@ -59,13 +59,13 @@ packages/policy-engine/
     slice-matcher.ts      matches / covers / intersects
     risk-evaluator.ts     indexCatalog / risksTouchedBy / risksTouchedByAll / findRiskEntry
     risk-policy.ts        checkAcceptableInEnv / prepareCatalog / hasFallbackRisk / fallbackRiskPrefix
-    qualify.ts            isEnvScopedEntry / qualifyRiskId / unqualifyRiskId / EnvResolver /
-                          noEnvResolver / resourceEnvResolver / resolveVector
+    qualify.ts            isEnvScopedEntry / isAcceptableInEnv / qualifyRiskId / unqualifyRiskId /
+                          EnvResolver / noEnvResolver / resourceEnvResolver / resolveVector
     risk-runtime.ts       evaluateCall / evaluateCallSimple
     legacy-bindings.ts    resourceFromBinding / bindingsEnvResolver            (quarantine)
     scope-injection.ts    injectionPlanFor / stripInjectedArgs / mergeInjectedArgs (quarantine, flag)
   tests/unit/
-    slice-dsl (23)  slice-matcher (26)  risk-evaluator (11)  risk-policy (8)
+    slice-dsl (23)  slice-matcher (29)  risk-evaluator (11)  risk-policy (9)
     qualify (21)    risk-runtime (17)   scope-injection (13)
 ```
 
@@ -117,10 +117,14 @@ carries `input`, `position` and a short message.
   wildcard (`service-var[*].W`).
 
 Segment-by-segment matching ; `[**]` consumes zero or more segments with
-backtracking ; the in-bracket glob `*` matches `[a-zA-Z0-9_/-]+`, which is
-narrower than what a bracket ident may contain (`.` and `~` are legal in
-`file[a.ts]` but `file[*]` does not match it). Known heuristic in
-glob-vs-glob `intersects` (`expandGlob`) ; neither is blocking.
+backtracking ; the in-bracket glob `*` expands over `BRACKET_IDENT_CHAR_CLASS`
+(exported by `slice-dsl.ts`, `[a-zA-Z0-9_./~-]`), the same class the parser
+accepts, so `branch[release-*]` matches `release-1.2` and `file[*]` matches
+`a.ts` : a pattern never accepts less than an identifier may contain.
+Glob × glob `intersects` is exact for globs with one `*` each (literal
+prefixes and suffixes must extend one another) and fails closed (`true`)
+when both sides carry several `*` ; `covers` uses the same split (a glob
+covers itself and any glob whose literals extend its own).
 
 ### `risk-evaluator.ts`
 
@@ -135,10 +139,10 @@ slice ; empty means the catalog has no fallback for that slice.
 ### `risk-policy.ts`
 
 - `checkAcceptableInEnv(entry, env)` — refuses at issuance when the entry
-  declares `acceptable_in_envs` and the resource's environment label is
-  absent or not in the list. Returns a message or `null`.
-- `prepareCatalog(catalog, { warn? })` — `indexCatalog` + duplicate ids +
-  RiskId grammar (`isRiskId` from `@vaubaan/shared`) ; a missing
+  is env-scoped and the resource's environment label is absent or not in
+  the list. Returns a message or `null`. Built on `isAcceptableInEnv`.
+- `prepareCatalog(catalog, { warn? })` — `indexCatalog` (patterns parsed,
+  ids unique) + RiskId grammar (`isRiskId` from `@vaubaan/shared`) ; a missing
   `<provider>.uncategorized-*` fallback calls `warn` (default
   `console.warn`). The SDK loader silences `warn` and re-checks the fallback
   itself (`semanticIssues`, a hard error) ; the SDK registry silences it
@@ -147,6 +151,14 @@ slice ; empty means the catalog has no fallback for that slice.
 - `hasFallbackRisk(catalog)`, `fallbackRiskPrefix(provider)`.
 
 ### `qualify.ts`
+
+`isAcceptableInEnv(entry, env)` is the one rule for `acceptable_in_envs` :
+an entry that is not env-scoped (no list, or an empty one) is acceptable
+anywhere ; an env-scoped entry only in a listed env, never without an env.
+Issuance (`checkAcceptableInEnv`), the runtime (`evaluateCall`), the plugin
+SDK's preset checks and the store's `RegistryCatalogIndex` all call it, so
+the four places cannot disagree (an empty list used to be refused by one of
+them).
 
 - `isEnvScopedEntry(entry)` — true iff `acceptable_in_envs` is non-empty ;
   that is the marker of an env-scoped risk.

@@ -8,8 +8,13 @@ import type { Clock } from '../clock.ts';
 import { toIso } from '../clock.ts';
 import type { StoreDb } from '../db.ts';
 import type { Encryptor } from '../encryptor.ts';
+import { InvariantError, NotFoundError } from '../errors.ts';
 import type { IdGenerator } from '../ids.ts';
 import type { Iso, Principal, PrincipalKind } from '../types.ts';
+
+/** Rows returned by a list when the caller gives no limit. */
+export const DEFAULT_LIST_LIMIT = 1000;
+export const MS_PER_DAY = 86_400_000;
 
 export interface RepoContext {
   readonly db: StoreDb;
@@ -23,9 +28,41 @@ export function nowIso(ctx: RepoContext): Iso {
   return toIso(ctx.clock.now());
 }
 
-export function parseJson<T>(text: string | null): T | null {
+/** A JSON column, or `null`. The caller narrows the `unknown`. */
+export function parseJson(text: string | null): unknown {
   if (text === null) return null;
-  return JSON.parse(text) as T;
+  return JSON.parse(text) as unknown;
+}
+
+/** A JSON column that must hold an object (`metadata_json`, `details_json`, …). */
+export function parseJsonObject(
+  text: string | null,
+  column: string,
+): Record<string, unknown> | null {
+  const value = parseJson(text);
+  if (value === null) return null;
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new InvariantError(`${column}: expected a JSON object`);
+  }
+  return value as Record<string, unknown>;
+}
+
+/** A column constrained to a closed set, checked against the set that defines the type. */
+export function parseEnum<T extends string>(allowed: readonly T[], raw: string, column: string): T {
+  if ((allowed as readonly string[]).includes(raw)) return raw as T;
+  throw new InvariantError(`${column}: unexpected value '${raw}'`);
+}
+
+/** A column the schema declares NOT NULL for this row kind; `null` means a corrupt row. */
+export function requireColumn<T>(value: T | null, column: string): T {
+  if (value === null) throw new InvariantError(`${column}: unexpectedly null`);
+  return value;
+}
+
+/** The row just written (or looked up) must exist; otherwise the store is inconsistent. */
+export function requireRow<R>(row: R | undefined, entity: string, id: string): R {
+  if (row === undefined) throw new NotFoundError(entity, id);
+  return row;
 }
 
 export function toJson(value: unknown): string | null {
@@ -52,7 +89,9 @@ export function principalFromColumns(
 ): Principal {
   if (kind === 'user' && userId !== null) return { kind: 'user', id: userId };
   if (kind === 'group' && groupId !== null) return { kind: 'group', id: groupId };
-  throw new Error(`inconsistent principal columns: ${kind}/${String(userId)}/${String(groupId)}`);
+  throw new InvariantError(
+    `inconsistent principal columns: ${kind}/${String(userId)}/${String(groupId)}`,
+  );
 }
 
 /** `(?, ?, …)` with one placeholder per value — SQL stays positional and portable. */

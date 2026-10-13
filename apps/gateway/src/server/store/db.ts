@@ -15,7 +15,9 @@ import { StoreError } from './errors.ts';
 export const MEMORY_PATH = ':memory:';
 
 /** Oldest SQLite that understands `STRICT` tables. */
-const MIN_SQLITE_VERSION = [3, 37, 0] as const;
+export const MIN_SQLITE_VERSION = [3, 37, 0] as const;
+/** Milliseconds a writer waits on a locked database before `SQLITE_BUSY`. */
+export const DEFAULT_BUSY_TIMEOUT_MS = 5000;
 
 export interface OpenDbOptions {
   /** File path, or `MEMORY_PATH` for an ephemeral in-memory database. */
@@ -24,12 +26,12 @@ export interface OpenDbOptions {
   readonly busyTimeoutMs?: number;
 }
 
-export type SqlValue = string | number | bigint | Buffer | null;
-
 export type StoreDb = BetterSqlite3.Database;
 
 export function openDb(options: OpenDbOptions): StoreDb {
-  const db = new BetterSqlite3(options.path, { timeout: options.busyTimeoutMs ?? 5000 });
+  const db = new BetterSqlite3(options.path, {
+    timeout: options.busyTimeoutMs ?? DEFAULT_BUSY_TIMEOUT_MS,
+  });
   assertSqliteVersion(db);
   // sqlite: pragmas. WAL lets readers proceed while the single writer commits;
   // synchronous=NORMAL in WAL mode survives a process crash and loses at most the last
@@ -44,16 +46,26 @@ export function openDb(options: OpenDbOptions): StoreDb {
 function assertSqliteVersion(db: StoreDb): void {
   const row = db.prepare<[], { v: string }>('SELECT sqlite_version() AS v').get();
   const version = row?.v ?? '0.0.0';
-  const parts = version.split('.').map((p) => Number.parseInt(p, 10));
-  const [maj = 0, min = 0, pat = 0] = parts;
-  const [rMaj, rMin, rPat] = MIN_SQLITE_VERSION;
-  const ok =
-    maj > rMaj || (maj === rMaj && min > rMin) || (maj === rMaj && min === rMin && pat >= rPat);
-  if (!ok) {
+  if (!isSqliteVersionAtLeast(version, MIN_SQLITE_VERSION)) {
     throw new StoreError(
       `SQLite ${version} is too old; ${MIN_SQLITE_VERSION.join('.')} or newer is required (STRICT tables)`,
     );
   }
+}
+
+/** `3.45.1` >= `[3, 37, 0]`; missing components count as 0, garbage as 0. */
+export function isSqliteVersionAtLeast(
+  version: string,
+  minimum: readonly [number, number, number],
+): boolean {
+  const [maj = 0, min = 0, pat = 0] = version
+    .split('.')
+    .map((p) => Number.parseInt(p, 10))
+    .map((n) => (Number.isNaN(n) ? 0 : n));
+  const [rMaj, rMin, rPat] = minimum;
+  return (
+    maj > rMaj || (maj === rMaj && min > rMin) || (maj === rMaj && min === rMin && pat >= rPat)
+  );
 }
 
 /**

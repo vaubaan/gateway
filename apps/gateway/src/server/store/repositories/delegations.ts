@@ -15,7 +15,7 @@ import type {
   OAuthCodeRecord,
   RefreshTokenRecord,
 } from '../types.ts';
-import { nowIso, type RepoContext } from './context.ts';
+import { nowIso, requireRow, type RepoContext } from './context.ts';
 
 export interface RegisterClientInput {
   readonly clientId: string;
@@ -222,7 +222,7 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
   const liveCodeByHash = db.prepare<[string, string], CodeRow>(
     `SELECT ${CODE_COLUMNS} FROM oauth_codes WHERE code_hash = ? AND consumed_at IS NULL AND expires_at > ?`,
   );
-  const consumeCode = db.prepare<[string, string]>(
+  const consumeCodeStmt = db.prepare<[string, string]>(
     'UPDATE oauth_codes SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL',
   );
   const insertRefresh = db.prepare<[string, string, string, string, string]>(
@@ -304,9 +304,7 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
         );
         for (const uri of new Set(input.redirectUris)) insertRedirect.run(id, uri);
       });
-      const row = clientById.get(id);
-      if (!row) throw new NotFoundError('oauth_client', id);
-      return clientToRecord(row);
+      return clientToRecord(requireRow(clientById.get(id), 'oauth_client', id));
     },
     async getClient(id) {
       const row = clientById.get(id);
@@ -353,16 +351,14 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
         nowIso(ctx),
         input.expiresAt,
       );
-      const row = codeById.get(id);
-      if (!row) throw new NotFoundError('oauth_code', id);
-      return codeToRecord(row);
+      return codeToRecord(requireRow(codeById.get(id), 'oauth_code', id));
     },
     async consumeCode(codeHash) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
         const row = liveCodeByHash.get(codeHash, now);
         if (!row) return null;
-        if (consumeCode.run(now, row.id).changes === 0) return null;
+        if (consumeCodeStmt.run(now, row.id).changes === 0) return null;
         const consumed = codeById.get(row.id);
         return consumed ? codeToRecord(consumed) : null;
       });
@@ -372,9 +368,7 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
       requireActiveDelegation(input.delegationId);
       const id = ctx.newId();
       insertRefresh.run(id, input.delegationId, input.tokenHash, nowIso(ctx), input.expiresAt);
-      const row = refreshById.get(id);
-      if (!row) throw new NotFoundError('oauth_refresh_token', id);
-      return refreshToRecord(row);
+      return refreshToRecord(requireRow(refreshById.get(id), 'oauth_refresh_token', id));
     },
     async rotateRefreshToken(tokenHash, next) {
       const now = nowIso(ctx);
@@ -396,9 +390,7 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
       requireActiveDelegation(input.delegationId);
       const id = ctx.newId();
       insertAccess.run(id, input.delegationId, input.tokenHash, nowIso(ctx), input.expiresAt);
-      const row = accessById.get(id);
-      if (!row) throw new NotFoundError('oauth_access_token', id);
-      return accessToRecord(row);
+      return accessToRecord(requireRow(accessById.get(id), 'oauth_access_token', id));
     },
     async findActiveAccessToken(tokenHash) {
       const row = liveAccessByHash.get(tokenHash, nowIso(ctx));

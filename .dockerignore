@@ -29,11 +29,12 @@ node_modules
 *.tsbuildinfo
 
 # Secrets never enter the image; configuration is mounted or injected at run time.
-.env
-.env.*
-!.env.example
+# Patterns are anchored at the context root unless prefixed with **: Next copies
+# apps/gateway/.env* into the standalone output, so every nested env file is excluded.
+**/.env
+**/.env.*
+!**/.env.example
 *.pem
-deploy/config/.env
 deploy/config/gateway.yaml
 
 docs

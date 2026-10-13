@@ -51,8 +51,8 @@ apps/gateway/src/
       logger.ts                 JSON-lines logger with level threshold and child bindings
       redact.ts                 token-prefix and secret redaction
     compose/
-      ports.ts                  Store (liveness port), RateLimiter, CacheClient, SessionStore
-      memory.ts                 in-memory implementations  // single-process only
+      ports.ts                  StoreLiveness, RateLimiter, SessionStore; re-exports gateway-core's CacheClient
+      memory.ts                 MemoryRateLimiter, MemorySessionStore  // single-process only
       registry.ts               buildEmptyRegistry(), RegistryCatalogIndex, checkProviderApps()
       store.ts                  openEmbeddedStore(): the SQLite store from store.path
       root.ts                   buildRoot(), getRoot() (globalThis), resetRoot()
@@ -122,7 +122,12 @@ build).
   webpack. The standalone output keeps the same entry (`apps/gateway/server.js`,
   now an ES module) and the same layout for the Dockerfile; it no longer
   copies the `packages/` and `plugins/` sources, which Turbopack bundles
-  from `transpilePackages`.
+  from `transpilePackages`. That list is derived from the `@vaubaan/*`
+  dependencies of `apps/gateway/package.json` (`workspaceDependencies()`),
+  never written by hand, so it is not a second provider list. Nothing in
+  `next.config.ts` reads an instance configuration value: `next.config`
+  values are frozen at build time (the former `ALLOWED_ORIGINS` read is
+  gone for that reason).
 - `serverExternalPackages`: `argon2` and `better-sqlite3` are in Next's
   default external list, `ssh2` is added. `outputFileTracingIncludes` lists
   the `argon2` prebuilds (nft does not follow `node-gyp-build`) and the
@@ -185,7 +190,14 @@ variables `PORT` / `HOSTNAME` read by Next's standalone `server.js`.
 
 Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`. A secret
 given both directly and through its `*_FILE` variable is an error ("set
-either X or X_FILE, not both").
+either X or X*FILE, not both"). `VAUBAAN_MASTER_KEY_PREVIOUS` entries must
+be `<integer>=<key>`; a malformed entry is reported by position and its
+content is never echoed (a bare key pasted there carries `=` padding). A
+YAML scalar that still contains `${...}` after resolution (for example the
+Compose syntax `${VAR:-default}`) is an error naming the key, so an
+unsupported reference never becomes a literal secret. `parseProviderEnvName`
+is the pure parser of `VAUBAAN_PROVIDER*<ID>\_<FIELD>`names;`PROVIDER_APP_FIELD_PROPERTY`maps each field to its`ProviderAppConfig`
+property exhaustively.
 
 Secret references in YAML: `${NAME}` is replaced by the environment
 variable (unset → error naming the key), `${file:/run/secrets/x}` by the
@@ -242,16 +254,18 @@ bindings. `silentLogger` is for tests.
 
 ## Ports and their single-process implementations
 
-| Port             | Today                                                                | Hosted replacement                    |
-| ---------------- | -------------------------------------------------------------------- | ------------------------------------- |
-| `Store`          | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`) | Postgres behind the same repositories |
-| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2                   | same (static)                         |
-| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`)       | Redis `INCR` + `PEXPIRE`              |
-| `CacheClient`    | `MemoryCache`, TTL, bounded (oldest evicted)                         | Redis                                 |
-| `SessionStore`   | `MemorySessionStore`                                                 | store-backed rows or Redis            |
+| Port             | Today                                                                                   | Hosted replacement                    |
+| ---------------- | --------------------------------------------------------------------------------------- | ------------------------------------- |
+| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                    | Postgres behind the same repositories |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2                                      | same (static)                         |
+| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`)                          | Redis `INCR` + `PEXPIRE`              |
+| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded); one definition | Redis                                 |
+| `SessionStore`   | `MemorySessionStore`, built on `MemoryCacheClient` (TTL in ms at the port)              | store-backed rows or Redis            |
 
-`GatewayRoot.store` is the full store with its repositories (the `Store`
-of `ports.ts` is only the liveness slice `/healthz` and `close()` need);
+`GatewayRoot.store` is the full store with its repositories
+(`StoreLiveness` of `ports.ts` is only the slice `/healthz` and `close()`
+need); the `globalThis` handle of `getRoot()` is per process by design
+(`// single-process only`: every replica builds its own root);
 `GatewayRoot.registry` is the SDK registry itself, so every provider list
 derives from one object. Features plug their factories through `RootDeps`
 (`openStore(ctx: { config, logger, encryptor, catalog })`,

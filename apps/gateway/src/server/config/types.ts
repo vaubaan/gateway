@@ -6,7 +6,12 @@
  * object (or a slice of it) through the composition root.
  */
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export const LOG_LEVELS = ['debug', 'info', 'warn', 'error'] as const;
+export type LogLevel = (typeof LOG_LEVELS)[number];
+
+export function isLogLevel(raw: string): raw is LogLevel {
+  return (LOG_LEVELS as readonly string[]).includes(raw);
+}
 
 export interface IdpClaimMapping {
   /** Claim carrying the stable subject identifier. */
@@ -58,6 +63,22 @@ export const PROVIDER_APP_FIELDS = [
   'private_key',
 ] as const;
 export type ProviderAppField = (typeof PROVIDER_APP_FIELDS)[number];
+
+export function isProviderAppField(raw: string): raw is ProviderAppField {
+  return (PROVIDER_APP_FIELDS as readonly string[]).includes(raw);
+}
+
+/** YAML/env field → `ProviderAppConfig` property. Exhaustive: a field added to
+ *  `PROVIDER_APP_FIELDS` without a property here fails to compile. */
+export const PROVIDER_APP_FIELD_PROPERTY: Readonly<
+  Record<ProviderAppField, keyof ProviderAppConfig>
+> = {
+  client_id: 'clientId',
+  client_secret: 'clientSecret',
+  app_id: 'appId',
+  app_slug: 'appSlug',
+  private_key: 'privateKey',
+};
 
 export interface EncryptionConfig {
   /** Raw 32-byte master key currently used to encrypt. */

@@ -114,7 +114,10 @@ export const myCatalog = loadCatalogFile(new URL('./risk-catalog.yaml', import.m
 // → { catalog: PluginCatalog, indexed: IndexedRiskCatalog }
 ```
 
-Runs at module load, hence at gateway boot. Pipeline :
+Runs at module load, hence at gateway boot. The rules it shares with the
+policy engine are imported, not re-implemented : `hasFallbackRisk` for the
+mandatory fallback, `isEnvScopedEntry` / `isAcceptableInEnv` for
+env-qualified preset entries. Pipeline :
 
 1. `js-yaml` `load` with `CORE_SCHEMA` (YAML 1.2 core : no implicit date
    or binary coercion). Syntax errors → `CatalogError` with the source name.

@@ -10,39 +10,52 @@
  */
 import { readFileSync } from 'node:fs';
 
-import type { IssueList } from './errors';
+import { errorMessage, type IssueList } from './errors';
 
 export type EnvSource = Readonly<Record<string, string | undefined>>;
 export type FileReader = (path: string) => string;
 
 export const defaultFileReader: FileReader = (path) => readFileSync(path, 'utf8');
 
+/** What every source reader needs: where values come from, where problems go. */
+export interface SourceContext {
+  readonly env: EnvSource;
+  readonly readFile: FileReader;
+  readonly issues: IssueList;
+}
+
 const REF = /\$\{(file:([^}]+)|([A-Za-z_][A-Za-z0-9_]*))\}/g;
+/** Anything that still looks like a reference after resolution is a syntax the loader does not support. */
+const UNSUPPORTED_REF = /\$\{[^}]*\}/;
 
 /** Resolves every `${...}` reference of a scalar read from the YAML file. */
-export function resolveRefs(
-  value: string,
-  keyPath: string,
-  env: EnvSource,
-  readFile: FileReader,
-  issues: IssueList,
-): string {
-  return value.replace(REF, (_whole, _inner: string, filePath?: string, varName?: string) => {
-    if (filePath !== undefined) {
-      try {
-        return readFile(filePath).trim();
-      } catch (err) {
-        issues.add(keyPath, `cannot read secret file "${filePath}": ${describe(err)}`);
+export function resolveRefs(ctx: SourceContext, value: string, keyPath: string): string {
+  const resolved = value.replace(
+    REF,
+    (_whole, _inner: string, filePath?: string, varName?: string) => {
+      if (filePath !== undefined) {
+        try {
+          return ctx.readFile(filePath).trim();
+        } catch (err) {
+          ctx.issues.add(keyPath, `cannot read secret file "${filePath}": ${errorMessage(err)}`);
+          return '';
+        }
+      }
+      const fromEnv = varName === undefined ? undefined : ctx.env[varName];
+      if (fromEnv === undefined) {
+        ctx.issues.add(keyPath, `references \${${varName ?? ''}} but that variable is not set`);
         return '';
       }
-    }
-    const resolved = varName === undefined ? undefined : env[varName];
-    if (resolved === undefined) {
-      issues.add(keyPath, `references \${${varName ?? ''}} but that variable is not set`);
-      return '';
-    }
-    return resolved;
-  });
+      return fromEnv;
+    },
+  );
+  if (UNSUPPORTED_REF.test(resolved)) {
+    ctx.issues.add(
+      keyPath,
+      'contains an unsupported ${...} reference; only ${NAME} and ${file:/path} are resolved',
+    );
+  }
+  return resolved;
 }
 
 /**
@@ -50,29 +63,25 @@ export function resolveRefs(
  * Returns `undefined` when neither is set.
  */
 export function readEnvSecret(
+  ctx: SourceContext,
   name: string,
   keyPath: string,
-  env: EnvSource,
-  readFile: FileReader,
-  issues: IssueList,
 ): string | undefined {
-  const direct = env[name];
+  const direct = ctx.env[name];
   const fileVar = `${name}_FILE`;
-  const filePath = env[fileVar];
+  const filePath = ctx.env[fileVar];
   if (direct !== undefined && filePath !== undefined) {
-    issues.add(keyPath, `set either ${name} or ${fileVar}, not both`, [name, fileVar]);
+    ctx.issues.add(keyPath, `set either ${name} or ${fileVar}, not both`, [name, fileVar]);
     return direct;
   }
   if (direct !== undefined) return direct;
   if (filePath === undefined) return undefined;
   try {
-    return readFile(filePath).trim();
+    return ctx.readFile(filePath).trim();
   } catch (err) {
-    issues.add(keyPath, `cannot read secret file "${filePath}": ${describe(err)}`, [fileVar]);
+    ctx.issues.add(keyPath, `cannot read secret file "${filePath}": ${errorMessage(err)}`, [
+      fileVar,
+    ]);
     return undefined;
   }
-}
-
-function describe(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }

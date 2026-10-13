@@ -22,7 +22,15 @@ import type {
   SessionRecord,
 } from '../types.ts';
 import { consumeApprovalSync } from './approvals.ts';
-import { nowIso, parseJson, placeholders, toJson, type RepoContext } from './context.ts';
+import {
+  DEFAULT_LIST_LIMIT,
+  nowIso,
+  parseJsonObject,
+  placeholders,
+  requireRow,
+  toJson,
+  type RepoContext,
+} from './context.ts';
 import { insertRequestSync, type InsertRequestInput } from './requests.ts';
 
 export interface DecideInput {
@@ -121,7 +129,7 @@ function eventToRecord(row: EventRow): EventRecord {
     kind: row.kind,
     riskId: row.risk_id,
     actorUserId: row.actor_user_id,
-    details: parseJson<Record<string, unknown>>(row.details_json),
+    details: parseJsonObject(row.details_json, 'events.details_json'),
   };
 }
 
@@ -158,12 +166,30 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
   const eventById = db.prepare<[string], EventRow>(
     'SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events WHERE id = ?',
   );
+  const missionExists = db.prepare<[string], { one: number }>(
+    'SELECT 1 AS one FROM missions WHERE id = ?',
+  );
+  const resetCounter = db.prepare<[string, string, string]>(
+    'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ? AND risk_id = ?',
+  );
+  const resetPeriod = db.prepare<[string, string]>(
+    'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ?',
+  );
+  const eventsSince = db.prepare<[string, string, number], EventRow>(
+    `SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events
+     WHERE session_id = ? AND ts >= ? ORDER BY ts, id LIMIT ?`,
+  );
+  const eventsAll = db.prepare<[string, number], EventRow>(
+    `SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events
+     WHERE session_id = ? ORDER BY ts, id LIMIT ?`,
+  );
 
   function getOrCreateSync(missionId: string, now: Iso): SessionRecord {
+    // Checked first: with foreign keys on, the insert would otherwise surface a driver
+    // error instead of the store's NotFoundError.
+    if (!missionExists.get(missionId)) throw new NotFoundError('mission', missionId);
     insertSession.run(ctx.newId(), missionId, now);
-    const row = byMission.get(missionId);
-    if (!row) throw new NotFoundError('mission', missionId);
-    return sessionToRecord(row);
+    return sessionToRecord(requireRow(byMission.get(missionId), 'session', missionId));
   }
 
   function readCounters(
@@ -194,9 +220,7 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       event.actorUserId ?? null,
       toJson(event.details),
     );
-    const row = eventById.get(id);
-    if (!row) throw new NotFoundError('event', id);
-    return eventToRecord(row);
+    return eventToRecord(requireRow(eventById.get(id), 'event', id));
   }
 
   return {
@@ -256,37 +280,18 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       }));
     },
     async resetCounters(sessionId, periodStart, riskId) {
-      if (riskId) {
-        return db
-          .prepare<
-            [string, string, string]
-          >('UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ? AND risk_id = ?')
-          .run(sessionId, periodStart, riskId).changes;
-      }
-      return db
-        .prepare<
-          [string, string]
-        >('UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ?')
-        .run(sessionId, periodStart).changes;
+      return riskId
+        ? resetCounter.run(sessionId, periodStart, riskId).changes
+        : resetPeriod.run(sessionId, periodStart).changes;
     },
     async recordEvent(sessionId, event) {
       return recordEventSync(sessionId, event, nowIso(ctx));
     },
     async listEvents(sessionId, options = {}) {
-      const limit = options.limit ?? 1000;
+      const limit = options.limit ?? DEFAULT_LIST_LIMIT;
       const rows = options.since
-        ? db
-            .prepare<[string, string, number], EventRow>(
-              `SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events
-               WHERE session_id = ? AND ts >= ? ORDER BY ts, id LIMIT ?`,
-            )
-            .all(sessionId, options.since, limit)
-        : db
-            .prepare<[string, number], EventRow>(
-              `SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events
-               WHERE session_id = ? ORDER BY ts, id LIMIT ?`,
-            )
-            .all(sessionId, limit);
+        ? eventsSince.all(sessionId, options.since, limit)
+        : eventsAll.all(sessionId, limit);
       return rows.map(eventToRecord);
     },
   };

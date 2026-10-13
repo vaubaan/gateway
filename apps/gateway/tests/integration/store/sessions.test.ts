@@ -5,9 +5,23 @@
  * minimal stand-ins that compare counters to a quota.
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import type { DecideContext, Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import {
+  NotFoundError,
+  openStore,
+  SetCatalogIndex,
+  type DecideContext,
+  type Store,
+} from '../../../src/server/store/index.ts';
+import {
+  openTestStore,
+  StubEncryptor,
+  TEST_RISK_IDS,
+  type TestStore,
+} from '../../../src/server/store/testing.ts';
 
 const READ = 'github.code-read';
 const WRITE = 'github.write-feature-branch';
@@ -87,6 +101,65 @@ describe('sessions repository', () => {
     const events = await store.sessions.listEvents(session.id);
     expect(events.filter((e) => e.kind === 'allowed-call')).toHaveLength(1);
     expect(events.filter((e) => e.kind === 'refused-call')).toHaveLength(N - 1);
+  });
+
+  it('an unknown mission is a NotFoundError, not a foreign-key driver error', async () => {
+    await expect(store.sessions.getOrCreate('mis_nope')).rejects.toBeInstanceOf(NotFoundError);
+    await expect(
+      store.sessions.decideAndDecrement(
+        { missionId: 'mis_nope', riskIds: [READ], periodStart: PERIOD },
+        quotaDecider({ [READ]: 1 }),
+      ),
+    ).rejects.toBeInstanceOf(NotFoundError);
+  });
+
+  it('two connections on one file: the second decision waits on the first transaction (SQLITE_BUSY)', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'vbn-sessions-'));
+    const path = join(dir, 'gateway.sqlite');
+    const open = (busyTimeoutMs: number) =>
+      openStore({
+        path,
+        encryptor: new StubEncryptor(),
+        catalog: new SetCatalogIndex(TEST_RISK_IDS),
+        busyTimeoutMs,
+      });
+    const a = open(50);
+    const b = open(50);
+    try {
+      const user = (await a.users.upsertFromIdp({ subject: 'c', email: 'c@x' })).id;
+      const connection = await a.connections.create({
+        provider: 'github',
+        owner: { kind: 'user', id: user },
+        displayName: 'gh',
+        credential: null,
+      });
+      const mission = await a.missions.create({
+        name: 'm',
+        creatorUserId: user,
+        periodAnchor: PERIOD,
+        periodSeconds: 86_400,
+        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        policy: [{ riskId: WRITE, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' }],
+      });
+      // A holds the write lock; B's decision cannot even read the counters until A commits.
+      a.db.prepare('BEGIN IMMEDIATE').run();
+      await expect(
+        b.sessions.decideAndDecrement(
+          { missionId: mission.id, riskIds: [WRITE], periodStart: PERIOD },
+          quotaDecider({ [WRITE]: 1 }),
+        ),
+      ).rejects.toMatchObject({ code: 'SQLITE_BUSY' });
+      a.db.prepare('COMMIT').run();
+      const result = await b.sessions.decideAndDecrement(
+        { missionId: mission.id, riskIds: [WRITE], periodStart: PERIOD },
+        quotaDecider({ [WRITE]: 1 }),
+      );
+      expect(result.outcome.allow).toBe(true);
+    } finally {
+      await a.close();
+      await b.close();
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 
   it('a call touching N risks decrements N counters; a refusal decrements none', async () => {

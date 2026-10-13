@@ -4,7 +4,9 @@
  */
 import { randomBytes } from 'node:crypto';
 
-export const TEST_MASTER_KEY = randomBytes(32).toString('base64');
+import { MASTER_KEY_BYTES } from './load';
+
+export const TEST_MASTER_KEY = randomBytes(MASTER_KEY_BYTES).toString('base64');
 export const TEST_BOOTSTRAP_TOKEN = 'bootstrap-' + randomBytes(24).toString('hex');
 
 /** The smallest environment that loads: no IdP, bootstrap token present. */

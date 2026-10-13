@@ -13,15 +13,16 @@
  */
 import { parse as parseYaml } from 'yaml';
 
-import { type IssueList } from './errors';
+import { errorMessage, type IssueList } from './errors';
 import {
   type EnvSource,
   type FileReader,
+  type SourceContext,
   defaultFileReader,
   readEnvSecret,
   resolveRefs,
 } from './secret-refs';
-import { PROVIDER_APP_FIELDS, type ProviderAppField } from './types';
+import { PROVIDER_APP_FIELDS, isProviderAppField, type ProviderAppField } from './types';
 
 export type RawTree = Record<string, unknown>;
 
@@ -71,8 +72,11 @@ export function envNamesFor(path: string): string[] {
   const providerMatch = /^providers\.([^.]+)\.([^.]+)$/.exec(path);
   if (providerMatch) {
     const [, id, field] = providerMatch;
-    const name = providerEnvName(id ?? '', field ?? '');
-    return SECRET_PROVIDER_FIELDS.has(field as ProviderAppField) ? [name, `${name}_FILE`] : [name];
+    const fieldName = field ?? '';
+    const name = providerEnvName(id ?? '', fieldName);
+    return isProviderAppField(fieldName) && SECRET_PROVIDER_FIELDS.has(fieldName)
+      ? [name, `${name}_FILE`]
+      : [name];
   }
   const spec = KEYS.find((k) => k.path === path);
   if (!spec) return [];
@@ -94,27 +98,23 @@ export function readEnvSource(
   issues: IssueList,
   readFile: FileReader = defaultFileReader,
 ): RawTree {
+  const ctx: SourceContext = { env, readFile, issues };
   const tree: RawTree = {};
   for (const spec of KEYS) {
-    const value = readEnvValue(spec, env, issues, readFile);
+    const value = readEnvValue(ctx, spec);
     if (value !== undefined) setPath(tree, spec.path, value);
   }
-  readProviderEnv(env, tree, issues, readFile);
+  readProviderEnv(ctx, tree);
   return tree;
 }
 
-function readEnvValue(
-  spec: KeySpec,
-  env: EnvSource,
-  issues: IssueList,
-  readFile: FileReader,
-): unknown {
+function readEnvValue(ctx: SourceContext, spec: KeySpec): unknown {
   if (spec.kind === 'secret' || spec.kind === 'secret-map') {
-    const raw = readEnvSecret(spec.env, spec.path, env, readFile, issues);
+    const raw = readEnvSecret(ctx, spec.env, spec.path);
     if (raw === undefined) return undefined;
-    return spec.kind === 'secret' ? raw : parseSecretMap(raw, spec, issues);
+    return spec.kind === 'secret' ? raw : parseSecretMap(ctx, raw, spec);
   }
-  const raw = env[spec.env];
+  const raw = ctx.env[spec.env];
   if (raw === undefined) return undefined;
   switch (spec.kind) {
     case 'string':
@@ -122,9 +122,9 @@ function readEnvValue(
     case 'list':
       return splitList(raw);
     case 'int': {
-      const n = Number(raw.trim());
+      const n = raw.trim() === '' ? Number.NaN : Number(raw.trim());
       if (!Number.isInteger(n)) {
-        issues.add(spec.path, `expected an integer, got "${raw}"`, [spec.env]);
+        ctx.issues.add(spec.path, `expected an integer, got "${raw}"`, [spec.env]);
         return undefined;
       }
       return n;
@@ -132,22 +132,27 @@ function readEnvValue(
     case 'bool': {
       const b = parseBool(raw);
       if (b === undefined)
-        issues.add(spec.path, `expected true or false, got "${raw}"`, [spec.env]);
+        ctx.issues.add(spec.path, `expected true or false, got "${raw}"`, [spec.env]);
       return b;
     }
   }
 }
 
-/** `1=<base64>,2=<base64>` → `{ "1": "<base64>", "2": "<base64>" }`. */
-function parseSecretMap(raw: string, spec: KeySpec, issues: IssueList): RawTree | undefined {
+/** `1=<base64>,2=<base64>` → `{ "1": "<base64>", "2": "<base64>" }`. The entries
+ *  are secrets: a malformed one is reported by position, never echoed. */
+function parseSecretMap(ctx: SourceContext, raw: string, spec: KeySpec): RawTree | undefined {
   const out: RawTree = {};
-  for (const entry of splitList(raw)) {
+  const entries = splitList(raw);
+  for (const [i, entry] of entries.entries()) {
     const eq = entry.indexOf('=');
-    if (eq <= 0) {
-      issues.add(spec.path, `expected "<version>=<key>" entries, got "${entry}"`, [spec.env]);
+    const version = eq > 0 ? entry.slice(0, eq).trim() : '';
+    // The version must be a bare integer: a base64 key pasted without `<version>=`
+    // carries `=` padding and must not be split (and echoed) as if it were one.
+    if (!/^\d+$/.test(version)) {
+      ctx.issues.add(spec.path, `entry #${i + 1} is not of the form "<version>=<key>"`, [spec.env]);
       return undefined;
     }
-    out[entry.slice(0, eq).trim()] = entry.slice(eq + 1).trim();
+    out[version] = entry.slice(eq + 1).trim();
   }
   return out;
 }
@@ -158,37 +163,48 @@ function parseSecretMap(raw: string, spec: KeySpec, issues: IssueList): RawTree 
  * provider ids containing `-` (`cloudflare-dns` → `CLOUDFLARE_DNS`) parse
  * unambiguously. No provider list is involved: the id is whatever remains.
  */
-function readProviderEnv(
-  env: EnvSource,
-  tree: RawTree,
-  issues: IssueList,
-  readFile: FileReader,
-): void {
-  const fieldsLongestFirst = [...PROVIDER_APP_FIELDS].sort((a, b) => b.length - a.length);
+function readProviderEnv(ctx: SourceContext, tree: RawTree): void {
   const seen = new Set<string>();
-  for (const name of Object.keys(env).sort()) {
-    if (!name.startsWith(PROVIDER_ENV_PREFIX) || env[name] === undefined) continue;
+  for (const name of Object.keys(ctx.env).sort()) {
+    if (!name.startsWith(PROVIDER_ENV_PREFIX) || ctx.env[name] === undefined) continue;
     const base = name.endsWith('_FILE') ? name.slice(0, -'_FILE'.length) : name;
     if (seen.has(base)) continue;
     seen.add(base);
-    const rest = base.slice(PROVIDER_ENV_PREFIX.length);
-    const field = fieldsLongestFirst.find((f) => rest.endsWith(`_${f.toUpperCase()}`));
-    const idPart = field ? rest.slice(0, -(field.length + 1)) : '';
-    if (!field || idPart.length === 0) {
-      issues.add(
+    const parsed = parseProviderEnvName(base);
+    if (!parsed) {
+      ctx.issues.add(
         `providers`,
         `${name} does not end with a known provider app field (${PROVIDER_APP_FIELDS.join(', ')})`,
         [name],
       );
       continue;
     }
-    const providerId = idPart.toLowerCase().replace(/_/g, '-');
-    const path = `providers.${providerId}.${field}`;
-    const value = SECRET_PROVIDER_FIELDS.has(field)
-      ? readEnvSecret(base, path, env, readFile, issues)
-      : env[base];
+    const path = `providers.${parsed.providerId}.${parsed.field}`;
+    const value = SECRET_PROVIDER_FIELDS.has(parsed.field)
+      ? readEnvSecret(ctx, base, path)
+      : ctx.env[base];
     if (value !== undefined) setPath(tree, path, value);
   }
+}
+
+const FIELDS_LONGEST_FIRST = [...PROVIDER_APP_FIELDS].sort((a, b) => b.length - a.length);
+
+/**
+ * `VAUBAAN_PROVIDER_CLOUDFLARE_DNS_CLIENT_SECRET` → `{ providerId: 'cloudflare-dns',
+ * field: 'client_secret' }`; `null` when the name (without `_FILE`) does not end
+ * with a known field or has no id part. Pure, so the hyphen and suffix rules can
+ * be tested on their own.
+ */
+export function parseProviderEnvName(
+  name: string,
+): { providerId: string; field: ProviderAppField } | null {
+  if (!name.startsWith(PROVIDER_ENV_PREFIX)) return null;
+  const rest = name.slice(PROVIDER_ENV_PREFIX.length);
+  const field = FIELDS_LONGEST_FIRST.find((f) => rest.endsWith(`_${f.toUpperCase()}`));
+  if (!field) return null;
+  const idPart = rest.slice(0, -(field.length + 1));
+  if (idPart.length === 0) return null;
+  return { providerId: idPart.toLowerCase().replace(/_/g, '-'), field };
 }
 
 /* ------------------------------------------------------------------------ */
@@ -213,18 +229,21 @@ export function readFileSource(
 ): FileSourceResult | null {
   const path = env[CONFIG_FILE_ENV];
   if (path === undefined || path.trim() === '') return null;
+  const ctx: SourceContext = { env, readFile, issues };
   let text: string;
   try {
     text = readFile(path);
   } catch (err) {
-    issues.add(CONFIG_FILE_ENV, `cannot read "${path}": ${describe(err)}`, [CONFIG_FILE_ENV]);
+    issues.add(CONFIG_FILE_ENV, `cannot read "${path}": ${errorMessage(err)}`, [CONFIG_FILE_ENV]);
     return { tree: {}, path };
   }
   let parsed: unknown;
   try {
     parsed = parseYaml(text) as unknown;
   } catch (err) {
-    issues.add(CONFIG_FILE_ENV, `"${path}" is not valid YAML: ${describe(err)}`, [CONFIG_FILE_ENV]);
+    issues.add(CONFIG_FILE_ENV, `"${path}" is not valid YAML: ${errorMessage(err)}`, [
+      CONFIG_FILE_ENV,
+    ]);
     return { tree: {}, path };
   }
   if (parsed === null || parsed === undefined) return { tree: {}, path };
@@ -234,36 +253,24 @@ export function readFileSource(
     ]);
     return { tree: {}, path };
   }
-  return { tree: resolveTree(parsed, '', env, readFile, issues), path };
+  return { tree: resolveTree(ctx, parsed, ''), path };
 }
 
-function resolveTree(
-  node: RawTree,
-  prefix: string,
-  env: EnvSource,
-  readFile: FileReader,
-  issues: IssueList,
-): RawTree {
+function resolveTree(ctx: SourceContext, node: RawTree, prefix: string): RawTree {
   const out: RawTree = {};
   for (const [key, value] of Object.entries(node)) {
     const path = prefix ? `${prefix}.${key}` : key;
-    out[key] = resolveValue(value, path, env, readFile, issues);
+    out[key] = resolveValue(ctx, value, path);
   }
   return out;
 }
 
-function resolveValue(
-  value: unknown,
-  path: string,
-  env: EnvSource,
-  readFile: FileReader,
-  issues: IssueList,
-): unknown {
-  if (typeof value === 'string') return resolveRefs(value, path, env, readFile, issues);
+function resolveValue(ctx: SourceContext, value: unknown, path: string): unknown {
+  if (typeof value === 'string') return resolveRefs(ctx, value, path);
   if (Array.isArray(value)) {
-    return value.map((item, i) => resolveValue(item, `${path}[${i}]`, env, readFile, issues));
+    return value.map((item, i) => resolveValue(ctx, item, `${path}[${i}]`));
   }
-  if (isPlainObject(value)) return resolveTree(value, path, env, readFile, issues);
+  if (isPlainObject(value)) return resolveTree(ctx, value, path);
   return value;
 }
 
@@ -323,8 +330,4 @@ function parseBool(raw: string): boolean | undefined {
   if (['true', '1', 'yes', 'on'].includes(v)) return true;
   if (['false', '0', 'no', 'off'].includes(v)) return false;
   return undefined;
-}
-
-function describe(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }

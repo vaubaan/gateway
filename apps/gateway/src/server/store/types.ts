@@ -1,25 +1,42 @@
 /**
  * Store-level record types — the shapes the repositories read and write.
  *
- * Spec: docs/spec/vaubaan-gateway.md §2.1–2.3. These are persistence records, not the
- * gateway's domain model: `@vaubaan/shared` (reshaped by P0.2 in parallel) owns the
- * domain types, and the store depends on it only for `RiskId`.
+ * Spec: docs/spec/vaubaan-gateway.md §2.1–2.3. These are persistence records (camelCase,
+ * one per table), not the gateway's domain model: `@vaubaan/shared` owns the domain
+ * vocabulary and every closed set below (statuses, gate, principal, request kind and
+ * status, timestamps) is the shared type, re-exported under the store's names. The
+ * record shapes themselves are mapped to the shared snake_case records by the domain
+ * layer (P1), not here.
  */
 
-import type { RiskId } from '@vaubaan/shared';
+import type {
+  ConnectionStatus,
+  Gate,
+  GroupSource,
+  Iso8601,
+  MissionStatus,
+  Principal,
+  RequestKind,
+  RequestStatus,
+  RiskId,
+  ShareStatus,
+} from '@vaubaan/shared';
 
-export type { RiskId };
+export type {
+  ConnectionStatus,
+  Gate,
+  GroupSource,
+  MissionStatus,
+  Principal,
+  RequestKind,
+  RiskId,
+  ShareStatus,
+};
 
 /** ISO-8601 UTC timestamp, e.g. `2026-10-13T09:00:00.000Z`. Lexicographically sortable. */
-export type Iso = string;
+export type Iso = Iso8601;
 
-export type PrincipalKind = 'user' | 'group';
-
-/** A user or a group, when a rule applies to both alike (owner, share target). */
-export interface Principal {
-  readonly kind: PrincipalKind;
-  readonly id: string;
-}
+export type PrincipalKind = Principal['kind'];
 
 // --- identities ---------------------------------------------------------------------
 
@@ -36,8 +53,6 @@ export interface UserRecord {
   readonly removedAt: Iso | null;
 }
 
-export type GroupSource = 'idp' | 'local';
-
 export interface GroupRecord {
   readonly id: string;
   readonly name: string;
@@ -46,8 +61,6 @@ export interface GroupRecord {
 }
 
 // --- connections, resources, shares -------------------------------------------------
-
-export type ConnectionStatus = 'active' | 'expired' | 'revoked' | 'unowned';
 
 export interface ConnectionRecord {
   readonly id: string;
@@ -80,8 +93,6 @@ export interface DiscoveredResource {
   readonly env?: string | null;
 }
 
-export type ShareStatus = 'active' | 'revoked';
-
 export interface ShareRecord {
   readonly id: string;
   readonly connectionId: string;
@@ -96,11 +107,8 @@ export interface ShareRecord {
 
 // --- missions -----------------------------------------------------------------------
 
-/** `exhausted` is per risk and derived from counters; it is never a stored status. */
-export type MissionStatus = 'active' | 'expired' | 'orphaned' | 'revoked';
-
-export type Gate = 'auto' | 'approval';
-
+/** `exhausted` is per risk and derived from counters; it is never a stored status. The
+ *  status set and `Gate` are `@vaubaan/shared`'s. */
 export interface MissionPolicyEntry {
   readonly riskId: RiskId;
   /** Actions per period. Always a number: no infinite budget (spec §3.2). */
@@ -138,6 +146,8 @@ export interface MissionRecord {
   readonly policy: readonly MissionPolicyEntry[];
 }
 
+/** The store distinguishes a token retired by rotation from a revoked one; the shared
+ *  domain (`MissionTokenStatus` there) only knows `active | revoked`. */
 export type MissionTokenStatus = 'active' | 'rotated' | 'revoked';
 
 export interface MissionTokenRecord {
@@ -185,8 +195,8 @@ export interface NewEvent {
 
 // --- requests and approvals ---------------------------------------------------------
 
-export type RequestKind = 'claim' | 'approval';
-export type RequestState = 'open' | 'granted' | 'refused' | 'expired';
+/** Column name `state`; the shared domain calls the same set `RequestStatus`. */
+export type RequestState = RequestStatus;
 
 export interface RequestRecord {
   readonly id: string;

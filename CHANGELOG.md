@@ -143,6 +143,29 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   configuration error (exit 78) once plugins are registered. `NullStore`
   and `EmptyPluginRegistry` are gone; tests use the `:memory:` store.
 
+- **P0 cycle-end pass (drift, clean code, consistency).** Doc drift fixed
+  across the v5 handbooks, test plans, workflow and deploy README (all in
+  English, `last_synced: 2026-10-13`). Code: the slice glob `*` expands over
+  the parser's identifier class (`release-*` matches `release-1.2`; it
+  failed open to the fallback risk) and glob × glob intersection is exact
+  for single-star globs; an `unowned` connection keeps serving its missions
+  (only `expired`/`revoked` are `connection-unavailable`); a
+  `risk-not-accepted` audit entry records `risks_touched`;
+  `isAcceptableInEnv` is the single `acceptable_in_envs` rule across the
+  engine, the SDK and the store; one `CacheClient` (gateway-core's) instead
+  of two with different TTL units; migration `0002` makes the `audit_risks`
+  delete guard compare with the purge cutoff and the runner refuses a
+  database newer than the image; the store imports the shared closed sets
+  instead of twins and its check-then-act writes are atomic; config errors
+  never echo a `VAUBAAN_MASTER_KEY_PREVIOUS` entry and refuse unsupported
+  `${...}` syntax; `next.config.ts` derives `transpilePackages` from the
+  workspace dependencies and drops the build-time `ALLOWED_ORIGINS`;
+  `.dockerignore` excludes nested `.env*` files, the smoke test asserts exit
+  78, reads the logs once (no `pipefail` false pass) and checks no env file
+  shipped; the compose quick start works as documented (example YAML reads
+  `${VAUBAAN_MASTER_KEY}`); `deploy/config/gateway.yaml` is gitignored; the
+  legacy Playwright specs read their credentials from the environment.
+
 ### Removed
 
 - From `@vaubaan/gateway-core`: `RedisCacheClient` (Upstash),

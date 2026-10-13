@@ -1,5 +1,5 @@
 ---
-title: Store — embedded SQLite, schema v1, repositories
+title: Store — embedded SQLite, schema and migrations, repositories
 status: current
 date: 2026-10-13
 last_synced: 2026-10-13
@@ -12,7 +12,7 @@ tracks:
   - apps/gateway/src/server/compose/registry.ts
 ---
 
-# Store — embedded SQLite, schema v1, repositories
+# Store — embedded SQLite, schema and migrations, repositories
 
 The store is the gateway's only persistence: one SQLite file on the mounted volume,
 opened by the process, migrated at boot, accessed through repository interfaces.
@@ -25,6 +25,7 @@ requests, approvals), §6 (encryption at rest, immutable audit), §8 (audit). De
 ```
 apps/gateway/migrations/
   0001_schema.sql                 schema v1 (27 tables + schema_migrations from the runner, 4 triggers)
+  0002_audit_risks_purge_guard.sql audit_risks delete guard compares with the purge cutoff (schema version 2)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           better-sqlite3 handle, pragmas, withImmediateTransaction, backupTo
@@ -80,15 +81,18 @@ mission. `SetCatalogIndex` remains for tests. `root.store` is this object;
 `openStore()`:
 
 1. opens the file (created if absent; the directory must exist, a missing one
-   fails the boot naming `store.path`) with `busy_timeout` 5 s and refuses SQLite older
-   than 3.37 (no `STRICT`);
+   fails the boot naming `store.path`) with `busy_timeout` 5 s
+   (`DEFAULT_BUSY_TIMEOUT_MS`) and refuses SQLite older than 3.37 (no `STRICT`;
+   `isSqliteVersionAtLeast`);
 2. sets `journal_mode = WAL` (file databases), `synchronous = NORMAL`,
    `foreign_keys = ON`, `temp_store = MEMORY`;
 3. creates `schema_migrations` if needed, then applies every
    `migrations/NNNN_name.sql` not yet recorded, each in one `BEGIN IMMEDIATE`
    transaction, recording name and SHA-256 checksum. An applied file whose checksum
    changed aborts the boot (`MigrationError`): applied migrations are immutable, fixes
-   are new files;
+   are new files. A database that records a migration the image does not ship (an
+   older image on a newer volume) aborts the boot too, naming it (downgrade
+   protection). A refused boot closes the handle before rethrowing;
 4. builds the repositories over one `RepoContext`.
 
 `openMemoryStore()` does the same on `:memory:` — this is what every test uses
@@ -97,6 +101,19 @@ five-id catalog).
 
 ## Conventions every repository follows
 
+- **Closed sets** (`ConnectionStatus`, `ShareStatus`, `MissionStatus`, `Gate`, `Principal`,
+  `RequestKind`, `RequestState` = `RequestStatus`, `Iso` = `Iso8601`) are
+  `@vaubaan/shared`'s types re-exported by `types.ts`; the store defines none of its own
+  except `MissionTokenStatus` (it keeps `rotated` apart from `revoked`). Record shapes
+  stay camelCase persistence records; the domain layer (P1) maps them.
+- **Helpers** in `repositories/context.ts`: `requireRow` (a row just written must exist),
+  `requireColumn` (a NOT NULL column of the row kind), `parseEnum` (a column against the
+  set that defines its type), `parseJson` returns `unknown` and `parseJsonObject` checks
+  the shape; `openSealedColumn` (`encryptor.ts`) is the one null rule for encrypted
+  column pairs. Prepared statements that share a name with a repository method carry the
+  `Stmt` suffix. Check-then-act writes (`requests.decide`, `shares.revoke`) are one
+  conditional `UPDATE` whose `changes` decides, and `transferOwner` / `replacePolicy` /
+  `issueToken` run inside the transaction, so they stay atomic on an asynchronous driver.
 - **Ids** are UUIDv7 text generated in the application (`newId()`); **timestamps** are
   ISO-8601 UTC text produced by the injected `Clock`. SQL never calls
   `CURRENT_TIMESTAMP`.
@@ -123,7 +140,10 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema v1 (`0001_schema.sql`)
+## Schema (`0001_schema.sql`, `0002_audit_risks_purge_guard.sql`)
+
+Schema version 2. `0001` creates every table and trigger; `0002` only replaces the
+`audit_risks` delete trigger (see Audit).
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                              |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -159,10 +179,11 @@ Reads: `getById(id)` and `list(filter)` with `AuditFilter { missionId?, kind?,
 since?, until?, limit? }` (default limit 1000, ordered by `ts, id`).
 
 Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks` aborts;
-a `DELETE` on `audit` aborts unless `audit_purge_guard` holds a cutoff newer than the
-row; `audit_risks` rows go only while that window is open, and the repository scopes
-the delete to the purged entries. `store.audit.purgeOlderThan(cutoff)` is the only
-path that opens the window, inside its own transaction;
+a `DELETE` on `audit` or on `audit_risks` aborts unless `audit_purge_guard` holds a
+cutoff newer than the entry (migration `0002` made the `audit_risks` trigger look up
+its parent entry's `ts`; in `0001` any risk row could go while a window was open).
+`store.audit.purgeOlderThan(cutoff)` is the only path that opens the window, inside
+its own transaction;
 `purgeByRetention(days = DEFAULT_AUDIT_RETENTION_DAYS)` (90, exported) computes the
 cutoff from the clock.
 `countAllowedTouches(mission, risk, since, until)` serves the structural check
@@ -211,18 +232,23 @@ capture both files atomically are also fine.
   uniqueness.
 - `tests/unit/server/store/migrate.test.ts` — file naming, ordering, duplicate
   versions, idempotent re-run, incremental apply, checksum immutability, rollback of a
-  failing file, shipped `0001_schema`.
+  failing file, downgrade refused (a recorded migration with no file), the two shipped
+  files.
+- `tests/unit/server/store/db.test.ts` — `isSqliteVersionAtLeast`.
 - `tests/integration/store/schema.test.ts` — all 28 tables, every table `STRICT`,
-  the composition `Store` port (`kind`, `ping`, `close`), boot against an empty file
+  the composition `StoreLiveness` port (`kind`, `ping`, `close`), boot against an empty file
   (WAL, foreign keys, `NORMAL`), reopen without re-migrating, two writers on one file
   serialize (`SQLITE_BUSY` then success), `VACUUM INTO` backup.
 - `tests/integration/store/audit.test.ts` — gateway-core call and admin entries
-  round-trip, `UPDATE`/`DELETE` abort, purge path and its boundaries, retention
-  default, filters, allowed-touch count, schema `CHECK`s, writer contract.
+  round-trip, `UPDATE`/`DELETE` abort (entries and, since `0002`, their risk rows
+  inside an open window), purge path and its boundaries, retention default, filters,
+  allowed-touch count, schema `CHECK`s, writer contract.
 - `tests/integration/store/{identities,connections-shares,missions,sessions,requests-approvals,delegations,config}.test.ts`
   — one suite per repository on `:memory:`, including the catalog check and the
   schema-level wildcard `CHECK`, the N=50 concurrent `decideAndDecrement` on quota 1
-  (exactly one allow), in-transaction approval consumption and request drop, the
+  (exactly one allow), two connections on one file (`SQLITE_BUSY` while the other
+  transaction is open, then success), an unknown mission as `NotFoundError`,
+  in-transaction approval consumption and request drop, the
   counters-vs-audit structural check, argument erasure on decision and expiry.
 - `tests/integration/compose/boot.test.ts` (handbook [configuration](configuration.md)) — the
   composition root opening this store on a temporary file with the real encryptor
