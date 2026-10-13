@@ -224,6 +224,19 @@ describe('refusal fields', () => {
     expect(r.hint).toContain(r.reason);
   });
 
+  test('mission-inactive: an orphaned mission is told how long an earlier request stays grantable', () => {
+    const orphaned = refuse.missionInactive({ status: 'orphaned', reason: 'authority lost' });
+    expect(orphaned.hint).toContain(
+      'A request opened before the mission was orphaned can be granted only until it expires; after that, your next refused call opens a new one.',
+    );
+    // Only the reversible status carries that promise.
+    for (const status of ['expired', 'revoked'] as const) {
+      expect(refuse.missionInactive({ status, reason: 'x' }).hint).not.toContain(
+        'until it expires',
+      );
+    }
+  });
+
   test('wrong-credential-kind: door, presented, expected', () => {
     const r = SAMPLES['wrong-credential-kind']();
     if (r.code !== 'wrong-credential-kind') throw new Error('wrong code');

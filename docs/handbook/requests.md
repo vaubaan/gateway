@@ -242,7 +242,18 @@ request on an orphaned mission reads as if the creator had not answered while
 they could only refuse. Saying otherwise needs a field on
 `RequestClosedEventDetails` (`@vaubaan/shared`) that the sweep would set from
 the verdict `MissionGrounds` derives for each expiring request; the sweep's
-SQL would still not filter on a status.
+SQL would still not filter on a status. It is not a change of the request
+service alone: the event is written by `RequestsRepo.sweepExpired()` inside
+its own synchronous transaction, which also selects the overdue requests, so
+the verdicts would have to be derived before that transaction, for requests
+it has not selected yet, and passed into the repository.
+
+The executor is told the same thing as the creator. The `mission-inactive`
+refusal of an orphaned mission (`INACTIVE_MISSION_NEXT_STEP.orphaned`,
+`@vaubaan/gateway-core`), the bootstrap kit (`REFUSAL_GUIDANCE`) and
+`/agent-bootstrap.md` end on: "A request opened before the mission was
+orphaned can be granted only until it expires; after that, your next refused
+call opens a new one."
 
 No resolution edits `mission_policy`: the next period starts from the
 mission's quota. The period is the one current **when the creator decides**

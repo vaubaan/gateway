@@ -105,7 +105,7 @@ export const REFUSAL_GUIDANCE: Readonly<Record<RefusalCode, string>> = {
   'connection-unavailable':
     'the provider connection is expired or revoked. Nothing you can do fixes it: tell the human who owns the connection (`owner`).',
   'mission-inactive':
-    'the mission is expired, orphaned or revoked. Stop calling with this token and report to the human: a revoked mission needs a new one, an expired one an extension, and an orphaned one works again with this same token once the authority behind it is back.',
+    'the mission is expired, orphaned or revoked. Stop calling with this token and report to the human: a revoked mission needs a new one, an expired one an extension, and an orphaned one works again with this same token once the authority behind it is back. A request opened before the mission was orphaned can be granted only until it expires; after that, your next refused call opens a new one.',
   'wrong-credential-kind':
     'this token was presented on the wrong door. A mission token only opens the execution endpoint above; do not send it anywhere else.',
 };

@@ -113,6 +113,9 @@ describe('buildBootstrapKit', () => {
     }
     expect(REFUSAL_GUIDANCE['budget-exhausted']).toContain('hand `claim_url` to the human');
     expect(REFUSAL_GUIDANCE['approval-required']).toContain('Hand `approval_url` to the human');
+    expect(REFUSAL_GUIDANCE['mission-inactive']).toContain(
+      'A request opened before the mission was orphaned can be granted only until it expires; after that, your next refused call opens a new one.',
+    );
     expect(kit.agent_instructions).toContain('Never work around a refusal');
     expect(kit.agent_instructions).toContain('give that URL to the human as is');
   });

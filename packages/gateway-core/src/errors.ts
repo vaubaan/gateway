@@ -160,7 +160,7 @@ const HAND_TO_HUMAN =
 const INACTIVE_MISSION_NEXT_STEP: Readonly<Record<Exclude<MissionStatus, 'active'>, string>> = {
   expired: 'Only the mission creator can extend it.',
   orphaned:
-    'The authority behind it is missing. It serves calls again, with this same token, if that authority comes back (a share made again, the creator back in their group); a revoked connection never comes back. Report to the human rather than retrying in a loop.',
+    'The authority behind it is missing. It serves calls again, with this same token, if that authority comes back (a share made again, the creator back in their group); a revoked connection never comes back. A request opened before the mission was orphaned can be granted only until it expires; after that, your next refused call opens a new one. Report to the human rather than retrying in a loop.',
   revoked: 'A new mission must be issued.',
 };
 
