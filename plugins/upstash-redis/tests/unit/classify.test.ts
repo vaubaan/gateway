@@ -166,14 +166,25 @@ describe('classifyUpstashRedis — data writes', () => {
     ).toEqual(['upstash-redis.database[db-abc-123].key-space[myset].W']);
   });
 
-  test('expire -> database[db-abc-123].key-space[mykey].W', () => {
+  test('expire -> database[db-abc-123].key-space[mykey].delete.W : a time to live removes the key', () => {
     expect(
       classify('upstash_redis__expire', {
         databaseId: 'db-abc-123',
         key: 'mykey',
         seconds: 60,
       }),
-    ).toEqual(['upstash-redis.database[db-abc-123].key-space[mykey].W']);
+    ).toEqual(['upstash-redis.database[db-abc-123].key-space[mykey].delete.W']);
+  });
+
+  test('set with a TTL -> database[db-abc-123].key-space[mykey].delete.W', () => {
+    expect(
+      classify('upstash_redis__set', {
+        databaseId: 'db-abc-123',
+        key: 'mykey',
+        value: 'v',
+        ex: 60,
+      }),
+    ).toEqual(['upstash-redis.database[db-abc-123].key-space[mykey].delete.W']);
   });
 
   test('del -> database[db-abc-123].key-space[k1].delete.W', () => {

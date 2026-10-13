@@ -66,16 +66,25 @@ describe('the command table — every command sits in exactly one class', () => 
   });
 
   test('every listed verb is upper-case and resolves to its own class when it stands alone', () => {
-    // A bare verb carries no argument, so the three argument-sensitive
-    // writes resolve to the more severe class (see the next suite).
-    const bareIsMoreSevere = new Set(['EXPIRE', 'PEXPIRE', 'HEXPIRE', 'HPEXPIRE']);
     for (const [cls, verbs] of classes) {
       for (const verb of verbs) {
         expect(verb).toBe(verb.toUpperCase());
-        const expected = bareIsMoreSevere.has(verb) ? 'delete' : cls;
-        expect(redisCommandClass([verb]), verb).toBe(expected);
-        expect(redisCommandClass([verb.toLowerCase()]), verb.toLowerCase()).toBe(expected);
+        expect(redisCommandClass([verb]), verb).toBe(cls);
+        expect(redisCommandClass([verb.toLowerCase()]), verb.toLowerCase()).toBe(cls);
       }
+    }
+  });
+
+  test('no command that gives a key a time to live, or moves data out of a key, is a plain write', () => {
+    // Orchestrator's decision of 2026-10-13 (finding B-M1): a one-second TTL and a
+    // RENAME are deletions in all but name.
+    const expiries = ['EXPIRE', 'PEXPIRE', 'HEXPIRE', 'HPEXPIRE', 'SETEX', 'PSETEX', 'GETEX'];
+    const absolute = ['EXPIREAT', 'PEXPIREAT', 'HEXPIREAT', 'HPEXPIREAT'];
+    const moves = ['RENAME', 'RENAMENX', 'LMOVE', 'RPOPLPUSH', 'BLMOVE', 'BRPOPLPUSH', 'SMOVE'];
+    for (const verb of [...expiries, ...absolute, ...moves]) {
+      expect(KNOWN_DELETES.has(verb), verb).toBe(true);
+      expect(KNOWN_WRITES.has(verb), verb).toBe(false);
+      expect(redisCommandClass([verb, 'a', 'b', '60']), verb).toBe('delete');
     }
   });
 
@@ -176,22 +185,40 @@ describe('execute — one command', () => {
     ['PING', ['PING'], [READ]],
     // writes
     ['SET', ['SET', 'k', 'v'], [WRITE]],
-    ['SET with a relative TTL', ['SET', 'k', 'v', 'EX', '60'], [WRITE]],
+    ['SET that keeps the TTL it has', ['SET', 'k', 'v', 'KEEPTTL'], [WRITE]],
+    ['SET with conditions only', ['SET', 'k', 'v', 'NX', 'GET'], [WRITE]],
     ['SET of a value that reads like an option', ['SET', 'k', 'EXAT'], [WRITE]],
-    ['EXPIRE with a positive TTL', ['EXPIRE', 'k', '60'], [WRITE]],
-    ['EXPIRE with a numeric positive TTL', ['EXPIRE', 'k', 60], [WRITE]],
-    ['PEXPIRE with a positive TTL', ['pexpire', 'k', '1500', 'NX'], [WRITE]],
-    ['HEXPIRE with a positive TTL', ['HEXPIRE', 'h', '60', 'FIELDS', '1', 'f'], [WRITE]],
+    ['SET of a value that reads like a TTL option', ['SET', 'k', 'EX'], [WRITE]],
+    ['PERSIST removes a TTL, nothing else', ['PERSIST', 'k'], [WRITE]],
+    ['COPY leaves its source', ['COPY', 'a', 'b', 'REPLACE'], [WRITE]],
     ['XADD without trimming', ['XADD', 's', '*', 'f', 'v'], [WRITE]],
     ['SORT without STORE', ['SORT', 'l'], [WRITE]],
     ['GEORADIUS without STORE', ['GEORADIUS', 'g', '0', '0', '1', 'km'], [WRITE]],
-    ['RENAME', ['RENAME', 'a', 'b'], [WRITE]],
     // deletes — the same command as the dedicated `del` tool
     ['DEL', ['DEL', 'k'], [DELETE]],
     ['DEL of several keys', ['DEL', 'a', 'b', 'c'], [DELETE]],
     ['del, lower case', ['del', 'k'], [DELETE]],
     ['UNLINK', ['UNLINK', 'k'], [DELETE]],
     ['GETDEL', ['GETDEL', 'k'], [DELETE]],
+    // a time to live removes the key when it elapses : one second is a deletion
+    ['SET with a relative TTL', ['SET', 'k', 'v', 'EX', '60'], [DELETE]],
+    ['SET with a one-second TTL', ['SET', 'k', 'v', 'EX', '1'], [DELETE]],
+    ['SET with a TTL in milliseconds, lower case', ['set', 'k', 'v', 'px', '1'], [DELETE]],
+    ['SET with a TTL after other options', ['SET', 'k', 'v', 'NX', 'EX', '60'], [DELETE]],
+    ['SETEX', ['SETEX', 'k', '1', 'v'], [DELETE]],
+    ['PSETEX', ['PSETEX', 'k', '1', 'v'], [DELETE]],
+    ['EXPIRE with a positive TTL', ['EXPIRE', 'k', '60'], [DELETE]],
+    ['EXPIRE with a one-second TTL', ['EXPIRE', 'k', '1'], [DELETE]],
+    ['EXPIRE with a numeric positive TTL', ['EXPIRE', 'k', 60], [DELETE]],
+    ['PEXPIRE with a positive TTL', ['pexpire', 'k', '1500', 'NX'], [DELETE]],
+    ['HEXPIRE with a positive TTL', ['HEXPIRE', 'h', '60', 'FIELDS', '1', 'f'], [DELETE]],
+    // a move takes the key, or the element, out of its source
+    ['RENAME', ['RENAME', 'a', 'b'], [DELETE]],
+    ['RENAMENX', ['renamenx', 'a', 'b'], [DELETE]],
+    ['LMOVE', ['LMOVE', 'a', 'b', 'LEFT', 'RIGHT'], [DELETE]],
+    ['RPOPLPUSH', ['RPOPLPUSH', 'a', 'b'], [DELETE]],
+    ['BLMOVE', ['BLMOVE', 'a', 'b', 'LEFT', 'RIGHT', '0'], [DELETE]],
+    ['SMOVE', ['SMOVE', 'a', 'b', 'm'], [DELETE]],
     ['EXPIRE to zero', ['EXPIRE', 'k', '0'], [DELETE]],
     ['EXPIRE to zero, numeric', ['EXPIRE', 'k', 0], [DELETE]],
     ['EXPIRE negative', ['EXPIRE', 'k', '-1'], [DELETE]],
@@ -323,12 +350,25 @@ describe('the dedicated tools cost what the same command costs through execute',
     );
   });
 
-  test('expire with a positive TTL is a write, on the key', () => {
-    expect(slicesOf('upstash_redis__expire', { key: 'k', seconds: 60 })).toEqual([`${KS}[k].W`]);
+  test('set without a time to live is a write ; with one, the delete marker, like SET … EX through execute', () => {
+    expect(slicesOf('upstash_redis__set', { key: 'k', value: 'v' })).toEqual([`${KS}[k].W`]);
+    expect(slicesOf('upstash_redis__set', { key: 'k', value: 'v', nx: true })).toEqual([
+      `${KS}[k].W`,
+    ]);
+    // Whatever the value: the executor appends EX / PX whenever the argument is present.
+    for (const ttl of [60, 1, 0, -1, '60', null, 'soon', Number.NaN]) {
+      for (const option of ['ex', 'px']) {
+        expect(
+          slicesOf('upstash_redis__set', { key: 'k', value: 'v', [option]: ttl }),
+          `${option}=${String(ttl)}`,
+        ).toEqual([`${KS}[k].delete.W`]);
+      }
+    }
+    expect(execute(['SET', 'k', 'v', 'EX', '60'])).toEqual([`${KS}[*].delete.W`]);
   });
 
-  test('expire to zero, negative, missing or unreadable deletes the key : the delete marker', () => {
-    for (const seconds of [0, -1, '0', '-5', undefined, null, 1.5, 'soon', Number.NaN]) {
+  test('expire is the delete marker whatever the TTL : positive, zero, negative, missing or unreadable', () => {
+    for (const seconds of [60, 1, 0, -1, '0', '-5', undefined, null, 1.5, 'soon', Number.NaN]) {
       expect(slicesOf('upstash_redis__expire', { key: 'k', seconds }), String(seconds)).toEqual([
         `${KS}[k].delete.W`,
       ]);

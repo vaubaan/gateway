@@ -7,7 +7,7 @@ only.
 
 - Contract: ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md),
   handbook [`plugin-sdk`](../../docs/handbook/plugin-sdk.md).
-- Plugin version 2.0.1, catalog version 4.
+- Plugin version 3.0.0, catalog version 5.
 - Modelling: handbook [`providers/upstash-redis`](../../docs/handbook/providers/upstash-redis.md)
   (data model, tool → slice mapping, catalog, edge cases).
 
@@ -16,7 +16,7 @@ only.
 | File                    | Role                                                                                                                                                       |
 | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                                                               |
-| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 4`. Loaded at boot by the SDK; the only catalog artefact.                                            |
+| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 5`. Loaded at boot by the SDK; the only catalog artefact.                                            |
 | `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                                                       |
 | `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                                                              |
 | `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; the command table of `execute`.                             |
@@ -32,7 +32,7 @@ pattern into an asset URL that Node's `fileURLToPath` rejects (ADR
 ## Data model
 
 ```
-account ─ database[<id>] ─┬─ key-space[<key>] ─┬─ delete     (DEL, UNLINK, HDEL, LPOP, EXPIRE 0… marker)
+account ─ database[<id>] ─┬─ key-space[<key>] ─┬─ delete     (DEL, UNLINK, HDEL, LPOP, EXPIRE, RENAME… marker)
                           │                    ├─ flush      (FLUSHDB / FLUSHALL marker)
                           │                    └─ execute    (script, administration, unknown command marker)
                           ├─ credentials                     (rename, tokens, passwords)
@@ -56,19 +56,20 @@ Redis command belongs to exactly one class of the table in `src/classify.ts`
 `KNOWN_ARBITRARY`, `KNOWN_ADMIN`), and the same command costs the same risk
 through a dedicated tool and through `execute`.
 
-| Command                                                           | Risks needed (in the database's environment) |
-| ----------------------------------------------------------------- | -------------------------------------------- |
-| read (`GET`, `SCAN`, `HGETALL`…)                                  | `read-data`                                  |
-| write (`SET`, `INCR`, `HSET`, `EXPIRE k 60`…)                     | `write-data`                                 |
-| delete (`DEL`, `UNLINK`, `GETDEL`, `HDEL`, `LPOP`, `EXPIRE k 0`…) | `write-data` + `delete-data`                 |
-| `FLUSHDB` / `FLUSHALL`                                            | `write-data` + `flush-database`              |
-| script, administration, unknown or unreadable command             | `write-data` + `execute-arbitrary`           |
-| a pipeline or MULTI / EXEC body                                   | the union over its commands                  |
+| Command                                                                                           | Risks needed (in the database's environment) |
+| ------------------------------------------------------------------------------------------------- | -------------------------------------------- |
+| read (`GET`, `SCAN`, `HGETALL`…)                                                                  | `read-data`                                  |
+| write a value that stays (`SET`, `INCR`, `HSET`, `LPUSH`…)                                        | `write-data`                                 |
+| delete, now or later (`DEL`, `UNLINK`, `HDEL`, `LPOP`, `EXPIRE k 60`, `SET k v EX 60`, `RENAME`…) | `write-data` + `delete-data`                 |
+| `FLUSHDB` / `FLUSHALL`                                                                            | `write-data` + `flush-database`              |
+| script, administration, unknown or unreadable command                                             | `write-data` + `execute-arbitrary`           |
+| a pipeline or MULTI / EXEC body                                                                   | the union over its commands                  |
 
 `write-data` alone cannot run a deletion command, a FLUSH or an arbitrary
-command. It can still make a key go away without them: a positive TTL
-(`EXPIRE`, `SET … EX`) removes the key when it elapses, and `RENAME`,
-`LMOVE` or `SMOVE` take a key or an element out of its source.
+command — nor make a key go away another way: any time to live (`EXPIRE`,
+`SETEX`, `SET … EX`) and the moves (`RENAME`, `LMOVE`, `SMOVE`) are
+deletions, and need `delete-data` too. A cache write with a TTL therefore
+needs both risks.
 
 A command the classifier cannot read is never cheaper than the catch-all.
 The executor sends exactly what was classified (`redisCommandOf`) and

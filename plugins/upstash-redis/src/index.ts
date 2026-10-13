@@ -59,7 +59,7 @@ export const upstashRedisCatalog = loadCatalogFile(UPSTASH_REDIS_CATALOG_PATH);
 export const upstashRedisPlugin = definePlugin({
   id: 'upstash-redis',
   displayName: 'Upstash Redis',
-  version: '2.0.1',
+  version: '3.0.0',
   description:
     'Serverless Redis plane — databases through the Management API, key-value data through each database REST endpoint.',
   summary:

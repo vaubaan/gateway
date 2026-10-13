@@ -33,6 +33,12 @@
  *     write, delete, flush, arbitrary execution, administration — and the
  *     same command costs the same risk whichever tool carries it (a DEL
  *     through `execute` carries the `delete` marker of the `del` tool) ;
+ *   - **whatever makes data go away is a deletion**, at once or later : a
+ *     key given a time to live (EXPIRE, SETEX, SET … EX) is removed when it
+ *     elapses, and a move (RENAME, LMOVE, SMOVE…) takes a key or an element
+ *     out of its source. All carry the `delete` marker, which the catalog
+ *     prices as `write-data` AND `delete-data` : a mission that accepted
+ *     writes alone cannot delete by setting a one-second TTL ;
  *   - a command the classifier cannot read (unknown verb, empty or
  *     non-string verb, an argument that is neither a string nor a finite
  *     number, a `command` that is not an array) is the `execute` marker,
@@ -207,13 +213,13 @@ export const KNOWN_READS: ReadonlySet<string> = new Set([
 /**
  * Commands that create, overwrite or modify a value and remove nothing. An
  * overwrite destroys the previous value : that is what `write-data` accepts.
- * Four of them turn into a deletion on some arguments — see `ESCALATIONS`.
+ * Some of them turn into a deletion on some arguments — see `ESCALATIONS`.
+ * No command here sets a time to live or moves data out of a key : those are
+ * deletions (`KNOWN_DELETES`).
  */
 export const KNOWN_WRITES: ReadonlySet<string> = new Set([
   // strings and keys
   'SET',
-  'SETEX',
-  'PSETEX',
   'SETNX',
   'MSET',
   'MSETNX',
@@ -225,11 +231,7 @@ export const KNOWN_WRITES: ReadonlySet<string> = new Set([
   'INCRBY',
   'DECRBY',
   'INCRBYFLOAT',
-  'EXPIRE',
-  'PEXPIRE',
   'PERSIST',
-  'RENAME',
-  'RENAMENX',
   'COPY',
   'TOUCH',
   // hashes
@@ -238,8 +240,6 @@ export const KNOWN_WRITES: ReadonlySet<string> = new Set([
   'HMSET',
   'HINCRBY',
   'HINCRBYFLOAT',
-  'HEXPIRE',
-  'HPEXPIRE',
   'HPERSIST',
   // lists
   'LPUSH',
@@ -248,13 +248,8 @@ export const KNOWN_WRITES: ReadonlySet<string> = new Set([
   'RPUSHX',
   'LSET',
   'LINSERT',
-  'LMOVE',
-  'RPOPLPUSH',
-  'BLMOVE',
-  'BRPOPLPUSH',
   // sets and sorted sets
   'SADD',
-  'SMOVE',
   'ZADD',
   'ZINCRBY',
   // bitmaps, HyperLogLog, geo
@@ -281,11 +276,15 @@ export const KNOWN_WRITES: ReadonlySet<string> = new Set([
 ]);
 
 /**
- * Commands that remove a key, a field, a member or an entry — the `delete`
- * marker of the dedicated `del` tool. Listed here as well :
- *   - the absolute expiries (`EXPIREAT`, `PEXPIREAT`, `HEXPIREAT`,
- *     `HPEXPIREAT`, `GETEX`) : an instant in the past deletes at once, and
- *     the classifier has no clock to tell ;
+ * Commands that remove a key, a field, a member or an entry, at once or
+ * later — the `delete` marker of the dedicated `del` tool. Listed here as well :
+ *   - **every expiry**, relative (`EXPIRE`, `PEXPIRE`, `HEXPIRE`, `HPEXPIRE`,
+ *     `SETEX`, `PSETEX`) or absolute (`EXPIREAT`, `PEXPIREAT`, `HEXPIREAT`,
+ *     `HPEXPIREAT`, `GETEX`) : the key or the field is gone when the time
+ *     elapses, and a time of one second is a deletion in all but name ;
+ *   - **the moves** (`RENAME`, `RENAMENX`, `LMOVE`, `RPOPLPUSH`, `BLMOVE`,
+ *     `BRPOPLPUSH`, `SMOVE`) : the source key, or the element taken from it,
+ *     is no longer where it was ;
  *   - the `*STORE` family and `BITOP` : an empty result deletes the
  *     destination key.
  */
@@ -295,14 +294,26 @@ export const KNOWN_DELETES: ReadonlySet<string> = new Set([
   'UNLINK',
   'GETDEL',
   'GETEX',
+  'EXPIRE',
+  'PEXPIRE',
   'EXPIREAT',
   'PEXPIREAT',
+  'SETEX',
+  'PSETEX',
+  'RENAME',
+  'RENAMENX',
   // hashes
   'HDEL',
   'HGETDEL',
+  'HEXPIRE',
+  'HPEXPIRE',
   'HEXPIREAT',
   'HPEXPIREAT',
   // lists
+  'LMOVE',
+  'RPOPLPUSH',
+  'BLMOVE',
+  'BRPOPLPUSH',
   'LPOP',
   'RPOP',
   'LREM',
@@ -312,6 +323,7 @@ export const KNOWN_DELETES: ReadonlySet<string> = new Set([
   'LMPOP',
   'BLMPOP',
   // sets
+  'SMOVE',
   'SREM',
   'SPOP',
   'SDIFFSTORE',
@@ -450,20 +462,14 @@ function buildCommandTable(
 /** A Redis command name : ASCII only, so upper-casing it cannot fold another script into a known verb. */
 const VERB = /^[A-Za-z][A-Za-z0-9._-]*$/;
 
-/** A strictly positive decimal integer, as Redis reads a relative TTL. */
-const POSITIVE_INTEGER = /^[1-9][0-9]*$/;
-
 function hasOption(args: readonly string[], from: number, options: ReadonlySet<string>): boolean {
   return args.slice(from).some((a) => options.has(a.toUpperCase()));
 }
 
-const ABSOLUTE_EXPIRY: ReadonlySet<string> = new Set(['EXAT', 'PXAT']);
+/** The options of `SET` that give the key a time to live, relative or absolute. */
+const EXPIRY_OPTIONS: ReadonlySet<string> = new Set(['EX', 'PX', 'EXAT', 'PXAT']);
 const STREAM_TRIM: ReadonlySet<string> = new Set(['MAXLEN', 'MINID']);
 const STORE: ReadonlySet<string> = new Set(['STORE', 'STOREDIST']);
-
-/** A relative TTL (third word) that is not a strictly positive integer removes the key or the fields. */
-const ttlRemoves = (command: readonly string[]): boolean =>
-  !POSITIVE_INTEGER.test(command[2] ?? '');
 
 /** `STORE` writes the result to a key, and deletes that key when the result is empty. */
 const storesResult = (command: readonly string[]): boolean => hasOption(command, 2, STORE);
@@ -474,12 +480,8 @@ const storesResult = (command: readonly string[]): boolean => hasOption(command,
  * towards yes — an option name found where a value may sit is a deletion.
  */
 const ESCALATIONS: Readonly<Record<string, (command: readonly string[]) => boolean>> = {
-  EXPIRE: ttlRemoves,
-  PEXPIRE: ttlRemoves,
-  HEXPIRE: ttlRemoves,
-  HPEXPIRE: ttlRemoves,
-  // SET key value [options] : an absolute expiry in the past deletes the key.
-  SET: (command) => hasOption(command, 3, ABSOLUTE_EXPIRY),
+  // SET key value [options] : any expiry removes the key when it elapses.
+  SET: (command) => hasOption(command, 3, EXPIRY_OPTIONS),
   // XADD key [MAXLEN | MINID …] : trimming evicts entries.
   XADD: (command) => hasOption(command, 2, STREAM_TRIM),
   SORT: storesResult,
@@ -583,8 +585,10 @@ const KEY_SPACE_READS = new Set([
   'upstash_redis__dbsize',
 ]);
 
+const SET_TOOL = 'upstash_redis__set';
+
 const DATA_WRITES = new Set([
-  'upstash_redis__set',
+  SET_TOOL,
   'upstash_redis__hset',
   'upstash_redis__lpush',
   'upstash_redis__sadd',
@@ -693,7 +697,10 @@ export function classifyUpstashRedis(
     return { slices: [keySpaceSlice('read', dbSeg, keySeg)] };
   }
   if (DATA_WRITES.has(tool)) {
-    return { slices: [keySpaceSlice('write', dbSeg, keyIdent(args.key))] };
+    // `set` with a time to live : the executor appends `EX` / `PX` whenever the
+    // argument is present, whatever its value, and so does this reading.
+    const expires = tool === SET_TOOL && (args.ex !== undefined || args.px !== undefined);
+    return { slices: [keySpaceSlice(expires ? 'delete' : 'write', dbSeg, keyIdent(args.key))] };
   }
 
   switch (tool) {
@@ -726,12 +733,9 @@ export function classifyUpstashRedis(
       return { slices: [keySpaceSlice('delete', dbSeg, keySeg)] };
     }
 
-    // ─── EXPIRE : a write, a deletion when the TTL is not positive ───
-    // The executor sends `String(args.seconds)` ; the same text is classified.
-    case 'upstash_redis__expire': {
-      const cls = redisCommandClass(['EXPIRE', 'key', String(args.seconds)]);
-      return { slices: [keySpaceSlice(cls, dbSeg, keyIdent(args.key))] };
-    }
+    // ─── EXPIRE : a deletion, now (a TTL of zero or less) or when it elapses ───
+    case 'upstash_redis__expire':
+      return { slices: [keySpaceSlice('delete', dbSeg, keyIdent(args.key))] };
 
     // ─── Execute — routed on the command table ───────────────────────
     case 'upstash_redis__execute': {

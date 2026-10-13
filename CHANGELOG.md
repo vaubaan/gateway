@@ -30,7 +30,7 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   declare, naming the argument; they used to forward it or drop it. An agent that
   pads its calls with fields of the provider's own API (`target` on
   `vercel__deploy_to_vercel`, `project_id` beside `projectId`) must stop. These plugins and GitHub are `3.0.0`; Stripe is `0.4.0`, Resend and Gmail
-  `0.3.0`, Upstash Redis `2.0.1`, SSH stays `2.0.0`.
+  `0.3.0`, Upstash Redis `2.0.1` (`3.0.0` since: see below), SSH stays `2.0.0`.
 - **Railway: refresh the resources of each connection once.** A `serviceId` is
   checked against the services recorded for the mission's project at discovery; a
   project discovered by an earlier build has none recorded, and a call that names
@@ -61,6 +61,14 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   granted more than 90 days ago stop at the first renewal after the upgrade.** The
   page shows the date for each. Operators set another duration with
   `oauth.delegation_max_lifetime` (`VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME`).
+- **Upstash Redis: a time to live and a move are deletions.** `EXPIRE` with any
+  TTL, `SETEX`, `SET … EX`/`PX` (and `upstash_redis__set` with `ex` or `px`),
+  `RENAME`, `LMOVE`, `SMOVE` and `RPOPLPUSH` now need `delete-data` next to
+  `write-data`: a one-second TTL removes a key as surely as `DEL`. **A mission that
+  holds `write-data` alone can no longer write a cache entry with a TTL**; add
+  `delete-data`, which the Developer and Operator presets already carry. With the
+  Operator preset, a TTL write on a prod database now waits for approval. The plugin
+  is `3.0.0`, its catalog `5`.
 - **Supabase: reading `auth`, `vault` or `storage` through SQL is a risk of its
   own.** `supabase__execute_sql` now needs `supabase[<env>].read-managed-schemas`
   on top of `supabase.read-data` when the query names a schema Supabase manages, and
