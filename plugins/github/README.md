@@ -82,17 +82,30 @@ Presets are UI sugar — the persisted policy is always the explicit list.
    tools need: Contents (read & write), Pull requests (read & write),
    Issues (read & write), Metadata (read), Actions (read), Administration
    (read & write, for branch protection), Workflows (read & write, for
-   pushes touching `.github/workflows/`). Generate a **private key**.
-   Set the setup/callback URL to the gateway's connection callback.
-2. **Configure the instance** with the three app-config keys the spec
+   pushes touching `.github/workflows/`). Generate a **private key** and
+   a **client secret**. Under "Identifying and authorizing users", tick
+   **Request user authorization (OAuth) during installation** and set the
+   **Callback URL** to the gateway's connection callback
+   (`<public_url>/connections/callback/github`, shown in Administration →
+   Provider apps). With that box ticked GitHub offers no setup URL: the
+   callback URL receives both `code` and `installation_id`. Keep "Expire
+   user authorization tokens" on.
+2. **Configure the instance** with the five app-config keys the spec
    declares: `app_id`, `private_key` (PEM, PKCS#1 or PKCS#8; a one-line
-   PEM with literal `\n` is accepted), `app_slug`. Missing keys fail at
-   the first call naming the key.
+   PEM with literal `\n` is accepted), `app_slug`, `client_id` (the
+   App's client ID, not its App ID) and `client_secret`. Missing keys keep
+   the provider out of "Connect a provider".
 3. **Connect**: the host redirects the user to
-   `https://github.com/apps/<app_slug>/installations/new`, reads
-   `installation_id` on the callback and stores it encrypted as the
-   connection's secret. The plugin never sees the private key outside
-   `ctx.appConfig`, and never reads `process.env`.
+   `https://github.com/apps/<app_slug>/installations/new`. On the callback
+   it exchanges `code` for a user access token
+   (`POST https://github.com/login/oauth/access_token`), checks that
+   `installation_id` is among `GET /user/installations` for that token,
+   drops the token, and only then stores the installation id encrypted as
+   the connection's secret. An installation the installing GitHub account
+   cannot reach is refused and audited. All of this is declared in
+   `githubCredential.userVerification` and run by the host: the plugin
+   never sees the client secret or the user token, sees the private key
+   only in `ctx.appConfig`, and never reads `process.env`.
 4. **Resources**: `discoverResources` lists the installation's
    repositories (`GET /installation/repositories`, 100 per page, up to 10
    pages) as `owner/repo` resources with `default_branch`, `private`,

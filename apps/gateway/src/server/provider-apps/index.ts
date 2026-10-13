@@ -11,12 +11,15 @@ export {
   needsProviderApp,
 } from './fields';
 export {
+  acceptUnverifiedKey,
   fileAppConfig,
+  PROVIDER_APP_FLAG_PREFIX,
   PROVIDER_APP_KEY_PREFIX,
   ProviderAppError,
   ProviderAppNotConfigured,
   providerAppKey,
   ProviderAppsService,
+  type InstallVerification,
   type ProviderAppSource,
   type ProviderAppStatus,
 } from './service';

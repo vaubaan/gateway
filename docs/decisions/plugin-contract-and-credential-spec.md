@@ -41,6 +41,22 @@ amended-by:
 > (a re-minted installation token). Gmail's rejecting placeholder and the
 > pure standard refreshes of supabase and railway were deleted. D5 : a
 > preset entry on the fallback is a loader error (see the fallback ADR).
+>
+> **Amended on 2026-10-13 by P1.4b.** D2 : the `app-install` spec gains an
+> optional, declarative `userVerification` block (`codeParam`, `tokenUrl`,
+> `clientAuthMethod`, `installationsUrl`, `installationsHeaders?`,
+> `installationsListField?`, `installationIdField`, `pagination?`) from which
+> the host proves that the human who authorized the app during installation
+> can reach the installation the callback names ; a spec that declares it
+> must list `client_id` and a secret `client_secret` in `appConfigFields`,
+> and `definePlugin` validates the block. The rule "a plugin never sees the
+> OAuth client secret" now holds for every kind : the host removes
+> `client_secret` from `ctx.appConfig` of `app-install` plugins too. The SDK
+> exports `CLIENT_ID_FIELD` / `CLIENT_SECRET_FIELD`. A spec without the block
+> is refused by the host unless the operator accepts unverified
+> installations. Decision and alternatives :
+> [[connect-driver-and-resource-curation]], amendment of the same day (D9,
+> D10).
 
 ## Context
 
@@ -123,7 +139,7 @@ oauth2       { authorizationUrl, tokenUrl, scopes, pkce, resourceIndicator?,
                clientAuthMethod: client_secret_basic | client_secret_post | none,
                refreshable, extraAuthorizationParams?, appConfigFields? }
 app-install  { appConfigFields (app id, private key, slug…), installUrl(appConfig),
-               installationIdParam }
+               installationIdParam, userVerification? }
 ssh-key      { algorithm: 'ed25519', fields (host, port, user) }
 ```
 

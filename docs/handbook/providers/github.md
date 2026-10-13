@@ -31,11 +31,41 @@ in git history.
 ## What one connection is
 
 A **GitHub App installation** on the company's organisation. The operator
-registers the App once and gives the instance three app-config keys
-(`app_id`, `private_key`, `app_slug`); a user connects by installing the App
-and the host stores the `installation_id` as the connection's secret
-(`app-install` credential kind). Resources are the repositories the
-installation can reach, discovered as `owner/repo`.
+registers the App once, with "Request user authorization (OAuth) during
+installation" enabled, and gives the instance five app-config keys
+(`app_id`, `private_key`, `app_slug`, `client_id`, `client_secret`); a user
+connects by installing the App and the host stores the `installation_id` as
+the connection's secret (`app-install` credential kind) — once it has
+checked that this user can reach that installation. Resources are the
+repositories the installation can reach, discovered as `owner/repo`.
+
+### Installation binding
+
+`githubCredential.userVerification` (`src/credential.ts`) is the
+declaration the host runs on the callback
+([connections](../connections.md), "Installation binding"; the plugin
+executes none of it):
+
+| Member                   | Value                                                               |
+| ------------------------ | ------------------------------------------------------------------- |
+| `codeParam`              | `code`                                                              |
+| `tokenUrl`               | `https://github.com/login/oauth/access_token`                       |
+| `clientAuthMethod`       | `client_secret_post` (`client_id`, `client_secret`, `code` in body) |
+| `installationsUrl`       | `https://api.github.com/user/installations`                         |
+| `installationsHeaders`   | `GITHUB_API_HEADERS` (`Accept`, `User-Agent`, API version)          |
+| `installationsListField` | `installations`                                                     |
+| `installationIdField`    | `id`                                                                |
+| `pagination`             | `page` / `per_page`, 100 per page                                   |
+
+With the checkbox enabled, GitHub starts its web application flow right
+after the installation and redirects to the App's first **callback URL**
+with `code` next to `installation_id` (and no setup URL can be set). The
+host exchanges the code for a user access token and calls
+`GET /user/installations`, which lists the installations of this App the
+token's user can reach; the claimed id must be among them. The user token
+is then dropped. `client_secret` is used by the host only and is not in the
+`ctx.appConfig` this plugin receives; `GITHUB_APP_CONFIG.clientId` /
+`.clientSecret` name the keys for the spec, not for a reader.
 
 ```mermaid
 sequenceDiagram
@@ -167,8 +197,18 @@ plugins. `branch-protection-write` is in no preset.
   `CatalogError`; paths are exact. Presets must reference ids of this
   catalog only.
 - **`github: app configuration key 'app_id' is missing`** — the instance
-  configuration lacks one of the three app-config keys; nothing was sent to
+  configuration lacks one of the app-config keys; nothing was sent to
   GitHub.
+- **"Not connected — the provider returned no user authorization"** — the
+  App does not have "Request user authorization (OAuth) during
+  installation" enabled, so GitHub came back without `code`.
+- **"Not connected — … not among those the authorizing account can
+  reach"** — the GitHub account signed in during the installation cannot
+  reach the installation whose id came back; `GET /user/installations` with
+  that account's token does not list it.
+- **`token-exchange-failed` with `incorrect_client_credentials`** — the
+  client ID or client secret entered for the App is wrong (the client ID is
+  not the App ID).
 - **`GitHub App token mint failed (404)`** — the installation id is unknown
   to this App (App uninstalled, or the wrong App's key); 401 means the key
   does not match `app_id`.

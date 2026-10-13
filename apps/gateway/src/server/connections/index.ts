@@ -96,6 +96,7 @@ export {
   type ConnectErrorCode,
 } from './errors';
 export {
+  ACCEPT_UNVERIFIED_ACTION,
   actorOf,
   connectionPath,
   FIELD_PREFIX,
@@ -103,8 +104,17 @@ export {
   NEW_CONNECTION_PATH,
   NOTICE_PARAM,
   PROVIDER_APPS_PAGE,
+  REFUSE_UNVERIFIED_ACTION,
   type ConnectionHandlers,
 } from './handlers';
+export {
+  InstallationRefused,
+  InstallationVerificationUnavailable,
+  MAX_INSTALLATION_PAGES,
+  verifyInstallation,
+  type InstallationClaim,
+  type InstallationRefusalReason,
+} from './install-verification';
 export {
   cleanName,
   editableMetadataKeys,
@@ -117,6 +127,7 @@ export {
   buildAuthorizationUrl,
   codeChallengeS256,
   exchangeCode,
+  exchangeUnsolicitedCode,
   newCodeVerifier,
   newState,
   OAuth2TokenError,
@@ -139,10 +150,12 @@ export {
   toPluginResource,
   type Actor,
   type ConnectableProvider,
+  type ConnectRefusalReason,
   type Connected,
   type ConnectionDetail,
   type ConnectionView,
   type DiscoveryRecord,
+  type InstallationBinding,
   type ResourcePatch,
   type StartInput,
   type StartResult,

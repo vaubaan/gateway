@@ -31,6 +31,14 @@ describe('shipped plugins through the generic connect driver', () => {
     }
   });
 
+  it('ships no app-install plugin whose installations cannot be verified', () => {
+    // Such a plugin would only be connectable with "accept unverified installations" on.
+    for (const plugin of SHIPPED_PLUGINS) {
+      if (plugin.credential.kind !== 'app-install') continue;
+      expect(plugin.credential.userVerification, plugin.id).toBeDefined();
+    }
+  });
+
   it('offers a provider only once its company app is configured, and flags experimental ones', async () => {
     const h = connectionsHarness({ plugins: SHIPPED_PLUGINS });
     const before = await h.service.providers();

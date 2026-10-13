@@ -60,7 +60,7 @@ are absent.
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`              |                                            4 |
 | `apps/gateway/tests/integration/budget/session-service.test.ts`                   |                                           19 |
 | `apps/gateway/tests/integration/compose/boot.test.ts`                             |                                            4 |
-| `apps/gateway/tests/integration/connections/connect-flow.test.ts`                 |                                            3 |
+| `apps/gateway/tests/integration/connections/connect-flow.test.ts`                 |                                            5 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                |                                            8 |
 | `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`               |                                           24 |
 | `apps/gateway/tests/integration/standalone-native-addons.test.ts`                 |                                            3 |
@@ -99,7 +99,7 @@ are absent.
 | `packages/gateway-core/tests/unit/risk-gateway.test.ts`                           |                                            8 |
 | `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                           |                                           22 |
 | `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                             |                                            4 |
-| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                            |                                           12 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                            |                                           13 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                                   |                                            3 |
 | `packages/plugin-sdk/tests/unit/registry.test.ts`                                 |                                           10 |
 | `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                              |                                           14 |
@@ -121,7 +121,7 @@ are absent.
 | `plugins/github/tests/unit/adapter.test.ts` (v4, kept until P1.6)                 |                                           18 |
 | `plugins/github/tests/unit/data-model.test.ts`                                    |                                            1 |
 | `plugins/github/tests/unit/execute.test.ts` (v5)                                  |                                           18 |
-| `plugins/github/tests/unit/plugin.test.ts` (v5)                                   |                                           13 |
+| `plugins/github/tests/unit/plugin.test.ts` (v5)                                   |                                           14 |
 | `plugins/github/tests/unit/risk-classifier.test.ts` (v4, kept until P1.6)         |                                           31 |
 | `plugins/gmail/tests/unit/data-model.test.ts`                                     |                                            5 |
 | `plugins/gmail/tests/unit/plugin.test.ts` (v5)                                    |                                           25 |
@@ -262,6 +262,9 @@ npx vitest run packages/policy-engine     # one package
   data-model referential integrity; credential spec rules per kind
   (api-key secret field, oauth2 https + PKCE for public clients +
   `refreshable` needs `refresh()`, app-install, ssh-key, unknown kind);
+  the `app-install` `userVerification` block (well-formed with and without
+  pagination, every malformed member named by path, `client_id` /
+  `client_secret` required among the app settings);
   missing functions; `expectCredentialKind`; `normalizeArgsIfEnabled`
   (off by default, on with the flag, no hook no change).
 - **`testing-kit.test.ts`** — `assertCatalogCoverage` on the fixture
@@ -348,9 +351,11 @@ case per convention (ref from the arguments, single-resource default,
 ambiguity denied), `execute` against `mockFetch`, the catalog path resolved
 with `catalogPathNextTo` and present on disk.
 
-**GitHub** (81) — `plugin.test.ts` (13): structural kit, catalog coverage of
+**GitHub** (82) — `plugin.test.ts` (14): structural kit, catalog coverage of
 every declared tool, the fallback lint, presets `read-only` / `developer` /
-`release-manager`, the `app-install` credential spec. `execute.test.ts`
+`release-manager`, the `app-install` credential spec with its five app
+settings and the declarative `userVerification` (GitHub token endpoint,
+`GET /user/installations`, 100 per page). `execute.test.ts`
 (18): installation token minting (JWT → `access_tokens`), per-call
 repository scoping, Octokit dispatch over the injected fetch,
 `UpstreamAuthError`, `github__mint_install_token`, paged resource discovery.
@@ -940,7 +945,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > `CredentialSpec` per kind) except in `shipped-providers.test.ts`.
 
 Unit, co-located under `apps/gateway/src/server/connections/` and
-`apps/gateway/src/server/provider-apps/` (102):
+`apps/gateway/src/server/provider-apps/` (118):
 
 - **`oauth2.test.ts`** (15) — authorization URL (code flow, state, S256
   challenge, RFC 7636 appendix B vector, resource indicator, extra
@@ -952,7 +957,7 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
   secret; an error body under HTTP 200; 5xx / network / missing
   `access_token` are not rejections; refresh rotates the refresh token,
   keeps it when none is returned, is a rejection without one.
-- **`service.test.ts`** (24) — the connect driver per credential kind:
+- **`service.test.ts`** (32) — the connect driver per credential kind:
   - `oauth2`: redirect URI on `public_url`, the verifier of the exchange
     matches the challenge of the redirect, the credential is stored and
     the plugin discovers with the fresh token and without the client
@@ -964,10 +969,26 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
     denial consumes the state; a failed exchange shows the provider's
     wording; a failed first discovery keeps the connection; the per-user
     rate limit (10 per minute, other users unaffected, window reset);
-  - `app-install`: installation URL with the state, installation id
-    stored, the plugin receives the app's private key; replay, missing id
-    ("awaiting approval"), malformed id and an installation the provider
-    rejects store nothing;
+  - `app-install`, installation binding (P1.4b): installation URL with
+    the state; **an installation id in the authorizing user's list (on the
+    second page) is accepted**, the code exchanged with the app's client
+    and no `redirect_uri`, the list read with the user token and the
+    declared headers, the plugin receives the private key but not the
+    client secret, and the user token is in no connection, audit entry or
+    plugin context; **an id not in the list is refused, nothing stored,
+    discovery never called, `connection-refused` audited**; **a callback
+    without `code` is refused** before any request (also with `?error=`);
+    **a refused code exchange is refused** (GitHub's 200 +
+    `bad_verification_code`) while a 503 is `provider-unreachable` and not
+    audited; a denied list is refused, an unreadable one fails closed; a
+    reconnection is verified and its refusal names the connection; replay,
+    missing id ("awaiting approval"), malformed id and an installation the
+    provider rejects store nothing;
+  - `app-install` **without `userVerification`**: refused at start and
+    absent from the picker by default; connects once the operator accepts
+    unverified installations (`installation_verification: none`); refused
+    and audited at the callback when the acceptance was withdrawn
+    mid-flow;
   - `api-key`: field validation by label, secret never echoed; a rejected
     key stores nothing and shows the provider's error (the Resend
     "restricted to only send emails" case); an unreachable provider is
@@ -1006,16 +1027,27 @@ Unit, co-located under `apps/gateway/src/server/connections/` and
 - **`codec-and-keypair.test.ts`** (12) — the four `CredentialSecret` kinds
   round-trip, malformed stored text refused; the generated ed25519 key is
   parsed by `ssh2`, matches its public line and signs.
-- **`shipped-providers.test.ts`** (4) — the plugins the image ships:
+- **`install-verification.test.ts`** (5, P1.4b) — `verifyInstallation`
+  alone: a bare list in one request with Basic client authentication, ids
+  as numbers or strings; an absent id, a longer id with the same prefix and
+  malformed items refused; a spec header cannot replace `Authorization`;
+  the cap of 20 pages refuses; refusal versus unreachable for each failure,
+  and no error message carries the user token or the client secret.
+- **`shipped-providers.test.ts`** (5) — the plugins the image ships:
   registered once; every provider-app field is expressible in the mounted
-  configuration; redirect-flow providers are offered only once their app
+  configuration; no shipped `app-install` plugin is unverifiable;
+  redirect-flow providers are offered only once their app
   is configured, forms need nothing; a valid https redirect with state,
   PKCE, resource indicator and extra parameters for each.
-- **`provider-apps/service.test.ts`** (11) — fields per credential kind;
-  one entry per plugin; a secret sealed under
+- **`provider-apps/service.test.ts`** (13) — fields per credential kind
+  (a verified `app-install` adds `client_id` / `client_secret`); one entry
+  per plugin with its `installVerification`; a secret sealed under
   `instance_config:provider_apps.<id>.<field>` and never returned; blank
   keeps the stored secret; every problem at once; the client secret goes
-  to the host only (an `app-install` plugin keeps its private key);
+  to the host only, for `oauth2` and for a verified `app-install` (which
+  keeps its private key); accepting unverified installations is explicit,
+  works for a file-sourced provider, is refused for a verifying or
+  non-installing provider, and a stray flag never weakens a verification;
   missing fields named; **the mounted configuration wins** and makes the
   provider read-only; an incomplete file block is not completed from the
   store; clear.
@@ -1027,7 +1059,14 @@ Integration:
   label that stops being set, name handed back to discovery) and the
   conditional transitions `refreshCredential` / `markExpired` /
   `reconnect` / `revoke` (a revoked connection is never brought back).
-- **`tests/integration/connections/connect-flow.test.ts`** (3) —
+- **`tests/integration/connections/connect-flow.test.ts`** (5; the two
+  `app-install` scenarios are P1.4b: a foreign installation id and a
+  callback without code are refused through the handlers with a
+  `connection-refused` audit row each, the rightful user connects, and
+  **the user token, the authorization code, the client secret and the
+  private key appear in no table and no log line**; a plugin without
+  `userVerification` is refused until an operator — not a user, and not for
+  a verifying provider — accepts unverified installations, audited) —
   `buildRoot` over the `:memory:` store with the **real encryptor**, a
   fixture registry and a mocked provider, driven through the HTTP
   handlers:

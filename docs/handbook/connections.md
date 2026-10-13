@@ -47,6 +47,7 @@ apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   service.ts           ConnectionService: start/complete, discover, updateResource, revoke, views
   credentials.ts       CredentialBroker: resolve() / refresh() — the refresh persistence hook
   oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError
+  install-verification.ts  verifyInstallation(): binds an app installation to the authorizing user
   pending.ts           PendingConnectStore (single-use state), NoticeStore (one-time notices)
   credential-codec.ts  serializeSecret / parseSecret: CredentialSecret ⇄ the sealed text
   ssh-keypair.ts       generateEd25519KeyPair(): OpenSSH private key + authorized_keys line
@@ -95,12 +96,12 @@ one entry in `SHIPPED_PLUGINS`, plus the dependency in
 
 `appConfigFieldsOf(spec)` (`provider-apps/fields.ts`):
 
-| Credential kind | Fields the operator enters                                                        |
-| --------------- | --------------------------------------------------------------------------------- |
-| `oauth2`        | `client_id`; `client_secret` unless `clientAuthMethod: 'none'`; `appConfigFields` |
-| `app-install`   | the plugin's `appConfigFields` (GitHub: `app_id`, `private_key`, `app_slug`)      |
-| `api-key`       | none — each user pastes a key of their own                                        |
-| `ssh-key`       | none — the instance generates the key pair                                        |
+| Credential kind | Fields the operator enters                                                                                 |
+| --------------- | ---------------------------------------------------------------------------------------------------------- |
+| `oauth2`        | `client_id`; `client_secret` unless `clientAuthMethod: 'none'`; `appConfigFields`                          |
+| `app-install`   | the plugin's `appConfigFields` (GitHub: `app_id`, `private_key`, `app_slug`, `client_id`, `client_secret`) |
+| `api-key`       | none — each user pastes a key of their own                                                                 |
+| `ssh-key`       | none — the instance generates the key pair                                                                 |
 
 `ProviderAppsService(config.providers, store.config, registry)`:
 
@@ -114,8 +115,8 @@ one entry in `SHIPPED_PLUGINS`, plus the dependency in
   required field is reported `incomplete` — it is never completed from the
   store.
 - **`status(id)` / `list()`** → `ProviderAppStatus { needsApp, fields,
-source, configured, missing, values (non-secret only), secretsSet }`.
-  The secret values are never returned.
+source, configured, missing, values (non-secret only), secretsSet,
+installVerification }`. The secret values are never returned.
 - **`save(id, input)`** validates every field at once (`ProviderAppError.problems`:
   required, `pattern`), keeps a stored secret when the input is blank,
   removes a blank optional field. **`clear(id)`** deletes the stored keys.
@@ -123,22 +124,47 @@ source, configured, missing, values (non-secret only), secretsSet }`.
   host's own use (OAuth client authentication, `installUrl(appConfig)`);
   throws `ProviderAppNotConfigured` naming the missing fields.
 - **`pluginAppConfig(id)`** — what a plugin receives as `ctx.appConfig`:
-  the same record **without `client_secret`** for `oauth2`; everything for
-  `app-install` (the plugin mints installation tokens from the private
-  key); `{}` when no app exists.
+  the same record **without `client_secret`**, whatever the kind (the
+  OAuth client of an `oauth2` provider, and the one an `app-install`
+  provider uses to verify installations); an `app-install` plugin keeps
+  every other field (it mints installation tokens from the private key);
+  `{}` when no app exists.
+- **`installVerification(id)`** → `'verified'` (the plugin's `app-install`
+  spec declares `userVerification`), `'unverified-refused'` (it does not —
+  the default: nobody can connect the provider), `'unverified-accepted'`
+  (it does not and the operator accepted that), or `null` for the other
+  kinds. **`setAcceptUnverifiedInstallations(id, accept)`** writes the
+  operator's decision under
+  `provider_app_flags.<id>.accept_unverified_installations` (`'true'` or
+  absent). It is refused for a provider that verifies — the flag never
+  weakens a verification that exists — and it is not a field of the app:
+  it lives in the store whatever the source of the fields, and `clear(id)`
+  removes it.
 
 The page `/admin/provider-apps` shows one card per provider that needs an
 app: state badge (`configured`, `not configured`, `incomplete: …`, `set by
 the mounted configuration`), the URL to register at the provider
 (`ConnectionService.callbackUrl(id)` = `<public_url>/connections/callback/<id>`
-— OAuth redirect URI or app setup URL), the fields
+— OAuth redirect URI; for an installed app, the callback URL of its user
+authorization when installations are verified, its setup URL otherwise),
+the fields
 (`CredentialFieldInputs`: secrets as password inputs, PEM-like secrets as a
 textarea, never pre-filled), Save, and Remove for store-sourced settings.
 `POST /admin/provider-apps/<provider>` (`handlers.saveProviderApp`) is
 origin-checked, requires `authorizeAdmin` (the bootstrap operator may use
 it), and writes an `AdminAuditEntry` `config-changed` on `instance-config` /
-`provider-app:<id>` whose `before`/`after` carry the non-secret values and
-the names of the secrets set.
+`provider-app:<id>` whose `before`/`after` carry the non-secret values, the
+names of the secrets set and, for an installed app, `install_verification`.
+
+An installed app also shows how its installations are bound to the
+connecting user: the badge `installations verified`, or — for a plugin
+without `userVerification` — a warning banner with its own form (outside
+the fields' fieldset, so it works for a file-sourced provider too) whose
+button posts `action=accept-unverified` / `action=refuse-unverified` to the
+same endpoint. Accepting is audited (`config-changed`), logged at `warn`
+and answered with a warning notice; the badge then reads `unverified
+installations accepted`. No shipped plugin needs it
+(`shipped-providers.test.ts` fails if one does).
 
 ## The connect driver
 
@@ -161,8 +187,12 @@ oauth2       start    oauthClient() from hostAppConfig ──none──▶ app-n
                           redirect_uri, code_verifier, [resource]; client auth per clientAuthMethod
                       ──rejected──▶ token-exchange-failed   ──5xx / network──▶ provider-unreachable
                       finalize(discovery: best-effort)
-app-install  start    installUrl(hostAppConfig) + ?state=<state>
+app-install  start    no userVerification and not accepted ──▶ installation-unverifiable
+                      installUrl(hostAppConfig) + ?state=<state>
              complete take(state); query[installationIdParam] must match ^[A-Za-z0-9_-]{1,64}$
+                      bindInstallation(): see "Installation binding"
+                      ──refused──▶ installation-not-verified / token-exchange-failed (audited)
+                      ──5xx / network──▶ provider-unreachable
                       finalize(discovery: reject-auth-failure)
 api-key      start    readCredentialFields(spec.fields, form)  ──▶ invalid-input
                       finalize(discovery: required)
@@ -226,21 +256,77 @@ metadata })`. The credential text is the JSON `CredentialSecret`, sealed by
   Reconnecting an `ssh-key` connection generates a new pair. Audit:
   `connection-reconnected`.
 
-- **Known gap, `app-install`.** The installation id of the callback is
-  accepted once the state is valid and the first discovery succeeds;
-  the host does not prove that the connecting user administers that
-  installation. A user who knows the id of another installation of the
-  company's app could connect it. Closing it needs the provider's
-  user-authorization step during installation (ADR
-  connect-driver-and-resource-curation, Consequences).
-
 `ConnectError` codes (`errors.ts`, sentences in `CONNECT_ERROR_MESSAGES`):
 `provider-unknown`, `app-not-configured`, `invalid-input`,
 `return-url-refused`, `rate-limited`, `state-invalid`, `provider-denied`,
-`token-exchange-failed`, `credential-rejected`, `provider-unreachable`,
-`not-found`, `connection-revoked`, `provider-mismatch`, `label-read-only`.
+`token-exchange-failed`, `installation-not-verified` (403),
+`installation-unverifiable` (409), `credential-rejected`,
+`provider-unreachable`, `not-found`, `connection-revoked`,
+`provider-mismatch`, `label-read-only`.
 A connection of another owner is reported exactly like a missing one
 (`not-found`).
+
+### Installation binding (`app-install`)
+
+A valid `state` proves who started the flow, not which installation they
+may claim: the installation id of the callback is a query parameter the
+browser controls. `ConnectionService.bindInstallation` therefore runs
+before `finalize`, hence before the plugin is asked to mint a token for the
+claimed id (ADR connect-driver-and-resource-curation, amendment of
+2026-10-13).
+
+**The plugin declares `userVerification`** (`AppInstallUserVerification`,
+[plugin SDK](plugin-sdk.md); GitHub does). The provider's app is set to ask
+the installing user to authorize it, so the callback carries an
+authorization code next to the installation id.
+`verifyInstallation(verification, client, { installationId, code }, io)`
+(`install-verification.ts`):
+
+1. `exchangeUnsolicitedCode()` (`oauth2.ts`) — `POST tokenUrl` with
+   `grant_type=authorization_code`, the code and the app's `client_id` /
+   `client_secret` per `clientAuthMethod`. No `redirect_uri` and no PKCE
+   verifier: the provider started that authorization itself, the host sent
+   neither.
+2. `GET installationsUrl` with `Authorization: Bearer <user token>` and the
+   spec's `installationsHeaders` (which can never replace `Authorization`),
+   page by page when `pagination` is declared (`perPageParam`, `pageParam`
+   from 1), reading `installationsListField` (or the body itself) and
+   `installationIdField` of each item, compared as strings.
+3. The id is in the list → resolved. A page shorter than `perPage` without
+   it, or `MAX_INSTALLATION_PAGES` (20) full pages without it → refused.
+
+The user token is a local of that function: it is not returned, stored,
+logged or put in an error message, and the plugin never receives it (nor
+the client secret). The connection's metadata records
+`installation_verification: 'user-authorization'`.
+
+| Outcome                                                            | `ConnectError`              | Audited (`reason`)            |
+| ------------------------------------------------------------------ | --------------------------- | ----------------------------- |
+| no code in the callback (or `?error=` from the provider)           | `installation-not-verified` | `no-authorization-code`       |
+| token endpoint refuses the code (4xx, or an `error` under 200)     | `token-exchange-failed`     | `authorization-code-rejected` |
+| installations endpoint answers 401 / 403                           | `installation-not-verified` | `installations-list-rejected` |
+| the id is not in the list                                          | `installation-not-verified` | `installation-not-listed`     |
+| 5xx, network, timeout (15 s), a body that is not the declared list | `provider-unreachable`      | no — the user retries         |
+
+A refusal stores nothing, writes an `AdminAuditEntry` `connection-refused`
+(object `connection` / the reconnect target, or `not-created:<provider>`;
+`after: { provider, reason, installation_id, reconnect }`) and logs
+`connection refused: installation not bound to the user` at `warn`. A
+reconnection goes through the same check.
+
+**The plugin declares none.** `start` and `complete` both refuse with
+`installation-unverifiable` (the second is audited with
+`verification-not-supported`: the operator may withdraw the acceptance
+while a user is at the provider) unless
+`providerApps.installVerification(id)` is `'unverified-accepted'`. Such a
+provider is also `configured: false` on the picker. When accepted, the
+connection is created as before P1.4b, with
+`installation_verification: 'none'` in its metadata and a `warn` log line.
+
+What the check proves: the account that authorized the app can reach the
+installation (for GitHub, `GET /user/installations` lists the installations
+the user has explicit read, write or admin access to through at least one
+repository). It does not prove that this account administers it.
 
 ### Ownership
 
@@ -412,9 +498,15 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 - `oauth2.test.ts` (15) — authorization URL, RFC 7636 vector, the three
   client authentication methods, resource indicator, error mapping,
   rotation.
-- `service.test.ts` (24) — the driver per credential kind against mocked
+- `service.test.ts` (32) — the driver per credential kind against mocked
   provider endpoints: state replay, foreign user, crossed provider,
-  foreign return URL, denial, failed exchange, rate limit, app-install
+  foreign return URL, denial, failed exchange, rate limit, the
+  installation binding (id in the user's list on a second page accepted
+  and the user token kept nowhere; id not in the list, missing code,
+  rejected code, denied list → refused, nothing stored, audited;
+  unreachable provider not audited; reconnection verified; a spec without
+  `userVerification` refused unless accepted, also when the acceptance is
+  withdrawn mid-flow), app-install
   rejection, api-key rejection storing nothing, ssh key pair, ownership
   (user and group), reconnect, revoke, the resource merge (owner label,
   name, hidden, list settings kept; stale; plugin-set label read-only),
@@ -422,19 +514,30 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 - `credentials.test.ts` (12) — resolve, skew refresh with rotation and
   persistence, single flight, rejected → `expired`, unreachable → still
   `active`, no refresh path, revoke race, plugin `refresh()` override.
+- `install-verification.test.ts` (5) — bare list and Basic client
+  authentication, ids as numbers or strings, malformed items, a spec header
+  cannot replace `Authorization`, the page cap, refusal versus unreachable,
+  no message carries the token or the client secret.
 - `pending.test.ts` (7), `input.test.ts` (17), `codec-and-keypair.test.ts`
   (12, the generated key is parsed and used by `ssh2`),
-  `shipped-providers.test.ts` (4, the real plugins through the driver),
-  `provider-apps/service.test.ts` (11).
+  `shipped-providers.test.ts` (5, the real plugins through the driver; no
+  shipped `app-install` plugin is unverifiable),
+  `provider-apps/service.test.ts` (13).
 
 Integration: `tests/integration/store/connections-shares.test.ts` (+2: the
 merge rule and the credential state transitions at the repository) and
-`tests/integration/connections/connect-flow.test.ts` (3) over `buildRoot`
+`tests/integration/connections/connect-flow.test.ts` (5) over `buildRoot`
 with the `:memory:` store and the **real** encryptor: operator registers
 the app → user connects → the blob and a dump of every table are scanned
 for the access token, refresh token, client secret, API key and SSH
 private key in clear → resources → owner edit survives a refresh → replay
-refused → revoke → `revoked`, blob NULL, audit trail.
+refused → revoke → `revoked`, blob NULL, audit trail. The `app-install`
+path: a foreign installation id and a callback without code are refused
+and audited, the rightful user connects, and **the user token, the
+authorization code, the client secret and the private key are in no table
+and no log line**; an unverifiable plugin is refused until the operator
+accepts it through the handler (403 for a user, refused for a verifying
+provider, audited).
 
 Not automated: a browser run against real providers
 ([e2e-tests](../tests/e2e-tests.md), "Manual — connect a provider").
@@ -456,6 +559,24 @@ Not automated: a browser run against real providers
 - **`token-exchange-failed` with `invalid_client`** — wrong client secret,
   or the provider expects another `clientAuthMethod` than the plugin's
   spec declares.
+- **`installation-not-verified` with "no user authorization"** — the
+  provider's app does not request user authorization during installation
+  (GitHub: the checkbox "Request user authorization (OAuth) during
+  installation"), or it still redirects to a setup URL instead of the
+  callback URL shown on `/admin/provider-apps`. The audit entry
+  `connection-refused` has `reason: no-authorization-code`.
+- **`installation-not-verified` for a legitimate user** — the account that
+  authorized at the provider is not the one that can reach the
+  installation (signed in to the provider as someone else), or the user
+  reaches more than `MAX_INSTALLATION_PAGES × perPage` installations.
+  `reason: installation-not-listed`.
+- **`token-exchange-failed` on an installation** — wrong `client_id` /
+  `client_secret` of the app (`incorrect_client_credentials`), or the code
+  expired (`bad_verification_code`; GitHub codes live ten minutes).
+- **A provider vanished from "Connect a provider" after an upgrade** — its
+  app lacks the fields verification needs (`incomplete: client_id,
+client_secret` on `/admin/provider-apps`), or its plugin cannot verify
+  installations and nobody accepted that.
 - **Connected but "resource discovery failed"** — the connection exists;
   the message is the plugin's. Fix the cause and use "Refresh discovery".
   The log line is `resource discovery failed` (component `connections`).
@@ -481,6 +602,12 @@ rejected` with `detail` (the provider's error) and `marked_expired`.
   forms derive from its `CredentialSpec`. If its app needs a field the
   mounted configuration cannot express, add it to `PROVIDER_APP_FIELDS`
   (`config/types.ts`); `shipped-providers.test.ts` fails until then.
+- **A new `app-install` provider** — declare `userVerification` in its
+  spec (token endpoint, installations endpoint, response shape) and list
+  `client_id` / `client_secret` in `appConfigFields`; `definePlugin` checks
+  both. The driver needs no change. A provider that has no such endpoint
+  ships without the block and is connectable only once the operator accepts
+  unverified installations.
 - **A new credential kind** — an ADR first (it changes the plugin
   contract), then: the variant in `credential-codec.ts`, a case in
   `ConnectionService.start` / `complete` with its discovery policy,

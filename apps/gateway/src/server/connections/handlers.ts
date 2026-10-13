@@ -8,7 +8,8 @@
  *   POST /connections/<id>/discover                  refresh discovery
  *   POST /connections/<id>/revoke                    revoke (terminal)
  *   POST /connections/<id>/resources/<resourceId>    owner edits on a resource
- *   POST /admin/provider-apps/<provider>             save / clear the company app (operator)
+ *   POST /admin/provider-apps/<provider>             save / clear the company app, accept or
+ *                                                    refuse unverified installations (operator)
  *
  * Every mutation requires a web session and passes the origin check (spec
  * §6). The callback is a top-level GET from the provider: it carries no
@@ -45,6 +46,9 @@ export const NOTICE_PARAM = 'notice';
 export const FIELD_PREFIX = 'field.';
 /** Form inputs carrying an editable metadata list are named `meta.<key>`. */
 export const METADATA_PREFIX = 'meta.';
+/** `action` values of the provider-app form besides the default save and `clear`. */
+export const ACCEPT_UNVERIFIED_ACTION = 'accept-unverified';
+export const REFUSE_UNVERIFIED_ACTION = 'refuse-unverified';
 const LOGIN_PAGE = '/login';
 const SEE_OTHER = 303;
 
@@ -261,7 +265,46 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
         });
       }
       try {
-        const clear = stringField(form, 'action') === 'clear';
+        const action = stringField(form, 'action');
+        if (action === ACCEPT_UNVERIFIED_ACTION || action === REFUSE_UNVERIFIED_ACTION) {
+          const accept = action === ACCEPT_UNVERIFIED_ACTION;
+          const after = await deps.providerApps.setAcceptUnverifiedInstallations(
+            providerId,
+            accept,
+          );
+          await deps.audit.write({
+            kind: 'admin',
+            ts: toIso(deps.clock.now()),
+            user_id: decision.principal.kind === 'user' ? decision.principal.user.id : 'bootstrap',
+            act: 'config-changed',
+            object: { type: 'instance-config', id: `provider-app:${providerId}` },
+            before: auditView(before),
+            after: auditView(after),
+            delegated_client_id: null,
+          });
+          logger.warn('provider app: acceptance of unverified installations changed', {
+            provider: providerId,
+            accept,
+          });
+          return await redirectWithNotice(
+            decision.principal,
+            anchor,
+            accept
+              ? {
+                  tone: 'warning',
+                  title: `${after.displayName}: unverified installations are now accepted`,
+                  lines: [
+                    'Any signed-in user who knows the id of an installation of this app can connect it. Turn this off as soon as the plugin can verify installations.',
+                  ],
+                }
+              : {
+                  tone: 'success',
+                  title: `${after.displayName}: unverified installations are refused`,
+                  lines: ['Existing connections are unchanged; new ones are refused.'],
+                },
+          );
+        }
+        const clear = action === 'clear';
         if (clear) {
           if (deps.providerApps.isReadOnly(providerId)) {
             throw new ProviderAppError([
@@ -368,7 +411,12 @@ function countLabel(count: number): string {
 }
 
 function auditView(status: ProviderAppStatus): Record<string, unknown> {
-  return { source: status.source, values: status.values, secrets_set: status.secretsSet };
+  return {
+    source: status.source,
+    values: status.values,
+    secrets_set: status.secretsSet,
+    ...(status.installVerification ? { install_verification: status.installVerification } : {}),
+  };
 }
 
 function stringField(form: FormData, name: string): string {

@@ -9,6 +9,10 @@
  *   is encrypted (the database is scanned for every secret in clear) →
  *   resources are discovered → owner edits survive a refresh → revoke →
  *   state `revoked`.
+ *
+ * And the `app-install` path: an installation is connected only when the
+ * provider confirms the authorizing user can reach it; the user token used
+ * for that check is in no table and no log line.
  */
 import { createRegistry, type Resource } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
@@ -22,9 +26,13 @@ import { validEnv } from '../../../src/server/config/testing';
 import { NOTICE_PARAM, parseSecret } from '../../../src/server/connections';
 import {
   API_KEY_SPEC,
+  APP_INSTALL_SPEC,
   fixturePlugin,
+  INSTALL_TOKEN_URL,
+  INSTALLATIONS_URL,
   OAUTH_SPEC,
   SSH_KEY_SPEC,
+  UNVERIFIED_APP_INSTALL_SPEC,
 } from '../../../src/server/connections/testing';
 import { providerAppKey } from '../../../src/server/provider-apps';
 
@@ -34,6 +42,12 @@ const ACCESS_TOKEN = 'access-token-PLAINTEXT-0123456789';
 const REFRESH_TOKEN = 'refresh-token-PLAINTEXT-0123456789';
 const CLIENT_SECRET = 'client-secret-PLAINTEXT-0123456789';
 const API_KEY = 'api-key-PLAINTEXT-0123456789';
+const USER_TOKEN = 'ghu_user-token-PLAINTEXT-0123456789';
+const USER_AUTH_CODE = 'user-auth-code-PLAINTEXT-0123456789';
+const INSTALL_CLIENT_SECRET = 'install-client-secret-PLAINTEXT-0123456789';
+const PRIVATE_KEY = 'app-private-key-PLAINTEXT-0123456789';
+/** The installations the mocked provider says the authorizing user can reach. */
+const REACHABLE_INSTALLATIONS = [1001, 1002, 1003];
 
 interface Session {
   readonly cookie: string;
@@ -45,8 +59,10 @@ describe('connections: provider app, connect, resources, revoke', () => {
   let root: GatewayRoot;
   let provider: MockFetch;
   let upstream: Resource[];
+  let logLines: string[];
 
   beforeEach(async () => {
+    logLines = [];
     upstream = [
       { provider: 'oauthco', ref: 'proj-a', displayName: 'Project A' },
       { provider: 'oauthco', ref: 'proj-b', displayName: 'Project B' },
@@ -62,15 +78,47 @@ describe('connections: provider app, connect, resources, revoke', () => {
           scope: 'read write',
         },
       },
+      {
+        method: 'POST',
+        url: INSTALL_TOKEN_URL,
+        body: { access_token: USER_TOKEN, token_type: 'bearer' },
+      },
+      {
+        method: 'GET',
+        url: (url) => url.startsWith(`${INSTALLATIONS_URL}?`),
+        respond: (call) => {
+          const query = new URL(call.url).searchParams;
+          const perPage = Number(query.get('per_page'));
+          const page = Number(query.get('page'));
+          return {
+            installations: REACHABLE_INSTALLATIONS.slice((page - 1) * perPage, page * perPage).map(
+              (id) => ({ id }),
+            ),
+          };
+        },
+      },
     ]);
     root = await buildRoot({
       loadConfig: () =>
         loadInstanceConfig({
           env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL, VAUBAAN_ADMIN_EMAILS: OPERATOR }),
         }),
-      logWrite: () => undefined,
+      logWrite: (_level, line) => logLines.push(line),
       buildRegistry: async () =>
         createRegistry([
+          fixturePlugin({
+            id: 'appco',
+            displayName: 'App Co',
+            credential: APP_INSTALL_SPEC,
+            discoverResources: async () => [
+              { provider: 'appco', ref: 'acme/app', displayName: 'acme/app' },
+            ],
+          }),
+          fixturePlugin({
+            id: 'oldappco',
+            displayName: 'Old App Co',
+            credential: UNVERIFIED_APP_INSTALL_SPEC,
+          }),
           fixturePlugin({
             id: 'oauthco',
             displayName: 'OAuth Co',
@@ -387,6 +435,150 @@ describe('connections: provider app, connect, resources, revoke', () => {
     );
     expect((await noticeOf(refused, alice))?.lines[0]).toContain('set by the provider plugin');
     expect((await root.store.connections.getResource(live.id))!.env).toBe('live');
+  });
+
+  it('binds an installation to the user who authorized it; the user token is in no table and no log', async () => {
+    const operator = await signIn(OPERATOR);
+    const alice = await signIn('alice@example.com');
+    const mallory = await signIn('mallory@example.com');
+    const handlers = root.connections.handlers;
+
+    const saved = await handlers.saveProviderApp(
+      post('/admin/provider-apps/appco', operator, {
+        'field.app_id': '4242',
+        'field.private_key': PRIVATE_KEY,
+        'field.app_slug': 'acme-gateway',
+        'field.client_id': 'Iv1.company-app',
+        'field.client_secret': INSTALL_CLIENT_SECRET,
+      }),
+      'appco',
+    );
+    expect(await noticeOf(saved, operator)).toMatchObject({ tone: 'success' });
+
+    async function install(session: Session, query: Record<string, string>): Promise<Response> {
+      const started = await handlers.connect(post('/connections/connect/appco', session), 'appco');
+      const state = location(started).searchParams.get('state')!;
+      const search = new URLSearchParams({ ...query, state }).toString();
+      return handlers.callback(get(`/connections/callback/appco?${search}`, session), 'appco');
+    }
+
+    // ── An insider claims an installation their GitHub account cannot reach ──
+    const stolen = await install(mallory, { code: USER_AUTH_CODE, installation_id: '9999' });
+    expect(location(stolen).pathname).toBe('/connections');
+    const stolenNotice = await noticeOf(stolen, mallory);
+    expect(stolenNotice).toMatchObject({ tone: 'danger', title: 'Not connected' });
+    expect(stolenNotice?.lines[0]).toContain('did not confirm that your account has access');
+
+    // ── …or replays the callback shape without any authorization code ───────
+    const noCode = await install(mallory, { installation_id: '1003' });
+    expect((await noticeOf(noCode, mallory))?.lines.join(' ')).toContain('no user authorization');
+
+    expect(await root.store.connections.list()).toEqual([]);
+    const refusals = (await root.store.audit.list({ kind: 'admin' })).filter(
+      (e) => e.kind === 'admin' && e.act === 'connection-refused',
+    );
+    expect(refusals).toMatchObject([
+      {
+        user_id: mallory.userId,
+        object: { type: 'connection', id: 'not-created:appco' },
+        after: { provider: 'appco', reason: 'installation-not-listed', installation_id: '9999' },
+      },
+      {
+        user_id: mallory.userId,
+        after: { reason: 'no-authorization-code', installation_id: '1003' },
+      },
+    ]);
+
+    // ── The person who can reach the installation connects it ───────────────
+    const landed = await install(alice, {
+      code: USER_AUTH_CODE,
+      installation_id: '1003',
+      setup_action: 'install',
+    });
+    const connectionId = location(landed).pathname.split('/').pop()!;
+    expect(await noticeOf(landed, alice)).toMatchObject({ tone: 'success', title: 'Connected' });
+    const connection = (await root.store.connections.getById(connectionId))!;
+    expect(connection).toMatchObject({ status: 'active', provider: 'appco' });
+    expect(connection.owner).toEqual({ kind: 'user', id: alice.userId });
+    expect(connection.metadata).toMatchObject({
+      installation_id: '1003',
+      installation_verification: 'user-authorization',
+    });
+    expect(await root.store.connections.listResources(connectionId)).toHaveLength(1);
+
+    // ── The user token, the code and the secrets are nowhere at rest ────────
+    const dump = databaseDump();
+    for (const secret of [USER_TOKEN, USER_AUTH_CODE, INSTALL_CLIENT_SECRET, PRIVATE_KEY]) {
+      expect(dump).not.toContain(secret);
+    }
+    expect(dump).toContain('Iv1.company-app'); // the dump does see clear values
+    expect(dump).toContain('connection-refused');
+    const logs = logLines.join('\n');
+    expect(logs).toContain('connection refused'); // the log did record the attempts
+    for (const secret of [USER_TOKEN, USER_AUTH_CODE, INSTALL_CLIENT_SECRET, PRIVATE_KEY]) {
+      expect(logs).not.toContain(secret);
+    }
+    // The token did reach the provider — and only the provider.
+    expect(
+      provider.calls.filter((c) => c.headers.authorization === `Bearer ${USER_TOKEN}`).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it('refuses a plugin that cannot verify installations until the operator accepts it, audited', async () => {
+    const operator = await signIn(OPERATOR);
+    const alice = await signIn('alice@example.com');
+    const handlers = root.connections.handlers;
+    await root.providerApps.save('oldappco', {
+      app_id: '7',
+      private_key: PRIVATE_KEY,
+      app_slug: 'old-app',
+    });
+
+    const refused = await handlers.connect(
+      post('/connections/connect/oldappco', alice),
+      'oldappco',
+    );
+    expect(location(refused).pathname).toBe('/connections/new/oldappco');
+    expect((await noticeOf(refused, alice))?.lines[0]).toContain(
+      'cannot prove who performed an installation',
+    );
+
+    // Only an operator decides, and not for a provider that verifies.
+    const flag = (session: Session, providerId: string, action: string) =>
+      handlers.saveProviderApp(
+        post(`/admin/provider-apps/${providerId}`, session, { action }),
+        providerId,
+      );
+    expect((await flag(alice, 'oldappco', 'accept-unverified')).status).toBe(403);
+    const pointless = await flag(operator, 'appco', 'accept-unverified');
+    expect((await noticeOf(pointless, operator))?.lines[0]).toContain(
+      'verifies every installation',
+    );
+
+    const accepted = await flag(operator, 'oldappco', 'accept-unverified');
+    expect(await noticeOf(accepted, operator)).toMatchObject({ tone: 'warning' });
+    expect(await root.providerApps.installVerification('oldappco')).toBe('unverified-accepted');
+    expect((await root.store.audit.list({ kind: 'admin' })).at(-1)).toMatchObject({
+      act: 'config-changed',
+      object: { type: 'instance-config', id: 'provider-app:oldappco' },
+      before: { install_verification: 'unverified-refused' },
+      after: { install_verification: 'unverified-accepted' },
+    });
+
+    const started = await handlers.connect(
+      post('/connections/connect/oldappco', alice),
+      'oldappco',
+    );
+    const state = location(started).searchParams.get('state')!;
+    const landed = await handlers.callback(
+      get(`/connections/callback/oldappco?installation_id=55&state=${state}`, alice),
+      'oldappco',
+    );
+    expect(await noticeOf(landed, alice)).toMatchObject({ title: 'Connected' });
+
+    const withdrawn = await flag(operator, 'oldappco', 'refuse-unverified');
+    expect(await noticeOf(withdrawn, operator)).toMatchObject({ tone: 'success' });
+    expect(await root.providerApps.installVerification('oldappco')).toBe('unverified-refused');
   });
 
   it('guards every entry point: session, origin, bootstrap operator, unconfigured app, foreign return URL', async () => {

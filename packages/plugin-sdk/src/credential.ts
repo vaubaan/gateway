@@ -86,18 +86,90 @@ export interface OAuth2CredentialSpec {
 }
 
 /**
+ * App-config keys of the app's OAuth client. The host asks for them for every
+ * `oauth2` spec ; an `app-install` spec that declares `userVerification` must
+ * list both in `appConfigFields`. The secret is used by the host only : it is
+ * removed from the `appConfig` a plugin receives.
+ */
+export const CLIENT_ID_FIELD = 'client_id';
+export const CLIENT_SECRET_FIELD = 'client_secret';
+
+/** How the host authenticates the app's OAuth client when it verifies an installation. */
+export type AppInstallClientAuthMethod = Exclude<OAuth2ClientAuthMethod, 'none'>;
+
+/** Page-number pagination of the installations list. */
+export interface AppInstallListPagination {
+  /** Query parameter carrying the 1-based page number (`page`). */
+  readonly pageParam: string;
+  /** Query parameter carrying the page size (`per_page`). */
+  readonly perPageParam: string;
+  /** Page size the host asks for ; a page shorter than this is the last one. */
+  readonly perPage: number;
+}
+
+/**
+ * Proof that the human who came back from the installation page has access
+ * to the installation the callback names. Declarative : the host runs it, the
+ * plugin writes no code and never sees the client secret or the user token.
+ *
+ * The provider's installation page is configured to ask the installing user
+ * to authorize the app (GitHub : "Request user authorization (OAuth) during
+ * installation"), so the authorization request is implicit in the install
+ * redirect and the callback carries an authorization code next to the
+ * installation id. The host then :
+ *   1. exchanges the code at `tokenUrl` with the app's `client_id` /
+ *      `client_secret` for a user token ;
+ *   2. lists the installations that token can reach at `installationsUrl` ;
+ *   3. accepts the installation id only when it is in that list ;
+ *   4. drops the user token (it is never stored and never handed to the plugin).
+ *
+ * A spec without this block cannot prove who performed an installation : the
+ * host refuses to connect it unless the operator explicitly accepts unverified
+ * installations for that provider app.
+ */
+export interface AppInstallUserVerification {
+  /** Name of the callback query parameter carrying the authorization code (`code`). */
+  readonly codeParam: string;
+  /** Token endpoint the code is exchanged at (https). */
+  readonly tokenUrl: string;
+  readonly clientAuthMethod: AppInstallClientAuthMethod;
+  /** Endpoint listing the installations the user token can reach (https, GET, Bearer). */
+  readonly installationsUrl: string;
+  /** Static request headers of the list call (API version, `Accept`). Never `Authorization`. */
+  readonly installationsHeaders?: Readonly<Record<string, string>>;
+  /**
+   * Property of the JSON response holding the list (`installations`). Omit
+   * when the response body is the list itself.
+   */
+  readonly installationsListField?: string;
+  /** Property of each list item holding the installation id (`id`) — a string or a number. */
+  readonly installationIdField: string;
+  /** Omit when the endpoint answers the whole list in one response. */
+  readonly pagination?: AppInstallListPagination;
+}
+
+/**
  * A platform app the company installs on its account (GitHub App). The host
  * redirects to the installation page and receives an installation id ; the
  * plugin mints short-lived tokens from the app's private key at call time.
  */
 export interface AppInstallCredentialSpec {
   readonly kind: 'app-install';
-  /** Operator settings the host collects once (app id, private key, app slug…). */
+  /**
+   * Operator settings the host collects once (app id, private key, app slug…).
+   * With `userVerification`, must include `client_id` and a secret `client_secret`.
+   */
   readonly appConfigFields: readonly CredentialField[];
   /** Build the installation URL from the app configuration. */
   installUrl(appConfig: ProviderAppConfig): string;
   /** Name of the query parameter carrying the installation id on the callback. */
   readonly installationIdParam: string;
+  /**
+   * How the host binds the installation to the identity of the human who
+   * performed it. Strongly recommended : without it the installation id of the
+   * callback is an unauthenticated claim.
+   */
+  readonly userVerification?: AppInstallUserVerification;
 }
 
 /**

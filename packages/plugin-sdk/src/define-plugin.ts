@@ -12,6 +12,11 @@
 import { CREDENTIAL_KINDS, isProviderId, toolPrefixFor, validateDataModel } from '@vaubaan/shared';
 
 import { semanticIssues } from './catalog-loader.ts';
+import {
+  CLIENT_ID_FIELD,
+  CLIENT_SECRET_FIELD,
+  type AppInstallCredentialSpec,
+} from './credential.ts';
 import type { ProviderPlugin } from './plugin.ts';
 
 /** Semver 2.0, pre-release allowed, no build metadata. */
@@ -123,6 +128,7 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
       if (typeof spec.installationIdParam !== 'string' || spec.installationIdParam.length === 0) {
         issues.push('credential.installationIdParam: expected a query parameter name');
       }
+      if (spec.userVerification !== undefined) issues.push(...userVerificationIssues(spec));
       break;
     case 'ssh-key':
       if (spec.algorithm !== 'ed25519')
@@ -132,6 +138,92 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
       break;
   }
   return issues;
+}
+
+/** Upper bound of a declared page size. */
+export const MAX_INSTALLATIONS_PER_PAGE = 1000;
+const CLIENT_AUTH_METHODS: readonly string[] = ['client_secret_basic', 'client_secret_post'];
+
+function userVerificationIssues(spec: AppInstallCredentialSpec): string[] {
+  const at = 'credential.userVerification';
+  const v: unknown = spec.userVerification;
+  if (!isRecord(v)) return [`${at}: expected an object when present`];
+  const issues: string[] = [];
+  if (!isName(v.codeParam)) {
+    issues.push(`${at}.codeParam: expected a query parameter name`);
+  } else if (v.codeParam === spec.installationIdParam || v.codeParam === 'state') {
+    issues.push(`${at}.codeParam: must differ from installationIdParam and from 'state'`);
+  }
+  for (const key of ['tokenUrl', 'installationsUrl'] as const) {
+    if (!isHttpsUrl(v[key])) issues.push(`${at}.${key}: expected an https URL`);
+  }
+  if (typeof v.clientAuthMethod !== 'string' || !CLIENT_AUTH_METHODS.includes(v.clientAuthMethod)) {
+    issues.push(`${at}.clientAuthMethod: expected ${CLIENT_AUTH_METHODS.join(' | ')}`);
+  }
+  if (!isName(v.installationIdField)) {
+    issues.push(`${at}.installationIdField: expected a property name`);
+  }
+  if (v.installationsListField !== undefined && !isName(v.installationsListField)) {
+    issues.push(`${at}.installationsListField: expected a property name when present`);
+  }
+  if (v.installationsHeaders !== undefined) {
+    if (!isRecord(v.installationsHeaders)) {
+      issues.push(`${at}.installationsHeaders: expected a record of header values`);
+    } else {
+      for (const [name, value] of Object.entries(v.installationsHeaders)) {
+        if (typeof value !== 'string') {
+          issues.push(`${at}.installationsHeaders.${name}: expected a string`);
+        }
+        if (name.toLowerCase() === 'authorization') {
+          issues.push(`${at}.installationsHeaders: the host sets Authorization itself`);
+        }
+      }
+    }
+  }
+  if (v.pagination !== undefined) {
+    const p: unknown = v.pagination;
+    if (!isRecord(p)) {
+      issues.push(`${at}.pagination: expected an object when present`);
+    } else {
+      if (!isName(p.pageParam) || !isName(p.perPageParam) || p.pageParam === p.perPageParam) {
+        issues.push(`${at}.pagination: pageParam and perPageParam must be two parameter names`);
+      }
+      const perPage = p.perPage;
+      if (
+        typeof perPage !== 'number' ||
+        !Number.isInteger(perPage) ||
+        perPage < 1 ||
+        perPage > MAX_INSTALLATIONS_PER_PAGE
+      ) {
+        issues.push(
+          `${at}.pagination.perPage: expected an integer from 1 to ${MAX_INSTALLATIONS_PER_PAGE}`,
+        );
+      }
+    }
+  }
+  // The host authenticates the app's OAuth client : the operator must be asked for it.
+  const fields = isList(spec.appConfigFields) ? spec.appConfigFields : [];
+  const clientId = fields.find((f) => f.name === CLIENT_ID_FIELD);
+  const clientSecret = fields.find((f) => f.name === CLIENT_SECRET_FIELD);
+  if (!clientId || clientId.secret || clientId.required === false) {
+    issues.push(
+      `credential.appConfigFields: userVerification needs a required, non-secret '${CLIENT_ID_FIELD}' field`,
+    );
+  }
+  if (!clientSecret || !clientSecret.secret || clientSecret.required === false) {
+    issues.push(
+      `credential.appConfigFields: userVerification needs a required, secret '${CLIENT_SECRET_FIELD}' field`,
+    );
+  }
+  return issues;
+}
+
+function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x);
+}
+
+function isName(x: unknown): x is string {
+  return typeof x === 'string' && x.trim().length > 0;
 }
 
 /** `Array.isArray` narrows a readonly array to `any[]` ; this guard keeps the element type. */
