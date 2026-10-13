@@ -75,6 +75,69 @@ describe('mapClaims and email_verified', () => {
   });
 });
 
+describe('mapClaims and the group overage claim (Entra ID)', () => {
+  const claims = { sub: 'idp|1', email: 'ops@example.com' };
+  const refusal = (raw: Record<string, unknown>, mapping = MAPPING): LoginError => {
+    let thrown: unknown;
+    try {
+      mapClaims(raw, mapping);
+    } catch (err) {
+      thrown = err;
+    }
+    expect(thrown).toBeInstanceOf(LoginError);
+    return thrown as LoginError;
+  };
+
+  it('refuses a token whose groups were moved out of it, instead of reading "no groups"', () => {
+    // What Entra ID sends above 200 groups: no `groups` claim, a pointer to the Graph API.
+    const overage = {
+      ...claims,
+      _claim_names: { groups: 'src1' },
+      _claim_sources: {
+        src1: { endpoint: 'https://graph.microsoft.com/v1.0/users/x/getMemberObjects' },
+      },
+    };
+    const err = refusal(overage);
+    expect(err.code).toBe('groups-overage');
+    // Operator-facing: the log line names the claim and what to change at the IdP.
+    expect(err.message).toContain("'groups'");
+    expect(err.message).toMatch(/groups assigned to the application/i);
+  });
+
+  it('refuses the implicit-flow marker `hasgroups`, as a boolean or a string', () => {
+    for (const marker of [true, 'true', 'True']) {
+      expect(refusal({ ...claims, hasgroups: marker }).code, String(marker)).toBe('groups-overage');
+    }
+  });
+
+  it('refuses even when a partial groups claim travels next to the pointer', () => {
+    const err = refusal({ ...claims, groups: ['dev'], _claim_names: { groups: 'src1' } });
+    expect(err.code).toBe('groups-overage');
+  });
+
+  it('follows the configured claim name: a pointer for another claim is not an overage', () => {
+    const mapping = { sub: 'sub', email: 'email', groups: 'roles' };
+    // The mapped claim is `roles`: `groups` being moved out does not concern it…
+    expect(
+      mapClaims(
+        { ...claims, roles: ['admins'], _claim_names: { groups: 'src1' }, hasgroups: true },
+        mapping,
+      ).groups,
+    ).toEqual(['admins']);
+    // …and a pointer for `roles` itself does.
+    expect(refusal({ ...claims, _claim_names: { roles: 'src1' } }, mapping).code).toBe(
+      'groups-overage',
+    );
+  });
+
+  it('accepts a token with no groups and no pointer (an IdP that sends none)', () => {
+    expect(mapClaims(claims, MAPPING).groups).toEqual([]);
+    expect(mapClaims({ ...claims, hasgroups: false }, MAPPING).groups).toEqual([]);
+    expect(mapClaims({ ...claims, _claim_names: 'garbage' }, MAPPING).groups).toEqual([]);
+    expect(mapClaims({ ...claims, _claim_names: { other: 'src1' } }, MAPPING).groups).toEqual([]);
+  });
+});
+
 describe('assertEmailDomainAllowed', () => {
   it('allows every domain when the list is empty', () => {
     expect(() => assertEmailDomainAllowed('a@anything.test', [])).not.toThrow();

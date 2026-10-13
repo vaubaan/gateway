@@ -27,7 +27,7 @@ import { randomBytes } from 'node:crypto';
 
 import type { MissionPolicyEntry, RiskId } from '@vaubaan/shared';
 
-import { SESSION_COOKIE } from '../../src/server/auth';
+import { LOGIN_COOKIE, SESSION_COOKIE } from '../../src/server/auth';
 import type { GatewayRoot } from '../../src/server/compose/root';
 import type { Actor } from '../../src/server/connections';
 import type { MissionDraft } from '../../src/server/missions';
@@ -99,7 +99,7 @@ export interface SeedSummary {
 interface SignedIn {
   readonly person: DemoPerson;
   readonly user: UserRecord;
-  /** `vbn_session=<id>`, as the browser would send it. */
+  /** `<SESSION_COOKIE>=<id>`, as the browser would send it. */
   readonly cookie: string;
 }
 
@@ -140,7 +140,7 @@ class Seeder {
     );
     const authorization = started.headers.get('location');
     if (!authorization) fail('sign-in did not start', started.status);
-    const pending = cookieOf(started, 'vbn_login');
+    const pending = cookieOf(started, LOGIN_COOKIE);
     const callback = this.ctx.idp.consent(new URL(authorization), person);
     const finished = await handlers.loginCallback(
       new Request(callback, { headers: { cookie: pending } }),
