@@ -323,7 +323,11 @@ reference — carries the colour of its **kind**, through `Slug` or through
 nothing else: severity, class of risk, gate, status and callouts keep the four
 status accents and their own marks (a filled badge, an outlined word, the
 vector strip). A kind is never said by the colour alone: the slug has its
-glyph, its `title` and a visually hidden word (`Risk: `, `Tool: `…).
+glyph, its `title` and a visually hidden word (`Risk: `, `Tool: `…) that is
+generated content (`data-kind-label`, `.slug::before`): assistive technology
+reads it, and the text of the element stays the bare name. An identifier
+wraps between its words — a `<wbr>` follows each separator
+(`github__create_|or_|update_|file`) — and never inside one.
 
 | Kind         | Hue (`tokens.css`) | Glyph      | Where it appears                                                                                                                           |
 | ------------ | ------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -334,9 +338,10 @@ glyph, its `title` and a visually hidden word (`Risk: `, `Tool: `…).
 | `resource`   | `cyan`             | box        | resource refs: mission page, mission creation, connection page, Audit                                                                      |
 | `connection` | `indigo`           | two rings  | connection names: mission page, Audit                                                                                                      |
 | `mission`    | `orange`           | flag       | mission names: Audit, Requests                                                                                                             |
-| `token`      | `gold`             | key        | the masked mission token: mission page, missions list                                                                                      |
+| `member`     | `magenta`          | person     | people on a mission: the Members table, the holder of a member token (mission page, session, Audit), the "Shared with you" callout         |
+| `token`      | `gold`             | key        | the masked mission token (mission page, missions list, "Members and tokens") and the name a named token goes by (session, Audit)           |
 
-Tokens, in `styles/tokens.css`: eight hue families of four steps (50, 200, 600, 900) beside the status accents, and per kind three semantic tokens mapped per
+Tokens, in `styles/tokens.css`: nine hue families of four steps (50, 200, 600, 900) beside the status accents, and per kind three semantic tokens mapped per
 theme — `--type-<kind>-rail` (step 600: a rail, a band, the glyph),
 `--type-<kind>-bg` and `--type-<kind>-fg` (the tag: 50 under 900 in light, 900
 under 200 in dark). The same file ends with one rule per kind,

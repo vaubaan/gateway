@@ -41,8 +41,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   gets a plane control that narrows every tab at once. `#risk-<id>` and `#preset-<id>` links
   open the right tab and plane.
 - **Colour says what kind of thing a name is.** Risks, presets, tools, data-model planes,
-  resources, connections, missions and tokens each have one colour and one glyph, the same
-  on every page — on the provider reference, a mission, the audit, a session, a request — so
+  resources, connections, missions, members and tokens each have one colour and one glyph,
+  the same on every page — on the provider reference, a mission, the audit, a session, a request — so
   a risk id is told from a tool name before it is read. Severity, gates and statuses keep
   their own marks. "What the colours mean" is in the help of the provider pages.
 - **Help on demand.** Explanatory text is one line with a "More" button — on the provider
@@ -403,6 +403,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **The Audit filters are grouped** into what, who and when, on two rows instead of ten
+  fields in one; tool names and risk ids wrap between their words, never inside one; the
+  "no environment label" warning of mission creation names a resource by the name its owner
+  gave it.
 - **The application bar holds on one line**: "Shares received" reads "Shares" and
   "Administration" reads "Admin" in the bar, the current section is marked, and the email,
   the role and "Sign out" are behind one account button.

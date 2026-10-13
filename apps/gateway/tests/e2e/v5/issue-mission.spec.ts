@@ -473,7 +473,7 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await expect(help).toBeHidden();
   await page.getByRole('button', { name: 'How to read this page' }).click();
   await expect(help.getByText('Can it be undone, and at what price?')).toBeVisible();
-  await expect(help.getByTestId('kind-legend').locator('[data-kind]')).toHaveCount(8);
+  await expect(help.getByTestId('kind-legend').locator('[data-kind]')).toHaveCount(9);
   await page.reload();
   await expect(help).toBeVisible();
   await page.getByRole('button', { name: 'How to read this page' }).click();

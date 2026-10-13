@@ -205,10 +205,10 @@ only its helper paragraph folds.
 
 **A6 — A type colour system, separate from the status colours.** One hue and
 one glyph per kind of object the interface names — risk, preset, tool, plane or
-entity, resource, connection, mission, token — carried by the row or column of
+entity, resource, connection, mission, member, token — carried by the row or column of
 that kind and by every reference to it (`Slug`). The hue says what kind of
 thing a name is and never its state: severity, class, gate and status keep the
-four status accents and their own forms. The eight hues are new primitive
+four status accents and their own forms. The nine hues are new primitive
 families chosen between the four status hues; a kind is also said by its glyph
 and a hidden word, never by the colour alone.
 
@@ -246,9 +246,12 @@ role and "Sign out" behind it.
   A7, reduced motion (now handled), and the use of the base surface for
   content. They are listed for the spec's owner; the handbook
   ([web-app](../handbook/web-app.md)) documents what the code does.
-- A page that prints a name with `Slug` gains a hidden word before it
-  ("Risk: "), so its text content is no longer the bare id; browser tests
-  match the id inside the slug.
+- The word that names the kind to assistive technology is generated content of
+  the slug, not text: the text of a cell that prints an id stays the bare id,
+  for a browser test as for a copy and paste.
+- The holder of a member token is a person and takes the member colour; the
+  holder of a named token is a name and takes the token colour. "Token holder"
+  is therefore not a colour of its own: it is one of the two.
 
 ### Rejected alternatives
 

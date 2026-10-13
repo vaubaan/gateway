@@ -17,6 +17,7 @@ export const ITEM_KINDS = [
   'resource',
   'connection',
   'mission',
+  'member',
   'token',
 ] as const;
 
@@ -34,5 +35,6 @@ export const ITEM_KIND_WORDS: Readonly<Record<ItemKind, { label: string; meaning
   resource: { label: 'Resource', meaning: 'One thing of a connection: a repository, a project.' },
   connection: { label: 'Connection', meaning: 'A credential of the company at a provider.' },
   mission: { label: 'Mission', meaning: 'What an agent was given: risks, budgets, resources.' },
-  token: { label: 'Token', meaning: 'A mission token, or whoever holds one.' },
+  member: { label: 'Member', meaning: 'A person on a mission: its creator or a member.' },
+  token: { label: 'Token', meaning: 'A mission token, or the name a named token goes by.' },
 };

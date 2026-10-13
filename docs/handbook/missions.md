@@ -825,7 +825,7 @@ After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
   creator's email, and "not generated yet" while the member has no token).
   "Duplicate from…" on the creation screen offers the created ones only.
 - **`/missions/<id>`** — read by the creator and by members. A member gets a
-  "Shared with you" banner naming the creator and none of the creator's
+  "Shared with you" callout (`Callout`, the member glyph) naming the creator and none of the creator's
   controls (Duplicate, Rotate token, Revoke mission, the gate buttons). The
   page was otherwise left as it is; the team lives in one self-contained
   section, `TeamSection` (`team-section.tsx`), fed by
@@ -954,7 +954,9 @@ for the ephemeral instance.
 - **Calls are refused `risk-not-accepted` on one resource only** — read the
   preview's `notices`: the resource has no environment label, or a label the
   catalog does not know; env-scoped risks can never be touched on it. Label it
-  on the Connections page.
+  on the Connections page. The line of the notice on the creation screen
+  (`noticeHeadline` in `mission-form.tsx`) names the resource as its owner
+  named it, with its ref after it when the two differ.
 - **A preset fills fewer risks than it lists** — read the line under the preset
   select: entries outside the authority, or needing a resource labelled with an
   environment nobody labelled (Connections page), are left out.

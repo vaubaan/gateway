@@ -21,8 +21,10 @@ describe('Slug', () => {
     expect(html).toMatch(/^<span[^>]*data-kind="tool"/);
     expect(html).toContain('<svg');
     expect(html).toContain('aria-hidden="true"');
-    expect(html).toContain('Tool: </span>');
-    expect(html).toContain('github__get_file_contents');
+    expect(html).toContain('data-kind-label="Tool: "');
+    // The name wraps between its words, never inside one, and its text stays the bare name.
+    expect(html).toContain('github__<wbr/>get_<wbr/>file_<wbr/>contents');
+    expect(html.replace(/<[^>]+>/g, '')).toBe('github__get_file_contents');
   });
 
   it('is a link when it is given somewhere to go, in a new tab on request', () => {

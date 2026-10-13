@@ -17,6 +17,13 @@ export type GlyphName =
   | 'archive'
   | 'user';
 
+const PERSON = (
+  <>
+    <circle cx="6" cy="4" r="2.2" />
+    <path d="M1.8 10.6c.5-2 2.1-3 4.2-3s3.7 1 4.2 3" />
+  </>
+);
+
 const KEY = (
   <>
     <circle cx="3.9" cy="6" r="2.2" />
@@ -43,6 +50,7 @@ const PATHS: Readonly<Record<GlyphName, React.ReactNode>> = {
     </>
   ),
   mission: <path d="M3 11V1.6M3 2h6.2L7.6 4.4 9.2 6.8H3" />,
+  member: PERSON,
   token: KEY,
   key: KEY,
   help: (
@@ -66,12 +74,7 @@ const PATHS: Readonly<Record<GlyphName, React.ReactNode>> = {
       <path d="M2.4 4.6v5h7.2v-5M4.8 6.8h2.4" />
     </>
   ),
-  user: (
-    <>
-      <circle cx="6" cy="4" r="2.2" />
-      <path d="M1.8 10.6c.5-2 2.1-3 4.2-3s3.7 1 4.2 3" />
-    </>
-  ),
+  user: PERSON,
 };
 
 export function Glyph({ name, className }: { name: GlyphName; className?: string }) {

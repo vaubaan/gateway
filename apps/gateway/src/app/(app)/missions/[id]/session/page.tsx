@@ -547,10 +547,15 @@ function HolderName({ holder }: { holder: SessionHolderView | null }) {
     return <span className={styles.muted}>not attributed (before tokens had a holder)</span>;
   }
   return holder.kind === 'member' ? (
-    <>{holder.label}</>
+    <Slug kind="member" mono={false}>
+      {holder.label}
+    </Slug>
   ) : (
     <>
-      {holder.label} <Badge>named token</Badge>
+      <Slug kind="token" mono={false}>
+        {holder.label}
+      </Slug>{' '}
+      <Badge>named token</Badge>
     </>
   );
 }

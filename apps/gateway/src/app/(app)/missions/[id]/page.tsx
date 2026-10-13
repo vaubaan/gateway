@@ -32,6 +32,7 @@ import {
   Thead,
   Tr,
   Slug,
+  Callout,
 } from '@/components/ui';
 import { GateBadge } from '@/components/risk/RiskBadges';
 import { RiskExplain, RiskIdLink } from '@/components/risk/RiskExplain';
@@ -99,14 +100,12 @@ export default async function MissionPage({ params }: Props) {
 
       {!isCreator && (
         <div data-testid="shared-with-me">
-          <Banner tone="info" title="Shared with you">
-            <p>
-              {detail.creator.email ?? 'Its creator'} created this mission and added you as a
-              member. You use it as it is — same resources, same policy, same budget as every other
-              holder — with your own token, below. You cannot change it; its requests are answered
-              by its creator alone.
-            </p>
-          </Banner>
+          <Callout tone="info" icon="member" title="Shared with you">
+            {detail.creator.email ?? 'Its creator'} created this mission and added you as a member.
+            You use it as it is — same resources, same policy, same budget as every other holder —
+            with your own token, below. You cannot change it; its requests are answered by its
+            creator alone.
+          </Callout>
         </div>
       )}
 

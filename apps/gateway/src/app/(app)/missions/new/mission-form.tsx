@@ -702,7 +702,7 @@ export function MissionForm({
               {preview.notices.map((n) => (
                 <li key={`${n.code}:${n.connection_index ?? ''}:${n.resource_refs.join(',')}`}>
                   <details>
-                    <summary>{noticeHeadline(n)}</summary>
+                    <summary>{noticeHeadline(n, context)}</summary>
                     {n.message}
                   </details>
                 </li>
@@ -739,9 +739,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
 }
 
-/** The one line of a notice; its full sentence (consequence, remedy) unfolds below it. */
-function noticeHeadline(notice: PreviewNotice): string {
-  const refs = notice.resource_refs.join(', ');
+/**
+ * The one line of a notice; its full sentence (consequence, remedy) unfolds
+ * below it. A resource is named as its owner named it; its ref follows only
+ * when the name is something else (a database is a UUID at the provider).
+ */
+function noticeHeadline(notice: PreviewNotice, context: readonly IssuanceConnection[]): string {
+  const resources = context.find((c) => c.id === notice.connection_id)?.resources ?? [];
+  const refs = notice.resource_refs
+    .map((ref) => {
+      const name = resources.find((r) => r.ref === ref)?.display_name;
+      return name && name !== ref ? `${name} (${ref})` : ref;
+    })
+    .join(', ');
   switch (notice.code) {
     case 'resource-without-env':
       return `Warning: no environment label on ${refs}. Environment-scoped risks are refused there.`;

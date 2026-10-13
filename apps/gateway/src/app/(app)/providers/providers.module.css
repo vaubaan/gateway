@@ -868,13 +868,13 @@
 }
 /* The description takes what the four other columns leave. */
 .colTool {
-  width: 31%;
+  width: 30%;
 }
 .colArgs {
   width: 17%;
 }
 .colPlane {
-  width: 10%;
+  width: 12%;
 }
 .colRisks {
   width: 13%;

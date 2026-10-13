@@ -135,13 +135,35 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
   await expect(page.locator('body')).not.toContainText(ARGUMENT_MARKER);
   await snap(page, 'audit-mission');
 
-  // Filters in one row; refused calls of one tool.
+  // Ten filters in three named groups — what, who, when — on two rows; refused calls of one tool.
   const filters = page.locator('form');
+  await expect(filters.getByRole('group', { name: 'What' }).locator('label')).toHaveCount(5);
+  await expect(filters.getByRole('group', { name: 'Who' }).locator('label')).toHaveCount(3);
+  await expect(filters.getByRole('group', { name: 'When' }).locator('label')).toHaveCount(2);
   const boxes = await filters
     .locator('label')
     .evaluateAll((labels) => labels.map((label) => Math.round(label.getBoundingClientRect().top)));
   expect(boxes).toHaveLength(10);
-  expect(new Set(boxes).size).toBe(1);
+  expect(new Set(boxes).size).toBe(2);
+  // A tool name and a risk id wrap between their words, never inside one.
+  const breaks = await page
+    .getByTestId('audit-table')
+    .locator('[data-kind="tool"], [data-kind="risk"]')
+    .evaluateAll((slugs) =>
+      slugs.every((slug) => {
+        const text = slug.querySelector('span');
+        if (!text) return false;
+        // Each word is one text node: a word broken across two lines has two boxes.
+        return [...text.childNodes]
+          .filter((node) => node.nodeType === Node.TEXT_NODE)
+          .every((word) => {
+            const range = document.createRange();
+            range.selectNodeContents(word);
+            return range.getClientRects().length === 1;
+          });
+      }),
+    );
+  expect(breaks).toBe(true);
   // And the table shows its last column without scrolling the page sideways.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
 

@@ -82,101 +82,116 @@ export default async function AuditPage({ searchParams }: Props) {
       )}
 
       <form method="get" action="/audit" className={`${styles.filters} ${styles.wide}`}>
-        <label className={styles.filter}>
-          <span>Mission</span>
-          <Select name={AUDIT_PARAMS.mission} defaultValue={raw.mission ?? ''}>
-            <option value="">all</option>
-            {withCurrent(options.missions, raw.mission).map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className={styles.filter}>
-          <span>User</span>
-          <Input
-            name={AUDIT_PARAMS.user}
-            defaultValue={raw.user ?? ''}
-            placeholder="email"
-            autoComplete="off"
-          />
-        </label>
-        <label className={styles.filter}>
-          <span>Connection</span>
-          <Select name={AUDIT_PARAMS.connection} defaultValue={raw.connection ?? ''}>
-            <option value="">all</option>
-            {withCurrent(
-              options.connections.map((c) => ({ id: c.id, name: c.label })),
-              raw.connection,
-            ).map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className={styles.filter}>
-          <span>Tool</span>
-          <Input
-            name={AUDIT_PARAMS.tool}
-            defaultValue={raw.tool ?? ''}
-            placeholder="exact name"
-            autoComplete="off"
-          />
-        </label>
-        <label className={styles.filter}>
-          <span>Decision</span>
-          <Select name={AUDIT_PARAMS.decision} defaultValue={raw.decision ?? ''}>
-            <option value="">any</option>
-            {AUDIT_DECISIONS.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className={styles.filter}>
-          <span title="Whose token the call presented: a member of the mission (their email) or a named token (its name). Authenticated by the token.">
-            Token holder
+        <div className={styles.filterGroup} role="group" aria-labelledby="audit-filters-what">
+          <span id="audit-filters-what" className={styles.filterCaption}>
+            What
           </span>
-          <Input
-            name={AUDIT_PARAMS.holder}
-            defaultValue={raw.holder ?? ''}
-            placeholder="email or name"
-            autoComplete="off"
-          />
-        </label>
-        <label className={styles.filter}>
-          <span title="What the caller declared about itself; not verified, not an identity">
-            Agent label
+          <label className={styles.filter}>
+            <span>Mission</span>
+            <Select name={AUDIT_PARAMS.mission} defaultValue={raw.mission ?? ''}>
+              <option value="">all</option>
+              {withCurrent(options.missions, raw.mission).map((m) => (
+                <option key={m.id} value={m.id}>
+                  {m.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className={styles.filter}>
+            <span>Connection</span>
+            <Select name={AUDIT_PARAMS.connection} defaultValue={raw.connection ?? ''}>
+              <option value="">all</option>
+              {withCurrent(
+                options.connections.map((c) => ({ id: c.id, name: c.label })),
+                raw.connection,
+              ).map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className={styles.filter}>
+            <span>Tool</span>
+            <Input
+              name={AUDIT_PARAMS.tool}
+              defaultValue={raw.tool ?? ''}
+              placeholder="exact name"
+              autoComplete="off"
+            />
+          </label>
+          <label className={styles.filter}>
+            <span>Decision</span>
+            <Select name={AUDIT_PARAMS.decision} defaultValue={raw.decision ?? ''}>
+              <option value="">any</option>
+              {AUDIT_DECISIONS.map((d) => (
+                <option key={d} value={d}>
+                  {d}
+                </option>
+              ))}
+            </Select>
+          </label>
+          <label className={styles.filter}>
+            <span>Kind</span>
+            <Select name={AUDIT_PARAMS.kind} defaultValue={raw.kind ?? ''}>
+              <option value="">any</option>
+              {AUDIT_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {k === 'call' ? 'calls' : 'administrative acts'}
+                </option>
+              ))}
+            </Select>
+          </label>
+        </div>
+        <div className={styles.filterGroup} role="group" aria-labelledby="audit-filters-who">
+          <span id="audit-filters-who" className={styles.filterCaption}>
+            Who
           </span>
-          <Input
-            name={AUDIT_PARAMS.agent}
-            defaultValue={raw.agent ?? ''}
-            placeholder="exact label"
-            autoComplete="off"
-          />
-        </label>
-        <label className={styles.filter}>
-          <span>Kind</span>
-          <Select name={AUDIT_PARAMS.kind} defaultValue={raw.kind ?? ''}>
-            <option value="">any</option>
-            {AUDIT_KINDS.map((k) => (
-              <option key={k} value={k}>
-                {k === 'call' ? 'calls' : 'administrative acts'}
-              </option>
-            ))}
-          </Select>
-        </label>
-        <label className={styles.filter}>
-          <span>From (UTC)</span>
-          <Input type="date" name={AUDIT_PARAMS.from} defaultValue={raw.from ?? ''} />
-        </label>
-        <label className={styles.filter}>
-          <span>To (UTC)</span>
-          <Input type="date" name={AUDIT_PARAMS.to} defaultValue={raw.to ?? ''} />
-        </label>
+          <label className={styles.filter}>
+            <span>User</span>
+            <Input
+              name={AUDIT_PARAMS.user}
+              defaultValue={raw.user ?? ''}
+              placeholder="email"
+              autoComplete="off"
+            />
+          </label>
+          <label className={styles.filter}>
+            <span title="Whose token the call presented: a member of the mission (their email) or a named token (its name). Authenticated by the token.">
+              Token holder
+            </span>
+            <Input
+              name={AUDIT_PARAMS.holder}
+              defaultValue={raw.holder ?? ''}
+              placeholder="email or name"
+              autoComplete="off"
+            />
+          </label>
+          <label className={styles.filter}>
+            <span title="What the caller declared about itself; not verified, not an identity">
+              Agent label
+            </span>
+            <Input
+              name={AUDIT_PARAMS.agent}
+              defaultValue={raw.agent ?? ''}
+              placeholder="exact label"
+              autoComplete="off"
+            />
+          </label>
+        </div>
+        <div className={styles.filterGroup} role="group" aria-labelledby="audit-filters-when">
+          <span id="audit-filters-when" className={styles.filterCaption}>
+            When
+          </span>
+          <label className={styles.filter}>
+            <span>From (UTC)</span>
+            <Input type="date" name={AUDIT_PARAMS.from} defaultValue={raw.from ?? ''} />
+          </label>
+          <label className={styles.filter}>
+            <span>To (UTC)</span>
+            <Input type="date" name={AUDIT_PARAMS.to} defaultValue={raw.to ?? ''} />
+          </label>
+        </div>
         <div className={styles.filterActions}>
           <Button type="submit" variant="primary">
             Search
@@ -248,8 +263,9 @@ function CallRow({ entry }: { entry: AuditCallView }) {
       <Td>
         <LocalDate ts={entry.ts} />
       </Td>
-      <Td className={styles.nowrap}>
+      <Td>
         <Badge tone={entry.decision === 'allowed' ? 'success' : 'danger'}>{entry.decision}</Badge>
+        {/* A refusal code wraps at its hyphens rather than widen the table. */}
         {entry.refusal_code && <div className={styles.mono}>{entry.refusal_code}</div>}
       </Td>
       <Td>
@@ -268,7 +284,9 @@ function CallRow({ entry }: { entry: AuditCallView }) {
       <Td className={styles.holder} data-testid="audit-holder">
         {entry.token ? (
           <>
-            {entry.token.label}
+            <Slug kind={entry.token.kind === 'named' ? 'token' : 'member'} mono={false}>
+              {entry.token.label}
+            </Slug>
             {entry.token.kind === 'named' && (
               <div>
                 <Badge>named token</Badge>
@@ -344,7 +362,7 @@ function AdminRow({ entry }: { entry: AuditAdminView }) {
       <Td>
         <Badge>act</Badge>
       </Td>
-      <Td>
+      <Td className={styles.wraps}>
         {entry.actor.label}
         {entry.delegated_client_id && (
           <div className={styles.muted}>through client {entry.delegated_client_id}</div>

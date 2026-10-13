@@ -88,6 +88,11 @@
   --orange-600: oklch(62% 0.18 45);
   --orange-900: oklch(32% 0.1 45);
 
+  --magenta-50: oklch(96% 0.035 328);
+  --magenta-200: oklch(84% 0.11 328);
+  --magenta-600: oklch(56% 0.21 328);
+  --magenta-900: oklch(30% 0.14 328);
+
   --gold-50: oklch(96% 0.06 98);
   --gold-200: oklch(86% 0.13 98);
   --gold-600: oklch(64% 0.13 98);
@@ -202,6 +207,9 @@
   --type-mission-rail: var(--orange-600);
   --type-mission-bg: var(--orange-900);
   --type-mission-fg: var(--orange-200);
+  --type-member-rail: var(--magenta-600);
+  --type-member-bg: var(--magenta-900);
+  --type-member-fg: var(--magenta-200);
   --type-token-rail: var(--gold-600);
   --type-token-bg: var(--gold-900);
   --type-token-fg: var(--gold-200);
@@ -261,6 +269,9 @@
   --type-mission-rail: var(--orange-600);
   --type-mission-bg: var(--orange-50);
   --type-mission-fg: var(--orange-900);
+  --type-member-rail: var(--magenta-600);
+  --type-member-bg: var(--magenta-50);
+  --type-member-fg: var(--magenta-900);
   --type-token-rail: var(--gold-600);
   --type-token-bg: var(--gold-50);
   --type-token-fg: var(--gold-900);
@@ -303,6 +314,11 @@
   --kind-rail: var(--type-mission-rail);
   --kind-bg: var(--type-mission-bg);
   --kind-fg: var(--type-mission-fg);
+}
+[data-kind='member'] {
+  --kind-rail: var(--type-member-rail);
+  --kind-bg: var(--type-member-bg);
+  --kind-fg: var(--type-member-fg);
 }
 [data-kind='token'] {
   --kind-rail: var(--type-token-rail);

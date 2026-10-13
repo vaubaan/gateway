@@ -502,8 +502,9 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   `after` of a resource edit and a failed discovery.
 - `tests/e2e/v5/audit-session.spec.ts` (4, Playwright on the ephemeral instance) — a day
   of calls on the session page (the calls per agent label beside the shared budget, the
-  timeline of one label and back to the whole one) and on the audit page (ten filters
-  in one row, the agent label among them); every column of the audit table on screen at
+  timeline of one label and back to the whole one) and on the audit page (ten filters in three named
+  groups — what, who, when — on two rows, the agent label among them; a tool name and a
+  risk id wrap between their words, never inside one); every column of the audit table on screen at
   1280 px with no sideways scroll (the fingerprint cell wraps; the check is a plain
   test, no longer an expected failure); every column of the session timeline on screen
   at 1280 px; 404 for a mission that is not the user's.

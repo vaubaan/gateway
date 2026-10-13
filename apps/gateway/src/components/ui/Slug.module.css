@@ -28,7 +28,20 @@
 }
 .text {
   min-width: 0;
-  overflow-wrap: anywhere;
+  /* Wraps at the break opportunities between its words; inside a word only
+     when a single word is wider than its container. */
+  overflow-wrap: break-word;
+}
+/* The kind, said to assistive technology and kept out of the element's text. */
+.slug::before {
+  content: attr(data-kind-label);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 /* A link reads as one at rest: underlined. */
 .link .text {
