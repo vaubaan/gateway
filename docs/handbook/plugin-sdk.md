@@ -88,7 +88,7 @@ flowchart LR
 | `catalog`                                            | —      | `RiskCatalog` with `presets` ; loaded from YAML, see below.                                                                                                                                                                                                   |
 | `credential`                                         | —      | `CredentialSpec`, see below.                                                                                                                                                                                                                                  |
 | `classify(tool, args, resources)`                    | yes    | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection ; used to derive the env and default refs. The gateway core's `Classifier` is this member plus `envOf` (`Pick<ProviderPlugin, 'classify' \| 'envOf'>`). |
-| `execute(ctx, tool, args)`                           | no     | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?. Throws `UpstreamAuthError` on 401/403.                                                                                                            |
+| `execute(ctx, tool, args)`                           | no     | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?, credentialCache?. Throws `UpstreamAuthError` on 401/403.                                                                                          |
 | `discoverResources(ctx)`                             | no     | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                                             |
 | `envOf?(slice, resources)`                           | yes    | The environment a slice carries in itself (Vercel's `env[prod]` segment, GitHub's branch) ; `undefined` defers to the resource label. See "Environment resolution".                                                                                           |
 | `refresh?(ctx)`                                      | no     | Override for a non-standard refresh only (re-minted installation token…). A standard `oauth2` credential is refreshed by the host from the spec (`tokenUrl`, `clientAuthMethod`, `resourceIndicator`) : `refreshable: true` needs no `refresh`.               |
@@ -98,6 +98,23 @@ flowchart LR
 `definePlugin(def)` validates (`pluginIssues`) and `Object.freeze`s. Issues
 are aggregated into one `PluginDefinitionError` so a contributor fixes a
 broken definition in one pass.
+
+`ExecuteContext.credentialCache` (`UpstreamCredentialCache { get, set(key,
+value, ttlSeconds) }`, optional) is a cache the host scopes to the
+connection, for the short-lived upstream credential a plugin derives on
+every call. The plugin picks the key and the lifetime ; the host namespaces
+the entries per connection, caps their lifetime and drops them when the
+provider answers 401 or the connection stops being `active`. Only `execute`
+receives it ; a credential that is the result of a tool is never cached.
+GitHub is the one user (`plugins/github/src/token-cache.ts`) ; the host side
+is described in [execution-door](execution-door.md), the decision in
+[[upstream-credential-cache-and-rejected-credentials]].
+
+`UpstreamAuthError` carries the provider's status. The execution door treats
+only a 401 as a rejected credential (refresh, retry, then the connection is
+`expired`) ; a 403 is reported as a failed call and changes nothing. A plugin
+must therefore raise 401 only when the provider says the credential itself
+is invalid.
 
 ### `CredentialSpec` and `CredentialSecret` (`credential.ts`)
 
@@ -359,10 +376,11 @@ metadata? }`, `ConnectionResource`, `Credential` (encrypted envelope),
 - `refusal.ts` — `REFUSAL_CODES` (8), `RefusalCode`, `isRefusalCode`.
 - `mcp.ts` — `toolPrefixFor`, `splitToolName`, `McpToolDeclaration`,
   `McpToolResult`, `McpToolContent`, `UpstreamAuthError`, JSON-RPC types.
-- `legacy-v4.ts` — quarantined v4 row types (`Provider`, `PROVIDERS`,
-  `providerForTool`, `ProviderBinding`, `ProviderAdmin`, `Token`,
-  `TokenContext`, `AccessTokenContext`, …), all `@deprecated`. No new
-  import ; deleted after P1.2 / P1.6.
+
+The quarantined v4 row types (`legacy-v4.ts` : `ProviderBinding`,
+`ProviderAdmin`, `Token`, `TokenContext`…) were deleted with the v4
+application ; no plugin exports a v4 adapter or a `classifyXxxV4` wrapper
+any more.
 
 ## The template (`plugins/_template`)
 

@@ -55,9 +55,9 @@ type-check` at the root fans out to all of them.
 - Historical v4 documents are marked `status: legacy` or moved to
   `docs/**/legacy/` (ADR
   [legacy-status-of-v4-adrs-and-handbooks](../decisions/legacy-status-of-v4-adrs-and-handbooks.md)).
-- Apart from the v4 app code that Phase 1 deletes, nothing in the repository
-  depends on Vercel or Supabase; `apps/gateway` still lists the
-  `@supabase/*` packages for the legacy routes until then.
+- Nothing in the repository depends on Vercel or Supabase: the v4
+  application code and its `@supabase/*` dependencies were deleted with
+  P1.6.
 
 ## TypeScript and lint baseline
 
@@ -74,29 +74,26 @@ type-check` at the root fans out to all of them.
 
 ## Scripts
 
-| Script                            | What it does                                                       |
-| --------------------------------- | ------------------------------------------------------------------ | --- | ------------------------------ |
-| `npm run ci`                      | type-check, lint, format:check, build, test — the exact CI gate    |
-| `npm run type-check`              | `tsc --noEmit` in every workspace                                  |
-| `npm run lint` / `lint:fix`       | ESLint over the repository                                         |
-| `npm run format` / `format:check` | Prettier write / check                                             |
-| `npm run build`                   | every workspace `build` (today: `next build` of `apps/gateway`)    |
-| `npm run test` / `test:watch`     | Vitest, whole suite                                                |
-| `npm run test:e2e`                | Playwright, every project (manual; not in CI)                      |
-| `npm run test:e2e:real-clouds`    | Playwright `e2e-real-clouds` project only (legacy v4 spec; manual) |
-| `npm run dev`                     | `next dev` of `apps/gateway`                                       |
-| `npm run gen-master-key`          | prints a fresh 32-byte base64 master key                           |
-| `npm run docker:build`            | builds `deploy/docker/Dockerfile` as `vaubaan-gateway:local`       |
-| `npm run docker:smoke`            | runs `deploy/docker/smoke.sh` against that image                   |
-| `prepare`                         | installs the husky hook (`husky                                    |     | true`, never fails an install) |
+| Script                            | What it does                                                          |
+| --------------------------------- | --------------------------------------------------------------------- | --- | ------------------------------ |
+| `npm run ci`                      | type-check, lint, format:check, build, test — the exact CI gate       |
+| `npm run type-check`              | `tsc --noEmit` in every workspace                                     |
+| `npm run lint` / `lint:fix`       | ESLint over the repository                                            |
+| `npm run format` / `format:check` | Prettier write / check                                                |
+| `npm run build`                   | every workspace `build` (today: `next build` of `apps/gateway`)       |
+| `npm run test` / `test:watch`     | Vitest, whole suite                                                   |
+| `npm run test:e2e`                | builds, then Playwright on the ephemeral instance (manual; not in CI) |
+| `npm run dev`                     | `next dev` of `apps/gateway`                                          |
+| `npm run gen-master-key`          | prints a fresh 32-byte base64 master key                              |
+| `npm run docker:build`            | builds `deploy/docker/Dockerfile` as `vaubaan-gateway:local`          |
+| `npm run docker:smoke`            | runs `deploy/docker/smoke.sh` against that image                      |
+| `prepare`                         | installs the husky hook (`husky                                       |     | true`, never fails an install) |
 
 Tests: Vitest collects `apps/*/tests/{unit,integration}`,
 `packages/*/tests/{unit,integration}`, `plugins/*/tests/unit` (`.test.ts`
 and `.test.tsx`) and co-located `*.test.ts` under `apps/*/src` and
-`packages/*/src`; `apps/gateway/tests/unit/components/**` runs under
-`jsdom`; `apps/*/tests/e2e/**` is excluded and belongs to Playwright. The
-runner sets `SKIP_LIVE=1` so legacy tests that could reach a real cloud skip
-themselves. Scenarios: [`docs/tests/`](../tests/).
+`packages/*/src`; `apps/*/tests/e2e/**` is excluded and belongs to
+Playwright. No test can reach a real provider. Scenarios: [`docs/tests/`](../tests/).
 
 ## Local gate
 
@@ -128,7 +125,7 @@ jobs:
     - npm run lint
     - npm run format:check
     - npm run build # next build (Turbopack); standalone output
-    - npm run test # vitest run, env SKIP_LIVE=1
+    - npm run test # vitest run
   docker: # needs: check
     - docker/build-push-action (deploy/docker/Dockerfile, push: false, load: true,
       GitHub Actions layer cache, build-arg GIT_COMMIT_SHA=${{ github.sha }})

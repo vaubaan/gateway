@@ -9,8 +9,8 @@ ships at least one **preset**.
 
 Current plugins: `cloudflare-dns`, `github`, `gmail` (experimental),
 `railway`, `resend`, `ssh`, `stripe`, `supabase`, `upstash-redis`, `vercel`
-— all ten on the SDK since P1.2 and aligned on one surface by P1.2-align
-(their v4 exports stay `@deprecated` until P1.6). `_template` is the
+— all ten on the SDK, on one surface ; the v4 adapters and `classifyXxxV4`
+wrappers are gone. `_template` is the
 scaffold. The per-provider index is
 [`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md).
 

@@ -9,6 +9,34 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ## [Unreleased]
 
+### Changed
+
+- **A web session or a delegated token presented at `/mcp` is refused with
+  `wrong-credential-kind`**; a token replaced by rotation is a 401 from the next call, and a
+  revoked mission answers `mission-inactive` — the door re-reads the token and the mission
+  on every call and only skips the argon2 computation.
+- **Only a 401 from a provider counts as a rejected credential.** The gateway then
+  refreshes and retries once; a rejected refresh turns the connection `expired` and the
+  agent reads `connection-unavailable`. A 403 is reported as a failed call and leaves the
+  connection alone.
+- **The audit's argument hash is the approval fingerprint**: SHA-256 of the canonical JSON
+  (64 hex characters) instead of v4's 16.
+- **`/mcp` no longer answers CORS**, and refuses a browser `Origin` other than the
+  instance's own.
+- `/` redirects to `/missions` (or `/login`); the application is on zod 4. The image build now
+  copies the dependencies npm nests under a workspace (`apps/gateway/node_modules`), which
+  the build stage used to leave behind.
+
+### Removed
+
+- **The v4 application.** The organization / project / token pages, the marketing site,
+  `/api/v1/**`, `/api/integrations/**`, the Supabase-backed gateway and its libraries, the
+  v4 Playwright specs, the v4 adapters and `classifyXxxV4` wrappers of the ten plugins,
+  `legacy-v4.ts` in `@vaubaan/shared`, the bindings bridge and the scope-injection module of
+  `@vaubaan/policy-engine`, and the dependencies only they used (`@supabase/ssr`,
+  `@supabase/supabase-js`, `@modelcontextprotocol/sdk` v1, `mermaid`). The classifier test
+  suites were ported to the plugins' v5 entry points.
+
 ### Security
 
 - **App installations are bound to the person who performs them (P1.4b).** Connecting a
@@ -28,6 +56,23 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **The execution MCP door (P1.6).** `POST /mcp` now serves v5: an agent presents its
+  mission token, `tools/list` shows the tools of the providers its mission holds a
+  connection and an accepted risk for, and `tools/call` goes through the whole decision —
+  mission state, resource selection, `risks_touched ⊆ accepted_risks`, budget / rate / gate,
+  then the provider with a credential decrypted for that call only — and leaves one audit
+  entry, allowed or refused. A refusal reaches the client whole: JSON-RPC error `-32603`
+  whose `data` carries the code, its fields (claim URL, approval URL, allowed resources…)
+  and the hint. `GET /mcp/catalog` returns the tool surface, what the mission can call, its
+  resources with their environment labels and what is left of each risk's quota. Agents may
+  label their calls (`X-Vaubaan-Agent` header, or `_meta.agent` per call) for the audit.
+  The door speaks MCP through `@modelcontextprotocol/server` 2.3 (stateless Streamable
+  HTTP; 2025-era and 2026-07-28 clients), answers plain JSON, and is rate limited per
+  mission (`mcp.rate_limit_per_minute`, default 600).
+- **Fewer round trips to GitHub.** The installation token the gateway mints for a call is
+  reused for up to 50 minutes per connection and repository, and dropped as soon as GitHub
+  rejects it or the connection is revoked. Plugins get the cache through
+  `ExecuteContext.credentialCache`.
 - **Claims and the request inbox (P1.7).** The URL a `budget-exhausted` refusal carries,
   `<public_url>/r/<id>`, now answers: it asks for a sign-in, lets only the mission's creator
   through (anyone else — including an owner of the same connection — gets a 403 that says

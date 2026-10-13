@@ -31,8 +31,6 @@ jobs:
       - run: npm run format:check
       - run: npm run build
       - run: npm run test
-        env:
-          SKIP_LIVE: '1'
 
   # Builds the single gateway image (deploy/docker/Dockerfile) and runs the
   # container smoke test: incomplete configuration exits naming the key, a
