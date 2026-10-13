@@ -6,7 +6,8 @@
  * the application: the consent screen is the one place where a user hands an
  * agent part of their authority, so its content, its escaping and its response
  * headers are decided — and tested — in one host-agnostic place. No script, no
- * external resource, never framed, never cached, no referrer.
+ * external resource, never framed, never cached, no referrer outside the
+ * instance.
  *
  * **Everything a client says of itself is shown as a claim.** The name comes
  * from the registration; what the screen states as fact is where the
@@ -74,7 +75,10 @@ function document(status: number, title: string, body: string): Response {
       'Content-Security-Policy': `default-src 'none'; style-src 'nonce-${nonce}'; base-uri 'none'; frame-ancestors 'none'`,
       'X-Frame-Options': 'DENY',
       'X-Content-Type-Options': 'nosniff',
-      'Referrer-Policy': 'no-referrer',
+      // `same-origin`, not `no-referrer`: a form posted from a `no-referrer`
+      // document carries `Origin: null`, which the mutation guard refuses. The
+      // address of this page still never leaves the instance.
+      'Referrer-Policy': 'same-origin',
     },
   });
 }

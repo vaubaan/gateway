@@ -107,13 +107,14 @@ describe('the consent screen', () => {
     expect(html.match(/<button /g)).toHaveLength(2);
   });
 
-  it('is never cached, never framed, sends no referrer and runs no script', async () => {
+  it('is never cached, never framed, sends no referrer off the instance and runs no script', async () => {
     const response = consentPage(view());
     expect(response.status).toBe(200);
     expect(response.headers.get('content-type')).toBe('text/html; charset=utf-8');
     expect(response.headers.get('cache-control')).toBe('no-store');
     expect(response.headers.get('x-frame-options')).toBe('DENY');
-    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+    // Not `no-referrer`: the form of such a document would post `Origin: null`.
+    expect(response.headers.get('referrer-policy')).toBe('same-origin');
     expect(response.headers.get('x-content-type-options')).toBe('nosniff');
     const csp = response.headers.get('content-security-policy') ?? '';
     expect(csp).toContain("default-src 'none'");

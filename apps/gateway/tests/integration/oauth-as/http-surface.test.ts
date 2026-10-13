@@ -372,18 +372,20 @@ describe('authorization server over HTTP', () => {
       }
     });
 
-    it.each([
+    const BROKEN: [string, Record<string, string | null>, string][] = [
       ['no PKCE challenge', { code_challenge: null }, 'invalid_request'],
       ['the plain PKCE method', { code_challenge_method: 'plain' }, 'invalid_request'],
       ['the implicit flow', { response_type: 'token' }, 'unsupported_response_type'],
       ['another scope', { scope: 'admin' }, 'invalid_scope'],
       ['the execution door as resource', { resource: `${PUBLIC_URL}/mcp` }, 'invalid_target'],
-    ])(
-      'returns %s to the client through its redirect URI, before any sign-in',
+    ];
+
+    it.each(BROKEN)(
+      'returns %s to the client through its redirect URI, once a user is signed in',
       async (_case, overrides, code) => {
-        const response = await instance
-          .browser()
-          .get(authorizationUrl(clientId, pkce, overrides).href);
+        const browser = instance.browser();
+        await browser.signIn(ADA);
+        const response = await browser.get(authorizationUrl(clientId, pkce, overrides).href);
         expect(response.status).toBe(303);
         const location = new URL(response.headers.get('location') ?? '');
         expect(`${location.origin}${location.pathname}`).toBe(LOOPBACK_REDIRECT);
@@ -395,6 +397,39 @@ describe('authorization server over HTTP', () => {
         expect(response.headers.get('referrer-policy')).toBe('no-referrer');
       },
     );
+
+    it.each(BROKEN)(
+      'sends nobody to the redirect URI for %s before a sign-in',
+      async (_case, overrides) => {
+        const response = await instance
+          .browser()
+          .get(authorizationUrl(clientId, pkce, overrides).href);
+        expect(response.status).toBe(303);
+        const location = new URL(response.headers.get('location') ?? '', PUBLIC_URL);
+        expect(location.origin).toBe(PUBLIC_URL);
+        expect(location.pathname).toBe('/auth/login');
+      },
+    );
+
+    it('is not a redirector for a client that waits for an operator, signed in or not', async () => {
+      const waiting = await register(instance, {
+        ...PUBLIC_CLIENT_METADATA,
+        redirect_uris: [WEB_REDIRECT],
+      });
+      // A request broken on purpose: the error would travel to the redirect URI.
+      const url = authorizationUrl(waiting.client_id, pkce, {
+        redirect_uri: WEB_REDIRECT,
+        response_type: null,
+      }).href;
+      const anonymous = await instance.browser().get(url);
+      expect(new URL(anonymous.headers.get('location') ?? '', PUBLIC_URL).origin).toBe(PUBLIC_URL);
+      const signedIn = instance.browser();
+      await signedIn.signIn(ADA);
+      const response = await signedIn.get(url);
+      expect(response.status).toBe(403);
+      expect(response.headers.get('location')).toBeNull();
+      expect(await response.text()).toContain('Waiting for an operator');
+    });
 
     it('refuses the bootstrap operator: a delegation is given by a user', async () => {
       const browser = instance.browser();

@@ -103,6 +103,8 @@ describe('addresses a document may be fetched from', () => {
     ['IPv6 multicast', 'ff02::1'],
     ['IPv6 documentation', '2001:db8::1'],
     ['NAT64 of a private address', '64:ff9b::a00:1'],
+    ['IPv4-compatible private', '::10.0.0.1'],
+    ['IPv4-compatible loopback', '::7f00:1'],
     ['IPv4-mapped loopback', '::ffff:127.0.0.1'],
     ['IPv4-mapped private', '::ffff:10.0.0.1'],
     ['IPv4-mapped loopback in hexadecimal', '::ffff:7f00:1'],

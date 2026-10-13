@@ -105,8 +105,8 @@ for (const [network, prefix] of [
   NON_PUBLIC.addSubnet(network, prefix, 'ipv4');
 }
 for (const [network, prefix] of [
-  ['::', 128],
-  ['::1', 128],
+  // Unspecified, loopback and the deprecated IPv4-compatible block (`::a.b.c.d`).
+  ['::', 96],
   ['64:ff9b::', 96],
   ['64:ff9b:1::', 48],
   ['100::', 64],

@@ -8,7 +8,8 @@
  * are established first, and until both are, nothing is ever sent to the
  * redirect URI — the human reads a page (`AuthorizationPageError`). Only then
  * are the other parameters judged, and their errors returned to the client
- * through the redirect (`AuthorizationRedirectError`).
+ * through the redirect (`AuthorizationRedirectError`) — which the handler only
+ * does for a signed-in user and a client that may ask (`handlers.authorize`).
  *
  * A consent is a server-side record bound to the user who was shown the
  * screen: the form posts back its id and a yes or a no, nothing else, so what

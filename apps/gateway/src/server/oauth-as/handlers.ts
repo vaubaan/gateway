@@ -353,6 +353,26 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
           params,
           user?.id ?? null,
         );
+        // Nothing is sent to the redirect URI — not even an error — before a user
+        // is signed in and the client is one that may ask: a client anybody
+        // registered a minute ago must not turn this endpoint into a redirector
+        // (RFC 9700 §4.11.2).
+        if (!principal) return signIn(request);
+        if (!user) return bootstrapCannotDelegate();
+        if (view.status === 'disabled') {
+          return messagePage(
+            403,
+            'Application disabled',
+            `An operator of this instance disabled the application "${view.client.name}". It cannot be given a delegation.`,
+          );
+        }
+        if (view.status === 'pending') {
+          return messagePage(
+            403,
+            'Waiting for an operator',
+            `The application "${view.client.name}" is known to this instance but no operator approved it yet. Ask an operator to approve it under Administration, OAuth clients (client id ${view.client.clientId}), then start the connection again from the application.`,
+          );
+        }
         let accepted;
         try {
           accepted = deps.authorization.validate(view.client, redirectUri, params);
@@ -369,22 +389,6 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
               err.echoState ? params.get('state') : null,
               { error: err.code, error_description: err.message },
             ),
-          );
-        }
-        if (!principal) return signIn(request);
-        if (!user) return bootstrapCannotDelegate();
-        if (view.status === 'disabled') {
-          return messagePage(
-            403,
-            'Application disabled',
-            `An operator of this instance disabled the application "${view.client.name}". It cannot be given a delegation.`,
-          );
-        }
-        if (view.status === 'pending') {
-          return messagePage(
-            403,
-            'Waiting for an operator',
-            `The application "${view.client.name}" is known to this instance but no operator approved it yet. Ask an operator to approve it under Administration, OAuth clients (client id ${view.client.clientId}), then start the connection again from the application.`,
           );
         }
         const destination = redirectDestination(redirectUri);
