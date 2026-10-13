@@ -79,7 +79,10 @@ Twenty-seven terms, distinct and not interchangeable.
   arguments and what the gateway checks. Environment-qualified `RiskId`s
   (`supabase[prod].bulk-row-write`) resolve against the environment label
   of the resource a call touches; for providers where the environment
-  lives in the arguments (the branch, for GitHub), the plugin derives it.
+  lives in the arguments (the branch, for GitHub), the plugin derives it. A call
+  that touches an environment-scoped risk on a resource carrying no
+  label, or a label outside the environments the risk accepts, is
+  refused: an unlabelled resource is never treated as a safe default.
 - **Share** — the act by which the owner of a connection grants a target
   (user or group) a **restriction** on that connection. A share is the
   triple `(connection, target, restriction)`.
@@ -652,7 +655,13 @@ command.
 - **[gateway-risk-model](./gateway-risk-model.md)** — provides plugins,
   catalogs, slices, scope caps, the `risk-not-accepted` code and the
   speed mechanism. v5 consumes this model without modifying it; it adds
-  the cumulative quota and the notion of session. Sections of that
+  the cumulative quota and the notion of session. One part of that
+  model is **not enforced in v5.0**: the stateless scope caps (items or
+  bytes per call). The execution door has no argument-normalization
+  stage yet, so shipped catalogs declare none, and a structural test
+  fails if one does (ADR
+  [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md)).
+  Speed is bounded by the mission's rate limit only. Sections of that
   document that speak of project, binding or org read with the mapping:
   binding → resource of a connection; project policy → share
   restriction; project-scoped root token → mission.
