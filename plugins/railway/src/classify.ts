@@ -28,16 +28,22 @@
  *     unlabelled project yields a wildcard segment, on which the policy
  *     engine refuses every env-scoped risk.
  *   - Every identifier has one grammar, which `execute` uses too : a Railway
- *     id (`projectId`, `environmentId`, `serviceId`, `deploymentId`) is a
- *     `railwayId`, a variable name a `variableName` ; a malformed one is
- *     denied, never escaped. `execute` resolves the call with the same
- *     `resolveTarget` and `readVariableWrite`, and sends the ids they return :
- *     what is classified is what is sent.
- *   - `deploymentId` is checked for its shape only : discovery stores the
- *     environments and the services of a project, not its deployments, so
- *     nothing here can tell which project owns one. A `serviceId` is bound
- *     to the project from the services discovery stored (`servicesOf`,
- *     `readService`, through `resolveTarget`), here and in `execute`.
+ *     id (`projectId`, `environmentId`, `serviceId`) is a `railwayId`, a
+ *     variable name a `variableName` ; a malformed one is denied, never
+ *     escaped. `execute` resolves the call with the same `resolveTarget` and
+ *     `readVariableWrite`, and sends the ids they return : what is
+ *     classified is what is sent.
+ *   - **Every id that is forwarded is bound to the mission's project.** A
+ *     `serviceId` is one of the services discovery stored on the project
+ *     (`servicesOf`, `readService`, through `resolveTarget`), an
+ *     `environmentId` one of its environments. Two arguments of the upstream
+ *     tools name an object nothing here can bind — discovery stores no
+ *     deployment and no agent thread, and the classifier is pure — so they
+ *     are **refused**, never forwarded : `deploymentId` of `get-logs` and
+ *     `threadId` of `railway-agent` (`UNBOUND_ARGUMENTS`). The same
+ *     credential reaches every project of the workspace : a forwarded id
+ *     would let a mission on one project read the logs, or continue the
+ *     agent conversation, of another.
  *
  * Crucial cases :
  *   1. Variable writes emit `service-var[K1,K2,…].W`, which matches
@@ -64,7 +70,7 @@ import {
   type SliceSegment,
 } from '@vaubaan/plugin-sdk';
 
-import { railwayTools } from './tools.ts';
+import { railwayTools, UNBOUND_ARGUMENTS } from './tools.ts';
 
 export const PROVIDER = 'railway';
 
@@ -183,7 +189,30 @@ export function undeclaredArgument(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): string | null {
-  return undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args, ROUTING_ARGUMENTS);
+  return (
+    unboundArgument(tool, args) ??
+    undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args, ROUTING_ARGUMENTS)
+  );
+}
+
+/**
+ * The refusal for an argument that names an object the plugin cannot bind to
+ * the mission's project (`UNBOUND_ARGUMENTS`), `null` when the call carries
+ * none. Present is refused, whatever the value — `null` and `''` included :
+ * the argument is not read, so no value of it is acceptable.
+ */
+export function unboundArgument(
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): string | null {
+  const unbound = Object.hasOwn(UNBOUND_ARGUMENTS, tool) ? UNBOUND_ARGUMENTS[tool] : undefined;
+  if (unbound === undefined) return null;
+  for (const [name, instead] of Object.entries(unbound)) {
+    if (Object.hasOwn(args, name)) {
+      return `${name}: not accepted by '${tool}' — it cannot be bound to the mission's project, so it is not sent. ${instead}`;
+    }
+  }
+  return null;
 }
 
 export function classifyRailway(
@@ -233,17 +262,14 @@ export const AMBIGUOUS_RAILWAY_TARGET = 'ambiguous railway target: specify proje
  * What a project-scoped call runs on, as `classify` and `execute` both read
  * it. Every id went through `railwayId` ; `project` is a resource of the
  * mission, and `environmentId` and `serviceId`, when given, are one of its
- * discovered environments and one of its discovered services.
- *
- * `deploymentId` is the exception : a deployment cannot be listed ahead of the
- * call, so it is held to the id grammar only and Railway decides what the
- * token may read of it (threat model, accepted risk A18).
+ * discovered environments and one of its discovered services. There is no
+ * other id : a call that names a deployment or an agent thread is refused
+ * before it gets here (`unboundArgument`).
  */
 export interface RailwayTarget {
   readonly project: Resource;
   readonly environmentId: string | null;
   readonly serviceId: string | null;
-  readonly deploymentId: string | null;
 }
 
 /**
@@ -269,17 +295,7 @@ export function resolveTarget(
 
   const service = readService(args, project);
   if ('denied' in service) return service;
-  const serviceId = service.id;
-  const deploymentId = optionalId(args.deploymentId, 'deploymentId');
-  if (typeof deploymentId === 'object' && deploymentId !== null) return deploymentId;
-
-  return { project, environmentId: environment.id, serviceId, deploymentId };
-}
-
-/** `null` when the argument is absent, the id when well-formed, a denial otherwise. */
-function optionalId(value: unknown, arg: string): string | null | Denial {
-  if (value === undefined) return null;
-  return railwayId(value) ?? { denied: `${arg}: malformed ref.` };
+  return { project, environmentId: environment.id, serviceId: service.id };
 }
 
 /** `{ id, name }` pairs the discovery stores under `metadata.environments`. */

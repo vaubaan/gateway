@@ -762,18 +762,21 @@ touches `upsert-variable` alone and only a replace touches
 unlabelled and a free-text-labelled project**; an `environmentId` must
 belong to the resolved project (`accept-deploy`, `redeploy`, the agent
 tool).
-`identifier-injection.test.ts` (316): a malformed id refused by `classify`
-and by `execute` (252), variable names, `execute` running on the target
+`identifier-injection.test.ts` (294): a malformed id refused by `classify`
+and by `execute`, variable names, `execute` running on the target
 the classifier resolved, a project id discovery would refuse; **a tool
 takes what its schema declares, nothing else** (8; `projectId` on a tool
 that takes none is checked, then not sent); **`serviceId` is bound to the
-project the mission holds** (20, threat model A18): a service of another
+project the mission holds** (20): a service of another
 project is refused by both sides and nothing is sent, the project's own
 service is sent as given, a service of another project _of the same
 mission_ is still not the named project's, a project discovered before
 services were recorded refuses with what to do, a project with no service
 refuses every `serviceId`, a malformed list in the metadata binds nothing.
-`deploymentId` and `threadId` are not bound (known limitation).
+**An id nothing can bind is refused**: `deploymentId` of `get-logs` and
+`threadId` of `railway-agent`, whatever their value, by `classify` and by
+`execute` with nothing sent; the declared schemas do not offer them; no other
+id-like argument of any tool is left unbound.
 `data-model` (1).
 
 **SSH** (696) — `plugin.test.ts` (299): kit (every catalog risk touched by

@@ -101,6 +101,16 @@ any call (`readService`, `servicesOf`). `deploymentId` and the `threadId` of
 the agent tools are **not** bound: the provider has no cheap lookup that names
 their project. The threat-model row A18 is narrowed to those two and stays open.
 
+> **Amended 2026-10-13** (orchestrator's decision after the final pass): the two
+> are no longer forwarded. An id the plugin cannot bind to the mission's project
+> is **refused**, in `classify` and in `execute`, and left out of the declared
+> schema (`UNBOUND_ARGUMENTS`): `get-logs` reads the latest deployment of a
+> bound service, and every `railway-agent` call starts a new conversation.
+> Binding them was not possible without a lookup the classifier, which is pure,
+> cannot make, and no documented call names the project of a deployment or of a
+> thread. A18 is closed for these two; it now names what remains, the agent tool
+> itself. Railway plugin `4.0.0`.
+
 ### D5. Versions
 
 A plugin whose classification became stricter or whose executor now refuses

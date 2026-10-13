@@ -469,8 +469,9 @@ interface ProjectsPage {
 /**
  * The arguments to send, with every id written from what the classifier's
  * own functions resolved : the project (filled in when the tool takes one and
- * the caller named none), the environment, the service, the deployment. A
- * call they deny is refused. Account-level tools name no resource of the
+ * the caller named none), the environment, the service. A call they deny is
+ * refused, and so is one that names a deployment or an agent thread, which
+ * nothing can bind to the project (`undeclaredArgument`). Account-level tools name no resource of the
  * mission and are forwarded as received.
  *
  * Every denial is a refusal the agent reads, a call that names no project the
@@ -503,7 +504,6 @@ function pinTarget(
   if (TOOLS_TAKING_PROJECT_ID.has(tool)) out.projectId = target.project.ref;
   if (target.environmentId !== null) out.environmentId = target.environmentId;
   if (target.serviceId !== null) out.serviceId = target.serviceId;
-  if (target.deploymentId !== null) out.deploymentId = target.deploymentId;
   return { args: out };
 }
 

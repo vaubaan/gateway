@@ -31,6 +31,12 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   pads its calls with fields of the provider's own API (`target` on
   `vercel__deploy_to_vercel`, `project_id` beside `projectId`) must stop. These plugins and GitHub are `3.0.0`; Stripe is `0.4.0`, Resend and Gmail
   `0.3.0`, Upstash Redis `2.0.1` (`3.0.0` since: see below), SSH stays `2.0.0`.
+- **Railway: `deploymentId` and `threadId` are refused.** Neither can be tied to the
+  mission's project, and the Railway credential reaches every project of the
+  workspace, so the gateway no longer forwards them: `railway__get-logs` takes
+  `serviceId` and `environmentId` and reads the latest deployment, and every
+  `railway__railway-agent` call starts a new conversation. The tools no longer list
+  the two arguments. The Railway plugin is `4.0.0`.
 - **Railway: refresh the resources of each connection once.** A `serviceId` is
   checked against the services recorded for the mission's project at discovery; a
   project discovered by an earlier build has none recorded, and a call that names
