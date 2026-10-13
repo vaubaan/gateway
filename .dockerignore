@@ -34,7 +34,7 @@ node_modules
 **/.env
 **/.env.*
 !**/.env.example
-*.pem
+**/*.pem
 deploy/config/gateway.yaml
 
 docs

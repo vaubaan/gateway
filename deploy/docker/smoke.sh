@@ -12,6 +12,9 @@
 set -euo pipefail
 
 EXIT_CONFIG_ERROR=78
+# A refused configuration must stop the container by itself; a regression that
+# keeps it running fails here (timeout exits 124) instead of hanging CI.
+FAIL_FAST_TIMEOUT_SECONDS=60
 
 IMAGE="${1:?usage: smoke.sh <image>}"
 PORT="${SMOKE_PORT:-3999}"
@@ -27,7 +30,7 @@ pass() { printf 'SMOKE OK:   %s\n' "$*"; }
 
 # 1. Incomplete configuration must exit with a named key.
 set +e
-out="$(docker run --rm -e VAUBAAN_PUBLIC_URL=https://gateway.example.com "$IMAGE" 2>&1)"
+out="$(timeout "$FAIL_FAST_TIMEOUT_SECONDS" docker run --rm -e VAUBAAN_PUBLIC_URL=https://gateway.example.com "$IMAGE" 2>&1)"
 code=$?
 set -e
 [ "$code" -eq "$EXIT_CONFIG_ERROR" ] || fail "incomplete configuration exited $code, expected $EXIT_CONFIG_ERROR:\n$out"
@@ -39,7 +42,7 @@ pass "incomplete configuration exits $code naming the missing keys"
 
 # 2. An http public URL is refused.
 set +e
-out="$(docker run --rm \
+out="$(timeout "$FAIL_FAST_TIMEOUT_SECONDS" docker run --rm \
   -e VAUBAAN_PUBLIC_URL=http://gateway.example.com \
   -e VAUBAAN_STORE_PATH=/data/gateway.db \
   -e VAUBAAN_MASTER_KEY="$MASTER_KEY" \

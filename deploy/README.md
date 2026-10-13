@@ -22,11 +22,11 @@ every configuration key: handbook
 
 ```
 deploy/
-  docker/Dockerfile        multi-stage build (node:22-bookworm-slim, non-root, HEALTHCHECK)
+  docker/Dockerfile        multi-stage build (node:22.23.3-bookworm-slim pinned by digest, non-root, HEALTHCHECK)
   docker/smoke.sh          container smoke test (also run by CI)
   compose.yaml             gateway + data volume + Caddy (automatic TLS)
-  caddy/Caddyfile          reverse proxy, streaming-friendly
-  config/gateway.example.yaml  every key, documented
+  caddy/Caddyfile          reverse proxy, streaming-friendly, security headers
+  config/gateway.example.yaml  every key, documented, all commented out
   config/.env.example          every environment variable, documented
 ```
 
@@ -41,15 +41,28 @@ cp deploy/config/.env.example deploy/config/.env
 cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
 npm run gen-master-key                     # paste into VAUBAAN_MASTER_KEY (or a secret file)
 openssl rand -hex 24                       # paste into VAUBAAN_BOOTSTRAP_TOKEN
-$EDITOR deploy/config/.env deploy/config/gateway.yaml
-docker compose -f deploy/compose.yaml up -d --build
+$EDITOR deploy/config/.env                 # GATEWAY_DOMAIN, VAUBAAN_PUBLIC_URL, VAUBAAN_ADMIN_EMAILS, the two secrets
+docker compose --env-file deploy/config/.env -f deploy/compose.yaml up -d --build
 curl -s https://<your domain>/healthz
 ```
 
+Pass `--env-file deploy/config/.env` on every Compose command (`up`, `down`,
+`logs`, `config`): Compose reads `GATEWAY_DOMAIN` from it and hands that one
+variable to the proxy. Without it the command stops with a message naming
+`GATEWAY_DOMAIN`. The proxy container receives nothing else: the master key,
+the bootstrap token and the IdP secret go to the gateway container only.
+`GATEWAY_DOMAIN` must be the host of `VAUBAAN_PUBLIC_URL`; nothing checks it
+for you.
+
 Both files are gitignored (`deploy/config/.env`, `deploy/config/gateway.yaml`;
-the `*.example*` files are tracked). The YAML wins over the environment key by key;
-you may use either alone. Secrets go in through `${NAME}` /
-`${file:/path}` references in the YAML or `*_FILE` variables.
+the `*.example*` files are tracked). The YAML wins over the environment key by
+key, silently, so `gateway.example.yaml` ships with **every key commented
+out**: the copy changes nothing and `.env` decides until you uncomment a key.
+Uncomment only what you want the file to own, replace the example value
+(`gateway.example.com`, `gateway-admins`, `ops@example.com` are examples), and
+remove the twin variable from `.env`. You may use either source alone. Secrets
+go in through `${NAME}` / `${file:/path}` references in the YAML or `*_FILE`
+variables.
 
 First sign-in: open `https://<your domain>/login`, follow the bootstrap link
 and paste the bootstrap token; on **Administration → Identity provider**
@@ -91,6 +104,23 @@ append the client address to `X-Forwarded-For`, and list the proxy's
 address in `trusted_proxies` so that header is believed. The gateway builds
 every URL from `public_url`, never from forwarded host or scheme headers.
 
+The gateway sets no security header itself; the proxy does. Send these four
+on every response, as `deploy/caddy/Caddyfile` does:
+
+| Header                      | Value                    | Why                                                                                                  |
+| --------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| `Strict-Transport-Security` | `max-age=31536000`       | browsers never fall back to http for this host                                                       |
+| `X-Content-Type-Options`    | `nosniff`                | a response is never re-interpreted as another type                                                   |
+| `Content-Security-Policy`   | `frame-ancestors 'none'` | no page can frame the UI (one-click forms change security settings); framing only, not a full policy |
+| `Referrer-Policy`           | `same-origin`            | no path leaks to another site; same-origin requests keep `Referer`, the origin check's fallback      |
+
+They do not affect the MCP door (non-browser clients ignore them, streaming
+is untouched). Do not use `no-referrer`: a same-origin form post that
+carries no `Origin` header is accepted on its `Referer`.
+
+Give the proxy only what it needs (its host name), never the gateway's
+environment.
+
 ## Operations
 
 - **Health**: `GET /healthz` → 200 `{"status":"ok",...}`; 503 `degraded`
@@ -99,6 +129,9 @@ every URL from `public_url`, never from forwarded host or scheme headers.
   `compose.yaml` use it.
 - **Logs**: JSON lines on stdout/stderr; mission tokens appear by prefix
   only, configured secrets are redacted. `VAUBAAN_LOG_LEVEL=debug` for more.
+- **Retention**: `retention_days` (default 90) purges the **audit trail**
+  only, at boot and then hourly. Session events, decided requests and
+  approvals are not purged and stay for the life of the store.
 - **Data**: everything is in `/data` (`gateway.db` and its WAL files). Back
   it up with a volume snapshot or SQLite's `VACUUM INTO` (`store.backupTo()`
   in the [store handbook](../docs/handbook/store.md#backup); there is no
@@ -111,7 +144,7 @@ every URL from `public_url`, never from forwarded host or scheme headers.
   [store handbook](../docs/handbook/store.md)).
 - **Smoke test an image**: `npm run docker:build && npm run docker:smoke`
   (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
-  checks the fail-fast exit, the https rule,
+  checks the fail-fast exit (within 60 seconds), the https rule,
   `/healthz`, secret redaction, native addons, the non-root user and that
   no env file is shipped.
 
@@ -123,4 +156,21 @@ Native addons (`argon2`, `better-sqlite3`) are prebuilt for glibc, which is
 why the base is Debian slim rather than Alpine; `next.config.ts` traces
 their binaries and runtime files explicitly (`outputFileTracingIncludes`)
 and the smoke test loads both inside the image. Build-time arguments:
-`NODE_VERSION` (22) and `GIT_COMMIT_SHA` (shown by `/healthz`).
+`NODE_IMAGE` (the whole base image reference, tag and digest; it replaces
+the former `NODE_VERSION`) and `GIT_COMMIT_SHA` (shown by `/healthz`).
+
+Both base images are pinned by full version and by digest, so one commit
+builds one image: `node:22.23.3-bookworm-slim` in the Dockerfile and
+`caddy:2.11.7-alpine` in `compose.yaml`. The digests are those of the
+multi-architecture index. To bump one, read the new digest from the registry
+and change version and digest together:
+
+```bash
+docker buildx imagetools inspect node:<version>-bookworm-slim   # "Digest:" line
+docker buildx imagetools inspect caddy:<version>-alpine
+```
+
+The digest is what is pulled: once it is present the registry ignores the
+tag, which is why the Dockerfile takes one `NODE_IMAGE` argument rather than
+a version on its own. The base must stay a Debian (glibc) image. Nothing
+proposes these bumps automatically yet.

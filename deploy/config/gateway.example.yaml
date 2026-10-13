@@ -4,44 +4,55 @@
 # environment variables listed next to each key (.env.example), or mix both:
 # the file wins over the environment, key by key.
 #
+# EVERY KEY BELOW IS COMMENTED OUT, on purpose: a key written here silently
+# overrides its environment variable, so a copy of this file changes nothing
+# until you uncomment a key. Uncomment only the keys you want this file to
+# own (with their parent line, e.g. `admin:` for `admin.group`), replace the
+# example value, and remove the twin variable from .env to keep one source.
+#
 # Secrets: write `${NAME}` to read the environment variable NAME, or
 # `${file:/run/secrets/name}` to read a file (Docker / Kubernetes secret).
 # Never commit a filled-in copy of this file.
 #
-# Every key below is either required (marked) or shown with its default.
+# Every key is either required (marked; from this file or from its
+# environment variable) or shown with its default. Values under example.com
+# and `gateway-admins` are examples, not defaults.
 
 # REQUIRED. Public origin of the instance: provider callbacks, request URLs
 # and the bootstrap kit are built from it. Must be https (TLS is terminated
 # by your reverse proxy, see deploy/caddy/Caddyfile). A sub-path is allowed.
 # env: VAUBAAN_PUBLIC_URL
-public_url: https://gateway.example.com
+# public_url: https://gateway.example.com
 
 # Reverse proxies whose X-Forwarded-For header is trusted for client IPs
 # (surface rate limits, audit). IP addresses or CIDR blocks. Default: none.
+# 172.16.0.0/12 is Docker's default address pool (the Caddy container of
+# compose.yaml); narrow it to your proxy's address when you can.
 # env: VAUBAAN_TRUSTED_PROXIES (comma-separated)
-trusted_proxies:
-  - 172.16.0.0/12
+# trusted_proxies:
+#   - 172.16.0.0/12
 
-store:
-  # REQUIRED. SQLite database file; its directory must be writable and
-  # persistent (the /data volume in the image).
-  # env: VAUBAAN_STORE_PATH
-  path: /data/gateway.db
+# store:
+#   # REQUIRED. SQLite database file; its directory must be writable and
+#   # persistent (the /data volume in the image).
+#   # env: VAUBAAN_STORE_PATH
+#   path: /data/gateway.db
 
-encryption:
-  # REQUIRED. 32 random bytes, base64 (`npm run gen-master-key`). Every
-  # connection credential is encrypted with a key derived from it.
-  # env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE
-  # With compose.yaml the value comes from deploy/config/.env; with Docker or
-  # Kubernetes secrets write `${file:/run/secrets/vaubaan_master_key}` instead.
-  master_key: ${VAUBAAN_MASTER_KEY}
-  # Version stamped on new blobs. Increase it when you rotate the key.
-  # env: VAUBAAN_MASTER_KEY_VERSION
-  key_version: 1
-  # Older keys still needed to open blobs written before a rotation.
-  # env: VAUBAAN_MASTER_KEY_PREVIOUS ("1=<base64>,2=<base64>") or _FILE
-  # previous_keys:
-  #   1: ${file:/run/secrets/vaubaan_master_key_v1}
+# encryption:
+#   # REQUIRED. 32 random bytes, base64 (`npm run gen-master-key`). Every
+#   # connection credential is encrypted with a key derived from it.
+#   # env: VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE
+#   # With compose.yaml the value comes from deploy/config/.env; with Docker or
+#   # Kubernetes secrets write `${file:/run/secrets/vaubaan_master_key}` instead.
+#   master_key: ${VAUBAAN_MASTER_KEY}
+#   # Version stamped on new blobs. Increase it when you rotate the key.
+#   # env: VAUBAAN_MASTER_KEY_VERSION
+#   key_version: 1
+#   # Older keys still needed to open blobs written before a rotation.
+#   # Example only: there is no default; uncomment after a rotation.
+#   # env: VAUBAAN_MASTER_KEY_PREVIOUS ("1=<base64>,2=<base64>") or _FILE
+#   previous_keys:
+#     1: ${file:/run/secrets/vaubaan_master_key_v1}
 
 # OpenID Connect provider (spec D2). Optional at first boot: until it is set,
 # the operator signs in with bootstrap_token. Once present, issuer (https),
@@ -67,12 +78,14 @@ encryption:
 
 # REQUIRED (one of the two). Who is operator once bootstrap_token is revoked:
 # members of an IdP group, and/or an explicit list of emails.
-admin:
-  # env: VAUBAAN_ADMIN_GROUP
-  group: gateway-admins
-  # env: VAUBAAN_ADMIN_EMAILS (comma-separated)
-  emails:
-    - ops@example.com
+# Example values: anyone your IdP places in the group named here is an
+# operator, so uncomment `group` only with the name of a group you control.
+# admin:
+#   # env: VAUBAAN_ADMIN_GROUP
+#   group: gateway-admins
+#   # env: VAUBAAN_ADMIN_EMAILS (comma-separated)
+#   emails:
+#     - ops@example.com
 
 # Apps your company registered at each provider, keyed by plugin id. Only
 # providers connected through an app need one: an App installation (github)
@@ -110,40 +123,42 @@ admin:
 # signs in through the IdP; harmless to leave set afterwards.
 # env: VAUBAAN_BOOTSTRAP_TOKEN or VAUBAAN_BOOTSTRAP_TOKEN_FILE
 # (or `${file:/run/secrets/vaubaan_bootstrap_token}` with a secrets mount)
-bootstrap_token: ${VAUBAAN_BOOTSTRAP_TOKEN}
+# bootstrap_token: ${VAUBAAN_BOOTSTRAP_TOKEN}
 
 # Community telemetry (spec §9): anonymous plugin success/failure counts.
 # Off by default; the collector URL has a built-in default and may be
 # pointed at your own collector.
-telemetry:
-  # env: VAUBAAN_TELEMETRY_ENABLED
-  enabled: false
-  # env: VAUBAAN_TELEMETRY_COLLECTOR_URL
-  # collector_url: https://collector.example.net/v1/reports
+# telemetry:
+#   # env: VAUBAAN_TELEMETRY_ENABLED
+#   enabled: false
+#   # env: VAUBAAN_TELEMETRY_COLLECTOR_URL (example value; the default is built in)
+#   collector_url: https://collector.example.net/v1/reports
 
-# Audit and event retention in days before the sweeper purges them.
+# Audit retention in days: the sweeper deletes audit entries older than this
+# (at boot, then hourly). Only the audit trail is purged; session events,
+# decided requests and approvals are not, and stay for the life of the store.
 # env: VAUBAAN_RETENTION_DAYS
-retention_days: 90
+# retention_days: 90
 
 # How long a claim request stays answerable (spec §3.4). Durations: 30s, 10m, 24h, 7d.
 # env: VAUBAAN_REQUEST_EXPIRY
-requests:
-  expiry: 24h
+# requests:
+#   expiry: 24h
 
 # How long an approval request stays answerable (spec §3.5).
 # env: VAUBAAN_APPROVAL_EXPIRY
-approvals:
-  expiry: 10m
+# approvals:
+#   expiry: 10m
 
 # Surface rate limit of the execution MCP door: requests per minute, per
 # mission, all agents of the mission together (spec §6). Separate from the
 # per-risk rate limits of a mission's budget.
 # env: VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE
-mcp:
-  rate_limit_per_minute: 600
+# mcp:
+#   rate_limit_per_minute: 600
 
 # Log verbosity: debug, info, warn, error. Logs are JSON lines; secrets and
 # mission token secrets are redacted.
 # env: VAUBAAN_LOG_LEVEL
-log:
-  level: info
+# log:
+#   level: info

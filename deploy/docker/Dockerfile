@@ -5,13 +5,17 @@
 # ADR: docs/decisions/docker-image-and-config-format.md
 # Handbook: docs/handbook/configuration.md, deploy/README.md
 
-ARG NODE_VERSION=22
+# Pinned by version and by digest (multi-architecture index). One argument on
+# purpose: when a digest is present the registry ignores the tag, so a
+# separate version argument could be overridden without any effect. Bump the
+# tag and the digest together (deploy/README.md, "What the image contains").
+ARG NODE_IMAGE=node:22.23.3-bookworm-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392
 
 # ---------------------------------------------------------------------------
 # base: debian-slim so the prebuilt native addons (argon2, better-sqlite3,
 # ssh2's optional cpu-features) load against glibc without a compiler.
 # ---------------------------------------------------------------------------
-FROM node:${NODE_VERSION}-bookworm-slim AS base
+FROM ${NODE_IMAGE} AS base
 ENV NEXT_TELEMETRY_DISABLED=1 \
     NPM_CONFIG_UPDATE_NOTIFIER=false
 WORKDIR /app

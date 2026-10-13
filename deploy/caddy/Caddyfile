@@ -1,7 +1,22 @@
 # TLS termination in front of the gateway (spec §6 "transport").
-# GATEWAY_DOMAIN comes from deploy/config/.env through compose.yaml.
+# GATEWAY_DOMAIN is the only variable this container receives: compose.yaml
+# interpolates it from deploy/config/.env (`docker compose --env-file`).
 {$GATEWAY_DOMAIN} {
 	encode zstd gzip
+
+	# Response headers for every route. They are plain response headers: they
+	# change nothing for the MCP door (POST and streamed responses from
+	# non-browser clients ignore them).
+	header {
+		# One year, this host only (no includeSubDomains: sibling hosts are not ours to bind).
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		# Framing only; not a full policy, so no script or style source is restricted.
+		Content-Security-Policy "frame-ancestors 'none'"
+		# The path never leaves the instance; same-origin requests keep the
+		# Referer the origin check falls back on when a form post has no Origin.
+		Referrer-Policy "same-origin"
+	}
 
 	reverse_proxy gateway:3000 {
 		# Do not buffer streamed MCP responses (SSE frames).
