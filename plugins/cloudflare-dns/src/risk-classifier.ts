@@ -1,7 +1,13 @@
 /**
- * Cloudflare DNS v4 risk-based classifier — maps a concrete `(tool, args,
- * bindings)` call to the set of slices the runtime intersects with the
- * risk catalog.
+ * LEGACY v4 classifier — `(tool, args, bindings)`, frozen.
+ *
+ * Kept so the v4 gateway pipeline (`apps/gateway/src/lib/gateway/build.ts`)
+ * compiles until P1.6 rewrites the execution door on `cloudflareDnsPlugin`.
+ * The v5 classifier is `classifyCloudflareDns` in `./classify.ts` ; it
+ * resolves the zone from the mission resources and layers the critical /
+ * delete overlays, which a v4 account-level binding cannot express.
+ *
+ * @deprecated legacy v4, deleted in P1.6 — use `classifyCloudflareDns` from `./classify.ts`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7.
  * Research : .vaubaan/research/providers/cloudflare-dns.md §2.
@@ -36,6 +42,7 @@
 
 import type { ProviderBinding, Slice, SliceSegment } from '@vaubaan/shared';
 
+/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome`. */
 export type ClassifyResult = { slices: Slice[] } | { denied: string };
 
 // ─── Slice helpers ─────────────────────────────────────────────────────────
@@ -86,6 +93,8 @@ function identArg(args: Record<string, unknown>, key: string): SliceSegment {
 
 /**
  * Classify a Cloudflare DNS tool call into the slice(s) it touches.
+ *
+ * @deprecated legacy v4, deleted in P1.6 — use `classifyCloudflareDns(tool, args, resources)`.
  *
  * Returns `{ slices: Slice[] }` on success — the runtime intersects each
  * slice with the catalog. Returns `{ denied: string }` for an unknown tool

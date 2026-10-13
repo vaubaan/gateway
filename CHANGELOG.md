@@ -11,6 +11,15 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Cloudflare DNS plugin on the v5 SDK (P1.2g).** `@vaubaan/plugin-cloudflare-dns` implements
+  `definePlugin()`: one `api-key` credential (a zone-scoped Cloudflare API token; the Global API
+  Key form is refused), `discoverResources` listing every zone the token reaches as one resource
+  per zone, record writes layered into `record-write` / `critical-record-write` (apex, wildcard,
+  MX, NS) / `record-delete` with a pre-flight read on `update_record`, `list_zones` filtered to
+  the mission's zones, presets `read-only` / `dns-operator` / `zone-admin` (approval on deletions,
+  critical records, imports, zone settings and DNSSEC), and the `zone-delete` pattern narrowed to
+  the zone itself (it used to match every write under a zone); the TypeScript catalog twin and its
+  sync test are gone. v4 exports stay `@deprecated` until P1.6.
 - **Stripe plugin on the v5 SDK (P1.2e).** `@vaubaan/plugin-stripe` implements
   `definePlugin()`: one `api-key` credential with optional test and live keys,
   one resource per mode (`acct_…/test`, `acct_…/live`) so `stripe[live].*`
