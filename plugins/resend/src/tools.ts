@@ -1,18 +1,85 @@
 /**
- * Resend MCP tools — all custom, no upstream MCP server to rewrap.
+ * Resend MCP tools — thin wrappers over the Resend REST API (api.resend.com).
  *
- * 25 tools total :
- *   - 9 reads (GET endpoints against api.resend.com)
- *   - 16 writes (POST/PUT/PATCH/DELETE endpoints against api.resend.com +
- *     1 synthetic `describe_zones`)
+ * 27 tools : 9 reads and 18 writes (one of them, `describe_zones`, synthetic).
+ * Names follow the SDK convention `<provider>__<verb>_<noun>` (prefix `resend__`).
  *
- * Names are prefixed `resend__` to match the Vaubaan policy DSL
- * provider scoping convention.
+ * Resource arguments are explicit, as the contributor guide asks :
+ *   - `domain`      — the sending domain ref (`notifications.acme.com`) for the
+ *                     domain tools ; sends take it from the `from` address ;
+ *   - `segment_id`  — the segment ref for segment, membership and broadcast
+ *                     tools. Every broadcast tool names its segment so the
+ *                     call can be scoped and env-qualified ; `execute` checks
+ *                     upstream that the broadcast really belongs to it.
  *
- * Spec : docs/spec/resend.md §6.
+ * Out of scope in v1 (spec §10) and refused by the classifier when present :
+ * `attachments`, `scheduled_at`, `send` on broadcast creation.
+ *
+ * Spec : docs/spec/resend.md §6 ; docs/spec/gateway-risk-model.md §7.
  */
 
-import type { McpToolDeclaration } from '@vaubaan/shared';
+import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
+
+const DOMAIN_ARG = {
+  domain: {
+    type: 'string',
+    description: 'Sending domain ref as listed in the mission (e.g. "notifications.acme.com").',
+  },
+} as const;
+
+const SEGMENT_ARG = {
+  segment_id: {
+    type: 'string',
+    description: 'Segment id as listed in the mission.',
+  },
+} as const;
+
+const ADDRESS_LIST = (what: string) => ({
+  type: 'array',
+  items: { type: 'string' },
+  description: `${what} address(es). "Name <user@domain>" is accepted.`,
+});
+
+const EMAIL_CONTENT_PROPS = {
+  subject: { type: 'string', description: 'Subject line.' },
+  html: { type: 'string', description: 'HTML body.' },
+  text: { type: 'string', description: 'Plain-text body (fallback for clients without HTML).' },
+  reply_to: ADDRESS_LIST('Reply-to'),
+  headers: { type: 'object', description: 'Custom email headers.' },
+  tags: {
+    type: 'array',
+    items: {
+      type: 'object',
+      properties: { name: { type: 'string' }, value: { type: 'string' } },
+    },
+    description: 'Tags for categorisation and analytics.',
+  },
+} as const;
+
+const SINGLE_EMAIL_PROPS = {
+  from: {
+    type: 'string',
+    description:
+      'Sender address on a sending domain of the mission, e.g. "Acme <noreply@notifications.acme.com>".',
+  },
+  to: ADDRESS_LIST('Recipient'),
+  cc: ADDRESS_LIST('CC'),
+  bcc: ADDRESS_LIST('BCC'),
+  ...EMAIL_CONTENT_PROPS,
+} as const;
+
+const BROADCAST_CONTENT_PROPS = {
+  from: {
+    type: 'string',
+    description: 'Sender address on a sending domain of the mission.',
+  },
+  subject: { type: 'string', description: 'Subject line.' },
+  html: { type: 'string', description: 'HTML body ; supports {{{contact.first_name|there}}}.' },
+  text: { type: 'string', description: 'Plain-text body.' },
+  reply_to: ADDRESS_LIST('Reply-to'),
+  name: { type: 'string', description: 'Internal campaign name.' },
+  preview_text: { type: 'string', description: 'Preview text shown by inbox clients.' },
+} as const;
 
 // ─── Read tools ─────────────────────────────────────────────────────────────
 
@@ -22,109 +89,71 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
     description: 'Retrieve the status and metadata of a sent email. Backed by GET /emails/:id.',
     inputSchema: {
       type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The email id returned by the send call.',
-        },
-      },
+      properties: { id: { type: 'string', description: 'The email id returned by a send.' } },
       required: ['id'],
     },
   },
   {
     name: 'resend__list_domains',
-    description: 'List all verified sending domains. Backed by GET /domains.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
+    description:
+      'List the sending domains of the mission with their verification status. Backed by GET /domains.',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'resend__get_domain',
     description:
-      'Retrieve a single domain with its DNS verification records. Backed by GET /domains/:id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The domain id.',
-        },
-      },
-      required: ['id'],
-    },
+      'Retrieve a sending domain with its DNS records (DKIM, SPF, DMARC). Backed by GET /domains/:id.',
+    inputSchema: { type: 'object', properties: { ...DOMAIN_ARG }, required: ['domain'] },
   },
   {
-    name: 'resend__list_audiences',
-    description: 'List all audiences (contact lists). Backed by GET /audiences.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
+    name: 'resend__list_segments',
+    description: 'List the segments (contact lists) of the mission. Backed by GET /segments.',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
-    name: 'resend__get_audience',
-    description: 'Retrieve a single audience by id. Backed by GET /audiences/:id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The audience id.',
-        },
-      },
-      required: ['id'],
-    },
+    name: 'resend__get_segment',
+    description: 'Retrieve a segment. Backed by GET /segments/:id.',
+    inputSchema: { type: 'object', properties: { ...SEGMENT_ARG }, required: ['segment_id'] },
   },
   {
     name: 'resend__list_contacts',
     description:
-      'List all contacts in an audience. Contacts carry PII (email, name). Backed by GET /audiences/:id/contacts.',
+      'List contacts, optionally those of one segment. Contacts carry PII. Backed by GET /contacts.',
     inputSchema: {
       type: 'object',
       properties: {
-        audience_id: {
+        segment_id: {
           type: 'string',
-          description: 'The audience id to list contacts from.',
+          description: 'Restrict to the members of this segment of the mission.',
         },
+        limit: { type: 'number', description: 'Page size (1-100).' },
+        after: { type: 'string', description: 'Cursor : the contact id to page after.' },
+        before: { type: 'string', description: 'Cursor : the contact id to page before.' },
       },
-      required: ['audience_id'],
     },
   },
   {
     name: 'resend__get_contact',
-    description: 'Retrieve a single contact by id. Carries PII. Backed by GET /contacts/:id.',
+    description:
+      'Retrieve a contact by id or email address. Carries PII. Backed by GET /contacts/:id.',
     inputSchema: {
       type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The contact id.',
-        },
-      },
+      properties: { id: { type: 'string', description: 'Contact id or email address.' } },
       required: ['id'],
     },
   },
   {
     name: 'resend__list_broadcasts',
-    description: 'List all broadcasts. Backed by GET /broadcasts.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
+    description: 'List the broadcasts of the segments of the mission. Backed by GET /broadcasts.',
+    inputSchema: { type: 'object', properties: {} },
   },
   {
     name: 'resend__get_broadcast',
-    description: 'Retrieve a single broadcast by id. Backed by GET /broadcasts/:id.',
+    description: 'Retrieve a broadcast of a segment of the mission. Backed by GET /broadcasts/:id.',
     inputSchema: {
       type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The broadcast id.',
-        },
-      },
-      required: ['id'],
+      properties: { ...SEGMENT_ARG, id: { type: 'string', description: 'The broadcast id.' } },
+      required: ['segment_id', 'id'],
     },
   },
 ];
@@ -135,70 +164,20 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
   {
     name: 'resend__send_email',
     description:
-      'Send a transactional email. Classified by recipient to-zone (internal/allowlist/external-unbounded). Attachments blocked in v1. Backed by POST /emails.',
+      'Send a transactional email from a sending domain of the mission. Classified by recipient zone ' +
+      '(internal / allowlist / external-unbounded) and recipient count. Attachments and scheduling are ' +
+      'refused. Backed by POST /emails.',
     inputSchema: {
       type: 'object',
-      properties: {
-        from: {
-          type: 'string',
-          description:
-            'Sender email address (must be from a verified domain). E.g. "noreply@notifications.acme.com".',
-        },
-        to: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Recipient email address(es).',
-        },
-        cc: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'CC recipient email address(es).',
-        },
-        bcc: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'BCC recipient email address(es).',
-        },
-        subject: {
-          type: 'string',
-          description: 'Email subject line.',
-        },
-        html: {
-          type: 'string',
-          description: 'HTML body of the email.',
-        },
-        text: {
-          type: 'string',
-          description: 'Plain text body (fallback for clients that do not render HTML).',
-        },
-        reply_to: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Reply-to address(es).',
-        },
-        tags: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              name: { type: 'string' },
-              value: { type: 'string' },
-            },
-          },
-          description: 'Tags for categorisation and analytics.',
-        },
-        headers: {
-          type: 'object',
-          description: 'Custom email headers.',
-        },
-      },
+      properties: { ...SINGLE_EMAIL_PROPS },
       required: ['from', 'to', 'subject'],
     },
   },
   {
     name: 'resend__send_batch_emails',
     description:
-      'Send a batch of up to 100 transactional emails in one call. Worst-case to-zone computed across all emails. Backed by POST /emails/batch.',
+      'Send up to 100 transactional emails in one call. Every from address must be on a sending domain ' +
+      'of the mission ; the worst recipient zone per domain applies. Backed by POST /emails/batch.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -206,47 +185,10 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
           type: 'array',
           items: {
             type: 'object',
-            properties: {
-              from: { type: 'string', description: 'Sender email address.' },
-              to: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Recipient email address(es).',
-              },
-              cc: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'CC recipients.',
-              },
-              bcc: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'BCC recipients.',
-              },
-              subject: { type: 'string', description: 'Subject line.' },
-              html: { type: 'string', description: 'HTML body.' },
-              text: { type: 'string', description: 'Plain text body.' },
-              reply_to: {
-                type: 'array',
-                items: { type: 'string' },
-                description: 'Reply-to addresses.',
-              },
-              tags: {
-                type: 'array',
-                items: {
-                  type: 'object',
-                  properties: {
-                    name: { type: 'string' },
-                    value: { type: 'string' },
-                  },
-                },
-                description: 'Tags.',
-              },
-              headers: { type: 'object', description: 'Custom headers.' },
-            },
+            properties: { ...SINGLE_EMAIL_PROPS },
             required: ['from', 'to', 'subject'],
           },
-          description: 'Array of email objects (max 100).',
+          description: 'Email objects (1 to 100).',
         },
       },
       required: ['emails'],
@@ -255,299 +197,189 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
   {
     name: 'resend__create_domain',
     description:
-      'Add a new sending domain. Posture-shift : changes what the account can send from. Backed by POST /domains.',
+      'Add a sending domain to the account. Posture shift : the owner must publish the DNS records and ' +
+      'add the new resource to missions. Backed by POST /domains.',
     inputSchema: {
       type: 'object',
       properties: {
-        name: {
-          type: 'string',
-          description: 'The domain name (e.g. "notifications.acme.com").',
-        },
+        name: { type: 'string', description: 'The domain name (e.g. "notifications.acme.com").' },
         region: {
           type: 'string',
-          description: 'Region for email delivery: "us-east-1", "eu-west-1", or "sa-east-1".',
+          description:
+            'Delivery region : "us-east-1", "eu-west-1", "sa-east-1" or "ap-northeast-1".',
         },
+        open_tracking: { type: 'boolean', description: 'Enable open tracking.' },
+        click_tracking: { type: 'boolean', description: 'Enable click tracking.' },
       },
       required: ['name'],
     },
   },
   {
     name: 'resend__update_domain',
-    description: 'Update a sending domain configuration. Backed by PATCH /domains/:id.',
+    description:
+      'Update the tracking and TLS settings of a sending domain. Backed by PATCH /domains/:id.',
     inputSchema: {
       type: 'object',
       properties: {
-        id: {
-          type: 'string',
-          description: 'The domain id.',
-        },
-        click_tracking: {
-          type: 'boolean',
-          description: 'Enable or disable click tracking.',
-        },
-        open_tracking: {
-          type: 'boolean',
-          description: 'Enable or disable open tracking.',
-        },
-        tls: {
-          type: 'string',
-          description: 'TLS setting: "enforced" or "opportunistic".',
-        },
+        ...DOMAIN_ARG,
+        click_tracking: { type: 'boolean', description: 'Enable or disable click tracking.' },
+        open_tracking: { type: 'boolean', description: 'Enable or disable open tracking.' },
+        tls: { type: 'string', description: 'TLS policy : "enforced" or "opportunistic".' },
       },
-      required: ['id'],
+      required: ['domain'],
     },
   },
   {
     name: 'resend__delete_domain',
     description:
-      'Remove a sending domain. Breaks email delivery for all messages using that sender. Backed by DELETE /domains/:id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The domain id to delete.',
-        },
-      },
-      required: ['id'],
-    },
+      'Remove a sending domain. Breaks delivery for every sender on it. Backed by DELETE /domains/:id.',
+    inputSchema: { type: 'object', properties: { ...DOMAIN_ARG }, required: ['domain'] },
   },
   {
     name: 'resend__verify_domain',
     description:
-      'Trigger DNS verification of a domain. Idempotent. Backed by POST /domains/:id/verify.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The domain id to verify.',
-        },
-      },
-      required: ['id'],
-    },
+      'Ask Resend to re-check the DNS records of a sending domain. Idempotent. Backed by POST /domains/:id/verify.',
+    inputSchema: { type: 'object', properties: { ...DOMAIN_ARG }, required: ['domain'] },
   },
   {
-    name: 'resend__create_audience',
-    description: 'Create a new audience (contact list). Backed by POST /audiences.',
+    name: 'resend__create_segment',
+    description: 'Create a segment (contact list). Backed by POST /segments.',
     inputSchema: {
       type: 'object',
-      properties: {
-        name: {
-          type: 'string',
-          description: 'The audience name (e.g. "Newsletter subscribers").',
-        },
-      },
+      properties: { name: { type: 'string', description: 'Segment name.' } },
       required: ['name'],
     },
   },
   {
-    name: 'resend__delete_audience',
+    name: 'resend__delete_segment',
     description:
-      'Delete an audience and all its contacts. Irreversible data loss. Backed by DELETE /audiences/:id.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The audience id to delete.',
-        },
-      },
-      required: ['id'],
-    },
+      'Delete a segment of the mission. Memberships are lost, contacts survive. Backed by DELETE /segments/:id.',
+    inputSchema: { type: 'object', properties: { ...SEGMENT_ARG }, required: ['segment_id'] },
   },
   {
     name: 'resend__create_contact',
     description:
-      'Add a contact to an audience. Carries PII (email, name). Backed by POST /audiences/:id/contacts.',
+      'Create a contact, optionally as a member of a segment of the mission. Carries PII. ' +
+      'Backed by POST /contacts (+ POST /contacts/:id/segments/:segment_id).',
     inputSchema: {
       type: 'object',
       properties: {
-        audience_id: {
+        email: { type: 'string', description: 'Contact email address.' },
+        first_name: { type: 'string', description: 'First name.' },
+        last_name: { type: 'string', description: 'Last name.' },
+        unsubscribed: { type: 'boolean', description: 'Unsubscribed from every broadcast.' },
+        segment_id: {
           type: 'string',
-          description: 'The audience id to add the contact to.',
-        },
-        email: {
-          type: 'string',
-          description: 'Contact email address.',
-        },
-        first_name: {
-          type: 'string',
-          description: 'Contact first name.',
-        },
-        last_name: {
-          type: 'string',
-          description: 'Contact last name.',
-        },
-        unsubscribed: {
-          type: 'boolean',
-          description: 'Whether the contact is unsubscribed.',
+          description: 'Add the new contact to this segment of the mission.',
         },
       },
-      required: ['audience_id', 'email'],
+      required: ['email'],
     },
   },
   {
     name: 'resend__update_contact',
-    description: 'Update a contact. Carries PII. Backed by PATCH /contacts/:id.',
+    description: 'Update a contact by id or email. Carries PII. Backed by PATCH /contacts/:id.',
     inputSchema: {
       type: 'object',
       properties: {
-        id: {
-          type: 'string',
-          description: 'The contact id.',
-        },
-        first_name: {
-          type: 'string',
-          description: 'Updated first name.',
-        },
-        last_name: {
-          type: 'string',
-          description: 'Updated last name.',
-        },
-        unsubscribed: {
-          type: 'boolean',
-          description: 'Updated unsubscribed status.',
-        },
+        id: { type: 'string', description: 'Contact id or email address.' },
+        first_name: { type: 'string', description: 'First name.' },
+        last_name: { type: 'string', description: 'Last name.' },
+        unsubscribed: { type: 'boolean', description: 'Unsubscribed from every broadcast.' },
       },
       required: ['id'],
     },
   },
   {
     name: 'resend__delete_contact',
-    description: 'Delete a contact from an audience. Backed by DELETE /contacts/:id.',
+    description: 'Delete a contact by id or email. Backed by DELETE /contacts/:id.',
+    inputSchema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Contact id or email address.' } },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'resend__add_contact_to_segment',
+    description:
+      'Add an existing contact to a segment of the mission. Backed by POST /contacts/:id/segments/:segment_id.',
     inputSchema: {
       type: 'object',
       properties: {
-        id: {
-          type: 'string',
-          description: 'The contact id to delete.',
-        },
+        ...SEGMENT_ARG,
+        id: { type: 'string', description: 'Contact id or email address.' },
       },
-      required: ['id'],
+      required: ['segment_id', 'id'],
+    },
+  },
+  {
+    name: 'resend__remove_contact_from_segment',
+    description:
+      'Remove a contact from a segment of the mission. Backed by DELETE /contacts/:id/segments/:segment_id.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        ...SEGMENT_ARG,
+        id: { type: 'string', description: 'Contact id or email address.' },
+      },
+      required: ['segment_id', 'id'],
     },
   },
   {
     name: 'resend__create_broadcast',
     description:
-      'Create a broadcast (campaign email) for an audience. Starts as draft. Backed by POST /audiences/:id/broadcasts.',
+      'Create a draft broadcast for a segment of the mission. Never sends : "send" and "scheduled_at" ' +
+      'are refused. Backed by POST /broadcasts.',
     inputSchema: {
       type: 'object',
-      properties: {
-        audience_id: {
-          type: 'string',
-          description: 'The audience id for this broadcast.',
-        },
-        from: {
-          type: 'string',
-          description: 'Sender email address (verified domain).',
-        },
-        subject: {
-          type: 'string',
-          description: 'Broadcast subject line.',
-        },
-        html: {
-          type: 'string',
-          description: 'HTML body of the broadcast.',
-        },
-        text: {
-          type: 'string',
-          description: 'Plain text body.',
-        },
-        reply_to: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Reply-to addresses.',
-        },
-        name: {
-          type: 'string',
-          description: 'Internal campaign name.',
-        },
-      },
-      required: ['audience_id', 'from', 'subject'],
+      properties: { ...SEGMENT_ARG, ...BROADCAST_CONTENT_PROPS },
+      required: ['segment_id', 'from', 'subject'],
     },
   },
   {
     name: 'resend__update_broadcast',
-    description: 'Update a broadcast (draft). Backed by PUT /broadcasts/:id.',
+    description:
+      'Update a draft broadcast of a segment of the mission. Backed by PATCH /broadcasts/:id.',
     inputSchema: {
       type: 'object',
       properties: {
-        id: {
-          type: 'string',
-          description: 'The broadcast id.',
-        },
-        from: {
-          type: 'string',
-          description: 'Updated sender address.',
-        },
-        subject: {
-          type: 'string',
-          description: 'Updated subject line.',
-        },
-        html: {
-          type: 'string',
-          description: 'Updated HTML body.',
-        },
-        text: {
-          type: 'string',
-          description: 'Updated plain text body.',
-        },
-        reply_to: {
-          type: 'array',
-          items: { type: 'string' },
-          description: 'Updated reply-to addresses.',
-        },
-        name: {
-          type: 'string',
-          description: 'Updated internal campaign name.',
-        },
+        ...SEGMENT_ARG,
+        id: { type: 'string', description: 'The broadcast id.' },
+        ...BROADCAST_CONTENT_PROPS,
       },
-      required: ['id'],
+      required: ['segment_id', 'id'],
     },
   },
   {
     name: 'resend__send_broadcast',
     description:
-      'Send a broadcast to its audience. Cardinal risk — mass email delivery. Irreversible. Backed by POST /broadcasts/:id/send.',
+      'Send a broadcast to its segment now. Cardinal risk : mass delivery, irreversible. The broadcast ' +
+      'must belong to the named segment. Backed by POST /broadcasts/:id/send.',
     inputSchema: {
       type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The broadcast id to send.',
-        },
-      },
-      required: ['id'],
+      properties: { ...SEGMENT_ARG, id: { type: 'string', description: 'The broadcast id.' } },
+      required: ['segment_id', 'id'],
     },
   },
   {
     name: 'resend__delete_broadcast',
     description:
-      'Delete a broadcast. If already sent, only removes the record. If scheduled, cancels it. Backed by DELETE /broadcasts/:id.',
+      'Delete a broadcast of a segment of the mission (cancels it if scheduled). Backed by DELETE /broadcasts/:id.',
     inputSchema: {
       type: 'object',
-      properties: {
-        id: {
-          type: 'string',
-          description: 'The broadcast id to delete.',
-        },
-      },
-      required: ['id'],
+      properties: { ...SEGMENT_ARG, id: { type: 'string', description: 'The broadcast id.' } },
+      required: ['segment_id', 'id'],
     },
   },
   {
     name: 'resend__describe_zones',
     description:
-      'Return the to-zone configuration from the binding metadata (internal_domains, allowlist_domains, allowlist_addresses). Synthetic tool — no upstream API call.',
-    inputSchema: {
-      type: 'object',
-      properties: {},
-    },
+      'Return the recipient-zone configuration (internal_domains, allowlist_domains, allowlist_addresses) ' +
+      'of every sending domain of the mission. Synthetic : no upstream call.',
+    inputSchema: { type: 'object', properties: {} },
   },
 ];
 
-export const availableTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS];
+export const resendTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS];
 
-/** The set of write tool names (used by execute.ts and test coverage). */
-export const WRITE_TOOL_NAMES = new Set(WRITE_TOOLS.map((t) => t.name));
+export const RESEND_WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(WRITE_TOOLS.map((t) => t.name));

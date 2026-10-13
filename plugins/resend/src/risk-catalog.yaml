@@ -1,22 +1,36 @@
-# Resend risk catalog — v4 risk-based model.
+# Risk catalog of the `resend` provider.
 #
-# Spec     : docs/spec/resend.md §5.
+# Spec : docs/spec/resend.md §5 (v4 modelling), docs/spec/gateway-risk-model.md §4
+#        + §4bis (scope caps), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# ADR  : docs/decisions/scope-caps-amplification-axis.md (caps + infra_limits),
+#        docs/decisions/unified-gates-drop-confirm.md (no default_gate),
+#        docs/decisions/plugin-contract-and-credential-spec.md (presets, loader).
 #
-# 15 named risks + 1 fallback = 16 total. RiskId format follows
-# `<provider>.<name>` (cf. shared/src/risk.ts RISK_ID_REGEX). The env
-# qualification is encoded in the binding (account is `envScopable`),
-# not in the RiskId — the runtime resolves the env from the binding and
-# qualifies the cardinal risks as `resend[prod].send-email-internal` etc.
+# Version 2 (v5 SDK migration). Slices are rooted at the mission resources —
+# `domain[<name>]` for everything that sends, `segment[<id>]` for broadcasts
+# and membership — instead of the v4 `account[<binding slug>]`. Two v4 risks
+# named after Resend's retired "audiences" are deprecated and replaced :
+# `read-audiences` → `read-segments`, `audience-write` → `segment-write`.
+# Their patterns are kept verbatim so the ids stay resolvable ; they never
+# match a v5 slice and no preset offers them.
 #
-# Slice patterns use the DSL declared in policy-engine/src/slice-dsl.ts
-# (no regex, only `[*]` / `[**]` wildcards and `[a,b,c]` lists). Each pattern
-# must match at least one tool's emitted slice — verified by the
-# `risk-catalog.test.ts` coverage lint.
+# Pattern discipline : `[**]` spans any number of segments, `[*]` exactly one
+# identifier. Write patterns use `[*]` and explicit leaves so that a contact
+# write never touches `segment-write`, and a broadcast send never touches
+# `broadcast-draft` — the v4 catalog conflated them.
 #
-# Two entries carry `caps` + `infra_limits` per the scope-caps ADR :
-# `resend.send-batch` and `resend.broadcast-send` (cardinal bulk actions).
+# Only `send-email-external-unbounded` is env-scoped : the owner labels domain
+# resources with free-form environments, and that one risk is refused outside
+# `staging` / `dev`. The fallback is never offered in a preset : the engine
+# counts it only when no specific risk matched.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor.
 
 provider: resend
+catalog_version: 2
+catalog_date: 2026-10-13
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -24,10 +38,9 @@ risks:
   - id: resend.read-email-status
     label: 'Read email send status and metadata'
     reason: >-
-      Retrieve the status, subject, from/to, and tags of sent emails.
-      Metadata-level : no body content returned by GET /emails/:id
-      (Resend does not store the full HTML body post-send). Low risk.
-    matches: 'resend.account[**].email[**].R'
+      Retrieve the status, subject, from/to and tags of a sent email.
+      Metadata-level : GET /emails/:id returns no body content. Low risk.
+    matches: 'resend.email[**].R'
     vector:
       reversibility: reversible
       blast: single
@@ -37,14 +50,12 @@ risks:
       persistence: stateless
 
   - id: resend.read-domains
-    label: 'Read domains and DNS verification status'
+    label: 'Read sending domains and DNS verification status'
     reason: >-
-      List/retrieve domains and their DNS records (DKIM, SPF, DMARC
-      status). Reveals the sending infrastructure posture. Metadata
-      only — no secrets exposed (DNS records are public by nature).
-    matches:
-      - 'resend.account[**].domain[**].R'
-      - 'resend.account[**].domain[**].dns-record[**].R'
+      List or retrieve the mission's sending domains with their DKIM / SPF /
+      DMARC records and the recipient-zone configuration (describe_zones).
+      Reveals the sending posture ; no secret (DNS records are public).
+    matches: 'resend.domain[**].R'
     vector:
       reversibility: reversible
       blast: single
@@ -54,16 +65,36 @@ risks:
       persistence: stateless
 
   - id: resend.read-audiences
-    label: 'Read audiences and contacts (PII)'
+    label: 'Read audiences and contacts (PII) — v4, replaced by read-segments'
     reason: >-
-      List/retrieve audiences and their contacts. Contacts carry PII
-      (email, first_name, last_name, custom properties). RGPD-relevant
-      — any consumption by an agent triggers minimisation obligations.
-      Distinct from read-email-status so an agent can check send status
-      without unlocking the contact database.
+      v4 risk rooted at the binding account. Resend renamed audiences to
+      segments and made contacts account-level ; `resend.read-segments`
+      carries the same PII read. Kept so the id stays resolvable.
     matches:
       - 'resend.account[**].audience[**].R'
       - 'resend.account[**].audience[**].contact[**].R'
+    deprecated: true
+    replaced_by: resend.read-segments
+    vector:
+      reversibility: reversible
+      blast: account
+      data: pii
+      cost: free
+      visibility: internal
+      persistence: stateless
+
+  - id: resend.read-segments
+    label: 'Read segments and contacts (PII)'
+    reason: >-
+      List or retrieve the mission's segments, the account's contacts and the
+      members of a segment. Contacts carry PII (email, first_name, last_name,
+      custom properties) — GDPR-relevant, every read by an agent is a
+      minimisation question. Distinct from read-broadcasts so a campaign
+      status can be checked without unlocking the contact database.
+    matches:
+      - 'resend.segment[*].R'
+      - 'resend.segment[*].member[*].R'
+      - 'resend.contact[*].R'
     vector:
       reversibility: reversible
       blast: account
@@ -75,10 +106,10 @@ risks:
   - id: resend.read-broadcasts
     label: 'Read broadcast campaigns'
     reason: >-
-      List/retrieve broadcast metadata (name, subject, status,
-      schedule). Does not expose contact-level PII — only aggregate
-      campaign info.
-    matches: 'resend.account[**].audience[**].broadcast[**].R'
+      List or retrieve broadcast metadata (name, subject, status, schedule)
+      of the mission's segments. No contact-level PII, aggregate campaign
+      information only.
+    matches: 'resend.segment[*].broadcast[*].R'
     vector:
       reversibility: reversible
       blast: single
@@ -87,15 +118,15 @@ risks:
       visibility: internal
       persistence: stateless
 
-  # ─── WRITES — TRANSACTIONAL EMAIL ──────────────────────────────────────
+  # ─── WRITES — TRANSACTIONAL EMAIL (rooted at the sending domain) ───────
 
   - id: resend.send-email-internal
     label: 'Send a transactional email to internal recipients only'
     reason: >-
-      Single email to recipients matching internal_domains. Low
-      exfiltration risk — stays within the organisation boundary.
-      Side effect : real email delivered to a real inbox.
-    matches: 'resend.account[**].to-zone[internal].W'
+      Every recipient belongs to the sending domain's internal_domains. Low
+      exfiltration risk — the message stays inside the organisation.
+      Side effect : a real email lands in a real inbox.
+    matches: 'resend.domain[*].to-zone[internal].W'
     vector:
       reversibility: costly
       blast: single
@@ -105,13 +136,12 @@ risks:
       persistence: session
 
   - id: resend.send-email-allowlist
-    label: 'Send a transactional email to pre-approved external contacts'
+    label: 'Send a transactional email to pre-approved external recipients'
     reason: >-
-      Email to recipients matching allowlist_domains or
-      allowlist_addresses. Pre-approved but external — the email
-      leaves the org boundary. Reversible only in the sense that
-      the content is already delivered (email is fire-and-forget).
-    matches: 'resend.account[**].to-zone[allowlist].W'
+      Every recipient is internal or matches allowlist_domains /
+      allowlist_addresses of the sending domain. Pre-approved but external :
+      the message leaves the organisation and cannot be recalled.
+    matches: 'resend.domain[*].to-zone[allowlist].W'
     vector:
       reversibility: costly
       blast: single
@@ -123,11 +153,12 @@ risks:
   - id: resend.send-email-external-unbounded
     label: 'Send a transactional email to an arbitrary external recipient'
     reason: >-
-      Email to an address not in internal_domains or allowlist. Cardinal
-      exfiltration vector — an agent could embed sensitive data in the
-      email body and send it to an attacker-controlled address. The
-      email is irreversibly delivered. Never acceptable on prod at MVP.
-    matches: 'resend.account[**].to-zone[external-unbounded].W'
+      At least one recipient matches neither internal_domains nor the
+      allowlists. Cardinal exfiltration vector : an agent could put sensitive
+      data in the body and send it to an attacker-controlled address,
+      irreversibly. Acceptable only on domains labelled staging or dev.
+    matches: 'resend.domain[*].to-zone[external-unbounded].W'
+    acceptable_in_envs: [staging, dev]
     vector:
       reversibility: irreversible
       blast: single
@@ -135,17 +166,15 @@ risks:
       cost: free
       visibility: public
       persistence: session
-    acceptable_in_envs: ['staging', 'dev']
 
   - id: resend.send-batch
     label: 'Send a batch of transactional emails (up to 100 per call)'
     reason: >-
-      POST /emails/batch sends up to 100 emails in one API call. Bulk
-      amplification regardless of recipient zone — the classifier
-      additionally emits the to-zone slice so both risks must be
-      accepted. Distinct marker so the operator explicitly consents to
-      bulk sending.
-    matches: 'resend.account[**].recipient-count[batch].W'
+      POST /emails/batch sends up to 100 emails in one call. Bulk
+      amplification whatever the recipient zone — the classifier also emits
+      the zone slice, so both risks must be accepted. A distinct marker so the
+      creator consents to bulk sending explicitly.
+    matches: 'resend.domain[*].recipient-count[batch].W'
     vector:
       reversibility: irreversible
       blast: bulk
@@ -160,16 +189,34 @@ risks:
     infra_limits:
       items_per_call_max: 100
 
-  # ─── WRITES — AUDIENCES & CONTACTS ─────────────────────────────────────
+  # ─── WRITES — SEGMENTS & CONTACTS ──────────────────────────────────────
 
   - id: resend.audience-write
-    label: 'Create or delete an audience'
+    label: 'Create or delete an audience — v4, replaced by segment-write'
     reason: >-
-      Structural change to the contact database. Creating an audience
-      is low risk ; deleting one removes all contained contacts
-      (irreversible data loss). Conservative vector reflects the
-      worst case (delete).
+      v4 risk rooted at the binding account. Resend renamed audiences to
+      segments ; `resend.segment-write` carries the same structural change.
+      Kept so the id stays resolvable.
     matches: 'resend.account[**].audience[**].W'
+    deprecated: true
+    replaced_by: resend.segment-write
+    vector:
+      reversibility: costly
+      blast: env
+      data: metadata
+      cost: free
+      visibility: internal
+      persistence: posture
+
+  - id: resend.segment-write
+    label: 'Create or delete a segment'
+    reason: >-
+      Structural change to the contact database. Creating a segment is low
+      risk ; deleting one drops every membership it held (the contacts
+      survive). Conservative vector for the worst case.
+    matches:
+      - 'resend.segment.W'
+      - 'resend.segment[*].W'
     vector:
       reversibility: costly
       blast: env
@@ -179,13 +226,16 @@ risks:
       persistence: posture
 
   - id: resend.contact-write
-    label: 'Create, update, or delete contacts in an audience'
+    label: 'Create, update or delete contacts ; add or remove segment members'
     reason: >-
-      Mutate the contact list — add subscribers, update PII fields,
-      remove contacts. PII-carrying operation (email, name, custom
-      properties). Reversible for creates (delete the contact) but
-      not for deletes (data loss).
-    matches: 'resend.account[**].audience[**].contact[**].W'
+      Mutate the contact database : add subscribers, edit PII fields,
+      unsubscribe, delete, or move contacts in and out of a segment (which
+      decides who a broadcast reaches). Reversible for creates, not for
+      deletes.
+    matches:
+      - 'resend.contact.W'
+      - 'resend.contact[*].W'
+      - 'resend.segment[*].member[*].W'
     vector:
       reversibility: costly
       blast: env
@@ -194,14 +244,18 @@ risks:
       visibility: internal
       persistence: posture
 
-  # ─── WRITES — BROADCASTS ───────────────────────────────────────────────
+  # ─── WRITES — BROADCASTS (rooted at the segment) ───────────────────────
 
   - id: resend.broadcast-draft
     label: 'Create or update a broadcast (draft, not sent)'
     reason: >-
-      Draft a campaign email. No side effect until sent — the broadcast
-      sits in draft status. Reversible (delete the broadcast).
-    matches: 'resend.account[**].audience[**].broadcast.W'
+      Draft a campaign for a segment of the mission. No side effect until
+      sent — the classifier refuses a create carrying `send` or
+      `scheduled_at`, which would bypass broadcast-send. Reversible (delete
+      the draft).
+    matches:
+      - 'resend.segment[*].broadcast.W'
+      - 'resend.segment[*].broadcast[*].W'
     vector:
       reversibility: reversible
       blast: single
@@ -211,14 +265,14 @@ risks:
       persistence: session
 
   - id: resend.broadcast-send
-    label: 'Send a broadcast to its audience (mass email delivery)'
+    label: 'Send a broadcast to its segment (mass email delivery)'
     reason: >-
-      Trigger delivery of a broadcast to all contacts in the audience
-      (or a segment). Cardinal bulk action — potentially thousands of
-      real emails delivered irreversibly. Cost scales with audience
-      size (Resend pricing is per-email). The highest-risk operation
-      in this provider.
-    matches: 'resend.account[**].audience[**].broadcast[**].send.W'
+      Deliver a broadcast to every contact of the segment. Cardinal bulk
+      action — potentially thousands of real emails, irreversibly, at a cost
+      that scales with the segment. The plugin re-reads the broadcast
+      upstream and refuses to send one that targets another segment than the
+      one named. The highest-risk operation of this provider.
+    matches: 'resend.segment[*].broadcast[*].send.W'
     vector:
       reversibility: irreversible
       blast: bulk
@@ -235,10 +289,10 @@ risks:
   - id: resend.broadcast-delete
     label: 'Delete a broadcast'
     reason: >-
-      Remove a broadcast. If the broadcast was already sent, this only
-      removes the campaign record — emails already delivered are not
-      recalled. If the broadcast was scheduled, this cancels it.
-    matches: 'resend.account[**].audience[**].broadcast[**].delete.W'
+      Remove a broadcast of a segment of the mission. A sent broadcast loses
+      its record only (delivered emails are not recalled) ; a scheduled one
+      is cancelled.
+    matches: 'resend.segment[*].broadcast[*].delete.W'
     vector:
       reversibility: costly
       blast: single
@@ -250,14 +304,15 @@ risks:
   # ─── WRITES — DOMAINS ──────────────────────────────────────────────────
 
   - id: resend.domain-write
-    label: 'Add, update, or remove a sending domain'
+    label: 'Add, update or remove a sending domain'
     reason: >-
-      Posture-shift : adding a domain changes the sending surface of
-      the account. Removing a domain breaks email delivery for all
-      messages using that sender. Requires DNS configuration outside
-      Resend (DKIM, SPF, DMARC) — the operator must complete
-      verification manually.
-    matches: 'resend.account[**].domain[**].W'
+      Posture shift : adding a domain widens what the account can send from
+      ; removing one breaks delivery for every sender on it ; tracking and
+      TLS settings change what recipients see. DNS must be configured
+      outside Resend. Suggested gate : approval.
+    matches:
+      - 'resend.domain.W'
+      - 'resend.domain[*].W'
     vector:
       reversibility: costly
       blast: account
@@ -269,11 +324,10 @@ risks:
   - id: resend.domain-verify
     label: 'Trigger DNS verification of a domain'
     reason: >-
-      Idempotent call that asks Resend to re-check the DNS records.
-      No side effect beyond the verification attempt. Low risk but
-      grouped with domain-write because it is a step in the domain
-      setup posture-shift.
-    matches: 'resend.account[**].domain[**].dns-record[**].W'
+      Idempotent request that asks Resend to re-check the DNS records of a
+      domain of the mission. No side effect beyond the attempt ; a step of
+      the domain set-up posture shift.
+    matches: 'resend.domain[*].dns-record[*].W'
     vector:
       reversibility: reversible
       blast: single
@@ -287,10 +341,10 @@ risks:
   - id: resend.uncategorized-write
     label: 'Uncategorized Resend write'
     reason: >-
-      Catch-all for writes not covered by a named risk. If Resend
-      adds new API surfaces (webhooks, API key management, templates)
-      and Vaubaan wraps them before the catalog is updated, calls
-      land here — fail-loud by design.
+      Catch-all for a write no named risk covers. If Resend adds a surface
+      (webhooks, API keys, templates) and Vaubaan wraps it before the catalog
+      is updated, calls land here — fail-loud by design. Never offered in a
+      preset.
     matches: 'resend.[**].W'
     vector:
       reversibility: costly
@@ -299,3 +353,122 @@ risks:
       cost: moderate
       visibility: internal
       persistence: posture
+
+# ─── PRESETS (UI sugar ; the persisted policy is always the explicit list) ──
+#
+# Values are a starting point — ADR `mission-presets-default-values` is
+# deferred. `send-email-external-unbounded` is env-scoped and never offered :
+# a creator adds `resend[staging].send-email-external-unbounded` by hand.
+
+presets:
+  - id: read-only
+    label: Read-only
+    description: Email status, sending domains and campaign metadata of the selected resources. No PII, no write.
+    entries:
+      - risk_id: resend.read-email-status
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.read-domains
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.read-broadcasts
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+
+  - id: developer
+    label: Developer
+    description: One token per code project — transactional sends to internal and allow-listed recipients, generous budgets ; no bulk, no PII, no domain change.
+    entries:
+      - risk_id: resend.read-email-status
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.read-domains
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.read-broadcasts
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.send-email-internal
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.send-email-allowlist
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+
+  - id: marketing-operator
+    label: Marketing operator
+    description: Contacts, segments and campaigns ; broadcast sends, batch sends and segment deletion need approval. No domain change.
+    entries:
+      - risk_id: resend.read-email-status
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.read-domains
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.read-segments
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.read-broadcasts
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.send-email-internal
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.send-email-allowlist
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.send-batch
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: resend.contact-write
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.segment-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: resend.broadcast-draft
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.broadcast-send
+        quota: 10
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: resend.broadcast-delete
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+
+  - id: domain-admin
+    label: Domain admin
+    description: Provision sending domains — read and verify freely, every domain mutation needs approval. No send.
+    entries:
+      - risk_id: resend.read-domains
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.domain-verify
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: resend.domain-write
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval

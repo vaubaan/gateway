@@ -1,4 +1,13 @@
 /**
+ * LEGACY v4 classifier — `(tool, args, bindings)`, slices rooted at
+ * `account[<binding slug>]`.
+ *
+ * Kept verbatim so the v4 gateway pipeline and its 46 tests run unchanged until
+ * P1.6. The v5 classifier (`classify.ts`) roots slices at the mission resources
+ * (domains, segments) and does not delegate here : the slice shapes differ.
+ *
+ * @deprecated legacy v4, deleted in P1.6 — use `classifyResend(tool, args, resources)`.
+ *
  * Resend v4 risk-based classifier — maps a concrete `(tool, args, bindings)`
  * call to the set of slices the runtime intersects with the risk catalog.
  *
@@ -33,6 +42,7 @@
 
 import type { ProviderBinding, Slice, SliceSegment } from '@vaubaan/shared';
 
+/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome`. */
 export type ClassifyResult = { slices: Slice[] } | { denied: string };
 
 // ─── To-zone names ─────────────────────────────────────────────────────────
@@ -198,6 +208,7 @@ function hasAttachments(args: Record<string, unknown>): boolean {
  * transactional email, broadcast/marketing, domain management, audience/
  * contact management, and email status reads.
  */
+/** @deprecated legacy v4, deleted in P1.6 — use `classifyResend(tool, args, resources)`. */
 export function classifyResendV4(
   tool: string,
   args: Record<string, unknown>,

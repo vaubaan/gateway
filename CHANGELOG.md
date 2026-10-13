@@ -91,6 +91,17 @@ resources)` lets a plugin derive the environment carried by the call
   `apps/gateway/src/lib/bash` into `plugins/ssh/src/bash` (shims left for the
   v4 routes). Handbook `providers/ssh` written in English; `bash-provider` and
   the SSH half of `railway-ssh` marked legacy.
+- **Resend plugin on the v5 SDK (P1.2f).** `@vaubaan/plugin-resend` implements
+  `definePlugin()`: one `api-key` credential (`api_key`), one resource per
+  sending domain (ref = name, recipient-zone lists in its metadata) and per
+  segment (Resend's renamed audiences), sends rooted at the `from` domain and
+  refused outside the mission, broadcasts verified upstream against the named
+  segment, `[*]`-precise catalog v2 with `read-audiences` / `audience-write`
+  deprecated in favour of `read-segments` / `segment-write`, two membership
+  tools added, presets `read-only` / `developer` / `marketing-operator` /
+  `domain-admin` (approval on bulk sends, segment deletion and domain
+  mutations); the TypeScript catalog twin and its sync test are gone. v4
+  exports stay `@deprecated` until P1.6.
 - **Stripe plugin on the v5 SDK (P1.2e).** `@vaubaan/plugin-stripe` implements
   `definePlugin()`: one `api-key` credential with optional test and live keys,
   one resource per mode (`acct_…/test`, `acct_…/live`) so `stripe[live].*`
