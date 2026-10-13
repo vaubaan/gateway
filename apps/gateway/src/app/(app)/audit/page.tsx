@@ -6,6 +6,7 @@
  */
 import Link from 'next/link';
 
+import { isOperatorPrincipal } from '@/components/auth/principal';
 import { LocalDate } from '@/components/LocalDate';
 import {
   Badge,
@@ -48,7 +49,7 @@ export default async function AuditPage({ searchParams }: Props) {
     root.audit.query.search(principal, query.filters, query.cursor),
     root.audit.query.filterOptions(principal),
   ]);
-  const seesAdmin = principal.kind === 'bootstrap' || principal.isOperator;
+  const seesAdmin = isOperatorPrincipal(principal);
 
   return (
     <>

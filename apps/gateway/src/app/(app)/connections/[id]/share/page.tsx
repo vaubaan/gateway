@@ -19,7 +19,7 @@ import {
   type PageSearchParams,
 } from '@/lib/connections/session';
 import { connectionPath, CONNECTIONS_PATH } from '@/server/connections';
-import { isShareError, type ShareContext } from '@/server/shares';
+import { isShareError, SHARE_ERROR_MESSAGES, type ShareContext } from '@/server/shares';
 
 import { ShareForm, type ShareFormInitial } from './share-form';
 
@@ -49,7 +49,6 @@ export default async function SharePage({
   const base = connectionPath(connection.id);
   const editingId = firstParam(query.share);
   const editing = context.shares.find((view) => view.share.id === editingId) ?? null;
-  const closed = connection.status === 'revoked' || connection.status === 'unowned';
 
   return (
     <Stack gap="var(--space-6)">
@@ -69,11 +68,9 @@ export default async function SharePage({
 
       <NoticeBanner notice={notice} />
 
-      {closed ? (
+      {context.unshareable ? (
         <Banner tone="warning" title="This connection cannot be shared">
-          {connection.status === 'revoked'
-            ? 'It is revoked; revocation is final.'
-            : 'It has no owner any more: an operator must reassign an owner first.'}
+          {SHARE_ERROR_MESSAGES[context.unshareable]}
         </Banner>
       ) : (
         <Card>

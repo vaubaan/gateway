@@ -159,6 +159,7 @@ export {
   CONNECT_RATE_WINDOW_MS,
   CONNECTIONS_PATH,
   ConnectionService,
+  ownerActRefusal,
   toPluginResource,
   type Actor,
   type ConnectableProvider,

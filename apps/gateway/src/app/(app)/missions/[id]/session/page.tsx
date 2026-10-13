@@ -30,6 +30,7 @@ import {
   Thead,
   Tr,
 } from '@/components/ui';
+import { GateBadge } from '@/components/risk/RiskBadges';
 import { currentUser } from '@/lib/auth/session';
 import type { SessionEventKind } from '@vaubaan/shared';
 import {
@@ -188,7 +189,7 @@ export default async function MissionSessionPage({ params, searchParams }: Props
                   {risk.rate_limit.max} per {risk.rate_limit.window_seconds}s
                 </Td>
                 <Td data-testid={`gate-${risk.risk_id}`}>
-                  {risk.gate === 'approval' ? <Badge tone="warning">approval</Badge> : 'auto'}
+                  <GateBadge gate={risk.gate} />
                   {risk.gate_open_until && (
                     <div className={styles.muted}>
                       open until <LocalDate ts={risk.gate_open_until} />

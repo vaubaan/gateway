@@ -189,6 +189,21 @@ export type NewOwner =
   | { readonly kind: 'user'; readonly email: string }
   | { readonly kind: 'group'; readonly groupId: string };
 
+/**
+ * Why this connection takes no owner act (share, transfer, reconnect), or `null` when it
+ * does (spec §2.3): revocation is final, and nobody acts on a connection without owner
+ * until the operator reassigns one. The one statement of the rule: the service's own
+ * refusals, the shares service and the pages (through `transferTargets` and
+ * `ShareContext.unshareable`) all read it here.
+ */
+export function ownerActRefusal(
+  connection: Pick<ConnectionRecord, 'status'>,
+): 'connection-revoked' | 'connection-unowned' | null {
+  if (connection.status === 'revoked') return 'connection-revoked';
+  if (connection.status === 'unowned') return 'connection-unowned';
+  return null;
+}
+
 export interface ConnectionServiceDeps {
   /** The three repositories the service reads and writes; never the raw handle. */
   readonly store: Pick<Store, 'connections' | 'users' | 'groups'>;
@@ -852,9 +867,11 @@ export class ConnectionService {
   /**
    * The groups the actor may hand this connection to: the ones they belong to
    * now, the current owner group excepted (spec §11.2: never a group one is
-   * not a member of).
+   * not a member of). None for a connection that takes no owner act, which
+   * `transfer` refuses.
    */
   transferTargets(actor: Actor, connection: ConnectionRecord): GroupRecord[] {
+    if (ownerActRefusal(connection)) return [];
     return actor.groups.filter(
       (g) => !(connection.owner.kind === 'group' && connection.owner.id === g.id),
     );
@@ -869,8 +886,8 @@ export class ConnectionService {
    */
   async transfer(actor: Actor, connectionId: string, groupId: string): Promise<ConnectionRecord> {
     const connection = await this.requireOwned(actor, connectionId);
-    if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
-    if (connection.status === 'unowned') throw new ConnectError('connection-unowned');
+    const refusal = ownerActRefusal(connection);
+    if (refusal) throw new ConnectError(refusal);
     const group = actor.groups.find((g) => g.id === groupId);
     if (!group) throw new ConnectError('transfer-not-member');
     if (connection.owner.kind === 'group' && connection.owner.id === group.id) return connection;
@@ -949,6 +966,22 @@ export class ConnectionService {
   }
 
   /**
+   * Operator: the groups `reassign` would accept as the new owner — the ones that
+   * have a member (an empty group would leave the connection ownerless again).
+   * A reading for the form; the write checks again in its own transaction.
+   */
+  async reassignTargets(): Promise<GroupRecord[]> {
+    const groups = await this.deps.store.groups.list();
+    const accepted = await Promise.all(groups.map((group) => this.canOwn(group)));
+    return groups.filter((_, index) => accepted[index]);
+  }
+
+  /** A group can be named owner while it has a member. */
+  private async canOwn(group: GroupRecord): Promise<boolean> {
+    return (await this.deps.store.groups.memberCount(group.id)) > 0;
+  }
+
+  /**
    * The repository's ownerless predicate, read outside any transaction: good
    * enough to name the refusal, never to authorize the write.
    */
@@ -965,7 +998,7 @@ export class ConnectionService {
       return { kind: 'user', id: lookup.user.id };
     }
     const group = await this.deps.store.groups.getById(newOwner.groupId);
-    if (!group || (await this.deps.store.groups.memberCount(group.id)) === 0) {
+    if (!group || !(await this.canOwn(group))) {
       throw new ConnectError('owner-group-empty');
     }
     return { kind: 'group', id: group.id };
@@ -1015,9 +1048,9 @@ export class ConnectionService {
   ): Promise<ConnectionRecord> {
     const connection = await this.requireOwned(actor, connectionId);
     if (connection.provider !== providerId) throw new ConnectError('provider-mismatch');
-    if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
     // Spec §2.3: nobody reconnects an unowned connection until an owner is reassigned.
-    if (connection.status === 'unowned') throw new ConnectError('connection-unowned');
+    const refusal = ownerActRefusal(connection);
+    if (refusal) throw new ConnectError(refusal);
     return connection;
   }
 

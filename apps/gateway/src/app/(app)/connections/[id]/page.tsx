@@ -81,13 +81,14 @@ export default async function ConnectionPage({
   const { connection, resources } = detail;
   const base = connectionPath(connection.id);
   const revoked = connection.status === 'revoked';
-  // The server refuses to reconnect an unowned connection (`connection-unowned`).
   const unowned = connection.status === 'unowned';
   const fields = Object.entries(detail.fields);
-  const { shares } = await root.shares.service.contextFor(actor, connection.id);
+  const { shares, unshareable } = await root.shares.service.contextFor(actor, connection.id);
+  // Empty when the connection takes no owner act: the service says which groups `transfer` accepts.
   const transferTargets = root.connections.service.transferTargets(actor, connection);
-  // Nobody shares or transfers a connection that is revoked or has no owner (spec §2.3).
-  const ownerActs = !revoked && !unowned;
+  // Share, reconnect: the rule is the services' (`ownerActRefusal`, spec §2.3), read from the
+  // context this page already loads. `revoked` and `unowned` below only choose what is displayed.
+  const ownerActs = unshareable === null;
 
   return (
     <Stack gap="var(--space-6)">
@@ -106,7 +107,7 @@ export default async function ConnectionPage({
         </div>
         {!revoked && (
           <div className={styles.actions}>
-            {!unowned && (
+            {ownerActs && (
               <Link
                 href={`${NEW_CONNECTION_PATH}/${encodeURIComponent(connection.provider)}?connection=${encodeURIComponent(connection.id)}`}
                 className={styles.linkButton}
@@ -205,7 +206,7 @@ export default async function ConnectionPage({
         )}
       </Card>
 
-      {ownerActs && transferTargets.length > 0 && (
+      {transferTargets.length > 0 && (
         <Card>
           <CardHeader>
             <CardTitle>Ownership</CardTitle>

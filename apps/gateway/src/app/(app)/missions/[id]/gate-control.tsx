@@ -12,6 +12,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui';
 import type { Gate } from '@vaubaan/shared';
 
+import { messageOf } from '../message-of';
 import styles from '../missions.module.css';
 
 const NEXT_GATE: Readonly<Record<Gate, Gate>> = { auto: 'approval', approval: 'auto' };
@@ -19,14 +20,6 @@ const ACTION: Readonly<Record<Gate, string>> = {
   auto: 'Require approval',
   approval: 'Set to auto',
 };
-
-function messageOf(body: unknown, status: number): string {
-  if (typeof body === 'object' && body !== null && 'message' in body) {
-    const { message } = body;
-    if (typeof message === 'string') return message;
-  }
-  return `The instance answered ${status}.`;
-}
 
 export function GateControl({
   missionId,

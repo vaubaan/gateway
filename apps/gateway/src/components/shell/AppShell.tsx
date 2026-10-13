@@ -7,6 +7,7 @@ import Link from 'next/link';
 
 import { OperatorBadge, SignOutButton } from '@/components/auth/PrincipalCard';
 import styles from '@/components/auth/auth.module.css';
+import { isOperatorPrincipal } from '@/components/auth/principal';
 import { Container } from '@/components/ui';
 import type { Principal } from '@/server/auth';
 
@@ -36,7 +37,7 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const who = principal.kind === 'user' ? principal.user.email : 'bootstrap token';
-  const operator = principal.kind === 'bootstrap' || principal.isOperator;
+  const operator = isOperatorPrincipal(principal);
   return (
     <div className={styles.adminShell}>
       <header className={styles.adminBar}>

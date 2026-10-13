@@ -13,6 +13,9 @@ tracks:
   - apps/gateway/src/components/shell/
   - apps/gateway/src/components/LocalDate.tsx
   - apps/gateway/src/components/auth/NeedsUser.tsx
+  - apps/gateway/src/components/auth/principal.ts
+  - apps/gateway/src/components/risk/
+  - apps/gateway/src/app/(app)/missions/message-of.ts
   - apps/gateway/src/lib/auth/session.ts
   - apps/gateway/src/lib/connections/session.ts
   - apps/gateway/next.config.ts
@@ -161,8 +164,10 @@ the page in a `Container`:
 - the brand link (to `/connections`) and one link per entry of `APP_NAV`:
   **Connections**, **Shares received**, **Missions**, **Requests**, **Audit**,
   **Delegations**. Every principal sees these links;
-- **Administration** (`/admin`), only when the principal is the bootstrap
-  operator or a user with `isOperator`;
+- **Administration** (`/admin`), only when `isOperatorPrincipal(principal)`
+  (`components/auth/principal.ts`): the bootstrap operator or a user with
+  `isOperator`. `PrincipalCard` and the Audit page's sentence read the same
+  function;
 - on the right: the user's email (or `bootstrap token`), `OperatorBadge`
   (`Operator` / `User` / "Bootstrap operator") and `SignOutButton`, both from
   `components/auth/PrincipalCard.tsx`.
@@ -189,6 +194,26 @@ the page then answers 500 instead of "not found". A page recognises a service
 error by shape — `isShareError(err, code)`, `isConnectError(err, code)`
 (name and code) — and services and handlers, which live in the root's own
 graph, keep `instanceof`.
+
+## A page shows what its service decides
+
+A control a page shows or hides follows a rule the server enforces. That rule
+is written once, next to the act it guards, and the page reads it from the
+view it already loads. A page never spells the condition again.
+
+| Rule                                                           | Stated in                                                    | Read by the page as                                                                                                                                                    |
+| -------------------------------------------------------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| a revoked or unowned connection takes no owner act (spec §2.3) | `ownerActRefusal(connection)` (`connections/service.ts`)     | `ShareContext.unshareable` (the Share dialog prints `SHARE_ERROR_MESSAGES[unshareable]`; the connection page hides Share, the actions of each share row and Reconnect) |
+| the same, for a transfer                                       | `ConnectionService.transferTargets` returns no group         | the Ownership card shows when a target is listed                                                                                                                       |
+| the gates of a revoked or orphaned mission are not edited      | `gateEditBlockedBy(mission)` (`missions/mission-service.ts`) | `MissionDetail.gates_editable`                                                                                                                                         |
+| a group without member is not named owner                      | `ConnectionService.reassignTargets()`                        | the group list of Admin → Connections                                                                                                                                  |
+
+`share`, `transfer`, the reconnection, `setGate` and `reassign` refuse on the
+same functions, and `tests/integration/authority/rules-read-by-pages.test.ts`
+asserts, on one state, what the reader says and what the act then answers.
+The statuses a page still tests itself (`revoked`, `unowned` on the connection
+page) choose a banner or a read-only field: what is displayed, not what is
+allowed.
 
 ## UI primitives — `components/ui/`
 
@@ -220,6 +245,18 @@ name)`; Admin → Provider apps passes `provider-app-<provider id>` because it
 renders one list per provider. Controls outside a `Field` are either wrapped in
 their `<label>` (Audit filters, the request decision form, checkboxes) or carry
 an `aria-label` (the mission form, the inline resource cells).
+
+Three display helpers are shared by the pages that used to carry a copy each:
+
+- `components/risk/RiskBadges.tsx`: `SeverityBadge({ level })`, the catalog
+  severity with its tone (Shares received, the Share dialog, the mission form),
+  and `GateBadge({ gate })`, `approval` as a warning badge and `auto` as the
+  plain word (mission page, session page, request page);
+- `app/(app)/missions/message-of.ts`: `messageOf(body, status)`, the `message`
+  of a JSON refusal of the mission API or "The instance answered `<status>`."
+  (gate control, rotate and revoke, the mission form);
+- `components/auth/principal.ts`: `isOperatorPrincipal(principal)`
+  ([The shell](#the-shell--componentsshell)).
 
 `components/LocalDate.tsx` (client) renders a timestamp: the ISO form on the
 server, the browser's locale after hydration, without a hydration mismatch.
@@ -304,6 +341,9 @@ Three unit files under `apps/gateway/tests/unit/app/` run without a browser
 - `field.test.tsx` renders `Field` and `CredentialFieldInputs` with
   `renderToStaticMarkup`: label bound by `for`/`id`, group role without
   `htmlFor`, unique ids when two lists share a page.
+
+Two helpers have a unit file beside them: `components/auth/principal.test.ts`
+and `app/(app)/missions/message-of.test.ts`.
 
 `guard-harness.ts` holds what the two guard files share (file discovery, calling
 a page as a function, naming a redirect or a "not found").

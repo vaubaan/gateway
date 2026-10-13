@@ -73,6 +73,7 @@ export {
 export {
   labellingOf,
   ShareService,
+  unshareableReason,
   type ReceivedRisk,
   type ReceivedShare,
   type RevokeOutcome,
@@ -82,4 +83,5 @@ export {
   type ShareServiceDeps,
   type ShareTargetInput,
   type ShareView,
+  type UnshareableReason,
 } from './service';

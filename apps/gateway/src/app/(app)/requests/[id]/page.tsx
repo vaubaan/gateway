@@ -37,6 +37,7 @@ import {
   Tr,
   type BadgeTone,
 } from '@/components/ui';
+import { GateBadge } from '@/components/risk/RiskBadges';
 import { currentUser } from '@/lib/auth/session';
 import {
   ADDRESSED_TO_CREATOR,
@@ -255,7 +256,7 @@ function ApprovalBody({ view }: { view: ApprovalView }) {
                   <div className={styles.mono}>{line.risk_id}</div>
                 </Td>
                 <Td>
-                  {line.gate === 'approval' ? <Badge tone="warning">approval</Badge> : 'auto'}
+                  <GateBadge gate={line.gate} />
                 </Td>
                 <Td>{line.quota}</Td>
                 <Td>{line.consumed}</Td>
