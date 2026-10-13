@@ -119,6 +119,9 @@ The full statement is section 6 of the specification,
 [`docs/spec/vaubaan-gateway.md`](docs/spec/vaubaan-gateway.md#6-security);
 the reasoning behind the first line is the ADR
 [trust-model-clear-at-rest-idp-style](docs/decisions/trust-model-clear-at-rest-idp-style.md).
-The threats considered one by one, and the ones the project accepts with the
-reason, are in the threat-model handbook under
-[`docs/handbook/`](docs/handbook/).
+How each of these is implemented is described in the handbooks under
+[`docs/handbook/`](docs/handbook/): [authentication](docs/handbook/authentication.md),
+[connections](docs/handbook/connections.md),
+[execution-door](docs/handbook/execution-door.md),
+[management-door](docs/handbook/management-door.md) and
+[audit](docs/handbook/audit.md).
