@@ -8,7 +8,7 @@ import Link from 'next/link';
 
 import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import { Badge, Card, Code, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
+import { Badge, Card, Table, Tbody, Td, Th, Thead, Tr, Slug } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import { maskedToken, type MissionOverview } from '@/server/missions';
 
@@ -107,7 +107,7 @@ function MissionTable({
             <Td>{mission.policy.length}</Td>
             <Td>
               {token ? (
-                <Code>{maskedToken(token.prefix)}</Code>
+                <Slug kind="token">{maskedToken(token.prefix)}</Slug>
               ) : shared ? (
                 <span className={styles.muted}>not generated yet</span>
               ) : (

@@ -188,18 +188,31 @@ export function describePresetWidth(width: PresetWidth): string {
 export const VECTOR_AXES: readonly {
   readonly axis: keyof RiskVector;
   readonly label: string;
+  /** The axis in a few letters, for the compact strip; the label is its full name. */
+  readonly abbr: string;
   readonly question: string;
 }[] = [
   {
     axis: 'reversibility',
     label: 'Reversibility',
+    abbr: 'Undo',
     question: 'Can it be undone, and at what price?',
   },
-  { axis: 'blast', label: 'Blast radius', question: 'How much does one action reach?' },
-  { axis: 'data', label: 'Data', question: 'What kind of data is exposed?' },
-  { axis: 'cost', label: 'Cost', question: 'Can it spend money?' },
-  { axis: 'visibility', label: 'Visibility', question: 'Who sees the effect?' },
-  { axis: 'persistence', label: 'Persistence', question: 'Does the effect outlive the mission?' },
+  {
+    axis: 'blast',
+    label: 'Blast radius',
+    abbr: 'Blast',
+    question: 'How much does one action reach?',
+  },
+  { axis: 'data', label: 'Data', abbr: 'Data', question: 'What kind of data is exposed?' },
+  { axis: 'cost', label: 'Cost', abbr: 'Cost', question: 'Can it spend money?' },
+  { axis: 'visibility', label: 'Visibility', abbr: 'Seen', question: 'Who sees the effect?' },
+  {
+    axis: 'persistence',
+    label: 'Persistence',
+    abbr: 'Lasts',
+    question: 'Does the effect outlive the mission?',
+  },
 ];
 
 /** Where a value sits on its axis: the mildest, the most severe, or in between. */
@@ -209,6 +222,8 @@ export interface VectorBadge {
   readonly axis: keyof RiskVector;
   /** The axis as the interface names it (`Blast radius`). */
   readonly label: string;
+  /** The axis in a few letters (`Blast`). */
+  readonly abbr: string;
   /** The catalog's value on that axis (`account`). */
   readonly value: string;
   readonly weight: VectorWeight;
@@ -218,12 +233,12 @@ export interface VectorBadge {
 
 /** One badge per axis, in the order of `VECTOR_AXES`; the text carries the information. */
 export function vectorBadges(vector: RiskVector): VectorBadge[] {
-  return VECTOR_AXES.map(({ axis, label }) => {
+  return VECTOR_AXES.map(({ axis, label, abbr }) => {
     const scale: readonly string[] = SEVERITY_RANKS[axis];
     const rank = scale.indexOf(vector[axis]);
     const weight: VectorWeight =
       rank <= 0 ? 'mildest' : rank === scale.length - 1 ? 'worst' : 'middle';
-    return { axis, label, value: vector[axis], weight, scale };
+    return { axis, label, abbr, value: vector[axis], weight, scale };
   });
 }
 
@@ -302,6 +317,15 @@ export const FALLBACK_NOTE =
   'Fallback: counts only for a write no other entry of the catalog names. Accepting it accepts writes nobody reviewed; no preset includes it.';
 export const DEPRECATED_NOTE =
   'Deprecated: kept so that existing missions and shares keep working; "select all" and presets leave it out.';
+
+/**
+ * A note without its lead ("Fallback: counts only…" → "Counts only…"), for the
+ * places that already print the lead as a title or a badge.
+ */
+export function noteBody(note: string): string {
+  const body = note.replace(/^[^:]{1,40}: /, '');
+  return body.charAt(0).toUpperCase() + body.slice(1);
+}
 
 const SECONDS_PER_MINUTE = 60;
 const SECONDS_PER_HOUR = 3600;

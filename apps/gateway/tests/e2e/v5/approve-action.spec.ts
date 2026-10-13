@@ -120,7 +120,8 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await expect(hedy.getByText(E2E_APPROVER_USER.email)).toBeVisible();
 
   // The tool, the arguments in clear, the slices, the budget of what the call touches.
-  await expect(hedy.getByTestId('approval-tool')).toHaveText(TOOL);
+  // The tool is named by its slug: its text, in the colour of its kind.
+  await expect(hedy.getByTestId('approval-tool').locator('[data-kind="tool"]')).toContainText(TOOL);
   const shown = hedy.getByTestId('approval-arguments');
   await expect(shown).toContainText(MARKER);
   await expect(shown).toContainText('"path": ".github/workflows/ci.yml"');

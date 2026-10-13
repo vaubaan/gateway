@@ -31,6 +31,8 @@ import {
   Th,
   Thead,
   Tr,
+  Slug,
+  Callout,
 } from '@/components/ui';
 import { GateBadge } from '@/components/risk/RiskBadges';
 import { RiskExplain, RiskIdLink } from '@/components/risk/RiskExplain';
@@ -98,14 +100,12 @@ export default async function MissionPage({ params }: Props) {
 
       {!isCreator && (
         <div data-testid="shared-with-me">
-          <Banner tone="info" title="Shared with you">
-            <p>
-              {detail.creator.email ?? 'Its creator'} created this mission and added you as a
-              member. You use it as it is — same resources, same policy, same budget as every other
-              holder — with your own token, below. You cannot change it; its requests are answered
-              by its creator alone.
-            </p>
-          </Banner>
+          <Callout tone="info" icon="member" title="Shared with you">
+            {detail.creator.email ?? 'Its creator'} created this mission and added you as a member.
+            You use it as it is — same resources, same policy, same budget as every other holder —
+            with your own token, below. You cannot change it; its requests are answered by its
+            creator alone.
+          </Callout>
         </div>
       )}
 
@@ -127,7 +127,7 @@ export default async function MissionPage({ params }: Props) {
             <dd>
               {token ? (
                 <>
-                  <Code>{maskedToken(token.prefix)}</Code>{' '}
+                  <Slug kind="token">{maskedToken(token.prefix)}</Slug>{' '}
                   <span className={styles.muted}>
                     issued <LocalDate ts={token.createdAt} /> — shown once; rotate to replace it
                   </span>
@@ -180,7 +180,9 @@ export default async function MissionPage({ params }: Props) {
                   <Link href={providerPath(c.provider)} className={styles.refLink}>
                     {c.provider_label}
                   </Link>{' '}
-                  “{c.display_name}”{' '}
+                  <Slug kind="connection" mono={false}>
+                    {c.display_name}
+                  </Slug>{' '}
                   {c.status !== 'active' && <Badge tone="danger">{c.status}</Badge>}
                 </dt>
                 <dd>
@@ -188,7 +190,8 @@ export default async function MissionPage({ params }: Props) {
                     ? 'no resource (account-level tools only)'
                     : c.resources.map((r) => (
                         <span key={r.id}>
-                          <Code>{r.ref}</Code> {r.env && <Badge mono>{r.env}</Badge>}{' '}
+                          <Slug kind="resource">{r.ref}</Slug>{' '}
+                          {r.env && <Badge mono>{r.env}</Badge>}{' '}
                         </span>
                       ))}
                 </dd>
@@ -201,10 +204,7 @@ export default async function MissionPage({ params }: Props) {
       <Card>
         <CardHeader>
           <CardTitle>Policy — {detail.policy.length} accepted risks</CardTitle>
-          <span className={styles.muted}>
-            The explicit list this mission carries. Each id opens its entry in the provider
-            reference.
-          </span>
+          <span className={styles.muted}>The explicit list this mission carries.</span>
         </CardHeader>
         <Table>
           <Thead>

@@ -49,6 +49,55 @@
   --red-600: oklch(58% 0.2 25);
   --red-900: oklch(28% 0.14 25);
 
+  /* ───── Primitive : type hues (what KIND of object; never a status) ─────
+     One family per kind of object the interface names, four steps like the
+     accents. Chosen between the four status hues (red 25, amber 60-80,
+     green 150, blue 250) so that a kind is not read as a state. */
+  --violet-50: oklch(96% 0.03 305);
+  --violet-200: oklch(84% 0.1 305);
+  --violet-600: oklch(56% 0.2 305);
+  --violet-900: oklch(30% 0.14 305);
+
+  --teal-50: oklch(96% 0.035 190);
+  --teal-200: oklch(84% 0.1 190);
+  --teal-600: oklch(58% 0.11 190);
+  --teal-900: oklch(30% 0.07 190);
+
+  --pink-50: oklch(96% 0.03 350);
+  --pink-200: oklch(84% 0.1 350);
+  --pink-600: oklch(58% 0.2 350);
+  --pink-900: oklch(30% 0.13 350);
+
+  --lime-50: oklch(96% 0.06 125);
+  --lime-200: oklch(86% 0.15 125);
+  --lime-600: oklch(60% 0.16 125);
+  --lime-900: oklch(30% 0.09 125);
+
+  --cyan-50: oklch(96% 0.03 222);
+  --cyan-200: oklch(84% 0.09 222);
+  --cyan-600: oklch(58% 0.13 222);
+  --cyan-900: oklch(30% 0.08 222);
+
+  --indigo-50: oklch(96% 0.03 275);
+  --indigo-200: oklch(84% 0.09 275);
+  --indigo-600: oklch(54% 0.2 275);
+  --indigo-900: oklch(30% 0.14 275);
+
+  --orange-50: oklch(96% 0.04 45);
+  --orange-200: oklch(84% 0.12 45);
+  --orange-600: oklch(62% 0.18 45);
+  --orange-900: oklch(32% 0.1 45);
+
+  --magenta-50: oklch(96% 0.035 328);
+  --magenta-200: oklch(84% 0.11 328);
+  --magenta-600: oklch(56% 0.21 328);
+  --magenta-900: oklch(30% 0.14 328);
+
+  --gold-50: oklch(96% 0.06 98);
+  --gold-200: oklch(86% 0.13 98);
+  --gold-600: oklch(64% 0.13 98);
+  --gold-900: oklch(32% 0.07 98);
+
   /* ───── Primitive : space (4px base) ───── */
   --space-0: 0;
   --space-1: 4px;
@@ -72,6 +121,7 @@
   --radius-full: 999px;
 
   /* ───── Primitive : font sizes (rem-based, 16px root) ───── */
+  --text-2xs: 0.65rem; /* 10.4px — axis abbreviations and column captions only */
   --text-xs: 0.75rem; /* 12px */
   --text-sm: 0.8125rem; /* 13px */
   --text-base: 0.875rem; /* 14px */
@@ -134,6 +184,35 @@
   --primary-bg: var(--gray-0);
   --primary-fg: var(--gray-1000);
   --primary-bg-hover: var(--gray-100);
+
+  /* Type colours: rail (marker), bg and fg (the tag). See components/ui/kinds.ts. */
+  --type-risk-rail: var(--violet-600);
+  --type-risk-bg: var(--violet-900);
+  --type-risk-fg: var(--violet-200);
+  --type-preset-rail: var(--teal-600);
+  --type-preset-bg: var(--teal-900);
+  --type-preset-fg: var(--teal-200);
+  --type-tool-rail: var(--pink-600);
+  --type-tool-bg: var(--pink-900);
+  --type-tool-fg: var(--pink-200);
+  --type-plane-rail: var(--lime-600);
+  --type-plane-bg: var(--lime-900);
+  --type-plane-fg: var(--lime-200);
+  --type-resource-rail: var(--cyan-600);
+  --type-resource-bg: var(--cyan-900);
+  --type-resource-fg: var(--cyan-200);
+  --type-connection-rail: var(--indigo-600);
+  --type-connection-bg: var(--indigo-900);
+  --type-connection-fg: var(--indigo-200);
+  --type-mission-rail: var(--orange-600);
+  --type-mission-bg: var(--orange-900);
+  --type-mission-fg: var(--orange-200);
+  --type-member-rail: var(--magenta-600);
+  --type-member-bg: var(--magenta-900);
+  --type-member-fg: var(--magenta-200);
+  --type-token-rail: var(--gold-600);
+  --type-token-bg: var(--gold-900);
+  --type-token-fg: var(--gold-200);
 }
 
 /* ───── Semantic : LIGHT (opt-in via data-theme="light") ───── */
@@ -167,4 +246,82 @@
   --primary-bg: var(--gray-1000);
   --primary-fg: var(--gray-0);
   --primary-bg-hover: var(--gray-900);
+
+  /* Type colours: rail (marker), bg and fg (the tag). See components/ui/kinds.ts. */
+  --type-risk-rail: var(--violet-600);
+  --type-risk-bg: var(--violet-50);
+  --type-risk-fg: var(--violet-900);
+  --type-preset-rail: var(--teal-600);
+  --type-preset-bg: var(--teal-50);
+  --type-preset-fg: var(--teal-900);
+  --type-tool-rail: var(--pink-600);
+  --type-tool-bg: var(--pink-50);
+  --type-tool-fg: var(--pink-900);
+  --type-plane-rail: var(--lime-600);
+  --type-plane-bg: var(--lime-50);
+  --type-plane-fg: var(--lime-900);
+  --type-resource-rail: var(--cyan-600);
+  --type-resource-bg: var(--cyan-50);
+  --type-resource-fg: var(--cyan-900);
+  --type-connection-rail: var(--indigo-600);
+  --type-connection-bg: var(--indigo-50);
+  --type-connection-fg: var(--indigo-900);
+  --type-mission-rail: var(--orange-600);
+  --type-mission-bg: var(--orange-50);
+  --type-mission-fg: var(--orange-900);
+  --type-member-rail: var(--magenta-600);
+  --type-member-bg: var(--magenta-50);
+  --type-member-fg: var(--magenta-900);
+  --type-token-rail: var(--gold-600);
+  --type-token-bg: var(--gold-50);
+  --type-token-fg: var(--gold-900);
+}
+
+/* ───── Kind scope ─────
+   An element that IS an object of some kind, or names one, carries
+   `data-kind`; its styles then read the three `--kind-*` variables. */
+[data-kind='risk'] {
+  --kind-rail: var(--type-risk-rail);
+  --kind-bg: var(--type-risk-bg);
+  --kind-fg: var(--type-risk-fg);
+}
+[data-kind='preset'] {
+  --kind-rail: var(--type-preset-rail);
+  --kind-bg: var(--type-preset-bg);
+  --kind-fg: var(--type-preset-fg);
+}
+[data-kind='tool'] {
+  --kind-rail: var(--type-tool-rail);
+  --kind-bg: var(--type-tool-bg);
+  --kind-fg: var(--type-tool-fg);
+}
+[data-kind='plane'] {
+  --kind-rail: var(--type-plane-rail);
+  --kind-bg: var(--type-plane-bg);
+  --kind-fg: var(--type-plane-fg);
+}
+[data-kind='resource'] {
+  --kind-rail: var(--type-resource-rail);
+  --kind-bg: var(--type-resource-bg);
+  --kind-fg: var(--type-resource-fg);
+}
+[data-kind='connection'] {
+  --kind-rail: var(--type-connection-rail);
+  --kind-bg: var(--type-connection-bg);
+  --kind-fg: var(--type-connection-fg);
+}
+[data-kind='mission'] {
+  --kind-rail: var(--type-mission-rail);
+  --kind-bg: var(--type-mission-bg);
+  --kind-fg: var(--type-mission-fg);
+}
+[data-kind='member'] {
+  --kind-rail: var(--type-member-rail);
+  --kind-bg: var(--type-member-bg);
+  --kind-fg: var(--type-member-fg);
+}
+[data-kind='token'] {
+  --kind-rail: var(--type-token-rail);
+  --kind-bg: var(--type-token-bg);
+  --kind-fg: var(--type-token-fg);
 }

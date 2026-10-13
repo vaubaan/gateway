@@ -11,7 +11,7 @@ import { notFound } from 'next/navigation';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/connections/connections.module.css';
 import { NoticeBanner } from '@/components/connections/parts';
-import { Banner, Card, CardBody, Stack } from '@/components/ui';
+import { Banner, Card, CardBody, Stack, Help } from '@/components/ui';
 import {
   currentActor,
   firstParam,
@@ -58,12 +58,15 @@ export default async function SharePage({
           <Link href={base}>{connection.displayName}</Link> / Share
         </p>
         <h1>Share {connection.displayName}</h1>
-        <p className={styles.muted}>
-          A share lets its target accept, in their own missions, some of the risks of this{' '}
-          {context.providerLabel} connection, and nothing beyond. Quantities, approval gates and the
-          resources a mission touches are chosen by whoever issues the mission. The target cannot
-          share further.
-        </p>
+        <Help
+          id="share-dialog"
+          line={`A share lets its target accept, in their own missions, some of the risks of this ${context.providerLabel} connection, and nothing beyond.`}
+        >
+          <p>
+            Quantities, approval gates and the resources a mission touches are chosen by whoever
+            issues the mission. The target cannot share further.
+          </p>
+        </Help>
       </div>
 
       <NoticeBanner notice={notice} />

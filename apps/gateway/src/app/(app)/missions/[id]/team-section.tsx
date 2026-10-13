@@ -28,7 +28,6 @@ import {
   CardBody,
   CardHeader,
   CardTitle,
-  Code,
   Input,
   Select,
   Table,
@@ -37,6 +36,8 @@ import {
   Th,
   Thead,
   Tr,
+  Help,
+  Slug,
 } from '@/components/ui';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 import type { MissionTeam, TeamTokenView } from '@/server/missions/team-service';
@@ -144,7 +145,7 @@ export function TeamSection({ team }: { team: MissionTeam }) {
             <strong>Your token</strong>{' '}
             {team.my_token ? (
               <>
-                <Code>{masked(team.my_token.prefix)}</Code>{' '}
+                <Slug kind="token">{masked(team.my_token.prefix)}</Slug>{' '}
                 <span className={styles.muted}>
                   generated <LocalDate ts={team.my_token.created_at} />, last used{' '}
                   <LastUsed at={team.my_token.last_used_at} />
@@ -202,7 +203,10 @@ export function TeamSection({ team }: { team: MissionTeam }) {
           {team.members.map((member) => (
             <Tr key={member.user_id} data-member={member.email}>
               <Td>
-                {member.email} {!member.active && <Badge tone="danger">deactivated</Badge>}
+                <Slug kind="member" mono={false}>
+                  {member.email}
+                </Slug>{' '}
+                {!member.active && <Badge tone="danger">deactivated</Badge>}
               </Td>
               <Td>
                 {member.role === 'creator' ? (
@@ -264,11 +268,22 @@ export function TeamSection({ team }: { team: MissionTeam }) {
               Add member
             </Button>
           </form>
-          <p className={styles.muted}>
-            {team.candidates.length === 0
-              ? 'Every active user of this instance is already on the mission. A user exists here once they have signed in.'
-              : 'A member uses the mission as it is and generates their own token; you never see it. They cannot change the mission, add members or answer its requests. Removing a member revokes their token.'}
-          </p>
+          {team.candidates.length === 0 ? (
+            <p className={styles.muted}>
+              Every active user of this instance is already on the mission. A user exists here once
+              they have signed in.
+            </p>
+          ) : (
+            <Help
+              id="mission-members"
+              line="A member uses the mission as it is and generates their own token; you never see it."
+            >
+              <p>
+                They cannot change the mission, add members or answer its requests. Removing a
+                member revokes their token.
+              </p>
+            </Help>
+          )}
         </CardBody>
       )}
 
@@ -291,11 +306,14 @@ export function TeamSection({ team }: { team: MissionTeam }) {
             {team.tokens.map((token) => (
               <Tr key={token.id} data-holder={token.holder.label}>
                 <Td>
-                  {token.holder.label} {token.mine && <Badge tone="info">you</Badge>}
+                  <Slug kind={token.holder.kind === 'member' ? 'member' : 'token'} mono={false}>
+                    {token.holder.label}
+                  </Slug>{' '}
+                  {token.mine && <Badge tone="info">you</Badge>}
                 </Td>
                 <Td>{token.holder.kind === 'member' ? 'member token' : 'named token'}</Td>
                 <Td>
-                  <Code>{masked(token.prefix)}</Code>
+                  <Slug kind="token">{masked(token.prefix)}</Slug>
                 </Td>
                 <Td>
                   <LocalDate ts={token.created_at} />
@@ -353,11 +371,15 @@ export function TeamSection({ team }: { team: MissionTeam }) {
               Create named token
             </Button>
           </form>
-          <p className={styles.muted}>
-            For a CI runner or a shared machine. Its calls are attributed to the name you give. The
-            token is shown once, to you: hand it to the machine. To replace it, revoke it and create
-            one with the same name.
-          </p>
+          <Help
+            id="mission-named-token"
+            line="For a CI runner or a shared machine: its calls are attributed to the name you give."
+          >
+            <p>
+              The token is shown once, to you: hand it to the machine. To replace it, revoke it and
+              create one with the same name.
+            </p>
+          </Help>
         </CardBody>
       )}
 

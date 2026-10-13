@@ -31,9 +31,8 @@
 }
 
 .fold {
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-md);
-  padding: var(--space-2) var(--space-4);
+  display: grid;
+  gap: var(--space-2);
 }
 .fold > summary {
   cursor: pointer;
@@ -84,6 +83,10 @@
   padding: 0;
   display: flex;
   flex-direction: column;
+  border: 1px solid var(--border-subtle);
+  border-left: 3px solid var(--kind-rail);
+  border-radius: var(--radius-md);
+  background: var(--surface-base);
 }
 
 .risk {
@@ -91,8 +94,11 @@
   grid-template-columns: 16px minmax(0, 1fr);
   gap: var(--space-2);
   align-items: start;
-  padding: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
   border-top: 1px solid var(--border-subtle);
+}
+.risks li:first-child .risk {
+  border-top: 0;
 }
 .risk > input {
   margin-top: 4px;
@@ -133,4 +139,9 @@
   gap: var(--space-2);
   align-items: baseline;
   flex-wrap: wrap;
+}
+.foldTitle {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--font-weight-semibold);
 }

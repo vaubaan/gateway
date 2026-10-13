@@ -88,7 +88,8 @@ From another machine, forward the port and open the same URL there:
             ssh -L ${port}:localhost:${port} ${input.host}
 The listener is bound to 127.0.0.1: nothing else on the network reaches it.
 
-Accounts (no password: pick one on the sign-in page; "Sign out" to switch)
+Accounts (no password: pick one on the sign-in page; to switch, open the
+account button at the end of the bar and "Sign out")
 ${accounts}
 
 Tokens of three seeded missions of Alice, for the commands below:
@@ -110,8 +111,9 @@ Things to try
      Any value of the right shape is accepted. Vercel has no simulation:
      connecting it fails with a message that says so, and nothing is sent.
   3. Read what a provider is: Providers -> GitHub. What the plugin connects to,
-     its data model, each risk with the reason it is a risk and its six badges,
-     each preset with everything it contains, the tools.
+     then four tabs: its presets side by side against the risks, each risk with
+     the reason it is a risk and its six-cell profile, its data model, its
+     tools. Supabase adds a plane control (db, storage, auth, functions).
   4. Issue a mission on one screen: Missions -> New mission. Include a
      connection and pick a preset: the block says what it allows, what waits
      for your approval and what it leaves out. Switch to Custom to accept risks

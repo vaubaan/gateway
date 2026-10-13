@@ -34,6 +34,7 @@ import {
   Th,
   Thead,
   Tr,
+  Slug,
 } from '@/components/ui';
 import { GateBadge } from '@/components/risk/RiskBadges';
 import { RiskIdLink } from '@/components/risk/RiskExplain';
@@ -243,7 +244,7 @@ export default async function MissionSessionPage({ params, searchParams }: Props
                   <Th>Period</Th>
                   {view.risks.map((risk) => (
                     <Th key={risk.risk_id} className={`${styles.mono} ${styles.nowrap}`}>
-                      {risk.risk_id}
+                      <RiskIdLink riskId={risk.risk_id} />
                     </Th>
                   ))}
                 </Tr>
@@ -318,7 +319,9 @@ export default async function MissionSessionPage({ params, searchParams }: Props
                       'Approval request'
                     )}
                   </Td>
-                  <Td className={styles.mono}>{request.risk_id}</Td>
+                  <Td className={styles.mono}>
+                    <RiskIdLink riskId={request.risk_id} />
+                  </Td>
                   <Td>
                     <LocalDate ts={request.created_at} />
                   </Td>
@@ -544,10 +547,15 @@ function HolderName({ holder }: { holder: SessionHolderView | null }) {
     return <span className={styles.muted}>not attributed (before tokens had a holder)</span>;
   }
   return holder.kind === 'member' ? (
-    <>{holder.label}</>
+    <Slug kind="member" mono={false}>
+      {holder.label}
+    </Slug>
   ) : (
     <>
-      {holder.label} <Badge>named token</Badge>
+      <Slug kind="token" mono={false}>
+        {holder.label}
+      </Slug>{' '}
+      <Badge>named token</Badge>
     </>
   );
 }
@@ -605,7 +613,9 @@ function EventRow({
           <div className={`${styles.mono} ${styles.nowrap}`}>{event.refusal_code}</div>
         )}
       </Td>
-      <Td className={`${styles.mono} ${styles.tool}`}>{event.tool ?? '—'}</Td>
+      <Td className={`${styles.mono} ${styles.tool}`}>
+        {event.tool ? <Slug kind="tool">{event.tool}</Slug> : '—'}
+      </Td>
       <Td>
         {event.risk_ids.length === 0 ? (
           '—'
@@ -613,7 +623,7 @@ function EventRow({
           <div className={styles.risks}>
             {event.risk_ids.map((risk) => (
               <span key={risk} className={`${styles.mono} ${styles.wraps}`}>
-                {risk}
+                <RiskIdLink riskId={risk} />
                 {event.remaining?.[risk] !== undefined && ` → ${event.remaining[risk]}`}
               </span>
             ))}

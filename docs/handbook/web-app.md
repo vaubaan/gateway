@@ -57,7 +57,10 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 - **Client components are the exception** (`'use client'`): the mission
   creation form with its preset panel and its Custom editor, the mission actions, the gate control
   of the mission page (`GateControl`), the bootstrap kit view, the share form
-  (`ShareForm`), `RevokeConnection`, `DangerConfirm` and `LocalDate`. The only
+  (`ShareForm`), `RevokeConnection`, `DangerConfirm`, `LocalDate`, the body of
+  a provider's reference (`ProviderView` and its sections), the two parts of
+  the bar that need the browser (`NavLinks`, `UserMenu`) and two primitives
+  (`Help`, `TabList`). The only
   `fetch` calls from the browser are the mission form (`POST /api/missions`,
   `POST /api/missions/preview`), the mission actions
   (`POST /api/missions/<id>/rotate|revoke`), the gate control
@@ -192,19 +195,33 @@ authority is recomputed on every request.
 ## The shell — `components/shell/`
 
 `AppShell({ principal, children })` (server component) renders one bar, then
-the page in a `Container`, then the build footer:
+the page in a `Container`, then the build footer. The bar is **one line**: its
+entries never wrap (`shell.module.css`, `.nav`), and a Playwright assertion
+holds it at 1280 px for an operator.
 
 - the brand link (to `/connections`) and one link per entry of `APP_NAV`:
-  **Connections**, **Shares received**, **Missions**, **Requests**, **Audit**,
-  **Delegations**, **Providers**. Every principal sees these links;
-- **Administration** (`/admin`), only when `isOperatorPrincipal(principal)`
+  **Connections**, **Shares**, **Missions**, **Requests**, **Audit**,
+  **Delegations**, **Providers**. A label is one short word — the page behind
+  "Shares" is still titled "Shares received" — so that one more entry fits.
+  Every principal sees these links;
+- **Admin** (`/admin`), only when `isOperatorPrincipal(principal)`
   (`components/auth/principal.ts`): the bootstrap operator or a user with
   `isOperator`. `PrincipalCard` (the account card of `/login` for a visitor
   who already has a session) and the Audit page's sentence read the same
   function;
-- on the right: the user's email (or `bootstrap token`), `OperatorBadge`
+- the links are rendered by `NavLinks` (client, `usePathname`): the entry the
+  path is under (`isCurrentSection` in `shell/nav.ts`: equal, or below it)
+  carries `aria-current="page"`, a heavier word and a rule under it;
+- on the right, `UserMenu` (client): one button with the user's email (or
+  `bootstrap token`), cut with an ellipsis past 260 px and whole in its
+  `title` and `aria-label` ("Account: `<email>`"). It opens a small panel —
+  the only overlay surface with a shadow — holding `OperatorBadge`
   (`Operator` / `User` / "Bootstrap operator") and `SignOutButton`, both from
-  `components/auth/PrincipalCard.tsx`.
+  `components/auth/PrincipalCard.tsx`. Escape or a click outside closes it.
+  `data-testid="user-menu"`.
+
+The Administration layout keeps its own bar (`components/auth/auth.module.css`,
+`.adminBar`): it was not reshaped.
 
 `BuildFooter` (server component, `shell.module.css`) is one line at the
 bottom of every page: `Vaubaan Gateway <version> · <commit>`, the build
@@ -217,7 +234,8 @@ which have no layout of their own, do not. `data-testid`: `build-footer`,
 `package.json` ([coding workflow, "One version"](../workflow/coding-workflow.md#one-version)).
 
 `AppNavEntry` is `{ href, label, Count? }`. `Count` is an optional server
-component rendered after the label with the principal. The only one is
+component rendered after the label with the principal; `AppShell` renders it
+and hands the result to `NavLinks` as a node. The only one is
 `OpenRequestCount` on "Requests": a warning badge with the number of open
 requests awaiting the signed-in user as creator, nothing at zero and nothing
 for the bootstrap operator ([requests](requests.md)).
@@ -264,18 +282,25 @@ allowed.
 Imported from `@/components/ui` (`index.ts`). Styles are CSS modules next to
 each file and use the tokens only.
 
-| Export                                        | What it is                                                                                                                                                                       |
-| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Button`                                      | `<button>` with `variant` (`primary`, `secondary`, `ghost`, `danger`; default `secondary`), `size` (`sm`, `md`; default `md`) and `loading` (disables the button), ref forwarded |
-| `Input`, `Textarea`, `Select`                 | styled form controls, refs forwarded                                                                                                                                             |
-| `Field`                                       | a labelled field with `label`, `htmlFor`, `hint` and `error` (the error replaces the hint)                                                                                       |
-| `Card`, `CardHeader`, `CardTitle`, `CardBody` | the bordered panel and its parts                                                                                                                                                 |
-| `Badge`                                       | inline status, `tone`: `neutral` (default), `info`, `success`, `warning`, `danger` (`BadgeTone`); `mono` for the monospace face                                                  |
-| `Banner`                                      | block message with an optional `title`, same tones (default `info`)                                                                                                              |
-| `Table`, `Thead`, `Tbody`, `Tr`, `Th`, `Td`   | styled table elements                                                                                                                                                            |
-| `Container`, `Stack`                          | page column (`.vbn-container`), vertical flex with a `gap`                                                                                                                       |
-| `Code`                                        | inline `<code>`                                                                                                                                                                  |
-| `DangerConfirm`                               | client modal: the user types `phrase` before Confirm enables; Escape or the backdrop cancels (not while `busy`). Used by the mission actions and `RevokeConnection`              |
+| Export                                        | What it is                                                                                                                                                                                                                                                                    |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Button`                                      | `<button>` with `variant` (`primary`, `secondary`, `ghost`, `danger`; default `secondary`), `size` (`sm`, `md`; default `md`) and `loading` (disables the button), ref forwarded                                                                                              |
+| `Input`, `Textarea`, `Select`                 | styled form controls, refs forwarded                                                                                                                                                                                                                                          |
+| `Field`                                       | a labelled field with `label`, `htmlFor`, `hint` and `error` (the error replaces the hint)                                                                                                                                                                                    |
+| `Card`, `CardHeader`, `CardTitle`, `CardBody` | the bordered panel and its parts                                                                                                                                                                                                                                              |
+| `Badge`                                       | inline status, `tone`: `neutral` (default), `info`, `success`, `warning`, `danger` (`BadgeTone`); `mono` for the monospace face                                                                                                                                               |
+| `Banner`                                      | block message with an optional `title`, same tones (default `info`)                                                                                                                                                                                                           |
+| `Table`, `Thead`, `Tbody`, `Tr`, `Th`, `Td`   | styled table elements                                                                                                                                                                                                                                                         |
+| `Container`, `Stack`                          | page column (`.vbn-container`), vertical flex with a `gap`                                                                                                                                                                                                                    |
+| `Code`                                        | inline `<code>`                                                                                                                                                                                                                                                               |
+| `DangerConfirm`                               | client modal: the user types `phrase` before Confirm enables; Escape or the backdrop cancels (not while `busy`). Used by the mission actions and `RevokeConnection`                                                                                                           |
+| `Slug`                                        | the name of an object in the colour of its kind (`kind`, below): an inline tag with the glyph of the kind, a visually hidden word for it, `href` to make it a link, `newTab`, `mono={false}` for a human name                                                                 |
+| `Glyph`                                       | the one glyph set, drawn in `Glyph.tsx` (no icon package): one 12 px line drawing per kind, plus `help`, `chevron`, `warning`, `info`, `key`, `flask`, `archive`, `user`; always `aria-hidden`                                                                                |
+| `Callout`                                     | a note with an icon and a short title on a neutral surface (`role="note"`); only the icon and the title carry the tone. Used for the fallback, deprecated, token hand-out and experimental notes                                                                              |
+| `Help`, `HelpButton`, `useHelp`               | client. Help on demand: `Help({ id, line })` shows one line and a "More" button; the panel is closed by default and its state is remembered per browser (`localStorage`, key `vaubaan:help:<id>`). `useHelp` + `HelpButton` are the same thing for a panel rendered elsewhere |
+| `TabList`, `TabPanel`                         | client. Tabs with the ARIA roles and keyboard (arrows, Home, End; a tab is selected when it takes focus); the state belongs to the caller                                                                                                                                     |
+| `KindLegend`                                  | "what the colours mean": every kind as its slug, with one sentence                                                                                                                                                                                                            |
+| `ITEM_KINDS`, `ITEM_KIND_WORDS`, `ItemKind`   | the list of kinds, and the label and meaning of each (`kinds.ts`)                                                                                                                                                                                                             |
 
 **Labels are bound to their controls.** A `Field` that holds one control
 takes `htmlFor`, the `id` of that control, and renders a real
@@ -290,15 +315,61 @@ renders one list per provider. Controls outside a `Field` are either wrapped in
 their `<label>` (Audit filters, the request decision form, checkboxes) or carry
 an `aria-label` (the mission form, the inline resource cells).
 
-Display helpers shared by the pages that used to carry a copy each:
+### Type colours: what kind of thing a name is
+
+Every name the interface prints for an object — as a row, a column, or a mere
+reference — carries the colour of its **kind**, through `Slug` or through
+`data-kind` on its container. The colour says what kind of thing it is and
+nothing else: severity, class of risk, gate, status and callouts keep the four
+status accents and their own marks (a filled badge, an outlined word, the
+vector strip). A kind is never said by the colour alone: the slug has its
+glyph, its `title` and a visually hidden word (`Risk: `, `Tool: `…) that is
+generated content (`data-kind-label`, `.slug::before`): assistive technology
+reads it, and the text of the element stays the bare name. An identifier
+wraps between its words — a `<wbr>` follows each separator
+(`github__create_|or_|update_|file`) — and never inside one.
+
+| Kind         | Hue (`tokens.css`) | Glyph      | Where it appears                                                                                                                           |
+| ------------ | ------------------ | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `risk`       | `violet`           | diamond    | every risk id (`RiskIdLink`): mission page, Custom editor, Share dialog, Requests, session, Audit, Shares received; the rail of a risk row |
+| `preset`     | `teal`             | three bars | the columns of the preset matrix, the preset tags of a risk row, the chosen preset of mission creation                                     |
+| `tool`       | `pink`             | prompt     | tool names: the tools table, a risk's declared tools, Audit, session, Requests                                                             |
+| `plane`      | `lime`             | branch     | planes and entities of a data model: the plane control, the outline, the index cards, the tools table                                      |
+| `resource`   | `cyan`             | box        | resource refs: mission page, mission creation, connection page, Audit                                                                      |
+| `connection` | `indigo`           | two rings  | connection names: mission page, Audit                                                                                                      |
+| `mission`    | `orange`           | flag       | mission names: Audit, Requests                                                                                                             |
+| `member`     | `magenta`          | person     | people on a mission: the Members table, the holder of a member token (mission page, session, Audit), the "Shared with you" callout         |
+| `token`      | `gold`             | key        | the masked mission token (mission page, missions list, "Members and tokens") and the name a named token goes by (session, Audit)           |
+
+Tokens, in `styles/tokens.css`: nine hue families of four steps (50, 200, 600, 900) beside the status accents, and per kind three semantic tokens mapped per
+theme — `--type-<kind>-rail` (step 600: a rail, a band, the glyph),
+`--type-<kind>-bg` and `--type-<kind>-fg` (the tag: 50 under 900 in light, 900
+under 200 in dark). The same file ends with one rule per kind,
+`[data-kind='<kind>'] { --kind-rail; --kind-bg; --kind-fg }`: a component
+reads the three `--kind-*` variables and never a family step. Adding a kind is
+one entry in `kinds.ts` (the compiler then asks for its words and its glyph),
+its tokens in both themes and its `[data-kind]` rule;
+`tests/unit/app/item-kinds.test.ts` fails until the three exist, and if two
+kinds share a hue or one borrows a status hue.
+
+`tokens.css` also gained `--text-2xs` (the axis captions of the vector strip
+and the captions of the budget columns), and `globals.css` a
+`prefers-reduced-motion` rule (transitions and animations take no time), the
+`.vbn-sr-only` utility and the focus ring on `summary` and `[tabindex]`.
+
+### Display helpers
+
+Shared by the pages that used to carry a copy each:
 
 - `components/risk/RiskExplain.tsx`: how a risk is explained everywhere —
-  `RiskExplain` (label, reason, vector badges, linked id), `VectorBadges`,
-  `VectorLegend`, `RiskIdLink`, `RiskMarkers` (handbook
+  `RiskExplain` (a compact row: label and class, id and one line of reason
+  that unfolds, the vector strip), `VectorStrip`, `VectorLegend`,
+  `RiskIdLink`, `RiskClassTag`, `RiskReason`, `RiskMarkers` (handbook
   [missions](missions.md), "How a risk is explained"). The Custom editor of
   mission creation, the Share dialog, the mission page and the provider
   reference render a risk through it; the Requests pages, the session page,
-  Shares received and the connection page link each risk id with `RiskIdLink`;
+  Audit, Shares received and the connection page print each risk id with
+  `RiskIdLink`, a `Slug` of kind `risk`;
 
 - `components/risk/RiskBadges.tsx`: `SeverityBadge({ level })`, the catalog
   severity with its tone (Shares received, the Share dialog, the mission form),
@@ -352,52 +423,119 @@ Everything is generated from the plugin registry by
 `src/server/providers/reference.ts` (pure, no IO); no provider has a
 hand-written page, and a plugin added to the registry has its page.
 
-| Function                           | Gives                                                                                                                                                |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `providerCards(registry)`          | the index: name, one-line description, credential kind, counts (risks, presets, tools), experimental ones last                                       |
-| `providerReference(registry, id)`  | the whole page of one plugin, or `null` (the page answers "not found")                                                                               |
-| `dataModelTrees(model)`            | each plane as a containment tree: entity, cardinalities, "carries the environment"                                                                   |
-| `describePattern(pattern)`         | a slice pattern read as words: `Write: repo (any) › branch (main, master) › file (any)`; the fallback pattern reads "Write anything in `<provider>`" |
-| `presetReferenceOf(preset, risks)` | a preset against the whole catalog: lines without asking, lines under approval, entries not included                                                 |
-| `riskExplainer(registry)`          | `(riskId) → CatalogRisk \| null`, for the pages that list a persisted policy                                                                         |
+| Function                               | Gives                                                                                                                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `providerCards(registry)`              | the index: name, one-line description, credential kind, counts (risks, presets, tools), the planes of the model, the environments of the catalog; experimental ones last |
+| `providerReference(registry, id)`      | the whole page of one plugin, or `null` (the page answers "not found")                                                                                                   |
+| `dataModelTrees(model)`                | each plane as a containment tree: entity, cardinalities, "carries the environment"                                                                                       |
+| `describePattern(pattern)`             | a slice pattern read as words: `Write: repo (any) › branch (main, master) › file (any)`; the fallback pattern reads "Write anything in `<provider>`"                     |
+| `presetReferenceOf(preset, risks)`     | a preset against the whole catalog: lines without asking, lines under approval, entries not included                                                                     |
+| `riskExplainer(registry)`              | `(riskId) → CatalogRisk \| null`, for the pages that list a persisted policy                                                                                             |
+| `planesOfPatterns`, `planesOfToolName` | `planes.ts`: the planes a catalog entry or a tool is filed under (below)                                                                                                 |
+| `riskPlanesOf(model, catalog)`         | `planes.ts`: per catalog entry its planes, or `null` for a model with one plane; what the Custom editor's plane filter reads                                             |
 
-`/providers/<id>` reads top to bottom:
+A `RiskReference` also names the presets that include it (`presets`: id, label,
+anchor), the tools the plugin declares for it (`declared_tools`, from
+`tokenHandouts`) and its `planes`; a `ToolReference` has its `planes`; the
+reference has `plane_filters` (slug, description, counts), empty when the
+model has one plane.
 
-1. **Header** — name, `experimental`, the community validation badge
-   (`root.telemetry.stats.statusFor`, absent when telemetry gives none), plugin
-   and catalog versions; the plugin's `summary` (plain words: what a connection
-   is, what a resource is, where the environment comes from —
-   [plugin-sdk](plugin-sdk.md)); credential kind, size, the maintainer handbook
-   link (`docsUrl`).
-2. **How to read a risk** (`#legend`) — quota, rate limit and gate in one
-   paragraph, the legend of the six axes, account-scoped against
-   environment-scoped, what `fallback` and `deprecated` mean.
-3. **Data model** (`#data-model`) — where the environment of a call comes from
-   (`EnvironmentReference.source`: `call` when the plugin declares `envOf`,
-   `resource-label` when the catalog has env-scoped entries, `none`
-   otherwise), the environments the catalog knows, then each plane as a tree.
-4. **Risk catalog** (`#risks`) — reads, writes, irreversible writes; one card
-   per entry, `id="risk-<id>"`: label, id, reason, markers explained, scope
-   (the explicit id per environment), the vector (per environment when an
-   override changes it), each pattern in words with the pattern itself under
-   it, the plugin's rate ceiling when it has one. An entry is listed once,
-   under the kind of its most severe variant, so its anchor is unique.
-5. **Presets** (`#presets`) — one card per preset, `id="preset-<id>"`: every
-   line with environment, quota, rate limit and gate, then "Not included".
-6. **Tools** (`#tools`) — name, description, required and optional arguments.
-   The "Risks" column reads "depends on the arguments": a plugin classifies a
-   call from its arguments and declares no table of the risks of each tool, so
-   the page says so (`TOOL_RISKS_NOTE`) and points to the catalog instead of
-   guessing. The same note says what spec §4.1 says of discovery: `tools/list`
-   is filtered per provider, a listed tool can still be refused at call time,
-   and the catalog endpoint of the execution door is the precise source of
-   what a mission can call. The one exception is a tool the plugin declares
+**The index** (`providers/page.tsx`) is a grid of cards. A card differs from
+its neighbours by what it holds: the name, the credential kind, the one-line
+description, the planes of the model as `plane` slugs, the environments the
+catalog knows, `experimental` and the community validation badge, and three
+counts with the glyph of their kind (presets, risks, tools). The lead is one
+line; the rest, with the colour legend, is behind "More".
+
+**`/providers/<id>`** is a compact header rendered by the server (`[id]/page.tsx`)
+and a client body (`[id]/provider-view.tsx`):
+
+- **Header** — name, `experimental`, the community validation badge
+  (`root.telemetry.stats.statusFor`, absent when telemetry gives none); plugin
+  and catalog versions and the maintainer handbook link (`docsUrl`) on one
+  monospace line; the plugin's `summary` (plain words: what a connection is,
+  what a resource is, where the environment comes from —
+  [plugin-sdk](plugin-sdk.md)); three facts in one row: what it connects to,
+  the credential kind, the environments with where they come from.
+- **Tabs** (`TabList`, sticky under the top of the window) — one section in
+  view at a time, in the order a reader needs them: **Presets** (the default),
+  **Risks**, **Data model**, **Tools**, each with its count. Selecting a tab
+  writes its fragment (`#presets`, `#risks`, `#data-model`, `#tools`).
+- **Plane control** — only when the model has several planes (today
+  Supabase): native radios drawn as pills, "All", one per plane, and `other`
+  when something is filed there. It slices every tab at once: the rows of the
+  matrix, the risk list, the outline, the tools, and the counts on the tabs.
+  `data-testid="plane-control"`.
+- **Help** — "How to read this page" (`useHelp('provider-reference')`,
+  `#legend` opens it): presets and risks in one paragraph, how to read a risk
+  with the legend of the six axes and the two markers, what the colours mean
+  (`KindLegend`), how planes are read. Closed by default.
+
+The four sections, one file each beside the page:
+
+1. **Presets** (`preset-matrix.tsx`, `#presets`) — one table: a column per
+   preset (`<th id="preset-<id>">`, the preset colour as a band, its label, its
+   counts, its description on three lines), a row per catalog entry grouped
+   into reads, writes and irreversible writes. A cell is the budget the preset
+   gives the risk — quota, rate limit, gate (`approval` as a badge) — once per
+   environment for an env-scoped risk, or a dash ("not included" to assistive
+   technology). The risk label and its id link to its entry in the Risks tab.
+   `data-testid`: `preset-matrix`, `preset-<id>`,
+   `cell-<preset id>-<risk id>`.
+2. **Risks** (`risk-list.tsx`, `#risks`) — the three groups, each under a
+   title that sticks below the tabs, as compact rows
+   (`<article id="risk-<id>">`): the label as a disclosure button, the severity
+   and the markers; the vector strip of its most severe variant; then the id,
+   one line of reason, the environments and the presets that include it as
+   `preset` slugs. Unfolded: the whole reason, a `Callout` per note (fallback,
+   deprecated with its replacement, token hand-out), the scope with the
+   explicit id per environment, the profile per environment when an override
+   changes it, each pattern in words with the pattern under it, the declared
+   tools, the plugin's rate ceiling. "Expand all" unfolds the list. An entry is
+   listed once, under the kind of its most severe variant, so its anchor is
+   unique. Fifteen entries, collapsed, measure about one and a half viewports
+   at 1280×800 (the browser test bounds it at 1.75).
+3. **Data model** (`data-model.tsx`, `#data-model`) — where the environment of
+   a call comes from (`EnvironmentReference.source`: `call` when the plugin
+   declares `envOf`, `resource-label` when the catalog has env-scoped entries,
+   `none` otherwise), then each plane as an outline with connectors: the
+   entity, its cardinalities as small annotations, its description; the
+   carrier of the environment has a badge and a band.
+4. **Tools** (`tool-table.tsx`, `#tools`) — a dense table: the name as a
+   `tool` slug, the description, required and optional arguments, the plane
+   when the model has several, and the risks. The "Risks" column reads "by
+   arguments": a plugin classifies a call from its arguments and declares no
+   table of the risks of each tool; the page says so in one line and the rest
+   (`TOOL_RISKS_NOTE`: `tools/list` is filtered per provider, a listed tool can
+   still be refused, the catalog endpoint of the execution door is the precise
+   source) is behind "More". The one exception is a tool the plugin declares
    in `tokenHandouts` ([plugin-sdk](plugin-sdk.md)): its row lists the
-   declared risks, linked, under a **"hands a token to the agent"** badge; the
-   same badge and the sentence behind it (`TOKEN_HANDOUT_NOTE`, spec §2.4)
-   are on each of those risks in the catalog section. Today that is
-   `github__mint_install_token` and the two `github.mint-install-token-*`
+   declared risks under a **"hands a token to the agent"** badge, a callout
+   above the table states `TOKEN_HANDOUT_NOTE` (spec §2.4), and each of those
+   risks carries the badge and, unfolded, the callout and the tool. Today that
+   is `github__mint_install_token` and the two `github.mint-install-token-*`
    risks.
+
+**Fragments.** `ProviderView` reads the fragment when the page opens and on
+every `hashchange` (`destinationOf`): a section id selects its tab;
+`#risk-<id>` selects Risks, unfolds the entry, scrolls to it and outlines it,
+and — when the plane in view does not show it — opens the entry's own plane;
+`#preset-<id>` selects Presets and outlines the column. Links inside the page
+call the same function, so the same link works twice in a row. What takes
+focus or is scrolled to stays clear of the sticky bar (`scroll-margin-top` from
+the measured height of the bar, `--bar-height`).
+
+**Planes** (`server/providers/planes.ts`, pure and browser-safe). Nothing is
+declared per risk or per tool, so the plane is read from what is declared and
+never guessed: a risk belongs to the plane of the first entity of its pattern
+that one plane alone declares (`project` is the root of every Supabase plane
+and decides nothing); a tool, which declares no pattern, is filed under a plane
+only when its name contains the name of such an entity, the longest name
+winning. Whatever names none goes to `other` (`OTHER_PLANE`): on Supabase the
+two catch-all risks (`read-data`, `uncategorized-write`) and the tools whose
+name says nothing of a plane (`get_project`, `execute_sql`, the
+`*_function` tools…). The same map feeds the plane filter of the Custom editor
+([missions](missions.md)).
 
 `src/server/providers/links.ts` (browser-safe) is the only place that builds
 those URLs and anchors: `providerPath`, `riskReferencePath`,
@@ -472,7 +610,7 @@ as the Dockerfile does.
 
 ## Tests
 
-Four unit files under `apps/gateway/tests/unit/app/` run without a browser
+Six unit files under `apps/gateway/tests/unit/app/` run without a browser
 (`npx vitest run apps/gateway/tests/unit/app`):
 
 - `app-guard.test.ts` discovers every `page.tsx` and `route.ts` under `(app)`.
@@ -487,6 +625,18 @@ Four unit files under `apps/gateway/tests/unit/app/` run without a browser
 - `field.test.tsx` renders `Field` and `CredentialFieldInputs` with
   `renderToStaticMarkup`: label bound by `for`/`id`, group role without
   `htmlFor`, unique ids when two lists share a page.
+
+- `item-kinds.test.ts` reads `tokens.css`: every kind of `kinds.ts` has its
+  three tokens in both themes and its `[data-kind]` rule, no kind borrows a
+  status hue, no two kinds share one; and the rule that marks the current
+  section of the bar (`isCurrentSection`).
+- `risk-explain.test.tsx` renders `Slug`, `RiskIdLink`, `KindLegend`,
+  `VectorStrip`, `RiskExplain`, `Help` and `Callout` to static markup: the
+  kind as attribute, glyph and hidden word; six cells with the axis named in
+  full; help closed.
+
+`server/providers/planes.test.ts` covers the plane rules on a two-plane model
+and on the shipped Supabase and GitHub plugins.
 
 Three helpers have a unit file beside them:
 `components/auth/principal.test.ts`, `app/(app)/missions/message-of.test.ts`
@@ -503,7 +653,9 @@ stamps the version of the root `package.json`.
 
 The other primitives and the rest of the shell have no unit test of their own. They are
 exercised by the Playwright suite `apps/gateway/tests/e2e/v5/` (`npm run test:e2e:v5`,
-seven specs): navigation through the bar (`navigation` named "Main"), the open
+seven specs): navigation through the bar (`navigation` named "Main", on one
+line at 1280 px, the current entry marked, the account menu), the tabs, the
+plane control, the fragments and the help of the provider reference, the open
 request count (`data-testid="open-request-count"`), forms, tables and dialogs of
 the Missions, Requests, Audit, Connections (shares), Delegations and Providers pages. The
 suite runs the standalone server of the build, the one the image starts

@@ -8,7 +8,7 @@ import Link from 'next/link';
 import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { RiskIdLink } from '@/components/risk/RiskExplain';
-import { Badge, Card, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
+import { Badge, Card, Table, Tbody, Td, Th, Thead, Tr, Slug } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import { inboxRequestPath } from '@/server/requests/url';
 
@@ -54,10 +54,16 @@ export default async function RequestsPage() {
                       {request.kind === 'claim' ? 'Claim' : 'Approval request'}
                     </Link>{' '}
                     <Badge tone="warning">{request.state}</Badge>
-                    {request.tool && <div className={styles.mono}>{request.tool}</div>}
+                    {request.tool && (
+                      <div>
+                        <Slug kind="tool">{request.tool}</Slug>
+                      </div>
+                    )}
                   </Td>
                   <Td>
-                    <Link href={`/missions/${request.mission.id}`}>{request.mission.name}</Link>
+                    <Slug kind="mission" mono={false} href={`/missions/${request.mission.id}`}>
+                      {request.mission.name}
+                    </Slug>
                   </Td>
                   <Td>
                     {request.risk_label}

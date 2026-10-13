@@ -17,6 +17,9 @@ import {
   severityLevel,
   severityOf,
   VECTOR_AXES,
+  noteBody,
+  FALLBACK_NOTE,
+  DEPRECATED_NOTE,
   vectorBadges,
 } from './catalog-view';
 import { ACME_CATALOG } from './testing';
@@ -161,6 +164,19 @@ describe('explaining a risk', () => {
   it('names the six axes in the order of the shared vocabulary, each with its question', () => {
     expect(VECTOR_AXES.map((a) => a.axis)).toEqual(Object.keys(RISK_VECTOR_AXES));
     expect(VECTOR_AXES.every((a) => a.label !== '' && a.question.endsWith('?'))).toBe(true);
+  });
+
+  it('gives each axis a short name of its own for the compact strip', () => {
+    const abbrs = VECTOR_AXES.map((a) => a.abbr);
+    expect(new Set(abbrs).size).toBe(abbrs.length);
+    expect(abbrs.every((abbr) => abbr.length > 0 && abbr.length <= 5)).toBe(true);
+    expect(vectorBadges(row('acme.admin').vector).map((b) => b.abbr)).toEqual(abbrs);
+  });
+
+  it('prints a note without its lead where the lead is already the title', () => {
+    expect(noteBody(FALLBACK_NOTE)).toMatch(/^Counts only for a write/);
+    expect(noteBody(DEPRECATED_NOTE)).toMatch(/^Kept so that/);
+    expect(noteBody('No lead here.')).toBe('No lead here.');
   });
 
   it('turns a vector into six badges whose text carries the value and whose weight follows the scale', () => {

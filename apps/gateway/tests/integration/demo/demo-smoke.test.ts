@@ -142,6 +142,15 @@ function locationOf(response: Response): string {
   return location;
 }
 
+/**
+ * A page as a reader sees its names: an identifier is printed with break
+ * opportunities between its words (`github__<wbr/>list_<wbr/>branches`), which
+ * are markup, not text.
+ */
+function readable(html: string): string {
+  return html.replace(/<wbr\s*\/?>/g, '');
+}
+
 describe.skipIf(!hasBuild())('npm run demo', () => {
   let demo: StartedDemo;
   let browser: Browser;
@@ -223,7 +232,7 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
   ])('shows seeded data on %s', async (path, seeded) => {
     const response = await browser.get(path);
     expect(response.status).toBe(200);
-    const html = await response.text();
+    const html = readable(await response.text());
     expect(html).toContain(ALICE.email);
     expect(html).toContain(seeded);
   });
@@ -266,15 +275,15 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     });
 
     // The audit, filtered on each holder (Alice is signed in).
-    const byCi = await (
-      await browser.get(`/audit?holder=${encodeURIComponent(CI_TOKEN_NAME)}`)
-    ).text();
+    const byCi = readable(
+      await (await browser.get(`/audit?holder=${encodeURIComponent(CI_TOKEN_NAME)}`)).text(),
+    );
     expect(byCi).toContain(CI_TOKEN_NAME);
     expect(byCi).toContain('named token');
     expect(byCi).toContain('github__list_branches');
-    const byBob = await (
-      await browser.get(`/audit?holder=${encodeURIComponent(BOB.email)}`)
-    ).text();
+    const byBob = readable(
+      await (await browser.get(`/audit?holder=${encodeURIComponent(BOB.email)}`)).text(),
+    );
     expect(byBob).toContain(BOB.email);
     expect(byBob).toContain('github__get_file_contents');
   });

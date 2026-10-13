@@ -58,6 +58,7 @@ export function PresetPanel({
               key={preset.id}
               className={[styles.choice, checked ? styles.choiceOn : ''].join(' ')}
               title={preset.description}
+              data-kind="preset"
             >
               <input
                 type="radio"

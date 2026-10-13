@@ -267,6 +267,45 @@ describe('the reference of the shipped plugins', () => {
     }
   });
 
+  it('says, on a card, the planes of the model and the environments of the catalog', () => {
+    const cards = providerCards(registry);
+    expect(cards.find((card) => card.id === 'supabase')).toMatchObject({
+      plane_slugs: ['db', 'storage', 'auth', 'functions'],
+      envs: ['preview', 'staging', 'prod'],
+    });
+    expect(cards.find((card) => card.id === 'github')).toMatchObject({
+      plane_slugs: ['repo'],
+      envs: [],
+    });
+  });
+
+  it('names, on each risk, the presets that include it and the tools declared for it', () => {
+    const github = referenceOf('github');
+    const entries = github.risk_groups.flatMap((group) => group.entries);
+    const byId = new Map(entries.map((entry) => [entry.base_id, entry]));
+    expect(byId.get('github.read-code')?.presets.map((preset) => preset.id)).toEqual(
+      github.presets.map((preset) => preset.id),
+    );
+    expect(byId.get('github.uncategorized-write')?.presets).toEqual([]);
+    expect(byId.get('github.mint-install-token-push')).toMatchObject({
+      declared_tools: ['github__mint_install_token'],
+      presets: [{ id: 'developer', anchor: 'preset-developer' }],
+    });
+    // Both ways agree: a preset's lines are exactly the risks that name it.
+    for (const reference of references) {
+      for (const preset of reference.presets) {
+        const lines = new Set(
+          [...preset.auto, ...preset.approval].map((line) => line.risk.base_id),
+        );
+        const naming = reference.risk_groups
+          .flatMap((group) => group.entries)
+          .filter((entry) => entry.presets.some((tag) => tag.id === preset.id))
+          .map((entry) => entry.base_id);
+        expect(new Set(naming)).toEqual(lines);
+      }
+    }
+  });
+
   it('answers null for a provider no plugin ships', () => {
     expect(providerReference(registry, 'no-such-provider')).toBeNull();
   });

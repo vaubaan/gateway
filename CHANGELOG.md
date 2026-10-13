@@ -31,6 +31,23 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `holder-removed`, `holder-deactivated`) at the very next call, while the mission keeps
   serving its other holders. The eight structured refusals are unchanged; the bootstrap
   kit and `/agent-bootstrap.md` say what each reason means.
+- **A readable provider reference.** A provider page is now a short header and four tabs
+  instead of one long column of identical cards: **Presets** first, side by side as a table
+  (one column per preset, one row per risk, each cell the quota, rate limit and gate) so the
+  difference between two presets is read along a row; **Risks** as compact rows grouped into
+  reads, writes and irreversible writes — fifteen fit in about a screen and a half — that
+  unfold for the patterns and the notes; **Data model** as an outline; **Tools** as a dense
+  table. A provider whose model has several planes (Supabase: db, storage, auth, functions)
+  gets a plane control that narrows every tab at once. `#risk-<id>` and `#preset-<id>` links
+  open the right tab and plane.
+- **Colour says what kind of thing a name is.** Risks, presets, tools, data-model planes,
+  resources, connections, missions, members and tokens each have one colour and one glyph,
+  the same on every page — on the provider reference, a mission, the audit, a session, a request — so
+  a risk id is told from a tool name before it is read. Severity, gates and statuses keep
+  their own marks. "What the colours mean" is in the help of the provider pages.
+- **Help on demand.** Explanatory text is one line with a "More" button — on the provider
+  pages, mission creation, the Custom editor and the Share dialog — closed by default and
+  remembered per browser.
 
 - **A provider reference inside the interface.** "Providers" in the navigation lists the
   plugins of the instance; each has a page generated from the plugin itself: what it
@@ -385,6 +402,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   failures are thrown, executor refusals are `isError` results.
 
 ### Changed
+
+- **The Audit filters are grouped** into what, who and when, on two rows instead of ten
+  fields in one; tool names and risk ids wrap between their words, never inside one; the
+  "no environment label" warning of mission creation names a resource by the name its owner
+  gave it.
+- **The application bar holds on one line**: "Shares received" reads "Shares" and
+  "Administration" reads "Admin" in the bar, the current section is marked, and the email,
+  the role and "Sign out" are behind one account button.
+- **A risk reads the same, and shorter, everywhere**: on mission creation, the Share dialog
+  and the mission page a risk is three lines — its label, its id with one line of reason
+  that unfolds, and a six-cell strip for its profile in place of six worded badges. The
+  Custom editor aligns quota, rate limit and gate in columns and can be narrowed to one
+  plane of the provider.
 
 - **A risk reads the same on every page.** The Share dialog shows its checklist open, each
   risk with its label, the reason it is a risk, its profile and a link to its entry in the

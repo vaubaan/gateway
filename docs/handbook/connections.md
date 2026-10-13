@@ -628,8 +628,9 @@ plugin` badge, hidden checkbox, Save — inputs reach their per-row form
 - **Shell.** `app/(app)/layout.tsx` renders `AppShell` for a web session
   (`currentPrincipal()`, a user or the bootstrap operator) and redirects
   anyone else to `/login`. `APP_NAV` in `AppShell.tsx` is the list of pages
-  in the bar (Connections, Shares received, Missions, Requests, Audit,
-  Delegations); operators also get the Administration link.
+  in the bar (Connections, Shares, Missions, Requests, Audit, Delegations,
+  Providers); operators also get the Admin link
+  ([web-app](web-app.md), "The shell").
 - **Notices.** A handler never puts a message in a URL: it stores a
   `Notice { tone, title, lines }` in the `NoticeStore` (`notice:<id>`,
   5 min, readable once, only by the web session it was written for) and
