@@ -20,9 +20,10 @@ Two kinds of end-to-end check exist today:
    only legacy v4 specs that target the retired SaaS; nothing in CI runs
    it.
 
-The v5 browser scenarios (sign-in through the IdP, connection creation,
-mission issuance, inbox approval, the agent's structured refusal) are
-written when the corresponding features land (Phase 1 and 2); each feature
+The v5 browser scenarios (connection creation, mission issuance, inbox
+approval, the agent's structured refusal) are written when the
+corresponding features land (Phase 1 and 2); the sign-in scenario (P1.1) is
+below, run by hand against a real IdP; each feature
 adds its scenario here.
 
 ## Container smoke (v5, P0.4, automated in CI)
@@ -53,6 +54,48 @@ adds its scenario here.
 5. **Non-root** — the process runs as uid 10001.
 6. **No env file shipped** — the image contains no `apps/gateway/.env*`
    file (the build context excludes every `.env*`).
+
+## Manual — operator bootstrap and OIDC sign-in (v5, P1.1, by hand)
+
+> Covers: plan P1.1 DoD ("Renaud can log into a local instance with Google
+> or Entra ID using only config values"), spec §7.1, §6 "human
+> authentication". Handbook [[authentication]]. The automated counterpart
+> runs against the in-process `FakeIdp`
+> ([`integration-tests.md`](./integration-tests.md)); this check is the only
+> one that touches a real identity provider and is never part of CI.
+
+Prerequisites: an instance behind TLS (`deploy/compose.yaml` with Caddy, or
+`next dev` behind a local https proxy) whose `public_url` is the browser's
+URL; an app registered at the IdP with redirect URI
+`<public_url>/auth/callback`; `admin.group` or `admin.emails` naming the
+tester; `bootstrap_token` set, `idp` **not** set in the configuration.
+
+1. **Bootstrap** — open `<public_url>/login`: "No identity provider is
+   configured yet" with the bootstrap link. `/admin/bootstrap` with a wrong
+   token shows "The bootstrap token was not accepted"; with the right token
+   lands on `/admin` with the `Bootstrap operator` badge.
+2. **Configure** — `/admin/identity-provider`: issuer, client id, client
+   secret, claim mapping (Entra ID: leave `groups`; the admin rule must
+   then name the group **object id** unless the app emits names; Google:
+   no groups, rely on `admin.emails`). Save → "Saved" banner; the page no
+   longer asks for the secret ("A secret is stored").
+3. **Test login** — the IdP consent screen appears, the browser comes back
+   to `/admin/identity-provider?tested=1` with the "Test login result"
+   banner: email, groups badges, `Operator: yes`. `/admin` now shows the
+   bootstrap token as `revoked <timestamp>`.
+4. **Bootstrap refused** — in a private window, `/admin/bootstrap` says the
+   token was revoked and links to `/login`; posting the token anyway is
+   refused.
+5. **Non-operator** — sign in as a user outside the rule: `/login` shows
+   the `User` badge and no Administration link; `/admin` renders "Not an
+   operator" naming the rule.
+6. **Session** — refresh after sign-in keeps the session; "Sign out" returns
+   to `/login` signed out; the cookie `vbn_session` is
+   `HttpOnly; Secure; SameSite=Lax` in the browser's storage inspector; the
+   sign-in survives a container restart (rows in `web_sessions`).
+7. **Logs** — the server log carries `user signed in`,
+   `bootstrap token revoked after the first operator sign-in`, and never
+   the client secret or the bootstrap token.
 
 ## Playwright harness
 

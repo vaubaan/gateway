@@ -15,6 +15,7 @@
 import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
+import { createAuthModule, type AuthModule, type OidcOptions } from '../auth';
 import {
   loadInstanceConfig,
   type InstanceConfig,
@@ -23,8 +24,9 @@ import {
 } from '../config';
 import { createEncryptor, type Encryptor } from '../crypto';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
+import { SqliteSessionStore } from '../session';
 import type { Store } from '../store';
-import { MemoryRateLimiter, MemorySessionStore } from './memory';
+import { MemoryRateLimiter } from './memory';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
 import { openEmbeddedStore, type StoreContext } from './store';
@@ -42,6 +44,8 @@ export interface GatewayRoot {
   readonly rateLimiter: RateLimiter;
   readonly cache: CacheClient;
   readonly sessions: SessionStore;
+  /** Human authentication: OIDC relying party, web sessions, bootstrap, admin rule (P1.1). */
+  readonly auth: AuthModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
   close(): Promise<void>;
@@ -64,6 +68,8 @@ export interface RootDeps {
   readonly rateLimiter?: RateLimiter;
   readonly cache?: CacheClient;
   readonly sessions?: SessionStore;
+  /** Outbound HTTP and issuer rules of the OIDC relying party (tests inject an in-process IdP). */
+  readonly oidc?: OidcOptions;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
 }
@@ -101,6 +107,12 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     catalog: new RegistryCatalogIndex(registry),
   });
 
+  // Web sessions live in the embedded store (table `web_sessions`) so they
+  // survive a restart and are revocable; a hosted deployment injects a shared
+  // `SessionStore` instead.
+  const sessions = deps.sessions ?? new SqliteSessionStore({ db: store.db });
+  const auth = createAuthModule({ config, store, sessions, logger, oidc: deps.oidc });
+
   const root: GatewayRoot = {
     config,
     configFile,
@@ -110,7 +122,8 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     registry,
     rateLimiter: deps.rateLimiter ?? new MemoryRateLimiter(),
     cache: deps.cache ?? new MemoryCacheClient(),
-    sessions: deps.sessions ?? new MemorySessionStore(),
+    sessions,
+    auth,
     build,
     startedAt: new Date(),
     async close() {

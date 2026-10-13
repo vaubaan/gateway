@@ -1,11 +1,13 @@
-import { type NextRequest, NextResponse } from 'next/server';
-import { getSupabaseServer } from '@/lib/supabase/server';
+/**
+ * `GET /auth/callback` — the OIDC redirect URI (`<public_url>/auth/callback`).
+ * The handler rebuilds the callback URL from `public_url`; only the query
+ * string of this request is used.
+ */
+import { getRoot } from '@/server/compose';
 
-export async function GET(req: NextRequest) {
-  const code = req.nextUrl.searchParams.get('code');
-  const next = req.nextUrl.searchParams.get('next') ?? '/dashboard';
-  if (!code) return NextResponse.redirect(new URL('/login', req.url));
-  const supabase = await getSupabaseServer();
-  await supabase.auth.exchangeCodeForSession(code);
-  return NextResponse.redirect(new URL(next, req.url));
+export const runtime = 'nodejs';
+export const dynamic = 'force-dynamic';
+
+export async function GET(request: Request): Promise<Response> {
+  return (await getRoot()).auth.handlers.loginCallback(request);
 }
