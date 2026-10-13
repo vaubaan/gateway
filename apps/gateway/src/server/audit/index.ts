@@ -87,14 +87,10 @@ export {
 } from './retention';
 export {
   ALL_EVENTS,
-  callLabelOf,
   eventView,
-  matchesTimelineFilter,
   MissionSessionService,
   PAST_PERIODS_SHOWN,
   SESSION_EVENTS_PAGE_SIZE,
-  SESSION_FILTER_SCAN_BATCH,
-  SESSION_FILTER_SCAN_LIMIT,
   type MissionSessionDeps,
   type MissionSessionView,
   type SessionEventView,
@@ -104,3 +100,4 @@ export {
   type SessionPeriodRow,
   type SessionRiskRow,
 } from './session-view';
+export { eventDetailLines, isSessionEventKind, type EventDetailLine } from './session-event-detail';

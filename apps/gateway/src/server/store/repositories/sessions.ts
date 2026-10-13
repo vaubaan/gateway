@@ -10,7 +10,10 @@
  *
  * An event is stored as given (`UntypedNewEvent`: any kind, any JSON details). The
  * gateway's writers build a typed `NewEvent` and readers go through `parseEventDetails`
- * (`@vaubaan/shared`); this module does not interpret details.
+ * (`@vaubaan/shared`); this module does not interpret details, with one exception: the
+ * `agent_label` column of a call event is a copy of `details.agent_label`, made at
+ * insert (`agentLabelColumn`) so the timeline of one label is an indexed read. The
+ * details stay the source: the column is never returned in an `EventRecord`.
  *
  * This file is the only writer of `sessions`, `session_counters` and `events`. The
  * requests repository reaches them through `createSessionPrimitives` (a granted claim
@@ -130,10 +133,32 @@ export interface SessionsRepo {
    * is the last event of the previous page. `listEvents` with `order: 'desc'` gives the
    * same first page; this one resumes after a position.
    */
-  listRecentEvents(
-    sessionId: string,
-    options: { before?: { ts: Iso; id: string }; limit: number },
-  ): Promise<EventRecord[]>;
+  listRecentEvents(sessionId: string, options: RecentEventsOptions): Promise<EventRecord[]>;
+}
+
+export interface RecentEventsOptions {
+  readonly before?: { readonly ts: Iso; readonly id: string };
+  readonly limit: number;
+  /**
+   * Only the call events (`CALL_EVENT_KINDS`) that carried this agent label; `null`:
+   * the calls that carried none. Same order and keyset as the unfiltered timeline.
+   */
+  readonly calls?: { readonly agentLabel: string | null };
+}
+
+/** The event kinds that carry an agent label (`CallEventDetails`, `@vaubaan/shared`). */
+export const CALL_EVENT_KINDS = ['call-allowed', 'call-refused'] as const;
+
+/**
+ * The `agent_label` column of an event about to be stored: the non-empty string its
+ * writer put in `details.agent_label`, on a call event; `null` otherwise. Migration
+ * 0008 backfills older rows with the same rule.
+ */
+export function agentLabelColumn(event: UntypedNewEvent): string | null {
+  if (!(CALL_EVENT_KINDS as readonly string[]).includes(event.kind)) return null;
+  const details: { readonly agent_label?: unknown } = event.details ?? {};
+  const label = details.agent_label;
+  return typeof label === 'string' && label !== '' ? label : null;
 }
 
 export interface ListEventsOptions {
@@ -171,6 +196,8 @@ interface EventRow {
 const SESSION_COLUMNS = 'id, mission_id, created_at';
 const COUNTER_COLUMNS = 'session_id, risk_id, period_start, consumed';
 const EVENT_COLUMNS = 'id, session_id, ts, kind, risk_id, actor_user_id, details_json';
+/** `kind IN (…)` over the call kinds: constants of this file, never input. */
+const CALL_KINDS_SQL = CALL_EVENT_KINDS.map((kind) => `'${kind}'`).join(', ');
 
 function sessionToRecord(row: SessionRow): SessionRecord {
   return { id: row.id, missionId: row.mission_id, createdAt: row.created_at };
@@ -223,8 +250,8 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     `SELECT ${SESSION_COLUMNS} FROM sessions WHERE mission_id = ?`,
   );
   const insertEvent = db.prepare<
-    [string, string, string, string, string | null, string | null, string | null]
-  >(`INSERT INTO events (${EVENT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    [string, string, string, string, string | null, string | null, string | null, string | null]
+  >(`INSERT INTO events (${EVENT_COLUMNS}, agent_label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   const eventById = db.prepare<[string], EventRow>(
     `SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`,
   );
@@ -255,6 +282,7 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
         event.riskId ?? null,
         event.actorUserId ?? null,
         toJson(event.details),
+        agentLabelColumn(event),
       );
       return eventToRecord(requireRow(eventById.get(id), 'event', id));
     },
@@ -320,6 +348,24 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     `SELECT ${EVENT_COLUMNS} FROM events
      WHERE session_id = ? AND (ts < ? OR (ts = ? AND id < ?)) ORDER BY ts DESC, id DESC LIMIT ?`,
   );
+  // The calls of one label, and the calls without one. Separate statements rather than
+  // `? IS NULL OR agent_label = ?`: Postgres cannot type a parameter that is only
+  // compared with NULL. The index `events_session_label_ts` serves the four of them.
+  const CALLS = `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? AND kind IN (${CALL_KINDS_SQL})`;
+  const KEYSET = 'AND (ts < ? OR (ts = ? AND id < ?))';
+  const NEWEST_FIRST = 'ORDER BY ts DESC, id DESC LIMIT ?';
+  const callsOfLabel = db.prepare<[string, string, number], EventRow>(
+    `${CALLS} AND agent_label = ? ${NEWEST_FIRST}`,
+  );
+  const callsOfLabelBefore = db.prepare<[string, string, string, string, string, number], EventRow>(
+    `${CALLS} AND agent_label = ? ${KEYSET} ${NEWEST_FIRST}`,
+  );
+  const callsUnlabelled = db.prepare<[string, number], EventRow>(
+    `${CALLS} AND agent_label IS NULL ${NEWEST_FIRST}`,
+  );
+  const callsUnlabelledBefore = db.prepare<[string, string, string, string, number], EventRow>(
+    `${CALLS} AND agent_label IS NULL ${KEYSET} ${NEWEST_FIRST}`,
+  );
 
   function getOrCreateSync(missionId: string, now: Iso): SessionRecord {
     // Checked first: with foreign keys on, the insert would otherwise surface a driver
@@ -344,6 +390,24 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       .all(sessionId, periodStart, ...riskIds);
     for (const row of rows) result.set(row.risk_id, row.consumed);
     return result;
+  }
+
+  function recentRows(sessionId: string, options: RecentEventsOptions): EventRow[] {
+    const { before, limit, calls } = options;
+    if (!calls) {
+      return before
+        ? eventsRecentBefore.all(sessionId, before.ts, before.ts, before.id, limit)
+        : eventsRecent.all(sessionId, limit);
+    }
+    const label = calls.agentLabel;
+    if (label === null) {
+      return before
+        ? callsUnlabelledBefore.all(sessionId, before.ts, before.ts, before.id, limit)
+        : callsUnlabelled.all(sessionId, limit);
+    }
+    return before
+      ? callsOfLabelBefore.all(sessionId, label, before.ts, before.ts, before.id, limit)
+      : callsOfLabel.all(sessionId, label, limit);
   }
 
   return {
@@ -436,11 +500,7 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
         .map(eventToRecord);
     },
     async listRecentEvents(sessionId, options) {
-      const { before, limit } = options;
-      const rows = before
-        ? eventsRecentBefore.all(sessionId, before.ts, before.ts, before.id, limit)
-        : eventsRecent.all(sessionId, limit);
-      return rows.map(eventToRecord);
+      return recentRows(sessionId, options).map(eventToRecord);
     },
   };
 }
