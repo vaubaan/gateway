@@ -8,8 +8,8 @@
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,
  *   - the to-zone classification from the sending domain's metadata,
- *   - the recipient-count emission (single / multi / batch),
- *   - the attachment denial (v1),
+ *   - the batch marker (`recipient-count[batch]`), emitted by a batch only,
+ *   - the attachment denial (v1) and the envelope-header denial,
  *   - the broadcast send/delete slice paths,
  *   - the domain operations,
  *   - the denials (unknown tool, no sending domain in the mission).
@@ -126,14 +126,13 @@ describe('classifyResend — reads (broadcasts)', () => {
 });
 
 describe('classifyResend — writes (transactional email — to-zone)', () => {
-  test('send_email to internal recipient -> to-zone[internal] + recipient-count[single]', () => {
+  test('send_email to internal recipient -> to-zone[internal], and no other slice', () => {
     const sl = classify('resend__send_email', {
       from: FROM,
       to: ['alice@acme.com'],
       subject: 'hello',
     });
-    expect(sl).toContain(`${DOMAIN}.to-zone[internal].W`);
-    expect(sl).toContain(`${DOMAIN}.recipient-count[single].W`);
+    expect(sl).toEqual([`${DOMAIN}.to-zone[internal].W`]);
   });
 
   test('send_email to allowlist domain recipient -> to-zone[allowlist]', () => {
@@ -170,19 +169,17 @@ describe('classifyResend — writes (transactional email — to-zone)', () => {
       to: ['alice@acme.com', 'unknown@evil.com'],
       subject: 'hello',
     });
-    expect(sl).toContain(`${DOMAIN}.to-zone[external-unbounded].W`);
-    expect(sl).toContain(`${DOMAIN}.recipient-count[multi].W`);
+    expect(sl).toEqual([`${DOMAIN}.to-zone[external-unbounded].W`]);
   });
 
-  test('send_email multi-recipient (all internal) -> recipient-count[multi]', () => {
+  test('send_email multi-recipient (all internal) -> the zone slice only, no count marker', () => {
     const sl = classify('resend__send_email', {
       from: FROM,
       to: ['alice@acme.com'],
       cc: ['bob@acme.io'],
       subject: 'hello',
     });
-    expect(sl).toContain(`${DOMAIN}.to-zone[internal].W`);
-    expect(sl).toContain(`${DOMAIN}.recipient-count[multi].W`);
+    expect(sl).toEqual([`${DOMAIN}.to-zone[internal].W`]);
   });
 
   test('send_email with cc/bcc recipients are included in zone classification', () => {
@@ -330,6 +327,127 @@ describe('classifyResend — attachment denial (v1)', () => {
   });
 });
 
+describe('classifyResend — fields that would escape the classification', () => {
+  const send = (extra: Record<string, unknown>) =>
+    classifyResend(
+      'resend__send_email',
+      { from: FROM, to: ['a@acme.com'], subject: 'hi', ...extra },
+      mission,
+    );
+  const deniedReason = (extra: Record<string, unknown>) => {
+    const result = send(extra);
+    return 'denied' in result ? result.denied : null;
+  };
+
+  test.each([
+    'To',
+    'Cc',
+    'Bcc',
+    'bcc',
+    'BCC',
+    'From',
+    'Sender',
+    'Reply-To',
+    'reply-to',
+    'Return-Path',
+    'Resent-To',
+    'Resent-Cc',
+    'Resent-Bcc',
+    'Resent-From',
+    'Resent-Sender',
+  ])('a %s header is refused — an internal send stays internal', (header) => {
+    expect(deniedReason({ headers: { [header]: 'spy@evil.com' } })).toBe(
+      `headers: '${header}' is an envelope header — use the from, to, cc, bcc and reply_to fields`,
+    );
+  });
+
+  test('a header name or value the classifier cannot read as one header is refused', () => {
+    expect(deniedReason({ headers: { 'X-A\r\nBcc': 'spy@evil.com' } })).toBe(
+      'headers: malformed header name',
+    );
+    expect(deniedReason({ headers: { 'Bcc ': 'spy@evil.com' } })).toBe(
+      'headers: malformed header name',
+    );
+    expect(deniedReason({ headers: { 'Bcc:': 'spy@evil.com' } })).toBe(
+      'headers: malformed header name',
+    );
+    expect(deniedReason({ headers: { '': 'x' } })).toBe('headers: malformed header name');
+    expect(deniedReason({ headers: { 'X-Ref': 'a\r\nBcc: spy@evil.com' } })).toBe(
+      "headers: 'X-Ref' must be a single-line string",
+    );
+    expect(deniedReason({ headers: { 'X-Ref': ['a', 'b'] } })).toBe(
+      "headers: 'X-Ref' must be a single-line string",
+    );
+    expect(deniedReason({ headers: { 'X-Ref': 42 } })).toBe(
+      "headers: 'X-Ref' must be a single-line string",
+    );
+  });
+
+  test('headers of another shape than an object are refused', () => {
+    for (const headers of ['Bcc: spy@evil.com', ['Bcc', 'spy@evil.com'], null, 42, true]) {
+      expect(deniedReason({ headers }), JSON.stringify(headers)).toBe(
+        'headers: expected an object of header names and string values',
+      );
+    }
+  });
+
+  test('ordinary custom headers are accepted and do not change the slice', () => {
+    const result = send({
+      headers: { 'X-Entity-Ref-ID': 'abc-123', 'List-Unsubscribe': '<https://acme.com/u>' },
+    });
+    expect(result).toEqual(send({}));
+    expect(send({ headers: {} })).toEqual(send({}));
+  });
+
+  test('an envelope header in one email of a batch refuses the batch', () => {
+    const result = classifyResend(
+      'resend__send_batch_emails',
+      {
+        emails: [
+          { from: FROM, to: ['a@acme.com'], subject: 'hi' },
+          { from: FROM, to: ['b@acme.com'], subject: 'hi', headers: { Bcc: 'spy@evil.com' } },
+        ],
+      },
+      mission,
+    );
+    expect(result).toEqual({
+      denied:
+        "emails[1].headers: 'Bcc' is an envelope header — use the from, to, cc, bcc and reply_to fields",
+    });
+  });
+
+  test('attachments in any shape but an empty list are refused', () => {
+    for (const attachments of [{ filename: 'f.txt' }, 'f.txt', null, 1, true, [null]]) {
+      expect(deniedReason({ attachments }), JSON.stringify(attachments)).toBe(
+        'attachments: not supported in v1',
+      );
+    }
+    expect(deniedReason({ attachments: [] })).toBeNull();
+    expect(
+      classifyResend(
+        'resend__send_batch_emails',
+        { emails: [{ from: FROM, to: ['a@acme.com'], subject: 'hi', attachments: 'f.txt' }] },
+        mission,
+      ),
+    ).toEqual({ denied: 'emails[0].attachments: not supported in v1' });
+  });
+
+  test('an id made of dots only is refused — it would collapse the URL path', () => {
+    for (const id of ['.', '..', '...']) {
+      expect(classifyResend('resend__get_email', { id }, mission)).toEqual({
+        denied: 'id: missing or malformed identifier',
+      });
+      expect(classifyResend('resend__delete_contact', { id }, mission)).toEqual({
+        denied: 'id: missing or malformed contact id or email',
+      });
+      expect(
+        classifyResend('resend__send_broadcast', { segment_id: 'seg_x', id }, mission),
+      ).toEqual({ denied: 'id: missing or malformed identifier' });
+    }
+    expect('slices' in classifyResend('resend__get_email', { id: 'a.b' }, mission)).toBe(true);
+  });
+});
+
 describe('classifyResend — describe_zones synthetic tool', () => {
   test('describe_zones -> domain[*].R (metadata-level, no risk)', () => {
     expect(classify('resend__describe_zones')).toEqual(['resend.domain[*].R']);
@@ -342,17 +460,13 @@ describe('classifyResend — resource propagation', () => {
     classify('resend__send_email', { from, to: ['bob@acme.io'], subject: 'hi' }, both);
 
   test('a send from the prod domain is rooted at it and zoned by its lists', () => {
-    expect(send(FROM)).toEqual([
-      `${DOMAIN}.to-zone[internal].W`,
-      `${DOMAIN}.recipient-count[single].W`,
-    ]);
+    expect(send(FROM)).toEqual([`${DOMAIN}.to-zone[internal].W`]);
   });
 
   test('a send from the staging domain is rooted at it and zoned by its own lists', () => {
     // acme.io is internal for the prod domain only.
     expect(send('noreply@staging.acme.dev')).toEqual([
       'resend.domain[staging.acme.dev].to-zone[external-unbounded].W',
-      'resend.domain[staging.acme.dev].recipient-count[single].W',
     ]);
   });
 
@@ -390,15 +504,14 @@ describe('classifyResend — denials', () => {
   });
 });
 
-describe('classifyResend — spec §7.2 multi-slice examples', () => {
+describe('classifyResend — spec §7.2 examples', () => {
   test('single transactional email to internal recipient', () => {
     const sl = classify('resend__send_email', {
       from: FROM,
       to: ['alice@acme.com'],
       subject: 'hi',
     });
-    expect(sl).toContain(`${DOMAIN}.to-zone[internal].W`);
-    expect(sl).toContain(`${DOMAIN}.recipient-count[single].W`);
+    expect(sl).toEqual([`${DOMAIN}.to-zone[internal].W`]);
   });
 
   test('single email to an external recipient', () => {
@@ -407,8 +520,7 @@ describe('classifyResend — spec §7.2 multi-slice examples', () => {
       to: ['unknown@attacker.com'],
       subject: 'hi',
     });
-    expect(sl).toContain(`${DOMAIN}.to-zone[external-unbounded].W`);
-    expect(sl).toContain(`${DOMAIN}.recipient-count[single].W`);
+    expect(sl).toEqual([`${DOMAIN}.to-zone[external-unbounded].W`]);
   });
 
   test('batch send to mixed recipients', () => {

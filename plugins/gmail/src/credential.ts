@@ -12,7 +12,7 @@
  * `include_granted_scopes=true` for incremental authorization. Access tokens
  * live one hour ; the token endpoint answers `expires_in`.
  *
- * Scopes follow the handbook decision (§5) : `gmail.readonly` and
+ * Scopes follow the handbook decision ("Credential and discovery") : `gmail.readonly` and
  * `gmail.compose` only — enough for every read tool and for `create_draft`.
  * `gmail.modify` (needed upstream by `label_*` and also unlocking `send`) and
  * `gmail.send` are **not** requested : opening them is an incremental
@@ -36,7 +36,7 @@ export const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1';
 export const GMAIL_SCOPE_READONLY = 'https://www.googleapis.com/auth/gmail.readonly';
 export const GMAIL_SCOPE_COMPOSE = 'https://www.googleapis.com/auth/gmail.compose';
 
-/** The scopes requested at connect time (handbook §5). */
+/** The scopes requested at connect time (handbook, "Credential and discovery"). */
 export const GMAIL_SCOPES: readonly string[] = [GMAIL_SCOPE_READONLY, GMAIL_SCOPE_COMPOSE];
 
 /** Keys of `ProviderAppConfig` the host collects for every oauth2 plugin. */

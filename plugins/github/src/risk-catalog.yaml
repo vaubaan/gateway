@@ -137,11 +137,9 @@ risks:
   # WRITES — workflow YAML files (privilege escalation vector)
   # ---------------------------------------------------------------
   # Not env-scoped : GitHub resources are repositories and the owner's env
-  # label (prod, staging) says nothing about the branch. The v4 catalog
-  # restricted this risk to the pseudo-envs feature/fix/chore, which the v5
-  # resource-based env resolution would never produce — the risk would have
-  # silently vanished from `risks_touched`. Writing a workflow on a
-  # protected branch additionally touches `github.merge-protected`.
+  # label (prod, staging) says nothing about the branch, so the risk is
+  # touched on every branch. Writing a workflow on a protected branch
+  # additionally touches `github.merge-protected`.
   - id: github.workflow-write-via-file
     label: 'Modify a GitHub Actions workflow (.github/workflows/*.yml)'
     reason: >-
@@ -350,7 +348,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One token per code project — read everything, write on feature branches, open PRs and comment ; no merge on protected branches, no branch-protection changes.
+    description: One mission per code repository — read everything, write on feature branches, open PRs and comment ; no merge on protected branches, no branch-protection changes.
     entries:
       - risk_id: github.read-code
         quota: 10000

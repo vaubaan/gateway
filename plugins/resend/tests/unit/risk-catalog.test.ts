@@ -1,9 +1,9 @@
 /**
  * Catalog invariants the SDK loader does not check for us : the bulk entries
- * keep their caps, the irreversible set is exact, only the exfiltration risk
+ * declare only the rate ceiling the gateway enforces, the irreversible set is exact, only the exfiltration risk
  * is env-scoped, no preset offers the fallback, a deprecated id or an
- * env-scoped risk unqualified, and the patterns are disjoint where the version 1
- * ones overlapped. Structure, patterns, presets and fallback are validated by
+ * env-scoped risk unqualified, and the patterns are disjoint : a slice touches
+ * exactly one risk. Structure, patterns, presets and fallback are validated by
  * `loadCatalogFile` at import and by the kit in `plugin.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
@@ -17,15 +17,20 @@ const { catalog, indexed } = resendCatalog;
 const touched = (raw: string) => risksTouchedBy(parseSlice(raw), indexed);
 
 describe('resend risk-catalog — shape', () => {
-  test('16 live risks + 2 deprecated version 1 ids, one fallback, version 2', () => {
+  test('18 entries : 15 live named risks + 1 fallback + 2 deprecated ids, version 2', () => {
     expect(catalog.provider).toBe('resend');
     expect(catalog.catalog_version).toBe(2);
     expect(catalog.risks).toHaveLength(18);
-    expect(catalog.risks.filter((r) => r.deprecated).map((r) => [r.id, r.replaced_by])).toEqual([
+    const fallback = catalog.risks.filter((r) => r.fallback);
+    const deprecated = catalog.risks.filter((r) => r.deprecated);
+    const liveNamed = catalog.risks.filter((r) => !r.fallback && !r.deprecated);
+    expect(fallback.map((r) => r.id)).toEqual(['resend.uncategorized-write']);
+    expect(deprecated.map((r) => [r.id, r.replaced_by])).toEqual([
       ['resend.read-audiences', 'resend.read-segments'],
       ['resend.audience-write', 'resend.segment-write'],
     ]);
-    expect(catalog.risks.filter((r) => r.id.startsWith('resend.uncategorized'))).toHaveLength(1);
+    expect(liveNamed).toHaveLength(15);
+    expect(liveNamed.length + fallback.length + deprecated.length).toBe(catalog.risks.length);
   });
 
   test('only send-email-external-unbounded is env-scoped, on staging and dev', () => {
@@ -37,17 +42,15 @@ describe('resend risk-catalog — shape', () => {
     ).toEqual(['staging', 'dev']);
   });
 
-  test('the bulk entries carry caps and infra limits', () => {
+  test('the bulk entries declare only the limit the gateway enforces', () => {
+    // ADR scope-caps-not-enforced-in-v5-0 : no `caps`, and of `infra_limits` only the
+    // ceiling on a mission's rate limit. The 100-email batch limit is the classifier's.
     const batch = catalog.risks.find((r) => r.id === 'resend.send-batch')!;
-    expect(batch.caps).toEqual({
-      items_per_call_max: 100,
-      calls_per_minute_max: 5,
-      calls_per_session_max: 50,
-    });
-    expect(batch.infra_limits).toEqual({ items_per_call_max: 100 });
+    expect(batch.caps).toBeUndefined();
+    expect(batch.infra_limits).toBeUndefined();
     const broadcast = catalog.risks.find((r) => r.id === 'resend.broadcast-send')!;
     expect(broadcast.vector.cost).toBe('unbounded');
-    expect(broadcast.caps).toEqual({ calls_per_minute_max: 1, calls_per_session_max: 5 });
+    expect(broadcast.caps).toBeUndefined();
     expect(broadcast.infra_limits).toEqual({ calls_per_minute_max: 10 });
   });
 
@@ -108,16 +111,36 @@ describe('resend risk-catalog — slices resolve to the expected risk, and only 
     [`${domain}.W`, 'resend.domain-write'],
     [`${domain}.dns-record[*].W`, 'resend.domain-verify'],
   ])('%s → %s', (raw, risk) => {
-    const risks = touched(raw);
-    expect(risks).toContain(risk);
-    // Exactly one named risk ; writes also touch the fallback by construction.
-    expect(risks.filter((id) => !id.endsWith('.uncategorized-write'))).toEqual([risk]);
+    // Exactly that risk : a slice a named risk matches never touches the fallback as well.
+    expect(touched(raw)).toEqual([risk]);
   });
 
-  test('reads touch no write risk ; single and multi sends touch no bulk risk', () => {
+  test('reads touch no write risk', () => {
     expect(touched(`${segment}.broadcast[*].R`)).toEqual(['resend.read-broadcasts']);
+  });
+
+  test('batch is the only count marker with a risk — which is why a single send emits none', () => {
+    // A marker without a named risk reaches the fallback ; the classifier never emits these two.
     expect(touched(`${domain}.recipient-count[single].W`)).toEqual(['resend.uncategorized-write']);
     expect(touched(`${domain}.recipient-count[multi].W`)).toEqual(['resend.uncategorized-write']);
+    for (const to of [['alice@acme.com'], ['alice@acme.com', 'bob@acme.com']]) {
+      const outcome = resendPlugin.classify(
+        'resend__send_email',
+        { from: 'bot@notifications.acme.com', to, subject: 's' },
+        [
+          {
+            provider: 'resend',
+            ref: 'notifications.acme.com',
+            displayName: 'notifications.acme.com',
+            metadata: { kind: 'domain' },
+          },
+        ],
+      );
+      if ('denied' in outcome) throw new Error(outcome.denied);
+      expect(outcome.slices.flatMap((s) => risksTouchedBy(s, indexed))).toEqual([
+        'resend.send-email-external-unbounded',
+      ]);
+    }
   });
 
   test('a novel write falls into the fallback only', () => {
@@ -125,7 +148,7 @@ describe('resend risk-catalog — slices resolve to the expected risk, and only 
     expect(touched('resend.api-key.W')).toEqual(['resend.uncategorized-write']);
   });
 
-  test('the version 1 account-rooted slices match nothing but the fallback any more', () => {
+  test('account-rooted slices match nothing but the fallback', () => {
     expect(touched('resend.account[prod-email].to-zone[internal].W')).toEqual([
       'resend.uncategorized-write',
     ]);

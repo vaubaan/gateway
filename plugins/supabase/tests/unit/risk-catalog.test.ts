@@ -2,8 +2,8 @@
  * Tests of the Supabase risk catalog as the plugin loads it.
  *
  * Coverage : the loaded catalog shape, every `matches` pattern parses,
- * coverage lint (every tool fires at least one named risk, not only the
- * fallback), cardinality mutual exclusion (`row[one]` vs `row[bulk]`, …),
+ * coverage lint (every tool fires named risks and never the fallback),
+ * cardinality mutual exclusion (`row[one]` vs `row[bulk]`, …),
  * posture-sensitive entries present, decision-level spot checks.
  */
 
@@ -137,7 +137,7 @@ describe('risk-catalog.yaml — posture-sensitive entries', () => {
 });
 
 // ────────────────────────────────────────────────────────────────────────
-// Coverage lint — every tool fires ≥ 1 named risk (not just the fallback)
+// Coverage lint — every tool fires named risks, never the fallback
 // ────────────────────────────────────────────────────────────────────────
 
 describe('risk-catalog.yaml — coverage lint', () => {
@@ -200,13 +200,55 @@ describe('risk-catalog.yaml — coverage lint', () => {
     }
   });
 
-  test('every classified tool fires ≥ 1 named risk (not just the fallback)', () => {
+  test('every classified tool fires at least one named risk and never the fallback', () => {
     for (const tool of SUPABASE_CLASSIFIED_TOOLS) {
       const touched = risksFor(tool, cannedArgs[tool]!);
       expect(touched.length, `${tool} touched no risk at all`).toBeGreaterThan(0);
-      const named = touched.filter((id) => id !== 'supabase.uncategorized-write');
-      expect(named.length, `${tool} only fired the fallback`).toBeGreaterThan(0);
+      expect(touched, `${tool} landed on the fallback`).not.toContain(
+        'supabase.uncategorized-write',
+      );
     }
+  });
+
+  test.each<[string, Record<string, unknown>, string[]]>([
+    ['supabase__create_user', { email: 'a@b.c' }, ['supabase.auth.user-write-one']],
+    ['supabase__update_user', { user_id: 'u1' }, ['supabase.auth.user-write-one']],
+    ['supabase__update_user', { user_id: 'bulk' }, ['supabase.auth.user-write-one']],
+    ['supabase__delete_user', { user_id: 'u1' }, ['supabase.auth.user-write-one']],
+    [
+      'supabase__upload_object',
+      { bucket: 'b1', path: 'dir/p.txt', content_base64: 'AA' },
+      ['supabase.storage.object-write-one'],
+    ],
+    [
+      'supabase__delete_object',
+      { bucket: 'b1', path: 'bulk' },
+      ['supabase.storage.object-write-one'],
+    ],
+  ])('%s %o touches exactly %o', (tool, args, expected) => {
+    expect(risksFor(tool, { ...p, ...args })).toEqual(expected);
+  });
+
+  test.each<[string, string[]]>([
+    ['create table t (id int);', ['supabase.migration-write']],
+    ['drop table users cascade;', ['supabase.migration-write', 'supabase.bulk-row-write']],
+    [
+      'grant all on all tables in schema public to anon;',
+      ['supabase.migration-write', 'supabase.db-role-write'],
+    ],
+    ['create extension pg_net;', ['supabase.migration-write', 'supabase.extension-write']],
+    [
+      "DO $$ BEGIN EXECUTE 'DEL' || 'ETE FROM auth.users'; END $$;",
+      [
+        'supabase.migration-write',
+        'supabase.bulk-row-write',
+        'supabase.policy-write',
+        'supabase.db-role-write',
+        'supabase.extension-write',
+      ],
+    ],
+  ])('apply_migration %j touches exactly %o', (query, expected) => {
+    expect(risksFor('supabase__apply_migration', { ...p, name: 'm', query })).toEqual(expected);
   });
 });
 

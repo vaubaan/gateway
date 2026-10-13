@@ -11,7 +11,11 @@
  *   - 401 / 403 from Stripe → `UpstreamAuthError` ;
  *   - Stripe takes `application/x-www-form-urlencoded` bodies with bracket
  *     notation for nested keys (`items[0][price]=…`), and query parameters on
- *     GET ; the `account` argument is consumed here and never forwarded.
+ *     GET ; the `account` argument is consumed here and never forwarded ;
+ *   - only the arguments the tool's schema declares are forwarded
+ *     (`declaredArgsOf`) : the classifier judged those and no other, so a
+ *     Stripe parameter nobody classified (`expand`, `collection_method`…)
+ *     never reaches the API, even if a caller skipped the classifier.
  */
 
 import {
@@ -33,6 +37,7 @@ import {
   stripeResourceRef,
   type StripeMode,
 } from './resources.ts';
+import { declaredArgsOf } from './tools.ts';
 
 /** Public API of the provider — a fact about Stripe, not instance configuration. */
 export const STRIPE_API_BASE = 'https://api.stripe.com/v1';
@@ -48,10 +53,21 @@ interface Route {
   readonly consumes?: readonly string[];
   /** When false, no argument is forwarded (singleton endpoints, verbs). */
   readonly forward?: boolean;
+  /** Values sent when the call does not carry the argument : the safe side, stated to Stripe. */
+  readonly defaults?: Args;
+}
+
+/** The object id a path is built from ; a call without one never reaches a collection endpoint. */
+function pathId(args: Args): string {
+  const id = args.id;
+  if (typeof id !== 'string' || id === '' || /^\.+$/.test(id)) {
+    throw new Error('stripe: id: missing or malformed');
+  }
+  return encodeURIComponent(id);
 }
 
 const byId = (prefix: string, suffix = '') => ({
-  path: (a: Args) => `/${prefix}/${encodeURIComponent(String(a.id))}${suffix}`,
+  path: (a: Args) => `/${prefix}/${pathId(a)}${suffix}`,
   consumes: ['id'],
 });
 
@@ -81,7 +97,12 @@ const ROUTES: Readonly<Record<string, Route>> = {
   stripe__cancel_subscription: { method: 'DELETE', ...byId('subscriptions') },
   stripe__pause_subscription: { method: 'POST', ...byId('subscriptions') },
   // writes — invoices
-  stripe__create_invoice: { method: 'POST', path: () => '/invoices' },
+  // A draft is a draft whatever the account's API version defaults to.
+  stripe__create_invoice: {
+    method: 'POST',
+    path: () => '/invoices',
+    defaults: { auto_advance: false },
+  },
   stripe__finalize_invoice: { method: 'POST', ...byId('invoices', '/finalize') },
   stripe__void_invoice: { method: 'POST', ...byId('invoices', '/void'), forward: false },
   // writes — money out
@@ -111,13 +132,12 @@ export async function executeStripe(
   }
   const key = keyFor(ctx, mode);
 
-  const { account: _account, ...forwarded } = args;
   const payload = await callStripeApi(
     ctx.fetch,
     key,
     route.method,
-    route.path(forwarded),
-    forwardedArgs(route, forwarded),
+    route.path(args),
+    forwardedArgs(tool, route, args),
     ctx.signal,
   );
   return { content: [{ type: 'text', text: JSON.stringify(payload, null, 2) }] };
@@ -147,14 +167,10 @@ export async function discoverStripeResources(
     if (!keyMatchesMode(key, mode)) {
       throw new Error(`stripe: ${field} must be a ${mode}-mode key (sk_${mode}_… or rk_${mode}_…)`);
     }
-    const account = (await callStripeApi(
-      ctx.fetch,
-      key,
-      'GET',
-      '/account',
-      {},
-      ctx.signal,
-    )) as AccountDto;
+    const account = await callStripeApi(ctx.fetch, key, 'GET', '/account', {}, ctx.signal);
+    if (!isAccountDto(account)) {
+      throw new Error(`stripe: GET /account with the ${mode}-mode key returned no account id`);
+    }
     const label =
       account.settings?.dashboard?.display_name ?? account.business_profile?.name ?? account.id;
     resources.push({
@@ -171,6 +187,16 @@ export async function discoverStripeResources(
   return resources;
 }
 
+function isAccountDto(value: unknown): value is AccountDto {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'id' in value &&
+    typeof value.id === 'string' &&
+    value.id !== ''
+  );
+}
+
 function keyFor(ctx: ConnectionContext, mode: StripeMode): string {
   const secret = expectCredentialKind(STRIPE_PROVIDER, ctx.credential, 'api-key');
   const key = secret.fields[KEY_FIELD_BY_MODE[mode]];
@@ -178,12 +204,24 @@ function keyFor(ctx: ConnectionContext, mode: StripeMode): string {
   return key;
 }
 
-function forwardedArgs(route: Route, args: Args): Args {
+/** Arguments the gateway consumes itself, whatever the tool. */
+const NEVER_FORWARDED: ReadonlySet<string> = new Set(['account']);
+
+/**
+ * What goes to Stripe : the arguments the tool declares, minus the ones the
+ * gateway or the path consumed, over the route's defaults. Anything else the
+ * call carried is dropped — it was never classified.
+ */
+function forwardedArgs(tool: string, route: Route, args: Args): Args {
   if (route.forward === false) return {};
-  if (!route.consumes) return args;
-  const rest: Record<string, unknown> = { ...args };
-  for (const key of route.consumes) delete rest[key];
-  return rest;
+  const consumed = new Set(route.consumes ?? []);
+  const forwarded: Record<string, unknown> = { ...route.defaults };
+  for (const key of declaredArgsOf(tool) ?? []) {
+    if (NEVER_FORWARDED.has(key) || consumed.has(key)) continue;
+    const value = args[key];
+    if (value !== undefined && value !== null) forwarded[key] = value;
+  }
+  return forwarded;
 }
 
 // ─── HTTP ─────────────────────────────────────────────────────────────────────

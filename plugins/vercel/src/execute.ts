@@ -16,10 +16,19 @@
  *   - `fetch` comes from the context, never from the global ;
  *   - 401 / 403 from either surface → `UpstreamAuthError`, so the host marks
  *     the connection `expired` ;
- *   - `teamId` is always the connection's team ; a different explicit value
- *     is refused before any network call ;
- *   - `projectId` absent → the mission's single project, when the tool's
- *     schema declares that argument.
+ *   - the team is the credential's `team_id`, and nothing else : a `teamId`
+ *     argument that is not exactly that value (another string, a non-string)
+ *     is refused before any network call, and the value sent upstream is
+ *     always written from the credential, on both surfaces ;
+ *   - the project is the one the classifier resolved (`resolveProject`, the
+ *     same function) : the argument is overwritten with it, never forwarded
+ *     as received ;
+ *   - a tool addressed by a deployment id or URL is forwarded only after the
+ *     deployment was resolved through the REST API under the pinned team and
+ *     found to belong to that project (`bindDeployments`) ;
+ *   - a tool that cannot be bound to a project (`UNBOUND_TOOLS`), an unknown
+ *     tool, or a rewrapped tool that cannot carry the team and was not
+ *     reviewed (`TEAMLESS_UPSTREAM_TOOLS`) is refused.
  */
 
 import {
@@ -30,7 +39,15 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER, VERCEL_ENVS } from './classify.ts';
+import {
+  isAccountTool,
+  isClassifiedTool,
+  PROVIDER,
+  resolveProject,
+  unboundToolDenial,
+  UNBOUND_TOOLS,
+  VERCEL_ENVS,
+} from './classify.ts';
 import { vercelAuth } from './credential.ts';
 import {
   ADD_DOMAIN,
@@ -47,7 +64,14 @@ import {
   UPSERT_FIREWALL_RULE,
   VERIFY_DOMAIN,
 } from './custom-tools.ts';
-import { isCustomTool, toUpstreamName, toolDeclaresProperty } from './tools.ts';
+import {
+  isCustomTool,
+  toUpstreamName,
+  toolAcceptsArgument,
+  toolDeclaresProperty,
+  toolRequiresProperty,
+  vercelToolByName,
+} from './tools.ts';
 
 /** The official Vercel MCP server (rewrapped tools). A fact about the provider. */
 export const VERCEL_MCP_URL = 'https://mcp.vercel.com/';
@@ -57,6 +81,30 @@ export const VERCEL_API_BASE = 'https://api.vercel.com';
 /** Projects per page and pages walked by `discoverResources` (1 000 projects). */
 export const DISCOVERY_PAGE_SIZE = 100;
 export const DISCOVERY_MAX_PAGES = 10;
+
+/**
+ * Rewrapped tools whose upstream schema is closed and has no `teamId` : the
+ * forward cannot carry the connection's team. Each one is reviewed here, with
+ * the reason the call stays inside the pinned team. A rewrapped tool in that
+ * situation and absent from this list is refused by `execute`.
+ */
+export const TEAMLESS_UPSTREAM_TOOLS: Readonly<Record<string, string>> = {
+  vercel__search_vercel_documentation:
+    'Public documentation search : the answer does not depend on a team and reads no team data.',
+  vercel__check_domain_availability_and_price:
+    'Registrar lookup of public availability and price : reads no team data.',
+  vercel__get_access_to_vercel_url:
+    'Addressed by URL : the deployment is first resolved through the REST API under the pinned team and must belong to the mission project.',
+  vercel__web_fetch_vercel_url:
+    'Addressed by URL : the deployment is first resolved through the REST API under the pinned team and must belong to the mission project.',
+};
+
+/** Arguments of a rewrapped tool that name a deployment (by id, hostname or URL). */
+const DEPLOYMENT_ARGS = ['idOrUrl', 'deploymentId', 'url'] as const;
+type DeploymentArg = (typeof DEPLOYMENT_ARGS)[number];
+
+/** A deployment id or a hostname : what the REST lookup accepts in its path. */
+const DEPLOYMENT_KEY = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 /** What one upstream call needs, built from the context. */
 interface VercelCall {
@@ -84,14 +132,11 @@ export async function executeVercel(
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   };
 
-  if (typeof args.teamId === 'string' && args.teamId !== teamId) {
-    return errorResult(
-      `teamId '${args.teamId}' is not the team of this connection ('${teamId}') — omit the argument.`,
-    );
-  }
-  const finalArgs = normalizeArgs(tool, args, teamId, ctx.resources);
+  const pinned = pinArgs(tool, args, teamId, ctx.resources);
+  if ('refused' in pinned) return errorResult(pinned.refused);
 
   try {
+    const finalArgs = await bindDeployments(call, tool, pinned.args, pinned.projectRef);
     return toToolResult(await callVercelTool(call, tool, finalArgs));
   } catch (e) {
     if (e instanceof UpstreamAuthError) throw e;
@@ -166,23 +211,175 @@ interface ProjectDto {
   readonly framework?: string | null;
 }
 
+type PinnedArgs =
+  | { readonly args: Record<string, unknown>; readonly projectRef: string | null }
+  | { readonly refused: string };
+
 /**
- * Fill the arguments the mission leaves no choice over : the connection's
- * team, and the single project of the mission, when the tool declares them.
- * Upstream tools declare `additionalProperties: false`, so nothing is added
- * to a tool whose schema does not have the property.
+ * Write the two arguments the mission leaves no choice over — the team of the
+ * credential and the project the classifier resolved — and refuse what cannot
+ * be pinned. No network call.
+ *
+ * The caller's `teamId` and `projectId` are never copied : they are checked,
+ * dropped, then written again from the credential and from `resolveProject`
+ * wherever the tool can receive them (declared property, or open schema).
  */
-function normalizeArgs(
+function pinArgs(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   teamId: string,
   resources: readonly Resource[],
-): Record<string, unknown> {
+): PinnedArgs {
+  if (UNBOUND_TOOLS.has(tool)) return { refused: unboundToolDenial(tool) };
+  if (!isClassifiedTool(tool) || vercelToolByName(tool) === undefined) {
+    return { refused: `unknown vercel tool '${tool}'.` };
+  }
+  if (args.teamId !== undefined && args.teamId !== teamId) {
+    return {
+      refused: `teamId is fixed by the connection ('${teamId}') : the value given is not the team of this connection — omit the argument.`,
+    };
+  }
+  const project = resolveProject(args, resources, !isAccountTool(tool));
+  if ('denied' in project) return { refused: project.denied };
+
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(args)) {
+    if (key !== 'teamId' && key !== 'projectId') out[key] = value;
+  }
+  if (toolAcceptsArgument(tool, 'teamId')) {
+    out.teamId = teamId;
+  } else if (!Object.hasOwn(TEAMLESS_UPSTREAM_TOOLS, tool)) {
+    return {
+      refused: `${tool}: the upstream tool cannot carry the team of this connection and has not been reviewed — refused.`,
+    };
+  }
+  if (project.ref !== null && !isAccountTool(tool) && toolAcceptsArgument(tool, 'projectId')) {
+    out.projectId = project.ref;
+  }
+  return { args: out, projectRef: project.ref };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Deployment binding : the deployment a call names belongs to the mission project
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface DeploymentTarget {
+  readonly arg: DeploymentArg;
+  /** Deployment id or hostname, looked up under the pinned team. */
+  readonly key: string;
+  /** The normalised URL to forward, for a URL-addressed tool ; `null` to forward the verified id. */
+  readonly href: string | null;
+}
+
+/**
+ * Read one deployment argument. A URL is reduced to its hostname for the
+ * lookup and re-serialised for the forward, so the host that is verified is
+ * the host the upstream tool receives. Throws on anything else than a
+ * deployment id, a hostname or a plain http(s) URL.
+ */
+function readDeploymentArg(arg: DeploymentArg, value: unknown): DeploymentTarget {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${arg}: expected a deployment id or URL.`);
+  }
+  if (arg !== 'url' && !value.includes('://')) {
+    if (!DEPLOYMENT_KEY.test(value)) throw new Error(`${arg}: malformed deployment id.`);
+    return { arg, key: value, href: null };
+  }
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${arg}: expected an absolute http(s) URL of a deployment.`);
+  }
+  if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+    throw new Error(`${arg}: expected an http(s) URL.`);
+  }
+  if (url.username !== '' || url.password !== '') {
+    throw new Error(`${arg}: a URL with credentials is refused.`);
+  }
+  if (!DEPLOYMENT_KEY.test(url.hostname)) throw new Error(`${arg}: malformed deployment host.`);
+  return { arg, key: url.hostname, href: arg === 'url' ? url.href : null };
+}
+
+function isRecord(x: unknown): x is Readonly<Record<string, unknown>> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x);
+}
+
+/**
+ * Resolve a deployment through the REST API **under the pinned team** and
+ * return its id, after checking it belongs to `projectRef`. Throws (a refusal
+ * the agent reads) when the team cannot see it, when the answer does not name
+ * its project, or when the project is another one.
+ *
+ * A 403 here is about the deployment the caller named, not about the token :
+ * it is a refusal, not an `UpstreamAuthError` — otherwise naming a foreign
+ * deployment would mark the connection `expired`. A 401 still is.
+ */
+async function verifiedDeploymentId(
+  call: VercelCall,
+  key: string,
+  projectRef: string,
+): Promise<string> {
+  const unverified = `deployment '${key}' could not be verified as a deployment of vercel project '${projectRef}' in the team of this connection`;
+  let body: unknown;
+  try {
+    body = await callRest(
+      call,
+      'GET',
+      `/v13/deployments/${encodeURIComponent(key)}`,
+      { teamId: call.teamId },
+      null,
+    );
+  } catch (e) {
+    if (e instanceof UpstreamAuthError && e.upstreamStatus !== 403) throw e;
+    throw new Error(`${unverified} : ${e instanceof Error ? e.message : String(e)}`);
+  }
+  if (!isRecord(body) || typeof body.id !== 'string' || typeof body.projectId !== 'string') {
+    throw new Error(`${unverified} : the lookup did not name its project.`);
+  }
+  if (body.ownerId !== undefined && body.ownerId !== call.teamId) {
+    throw new Error(`${unverified} : it is owned by another team.`);
+  }
+  if (body.projectId !== projectRef) {
+    throw new Error(
+      `deployment '${key}' does not belong to vercel project '${projectRef}' of this mission.`,
+    );
+  }
+  return body.id;
+}
+
+/**
+ * For a rewrapped tool, verify every deployment argument its schema declares
+ * and rewrite it : the verified deployment id for `idOrUrl` / `deploymentId`,
+ * the normalised URL for `url`. Schema-driven, so a tool added upstream with
+ * one of these arguments is bound without a code change. All arguments are
+ * read before the first lookup : an unreadable one costs no network call.
+ */
+async function bindDeployments(
+  call: VercelCall,
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+  projectRef: string | null,
+): Promise<Record<string, unknown>> {
   const out: Record<string, unknown> = { ...args };
-  if (toolDeclaresProperty(tool, 'teamId') && out.teamId === undefined) out.teamId = teamId;
-  if (toolDeclaresProperty(tool, 'projectId') && out.projectId === undefined) {
-    const own = resources.filter((r) => r.provider === PROVIDER);
-    if (own.length === 1) out.projectId = own[0]!.ref;
+  if (isCustomTool(tool)) return out;
+
+  const targets: DeploymentTarget[] = [];
+  for (const arg of DEPLOYMENT_ARGS) {
+    if (!toolDeclaresProperty(tool, arg)) continue;
+    if (args[arg] === undefined) {
+      if (toolRequiresProperty(tool, arg)) throw new Error(`${arg}: argument missing.`);
+      continue;
+    }
+    targets.push(readDeploymentArg(arg, args[arg]));
+  }
+  if (targets.length === 0) return out;
+  if (projectRef === null) {
+    throw new Error(`${tool}: a deployment cannot be verified without a project of this mission.`);
+  }
+  for (const target of targets) {
+    const id = await verifiedDeploymentId(call, target.key, projectRef);
+    out[target.arg] = target.href ?? id;
   }
   return out;
 }
@@ -375,11 +572,10 @@ async function executeCustom(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<unknown> {
+  // `pinArgs` wrote the project the classifier resolved ; the team is the credential's.
   const projectId = typeof args.projectId === 'string' ? args.projectId : '';
   if (!projectId) throw new Error(`Vercel custom tool ${tool}: projectId is required.`);
-  const effectiveTeamId = typeof args.teamId === 'string' ? args.teamId : call.teamId;
-  const query: Record<string, string> = {};
-  if (effectiveTeamId) query.teamId = effectiveTeamId;
+  const query: Record<string, string> = { teamId: call.teamId };
   const project = encodeURIComponent(projectId);
 
   if (tool === UPDATE_PROJECT_SETTINGS) {

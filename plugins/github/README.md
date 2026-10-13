@@ -22,7 +22,7 @@ ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract
 | `src/credential.ts`       | `app-install` `CredentialSpec`, app-config keys, `installationTokenFor(ctx, scope)`.                             |
 | `src/app-install.ts`      | RS256 App JWT → `POST /app/installations/{id}/access_tokens` (scoped to repositories and permissions).           |
 | `src/execute.ts`          | `execute` (per-call token + Octokit over `ctx.fetch`), `mint_install_token`, `discoverResources` (paged).        |
-| `src/octokit-dispatch.ts` | Tool name → Octokit call.                                                                                        |
+| `src/octokit-dispatch.ts` | Tool name → Octokit call; a merge first checks the pull request's real base against the declared one.            |
 
 The plugin imports the SDK only (plus `@octokit/rest` and `jose`); nothing
 from `apps/` or `@vaubaan/gateway-core`.
@@ -61,6 +61,13 @@ touches `feature-branch-write`; a write on `wip-x` matches no specific
 entry and falls to `uncategorized-write`. No preset offers the fallback:
 a mission that needs unconventional branch names accepts it explicitly.
 
+The classifier refuses what it cannot place exactly: a file path that is
+not canonical (leading `/`, empty, `.` or `..` segment, backslash), a ref
+where a branch name is expected (`refs/heads/main`), a malformed `files`
+list. `merge_pull_request` is classified on the declared `base` (`main`
+when absent) and the merge is refused when the pull request targets
+another branch.
+
 ## Presets
 
 | Preset            | Grants                                                                                                                                 | Approval gates                                        |
@@ -69,7 +76,7 @@ a mission that needs unconventional branch names accepts it explicitly.
 | `developer`       | reads, `search-global`, `feature-branch-write`, `bulk-file-write`, `create-pr`, `comment-write`, `workflow-write-via-file`, both mints | `workflow-write-via-file`, `mint-install-token-push`  |
 | `release-manager` | reads, `feature-branch-write`, `create-pr`, `comment-write`, `merge-protected`, `create-release`, `delete-release`                     | `merge-protected`, `create-release`, `delete-release` |
 
-`developer` is the "one token per code project" preset: it never merges
+`developer` is the "one mission per code repository" preset: it never merges
 into a protected branch and never touches branch protection. No preset
 grants `branch-protection-write`; the creator adds it explicitly.
 Presets are UI sugar — the persisted policy is always the explicit list.
@@ -128,8 +135,10 @@ npx vitest run plugins/github
 ```
 
 - `plugin.test.ts` — SDK kit (`assertPluginWellFormed`, `assertPresetsValid`,
-  `assertNoWildcard`, `assertCatalogCoverage` with a sample per tool, every
-  risk reachable), fallback lint, preset invariants, credential spec.
+  `assertNoWildcard`, `assertCatalogCoverage` with samples per tool: the 14
+  named risks touched, `fallbackHits` empty), preset invariants, credential spec.
+- `risk-catalog.test.ts` — the table `[tool, arguments, risks touched]`: add a
+  row whenever a tool, a classifier branch or a catalog pattern changes.
 - `classify.test.ts` — the classifier's security suite: `(tool, args, resources)` → exact slices or denial.
 - `execute.test.ts` — JWT claims, mint request shape, per-call scoping,
   Octokit over `mockFetch`, `UpstreamAuthError`, mint tool, paged discovery.

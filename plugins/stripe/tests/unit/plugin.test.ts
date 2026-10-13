@@ -12,6 +12,7 @@ import {
   serializeSlice,
   type ConnectionContext,
   type ExecuteContext,
+  type ProviderPlugin,
   type Resource,
 } from '@vaubaan/plugin-sdk';
 import {
@@ -89,10 +90,17 @@ describe('stripe plugin — structural kit', () => {
         stripe__create_coupon: [{ args: { percent_off: 10 } }],
         stripe__create_promotion_code: [{ args: { coupon: 'co_x' } }],
         stripe__create_subscription: [{ args: { customer: 'cus_x', items: [] } }],
-        stripe__update_subscription: [{ args: { id: 'sub_x' } }],
+        stripe__update_subscription: [
+          { args: { id: 'sub_x' } },
+          { args: { id: 'sub_x', cancel_at_period_end: true } },
+        ],
         stripe__cancel_subscription: [{ args: { id: 'sub_x' } }],
         stripe__pause_subscription: [{ args: { id: 'sub_x', pause_collection: {} } }],
-        stripe__create_invoice: [{ args: { customer: 'cus_x' } }],
+        stripe__create_invoice: [
+          { args: { customer: 'cus_x' } },
+          { args: { customer: 'cus_x', auto_advance: true } },
+          { args: { customer: 'cus_x', expand: ['customer'] }, expectDenied: true },
+        ],
         stripe__finalize_invoice: [{ args: { id: 'in_x' } }],
         stripe__void_invoice: [{ args: { id: 'in_x' } }],
         stripe__create_refund: [{ args: { charge: 'ch_x' } }, { args: { payment_intent: 'pi_x' } }],
@@ -159,15 +167,14 @@ describe('classifyStripe — resource resolution', () => {
 });
 
 describe('modeOf', () => {
-  test('ref suffix wins over metadata and env ; env label alone is the last fallback', () => {
+  test('ref suffix wins over metadata ; the env label is never a source of the mode', () => {
     expect(modeOf(liveRes)).toBe('live');
     expect(modeOf({ ...liveRes, env: 'prod' })).toBe('live');
+    expect(modeOf({ ...liveRes, metadata: { mode: 'test' } })).toBe('live');
     expect(
       modeOf({ provider: 'stripe', ref: 'acct_1', displayName: 'x', metadata: { mode: 'test' } }),
     ).toBe('test');
-    expect(modeOf({ provider: 'stripe', ref: 'acct_1', env: 'live', displayName: 'x' })).toBe(
-      'live',
-    );
+    expect(modeOf({ provider: 'stripe', ref: 'acct_1', env: 'live', displayName: 'x' })).toBeNull();
     expect(
       modeOf({ provider: 'stripe', ref: 'acct_1', env: 'production', displayName: 'x' }),
     ).toBeNull();
@@ -180,11 +187,11 @@ describe('modeOf', () => {
     ).toBe('test');
   });
 
-  test('a resource without a determinable mode classifies to mode[*]', () => {
+  test('a resource without a determinable mode is refused, as `execute` refuses it', () => {
     const unknown: Resource = { provider: 'stripe', ref: 'acct_1', displayName: 'x' };
-    expect(slices('stripe__get_balance', {}, [unknown])).toEqual([
-      'stripe.account[acct_1].mode[*].balance.R',
-    ]);
+    expect(denied('stripe__get_balance', {}, [unknown])).toBe(
+      "account: cannot determine the test/live mode of 'acct_1'",
+    );
   });
 });
 
@@ -421,6 +428,13 @@ describe('discoverStripeResources with mockFetch', () => {
     expect(fetch.calls).toHaveLength(0);
   });
 
+  test('an answer without an account id is refused, never a resource named undefined', async () => {
+    const fetch = mockFetch([{ url: `${STRIPE_API_BASE}/account`, body: { object: 'account' } }]);
+    await expect(
+      stripePlugin.discoverResources(ctx(fetch, { live_key: 'sk_live_xyz' })),
+    ).rejects.toThrow(/returned no account id/);
+  });
+
   test('a rejected key surfaces as UpstreamAuthError', async () => {
     const fetch = mockFetch([
       { url: /\/account$/, status: 401, body: { error: { message: 'Invalid API Key' } } },
@@ -450,6 +464,17 @@ describe('discoverStripeResources with mockFetch', () => {
     await expect(stripePlugin.discoverResources(oauth)).rejects.toMatchObject({
       name: 'CredentialKindMismatch',
     });
+  });
+});
+
+describe('plugin declaration', () => {
+  test('docsUrl points at the modelling handbook of this provider', () => {
+    expect(stripePlugin.docsUrl).toMatch(/\/docs\/handbook\/providers\/stripe\.md$/);
+  });
+
+  test('no envOf hook : the environment is the label discovery wrote, checked against the mode', () => {
+    const contract: ProviderPlugin = stripePlugin;
+    expect(contract.envOf).toBeUndefined();
   });
 });
 

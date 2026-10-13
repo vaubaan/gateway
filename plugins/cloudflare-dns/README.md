@@ -23,9 +23,9 @@ account[<account id>].zone[<zone id>]
 
 No entity is `envScopable`: DNS has no test/live mode and no catalog risk is
 env-scoped. `record.critical` is an overlay emitted next to a record write
-when the record is the apex (`example.com`, `@`), a wildcard at the apex
-(`*.example.com`), or of type MX or NS. `record.delete` is the verb leaf of
-a deletion. `zone-import` / `zone-export` stand for the BIND bulk endpoints.
+— create, update or deletion — when the record is the apex (`example.com`,
+`@`), a wildcard at the apex (`*.example.com`), or of type MX or NS.
+`record.delete` is the verb leaf of a deletion. `zone-import` / `zone-export` stand for the BIND bulk endpoints.
 
 ## Credential and resources
 
@@ -61,6 +61,12 @@ an apex record from a subdomain record.
 the mission holds a single zone). `zone_id` and `record_id` are consumed by
 the gateway and never forwarded.
 
+`zone_id` and `record_id` end up in the request path, so both must be a
+single path-safe segment: `^[A-Za-z0-9_-]{1,64}$` (`pathIdent` in
+`src/resources.ts`, applied by `classify` and by `execute`). `.`, `..`, a
+`/` or any other character is refused before classification and before any
+call — `dns_records/..` would otherwise be sent as the zone endpoint.
+
 Reads (7): `list_zones`, `get_zone`, `list_records`, `get_record`,
 `export_records`, `get_zone_settings`, `get_dnssec`.
 
@@ -68,7 +74,7 @@ Writes (8): `create_record`, `update_record`, `delete_record`,
 `import_records`, `edit_zone_settings`, `purge_cache`, `edit_dnssec`,
 `delete_zone`.
 
-Two behaviours are specific to v5:
+Three behaviours are specific to v5:
 
 - `list_zones` answers with the upstream list **filtered to the mission's
   zones** (`result_info` is passed through unchanged).
@@ -76,30 +82,39 @@ Two behaviours are specific to v5:
   subdomain record, `execute` reads the record first and refuses the PATCH
   if the record is in fact apex, wildcard, MX or NS — otherwise an agent
   could move an apex record away while holding `record-write` only.
+- `delete_record` takes the same `type` and `name`, optional. Without them
+  the deletion is classified as a critical record write
+  (`critical-record-write` on top of `record-write` and `record-delete`).
+  With them, a deletion declared ordinary is checked the same way: `execute`
+  reads the record first and refuses the DELETE if it is apex, wildcard, MX
+  or NS, or if its type and name cannot be read back. `type` and `name` are
+  never sent upstream on a deletion.
 
 ## Catalog
 
 `src/risk-catalog.yaml`, version 2: 11 named risks and the
 `cloudflare-dns.uncategorized-write` fallback.
 
-| Risk                                   | Action | Notes                                                                          |
-| -------------------------------------- | ------ | ------------------------------------------------------------------------------ |
-| `cloudflare-dns.read-zone-metadata`    | R      | Zones, settings, DNSSEC. `zone[**].R` is recursive: record reads touch it too. |
-| `cloudflare-dns.read-records`          | R      | Record values (topology).                                                      |
-| `cloudflare-dns.export-zone-file`      | R      | Whole zone in one BIND dump.                                                   |
-| `cloudflare-dns.record-write`          | W      | Every record write, critical and deletions included (`record[**].W`).          |
-| `cloudflare-dns.critical-record-write` | W      | Apex, wildcard-at-apex, MX, NS; also any write without `type` + `name`.        |
-| `cloudflare-dns.record-delete`         | W      | `record[R].delete.W`.                                                          |
-| `cloudflare-dns.import-records`        | W      | Bulk, may overwrite apex and MX.                                               |
-| `cloudflare-dns.zone-settings-write`   | W      | SSL mode, minimum TLS…                                                         |
-| `cloudflare-dns.dnssec-write`          | W      | Can break resolution.                                                          |
-| `cloudflare-dns.cache-purge`           | W      | Reversible, load spike.                                                        |
-| `cloudflare-dns.zone-delete`           | W      | Irreversible. `zone[*].W`: the zone itself, never a write under it.            |
-| `cloudflare-dns.uncategorized-write`   | W      | Fallback; in no preset.                                                        |
+| Risk                                   | Action | Notes                                                                                  |
+| -------------------------------------- | ------ | -------------------------------------------------------------------------------------- |
+| `cloudflare-dns.read-zone-metadata`    | R      | Zones, settings, DNSSEC. `zone[**].R` is recursive: record reads touch it too.         |
+| `cloudflare-dns.read-records`          | R      | Record values (topology).                                                              |
+| `cloudflare-dns.export-zone-file`      | R      | Whole zone in one BIND dump.                                                           |
+| `cloudflare-dns.record-write`          | W      | Every record write, critical and deletions included (`record[**].W`).                  |
+| `cloudflare-dns.critical-record-write` | W      | Apex, wildcard-at-apex, MX, NS, deletions included; any write without `type` + `name`. |
+| `cloudflare-dns.record-delete`         | W      | `record[R].delete.W`.                                                                  |
+| `cloudflare-dns.import-records`        | W      | Bulk, may overwrite apex and MX.                                                       |
+| `cloudflare-dns.zone-settings-write`   | W      | SSL mode, minimum TLS…                                                                 |
+| `cloudflare-dns.dnssec-write`          | W      | Can break resolution.                                                                  |
+| `cloudflare-dns.cache-purge`           | W      | Reversible, load spike.                                                                |
+| `cloudflare-dns.zone-delete`           | W      | Irreversible. `zone[*].W`: the zone itself, never a write under it.                    |
+| `cloudflare-dns.uncategorized-write`   | W      | Fallback; in no preset.                                                                |
 
 Record writes are layered: a mission needs `record-write` for any record
 change, plus `critical-record-write` for the sensitive ones and
-`record-delete` for deletions.
+`record-delete` for deletions. Deleting an apex, wildcard, MX or NS record
+— or any record the call does not name by `type` and `name` — needs all
+three.
 
 ## Presets
 
@@ -114,9 +129,11 @@ persisted policy is the explicit enumeration.
 
 ## Tests
 
-`npx vitest run plugins/cloudflare-dns` — 94 tests: the SDK kit
+`npx vitest run plugins/cloudflare-dns` — 122 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
 `assertPresetsValid`), the classifier (`plugin.test.ts` and the per-tool
-suite `classify.test.ts`), `execute` and `discoverResources` against
-`mockFetch`, the credential spec and presets, catalog invariants and the
-data model. No test ever calls Cloudflare.
+suite `classify.test.ts`, including the path-safe identifiers), `execute`
+and `discoverResources` against `mockFetch` (the update / delete guard, no
+call for an unsafe identifier), the credential spec and presets, catalog
+invariants with the exact risks each tool touches, and the data model. No
+test ever calls Cloudflare.

@@ -6,7 +6,7 @@
  *
  * Gmail exposes a single plane (`mailbox`) — there is no parallel split into
  * inbox / sent / drafts ; those are *labels* in Gmail's own model, not
- * planes. The data-model unique-feature vs the 5 prior providers is the
+ * planes. The distinctive feature of this data model is the
  * *identity-based zoning* : a message's risk profile depends on the
  * **sender domain** (or recipient set), not on the technical containment.
  * Vaubaan encodes that axis via 4 synthetic entities (`from-zone`,
@@ -128,20 +128,21 @@ export const gmailDataModel: DataModel = {
           cardinalities: ['one'],
           description:
             'Synthetic singleton marker emitted by the classifier when a call may ' +
-            'touch many items (search_threads with a non-discriminating q, ' +
-            'batchModify, etc.). Distinct from the per-item zone markers so the ' +
-            'operator confirms bulk-amplification explicitly.',
+            'touch many items (a search_threads query not bounded by a positive ' +
+            '`from:<address>` clause). Distinct from the per-item zone markers so ' +
+            'the operator confirms bulk-amplification explicitly.',
         },
         {
           name: 'sensitive-label',
           parent: 'mailbox',
           cardinalities: ['bounded'],
           description:
-            'Synthetic marker emitted by the classifier when a read call targets a ' +
-            'thread/message carrying a label listed in ' +
-            'the resource metadata `sensitive_labels` (e.g. FINANCIAL, LEGAL, HR, ' +
-            'PERSONAL). Overrides the from-zone classification — a sensitive label ' +
-            'gates the read regardless of who the sender is.',
+            'Synthetic marker emitted by the classifier when a call may read, apply ' +
+            'or remove a label listed in the resource metadata `sensitive_labels` ' +
+            '(e.g. FINANCIAL, LEGAL, HR, PERSONAL). Overrides the from-zone ' +
+            'classification — a sensitive label gates the read regardless of who ' +
+            'the sender is. The identifier is the label name, or `*` when the ' +
+            'label is unknown before the fetch.',
         },
       ],
     },

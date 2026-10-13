@@ -8,11 +8,12 @@
  *    `create_release`, `push_files`)
  *  - the `workflow-via-file` virtual slice
  *  - retired tools (risk-model spec §7.2 #1) — they must return `{ denied: ... }`
- *  - structural denials (repo outside the mission, missing args, unknown tool)
+ *  - structural denials (repo outside the mission, missing args, unknown tool,
+ *    non-canonical paths, refs given as branches, malformed `files`)
  *
- * The test does NOT exercise the matcher or the catalog ; that's the
- * `risk-catalog.test.ts` job. Here we only verify the classifier emits the
- * exact slice strings expected by the catalog patterns.
+ * The test does NOT exercise the matcher or the catalog : which risks a
+ * call touches is pinned in `risk-catalog.test.ts`. Here we only verify the
+ * classifier emits the exact slice strings, or the exact refusal.
  */
 
 import { describe, expect, test } from 'vitest';
@@ -220,6 +221,122 @@ describe('classifyGithub — branch / file writes', () => {
   });
 });
 
+// ─── non-canonical paths, branches and file lists ──────────────────────────
+
+describe('classifyGithub — refuses what it cannot place exactly', () => {
+  const NON_CANONICAL_PATHS = [
+    '/.github/workflows/ci.yml',
+    './.github/workflows/ci.yml',
+    '.github//workflows/ci.yml',
+    '.github/./workflows/ci.yml',
+    'src/../.github/workflows/ci.yml',
+    '.github\\workflows\\ci.yml',
+    '.github/workflows/ci.yml/',
+  ];
+
+  test.each(NON_CANONICAL_PATHS)('create_or_update_file refuses the path %j', (path) => {
+    const r = classifyGithub(
+      'github__create_or_update_file',
+      { ...baseArgs, branch: 'feature/x', path, content: 'x', message: 'm' },
+      resources,
+    );
+    expect(expectDenied(r)).toBe(
+      `tool 'github__create_or_update_file' path '${path}' must be relative, with no empty, '.' or '..' segment and no backslash`,
+    );
+  });
+
+  test.each(NON_CANONICAL_PATHS)('delete_file refuses the path %j', (path) => {
+    const r = classifyGithub(
+      'github__delete_file',
+      { ...baseArgs, branch: 'feature/x', path, message: 'm', sha: 'd' },
+      resources,
+    );
+    expect(expectDenied(r)).toContain(`path '${path}' must be relative`);
+  });
+
+  test.each(NON_CANONICAL_PATHS)('push_files refuses an entry with the path %j', (path) => {
+    const r = classifyGithub(
+      'github__push_files',
+      {
+        ...baseArgs,
+        branch: 'feature/x',
+        message: 'm',
+        files: [
+          { path: 'a.ts', content: '1' },
+          { path, content: 'x' },
+        ],
+      },
+      resources,
+    );
+    expect(expectDenied(r)).toContain(`path '${path}' must be relative`);
+  });
+
+  test('a workflow file in a canonical path keeps its marker whatever the case', () => {
+    const r = classifyGithub(
+      'github__delete_file',
+      { ...baseArgs, branch: 'feature/x', path: '.GitHub/Workflows/CI.YAML', message: 'm' },
+      resources,
+    );
+    expect(expectSlices(r)).toContain(
+      `github.repo[${repoRef}].branch[feature/x].workflow-via-file.W`,
+    );
+  });
+
+  test.each([
+    ['not an array', { path: 'a.ts', content: '1' }],
+    ['an entry without path', [{ path: 'a.ts', content: '1' }, { content: '2' }]],
+    [
+      'an entry with a non-string path',
+      [
+        { path: 'a.ts', content: '1' },
+        { path: 5, content: '2' },
+      ],
+    ],
+    ['an entry without content', [{ path: 'a.ts', content: '1' }, { path: 'b.ts' }]],
+    ['an entry that is not an object', [{ path: 'a.ts', content: '1' }, 'b.ts']],
+    ['an empty array', []],
+  ])('push_files refuses files that are %s', (_label, files) => {
+    const r = classifyGithub(
+      'github__push_files',
+      { ...baseArgs, branch: 'feature/x', message: 'm', files },
+      resources,
+    );
+    expect(expectDenied(r)).toBe(
+      "tool 'github__push_files' requires 'files' to be a non-empty array of { path, content } strings",
+    );
+  });
+
+  test.each([
+    ['github__create_branch', { branch: 'refs/heads/main' }],
+    [
+      'github__create_or_update_file',
+      { branch: 'refs/heads/main', path: 'a.ts', content: 'x', message: 'm' },
+    ],
+    ['github__delete_file', { branch: 'refs/heads/main', path: 'a.ts', message: 'm', sha: 'd' }],
+    [
+      'github__push_files',
+      { branch: 'refs/heads/main', message: 'm', files: [{ path: 'a.ts', content: '1' }] },
+    ],
+    ['github__update_branch_protection', { branch: 'heads/main' }],
+  ])('%s refuses a ref where a branch name is expected', (tool, args) => {
+    const r = classifyGithub(tool, { ...baseArgs, ...args }, resources);
+    expect(expectDenied(r)).toContain("must be a branch name such as 'main', not a ref");
+  });
+
+  test('wildcard characters never reach a concrete slice', () => {
+    const branch = classifyGithub('github__create_branch', { ...baseArgs, branch: '*' }, resources);
+    expect(expectSlices(branch)).toEqual([`github.repo[${repoRef}].branch[-].W`]);
+    const file = classifyGithub(
+      'github__create_or_update_file',
+      { ...baseArgs, branch: 'feature/**', path: 'src/*.ts', content: 'x', message: 'm' },
+      resources,
+    );
+    expect(expectSlices(file)).toEqual([
+      `github.repo[${repoRef}].branch[feature/--].file[src/-.ts].W`,
+    ]);
+  });
+});
+
 // ─── writes — PRs / comments / releases ───────────────────────────────────
 
 describe('classifyGithub — PRs, comments, releases', () => {
@@ -343,7 +460,7 @@ describe('classifyGithub — retired tools (risk-model spec §7.2 #1)', () => {
   ])('%s returns denied', (tool, args) => {
     const r = classifyGithub(tool, args, resources);
     expect(expectDenied(r)).toBe(
-      'tool removed in v4 risk-based model — use cloud-provider tool directly',
+      'tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the provider that hosts the service.',
     );
   });
 });
@@ -362,7 +479,57 @@ describe('classifyGithub — structural denials', () => {
       { owner: 'someone-else', repo: 'private' },
       resources,
     );
-    expect(expectDenied(r)).toContain('is not bound to this project');
+    expect(expectDenied(r)).toBe(
+      "github repository 'someone-else/private' is not selected in this mission. Selected: sbw-vaubaan/gateway.",
+    );
+  });
+
+  test('repo outside a mission of many repositories : the refusal gives their count, not their names', () => {
+    const many: Resource[] = Array.from({ length: 6 }, (_, i) => ({
+      provider: 'github',
+      ref: `sbw-vaubaan/repo-${i}`,
+      displayName: `sbw-vaubaan/repo-${i}`,
+    }));
+    const r = classifyGithub('github__list_branches', { owner: 'someone-else', repo: 'x' }, many);
+    expect(expectDenied(r)).toBe(
+      "github repository 'someone-else/x' is not selected in this mission. 6 repositories are selected.",
+    );
+    const five = classifyGithub(
+      'github__list_branches',
+      { owner: 'someone-else', repo: 'x' },
+      many.slice(0, 5),
+    );
+    expect(expectDenied(five)).toContain(
+      'Selected: sbw-vaubaan/repo-0, sbw-vaubaan/repo-1, sbw-vaubaan/repo-2, sbw-vaubaan/repo-3, sbw-vaubaan/repo-4.',
+    );
+  });
+
+  test('repo-scoped tool in a mission without GitHub repository', () => {
+    const otherProvider: Resource = { provider: 'vercel', ref: 'prj_1', displayName: 'web' };
+    for (const missionResources of [[], [otherProvider]]) {
+      const r = classifyGithub('github__list_branches', baseArgs, missionResources);
+      expect(expectDenied(r)).toBe('no GitHub repository is selected in this mission.');
+    }
+  });
+
+  test('mint_install_token for a repository outside the mission', () => {
+    const r = classifyGithub(
+      'github__mint_install_token',
+      { purpose: 'push', repoFullName: 'someone-else/private' },
+      resources,
+    );
+    expect(expectDenied(r)).toBe(
+      "github repository 'someone-else/private' is not selected in this mission. Selected: sbw-vaubaan/gateway.",
+    );
+  });
+
+  test('mint_install_token in a mission without GitHub repository, with or without repoFullName', () => {
+    for (const args of [{ purpose: 'clone' }, { purpose: 'clone', repoFullName: repoRef }]) {
+      const r = classifyGithub('github__mint_install_token', args, []);
+      expect(expectDenied(r)).toBe(
+        'github__mint_install_token: no GitHub repository is selected in this mission.',
+      );
+    }
   });
 
   test('missing owner/repo', () => {

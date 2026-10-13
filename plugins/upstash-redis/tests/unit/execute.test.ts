@@ -147,6 +147,66 @@ describe('executeUpstashRedis — data tools build the Redis command', () => {
       'PING',
     ]);
   });
+
+  test('execute renders a finite number as text, exactly as the classifier read it', async () => {
+    expect(await commandOf('upstash_redis__execute', { command: ['EXPIRE', 'k', 60] }, 1)).toEqual([
+      'EXPIRE',
+      'k',
+      '60',
+    ]);
+  });
+
+  test('execute refuses a command the classifier could not read as one command, before any network call', async () => {
+    // `[["FLUSHALL"]]` used to be coerced to the single verb FLUSHALL after
+    // being classified as something else : the executor now reads `command`
+    // with the classifier's own function.
+    for (const command of [
+      [['FLUSHALL']],
+      [
+        ['GET', 'a'],
+        ['DEL', 'a'],
+      ],
+      ['GET', ['k']],
+      ['GET', { k: 1 }],
+      ['GET', null],
+      [42, 'k'],
+      [''],
+      [],
+      'FLUSHALL',
+      undefined,
+    ]) {
+      const fetch = mockFetch([]);
+      const result = await upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__execute', {
+        command,
+      });
+      expect(result.isError, JSON.stringify(command)).toBe(true);
+      expect((result.content[0] as { text: string }).text).toMatch(/one Redis command/);
+      expect(fetch.calls).toHaveLength(0);
+    }
+  });
+
+  test('a database answer without a usable REST endpoint or token is an error, not a request', async () => {
+    for (const body of [
+      { database_id: DATABASE_ID, rest_url: 42, rest_token: 'tok' },
+      { database_id: DATABASE_ID, rest_url: REST_URL, rest_token: { nested: true } },
+      'not an object',
+    ]) {
+      const fetch = mockFetch([
+        {
+          method: 'GET',
+          url: `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}`,
+          body,
+          times: 1,
+        },
+      ]);
+      const result = await upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get', {
+        key: 'k',
+      });
+      expect(result.isError).toBe(true);
+      expect((result.content[0] as { text: string }).text).toMatch(/REST endpoint\/token/);
+      expect(fetch.calls).toHaveLength(1);
+    }
+  });
 });
 
 describe('upstash-redis plugin — declared tools', () => {

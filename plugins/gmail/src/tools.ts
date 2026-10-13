@@ -15,8 +15,10 @@
  * by moving them into `gmailTools`.
  *
  * Argument names are the ones the classifier reads (`q`, `id`,
- * `thread_id`, `message_id`, `to` / `cc` / `bcc`) ; the execution phase maps
- * them onto the upstream names (`threadId`, `labelIds`…).
+ * `thread_id`, `message_id`, `label`, `to` / `cc` / `bcc`) ; the execution
+ * phase maps them onto the upstream names (`threadId`, `labelIds`…). The
+ * `required` lists mirror the classifier : it refuses a call whose id or
+ * label is missing.
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
@@ -46,13 +48,14 @@ const labelArg = {
   label: {
     type: 'string',
     description:
-      'Label id — a system label (INBOX, STARRED, UNREAD, IMPORTANT) or a user label id from list_labels.',
+      'Label id — a system label (INBOX, STARRED, UNREAD, IMPORTANT) or a user label id from list_labels. TRASH and SPAM are refused.',
   },
 };
 const recipients = {
   type: 'array',
   items: { type: 'string' },
-  description: 'Addresses, as `addr@example.com` or `Name <addr@example.com>`.',
+  description:
+    'Addresses, one per element, as `addr@example.com` or `Name <addr@example.com>`. An element that is not exactly one address refuses the call.',
 };
 
 /**
@@ -69,7 +72,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
   {
     name: 'gmail__search_threads',
     description:
-      'Search threads with a Gmail query (`from:`, `to:`, `label:`, `subject:`…). A query without from:/to:/label: is a bulk read.',
+      'Search threads with a Gmail query (`from:`, `to:`, `label:`, `newer_than:`…). Only a plain conjunction holding a `from:<full address>` clause is a bounded read ; an `OR`, a grouping, a quoted phrase or a query without such a clause is a bulk read from unknown senders.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -82,7 +85,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
   {
     name: 'gmail__get_thread',
     description:
-      'Read a thread and its messages. Classified as a read from an unknown sender (the sender is only known after the fetch).',
+      'Read a thread and its messages. Classified as a read from an unknown sender, and of a sensitive label when the mailbox declares some (sender and labels are only known after the fetch).',
     inputSchema: {
       type: 'object',
       properties: { id: { type: 'string', description: 'Thread id.' } },
@@ -97,7 +100,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
   {
     name: 'gmail__create_draft',
     description:
-      'Create a draft (never sends). The risk depends on the recipients : self, internal, allowlisted, or external.',
+      'Create a draft (never sends). The risk depends on the recipients : self, internal or allowlisted. A recipient outside the internal domains and the allowlists refuses the draft.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -121,7 +124,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: { ...threadIdArg, message_id: { type: 'string' }, ...labelArg },
-      required: ['message_id', 'label'],
+      required: ['thread_id', 'message_id', 'label'],
     },
   },
   {
@@ -130,7 +133,7 @@ export const gmailClassifiedToolDeclarations: readonly McpToolDeclaration[] = [
     inputSchema: {
       type: 'object',
       properties: { ...threadIdArg, message_id: { type: 'string' }, ...labelArg },
-      required: ['message_id', 'label'],
+      required: ['thread_id', 'message_id', 'label'],
     },
   },
   {

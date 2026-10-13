@@ -94,25 +94,48 @@ PAT path.
 
 ## Files
 
-| File                      | Role                                                                                                                          |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v1.0.0.                                                                                       |
-| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets, `catalog_version: 2`.                                                                         |
-| `src/data-model.ts`       | Plane `repo`, 16 entities; `branch` is `envScopable`.                                                                         |
-| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.   |
-| `src/classify.ts`         | `classifyGithub(tool, args, resources)`; core `classifyGithubRefs` over repo refs.                                            |
-| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                    |
-| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                              |
-| `src/execute.ts`          | `executeGithub`, `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).  |
-| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin. |
-| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, tool, args)`.                                                                                    |
+| File                      | Role                                                                                                                                                      |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v1.0.0.                                                                                                                   |
+| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets, `catalog_version: 2`.                                                                                                     |
+| `src/data-model.ts`       | Plane `repo`, 16 entities; `branch` is `envScopable`.                                                                                                     |
+| `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                               |
+| `src/classify.ts`         | `classifyGithub(tool, args, resources)`; the refusal wording (`repositoryNotSelectedMessage`), `declaredMergeBase`, `readFileEntries`, `isCanonicalPath`. |
+| `src/credential.ts`       | `githubCredential` (app-install spec), `installationTokenFor(ctx, scope)`.                                                                                |
+| `src/app-install.ts`      | `buildAppJwt`, `mintInstallationToken`, `GITHUB_API_BASE`, `GITHUB_API_HEADERS`.                                                                          |
+| `src/execute.ts`          | `executeGithub`, `discoverGithubResources`, `MINT_PERMISSIONS`, discovery paging constants (100 per page, 10 pages at most).                              |
+| `src/token-cache.ts`      | `installationTokenForCall(ctx, repo)`: per-call token served from `ctx.credentialCache`, 50 min at most, 5 min expiry margin.                             |
+| `src/octokit-dispatch.ts` | `dispatchGithubTool(octokit, tool, args)`; reads the pull request before a merge and refuses a base other than the declared one.                          |
 
 ## Tool → slice mapping
 
 Every repo-scoped tool resolves `owner/repo` and refuses a repository that
 is not among the mission's GitHub resources (`denied`), even though the
 host already checked `resource-not-in-mission`. Identifiers are sanitised
-to the slice ident class before being embedded.
+to the slice ident class before being embedded (`*` included: it becomes
+`-`).
+
+An argument that selects a risk class is either refused unless it has the
+one spelling the classifier reasons about, or checked against GitHub:
+
+- **File paths** of `create_or_update_file`, `delete_file` and every
+  `push_files` entry must be canonical: relative, `/`-separated, with no
+  empty, `.` or `..` segment and no backslash. `/.github/workflows/ci.yml`,
+  `./.github/…` or `.github//workflows/…` are refused, not normalised, so
+  the `workflow-via-file` marker never depends on how GitHub resolves a
+  path.
+- **Branches** of `create_branch`, `create_or_update_file`, `delete_file`,
+  `push_files` and `update_branch_protection` must be branch names: a value
+  starting with `refs/` or `heads/` is refused.
+- **`files`** of `push_files` must be a non-empty array whose every entry
+  has a string `path` and a string `content`; one malformed entry refuses
+  the call. The dispatcher reads `files` through the same function
+  (`readFileEntries`), so what is classified is what is pushed.
+- **`base`** of `merge_pull_request` is never sent to GitHub (the merge
+  endpoint takes none). The dispatcher first reads the pull request
+  (`GET /repos/{owner}/{repo}/pulls/{n}`) and merges only when its real
+  base equals the declared one (`main` when absent); otherwise the call
+  fails without a merge and the error names the real base.
 
 | Tool                                      | Slices                                                                                               |
 | ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
@@ -139,7 +162,8 @@ to the slice ident class before being embedded.
 | `mint_install_token`                      | `repo[X].install-token[clone\|push].W` for `repoFullName`, or one per GitHub resource of the mission |
 
 Concrete slices never carry wildcards: a "list all" read emits the entity
-name without a leaf and the catalog's terminal `[**]` absorbs it.
+name without a leaf and the catalog's terminal `[**]` absorbs it, and a `*`
+in an argument is replaced before it reaches a slice.
 
 ## Catalog decisions
 
@@ -166,8 +190,14 @@ preset offers it, the creator adds it for unconventional branch names
   `release-manager` preset does).
 - Two mint risks (`clone` vs `push`): the push token leaves the gateway's
   perimeter with write permissions, hence a separate, approval-gated entry.
-- `merge_pull_request` defaults `base` to `main` when the argument is
-  absent — the conservative assumption (the tool declares `base`).
+- `merge_pull_request` is classified on the declared `base`, `main` when
+  the argument is absent — the conservative assumption — and the declaration
+  is binding: the merge is refused when the pull request targets another
+  branch. It also touches `create-pr`, whose `pull_request[**].W` pattern
+  matches the `pull_request[N].W` slice.
+- A merge into a branch that is not protected by name (`feature/x`,
+  `develop`) has no named risk: its `merge-into` slice lands on the
+  fallback. Whether it deserves an entry is an open catalog decision.
 
 ## Presets
 
@@ -183,19 +213,29 @@ plugins. `branch-protection-write` is in no preset.
 
 ## Tests
 
-`npx vitest run plugins/github` — 71 tests, no network:
+`npx vitest run plugins/github` — 170 tests, no network:
 
-- `plugin.test.ts` (14): kit assertions, coverage with a sample per tool
-  (every catalog risk reachable), fallback-only lint, fallback catching an
-  unconventional branch, preset invariants, credential spec, resource check.
-- `classify.test.ts` (31): the per-tool security suite of `classifyGithub`
+- `plugin.test.ts` (14): kit assertions, coverage with samples per tool
+  (the 14 named risks touched, `fallbackHits` empty), the fallback catching
+  a write on an unconventional branch and a merge into a non-protected one,
+  preset invariants, credential spec, resource check.
+- `risk-catalog.test.ts` (56): the table `[tool, arguments, risks touched]`
+  evaluated through `classifyGithub` and the shipped catalog — at least one
+  row per tool, every risk of the catalog named by a row (protected and
+  feature branches, workflow files, bulk pushes, merges, both mint
+  purposes, the fallback cases).
+- `classify.test.ts` (69): the per-tool security suite of `classifyGithub`
   (reads, branch and file writes, pull requests, comments, releases, rules,
-  mint, retired tools, structural denials).
-- `execute.test.ts` (20): JWT claims (RS256, `iss`, 540 s), mint request
+  mint, retired tools, structural denials: non-canonical paths, refs given
+  as branches, malformed `files`, wildcard characters, repositories outside
+  the mission).
+- `execute.test.ts` (25): JWT claims (RS256, `iss`, 540 s), mint request
   (Bearer JWT, scoping body, PEM un-escaping, missing key names the key,
   kind mismatch, 401 → `UpstreamAuthError`), Octokit over `mockFetch`
   (per-call repository scoping, installation-wide for search, JSON body,
-  403 → `UpstreamAuthError`), branch-protection and release tools, mint tool
+  403 → `UpstreamAuthError`), branch-protection and release tools, the merge
+  bound to the declared base (read then merge; no merge on a mismatch or an
+  unreadable base), `push_files` refusing malformed `files`, mint tool
   (clone/push permission sets, fan-out over mission resources, refusals
   before any call), discovery (metadata, paging to `total_count`, 401).
 - `token-cache.test.ts` (5): a mint per call without a host cache, one mint
@@ -225,10 +265,50 @@ plugins. `branch-protection-write` is in no preset.
 - **`GitHub App token mint failed (404)`** — the installation id is unknown
   to this App (App uninstalled, or the wrong App's key); 401 means the key
   does not match `app_id`.
-- **A repo-scoped call is `denied` by the classifier** — a repository
-  outside the mission's selected resources is refused, and the message names
-  the allowed ones; add the repository to the mission (or the connection's
-  discovered resources are stale: refresh them).
+- **A call names a repository outside the mission** — the classifier
+  refuses with the sentence below. Up to five selected repositories are
+  named; above, the message ends with `N repositories are selected.` Add
+  the repository to the mission (or the connection's discovered resources
+  are stale: refresh them). `github__mint_install_token` with a foreign
+  `repoFullName` gets the same sentence.
+
+  ```text
+  github repository 'acme/lib' is not selected in this mission. Selected: acme/app.
+  ```
+
+- **The mission holds no GitHub repository** — every repo-scoped tool is
+  refused with the first line, the mint tool with the second.
+
+  ```text
+  no GitHub repository is selected in this mission.
+  github__mint_install_token: no GitHub repository is selected in this mission.
+  ```
+
+- **A client still names `dispatch_workflow`, `cancel_workflow_run` or
+  `rerun_workflow_run`** — retired tools, refused with:
+
+  ```text
+  tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the provider that hosts the service.
+  ```
+
+- **The classifier refuses a spelling it cannot place exactly** — send the
+  canonical path, the bare branch name, well-formed `files` entries.
+
+  ```text
+  tool 'github__create_or_update_file' path '/.github/workflows/ci.yml' must be relative, with no empty, '.' or '..' segment and no backslash
+  tool 'github__create_branch' branch 'refs/heads/main' must be a branch name such as 'main', not a ref
+  tool 'github__push_files' requires 'files' to be a non-empty array of { path, content } strings
+  ```
+
+- **A merge fails although the mission accepts it** — the call was
+  classified on the declared base and the pull request targets another
+  branch; nothing was merged. Calling again with the real base classifies
+  the merge on it (`merge-protected` for a protected branch).
+
+  ```text
+  github__merge_pull_request: pull request #7 targets 'main', not the declared base 'feature/x'. Call again with base 'main'.
+  ```
+
 - **A write is refused with `github.uncategorized-write` missing** — the
   branch matches neither the feature/\* conventions nor a protected name,
   so only the fallback caught it. Rename the branch, or have the creator
@@ -240,6 +320,10 @@ plugins. `branch-protection-write` is in no preset.
 
 - The `search_*` queries are not forced to `repo:<mission resource>`; the
   risk `search-global` (blast `account`) is the guard.
+- The base check of `merge_pull_request` is a read followed by the merge,
+  not one atomic call: GitHub's merge endpoint has no "expected base"
+  parameter, so a pull request retargeted between the two requests is
+  merged into its new base.
 - Missing tools identified in v4 (`create_issue`, `update_issue`,
   `create_pull_request_review`, `delete_branch`, `get_repository`…) stay
   out; they would slot into existing risks without a new entry.

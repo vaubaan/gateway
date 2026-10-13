@@ -22,7 +22,7 @@ entities:
 domain[<name>]            envScopable — the sending surface
   ├─ dns-record[*]
   ├─ to-zone[Z]           ★ internal | allowlist | external-unbounded
-  └─ recipient-count[C]   ★ single | multi | batch
+  └─ recipient-count[C]   ★ batch — emitted by a batch send only
 segment[<id>]             envScopable — a contact list (Resend's former "audience")
   ├─ member[<contact>]    ★ a contact's membership of the segment
   └─ broadcast[<id>]      a campaign targeting the segment
@@ -86,20 +86,34 @@ Rules the classifier enforces, all `denied` (audited, never executed):
 
 - a `from` whose domain is not a sending domain of the mission (sends and
   broadcasts), a malformed recipient, a send without recipient;
-- `attachments`, `scheduled_at`, and `send: true` on a broadcast create or
-  update — out of scope in v1, and the latter would bypass `broadcast-send`;
+- `attachments` (anything but an empty list, a non-array value included),
+  `scheduled_at`, and `send: true` on a broadcast create or update — out of
+  scope in v1, and the latter would bypass `broadcast-send`;
+- a `headers` entry naming an envelope field (`To`, `Cc`, `Bcc`, `From`,
+  `Sender`, `Reply-To`, `Return-Path`, `Resent-*`; case-insensitive), a
+  malformed header name, a value that is not a single-line string — the
+  zone is computed from `from`, `to`, `cc` and `bcc` only;
 - a batch with no email or more than 100;
-- a `domain` or `segment_id` outside the mission, a malformed identifier.
+- a `domain` or `segment_id` outside the mission, a malformed identifier
+  (an id made of dots only included).
+
+A single send classifies to one slice, `domain[D].to-zone[Z].W`, whatever
+its number of recipients; a batch adds `domain[D].recipient-count[batch].W`
+per sending domain. No tool emits a slice that reaches the fallback.
 
 `execute` re-runs the classifier before any call, and every broadcast call
 first reads the broadcast upstream and refuses one that targets another
 segment than the one named. List tools return only the mission's domains,
-segments and the broadcasts of those segments.
+segments and the broadcasts of those segments. Only the fields a tool
+declares in its `inputSchema` are forwarded to Resend: an undeclared
+argument (`audience_id`, a template id, …) is dropped, because no classifier
+rule read it. To expose a new Resend field, declare it in `tools.ts` and
+decide how it is classified.
 
 ## Catalog
 
-`src/risk-catalog.yaml`, version 2: 15 live risks, the
-`resend.uncategorized-write` fallback, and two deprecated v4 ids
+`src/risk-catalog.yaml`, version 2, 18 entries: 15 live named risks, the
+`resend.uncategorized-write` fallback, and two deprecated ids
 (`read-audiences` → `read-segments`, `audience-write` → `segment-write`)
 kept so they stay resolvable.
 
@@ -112,11 +126,11 @@ kept so they stay resolvable.
 | `resend.send-email-internal`           | W      | Every recipient in `internal_domains`.                                       |
 | `resend.send-email-allowlist`          | W      | Internal or allow-listed recipients.                                         |
 | `resend.send-email-external-unbounded` | W      | Irreversible, `data: secret`; **env-scoped `[staging, dev]`**.               |
-| `resend.send-batch`                    | W      | `POST /emails/batch`; caps 100/call, 5/min, 50/session.                      |
+| `resend.send-batch`                    | W      | `POST /emails/batch`; at most 100 emails per call.                           |
 | `resend.segment-write`                 | W      | Create or delete a segment.                                                  |
 | `resend.contact-write`                 | W      | Contact CRUD and segment membership — PII.                                   |
 | `resend.broadcast-draft`               | W      | Create or update a draft.                                                    |
-| `resend.broadcast-send`                | W      | Irreversible, `cost: unbounded`; caps 1/min, 5/session.                      |
+| `resend.broadcast-send`                | W      | Irreversible, `cost: unbounded`; rate ceiling 10/min.                        |
 | `resend.broadcast-delete`              | W      | Cancels a scheduled broadcast.                                               |
 | `resend.domain-write`                  | W      | Add, update, remove a sending domain — posture shift.                        |
 | `resend.domain-verify`                 | W      | Trigger DNS verification.                                                    |
@@ -124,27 +138,40 @@ kept so they stay resolvable.
 
 Patterns use `[*]` (exactly one identifier) and explicit verb leaves, so a
 contact write never touches `segment-write` and a broadcast send never
-touches `broadcast-draft` — the v4 catalog's `[**]` patterns overlapped.
+touches `broadcast-draft`.
+
+`send-email-external-unbounded` is the one env-scoped risk. A send with a
+recipient in no zone list is allowed only from a domain labelled `staging`
+or `dev`, by a mission that accepted `resend[staging].…` / `resend[dev].…`.
+From a domain labelled anything else, or not labelled, the engine refuses
+the call whatever the mission accepted — the classifier reports the slice,
+the catalog's `acceptable_in_envs` decides.
 
 ## Presets
 
-| Preset               | Scope                                                                                                                                                    |
-| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `read-only`          | Email status, domains, campaign metadata. No PII, no write.                                                                                              |
-| `developer`          | One token per code project: reads plus transactional sends to internal and allow-listed recipients, generous budgets. No bulk, no PII, no domain change. |
-| `marketing-operator` | Reads including PII, contacts and segments, drafts and single sends `auto`; `broadcast-send`, `send-batch` and `segment-write` need `approval`.          |
-| `domain-admin`       | Read and verify domains freely; `domain-write` needs `approval`. No send.                                                                                |
+| Preset               | Scope                                                                                                                                                      |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read-only`          | Email status, domains, campaign metadata. No PII, no write.                                                                                                |
+| `developer`          | One mission per code project: reads plus transactional sends to internal and allow-listed recipients, generous budgets. No bulk, no PII, no domain change. |
+| `marketing-operator` | Reads including PII, contacts and segments, drafts and single sends `auto`; `broadcast-send`, `send-batch` and `segment-write` need `approval`.            |
+| `domain-admin`       | Read and verify domains freely; `domain-write` needs `approval`. No send.                                                                                  |
 
 Presets are UI sugar: the persisted policy is the explicit enumeration.
 `send-email-external-unbounded` is env-scoped and never offered; a creator
-adds `resend[staging].send-email-external-unbounded` by hand. Values are a
-starting point — ADR `mission-presets-default-values` is deferred.
+adds `resend[staging].send-email-external-unbounded` by hand, so no preset
+can send to a recipient outside the zone lists. Every preset does what its
+row says without the fallback (`tests/unit/mission-evaluation.test.ts`
+evaluates each one call by call). Values are a starting point — ADR
+`mission-presets-default-values` is deferred.
 
 ## Tests
 
-`npx vitest run plugins/resend` — 121 tests: the SDK kit
-(`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
-`assertPresetsValid`), the classifier (cross-cutting rules in
-`plugin.test.ts`, one scenario per tool in `classify.test.ts`), `execute` and
-`discoverResources` against `mockFetch`, the credential spec and presets,
-catalog invariants and the data model. No test ever calls Resend.
+`npx vitest run plugins/resend` — 161 tests: the SDK kit
+(`assertPluginWellFormed`, `assertCatalogCoverage` with no fallback hit,
+`assertNoWildcard`, `assertPresetsValid`), the classifier (cross-cutting
+rules in `plugin.test.ts`, one scenario per tool in `classify.test.ts`),
+`execute` and `discoverResources` against `mockFetch`, the credential spec
+and presets, catalog invariants, the data model, and whole decisions through
+the real catalog and the engine (`mission-evaluation.test.ts`: external
+sends per domain label, each preset call by call). No test ever calls
+Resend.

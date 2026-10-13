@@ -96,7 +96,10 @@ describe('supabase plugin — structural kit', () => {
         supabase__get_anon_key: [{ args: p }],
         supabase__list_tables: [{ args: { ...p, schemas: ['public', 'app'] } }],
         supabase__list_migrations: [{ args: p }],
-        supabase__execute_sql: [{ args: { ...p, query: 'DELETE FROM users;' } }],
+        supabase__execute_sql: [
+          { args: { ...p, query: 'DELETE FROM users;' } },
+          { args: p, expectDenied: true },
+        ],
         supabase__get_advisors: [{ args: { ...p, type: 'security' } }],
         supabase__apply_migration: [
           { args: { ...p, name: 'ddl', query: 'CREATE TABLE x(id int);' } },
@@ -106,6 +109,17 @@ describe('supabase plugin — structural kit', () => {
               name: 'rls',
               query: 'CREATE POLICY p ON users USING (true); UPDATE users SET a = 1;',
             },
+          },
+          { args: { ...p, name: 'grant', query: 'grant select on t to anon;' } },
+          { args: { ...p, name: 'ext', query: 'create extension if not exists vector;' } },
+          { args: { ...p, name: 'fn', query: 'do $$ begin null; end $$;' } },
+          {
+            args: { ...p, name: 'no-sql', query: ['create table x(id int);'] },
+            expectDenied: true,
+          },
+          {
+            args: { ...p, projectRef: STAGING_REF, name: 'alias', query: 'select 1;' },
+            expectDenied: true,
           },
         ],
         supabase__list_buckets: [{ args: p }],
@@ -145,8 +159,14 @@ describe('supabase plugin — structural kit', () => {
           { args: { ...p, phone: '+33612345678' } },
           { args: p },
         ],
-        supabase__update_user: [{ args: { ...p, user_id: 'u1' } }],
-        supabase__delete_user: [{ args: { ...p, user_id: 'u1' } }],
+        supabase__update_user: [
+          { args: { ...p, user_id: 'u1' } },
+          { args: { ...p, user_id: 'bulk' } },
+        ],
+        supabase__delete_user: [
+          { args: { ...p, user_id: 'u1' } },
+          { args: { ...p, user_id: ['u1'] }, expectDenied: true },
+        ],
         supabase__generate_link: [
           { args: { ...p, email: 'a@b.c', type: 'magiclink' } },
           { args: { ...p, email: 'a b', type: 'magiclink' }, expectDenied: true },
@@ -182,13 +202,14 @@ describe('supabase plugin — structural kit', () => {
       { resources: [staging] },
     );
     expect(report.toolsChecked).toBe(44);
+    // No sample lands on the fallback : every write a tool can make has a
+    // dedicated catalog entry (ADR fallback-risk-only-when-uncategorized).
+    expect(report.fallbackHits).toEqual([]);
     // Every catalog risk a tool can reach today is touched. Untouched on
     // purpose : `row-write-one` (no tool writes rows one by one — execute_sql
-    // is read-only) and the three anticipated entries without a tool yet.
+    // is read-only) and `auth.bulk-user-write` (no bulk user tool yet).
     expect(report.risksUntouched).toEqual([
       'supabase.row-write-one',
-      'supabase.db-role-write',
-      'supabase.extension-write',
       'supabase.auth.bulk-user-write',
     ]);
   });
@@ -204,6 +225,11 @@ describe('supabase plugin — structural kit', () => {
     });
     expect(
       supabasePlugin.classify('supabase__get_project', { project_ref: 'a b' }, [staging]),
+    ).toEqual({
+      denied: 'project_ref: missing or malformed.',
+    });
+    expect(
+      supabasePlugin.classify('supabase__get_project', { project_ref: [PROD_REF] }, [staging]),
     ).toEqual({
       denied: 'project_ref: missing or malformed.',
     });

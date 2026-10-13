@@ -8,16 +8,19 @@
  *   - the slice(s) emitted for a given (tool, args) call,
  *   - the account propagation from the zone resource into every slice,
  *   - the denials (unknown tool, no Cloudflare DNS zone in the mission),
- *   - the absence of mode segment (no envScopable).
+ *   - the absence of any segment outside the data model (no mode, no env),
+ *   - the refusal of identifiers that are not safe in a URL path.
  *
- * Zone resolution, the critical overlay and malformed identifiers are
- * covered in depth by `plugin.test.ts`.
+ * Zone resolution and the critical overlay are covered in depth by
+ * `plugin.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 
 import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 
 import { classifyCloudflareDns } from '../../src/classify.ts';
+import { cloudflareDnsDataModel } from '../../src/data-model.ts';
+import { cloudflareDnsTools } from '../../src/tools.ts';
 
 const zone: Resource = {
   provider: 'cloudflare-dns',
@@ -102,10 +105,49 @@ describe('classifyCloudflareDns — writes (record CRUD)', () => {
     ).toEqual(['cloudflare-dns.account[acct_cf123].zone[z1].record[r1].W']);
   });
 
-  test('delete_record(zone_id=z1, record_id=r1) -> zone[z1].record[r1].delete.W', () => {
-    expect(classify('cloudflare_dns__delete_record', { zone_id: 'z1', record_id: 'r1' })).toEqual([
+  test('delete_record(zone_id=z1, record_id=r1, ordinary record) -> zone[z1].record[r1].delete.W', () => {
+    expect(
+      classify('cloudflare_dns__delete_record', { zone_id: 'z1', record_id: 'r1', ...ordinary }),
+    ).toEqual(['cloudflare-dns.account[acct_cf123].zone[z1].record[r1].delete.W']);
+  });
+
+  test('delete_record of an apex / MX / NS record also emits the critical overlay', () => {
+    const expected = [
       'cloudflare-dns.account[acct_cf123].zone[z1].record[r1].delete.W',
-    ]);
+      'cloudflare-dns.account[acct_cf123].zone[z1].record[r1].critical.W',
+    ];
+    for (const record of [
+      { type: 'A', name: 'example.com' },
+      { type: 'TXT', name: '@' },
+      { type: 'A', name: '*.example.com' },
+      { type: 'MX', name: 'mail.example.com' },
+      { type: 'NS', name: 'sub.example.com' },
+    ]) {
+      expect(
+        classify('cloudflare_dns__delete_record', { zone_id: 'z1', record_id: 'r1', ...record }),
+        `${record.type} ${record.name}`,
+      ).toEqual(expected);
+    }
+  });
+
+  test('delete_record without type and name is critical (the record cannot be told apart)', () => {
+    const expected = [
+      'cloudflare-dns.account[acct_cf123].zone[z1].record[r1].delete.W',
+      'cloudflare-dns.account[acct_cf123].zone[z1].record[r1].critical.W',
+    ];
+    expect(classify('cloudflare_dns__delete_record', { zone_id: 'z1', record_id: 'r1' })).toEqual(
+      expected,
+    );
+    expect(
+      classify('cloudflare_dns__delete_record', { zone_id: 'z1', record_id: 'r1', type: 'A' }),
+    ).toEqual(expected);
+    expect(
+      classify('cloudflare_dns__delete_record', {
+        zone_id: 'z1',
+        record_id: 'r1',
+        name: 'www.example.com',
+      }),
+    ).toEqual(expected);
   });
 });
 
@@ -161,12 +203,104 @@ describe('classifyCloudflareDns — account propagation from the zone resource',
     ]);
   });
 
-  test('no mode segment in slices (DNS has no test/live)', () => {
-    const sl = classify('cloudflare_dns__list_zones');
-    // Should NOT contain 'mode' anywhere in the serialized slice
-    for (const s of sl) {
-      expect(s).not.toContain('mode');
+  test('every tool emits slices rooted at the account, made of data-model entities only', () => {
+    const entityNames = new Set(
+      cloudflareDnsDataModel.planes.flatMap((plane) => plane.entities.map((e) => e.name)),
+    );
+    for (const { name: tool } of cloudflareDnsTools) {
+      for (const args of [
+        { zone_id: 'z1', record_id: 'r1' },
+        { zone_id: 'z1', record_id: 'r1', ...ordinary },
+      ]) {
+        const result = classifyCloudflareDns(tool, args, [zone]);
+        if ('denied' in result) throw new Error(`${tool}: unexpected denial: ${result.denied}`);
+        expect(result.slices.length, tool).toBeGreaterThan(0);
+        for (const s of result.slices) {
+          expect(serializeSlice(s), tool).toMatch(/^cloudflare-dns\.account\[/);
+          for (const segment of s.path) {
+            if (segment.kind === 'name') {
+              expect(entityNames.has(segment.value), `${tool}: '${segment.value}'`).toBe(true);
+            }
+          }
+        }
+      }
     }
+  });
+});
+
+describe('classifyCloudflareDns — identifiers that reach the URL path', () => {
+  const RECORD_TOOLS = [
+    'cloudflare_dns__get_record',
+    'cloudflare_dns__update_record',
+    'cloudflare_dns__delete_record',
+  ];
+
+  test('a record_id that is a dot segment or holds a separator is refused', () => {
+    for (const record_id of ['.', '..', '../..', 'r1/../r2', '~', 'a/b', 'a.b', 'r1?x=1', 'r1#x']) {
+      for (const tool of RECORD_TOOLS) {
+        expect(
+          classifyCloudflareDns(tool, { zone_id: 'z1', record_id, ...ordinary }, [zone]),
+          `${tool} ${record_id}`,
+        ).toEqual({ denied: 'record_id: malformed identifier' });
+      }
+    }
+  });
+
+  test('a record_id longer than 64 characters is refused ; a 32-hex Cloudflare id passes', () => {
+    expect(
+      classifyCloudflareDns(
+        'cloudflare_dns__get_record',
+        { zone_id: 'z1', record_id: 'a'.repeat(65) },
+        [zone],
+      ),
+    ).toEqual({ denied: 'record_id: malformed identifier' });
+    expect(
+      classify('cloudflare_dns__get_record', {
+        zone_id: 'z1',
+        record_id: '372e67954025e0ba6aaa6d586b9e0b59',
+      }),
+    ).toEqual([
+      'cloudflare-dns.account[acct_cf123].zone[z1].record[372e67954025e0ba6aaa6d586b9e0b59].R',
+    ]);
+  });
+
+  test('a missing, null or empty record_id is refused', () => {
+    for (const record_id of [undefined, null, '']) {
+      for (const tool of RECORD_TOOLS) {
+        expect(
+          classifyCloudflareDns(tool, { zone_id: 'z1', record_id, ...ordinary }, [zone]),
+          `${tool} ${String(record_id)}`,
+        ).toEqual({ denied: 'record_id: missing' });
+      }
+    }
+  });
+
+  test('a zone_id that is a dot segment, a wildcard or holds a separator is refused', () => {
+    for (const zone_id of ['.', '..', '*', 'z1/..', 'z1/dns_records', 'a.b', '~']) {
+      for (const tool of ['cloudflare_dns__get_zone', 'cloudflare_dns__delete_zone']) {
+        expect(classifyCloudflareDns(tool, { zone_id }, [zone]), `${tool} ${zone_id}`).toEqual({
+          denied: 'zone_id: malformed zone id',
+        });
+      }
+    }
+  });
+
+  test('a mission zone whose ref is not path-safe is never targeted, even as the single zone', () => {
+    const unsafe: Resource = { ...zone, ref: '..' };
+    for (const args of [{}, { zone_id: '..' }]) {
+      expect(classifyCloudflareDns('cloudflare_dns__delete_zone', args, [unsafe])).toEqual({
+        denied: 'zone_id: malformed zone id',
+      });
+    }
+  });
+
+  test('an empty or null zone_id falls back to the single zone of the mission', () => {
+    expect(classify('cloudflare_dns__get_zone', { zone_id: '' })).toEqual([
+      'cloudflare-dns.account[acct_cf123].zone[z1].R',
+    ]);
+    expect(classify('cloudflare_dns__get_zone', { zone_id: null })).toEqual([
+      'cloudflare-dns.account[acct_cf123].zone[z1].R',
+    ]);
   });
 });
 
@@ -197,7 +331,7 @@ describe('classifyCloudflareDns — undeclared tools are denied (fail-loud)', ()
   ]) {
     test(`'${tool}' is denied at the classifier (fail-loud)`, () => {
       const result = classifyCloudflareDns(tool, {}, [zone]);
-      expect(result).toHaveProperty('denied');
+      expect(result).toEqual({ denied: `unknown cloudflare-dns tool '${tool}'.` });
     });
   }
 });

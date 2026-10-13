@@ -57,7 +57,9 @@ returns **one resource per mode**:
 
 The mode is in the ref, in `metadata.mode` and in `env`. `execute` picks the
 key from the ref / metadata, never from the env label, so relabelling the
-environment in the UI cannot switch keys. A key pasted in the wrong field
+environment cannot switch keys — and the classifier refuses a resource whose
+label is not its mode, or whose mode cannot be read, so a live call is never
+judged under a `stripe[test].*` risk. A key pasted in the wrong field
 (`sk_live_…` as `test_key`) is refused before any call; a credential with
 no key at all fails discovery.
 
@@ -82,6 +84,22 @@ Writes (17): `create_product`, `update_product`, `create_price`,
 
 `create_payout` and `delete_customer` are both irreversible and gated `approval` on live in the shipped preset.
 
+The properties a tool declares are its whole argument surface: the
+classifier refuses a call carrying any other key (`expand`, an undeclared
+Stripe parameter) and `execute` forwards the declared ones only. Two
+declared arguments change what a call costs:
+
+- `update_subscription` with `cancel_at_period_end` or `cancel_at` set also
+  needs `subscription-cancel`;
+- `create_invoice` with `auto_advance` set also needs `invoice-finalize`
+  (without it, `execute` sends `auto_advance=false`).
+
+Reads whose answer carries customer fields — `list_invoices`,
+`list_charges`, `list_payment_intents`, and `list_events` unless `type`
+names a family without customer payload (`payout.*`, `balance.*`,
+`product.*`, `price.*`, `plan.*`, `coupon.*`, `promotion_code.*`) — also
+need `read-customer-pii`.
+
 ## Catalog
 
 `src/risk-catalog.yaml`, version 3: 16 named risks and the
@@ -94,17 +112,17 @@ resource the call targets.
 | ------------------------------- | ------ | -------------------------------------------------------------------- |
 | `stripe.read-catalog`           | R      | Products, prices, coupons, promotion codes.                          |
 | `stripe.read-billing-history`   | R      | Customers (business payload), subscriptions, invoices, PI, charges.  |
-| `stripe.read-customer-pii`      | R      | Co-emitted with every customer read.                                 |
+| `stripe.read-customer-pii`      | R      | Co-emitted with every read returning customer fields (see Tools).    |
 | `stripe.read-balance`           | R      | Balance, ledger, events.                                             |
 | `stripe.catalog-write`          | W      | Reversible.                                                          |
 | `stripe.subscription-create`    | W      | Co-emits `payment-intent.W` (immediate proration).                   |
 | `stripe.subscription-update`    | W      | Also `pause_subscription`.                                           |
-| `stripe.subscription-cancel`    | W      | Irreversible.                                                        |
+| `stripe.subscription-cancel`    | W      | Irreversible. Also `update_subscription` scheduling a cancellation.  |
 | `stripe.invoice-create-draft`   | W      | Reversible.                                                          |
-| `stripe.invoice-finalize`       | W      | Notifies the customer, attempts collection.                          |
+| `stripe.invoice-finalize`       | W      | Notifies, attempts collection. Also `create_invoice` + auto_advance. |
 | `stripe.invoice-void`           | W      | Irreversible.                                                        |
-| `stripe.refund-create`          | W      | Irreversible, `cost: unbounded`; caps 1/call, 3/min, 20/session.     |
-| `stripe.payout-create`          | W      | Irreversible, `cost: unbounded`; caps 1/call, 2/min, 5/session.      |
+| `stripe.refund-create`          | W      | Irreversible, `cost: unbounded`; rate ceiling 30/min.                |
+| `stripe.payout-create`          | W      | Irreversible, `cost: unbounded`; rate ceiling 30/min.                |
 | `stripe.customer-delete`        | W      | Irreversible, cancels subscriptions, erases PII.                     |
 | `stripe.webhook-endpoint-write` | W      | Posture shift.                                                       |
 | `stripe.mint-webhook-secret`    | W      | Co-emitted with `create_webhook_endpoint`.                           |
@@ -112,11 +130,11 @@ resource the call targets.
 
 ## Presets
 
-| Preset                | Scope                                                                                                                    |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `read-only`           | Catalog, billing history, balance of the selected mode. No PII (so no customer reads), no write.                         |
-| `test-mode-developer` | Every risk qualified `stripe[test].*`, generous quotas, all `auto`. Nothing on live.                                     |
-| `finance-operator`    | Live reads including PII, subscriptions and invoices `auto`; refund, payout, customer deletion, cancel, void `approval`. |
+| Preset                | Scope                                                                                                                                                     |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read-only`           | Catalog, subscriptions, balance and customer-free events of the selected mode. No PII (so no customer, invoice, charge or payment-intent read), no write. |
+| `test-mode-developer` | Every risk qualified `stripe[test].*`, generous quotas, all `auto`. Nothing on live.                                                                      |
+| `finance-operator`    | Live reads including PII, subscriptions and invoices `auto`; refund, payout, customer deletion, cancel, void `approval`.                                  |
 
 Presets are UI sugar: the persisted policy is the explicit enumeration.
 No preset carries the fallback: the engine counts it only when no dedicated
@@ -124,9 +142,12 @@ entry matched a write.
 
 ## Tests
 
-`npx vitest run plugins/stripe` — 110 tests: the SDK kit
+`npx vitest run plugins/stripe` — 160 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
 `assertPresetsValid`), the classifier's tool-by-tool security suite
-(`classify.test.ts`), the request shapes sent to Stripe (`execute.test.ts`),
-`execute` and `discoverResources` against `mockFetch`, the credential spec
-and presets, and catalog invariants. No test ever calls Stripe.
+(`classify.test.ts`), the decision path through the real catalog and the
+engine — stronger risk on `cancel_at*` / `auto_advance`, PII overlay, mode
+resolution, each preset on test and live (`policy.test.ts`), the request
+shapes sent to Stripe (`execute.test.ts`), `execute` and `discoverResources`
+against `mockFetch`, the credential spec and presets, and catalog
+invariants. No test ever calls Stripe.

@@ -153,6 +153,14 @@ describe('railway risk catalog — shape', () => {
     expect(entry?.vector_overrides).toEqual({ prod: { reversibility: 'costly' } });
   });
 
+  test('catalog_version is 3 : bulk-variables-replace matches the replace marker only', () => {
+    expect(catalog.catalog_version).toBe(3);
+    const entry = catalog.risks.find((r) => r.id === 'railway.bulk-variables-replace');
+    expect(entry?.matches).toBe('railway.project[**].environment[**].service-var-replace.W');
+    // Destructive anywhere : not env-scoped, so no label can make it acceptable by default.
+    expect(entry?.acceptable_in_envs).toBeUndefined();
+  });
+
   test('uncategorized-write is the fallback (matches railway.**.W)', () => {
     const entry = catalog.risks.find((r) => r.id === 'railway.uncategorized-write');
     expect(entry?.matches).toBe('railway.**.W');
@@ -214,6 +222,57 @@ describe('railway risk catalog — runtime risksTouchedBy', () => {
   test('logs read touches read-runtime (broad) + read-logs (specific)', () => {
     const touched = risksTouchedBy(logsReadSlice(), indexed);
     expect(touched).toEqual(['railway.read-runtime', 'railway.read-logs']);
+  });
+});
+
+// ─── Classifier × catalog : which risks each variable write touches ────────
+
+describe('railway risk catalog — variable writes as classified', () => {
+  const indexed = indexCatalog(catalog);
+  const PROJECT = 'p-xyz';
+  const ENV_ID = 'env-1';
+  const resources = [
+    {
+      provider: 'railway',
+      ref: PROJECT,
+      displayName: 'api',
+      env: 'staging',
+      metadata: { environments: [{ id: ENV_ID, name: 'staging' }] },
+    },
+  ];
+
+  function touchedBy(tool: string, extra: Record<string, unknown>): string[] {
+    const args = { projectId: PROJECT, environmentId: ENV_ID, ...extra };
+    const outcome = railwayPlugin.classify(tool, args, resources);
+    if ('denied' in outcome) throw new Error(outcome.denied);
+    return [...new Set(outcome.slices.flatMap((s) => risksTouchedBy(s, indexed)))];
+  }
+
+  test('a write of named variables touches upsert-variable alone', () => {
+    const only = ['railway.upsert-variable'];
+    expect(touchedBy('railway__upsert-variable', { name: 'A', value: '1' })).toEqual(only);
+    expect(touchedBy('railway__delete-variable', { name: 'A' })).toEqual(only);
+    expect(touchedBy('railway__upsert-variables', { variables: { A: '1', B: '2' } })).toEqual(only);
+    expect(
+      touchedBy('railway__upsert-variables', { variables: { A: '1' }, replace: false }),
+    ).toEqual(only);
+  });
+
+  test('a replace of every variable touches upsert-variable and bulk-variables-replace', () => {
+    const both = ['railway.upsert-variable', 'railway.bulk-variables-replace'];
+    expect(
+      touchedBy('railway__upsert-variables', { variables: { A: '1' }, replace: true }),
+    ).toEqual(both);
+    expect(touchedBy('railway__upsert-variables', { variables: {} })).toEqual(both);
+  });
+
+  test('railway-agent touches agent-action, deploy and both variable risks, never the fallback', () => {
+    expect(touchedBy('railway__railway-agent', { message: 'hi' })).toEqual([
+      'railway.agent-action',
+      'railway.deploy',
+      'railway.upsert-variable',
+      'railway.bulk-variables-replace',
+    ]);
   });
 });
 

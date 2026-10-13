@@ -60,7 +60,24 @@ describe('cloudflareDnsDataModel — referential integrity', () => {
     }
   });
 
-  test('declares exactly 10 entities', () => {
-    expect(entities()).toHaveLength(10);
+  test('declares exactly these 10 entities', () => {
+    expect(
+      entities()
+        .map((e) => e.name)
+        .sort(),
+    ).toEqual(
+      [
+        'account',
+        'cache',
+        'critical',
+        'delete',
+        'dnssec',
+        'record',
+        'zone',
+        'zone-export',
+        'zone-import',
+        'zone-settings',
+      ].sort(),
+    );
   });
 });

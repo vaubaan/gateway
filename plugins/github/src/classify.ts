@@ -16,6 +16,13 @@
  * calling (`resource-not-in-mission`), the classifier repeats it so a slice
  * never names a repository outside the mission.
  *
+ * What selects a risk class is either sent to GitHub as it was classified
+ * or verified against GitHub : file paths must be canonical and branches
+ * must be branch names (refused otherwise, so the `.github/workflows/` and
+ * protected-branch patterns cannot be dodged by another spelling), and the
+ * declared base of `merge_pull_request` is compared with the pull request's
+ * real base before the merge (`octokit-dispatch.ts`).
+ *
  * Virtual slice leaves (verbs derived from the data model, see `data-model.ts`) :
  *   - `branch[X].merge-into.W`        — secondary slice of `merge_pull_request`
  *   - `branch[X].propose-to[Y].W`     — secondary slice of `create_pull_request`
@@ -26,7 +33,8 @@
  *
  * Concrete slices never contain wildcards : "list all <entity>" reads emit
  * the entity name without a leaf (`repo[X].branch.R`) and the catalog's
- * terminal `[**]` absorbs the missing segment.
+ * terminal `[**]` absorbs the missing segment ; a `*` in an argument is
+ * replaced like any character outside the ident class (`asIdent`).
  */
 
 import { parseSlice, type ClassifyOutcome, type Resource, type Slice } from '@vaubaan/plugin-sdk';
@@ -40,9 +48,19 @@ const RETIRED_TOOLS = new Set<string>([
   'github__rerun_workflow_run',
 ]);
 
-const RETIRED_HINT = 'tool removed in v4 risk-based model — use cloud-provider tool directly';
+const RETIRED_HINT =
+  'tool retired: this gateway does not dispatch, cancel or re-run GitHub workflows — use the deployment tools of the provider that hosts the service.';
 
 export const MINT_TOOL = 'github__mint_install_token';
+
+/** The branch `merge_pull_request` is classified on when the call declares no `base`. */
+export const DEFAULT_MERGE_BASE = 'main';
+
+/** Refusal when the mission holds no GitHub repository at all. */
+export const NO_REPOSITORY_SELECTED = 'no GitHub repository is selected in this mission.';
+
+/** Up to this many repositories a refusal names them ; above, it gives their count. */
+const MAX_REPOSITORIES_NAMED_IN_REFUSAL = 5;
 
 const GLOBAL_SEARCH = new Set<string>(['github__search_code', 'github__search_issues']);
 
@@ -68,11 +86,29 @@ export function githubRepoRefs(resources: readonly Resource[]): string[] {
   return out;
 }
 
-/** Core classifier over the set of repository refs the mission may touch. */
-export function classifyGithubRefs(
+/**
+ * Refusal for a repository that is not one of the mission's. Names the
+ * selected repositories when they are few, so the agent can correct the call.
+ */
+export function repositoryNotSelectedMessage(ref: string, missionRepos: readonly string[]): string {
+  if (missionRepos.length === 0) return NO_REPOSITORY_SELECTED;
+  const selected =
+    missionRepos.length <= MAX_REPOSITORIES_NAMED_IN_REFUSAL
+      ? `Selected: ${missionRepos.join(', ')}.`
+      : `${missionRepos.length} repositories are selected.`;
+  return `github repository '${ref}' is not selected in this mission. ${selected}`;
+}
+
+/** The base branch a `merge_pull_request` call declares — what it is classified on and checked against. */
+export function declaredMergeBase(args: Readonly<Record<string, unknown>>): string {
+  return strArg(args, 'base') ?? DEFAULT_MERGE_BASE;
+}
+
+/** Core classifier over the repository refs (`owner/repo`) selected in the mission. */
+function classifyGithubRefs(
   tool: string,
   args: Readonly<Record<string, unknown>>,
-  boundRepos: readonly string[],
+  missionRepos: readonly string[],
 ): ClassifyOutcome {
   if (RETIRED_TOOLS.has(tool)) {
     return { denied: RETIRED_HINT };
@@ -87,11 +123,11 @@ export function classifyGithubRefs(
   // Credential mint — the slice depends on `purpose`, and the optional
   // `repoFullName` narrows the fan-out over the mission's repositories.
   if (tool === MINT_TOOL) {
-    return classifyMintInstallToken(args, boundRepos);
+    return classifyMintInstallToken(args, missionRepos);
   }
 
   // Every other tool needs `owner` + `repo` and must resolve to a resource.
-  const repoRef = resolveRepoRef(args, boundRepos);
+  const repoRef = resolveRepoRef(args, missionRepos);
   if (typeof repoRef === 'object') return repoRef;
 
   switch (tool) {
@@ -158,6 +194,7 @@ export function classifyGithubRefs(
     case 'github__create_branch': {
       const branch = strArg(args, 'branch');
       if (!branch) return denied(tool, "requires 'branch'");
+      if (!isBranchName(branch)) return denied(tool, notABranchName(branch));
       return { slices: [build(`${PROVIDER}.repo[${repoRef}].branch[${asIdent(branch)}].W`)] };
     }
     case 'github__create_or_update_file':
@@ -165,18 +202,20 @@ export function classifyGithubRefs(
       const branch = strArg(args, 'branch');
       const path = strArg(args, 'path');
       if (!branch || !path) return denied(tool, "requires 'branch' and 'path'");
+      if (!isBranchName(branch)) return denied(tool, notABranchName(branch));
+      if (!isCanonicalPath(path)) return denied(tool, notACanonicalPath(path));
       return { slices: fileWriteSlices(repoRef, branch, [path]) };
     }
     case 'github__push_files': {
       const branch = strArg(args, 'branch');
       if (!branch) return denied(tool, "requires 'branch'");
+      if (!isBranchName(branch)) return denied(tool, notABranchName(branch));
       const files = readFileEntries(args);
-      if (!files.length) return denied(tool, "requires non-empty 'files' array");
-      const out = fileWriteSlices(
-        repoRef,
-        branch,
-        files.map((f) => f.path),
-      );
+      if (!files) return denied(tool, `requires ${FILES_SHAPE}`);
+      const paths = files.map((f) => f.path);
+      const badPath = paths.find((p) => !isCanonicalPath(p));
+      if (badPath !== undefined) return denied(tool, notACanonicalPath(badPath));
+      const out = fileWriteSlices(repoRef, branch, paths);
       if (files.length > 1) {
         out.push(build(`${PROVIDER}.repo[${repoRef}].branch[${asIdent(branch)}].files-bulk.W`));
       }
@@ -200,9 +239,11 @@ export function classifyGithubRefs(
     case 'github__merge_pull_request': {
       const n = numArg(args, 'pull_number');
       if (n == null) return denied(tool, "requires 'pull_number'");
-      // The base branch is not always in args ; assume the canonical default.
-      // The catalog's `merge-protected` covers `branch[main|master|...].merge-into.W`.
-      const base = strArg(args, 'base') ?? 'main';
+      // The declared base selects the risk class (`merge-protected` covers
+      // `branch[main|master|...].merge-into.W`) ; GitHub never receives it, so
+      // the dispatcher reads the pull request and refuses the merge when its
+      // real base is another branch.
+      const base = declaredMergeBase(args);
       return {
         slices: [
           build(`${PROVIDER}.repo[${repoRef}].pull_request[${n}].W`),
@@ -238,6 +279,7 @@ export function classifyGithubRefs(
     case 'github__update_branch_protection': {
       const branch = strArg(args, 'branch');
       if (!branch) return denied(tool, "requires 'branch'");
+      if (!isBranchName(branch)) return denied(tool, notABranchName(branch));
       return {
         slices: [build(`${PROVIDER}.repo[${repoRef}].branch-protection[${asIdent(branch)}].W`)],
       };
@@ -270,26 +312,26 @@ function fileWriteSlices(repoRef: string, branch: string, paths: readonly string
 
 function classifyMintInstallToken(
   args: Readonly<Record<string, unknown>>,
-  boundRepos: readonly string[],
+  missionRepos: readonly string[],
 ): ClassifyOutcome {
   const purpose = args.purpose;
   if (purpose !== 'clone' && purpose !== 'push') {
     return { denied: `${MINT_TOOL} requires purpose 'clone' or 'push'` };
   }
+  if (missionRepos.length === 0) {
+    return { denied: `${MINT_TOOL}: ${NO_REPOSITORY_SELECTED}` };
+  }
   const repoArg = strArg(args, 'repoFullName');
   if (repoArg) {
-    if (!boundRepos.includes(repoArg)) {
-      return { denied: `repo '${repoArg}' is not bound to this project` };
+    if (!missionRepos.includes(repoArg)) {
+      return { denied: repositoryNotSelectedMessage(repoArg, missionRepos) };
     }
     return { slices: [build(`${PROVIDER}.repo[${repoArg}].install-token[${purpose}].W`)] };
   }
   // No repoFullName → fan out to every repository of the mission (the same
   // set `execute` scopes the minted token to).
-  if (boundRepos.length === 0) {
-    return { denied: `${MINT_TOOL} requires at least one github binding on the project` };
-  }
   return {
-    slices: boundRepos.map((repo) =>
+    slices: missionRepos.map((repo) =>
       build(`${PROVIDER}.repo[${repo}].install-token[${purpose}].W`),
     ),
   };
@@ -299,10 +341,10 @@ function classifyMintInstallToken(
 // Argument helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Resolve `<owner>/<repo>` from args and check it is one of `boundRepos`. */
+/** Resolve `<owner>/<repo>` from args and check it is one of the mission's repositories. */
 function resolveRepoRef(
   args: Readonly<Record<string, unknown>>,
-  boundRepos: readonly string[],
+  missionRepos: readonly string[],
 ): string | { denied: string } {
   const owner = strArg(args, 'owner');
   const repo = strArg(args, 'repo');
@@ -310,8 +352,8 @@ function resolveRepoRef(
     return { denied: "requires string 'owner' and 'repo'" };
   }
   const ref = `${owner}/${repo}`;
-  if (!boundRepos.includes(ref)) {
-    return { denied: `repo '${ref}' is not bound to this project` };
+  if (!missionRepos.includes(ref)) {
+    return { denied: repositoryNotSelectedMessage(ref, missionRepos) };
   }
   return ref;
 }
@@ -336,19 +378,31 @@ export interface FileEntry {
   readonly content: string;
 }
 
-/** The `files` argument of `push_files`, keeping only well-formed entries. */
-export function readFileEntries(args: Readonly<Record<string, unknown>>): FileEntry[] {
-  const raw = args.files;
-  if (!Array.isArray(raw)) return [];
+/** What `push_files` requires of its `files` argument, as worded in refusals. */
+export const FILES_SHAPE = "'files' to be a non-empty array of { path, content } strings";
+
+/**
+ * The `files` argument of `push_files`, or `undefined` unless it is a
+ * non-empty array whose every entry has a string `path` and a string
+ * `content`. The classifier and the dispatcher both read `files` through
+ * this function, so what is classified is what is sent.
+ */
+export function readFileEntries(args: Readonly<Record<string, unknown>>): FileEntry[] | undefined {
+  const raw: unknown = args.files;
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
   const out: FileEntry[] = [];
-  for (const item of raw) {
-    if (item == null || typeof item !== 'object') continue;
-    const obj = item as Record<string, unknown>;
-    const path = typeof obj.path === 'string' ? obj.path : undefined;
-    const content = typeof obj.content === 'string' ? obj.content : '';
-    if (path && path.length > 0) out.push({ path, content });
+  for (const item of raw as readonly unknown[]) {
+    if (!isFileEntry(item)) return undefined;
+    out.push({ path: item.path, content: item.content });
   }
   return out;
+}
+
+function isFileEntry(item: unknown): item is FileEntry {
+  if (item === null || typeof item !== 'object') return false;
+  const path: unknown = 'path' in item ? item.path : undefined;
+  const content: unknown = 'content' in item ? item.content : undefined;
+  return typeof path === 'string' && path.length > 0 && typeof content === 'string';
 }
 
 /** GitHub recognizes workflow files at `.github/workflows/*.yml` and `.yaml`. */
@@ -357,13 +411,42 @@ export function isWorkflowPath(path: string): boolean {
 }
 
 /**
- * Render an arbitrary string as a slice bracket-ident. The DSL accepts
- * `[a-zA-Z0-9_./~*-]+` inside brackets ; characters outside that set are
- * replaced by `-` so the resulting slice still parses. Catalog patterns are
- * broad enough that the exact sanitized value rarely matters.
+ * A repository path in the one spelling the classifier reasons about :
+ * relative, `/`-separated, with no empty, `.` or `..` segment. Any other
+ * spelling is refused rather than normalised, so `isWorkflowPath` never
+ * depends on how GitHub would resolve it.
+ */
+export function isCanonicalPath(path: string): boolean {
+  return (
+    !path.includes('\\') &&
+    path.split('/').every((seg) => seg !== '' && seg !== '.' && seg !== '..')
+  );
+}
+
+function notACanonicalPath(path: string): string {
+  return `path '${path}' must be relative, with no empty, '.' or '..' segment and no backslash`;
+}
+
+/**
+ * A branch name, not a ref : `refs/heads/main` or `heads/main` could reach
+ * `main` under a spelling the protected-branch patterns do not match.
+ */
+function isBranchName(branch: string): boolean {
+  return !branch.startsWith('refs/') && !branch.startsWith('heads/');
+}
+
+function notABranchName(branch: string): string {
+  return `branch '${branch}' must be a branch name such as 'main', not a ref`;
+}
+
+/**
+ * Render an arbitrary string as a slice bracket-ident : characters outside
+ * `[a-zA-Z0-9_./~-]` — the wildcard `*` included — are replaced by `-`, so
+ * the slice parses and stays concrete. Catalog patterns are broad enough
+ * that the exact sanitized value rarely matters.
  */
 function asIdent(raw: string): string {
-  const cleaned = raw.replace(/[^a-zA-Z0-9_./*~-]/g, '-');
+  const cleaned = raw.replace(/[^a-zA-Z0-9_./~-]/g, '-');
   return cleaned.length > 0 ? cleaned : '_';
 }
 

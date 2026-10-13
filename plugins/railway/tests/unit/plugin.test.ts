@@ -56,7 +56,20 @@ const prod: Resource = {
   displayName: 'api (prod)',
   metadata: { environments: [{ id: ENV_PRD, name: 'production' }] },
 };
-const unlabelled: Resource = { provider: 'railway', ref: PROJECT_STG, displayName: 'api' };
+/** Discovered, but the owner has not labelled it yet. */
+const unlabelled: Resource = {
+  provider: 'railway',
+  ref: PROJECT_STG,
+  displayName: 'api',
+  metadata: { environments: [{ id: ENV_STG, name: 'staging' }] },
+};
+/** A project resource whose environments discovery never stored. */
+const undiscovered: Resource = {
+  provider: 'railway',
+  ref: PROJECT_STG,
+  env: 'staging',
+  displayName: 'api',
+};
 const foreign: Resource = { provider: 'vercel', ref: 'prj_1', displayName: 'other' };
 
 const secret = (over: Partial<OAuth2Secret> = {}): OAuth2Secret => ({
@@ -133,6 +146,8 @@ describe('railway plugin — structural kit', () => {
           { args: { environmentId: ENV_STG } },
           // two projects, no projectId : resolved through the discovered environments.
           { args: { environmentId: ENV_PRD }, resources: [staging, prod] },
+          // one project, an environment it does not own : outside the mission.
+          { args: { environmentId: ENV_PRD }, expectDenied: true },
         ],
         'railway__railway-agent': [
           { args: { projectId: PROJECT_STG, environmentId: ENV_STG, message: 'scale the worker' } },
@@ -234,6 +249,45 @@ describe('classifyRailway', () => {
     ]);
   });
 
+  test('accept-deploy with a single mission project still checks the environment belongs to it', () => {
+    expect(slices('railway__accept-deploy', { environmentId: ENV_STG })).toEqual([
+      `railway.project[${PROJECT_STG}].environment[staging].service[*].deployment.W`,
+    ]);
+    // ENV_PRD is an environment of a project the mission does not select.
+    expect(denied('railway__accept-deploy', { environmentId: ENV_PRD })).toBe(
+      `environmentId: not an environment of railway project '${PROJECT_STG}'.`,
+    );
+    expect(denied('railway__accept-deploy', {})).toBe(
+      'environmentId: required, it is the only argument naming the target.',
+    );
+    expect(denied('railway__accept-deploy', { environmentId: 42 })).toBe(
+      'environmentId: malformed ref.',
+    );
+  });
+
+  test('an explicit projectId does not exempt environmentId from the check', () => {
+    const crossed = { projectId: PROJECT_STG, environmentId: ENV_PRD };
+    const refusal = `environmentId: not an environment of railway project '${PROJECT_STG}'.`;
+    expect(denied('railway__redeploy', { ...crossed, serviceId: SERVICE })).toBe(refusal);
+    expect(denied('railway__list-variables', crossed)).toBe(refusal);
+    expect(denied('railway__railway-agent', { ...crossed, message: 'hi' })).toBe(refusal);
+    // Both projects in the mission : the pair must still agree.
+    expect(denied('railway__list-variables', crossed, [staging, prod])).toBe(refusal);
+  });
+
+  test('a project without discovered environments accepts no environmentId', () => {
+    expect(denied('railway__accept-deploy', { environmentId: ENV_STG }, [undiscovered])).toMatch(
+      /^environmentId: the environments of railway project '.+' are unknown/,
+    );
+    expect(denied('railway__list-variables', { environmentId: ENV_STG }, [undiscovered])).toMatch(
+      /^environmentId: the environments of railway project '.+' are unknown/,
+    );
+    // Nothing to bind without an environmentId.
+    expect(slices('railway__list-services', {}, [undiscovered])).toEqual([
+      `railway.project[${PROJECT_STG}].environment[*].service[*].R`,
+    ]);
+  });
+
   test('refuses an unknown project, an ambiguous target, a mission without Railway project', () => {
     expect(denied('railway__list-services', { projectId: PROJECT_PRD })).toBe(
       `railway project '${PROJECT_PRD}' is not a resource of this mission.`,
@@ -279,11 +333,11 @@ describe('classifyRailway', () => {
   });
 
   test('environmentsOf tolerates missing or malformed metadata', () => {
-    expect(environmentsOf(unlabelled)).toEqual([]);
-    expect(environmentsOf({ ...unlabelled, metadata: { environments: 'nope' } })).toEqual([]);
+    expect(environmentsOf(undiscovered)).toEqual([]);
+    expect(environmentsOf({ ...undiscovered, metadata: { environments: 'nope' } })).toEqual([]);
     expect(
       environmentsOf({
-        ...unlabelled,
+        ...undiscovered,
         metadata: { environments: [{ id: 1 }, { id: 'e', name: 'n' }] },
       }),
     ).toEqual([{ id: 'e', name: 'n' }]);

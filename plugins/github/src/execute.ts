@@ -28,7 +28,12 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
-import { MINT_TOOL, githubRepoRefs } from './classify.ts';
+import {
+  MINT_TOOL,
+  NO_REPOSITORY_SELECTED,
+  githubRepoRefs,
+  repositoryNotSelectedMessage,
+} from './classify.ts';
 import { installationTokenFor } from './credential.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 import { installationTokenForCall } from './token-cache.ts';
@@ -100,13 +105,13 @@ async function mintInstallTokenTool(
     throw new Error(`${MINT_TOOL} requires purpose in ['clone','push'], got ${String(purpose)}.`);
   }
   const refs = githubRepoRefs(ctx.resources);
-  if (refs.length === 0) throw new Error(`${MINT_TOOL}: the mission touches no GitHub repository.`);
+  if (refs.length === 0) throw new Error(`${MINT_TOOL}: ${NO_REPOSITORY_SELECTED}`);
 
   const repoFullName = typeof args.repoFullName === 'string' ? args.repoFullName : undefined;
   let scoped: readonly string[];
   if (repoFullName) {
     if (!refs.includes(repoFullName)) {
-      throw new Error(`${MINT_TOOL}: ${repoFullName} is not a GitHub resource of this mission.`);
+      throw new Error(`${MINT_TOOL}: ${repositoryNotSelectedMessage(repoFullName, refs)}`);
     }
     scoped = [repoFullName];
   } else {

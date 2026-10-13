@@ -1,6 +1,6 @@
 /**
  * Catalog invariants the SDK loader does not check for us : the cardinal
- * money-out entries keep their caps, the irreversible set is exact, every
+ * money-out entries keep their rate ceiling and declare no unenforced cap, the irreversible set is exact, every
  * named risk is env-scoped on the Stripe mode, and a handful of slices
  * resolve to the risk a reviewer expects. Structure, patterns, presets and
  * fallback are validated by `loadCatalogFile` at import and by the kit in
@@ -36,21 +36,16 @@ describe('stripe risk-catalog — shape', () => {
     }
   });
 
-  test('the money-out risks carry caps and infra limits', () => {
+  test('the money-out risks carry the rate ceiling, and no cap the door does not enforce', () => {
     for (const id of ['stripe.refund-create', 'stripe.payout-create']) {
       const entry = catalog.risks.find((r) => r.id === id);
       expect(entry, id).toBeDefined();
       expect(entry!.vector.cost).toBe('unbounded');
       expect(entry!.vector.reversibility).toBe('irreversible');
-      expect(entry!.caps?.items_per_call_max).toBe(1);
-      expect(entry!.infra_limits?.calls_per_minute_max).toBe(30);
+      // ADR scope-caps-not-enforced-in-v5-0 : only the ceiling on a mission's rate limit.
+      expect(entry!.infra_limits).toEqual({ calls_per_minute_max: 30 });
+      expect(entry!.caps).toBeUndefined();
     }
-    const refund = catalog.risks.find((r) => r.id === 'stripe.refund-create')!;
-    expect(refund.caps).toEqual({
-      items_per_call_max: 1,
-      calls_per_minute_max: 3,
-      calls_per_session_max: 20,
-    });
   });
 
   test('the irreversible set is exact', () => {
@@ -72,17 +67,33 @@ describe('stripe risk-catalog — slices resolve to the expected risk', () => {
   const touched = (raw: string) => risksTouchedBy(parseSlice(raw), indexed);
   const root = 'stripe.account[acct_x/live].mode[live]';
 
+  // The full set, not `toContain` : a trailing `[**]` matches zero
+  // identifiers and deeper paths alike, so a creation, a verb leaf or an
+  // overlay also touches the entry of the entity it hangs from.
   test.each([
-    [`${root}.product[prod_x].R`, 'stripe.read-catalog'],
-    [`${root}.customer[cus_x].pii.R`, 'stripe.read-customer-pii'],
-    [`${root}.balance.R`, 'stripe.read-balance'],
-    [`${root}.payment-intent[pi_x].charge[ch_x].refund.W`, 'stripe.refund-create'],
-    [`${root}.payout.W`, 'stripe.payout-create'],
-    [`${root}.customer[cus_x].delete.W`, 'stripe.customer-delete'],
-    [`${root}.customer[cus_x].subscription[sub_x].cancel.W`, 'stripe.subscription-cancel'],
-    [`${root}.webhook-endpoint[we_x].secret.W`, 'stripe.mint-webhook-secret'],
-  ])('%s → %s', (raw, risk) => {
-    expect(touched(raw)).toContain(risk);
+    [`${root}.product[prod_x].R`, ['stripe.read-catalog']],
+    [`${root}.customer[cus_x].pii.R`, ['stripe.read-billing-history', 'stripe.read-customer-pii']],
+    [`${root}.balance.R`, ['stripe.read-balance']],
+    [`${root}.payment-intent[pi_x].charge[ch_x].refund.W`, ['stripe.refund-create']],
+    [`${root}.payout.W`, ['stripe.payout-create']],
+    [`${root}.customer[cus_x].delete.W`, ['stripe.customer-delete']],
+    [
+      `${root}.customer[cus_x].subscription.W`,
+      ['stripe.subscription-create', 'stripe.subscription-update'],
+    ],
+    [`${root}.customer[cus_x].subscription[sub_x].W`, ['stripe.subscription-update']],
+    [
+      `${root}.customer[cus_x].subscription[sub_x].cancel.W`,
+      ['stripe.subscription-update', 'stripe.subscription-cancel'],
+    ],
+    [`${root}.customer[cus_x].invoice.W`, ['stripe.invoice-create-draft']],
+    [`${root}.customer[cus_x].invoice[*].finalize.W`, ['stripe.invoice-finalize']],
+    [
+      `${root}.webhook-endpoint[we_x].secret.W`,
+      ['stripe.webhook-endpoint-write', 'stripe.mint-webhook-secret'],
+    ],
+  ])('%s → %j', (raw, risks) => {
+    expect(touched(raw)).toEqual(risks);
   });
 
   test('finalize and void are distinct ; delete is not an update', () => {

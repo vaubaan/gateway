@@ -12,6 +12,7 @@
 # quota, a rate limit and a gate — never a wildcard.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Changing a `matches` pattern : same bump (v3 repointed `bulk-variables-replace`).
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
 # point `replaced_by` at its successor, so existing missions keep working.
 #
@@ -21,7 +22,7 @@
 # touches into the `environment[...]` segment of the slice.
 
 provider: railway
-catalog_version: 2
+catalog_version: 3
 catalog_date: 2026-10-13
 
 risks:
@@ -133,9 +134,12 @@ risks:
     label: 'Replace every environment variable in bulk (replace=true)'
     reason: >-
       DESTRUCTIVE : every variable absent from the payload is deleted.
-      Detected from `replace: true` on `upsert-variables`, or from an
-      unbounded variable payload. Any environment, prod or not.
-    matches: 'railway.project[**].environment[**].service-var[*].W'
+      Detected from `replace` set on `upsert-variables`, from an empty or
+      malformed variable payload, and on every `railway-agent` call. Any
+      environment, prod or not.
+    # The classifier emits this marker slice for the replace case only : a
+    # write of named variables touches `railway.upsert-variable` alone.
+    matches: 'railway.project[**].environment[**].service-var-replace.W'
     vector:
       reversibility: irreversible
       blast: env
@@ -165,8 +169,8 @@ risks:
     reason: >-
       The upstream agent decides alone what to mutate ; no fine
       classification is possible. Catch-all by construction : the classifier
-      also emits the deployment and variable write slices, so a mission must
-      accept those risks too. Explicit opt-in only ; absent from every preset.
+      also emits the deployment, variable write and variable replace slices,
+      so a mission must accept those risks too. Explicit opt-in only ; absent from every preset.
     matches: 'railway.account[**].agent-session.W'
     vector:
       reversibility: costly

@@ -128,17 +128,17 @@ describe('vercel plugin — structural kit', () => {
         vercel__get_runtime_logs: [{ args: { ...p, deploymentId: 'dpl_1' } }],
         vercel__web_fetch_vercel_url: [{ args: { url: 'https://app-git-main.vercel.app/' } }],
         vercel__list_toolbar_threads: [{ args: p }],
-        vercel__get_toolbar_thread: [{ args: { ...p, threadId: 'thr_1' } }],
+        vercel__get_toolbar_thread: [{ args: { ...p, threadId: 'thr_1' }, expectDenied: true }],
         vercel__list_env_vars: [{ args: p }, { args: { ...p, decrypt: true } }],
-        vercel__deploy_to_vercel: [
-          { args: { ...p, target: 'preview' } },
-          { args: { ...p, target: 'production' } },
-          { args: {} },
-        ],
+        vercel__deploy_to_vercel: [{ args: p }, { args: {} }],
         vercel__get_access_to_vercel_url: [{ args: { url: 'https://app-git-main.vercel.app/' } }],
         vercel__upsert_env_var: [
           { args: { ...p, key: 'K', value: 'v', target: ['preview'] } },
           { args: { ...p, key: 'K', value: 'v' } },
+          {
+            args: { ...p, key: 'K', value: 'v', target: ['preview', 'staging'] },
+            expectDenied: true,
+          },
         ],
         vercel__delete_env_var: [{ args: { ...p, id: 'env_1' } }],
         vercel__update_project_settings: [{ args: { ...p, framework: 'nextjs' } }],
@@ -152,27 +152,39 @@ describe('vercel plugin — structural kit', () => {
         ],
         vercel__remove_firewall_rule: [{ args: { ...p, ruleId: 'rule_1' } }],
         vercel__manage_ip_blocking: [{ args: { ...p, operation: 'insert', ip: '10.0.0.1' } }],
+        // The four thread-addressed writes are refused : a thread cannot be bound to a project.
         vercel__change_toolbar_thread_resolve_status: [
-          { args: { ...p, threadId: 'thr_1', resolved: true } },
+          { args: { ...p, threadId: 'thr_1', resolved: true }, expectDenied: true },
         ],
-        vercel__reply_to_toolbar_thread: [{ args: { ...p, threadId: 'thr_1', markdown: 'x' } }],
+        vercel__reply_to_toolbar_thread: [
+          { args: { ...p, threadId: 'thr_1', markdown: 'x' }, expectDenied: true },
+        ],
         vercel__edit_toolbar_message: [
-          { args: { ...p, threadId: 'thr_1', messageId: 'msg_1', markdown: 'x' } },
+          {
+            args: { ...p, threadId: 'thr_1', messageId: 'msg_1', markdown: 'x' },
+            expectDenied: true,
+          },
         ],
         vercel__add_toolbar_reaction: [
-          { args: { ...p, threadId: 'thr_1', messageId: 'msg_1', emoji: '+1' } },
+          {
+            args: { ...p, threadId: 'thr_1', messageId: 'msg_1', emoji: '+1' },
+            expectDenied: true,
+          },
         ],
       },
       { resources: [app, foreign] },
     );
     expect(report.toolsChecked).toBe(31);
-    // Every named risk is reached by at least one tool ; no sample lands on
-    // the fallback (ADR fallback-risk-only-when-uncategorized).
+    // Every named risk but one is reached by at least one tool ; no sample
+    // lands on the fallback (ADR fallback-risk-only-when-uncategorized).
+    // `vercel.toolbar-write` stays in the catalog (risk ids are stable) but no
+    // tool reaches it while the thread-addressed tools are refused.
+    const unreachable = ['vercel.toolbar-write'];
     const named = vercelPlugin.catalog.risks
       .map((r) => r.id)
-      .filter((id) => id !== 'vercel.uncategorized-write');
+      .filter((id) => id !== 'vercel.uncategorized-write' && !unreachable.includes(id));
     expect(report.risksTouched).toEqual(named);
-    expect(report.risksUntouched).toEqual([]);
+    expect(report.risksUntouched).toEqual(unreachable);
     expect(report.fallbackHits).toEqual([]);
   });
 });
@@ -192,6 +204,8 @@ describe('classifyVercel — project resolution against mission resources', () =
     expect(slices('vercel__get_project', {}, [app, foreign])).toEqual([
       'vercel.project[prj_abc].project-settings.R',
     ]);
+    // The URL is not proof of ownership : `execute` verifies the deployment
+    // belongs to this project before the upstream call (binding.test.ts).
     expect(
       slices('vercel__get_access_to_vercel_url', { url: 'https://x.vercel.app/' }, [app]),
     ).toEqual(['vercel.project[prj_abc].deployment[*].bypass-token.W']);
@@ -231,11 +245,14 @@ describe('classifyVercel — project resolution against mission resources', () =
     });
   });
 
-  test('upsert with only unknown targets fans out to the three envs ; prod literal accepted', () => {
-    const out = slices('vercel__upsert_env_var', { key: 'K', value: 'v', target: ['nope'] }, [app]);
-    expect(out).toHaveLength(4);
-    expect(out).toContain('vercel.project[prj_abc].env-var-fan-out.W');
-    expect(slices('vercel__deploy_to_vercel', { target: 'prod' }, [app])).toEqual([
+  test('upsert with an unknown target is refused ; a deploy is on prod whatever the arguments', () => {
+    const refused = classifyVercel(
+      'vercel__upsert_env_var',
+      { key: 'K', value: 'v', target: ['nope'] },
+      [app],
+    );
+    expect('denied' in refused ? refused.denied : null).toMatch(/^target: expected an array of/);
+    expect(slices('vercel__deploy_to_vercel', { target: 'preview' }, [app])).toEqual([
       'vercel.project[prj_abc].env[prod].deployment.W',
     ]);
   });
@@ -341,15 +358,17 @@ describe('executeVercel with mockFetch', () => {
     });
   });
 
-  test('does not inject teamId or projectId into a tool whose schema does not declare them', async () => {
+  test('sends neither teamId nor projectId to a tool whose closed schema has none, even when given', async () => {
     const fetch = mockFetch([
       { method: 'POST', url: VERCEL_MCP_URL, respond: (c) => sseFrame(c, { content: [] }) },
     ]);
-    await vercelPlugin.execute(ctx(fetch), 'vercel__get_access_to_vercel_url', {
-      url: 'https://x.vercel.app/',
+    await vercelPlugin.execute(ctx(fetch), 'vercel__search_vercel_documentation', {
+      topic: 'routing',
+      teamId: 'team_abc',
+      projectId: 'prj_abc',
     });
     expect((fetch.calls[0]!.json as { params: { arguments: unknown } }).params.arguments).toEqual({
-      url: 'https://x.vercel.app/',
+      topic: 'routing',
     });
   });
 
@@ -374,7 +393,9 @@ describe('executeVercel with mockFetch', () => {
       teamId: 'team_other',
     });
     expect(result.isError).toBe(true);
-    expect((result.content[0] as { text: string }).text).toMatch(/team_other/);
+    expect((result.content[0] as { text: string }).text).toMatch(
+      /teamId is fixed by the connection \('team_abc'\)/,
+    );
     expect(fetch.calls).toHaveLength(0);
   });
 
@@ -449,7 +470,7 @@ describe('executeVercel — request shapes of the custom REST tools', () => {
     expect(names).not.toContain('vercel__update_deployment_protection');
   });
 
-  test('forwards an explicit teamId equal to the connection team unchanged', async () => {
+  test('accepts an explicit teamId equal to the connection team', async () => {
     const fetch = mockFetch([
       { method: 'POST', url: VERCEL_MCP_URL, respond: (c) => sseFrame(c, { content: [] }) },
     ]);
@@ -489,7 +510,7 @@ describe('executeVercel — request shapes of the custom REST tools', () => {
       { rootDirectory: 'app' },
     );
     expect(result.isError).toBe(true);
-    expect(text(result)).toMatch(/projectId is required/);
+    expect(text(result)).toMatch(/projectId: argument missing and the mission touches 2/);
     expect(fetch.calls).toHaveLength(0);
   });
 

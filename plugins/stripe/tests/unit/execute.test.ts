@@ -187,6 +187,70 @@ describe('execute — POST form-encoding', () => {
   });
 });
 
+describe('execute — only declared arguments reach Stripe', () => {
+  test('an undeclared argument is dropped from a GET query', async () => {
+    const call = await requestOf(
+      'stripe__list_invoices',
+      { customer: 'cus_1', 'expand[]': 'data.customer', expand: ['data.customer'], created: 1 },
+      { data: [] },
+    );
+    expect(call.url).toBe('https://api.stripe.com/v1/invoices?customer=cus_1');
+  });
+
+  test('an undeclared argument is dropped from a POST body', async () => {
+    const call = await requestOf(
+      'stripe__create_refund',
+      { charge: 'ch_abc', reverse_transfer: true, expand: ['charge.customer'] },
+      { id: 're_new' },
+    );
+    expect(call.body).toBe('charge=ch_abc');
+  });
+
+  test('create_invoice states the draft explicitly, and forwards nothing it does not declare', async () => {
+    const draft = await requestOf(
+      'stripe__create_invoice',
+      { customer: 'cus_1', collection_method: 'charge_automatically', pending: 'include' },
+      { id: 'in_new' },
+    );
+    expect(draft.body).toBe('auto_advance=false&customer=cus_1');
+    const advancing = await requestOf(
+      'stripe__create_invoice',
+      { customer: 'cus_1', auto_advance: true },
+      { id: 'in_new' },
+    );
+    expect(advancing.body).toBe('auto_advance=true&customer=cus_1');
+  });
+
+  test('update_subscription forwards the declared cancellation fields', async () => {
+    const call = await requestOf(
+      'stripe__update_subscription',
+      { id: 'sub_x', cancel_at_period_end: true, cancellation_details: { comment: 'x' } },
+      { id: 'sub_x' },
+    );
+    expect(call.url).toBe('https://api.stripe.com/v1/subscriptions/sub_x');
+    expect(call.body).toBe('cancel_at_period_end=true');
+  });
+
+  test('pause_subscription cannot carry a cancellation', async () => {
+    const call = await requestOf(
+      'stripe__pause_subscription',
+      { id: 'sub_x', pause_collection: { behavior: 'void' }, cancel_at_period_end: true },
+      { id: 'sub_x' },
+    );
+    expect(call.body).toBe('pause_collection%5Bbehavior%5D=void');
+  });
+
+  test('a path id that is missing or made of dots never becomes a collection endpoint', async () => {
+    for (const id of [undefined, '', '.', '..', 42]) {
+      const fetch = mockFetch([]);
+      await expect(
+        stripePlugin.execute(ctx(fetch), 'stripe__update_subscription', { id }),
+      ).rejects.toThrow('stripe: id: missing or malformed');
+      expect(fetch.calls).toHaveLength(0);
+    }
+  });
+});
+
 describe('execute — DELETE routing', () => {
   test('cancel_subscription → DELETE /v1/subscriptions/:id', async () => {
     const call = await requestOf(

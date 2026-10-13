@@ -12,15 +12,15 @@ only.
 
 ## Layout
 
-| File                    | Role                                                                                                                   |
-| ----------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                           |
-| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 2`. Loaded at boot by the SDK; the only catalog artefact.        |
-| `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                   |
-| `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                          |
-| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; `execute` verb routing. |
-| `src/credential.ts`     | `api-key` spec: account email + Management API key; `upstashAuth()` narrows the secret.                                |
-| `src/execute.ts`        | Management API (Basic auth) and Data API (per-database Bearer), redaction, `discoverResources`.                        |
+| File                    | Role                                                                                                                           |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                                   |
+| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 2`. Loaded at boot by the SDK; the only catalog artefact.                |
+| `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                           |
+| `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                                  |
+| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; the command table of `execute`. |
+| `src/credential.ts`     | `api-key` spec: account email + Management API key; `upstashAuth()` narrows the secret.                                        |
+| `src/execute.ts`        | Management API (Basic auth) and Data API (per-database Bearer), redaction, `discoverResources`.                                |
 
 `src/index.ts` resolves the YAML path with the SDK helper
 `catalogPathNextTo(import.meta.url)`, not with
@@ -31,9 +31,9 @@ pattern into an asset URL that Node's `fileURLToPath` rejects (ADR
 ## Data model
 
 ```
-account ─ database[<id>] ─┬─ key-space[<key>] ─┬─ delete     (DEL marker)
+account ─ database[<id>] ─┬─ key-space[<key>] ─┬─ delete     (DEL, UNLINK, HDEL, LPOP, EXPIRE 0… marker)
                           │                    ├─ flush      (FLUSHDB / FLUSHALL marker)
-                          │                    └─ execute    (unknown Redis verb marker)
+                          │                    └─ execute    (script, administration, unknown command marker)
                           ├─ credentials                     (rename, tokens, passwords)
                           ├─ stats
                           └─ backup                          (declared, no tool yet)
@@ -43,7 +43,32 @@ The **database** (Upstash database id) is the resource a connection exposes
 and a mission selects. The **environment** is the owner's label on that
 resource (`development`, `staging`, `prod`): every slice carries
 `database[<id>]`, which the host's default `resourceEnvResolver` maps to the
-label. No plugin-side env hook is needed.
+label. No plugin-side env hook is needed. Every write risk is env-scoped, so
+a write on a database with no label, or with a label outside those three, is
+refused whatever the mission accepts; reads still pass.
+
+## The generic `execute` tool
+
+`execute` is authorized on the command it carries, not on the tool: every
+Redis command belongs to exactly one class of the table in `src/classify.ts`
+(`KNOWN_READS`, `KNOWN_WRITES`, `KNOWN_DELETES`, `KNOWN_DESTRUCTIVE`,
+`KNOWN_ARBITRARY`, `KNOWN_ADMIN`), and the same command costs the same risk
+through a dedicated tool and through `execute`.
+
+| Command                                                           | Risks needed (in the database's environment) |
+| ----------------------------------------------------------------- | -------------------------------------------- |
+| read (`GET`, `SCAN`, `HGETALL`…)                                  | `read-data`                                  |
+| write (`SET`, `INCR`, `HSET`, `EXPIRE k 60`…)                     | `write-data`                                 |
+| delete (`DEL`, `UNLINK`, `GETDEL`, `HDEL`, `LPOP`, `EXPIRE k 0`…) | `write-data` + `delete-data`                 |
+| `FLUSHDB` / `FLUSHALL`                                            | `write-data` + `flush-database`              |
+| script, administration, unknown or unreadable command             | `write-data` + `execute-arbitrary`           |
+| a pipeline or MULTI / EXEC body                                   | the union over its commands                  |
+
+A command the classifier cannot read is never cheaper than the catch-all.
+The executor sends exactly what was classified (`redisCommandOf`) and
+refuses a pipeline-shaped `command`: no pipeline endpoint is wired. To add a
+verb, put it in exactly one set (a verb listed twice fails the import) and
+add a row to `tests/unit/command-table.test.ts`.
 
 ## Credential
 
@@ -75,11 +100,11 @@ Risks (ids are stable, never renamed): `read-database-metadata`,
 as `upstash-redis[staging].write-data` etc. Reads and `create-database`
 (account-rooted) stay account-scoped.
 
-| Preset      | Intent                                                                                                       | Approval-gated by default                                                                                |
-| ----------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
-| `read-only` | Inspect databases, stats and key-value data.                                                                 | —                                                                                                        |
-| `developer` | One token per code project: key-level reads/writes with TTL and targeted DEL on `development` and `staging`. | — (no FLUSH, no arbitrary command, no management write, nothing on `prod`)                               |
-| `operator`  | Developer plus `prod` key writes, FLUSH, arbitrary commands, database create/delete/rename.                  | FLUSH on `staging` / `prod`, every database deletion, every rename, `prod` DEL, `prod` arbitrary command |
+| Preset      | Intent                                                                                      | Approval-gated by default                                                                                   |
+| ----------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `read-only` | Inspect databases, stats and key-value data.                                                | —                                                                                                           |
+| `developer` | Key-level reads/writes with TTL and targeted deletions on `development` and `staging`.      | — (no FLUSH, no arbitrary command, no management write, nothing on `prod`)                                  |
+| `operator`  | Developer plus `prod` key writes, FLUSH, arbitrary commands, database create/delete/rename. | FLUSH and arbitrary commands on `staging` / `prod`, every database deletion, every rename, `prod` deletions |
 
 Budgets are per period; see the YAML for the numbers. Presets are UI sugar;
 the persisted mission policy is always the explicit enumeration. No preset
@@ -101,11 +126,15 @@ npx vitest run plugins/upstash-redis
 ```
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
-`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with one
-sample per tool), the classifier conventions, env resolution through the
-resource label, the credential spec, and `execute` / `discoverResources`
-against `mockFetch`. `classify.test.ts` is the classifier's security suite
-(the expected slice of every tool, `execute` verb routing, denials),
-`risk-catalog.test.ts` lints the loaded catalog and its coverage of every
-tool, and `execute.test.ts` pins the request shapes sent upstream. No test
-reaches the network.
+`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with
+samples for every tool), the classifier conventions, env resolution through
+the resource label, the credential spec, and `execute` / `discoverResources`
+against `mockFetch`. `classify.test.ts` pins the expected slice of every
+tool and the denials; `command-table.test.ts` is the adversarial table of
+the generic `execute` tool (one class per command, deletions in disguise,
+unreadable commands, pipelines); `policy.test.ts` runs the shipped catalog
+and presets through the engine (`evaluateCall` with the gateway's env
+resolver): refusal on an unlabelled database, what each preset allows and
+refuses. `risk-catalog.test.ts` lints the loaded catalog and its coverage of
+every tool, and `execute.test.ts` pins the request shapes sent upstream. No
+test reaches the network.

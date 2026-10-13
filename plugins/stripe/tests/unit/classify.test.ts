@@ -2,7 +2,7 @@
  * Security suite of the Stripe classifier — `classifyStripe(tool, args, resources)`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7.
- * Research : .vaubaan/research/providers/stripe.md §2 + §5.
+ * Handbook : docs/handbook/providers/stripe.md.
  *
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,
@@ -24,7 +24,7 @@ const liveResource: Resource = {
   ref: 'acct_live',
   displayName: 'acct_live',
   env: 'live',
-  metadata: {},
+  metadata: { mode: 'live' },
 };
 
 const testResource: Resource = {
@@ -32,7 +32,7 @@ const testResource: Resource = {
   ref: 'acct_test',
   displayName: 'acct_test',
   env: 'test',
-  metadata: {},
+  metadata: { mode: 'test' },
 };
 
 function classify(
@@ -82,21 +82,30 @@ describe('classifyStripe — reads (billing history)', () => {
     ]);
   });
 
-  test('list_invoices(customer=cus_x) → customer[cus_x].invoice[*].R', () => {
+  test('list_invoices(customer=cus_x) → customer[cus_x].invoice[*].R + the PII overlay', () => {
     expect(classify('stripe__list_invoices', { customer: 'cus_x' })).toEqual([
       'stripe.account[acct_live].mode[live].customer[cus_x].invoice[*].R',
+      'stripe.account[acct_live].mode[live].customer[cus_x].pii.R',
     ]);
   });
 
-  test('list_charges → payment-intent[*].charge[*].R', () => {
+  test('list_charges → payment-intent[*].charge[*].R + the PII overlay', () => {
     expect(classify('stripe__list_charges')).toEqual([
       'stripe.account[acct_live].mode[live].payment-intent[*].charge[*].R',
+      'stripe.account[acct_live].mode[live].customer[*].pii.R',
     ]);
+    expect(classify('stripe__list_charges', { customer: 'cus_x', payment_intent: 'pi_x' })).toEqual(
+      [
+        'stripe.account[acct_live].mode[live].payment-intent[pi_x].charge[*].R',
+        'stripe.account[acct_live].mode[live].customer[cus_x].pii.R',
+      ],
+    );
   });
 
-  test('list_payment_intents → payment-intent[*].R', () => {
+  test('list_payment_intents → payment-intent[*].R + the PII overlay', () => {
     expect(classify('stripe__list_payment_intents')).toEqual([
       'stripe.account[acct_live].mode[live].payment-intent[*].R',
+      'stripe.account[acct_live].mode[live].customer[*].pii.R',
     ]);
   });
 });
@@ -108,10 +117,29 @@ describe('classifyStripe — reads (monitoring)', () => {
     ]);
   });
 
-  test('list_events emits both event[*].R AND balance-transaction[*].R (research §4.4)', () => {
-    const sl = classify('stripe__list_events');
-    expect(sl).toContain('stripe.account[acct_live].mode[live].event[*].R');
-    expect(sl).toContain('stripe.account[acct_live].mode[live].balance-transaction[*].R');
+  test('list_events emits event[*].R, balance-transaction[*].R and the PII overlay', () => {
+    expect(classify('stripe__list_events')).toEqual([
+      'stripe.account[acct_live].mode[live].event[*].R',
+      'stripe.account[acct_live].mode[live].balance-transaction[*].R',
+      'stripe.account[acct_live].mode[live].customer[*].pii.R',
+    ]);
+  });
+
+  test('list_events filtered on a family without customer payload drops the overlay', () => {
+    for (const type of ['payout.paid', 'payout.*', 'balance.available', 'price.updated']) {
+      expect(classify('stripe__list_events', { type })).toEqual([
+        'stripe.account[acct_live].mode[live].event[*].R',
+        'stripe.account[acct_live].mode[live].balance-transaction[*].R',
+      ]);
+    }
+  });
+
+  test('any other type filter keeps the overlay (fail closed)', () => {
+    for (const type of ['customer.created', 'charge.*', '*', 'payout', 'payout.paid,charge.*', 7]) {
+      expect(classify('stripe__list_events', { type })).toContain(
+        'stripe.account[acct_live].mode[live].customer[*].pii.R',
+      );
+    }
   });
 });
 
@@ -173,10 +201,37 @@ describe('classifyStripe — writes (subscriptions)', () => {
   });
 
   test('pause_subscription → subscription update path (not cancel)', () => {
-    // Pause maps to the subscription-update risk (research §6.bis).
+    // Pause maps to the subscription-update risk.
     expect(classify('stripe__pause_subscription', { id: 'sub_x' })).toEqual([
       'stripe.account[acct_live].mode[live].customer[*].subscription[sub_x].W',
     ]);
+  });
+
+  test('update_subscription scheduling a cancellation also emits cancel.W', () => {
+    const updateAndCancel = [
+      'stripe.account[acct_live].mode[live].customer[*].subscription[sub_x].W',
+      'stripe.account[acct_live].mode[live].customer[*].subscription[sub_x].cancel.W',
+    ];
+    for (const extra of [
+      { cancel_at_period_end: true },
+      { cancel_at_period_end: 'false' },
+      { cancel_at_period_end: 0 },
+      { cancel_at: 1893456000 },
+      { cancel_at: 'max_period_end' },
+      { cancel_at_period_end: false, cancel_at: 1893456000 },
+    ]) {
+      expect(classify('stripe__update_subscription', { id: 'sub_x', ...extra })).toEqual(
+        updateAndCancel,
+      );
+    }
+  });
+
+  test('update_subscription clearing a scheduled cancellation stays an update', () => {
+    for (const extra of [{ cancel_at_period_end: false }, { cancel_at: '' }, { cancel_at: null }]) {
+      expect(classify('stripe__update_subscription', { id: 'sub_x', ...extra })).toEqual([
+        'stripe.account[acct_live].mode[live].customer[*].subscription[sub_x].W',
+      ]);
+    }
   });
 });
 
@@ -185,6 +240,20 @@ describe('classifyStripe — writes (invoices)', () => {
     expect(classify('stripe__create_invoice', { customer: 'cus_x' })).toEqual([
       'stripe.account[acct_live].mode[live].customer[cus_x].invoice.W',
     ]);
+  });
+
+  test('create_invoice with auto_advance also emits invoice[*].finalize.W', () => {
+    for (const auto_advance of [true, 'true', 'false', 1, 0]) {
+      expect(classify('stripe__create_invoice', { customer: 'cus_x', auto_advance })).toEqual([
+        'stripe.account[acct_live].mode[live].customer[cus_x].invoice.W',
+        'stripe.account[acct_live].mode[live].customer[cus_x].invoice[*].finalize.W',
+      ]);
+    }
+    for (const auto_advance of [false, null, undefined]) {
+      expect(classify('stripe__create_invoice', { customer: 'cus_x', auto_advance })).toEqual([
+        'stripe.account[acct_live].mode[live].customer[cus_x].invoice.W',
+      ]);
+    }
   });
 
   test('finalize_invoice(id=inv_x) → invoice[inv_x].finalize.W', () => {
@@ -241,25 +310,60 @@ describe('classifyStripe — mode propagation (test vs live)', () => {
     ]);
   });
 
-  test('resource without env falls back to mode[*] (safe wildcard)', () => {
+  const mismatch = {
+    denied: "account: 'acct_live' is a live-mode resource but its environment label is not 'live'",
+  };
+
+  test('a resource without env label is refused, never a mode[*] slice', () => {
     const { env: _env, ...noEnv } = liveResource;
-    expect(classify('stripe__get_balance', {}, [noEnv])).toEqual([
-      'stripe.account[acct_live].mode[*].balance.R',
-    ]);
+    expect(classifyStripe('stripe__get_balance', {}, [noEnv])).toEqual(mismatch);
+    expect(classifyStripe('stripe__get_balance', {}, [{ ...liveResource, env: null }])).toEqual(
+      mismatch,
+    );
   });
 
-  test('resource with a null env falls back to mode[*]', () => {
-    const nullEnv: Resource = { ...liveResource, env: null };
-    expect(classify('stripe__get_balance', {}, [nullEnv])).toEqual([
-      'stripe.account[acct_live].mode[*].balance.R',
-    ]);
+  test('a resource whose label is not its mode is refused', () => {
+    for (const env of ['production', 'test']) {
+      expect(classifyStripe('stripe__get_balance', {}, [{ ...liveResource, env }])).toEqual(
+        mismatch,
+      );
+    }
   });
 
-  test('resource with garbage env falls back to mode[*]', () => {
-    const weirdEnv: Resource = { ...liveResource, env: 'production' };
-    expect(classify('stripe__get_balance', {}, [weirdEnv])).toEqual([
-      'stripe.account[acct_live].mode[*].balance.R',
-    ]);
+  test('a resource whose mode cannot be read is refused ; the label alone is not a mode', () => {
+    const noMode: Resource = { ...liveResource, metadata: {} };
+    expect(classifyStripe('stripe__create_refund', { charge: 'ch_x' }, [noMode])).toEqual({
+      denied: "account: cannot determine the test/live mode of 'acct_live'",
+    });
+  });
+});
+
+describe('classifyStripe — arguments', () => {
+  test('an argument the tool does not declare refuses the call', () => {
+    expect(
+      classifyStripe('stripe__list_invoices', { expand: ['data.customer'] }, [liveResource]),
+    ).toEqual({
+      denied: "expand: not an argument of 'stripe__list_invoices' — nothing classifies it",
+    });
+    expect(
+      classifyStripe('stripe__create_invoice', { customer: 'cus_x', collection_method: 'x' }, [
+        liveResource,
+      ]),
+    ).toEqual({
+      denied:
+        "collection_method: not an argument of 'stripe__create_invoice' — nothing classifies it",
+    });
+  });
+
+  test('an identifier made of dots only is refused (it would collapse the URL path)', () => {
+    for (const id of ['.', '..', '...']) {
+      expect(classifyStripe('stripe__update_subscription', { id }, [liveResource])).toEqual({
+        denied: 'id: malformed identifier',
+      });
+      expect(classifyStripe('stripe__finalize_invoice', { id }, [liveResource])).toEqual({
+        denied: 'id: malformed identifier',
+      });
+    }
   });
 });
 
@@ -286,10 +390,9 @@ describe('classifyStripe — denials', () => {
 });
 
 describe('classifyStripe — confirm/transfer/connect tools fall through to denied', () => {
-  // The classifier knows the declared tools only ; anything else is denied
-  // here (the fallback risk only kicks in if the runtime executes the call
-  // via a non-classifier path). This is fail-loud by design — adding a new
-  // tool requires (1) classifier case + (2) catalog risk entry.
+  // The classifier knows the declared tools only ; anything else is denied.
+  // Fail-loud by design — adding a new tool requires (1) a classifier case
+  // and (2) a catalog risk entry.
   for (const tool of [
     'stripe__confirm_payment_intent',
     'stripe__create_transfer',

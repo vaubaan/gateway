@@ -132,7 +132,7 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
   {
     name: 'upstash_redis__execute',
     description:
-      'Execute a generic Redis command. The command is an array of strings (e.g. ["SET", "key", "value"]). Use this for commands not covered by specific tools.',
+      'Execute one generic Redis command. The command is an array of strings (e.g. ["SET", "key", "value"]). Use this for commands not covered by specific tools. The command is authorized as what it does: a read, a write, a deletion (DEL, UNLINK, EXPIRE with a TTL of 0…), a flush, or — for scripts, administration and any command the gateway does not know — arbitrary execution.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -297,7 +297,8 @@ const DATA_TOOLS: readonly McpToolDeclaration[] = [
   },
   {
     name: 'upstash_redis__expire',
-    description: 'EXPIRE — set a timeout on a key in seconds.',
+    description:
+      'EXPIRE — set a timeout on a key in seconds. A TTL of 0 or less deletes the key at once and is authorized as a deletion.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -245,7 +245,7 @@ export const githubTools: readonly McpToolDeclaration[] = [
   {
     name: 'github__merge_pull_request',
     description:
-      'Merge a pull request. Pass `base` (the PR base branch) so the call is classified on the right branch ; defaults to `main`.',
+      'Merge a pull request. Pass `base`, the base branch of the pull request : the call is classified on it and refused when the pull request targets another branch ; defaults to `main`.',
     inputSchema: {
       type: 'object',
       properties: {

@@ -120,12 +120,38 @@ describe('resend plugin — structural kit', () => {
           { args: { from: FROM, to: 'bob@partner.com', subject: 'hi' } },
           { args: { from: 'x@staging.acme.dev', to: ['who@evil.com'], subject: 'hi' } },
           {
+            args: {
+              from: FROM,
+              to: ['alice@acme.com'],
+              cc: ['bob@acme.io'],
+              bcc: 'carol@acme.com',
+              subject: 'hi',
+              html: '<p>hi</p>',
+              text: 'hi',
+              reply_to: ['help@acme.com'],
+              headers: { 'X-Entity-Ref-ID': 'ref-1' },
+              tags: [{ name: 'kind', value: 'welcome' }],
+            },
+          },
+          {
             args: { from: FROM, to: ['alice@acme.com'], subject: 'hi', attachments: [{}] },
+            expectDenied: true,
+          },
+          {
+            args: { from: FROM, to: ['alice@acme.com'], subject: 'hi', headers: { Bcc: 'x@e.io' } },
             expectDenied: true,
           },
         ],
         resend__send_batch_emails: [
           { args: { emails: [{ from: FROM, to: ['alice@acme.com'], subject: 'hi' }] } },
+          {
+            args: {
+              emails: [
+                { from: FROM, to: ['bob@partner.com'], subject: 'hi' },
+                { from: 'x@staging.acme.dev', to: ['who@evil.com'], subject: 'hi' },
+              ],
+            },
+          },
         ],
         resend__create_domain: [{ args: { name: 'mail.acme.com' } }],
         resend__update_domain: [{ args: { domain: 'notifications.acme.com', tls: 'enforced' } }],
@@ -153,6 +179,8 @@ describe('resend plugin — structural kit', () => {
       { resources: mission },
     );
     expect(report.toolsChecked).toBe(27);
+    // No documented call reaches the fallback : every write slice has a named risk.
+    expect(report.fallbackHits).toEqual([]);
     // Only the two retired catalog ids (account-rooted patterns) are never touched.
     expect(report.risksUntouched).toEqual(['resend.read-audiences', 'resend.audience-write']);
   });
@@ -162,10 +190,7 @@ describe('classifyResend — the from domain is the resource', () => {
   test('a send is rooted at the domain of its from address, display name and case ignored', () => {
     expect(
       slices('resend__send_email', { from: FROM, to: ['alice@acme.com'], subject: 'x' }),
-    ).toEqual([
-      'resend.domain[notifications.acme.com].to-zone[internal].W',
-      'resend.domain[notifications.acme.com].recipient-count[single].W',
-    ]);
+    ).toEqual(['resend.domain[notifications.acme.com].to-zone[internal].W']);
     expect(
       slices('resend__send_email', {
         from: 'NoReply@Staging.Acme.DEV',
@@ -212,7 +237,7 @@ describe('classifyResend — the from domain is the resource', () => {
   });
 });
 
-describe('classifyResend — recipient zones and counts', () => {
+describe('classifyResend — recipient zones', () => {
   const send = (args: Record<string, unknown>) =>
     slices('resend__send_email', { from: FROM, subject: 's', ...args });
 
@@ -232,11 +257,10 @@ describe('classifyResend — recipient zones and counts', () => {
     );
   });
 
-  test('single vs multi recipient count', () => {
-    expect(send({ to: 'alice@acme.com' })[1]).toContain('recipient-count[single]');
-    expect(send({ to: ['alice@acme.com'], cc: ['bob@acme.io'] })[1]).toContain(
-      'recipient-count[multi]',
-    );
+  test('one recipient or several : a single send is its zone slice, never a count marker', () => {
+    const internal = ['resend.domain[notifications.acme.com].to-zone[internal].W'];
+    expect(send({ to: 'alice@acme.com' })).toEqual(internal);
+    expect(send({ to: ['alice@acme.com'], cc: ['bob@acme.io'] })).toEqual(internal);
   });
 
   test('zone lists come from the domain resource and are lower-cased', () => {
@@ -480,7 +504,7 @@ const textOf = (r: { content: readonly unknown[] }) => (r.content[0] as { text: 
 const jsonOf = (r: { content: readonly unknown[] }) => JSON.parse(textOf(r)) as unknown;
 
 describe('executeResend with mockFetch', () => {
-  test('send_email posts JSON with the bearer ; the payload is forwarded as-is', async () => {
+  test('send_email posts JSON with the bearer ; the declared fields are forwarded', async () => {
     const fetch = mockFetch([
       { method: 'POST', url: `${RESEND_API_BASE}/emails`, body: { id: 'em_1' } },
     ]);
@@ -501,6 +525,130 @@ describe('executeResend with mockFetch', () => {
     const emails = [{ from: FROM, to: ['alice@acme.com'], subject: 's' }];
     await resendPlugin.execute(ctxOf(fetch), 'resend__send_batch_emails', { emails });
     expect(fetch.calls[0]!.json).toEqual(emails);
+  });
+
+  test('only the declared fields of a tool reach Resend', async () => {
+    const fetch = mockFetch([
+      { method: 'POST', url: `${RESEND_API_BASE}/emails`, body: { id: 'em_1' } },
+      { method: 'POST', url: `${RESEND_API_BASE}/emails/batch`, body: { data: [] } },
+      { method: 'POST', url: `${RESEND_API_BASE}/domains`, body: { id: 'dom_new' } },
+      { method: 'PATCH', url: `${RESEND_API_BASE}/domains/dom_stg`, body: { id: 'dom_stg' } },
+      { method: 'POST', url: `${RESEND_API_BASE}/contacts`, body: { id: 'ct_new' } },
+      { method: 'PATCH', url: `${RESEND_API_BASE}/contacts/ct_1`, body: { id: 'ct_1' } },
+      { method: 'GET', url: `${RESEND_API_BASE}/contacts?limit=5`, body: { data: [] } },
+      { method: 'POST', url: `${RESEND_API_BASE}/broadcasts`, body: { id: 'brd_2' } },
+      {
+        method: 'GET',
+        url: `${RESEND_API_BASE}/broadcasts/brd_1`,
+        body: { id: 'brd_1', segment_id: 'seg_news' },
+      },
+      { method: 'PATCH', url: `${RESEND_API_BASE}/broadcasts/brd_1`, body: { id: 'brd_1' } },
+    ]);
+    const ctx = ctxOf(fetch);
+    // Fields no tool declares : a legacy audience target, a template, a topic.
+    const undeclared = { audience_id: 'aud_other', template_id: 'tpl_1', topic_id: 'top_1' };
+    const email = {
+      from: FROM,
+      to: ['alice@acme.com'],
+      cc: ['bob@acme.io'],
+      subject: 'Hi',
+      html: '<p>x</p>',
+      text: 'x',
+      reply_to: ['help@acme.com'],
+      headers: { 'X-Entity-Ref-ID': 'ref-1' },
+      tags: [{ name: 'kind', value: 'welcome' }],
+    };
+
+    await resendPlugin.execute(ctx, 'resend__send_email', {
+      ...email,
+      ...undeclared,
+      attachments: [],
+    });
+    expect(fetch.calls[0]!.json).toEqual(email);
+
+    await resendPlugin.execute(ctx, 'resend__send_batch_emails', {
+      emails: [{ ...email, ...undeclared }],
+      ...undeclared,
+    });
+    expect(fetch.calls[1]!.json).toEqual([email]);
+
+    await resendPlugin.execute(ctx, 'resend__create_domain', {
+      name: 'mail.acme.com',
+      region: 'eu-west-1',
+      custom_return_path: 'bounce',
+    });
+    expect(fetch.calls[2]!.json).toEqual({ name: 'mail.acme.com', region: 'eu-west-1' });
+
+    await resendPlugin.execute(ctx, 'resend__update_domain', {
+      domain: 'staging.acme.dev',
+      tls: 'enforced',
+      name: 'other.acme.com',
+    });
+    expect(fetch.calls[3]!.json).toEqual({ tls: 'enforced' });
+
+    await resendPlugin.execute(ctx, 'resend__create_contact', {
+      email: 'new@example.com',
+      first_name: 'New',
+      ...undeclared,
+    });
+    expect(fetch.calls[4]!.json).toEqual({ email: 'new@example.com', first_name: 'New' });
+
+    await resendPlugin.execute(ctx, 'resend__update_contact', {
+      id: 'ct_1',
+      unsubscribed: true,
+      ...undeclared,
+    });
+    expect(fetch.calls[5]!.json).toEqual({ unsubscribed: true });
+
+    await resendPlugin.execute(ctx, 'resend__list_contacts', { limit: 5, ...undeclared });
+
+    await resendPlugin.execute(ctx, 'resend__create_broadcast', {
+      segment_id: 'seg_news',
+      from: FROM,
+      subject: 'News',
+      ...undeclared,
+    });
+    expect(fetch.calls[7]!.json).toEqual({ from: FROM, subject: 'News', segment_id: 'seg_news' });
+
+    await resendPlugin.execute(ctx, 'resend__update_broadcast', {
+      segment_id: 'seg_news',
+      id: 'brd_1',
+      subject: 'v2',
+      ...undeclared,
+    });
+    expect(fetch.calls[9]!.json).toEqual({ subject: 'v2' });
+    expect(fetch.pending()).toEqual([]);
+  });
+
+  test('an envelope header or a non-array attachments value never reaches Resend', async () => {
+    const fetch = mockFetch([]);
+    const ctx = ctxOf(fetch);
+    const base = { from: FROM, to: ['alice@acme.com'], subject: 's' };
+    await expect(
+      resendPlugin.execute(ctx, 'resend__send_email', { ...base, headers: { Bcc: 'x@evil.com' } }),
+    ).rejects.toThrow(/^resend: headers: 'Bcc' is an envelope header/);
+    await expect(
+      resendPlugin.execute(ctx, 'resend__send_email', { ...base, attachments: { path: 'x' } }),
+    ).rejects.toThrow(/^resend: attachments: not supported in v1/);
+    await expect(
+      resendPlugin.execute(ctx, 'resend__send_batch_emails', {
+        emails: [{ ...base, headers: { 'Reply-To': 'x@evil.com' } }],
+      }),
+    ).rejects.toThrow(/^resend: emails\[0\]\.headers: 'Reply-To' is an envelope header/);
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('a created contact without an id is not added to a segment through a guessed URL', async () => {
+    const fetch = mockFetch([
+      { method: 'POST', url: `${RESEND_API_BASE}/contacts`, body: { object: 'contact' } },
+    ]);
+    await expect(
+      resendPlugin.execute(ctxOf(fetch), 'resend__create_contact', {
+        email: 'new@example.com',
+        segment_id: 'seg_news',
+      }),
+    ).rejects.toThrow(/Resend returned no id — it was not added to segment 'seg_news'/);
+    expect(fetch.calls).toHaveLength(1);
   });
 
   test('a call the classifier refuses is never executed', async () => {

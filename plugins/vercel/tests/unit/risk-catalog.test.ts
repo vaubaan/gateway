@@ -25,7 +25,7 @@ import yaml from 'js-yaml';
 import type { Resource, RiskCatalog, RiskEntry, Slice } from '@vaubaan/plugin-sdk';
 import { matches, parseSlice } from '@vaubaan/policy-engine';
 
-import { classifyVercel } from '../../src/classify.ts';
+import { classifyVercel, UNBOUND_TOOLS } from '../../src/classify.ts';
 import { vercelTools } from '../../src/tools.ts';
 
 // ─── Load + parse the YAML catalog ──────────────────────────────────────────
@@ -137,11 +137,7 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
   const base = { projectId: 'prj_abc' } as const;
   switch (tool) {
     case 'vercel__deploy_to_vercel':
-      return [
-        { ...base, target: 'production' },
-        { ...base, target: 'preview' },
-        { ...base, target: 'development' },
-      ];
+      return [{ ...base }];
     case 'vercel__upsert_env_var':
       return [
         { ...base, key: 'K', value: 'v', target: ['preview'] },
@@ -164,13 +160,6 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
       return [{ ...base, deploymentId: 'dep_xyz' }];
     case 'vercel__list_toolbar_threads':
       return [{ ...base }];
-    case 'vercel__get_toolbar_thread':
-    case 'vercel__change_toolbar_thread_resolve_status':
-    case 'vercel__reply_to_toolbar_thread':
-      return [{ ...base, threadId: 'thr_1' }];
-    case 'vercel__edit_toolbar_message':
-    case 'vercel__add_toolbar_reaction':
-      return [{ ...base, threadId: 'thr_1', messageId: 'msg_2' }];
     case 'vercel__add_project_domain':
     case 'vercel__verify_project_domain':
     case 'vercel__remove_project_domain':
@@ -205,7 +194,8 @@ function risksForTool(tool: string): string[] {
 }
 
 describe('vercel risk-catalog — coverage lint (every tool matched by ≥1 non-fallback risk)', () => {
-  for (const tool of vercelTools) {
+  // The thread-addressed toolbar tools are refused by the classifier : no slice, no risk.
+  for (const tool of vercelTools.filter((t) => !UNBOUND_TOOLS.has(t.name))) {
     test(`'${tool.name}' is covered by at least one non-fallback risk`, () => {
       const hit = risksForTool(tool.name);
       expect(hit.length, `tool '${tool.name}' matched zero catalog risks`).toBeGreaterThan(0);

@@ -10,7 +10,7 @@
 # upstream rate limit (1200 req / 5 min per token) suffices.
 #
 # Record writes are layered. `record-write` matches every record write
-# (`record[**].W` is recursive) ; a write on an apex, wildcard, MX or NS
+# (`record[**].W` is recursive) ; a write (deletion included) on an apex, wildcard, MX or NS
 # record also touches `critical-record-write` ; a deletion also touches
 # `record-delete`. A mission needs `record-write` for any record change and
 # the specific risk on top for the sensitive ones.

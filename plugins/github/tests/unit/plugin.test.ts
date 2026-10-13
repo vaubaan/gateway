@@ -2,11 +2,11 @@
  * Mandatory structural suite of the github plugin (spec §10) : the SDK kit,
  * catalog coverage of every declared tool, the fallback lint, the presets
  * and the credential spec. The classifier branches are pinned in
- * `risk-classifier.test.ts` ; upstream calls in `execute.test.ts`.
+ * `classify.test.ts`, the risks each tool touches in `risk-catalog.test.ts`,
+ * upstream calls in `execute.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 
-import { prepareCatalog, risksTouchedByAll } from '@vaubaan/policy-engine';
 import type { Resource } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
@@ -21,7 +21,10 @@ import { appRepo, libRepo } from './fixtures.ts';
 const repo = { owner: 'acme', repo: 'app' };
 const feature = 'feature/test';
 
-/** One realistic call per tool ; branches default to feature/* and main so both write classes are exercised. */
+/**
+ * Realistic calls per tool ; branches are feature/* and protected names, so
+ * both write classes are exercised and no sample lands on the fallback.
+ */
 const samples = {
   github__list_branches: [{ args: { ...repo } }],
   github__list_commits: [{ args: { ...repo } }, { args: { ...repo, sha: feature } }],
@@ -78,7 +81,7 @@ const samples = {
   github__get_branch_protection: [{ args: { ...repo, branch: 'main' } }],
   github__merge_pull_request: [
     { args: { ...repo, pull_number: 1 } },
-    { args: { ...repo, pull_number: 1, base: feature } },
+    { args: { ...repo, pull_number: 1, base: 'release-2026' } },
   ],
   github__delete_file: [
     { args: { ...repo, branch: feature, path: 'a.ts', message: 'm', sha: 'd' } },
@@ -104,39 +107,55 @@ describe('github plugin — structural kit', () => {
     for (const t of githubPlugin.tools) expect(t.name.startsWith('github__')).toBe(true);
   });
 
-  test('every tool classifies to slices the catalog covers, and every risk is reachable', () => {
+  test('every tool classifies to slices a named risk covers ; no sample slice lands on the fallback', () => {
     const report = assertCatalogCoverage(githubPlugin, samples, { resources });
     expect(report.toolsChecked).toBe(26);
+    // The 14 named risks, in catalog order ; the fallback is not among them.
+    expect(report.risksTouched).toEqual([
+      'github.read-code',
+      'github.read-meta',
+      'github.search-global',
+      'github.feature-branch-write',
+      'github.merge-protected',
+      'github.workflow-write-via-file',
+      'github.bulk-file-write',
+      'github.create-pr',
+      'github.comment-write',
+      'github.create-release',
+      'github.delete-release',
+      'github.branch-protection-write',
+      'github.mint-install-token-clone',
+      'github.mint-install-token-push',
+    ]);
     expect(report.risksUntouched).toEqual([]);
-    expect(report.risksTouched).toEqual(githubCatalog.catalog.risks.map((r) => r.id));
+    expect(report.fallbackHits).toEqual([]);
   });
 
-  test('no write tool touches only the fallback risk', () => {
-    const indexed = prepareCatalog(githubCatalog.catalog, { warn: () => undefined });
-    const fallbackOnly: string[] = [];
-    for (const [tool, calls] of Object.entries(samples)) {
-      for (const call of calls) {
-        const out = classifyGithub(tool, call.args, resources);
-        if ('denied' in out) continue;
-        if (!out.slices.some((s) => s.action === 'W')) continue;
-        const touched = risksTouchedByAll(out.slices, indexed);
-        if (touched.every((id) => id === 'github.uncategorized-write')) {
-          fallbackOnly.push(`${tool} ${JSON.stringify(call.args)}`);
-        }
-      }
-    }
-    expect(fallbackOnly).toEqual([]);
+  test('the fallback is the one catalog risk the samples leave out', () => {
+    const named = githubCatalog.catalog.risks.filter((r) => !r.fallback).map((r) => r.id);
+    expect(named).toHaveLength(14);
+    expect(githubCatalog.catalog.risks.filter((r) => r.fallback).map((r) => r.id)).toEqual([
+      'github.uncategorized-write',
+    ]);
   });
 
-  test('a write on an unconventional branch is caught by the fallback alone', () => {
-    const indexed = prepareCatalog(githubCatalog.catalog, { warn: () => undefined });
-    const out = classifyGithub(
-      'github__create_or_update_file',
-      { ...repo, branch: 'wip-x', path: 'a.ts', content: '', message: 'm' },
-      resources,
+  test('writes outside the branch conventions do land on the fallback, slice by slice', () => {
+    const report = assertCatalogCoverage(
+      githubPlugin,
+      {
+        ...samples,
+        github__create_or_update_file: [
+          { args: { ...repo, branch: 'wip-x', path: 'a.ts', content: '', message: 'm' } },
+        ],
+        // A merge into a non-protected branch has no named risk of its own.
+        github__merge_pull_request: [{ args: { ...repo, pull_number: 1, base: feature } }],
+      },
+      { resources },
     );
-    if ('denied' in out) throw new Error(out.denied);
-    expect(risksTouchedByAll(out.slices, indexed)).toEqual(['github.uncategorized-write']);
+    expect(report.fallbackHits).toEqual([
+      "'github__create_or_update_file' sample #1 slice #1",
+      "'github__merge_pull_request' sample #1 slice #2",
+    ]);
   });
 });
 
@@ -244,7 +263,7 @@ describe('github credential spec — app-install', () => {
     expect(
       classifyGithub('github__list_branches', { owner: 'acme', repo: 'lib' }, [appRepo]),
     ).toEqual({
-      denied: "repo 'acme/lib' is not bound to this project",
+      denied: "github repository 'acme/lib' is not selected in this mission. Selected: acme/app.",
     });
     const ok = classifyGithub('github__list_branches', { owner: 'acme', repo: 'lib' }, [
       appRepo,

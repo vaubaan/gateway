@@ -14,6 +14,7 @@ One plane, `runtime`:
 ```
 account → project → environment → service → deployment → {logs, status}
                                            └→ service-var   (service-scoped or project-shared)
+                                           └→ service-var-replace (marker: "replace every variable")
 account → agent-session                                     (the railway-agent meta-tool)
 ```
 
@@ -22,6 +23,13 @@ The **resource** a connection exposes is the Railway **project** (UUID).
 see, with their environments in `metadata.environments` (`[{ id, name }]`).
 The owner labels each project with an environment (`prod`, `staging`,
 `preview`, `dev`); that label is what env-qualified risks resolve against.
+
+**A project must be labelled to run env-scoped operations.** On a project
+with no label, or a label outside those four, every call touching
+`read-variables`, `deploy` or `upsert-variable` is refused whatever the
+mission accepts: `list-variables`, `redeploy`, `accept-deploy`, the
+variable writes and `railway-agent`. Account, runtime and log reads still
+work. The owner fixes it by labelling the project.
 
 ## Tools
 
@@ -37,15 +45,23 @@ The owner labels each project with an environment (`prod`, `staging`,
 | `railway__upsert-variable`, `railway__delete-variable`, `railway__upsert-variables` | GraphQL | `railway[env].upsert-variable`                        |
 | `railway__upsert-variables` with `replace: true`                                    | GraphQL | `…upsert-variable` + `railway.bulk-variables-replace` |
 
+A write of named variables touches `upsert-variable` alone.
+`bulk-variables-replace` is touched only when the call replaces every
+variable: `upsert-variables` with `replace` set (or an empty or malformed
+`variables`), and every `railway-agent` call.
+
 Project-scoped tools take `projectId` (one of the mission's resources).
 When omitted, the mission's single Railway project is used; `accept-deploy`
 carries only `environmentId`, which the classifier maps back to the project
-whose discovered environments contain it.
+whose discovered environments contain it. In every case an `environmentId`
+argument must be one of the discovered environments of the resolved
+project, or the call is refused — refresh the connection's resources after
+creating an environment.
 
 ## Catalog and presets
 
 `src/risk-catalog.yaml` — nine risks plus the mandatory
-`railway.uncategorized-write` fallback, `catalog_version: 2`. Env-scoped
+`railway.uncategorized-write` fallback, `catalog_version: 3`. Env-scoped
 risks (`deploy`, `upsert-variable`, `read-variables`) accept `staging`,
 `preview`, `dev`, `prod` and carry a stricter `prod` vector.
 
@@ -84,7 +100,7 @@ after an `UpstreamAuthError`.
 ## Development
 
 ```
-npx vitest run plugins/railway     # 63 tests, no network
+npx vitest run plugins/railway     # 111 tests, no network
 npx tsc -p plugins/railway/tsconfig.json --noEmit
 ```
 

@@ -13,15 +13,15 @@ Written against [`@vaubaan/plugin-sdk`](../../packages/plugin-sdk) only.
 
 ## Layout
 
-| File                    | Role                                                                                                           |
-| ----------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`          | `definePlugin({...})` — default export `vercelPlugin`.                                                         |
-| `src/risk-catalog.yaml` | 16 risks + fallback, three presets. Loaded at boot by the SDK; the only catalog artefact.                      |
-| `src/data-model.ts`     | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                            |
-| `src/tools.ts`          | 31 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 13 custom REST (`custom-tools.ts`).     |
-| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Project resolution against the mission's resources.                  |
-| `src/credential.ts`     | `api-key` spec: access token + team id; `vercelAuth()` narrows the secret.                                     |
-| `src/execute.ts`        | JSON-RPC forward to the Vercel MCP server, REST for custom tools, `discoverResources` (paged project listing). |
+| File                    | Role                                                                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `src/index.ts`          | `definePlugin({...})` — default export `vercelPlugin`.                                                                                                       |
+| `src/risk-catalog.yaml` | 16 risks + fallback, three presets. Loaded at boot by the SDK; the only catalog artefact.                                                                    |
+| `src/data-model.ts`     | One plane `runtime`, 17 entities; `env` is the env-scopable entity.                                                                                          |
+| `src/tools.ts`          | 31 tools: 18 rewrapped from `mcp.vercel.com` (`upstream-tools.json`) + 13 custom REST (`custom-tools.ts`).                                                   |
+| `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Project resolution against the mission's resources; denies the five thread-addressed tools (`UNBOUND_TOOLS`).      |
+| `src/credential.ts`     | `api-key` spec: access token + team id; `vercelAuth()` narrows the secret.                                                                                   |
+| `src/execute.ts`        | Team and project pinning, deployment binding, JSON-RPC forward to the Vercel MCP server, REST for custom tools, `discoverResources` (paged project listing). |
 
 `src/index.ts` resolves the YAML path from `import.meta.url` as a **string**
 (`VERCEL_CATALOG_PATH`), not with `new URL('./risk-catalog.yaml', import.meta.url)`:
@@ -45,8 +45,15 @@ account ─ team ─ project ─┬─ project-settings
 
 The **project** (`prj_xxx`) is the resource a connection exposes and a mission
 selects. The **environment** is not a resource: it is the closed Vercel triad,
-derived from the call arguments (`target: production | preview | development`)
-and emitted as the `env[<label>]` segment of the slice.
+emitted as the `env[<label>]` segment of the slice. It is read from `target`
+for `upsert_env_var` (an unreadable `target` is refused); `deploy_to_vercel`
+has no such argument upstream and is always classified on `prod`.
+
+A second identifier is never trusted. A tool addressed by a deployment id or
+URL is forwarded only after the deployment was resolved through the REST API
+under the pinned team and found to belong to the mission's project. The five
+tools addressed by a toolbar thread id cannot be bound that way and are
+refused. See the handbook, §2 and §5.
 
 ## Credential
 
@@ -60,8 +67,12 @@ and emitted as the `env[<label>]` segment of the slice.
 There is no OAuth app to register: Vercel's REST API and MCP server are both
 reached with a personal access token, which is what works.
 The token does not refresh (`refresh` is absent); pick an expiration when
-creating it and reconnect when it expires. An explicit `teamId` argument that
-differs from the connection's team is refused before any network call.
+creating it and reconnect when it expires. The team is pinned to the
+credential: a `teamId` argument that is not exactly the connection's team
+(another string, or any non-string) is refused before any network call, and
+the value sent to Vercel is always written from the credential. The four
+rewrapped tools that cannot carry a team are listed with their reason in
+`TEAMLESS_UPSTREAM_TOOLS` (`src/execute.ts`).
 
 ## Catalog and presets
 
@@ -108,9 +119,13 @@ npx vitest run plugins/vercel
 ```
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
-`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with one
-sample per tool), the classifier conventions, the credential spec, and
-`execute` / `discoverResources` against `mockFetch` (including the request
+`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with at
+least one sample per tool), the classifier conventions, the credential spec,
+and `execute` / `discoverResources` against `mockFetch` (including the request
 shapes of the custom REST tools). `classify.test.ts` pins the slices of each
 tool; `risk-catalog.test.ts` lints the YAML catalog against the classifier.
-No test reaches the network.
+`team-pin.test.ts` proves, over every declared tool, that each request
+carries the credential's team and that no team id comes from the arguments;
+`binding.test.ts` covers the deployment binding and the refused thread tools;
+`firewall.test.ts` covers the five firewall tools (slices, risks, request
+shapes). No test reaches the network.

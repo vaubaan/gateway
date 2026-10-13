@@ -30,45 +30,69 @@ The **resource** a connection exposes is the authenticated **mailbox**
 (`ref` = the lower-cased address, from `GET /gmail/v1/users/me/profile`).
 Its `metadata` carries the zoning configuration the owner edits:
 
-| Key                   | Type       | Drives                                                     |
-| --------------------- | ---------- | ---------------------------------------------------------- |
-| `account_email`       | `string`   | `to-zone[self]` (defaults to the ref; set at discovery)    |
-| `internal_domains`    | `string[]` | `from-zone[internal]`, `to-zone[internal]`                 |
-| `allowlist_addresses` | `string[]` | `from-zone[known-external]`, `to-zone[allowlist]`          |
-| `allowlist_domains`   | `string[]` | `from-zone[known-external]`, `to-zone[allowlist]`          |
-| `sensitive_labels`    | `string[]` | `sensitive-label[<label>]` on a `label:` clause naming one |
+| Key                   | Type       | Drives                                                   |
+| --------------------- | ---------- | -------------------------------------------------------- |
+| `account_email`       | `string`   | `to-zone[self]` (defaults to the ref; set at discovery)  |
+| `internal_domains`    | `string[]` | `from-zone[internal]`, `to-zone[internal]`               |
+| `allowlist_addresses` | `string[]` | `from-zone[known-external]`, `to-zone[allowlist]`        |
+| `allowlist_domains`   | `string[]` | `from-zone[known-external]`, `to-zone[allowlist]`        |
+| `sensitive_labels`    | `string[]` | `sensitive-label[<label>]` on every read and label write |
 
 Discovery pre-fills nothing but `account_email`: with empty lists every
-sender is `unknown` and every recipient `external-unbounded`, the safest
-reading. A mission must hold exactly one Gmail resource; two or more is
+sender is `unknown` and every recipient but the mailbox itself is external,
+so every such draft is refused — the safest reading. A mission must hold exactly one Gmail resource; two or more is
 denied as ambiguous (no tool argument selects a mailbox).
 
 ## Tools (modelled, not exposed)
 
-| Tool                                                                                             | Slices → risk(s)                                                                                                                                                         |
-| ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `gmail__describe_zones` (synthetic), `gmail__list_labels`                                        | `label[*].R` → `read-mailbox`                                                                                                                                            |
-| `gmail__search_threads`                                                                          | `read-mailbox` + one `read-from-zone-*` per `from:` zone; `bulk-read` + `read-from-zone-unknown` when non-discriminating; `read-sensitive-label` on a sensitive `label:` |
-| `gmail__get_thread`                                                                              | `read-mailbox` + `read-from-zone-unknown` (worst case: the sender is unknown before the fetch)                                                                           |
-| `gmail__list_drafts`                                                                             | `read-drafts`                                                                                                                                                            |
-| `gmail__create_draft`                                                                            | `draft-write` + `draft-to-zone-{self,internal,allowlist,external-unbounded}` (worst recipient wins)                                                                      |
-| `gmail__label_message`, `gmail__unlabel_message`, `gmail__label_thread`, `gmail__unlabel_thread` | `label-write`                                                                                                                                                            |
+| Tool                                                                                             | Slices → risk(s)                                                                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `gmail__describe_zones` (synthetic), `gmail__list_labels`                                        | `label[*].R` → `read-mailbox`                                                                                                                                                                              |
+| `gmail__search_threads`                                                                          | `read-mailbox` + one `read-from-zone-*` per `from:` zone; `read-from-zone-unknown` + `bulk-read` when the query is not bounded; `read-sensitive-label` for each sensitive label the query does not exclude |
+| `gmail__get_thread`                                                                              | `read-mailbox` + `read-from-zone-unknown` (+ `read-sensitive-label` when the mailbox declares sensitive labels) — worst case: sender and labels are unknown before the fetch                               |
+| `gmail__list_drafts`                                                                             | `read-drafts`                                                                                                                                                                                              |
+| `gmail__create_draft`                                                                            | `draft-write` + `draft-to-zone-{self,internal,allowlist}` (worst recipient wins); **refused** when a recipient is external or does not parse                                                               |
+| `gmail__label_message`, `gmail__unlabel_message`, `gmail__label_thread`, `gmail__unlabel_thread` | `label-write` (+ the fallback `uncategorized-write` when the label is, or may be, a sensitive one); **refused** for `TRASH` / `SPAM` or a missing id                                                       |
 
-A query is non-discriminating when it carries neither `from:` nor `to:` nor
-`label:`. A no-reply local part (`no-reply@`, `notifications@`…) is
-`automated` before any domain match. Any other tool name is `denied`.
+The classifier fails closed — what it cannot read costs the worst case or
+refuses the call:
+
+- **Searches.** A query is _bounded_ only when it is a plain conjunction
+  holding at least one positive `from:<full address>`. An `OR`, a grouping
+  (`( ) { } |`), a quoted phrase, a `from:` that is not one address
+  (`from:support`), or no `from:` at all (`to:` only, `label:` only,
+  `-from:`) is `read-from-zone-unknown` + `bulk-read`. A negation or an
+  operator the parser does not model adds `read-from-zone-unknown`.
+- **Automated senders.** A sender is `automated` when the local part of its
+  full address _is_ a no-reply name (`no-reply@`, `notifications@`…), before
+  any domain match. `supportive.ceo@myorg.com` is `internal`.
+- **Sensitive labels.** On a mailbox that declares some, `get_thread` always
+  carries the marker and a search carries it for each label it does not
+  exclude with `-label:<name>` in a plain conjunction.
+- **Recipients.** One address per string, `addr@example.com` or
+  `Name <addr@example.com>`; anything else (two addresses in one string, an
+  object, a bare word) refuses the call. A recipient outside the internal
+  domains and the allowlists refuses the draft.
+- **Label writes.** `thread_id`, `message_id` (message tools) and `label` are
+  required and validated. A user label id cannot be mapped to a name, so on a
+  mailbox with sensitive labels only system label ids (`INBOX`, `STARRED`,
+  `UNREAD`, `IMPORTANT`…) are plain `label-write`.
+
+Any other tool name is `denied`.
 
 The declarations live in `gmailClassifiedToolDeclarations` (argument names
-`q`, `id`, `thread_id`, `message_id`, `to`/`cc`/`bcc`); the execution phase
+`q`, `id`, `thread_id`, `message_id`, `label`, `to`/`cc`/`bcc`); the execution phase
 moves them into `gmailTools` and maps them onto the official Gmail MCP
 server (`gmailmcp.googleapis.com`).
 
 ## Catalog and presets
 
 `src/risk-catalog.yaml` — fifteen risks plus the mandatory
-`gmail.uncategorized-write` fallback, `catalog_version: 2`. No risk is
-env-scoped (Gmail has no environment). `gmail.read-from-zone-unknown` and
-`gmail.bulk-read` carry `caps` and `infra_limits` (scope-caps ADR). Two
+`gmail.uncategorized-write` fallback, `catalog_version: 3`. No risk is
+env-scoped (Gmail has no environment). No entry declares `caps` or
+`infra_limits`: the door enforces no stateless cap (ADR
+`scope-caps-not-enforced-in-v5-0`), so `gmail.read-from-zone-unknown` and
+`gmail.bulk-read` are bounded by the mission's quota and rate limit only. Two
 entries are new in v5 because the SDK coverage kit showed the v4 catalog
 left slices to the fallback: `read-mailbox` also matches the thread
 containment slice of `get_thread`, and `draft-write` covers the containment
@@ -77,12 +101,13 @@ slice of a draft (the zone risk carries the exfiltration axis).
 | Preset      | Grants                                                                                                                                                               |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `read-only` | Labels, drafts, searches and reads from automated, internal, allowlisted and unknown senders (unknown capped at 20/min). No write, no bulk read, no sensitive label. |
-| `developer` | Read-only + `draft-write` with drafts to self / internal / allowlist, and single-thread labels (`auto`); `bulk-read` and `bulk-label-write` under `approval`.        |
+| `developer` | Read-only + `draft-write` with drafts to self / internal / allowlist, and single-thread labels (`auto`); `bulk-read` under `approval`.                               |
 
 In no preset, on purpose: `gmail.read-sensitive-label` (PII, explicit
 acceptance), `gmail.draft-to-zone-external-unbounded` (the exfiltration
-vector — v4 marked it "never acceptable", which a v5 catalog cannot express,
-so the guard is now the presets and the issuance UI) and the fallback.
+vector — never acceptable: the classifier refuses the draft, and the entry
+is kept `deprecated` because ids are never deleted),
+`gmail.bulk-label-write` (no modelled tool can touch it) and the fallback.
 
 ## Credential — how the company registers its app
 
@@ -106,12 +131,10 @@ incremental-authorization decision for the execution phase.
 
 The plugin implements no provider-specific refresh: Google's refresh is the
 standard `refresh_token` grant the host performs from the spec.
-`refreshGmailCredential` is a rejecting placeholder that only satisfies the
-current SDK check and goes away with the SDK's generic refresh.
 
 ## Development
 
 ```
-npx vitest run plugins/gmail       # 124 tests, no network
+npx vitest run plugins/gmail       # 214 tests, no network
 npx tsc -p plugins/gmail/tsconfig.json --noEmit
 ```

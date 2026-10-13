@@ -101,34 +101,44 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
     expect(hasFallback, 'catalog must declare a gmail.uncategorized-* fallback').toBe(true);
   });
 
-  test('gmail.draft-to-zone-external-unbounded is kept in the catalog, unscoped, and offered by no preset', () => {
-    // "Never acceptable" cannot be written as `acceptable_in_envs: []` : the
-    // loader refuses an empty list, so the guarantee now rests on the
-    // presets (and on the issuance UI) rather than on the catalog.
+  test('gmail.draft-to-zone-external-unbounded is never acceptable : kept, deprecated, in no preset, and refused by the classifier', () => {
+    // "Never acceptable" cannot be written in the catalog (the loader
+    // refuses `acceptable_in_envs: []`), and a mission may enumerate every
+    // risk id. The guarantee is therefore the classifier's : the draft is
+    // refused before any accepted risk is looked at.
     const entry = parsedCatalog.risks.find(
       (r) => r.id === 'gmail.draft-to-zone-external-unbounded',
     );
     expect(entry).toBeDefined();
-    expect(entry!.acceptable_in_envs).toBeUndefined();
+    expect(entry!.deprecated).toBe(true);
     for (const preset of parsedCatalog.presets ?? []) {
       expect(preset.entries.map((e) => e.risk_id)).not.toContain(entry!.id);
     }
+    for (const to of [['stranger@evil.ru'], ['colleague@myorg.com', 'stranger@evil.ru']]) {
+      const outcome = classifyGmail('gmail__create_draft', { to, subject: 's', body: 'b' }, [
+        mailbox,
+      ]);
+      expect(outcome).toEqual({
+        denied:
+          'recipients outside the internal domains and the allowlist: not acceptable for a draft.',
+      });
+    }
   });
 
-  test('gmail.bulk-read carries caps + infra_limits (research §3 + ADR scope-caps)', () => {
-    const entry = parsedCatalog.risks.find((r) => r.id === 'gmail.bulk-read');
-    expect(entry).toBeDefined();
-    expect(entry!.caps).toBeDefined();
-    expect(entry!.infra_limits).toBeDefined();
-    expect(entry!.infra_limits!.items_per_call_max).toBe(500);
-    expect(entry!.infra_limits!.bytes_per_call_max).toBe(10485760);
+  test('gmail.bulk-label-write is kept but offered by no preset (no tool can touch it)', () => {
+    expect(parsedCatalog.risks.some((r) => r.id === 'gmail.bulk-label-write')).toBe(true);
+    for (const preset of parsedCatalog.presets ?? []) {
+      expect(preset.entries.map((e) => e.risk_id)).not.toContain('gmail.bulk-label-write');
+    }
   });
 
-  test('gmail.read-from-zone-unknown carries caps + infra_limits', () => {
-    const entry = parsedCatalog.risks.find((r) => r.id === 'gmail.read-from-zone-unknown');
-    expect(entry).toBeDefined();
-    expect(entry!.caps).toBeDefined();
-    expect(entry!.caps!.temporal_window_days).toBe(7);
+  test('no entry declares a cap the door does not enforce (ADR scope-caps-not-enforced-in-v5-0)', () => {
+    for (const id of ['gmail.bulk-read', 'gmail.read-from-zone-unknown']) {
+      const entry = parsedCatalog.risks.find((r) => r.id === id);
+      expect(entry, id).toBeDefined();
+      expect(entry!.caps, id).toBeUndefined();
+      expect(entry!.infra_limits, id).toBeUndefined();
+    }
   });
 });
 
@@ -190,8 +200,9 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
         { q: 'from:colleague@myorg.com' },
         // unknown sender → from-zone[unknown].
         { q: 'from:random@random.io' },
-        // non-discriminating → bulk-marker + from-zone[unknown].
+        // not bounded by a positive from: → bulk-marker + from-zone[unknown].
         { q: 'is:unread' },
+        { q: 'from:no-reply@github.com OR newer_than:3650d' },
         // sensitive label.
         { q: 'label:LEGAL' },
       ];
@@ -204,16 +215,15 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
         { to: ['colleague@myorg.com'], subject: 's', body: 'b' },
         { to: ['me@myorg.com'], subject: 's', body: 'b' },
         { to: ['partner@vendor.com'], subject: 's', body: 'b' },
-        { to: ['stranger@evil.ru'], subject: 's', body: 'b' },
       ];
     case 'gmail__list_labels':
       return [{}];
     case 'gmail__label_message':
     case 'gmail__unlabel_message':
-      return [{ thread_id: 't1', message_id: 'm1', label: 'Important' }];
+      return [{ thread_id: 't1', message_id: 'm1', label: 'IMPORTANT' }];
     case 'gmail__label_thread':
     case 'gmail__unlabel_thread':
-      return [{ thread_id: 't1', label: 'Important' }];
+      return [{ thread_id: 't1', label: 'IMPORTANT' }];
     case 'gmail__describe_zones':
       return [{}];
     default:
@@ -286,6 +296,23 @@ describe('gmail risk-catalog — risksTouchedBy sanity checks', () => {
   test('a sensitive-label[LEGAL].R slice touches gmail.read-sensitive-label', () => {
     const sl = parseSlice('gmail.mailbox.sensitive-label[LEGAL].R');
     expect(risksTouchedBy(sl, idx)).toContain('gmail.read-sensitive-label');
+  });
+
+  test('a sensitive-label[..].W slice touches only the fallback', () => {
+    for (const raw of [
+      'gmail.mailbox.sensitive-label[LEGAL].W',
+      'gmail.mailbox.sensitive-label[*].W',
+    ]) {
+      expect(risksTouchedBy(parseSlice(raw), idx)).toEqual(['gmail.uncategorized-write']);
+    }
+  });
+
+  test('a label write on a system label touches gmail.label-write alone', () => {
+    const outcome = classifyGmail('gmail__label_thread', { thread_id: 't1', label: 'STARRED' }, [
+      mailbox,
+    ]);
+    if (!('slices' in outcome)) throw new Error('expected slices');
+    expect(outcome.slices.flatMap((sl) => risksTouchedBy(sl, idx))).toEqual(['gmail.label-write']);
   });
 
   test('the fallback catches a wholly novel write slice', () => {

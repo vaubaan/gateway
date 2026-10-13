@@ -18,9 +18,8 @@
  * installation token from the App's private key (`app-install.ts`), scoped
  * to the repositories and permissions the call needs.
  *
- * No PAT path : the v4 adapter accepted a personal access token for E2E runs
- * before an App existed ; the v5 contract carries one `CredentialSpec` per
- * plugin and the on-prem instance always registers its own App (ADR D3).
+ * No personal-access-token path : the contract carries one `CredentialSpec`
+ * per plugin and the on-prem instance always registers its own App (ADR D3).
  */
 
 import {

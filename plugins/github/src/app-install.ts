@@ -56,8 +56,8 @@ export interface MintInstallationTokenInput extends AppCredentials {
    * App was granted at install). Omit for the App's full granted permissions.
    */
   permissions?: Record<string, string>;
-  /** The injected fetch (`ctx.fetch`). Defaults to the global fetch when a caller passes none. */
-  fetchImpl?: typeof fetch;
+  /** The injected fetch (`ctx.fetch`) ; the plugin never falls back to the global one. */
+  fetchImpl: typeof fetch;
   signal?: AbortSignal;
 }
 
@@ -85,14 +85,13 @@ export async function mintInstallationToken(
   input: MintInstallationTokenInput,
 ): Promise<ScopedInstallationToken> {
   const jwt = await buildAppJwt(input);
-  const fetchFn = input.fetchImpl ?? fetch;
   const body: Record<string, unknown> = {};
   if (input.repositories && input.repositories.length > 0) body.repositories = input.repositories;
   if (input.permissions && Object.keys(input.permissions).length > 0) {
     body.permissions = input.permissions;
   }
   const hasBody = Object.keys(body).length > 0;
-  const res = await fetchFn(
+  const res = await input.fetchImpl(
     `${GITHUB_API_BASE}/app/installations/${encodeURIComponent(input.installationId)}/access_tokens`,
     {
       method: 'POST',

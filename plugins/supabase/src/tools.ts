@@ -75,7 +75,7 @@ export const supabaseTools: readonly McpToolDeclaration[] = [
   {
     name: 'supabase__apply_migration',
     description:
-      'Apply a database migration (DDL, optionally with DML backfill). Backed by POST /v1/projects/{ref}/database/migrations. Embedded DML and RLS statements are classified as additional risks.',
+      'Apply a database migration. Backed by POST /v1/projects/{ref}/database/migrations. Every migration is a schema write ; statements that write rows or drop a table or a column, change RLS, privileges or extensions each add the matching risk, and SQL the gateway cannot read statement by statement (DO blocks, function, trigger or view definitions, CTEs, SET, COPY, bare SELECT) requires all of them. Migrations that write or destroy rows are refused on prod-labelled projects : keep prod migrations to plain DDL and RLS statements.',
     inputSchema: {
       type: 'object',
       properties: {
