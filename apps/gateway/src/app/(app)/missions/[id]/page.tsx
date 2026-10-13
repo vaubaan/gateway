@@ -1,7 +1,8 @@
 /**
  * `/missions/<id>` — one mission: state, connections and resources, policy
- * per risk with what is left this period, token prefix with Rotate, and the
- * bootstrap kit with the secret masked (spec §4.2, §4.4).
+ * per risk with what is left this period, token prefix with Rotate, the
+ * bootstrap kit with the secret masked (spec §4.2, §4.4), and the link to the
+ * mission's session page.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -57,11 +58,16 @@ export default async function MissionPage({ params }: Props) {
             {mission.name} <StateBadge state={state} />
           </h1>
         </div>
-        <MissionActions
-          missionId={mission.id}
-          name={mission.name}
-          active={state.kind === 'active'}
-        />
+        <div className={styles.actions}>
+          <Link href={`/missions/${mission.id}/session`} className={styles.secondaryLink}>
+            Session
+          </Link>
+          <MissionActions
+            missionId={mission.id}
+            name={mission.name}
+            active={state.kind === 'active'}
+          />
+        </div>
       </div>
 
       <Card>

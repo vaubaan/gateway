@@ -15,6 +15,7 @@
 import { MemoryCacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
+import { createAuditModule, type AuditModule } from '../audit';
 import { createAuthModule, type AuthModule, type OidcOptions } from '../auth';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
@@ -59,6 +60,8 @@ export interface GatewayRoot {
   readonly missions: MissionsModule;
   /** Requests to the creator: inbox, claim decisions, expiry sweeper, request URL (P1.7). */
   readonly requests: RequestsModule;
+  /** Audit search, mission session view, retention sweeper (P1.8). */
+  readonly audit: AuditModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
   close(): Promise<void>;
@@ -158,6 +161,11 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     logger,
   });
 
+  // The retention purge runs once before the instance serves, then on a timer
+  // that `close()` stops (handbook audit).
+  const audit = createAuditModule({ config, store, missions: missions.service, logger });
+  await audit.retention.start();
+
   const root: GatewayRoot = {
     config,
     configFile,
@@ -173,10 +181,12 @@ export async function buildRoot(deps: RootDeps = {}): Promise<GatewayRoot> {
     connections,
     missions,
     requests,
+    audit,
     build,
     startedAt: new Date(),
     async close() {
       requests.sweeper.stop();
+      await audit.retention.stop();
       await store.close();
     },
   };

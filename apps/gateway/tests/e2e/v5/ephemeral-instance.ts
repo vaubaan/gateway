@@ -14,7 +14,8 @@
  *     who signs in next, a token check through `MissionService.verifyToken`,
  *     and the executor's side of "exhaust and claim" — calls recorded
  *     straight through the budget's `SessionService.recordCall`, as the
- *     execution door does.
+ *     execution door does — and `seed-day`, a day of calls with their audit
+ *     entries on a new mission, for the audit pages.
  *
  * Run by Playwright's `webServer` (see `playwright.config.ts` next to this
  * file) after `next build`. Never part of the image.
@@ -30,9 +31,18 @@ import { budgetMissionOf, SessionService } from '../../../src/server/budget';
 import { getRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { SlidingWindowRateLimiter } from '../../../src/server/rate-limit';
 import type { UserRecord } from '../../../src/server/store/types';
+import { auditRigOn, seedDayOfWork } from '../../integration/audit/support';
 import { FakeIdp } from '../../integration/auth/fake-idp';
 import { seedInstance, testRootDeps } from '../../integration/missions/support';
-import { CONTROL_PREFIX, E2E_USER, IDP_ISSUER, instancePort, PUBLIC_URL } from './instance';
+import { seedConnection } from '../../../src/server/missions/testing';
+import {
+  CONTROL_PREFIX,
+  E2E_AUDIT_USER,
+  E2E_USER,
+  IDP_ISSUER,
+  instancePort,
+  PUBLIC_URL,
+} from './instance';
 
 const CLIENT = { clientId: 'vaubaan-gateway-e2e', clientSecret: 'e2e-client-secret' };
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
@@ -199,6 +209,24 @@ async function main(): Promise<void> {
           reason: verification.outcome === 'retired' ? verification.reason : null,
           mission_status: verification.outcome === 'unknown' ? null : verification.mission.status,
         });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/seed-day` && req.method === 'POST') {
+        // A user of their own, with their own GitHub connection: the open
+        // requests this leaves behind are in nobody else's inbox.
+        const user = await root.store.users.upsertFromIdp({
+          subject: E2E_AUDIT_USER.sub,
+          email: E2E_AUDIT_USER.email,
+          displayName: E2E_AUDIT_USER.name,
+        });
+        const github = await seedConnection(root.store, {
+          provider: 'github',
+          owner: { kind: 'user', id: user.id },
+          displayName: 'grace-org',
+          resources: [{ ref: 'grace/app' }],
+        });
+        const rig = auditRigOn(root, { ...seeded, ada: user, github });
+        sendJson(res, 200, await seedDayOfWork(rig));
         return;
       }
       await handle(req, res);

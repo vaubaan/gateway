@@ -23,6 +23,8 @@ const SCANNED = [
   'apps/gateway/src/instrumentation.ts',
   'apps/gateway/src/app/healthz',
   'apps/gateway/src/app/(app)/connections',
+  'apps/gateway/src/app/(app)/audit',
+  'apps/gateway/src/app/(app)/missions/[id]/session',
   'apps/gateway/src/app/admin/(guarded)/provider-apps',
   'apps/gateway/src/components/connections',
   'apps/gateway/src/components/shell',

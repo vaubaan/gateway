@@ -403,7 +403,9 @@ table) and on the owner's "Refresh discovery"
 (`ConnectionService.discover` → `POST /connections/<id>/discover`), with a
 30 s timeout. On `UpstreamAuthError` the broker refreshes once and the
 discovery is retried; a second rejection leaves the connection `expired`
-and the provider's message in the outcome. A failed refresh never throws:
+and the provider's message in the outcome. The owner's refresh is audited
+(`resources-discovered` on the connection: `ok`, `count`, `error`), whether
+it succeeded or not. A failed refresh never throws:
 it is recorded in `metadata.discovery` and shown; the known resources stay
 as they were. Resources of another provider or without a ref are ignored
 with a warning; a plugin `env` that is not a valid label
@@ -432,7 +434,9 @@ refs and cascades to mission selections) is no longer used by any flow.
 
 Owner edits (`ConnectionService.updateResource` → `POST
 /connections/<id>/resources/<resourceId>`), all validated before the first
-write:
+write, and audited: one `resource-edited` entry on the connection with the
+resource's editable fields `before` and `after` (none when the save changed
+nothing; handbook [audit](audit.md)):
 
 - `display_name` — `setResourceDisplayName`; blank hands the name back to
   discovery;

@@ -86,8 +86,18 @@ export async function completeLogin(
 
   let bootstrapRevoked = false;
   if (authority.isOperator && (await deps.bootstrap.state()).status === 'active') {
-    await deps.bootstrap.revoke();
+    const revoked = await deps.bootstrap.revoke();
     bootstrapRevoked = true;
+    await deps.store.auditWriter.write({
+      kind: 'admin',
+      ts: revoked.status === 'revoked' ? revoked.revokedAt : new Date().toISOString(),
+      user_id: user.id,
+      act: 'config-changed',
+      object: { type: 'instance-config', id: 'bootstrap' },
+      before: { status: 'active' },
+      after: { status: revoked.status },
+      delegated_client_id: null,
+    });
     deps.logger.info('bootstrap token revoked after the first operator sign-in', {
       user_id: user.id,
     });

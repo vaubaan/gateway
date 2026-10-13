@@ -41,6 +41,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Unanswered requests expire after `requests.expiry` (default 24 h). Approval requests are
   listed but cannot be decided yet.
 
+- **Audit search, mission session page, retention (P1.8).** `/audit` searches the audit by
+  mission, user, connection, tool, decision and period, newest first, with keyset paging. A
+  user sees the entries about the missions they created and the connections they or their
+  groups own; an operator also sees every administrative entry; nobody sees arguments, only
+  their hash. `/missions/<id>/session` (linked from the mission page) shows the counters per
+  risk and per period with what is left, the gate of each risk, the open requests as links,
+  the agent labels seen and the event timeline. Audit entries older than `retention_days`
+  (default 90) are purged at boot and then hourly. Refreshing a connection's discovery and
+  editing a resource now leave an administrative entry (`resources-discovered`,
+  `resource-edited` with the fields before and after), as does the revocation of the
+  bootstrap token by the first operator sign-in; a structural test enumerates the service
+  methods and fails when a mutation writes none.
 - **Declarative installation verification in the plugin SDK (P1.4b).** The `app-install`
   `CredentialSpec` accepts an optional `userVerification` block (authorization-code
   parameter, token endpoint, installations endpoint, response shape, pagination) that the

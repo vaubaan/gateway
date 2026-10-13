@@ -126,6 +126,11 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      the inbox's expiry sweeper (an `unref`-ed interval); `root.close()`
      stops it before closing the store. The per-IP limit of `/r/*` goes
      through `root.rateLimiter` and reads `trusted_proxies`;
+   - `createAuditModule()` → `root.audit` (`query`, `sessions`,
+     `retention`; handbook [audit](audit.md)); the root awaits
+     `retention.start()`, which purges the audit entries older than
+     `retention_days` once and then every hour, and `root.close()` stops
+     that timer before closing the store;
    - the boot line `composition root ready` (`store`, `schema_version`,
      `plugins`, `build`) closes the sequence.
 5. On `ConfigError`, `bootOrExit()` prints the error to stderr with a

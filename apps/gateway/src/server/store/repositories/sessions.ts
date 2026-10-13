@@ -101,6 +101,15 @@ export interface SessionsRepo {
   resetCounters(sessionId: string, periodStart: Iso, riskId?: RiskId): Promise<number>;
   recordEvent(sessionId: string, event: NewEvent): Promise<EventRecord>;
   listEvents(sessionId: string, options?: ListEventsOptions): Promise<EventRecord[]>;
+  /**
+   * The session timeline, newest first (`ts DESC, id DESC`), paged by keyset: `before`
+   * is the last event of the previous page. `listEvents` with `order: 'desc'` gives the
+   * same first page; this one resumes after a position.
+   */
+  listRecentEvents(
+    sessionId: string,
+    options: { before?: { ts: Iso; id: string }; limit: number },
+  ): Promise<EventRecord[]>;
 }
 
 export interface ListEventsOptions {
@@ -200,6 +209,14 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
   const eventsAll = db.prepare<[string, number], EventRow>(
     `SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events
      WHERE session_id = ? ORDER BY ts, id LIMIT ?`,
+  );
+  const EVENT_COLUMNS = 'id, session_id, ts, kind, risk_id, actor_user_id, details_json';
+  const eventsRecent = db.prepare<[string, number], EventRow>(
+    `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? ORDER BY ts DESC, id DESC LIMIT ?`,
+  );
+  const eventsRecentBefore = db.prepare<[string, string, string, string, number], EventRow>(
+    `SELECT ${EVENT_COLUMNS} FROM events
+     WHERE session_id = ? AND (ts < ? OR (ts = ? AND id < ?)) ORDER BY ts DESC, id DESC LIMIT ?`,
   );
 
   function getOrCreateSync(missionId: string, now: Iso): SessionRecord {
@@ -337,6 +354,13 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
         )
         .all(...params)
         .map(eventToRecord);
+    },
+    async listRecentEvents(sessionId, options) {
+      const { before, limit } = options;
+      const rows = before
+        ? eventsRecentBefore.all(sessionId, before.ts, before.ts, before.id, limit)
+        : eventsRecent.all(sessionId, limit);
+      return rows.map(eventToRecord);
     },
   };
 }

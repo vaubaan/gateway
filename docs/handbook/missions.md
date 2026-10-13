@@ -55,7 +55,8 @@ apps/gateway/src/app/(app)/missions/
   new/mission-form.tsx   the one-page creation screen (client)
   new/form-state.ts      state and transitions of the form (pure, unit-tested)
   new/risk-detail.tsx    per-risk table of one connection (client)
-  [id]/page.tsx          /missions/<id> — detail
+  [id]/page.tsx          /missions/<id> — detail (links to its session page)
+  [id]/session/page.tsx  /missions/<id>/session — counters, requests, timeline (handbook audit)
   [id]/mission-actions.tsx  Duplicate / Rotate / Revoke (client)
   bootstrap-kit-view.tsx BootstrapKitView, RevealDialog (client)
 apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [id]/revoke — one-line adapters

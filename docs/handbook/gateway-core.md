@@ -145,7 +145,8 @@ upstream_error IS NOT NULL`.
   `refusal_reason = <text>`.
 
 **Administrative entry**: `ts`, `user_id`, `act` (`AdminAct` union:
-connection created/reconnected/transferred/revoked, share created/revoked,
+connection created/reconnected/refused/transferred/revoked, resources
+discovered, resource edited, share created/revoked,
 mission issued/rotated/revoked/closed, budget extended, period reset,
 expiry extended, gate opened, approval granted, request refused,
 delegation granted/revoked, config changed), `object {type, id}` with

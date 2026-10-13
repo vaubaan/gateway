@@ -78,8 +78,9 @@ decides lives under `server/auth` and is tested without Next.
 
 The transition happens on the **first IdP sign-in of a user matching the admin
 rule**: `completeLogin()` writes `bootstrap.revoked_at` into `instance_config`
-(`BootstrapService.revoke()`), the token is refused from then on even if it is
-still present in the configuration, and open bootstrap sessions fail their next
+(`BootstrapService.revoke()`) and an administrative audit entry
+(`config-changed` on `instance-config` / `bootstrap`, in that user's name); the
+token is refused from then on even if it is still present in the configuration, and open bootstrap sessions fail their next
 `authorizeAdmin()` check. A non-operator signing in first does not revoke
 anything (that would lock the instance). When the IdP is set in the mounted
 configuration there is no token at all (`InstanceConfig.bootstrapToken` is
