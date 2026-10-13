@@ -280,9 +280,11 @@ Instance                          (one company, one trust domain)
 
 **Connection**: `active` → `expired` (the provider rejected the
 credential and refresh failed) → `active` after reconnection by any
-owner; `revoked` by an owner, terminal. An `expired` or `revoked`
-connection makes every call of the missions that carry it fail, with a
-structured refusal naming the connection. A connection whose owner group
+owner; `revoked` by an owner, terminal. An `expired` connection makes
+every call of the missions that carry it fail with
+`connection-unavailable`, naming the connection, until someone
+reconnects it. A `revoked` connection grounds no authority any more: the
+missions that carry it become `orphaned`. A connection whose owner group
 becomes empty (all members removed from the IdP) becomes `unowned`:
 missions keep running, but nobody can share or reconnect until the
 operator reassigns an owner. This is the operator's only act on the
@@ -305,7 +307,12 @@ revoke the missions the target already issued; it turns them `orphaned`
 - `orphaned` — the upstream authority vanished (share revoked,
   connection revoked, creator removed from the IdP or dropped from the
   owner group that grounded their authority). Every call is refused. The
-  creator, or an owner of the connection, may close it.
+  state is **derived from the creator's current authority, never
+  stored as a verdict**: if the authority comes back (the share is made
+  again, the creator is back in the owner group at the next sign-in),
+  the mission serves calls again, with its session and counters intact.
+  A revoked connection never comes back, so its missions stay orphaned.
+  The creator, or an owner of the connection, may close it.
 - `revoked` — by the creator, terminal.
 
 **Request**: `open` → `granted` | `refused` | `expired` (unanswered
