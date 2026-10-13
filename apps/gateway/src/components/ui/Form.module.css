@@ -1,0 +1,91 @@
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: var(--space-10);
+  align-items: start;
+}
+.steps {
+  min-width: 0;
+}
+/* The rail stays in view: the summary and the one action are never a scroll away. */
+.rail {
+  position: sticky;
+  top: var(--space-6);
+  display: flex;
+  min-width: 0;
+  /* Shorter than the window by what stands above the form (the header of the page), so that
+     the foot of the rail — the action — is in view before any scrolling too. */
+  max-height: calc(100vh - 168px);
+}
+/* The box of the rail: its head and its foot (the action) stay, what is between scrolls. */
+.rail > * {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  min-height: 0;
+}
+.rail > * > * {
+  flex: none;
+}
+.rail > * > :not(:first-child):not(:last-child) {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+.step {
+  margin-top: 30px;
+}
+.step:first-child {
+  margin-top: 0;
+}
+.head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.head > :first-child {
+  width: 20px;
+  height: 20px;
+}
+.title {
+  flex: none;
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-strong);
+  white-space: nowrap;
+}
+.hint {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  min-width: 0;
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: var(--text-sm);
+  text-align: right;
+}
+.columns {
+  display: grid;
+  grid-template-columns: 200px 200px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+@media (max-width: 1100px) {
+  .form {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-8);
+  }
+  .rail {
+    position: static;
+    display: block;
+    max-height: none;
+  }
+}
+@media (max-width: 720px) {
+  .columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

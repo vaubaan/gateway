@@ -15,6 +15,7 @@ import type {
   IssuanceConnection,
   IssuanceResource,
   MissionDraft,
+  PreviewIssue,
   ResolvedDraftConnection,
   SkippedPresetEntry,
 } from '@/server/missions/model';
@@ -51,20 +52,20 @@ export interface ConnectionState {
 }
 
 export const PERIOD_CHOICES = [
-  { id: 'hour', label: 'Quotas reload every hour', seconds: 3600 },
-  { id: 'day', label: 'Quotas reload every day', seconds: 86_400 },
-  { id: 'week', label: 'Quotas reload every week', seconds: 604_800 },
-  { id: 'one-off', label: 'One-off — quotas never reload', seconds: null },
+  { id: 'hour', label: 'Every hour', seconds: 3600 },
+  { id: 'day', label: 'Every day', seconds: 86_400 },
+  { id: 'week', label: 'Every week', seconds: 604_800 },
+  { id: 'one-off', label: 'Never: one set of limits for the whole mission', seconds: null },
 ] as const;
 export type PeriodChoice = (typeof PERIOD_CHOICES)[number]['id'];
 
 export const EXPIRY_CHOICES = [
-  { id: 'never', label: 'Never expires', days: null },
-  { id: '1d', label: 'Expires in 24 hours', days: 1 },
-  { id: '7d', label: 'Expires in 7 days', days: 7 },
-  { id: '30d', label: 'Expires in 30 days', days: 30 },
-  { id: '90d', label: 'Expires in 90 days', days: 90 },
-  { id: 'custom', label: 'Expires on a date…', days: null },
+  { id: 'never', label: 'Never', days: null },
+  { id: '1d', label: 'In 24 hours', days: 1 },
+  { id: '7d', label: 'In 7 days', days: 7 },
+  { id: '30d', label: 'In 30 days', days: 30 },
+  { id: '90d', label: 'In 90 days', days: 90 },
+  { id: 'custom', label: 'On a date…', days: null },
 ] as const;
 export type ExpiryChoice = (typeof EXPIRY_CHOICES)[number]['id'];
 
@@ -78,7 +79,7 @@ export interface FormState {
   readonly showExperimental: boolean;
 }
 
-/** Daily reload is the usual shape of "one token per code project". */
+/** Limits that reset every day are the usual shape of "one key per code project". */
 export const DEFAULT_PERIOD: PeriodChoice = 'day';
 export const DEFAULT_EXPIRY: ExpiryChoice = 'never';
 const MS_PER_DAY = 86_400_000;
@@ -168,7 +169,7 @@ export function describeSkipped(skipped: readonly SkippedPresetEntry[]): string 
     ...new Set(skipped.filter((s) => s.reason === 'unresolvable-env').map((s) => s.env)),
   ];
   const parts: string[] = [];
-  if (outside > 0) parts.push(`${outside} outside your authority`);
+  if (outside > 0) parts.push(`${outside} outside what you may allow`);
   if (envs.length > 0) {
     const named = envs.filter((e): e is string => e !== null).map((e) => `"${e}"`);
     const unresolved = skipped.length - outside;
@@ -179,7 +180,7 @@ export function describeSkipped(skipped: readonly SkippedPresetEntry[]): string 
         : `${unresolved} ${need} a selected resource with an environment label`,
     );
   }
-  return `${skipped.length} preset ${skipped.length === 1 ? 'entry' : 'entries'} left out: ${parts.join('; ')}.`;
+  return `${skipped.length} ${skipped.length === 1 ? 'permission' : 'permissions'} of the preset left out here: ${parts.join('; ')}.`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -248,8 +249,11 @@ export interface PresetExplanation {
   readonly skipped: readonly SkippedFamily[];
 }
 
+/** Why a permission the catalog lists cannot be given here: the reader's own ceiling on the account. */
+export const OUTSIDE_AUTHORITY = 'outside what you may allow';
+
 function skippedWhy(skipped: SkippedPresetEntry, envs: readonly string[]): string {
-  if (skipped.reason === 'outside-authority') return 'outside your authority';
+  if (skipped.reason === 'outside-authority') return OUTSIDE_AUTHORITY;
   const named = skipped.env ? [skipped.env] : envs;
   return named.length > 0
     ? `needs a selected resource labelled ${named.map((env) => `"${env}"`).join(' or ')}`
@@ -311,39 +315,58 @@ export function explainPreset(
   };
 }
 
-/** A preset in a few words, for the choice itself: `10 risks · 2 need approval`. */
-export function presetChoiceLabel(explanation: PresetExplanation): string {
-  const total = explanation.auto.length + explanation.approval.length;
-  const parts = [`${total} ${total === 1 ? 'risk' : 'risks'}`];
-  if (explanation.approval.length > 0) {
-    parts.push(
-      `${explanation.approval.length} ${explanation.approval.length === 1 ? 'needs' : 'need'} approval`,
-    );
-  }
-  return parts.join(' · ');
-}
-
-function counted(count: number, one: string, many: string): string {
-  return `${count} ${count === 1 ? one : many}`;
+/** How many permissions a preset yields here: what its choice says beside its name. */
+export function presetWidth(explanation: PresetExplanation): number {
+  return explanation.auto.length + explanation.approval.length;
 }
 
 /**
- * The counts of a preset's reading, in one sentence — what stays on screen
- * when its lists are not spread out. Every part of the reading is counted,
- * including what the preset could not apply here, so nothing disappears.
+ * Why a preset would allow nothing with this selection and this authority, or
+ * `null` when it allows something. The choice is then drawn as unavailable and
+ * says this sentence, instead of being offered and yielding an empty mission.
  */
-export function presetDigest(explanation: PresetExplanation): string {
-  const parts = [
-    `${explanation.auto.length} allowed without asking`,
-    `${counted(explanation.approval.length, 'needs', 'need')} your approval`,
-    `${explanation.leftOut.length} not included`,
-  ];
-  if (explanation.skipped.length > 0) {
-    parts.push(
-      `${counted(explanation.skipped.length, 'entry', 'entries')} of the preset left out here`,
-    );
+export function presetUnavailable(explanation: PresetExplanation): string | null {
+  if (presetWidth(explanation) > 0) return null;
+  const reasons = [...new Set(explanation.skipped.map((family) => family.why))];
+  if (reasons.length === 0) return 'holds no permission';
+  return reasons
+    .map((reason) => (reason.startsWith('needs ') ? `${reason}: none selected` : reason))
+    .join('; ');
+}
+
+/** The policy of a connection as it stands in the form, counted. */
+export interface PolicyCounts {
+  /** Chosen, and runs without asking. */
+  readonly free: number;
+  /** Chosen, and asks the creator first. */
+  readonly asks: number;
+  /** Could be chosen here, and is not. */
+  readonly notIncluded: number;
+}
+
+export function policyCounts(connection: IssuanceConnection, state: ConnectionState): PolicyCounts {
+  const rows = editorRows(connection, state);
+  let free = 0;
+  let asks = 0;
+  let notIncluded = 0;
+  for (const row of rows) {
+    const entry = state.entries[row.risk.risk_id];
+    if (entry) {
+      if (entry.gate === 'approval') asks += 1;
+      else free += 1;
+    } else if (row.unavailable === null && !row.risk.deprecated && !row.risk.fallback) {
+      notIncluded += 1;
+    }
   }
-  return parts.join(' · ');
+  return { free, asks, notIncluded };
+}
+
+/**
+ * "Custom, start empty": the editor on an empty list, tied to no preset. The
+ * screen asks first when this would throw edits away (`discardsEdits`).
+ */
+export function startEmpty(state: ConnectionState): ConnectionState {
+  return { ...state, mode: 'custom', presetId: '', entries: {}, edited: false };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -352,10 +375,10 @@ export function presetDigest(explanation: PresetExplanation): string {
 
 /** Which rows the editor shows. */
 export const RISK_FILTERS = [
-  { id: 'all', label: 'All risks' },
-  { id: 'accepted', label: 'Accepted' },
-  { id: 'available', label: 'Not accepted yet' },
-  { id: 'unavailable', label: 'Unavailable to you' },
+  { id: 'available', label: 'Available to you' },
+  { id: 'accepted', label: 'Chosen' },
+  { id: 'unavailable', label: 'Not available' },
+  { id: 'all', label: 'All' },
 ] as const;
 export type RiskFilter = (typeof RISK_FILTERS)[number]['id'];
 
@@ -399,7 +422,8 @@ export function filterRows(
 ): EditorRow[] {
   return rows.filter((row) => {
     if (filter === 'accepted' && !row.accepted) return false;
-    if (filter === 'available' && (row.accepted || row.unavailable !== null)) return false;
+    // What the reader can act on: what they may tick, and what is ticked (to untick it).
+    if (filter === 'available' && row.unavailable !== null && !row.accepted) return false;
     if (filter === 'unavailable' && row.unavailable === null) return false;
     return matchesQuery(row.risk, query);
   });
@@ -491,7 +515,7 @@ export function unavailableReason(
   resources: readonly Pick<IssuanceResource, 'env'>[],
   held: ReadonlySet<RiskId>,
 ): string | null {
-  if (!held.has(risk.risk_id)) return 'outside your authority';
+  if (!held.has(risk.risk_id)) return OUTSIDE_AUTHORITY;
   if (!isResolvable(risk, connection, resources)) {
     return `no selected resource is labelled "${risk.env ?? ''}"`;
   }
@@ -648,4 +672,79 @@ export function loadResolved(
     };
   }
   return { ...state, connections, showExperimental };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// What stands in the way, in the words of the interface
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Longest list of ids quoted in a sentence. */
+const IDS_QUOTED = 4;
+
+function quotedIds(ids: readonly string[] | undefined): string {
+  const list = ids ?? [];
+  const shown = list.slice(0, IDS_QUOTED).join(', ');
+  const more = list.length - IDS_QUOTED;
+  return more > 0 ? `${shown} and ${more} more` : shown;
+}
+
+/**
+ * One reason the draft cannot be created, said with the words a person reads.
+ * The code and the fields are the protocol's (`PreviewIssue`, also answered
+ * to an agent on the management door, in its own words): this is the same
+ * fact for the page. An issue this function has no sentence for — a later
+ * code, a missing field — is printed as the server worded it.
+ */
+export function issueSentence(
+  issue: PreviewIssue,
+  context: readonly Pick<IssuanceConnection, 'id' | 'provider_label' | 'display_name'>[],
+): string {
+  const connection = context.find((c) => c.id === issue.connection_id);
+  const account = connection ? `${connection.provider_label} · ${connection.display_name}` : null;
+  const ids = quotedIds(issue.risk_ids);
+  const refs = quotedIds(issue.resource_refs);
+  const several = (issue.risk_ids?.length ?? 0) !== 1;
+  switch (issue.code) {
+    case 'name-missing':
+      return 'Give the mission a name.';
+    case 'no-connection':
+      return 'Include at least one account.';
+    case 'duplicate-provider':
+      return 'A mission takes one account per service.';
+    case 'invalid-period':
+      return 'Choose how often the limits reset.';
+    case 'invalid-expiry':
+      return 'The end date must be a valid date in the future.';
+    default:
+      break;
+  }
+  if (!account) return issue.message;
+  switch (issue.code) {
+    case 'connection-unavailable':
+      return `${account} cannot be used now: it needs reconnecting, or it was disconnected.`;
+    case 'duplicate-connection':
+      return `${account} is listed twice.`;
+    case 'no-resource-selected':
+      return `${account}: select at least one resource.`;
+    case 'no-accepted-risk':
+      return `${account} allows nothing yet: pick a preset or a permission, or leave the account out.`;
+    case 'resource-stale':
+      return refs
+        ? `${account}: ${refs} can no longer be found there. Leave it out.`
+        : issue.message;
+    case 'exceeds-authority':
+      return ids
+        ? `${account}: ${ids} ${several ? 'are' : 'is'} ${OUTSIDE_AUTHORITY} on this account.`
+        : issue.message;
+    case 'unresolvable-env':
+      return ids
+        ? `${account}: no selected resource carries the environment of ${ids}.`
+        : issue.message;
+    case 'missing-budget':
+      return ids ? `${account}: give a limit to ${ids}.` : issue.message;
+    case 'invalid-budget':
+      return ids ? `${account}: a limit is a whole number above zero (${ids}).` : issue.message;
+    default:
+      return issue.message;
+  }
 }

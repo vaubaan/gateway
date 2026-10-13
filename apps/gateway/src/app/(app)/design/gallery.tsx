@@ -19,6 +19,7 @@ import {
   TokenSections,
 } from './sections-foundation';
 import { WaitingSections } from './sections-waiting';
+import { MISSION_SECTION_ITEMS, MissionSections } from './sections-missions';
 
 /** The sections, as the local navigation lists them. Each `id` is a section anchor. */
 export const GALLERY_SECTIONS: readonly {
@@ -82,6 +83,7 @@ export const GALLERY_SECTIONS: readonly {
       { id: 'request', label: 'Open request' },
     ],
   },
+  { group: 'Mission pages', items: MISSION_SECTION_ITEMS },
 ];
 
 export function Gallery() {
@@ -122,6 +124,7 @@ export function Gallery() {
         <FormSections />
         <LegacySections />
         <WaitingSections />
+        <MissionSections />
       </SubNavFrame>
     </>
   );

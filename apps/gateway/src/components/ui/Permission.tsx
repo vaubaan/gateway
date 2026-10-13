@@ -103,6 +103,7 @@ export function PermissionTable({
   caption,
   children,
   testId,
+  labels,
 }: {
   variant?: PermissionVariant;
   /** Names the table for assistive technology ("Permissions on GitHub · acme"). */
@@ -110,6 +111,11 @@ export function PermissionTable({
   /** `PermissionGroup`s (or bare `PermissionRow`s inside one `<tbody>`). */
   children: React.ReactNode;
   testId?: string;
+  /**
+   * Other heads for the two columns that depend on the period of a mission whose
+   * limits do not reset every day ("Per week", "Used this week"). Daily by default.
+   */
+  labels?: { readonly limit?: string; readonly usage?: string };
 }) {
   const layout = LAYOUTS[variant];
   return (
@@ -126,10 +132,10 @@ export function PermissionTable({
               )}
               <th scope="col">Permission</th>
               {layout.severity && <th scope="col">{SEVERITY_LABEL}</th>}
-              {layout.usage && <th scope="col">{LIMIT_WORDS.usedToday}</th>}
+              {layout.usage && <th scope="col">{labels?.usage ?? LIMIT_WORDS.usedToday}</th>}
               {layout.perDay && (
                 <th scope="col" className={styles.number}>
-                  {LIMIT_WORDS.perDay}
+                  {labels?.limit ?? LIMIT_WORDS.perDay}
                 </th>
               )}
               {layout.perMinute && (

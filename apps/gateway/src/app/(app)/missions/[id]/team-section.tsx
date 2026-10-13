@@ -1,402 +1,344 @@
 'use client';
 
 /**
- * "Members and tokens" of a mission (spec §4.2 "Missions", §7.9 bis).
+ * "People and keys" of a mission (spec §4.2 "Missions", §7.9 bis): who works
+ * on it, each with one key, and what that key did in the current period.
  *
- * One section, two readers:
+ * One row per holder — the creator, then the teammates in the order they were
+ * added, then the machine keys. Three things by default (who, what their key
+ * did, the acts on the row); the role and the masked key are details.
  *
- *   the creator   adds a member (picked by email among the active users),
- *                 removes one, creates a named token for a machine, revokes
- *                 any token, and sees for each token its holder, its kind,
- *                 when it was created and when it was last used;
- *   a member      generates, rotates or revokes their OWN token and reads the
- *                 rest. Nothing else is offered to them, and the server
- *                 refuses it anyway.
+ *   the creator   replaces their own key, removes a teammate, revokes or
+ *                 replaces any other key;
+ *   a teammate    generates and replaces their OWN key, and reads the rest.
  *
- * A secret is shown once, in the reveal dialog, to whoever generated it: a
- * member's token never appears on the creator's screen, and no list of this
- * section carries more than a prefix.
+ * A row shows an act only when the server would take it. A key is never shown
+ * here beyond its masked form: it was shown once, to the person who made it.
  */
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
-
-import { LocalDate } from '@/components/LocalDate';
 import {
-  Badge,
   Button,
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
-  Input,
-  Select,
-  Table,
-  Tbody,
-  Td,
-  Th,
-  Thead,
-  Tr,
-  Help,
-  Slug,
+  DataTable,
+  DetailScope,
+  DetailToggle,
+  KeyHolder,
+  KeyMark,
+  Section,
+  type Column,
 } from '@/components/ui';
-import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
-import type { MissionTeam, TeamTokenView } from '@/server/missions/team-service';
-import { TOKEN_NAME_MAX_LENGTH, TOKEN_NAME_RULE } from '@/server/missions/token-name';
+import {
+  ACTIONS,
+  agoSentence,
+  count,
+  KEY_WORDS,
+  MISSION_ACTIONS,
+  MISSION_WORDS,
+  qualifiers,
+  ROLE_WORDS,
+  SECTIONS,
+  shortDate,
+  TERMS,
+} from '@/lib/vocabulary';
+import type { MissionTeam, TeamMemberView, TeamTokenView } from '@/server/missions/team-service';
 
-import { RevealDialog } from '../bootstrap-kit-view';
-import { messageOf } from '../message-of';
-import styles from './team.module.css';
+import styles from '../missions.module.css';
+import { useMissionActs } from './mission-actions';
 
-interface Revealed {
-  readonly title: string;
-  readonly kit: BootstrapKit;
+/** The calls of the current period made with the keys of one holder. */
+export interface HolderCalls {
+  /** `member` with a user id, or `named` with the name of a machine key. */
+  readonly kind: 'member' | 'named';
+  readonly key: string;
+  readonly allowed: number;
+  readonly refused: number;
+  readonly last_seen_at: string;
 }
 
-function kitOf(body: unknown): BootstrapKit | null {
-  if (typeof body !== 'object' || body === null || !('kit' in body)) return null;
-  return body.kit as BootstrapKit;
+interface HolderRow {
+  readonly id: string;
+  readonly name: string;
+  readonly machine: boolean;
+  readonly member: TeamMemberView | null;
+  readonly token: TeamTokenView | null;
+  readonly calls: HolderCalls | null;
+  readonly mine: boolean;
 }
 
-/** `vbn_live_<prefix>_…`: what a list shows of a token. Never more. */
 function masked(prefix: string): string {
   return `vbn_live_${prefix}_…`;
 }
 
-export function TeamSection({ team }: { team: MissionTeam }) {
-  const router = useRouter();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [revealed, setRevealed] = useState<Revealed | null>(null);
-  const [candidate, setCandidate] = useState('');
-  const [tokenName, setTokenName] = useState('');
+function rowsOf(team: MissionTeam, calls: readonly HolderCalls[]): HolderRow[] {
+  const people = team.members.map((member): HolderRow => {
+    const token =
+      team.tokens.find((t) => t.holder.kind === 'member' && t.holder.user_id === member.user_id) ??
+      null;
+    return {
+      id: `member:${member.email}`,
+      name: member.email,
+      machine: false,
+      member,
+      token,
+      calls: calls.find((c) => c.kind === 'member' && c.key === member.user_id) ?? null,
+      mine: false,
+    };
+  });
+  const machines = team.tokens
+    .filter((token) => token.holder.kind === 'named')
+    .map(
+      (token): HolderRow => ({
+        id: `machine:${token.holder.label}`,
+        name: token.holder.label,
+        machine: true,
+        member: null,
+        token,
+        calls: calls.find((c) => c.kind === 'named' && c.key === token.holder.label) ?? null,
+        mine: false,
+      }),
+    );
+  return [...people, ...machines];
+}
 
-  const { mission, role } = team;
-  const isCreator = role === 'creator';
-  const base = `/api/missions/${encodeURIComponent(mission.id)}`;
+export function TeamSection({
+  team,
+  calls,
+  period,
+  me,
+  now,
+}: {
+  team: MissionTeam;
+  calls: readonly HolderCalls[];
+  /** "today", "this week": the period the calls are counted in. */
+  period: string;
+  /** The reader's user id: their own row is the one they act on. */
+  me: string;
+  /** The instant the page was rendered at, so that "2 min" reads the same on both sides. */
+  now: string;
+}) {
+  const acts = useMissionActs();
+  const isCreator = team.role === 'creator';
+  const at = new Date(now);
+  const rows = rowsOf(team, calls).map((row) => ({
+    ...row,
+    mine: row.member?.user_id === me,
+  }));
 
-  async function post(path: string, body?: unknown): Promise<unknown> {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`${base}${path}`, {
-        method: 'POST',
-        ...(body === undefined
-          ? {}
-          : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }),
-      });
-      const answer: unknown = await res.json().catch(() => null);
-      if (!res.ok) {
-        setError(messageOf(answer, res.status));
-        return null;
+  const columns: Column<HolderRow>[] = [
+    {
+      id: 'holder',
+      header: 'Holder',
+      // The same place on every mission, whatever the names: the eye finds the second column.
+      width: '34%',
+      cell: (row) => (
+        <KeyHolder
+          name={row.name}
+          kind={row.machine ? 'machine' : 'person'}
+          muted={row.member ? !row.member.active : false}
+          qualifier={qualifiers([
+            row.mine && ROLE_WORDS.you,
+            row.member?.role === 'creator' && ROLE_WORDS.creator,
+            row.machine && KEY_WORDS.machineKey,
+            row.member && !row.member.active && 'no longer active',
+          ])}
+        />
+      ),
+    },
+    {
+      id: 'calls',
+      header: 'Calls',
+      width: '32%',
+      cell: (row) => {
+        if (!row.token) {
+          return (
+            <span className={styles.quietText}>
+              {team.issuable ? KEY_WORDS.notGenerated : 'no working key'}
+            </span>
+          );
+        }
+        if (row.calls) {
+          const total = row.calls.allowed + row.calls.refused;
+          return (
+            <span className={styles.quietText}>
+              {count(total, TERMS.call)} {period}
+              {row.calls.refused > 0 && ` · ${row.calls.refused} refused`} · last call{' '}
+              {agoSentence(row.calls.last_seen_at, at)}
+            </span>
+          );
+        }
+        return (
+          <span className={styles.quietText}>
+            {row.token.last_used_at
+              ? `no call ${period} · last used ${agoSentence(row.token.last_used_at, at)}`
+              : 'key never used'}
+          </span>
+        );
+      },
+    },
+    {
+      id: 'role',
+      header: 'Role',
+      detail: true,
+      cell: (row) => {
+        if (row.machine) {
+          return (
+            <>
+              Machine key
+              <span className={styles.sub}>
+                created by {row.token?.created_by}
+                {row.token && ` · ${shortDate(row.token.created_at, at)}`}
+              </span>
+            </>
+          );
+        }
+        if (row.member?.role === 'creator') {
+          return (
+            <>
+              Creator<span className={styles.sub}>answers what agents ask</span>
+            </>
+          );
+        }
+        return (
+          <>
+            Teammate
+            {row.member?.added_at && (
+              <span className={styles.sub}>added {shortDate(row.member.added_at, at)}</span>
+            )}
+          </>
+        );
+      },
+    },
+    {
+      id: 'key',
+      header: 'Key',
+      detail: true,
+      nowrap: true,
+      cell: (row) =>
+        row.token ? (
+          <>
+            <KeyMark>{masked(row.token.prefix)}</KeyMark>
+            <span className={styles.sub}>
+              issued {shortDate(row.token.created_at, at)} · {KEY_WORDS.shownOnce.toLowerCase()}
+            </span>
+          </>
+        ) : (
+          '—'
+        ),
+    },
+  ];
+
+  function actionsOf(row: HolderRow): React.ReactNode {
+    const { token, member } = row;
+    if (row.mine) {
+      if (!token) {
+        return team.issuable ? (
+          <Button type="button" size="sm" disabled={acts.busy} onClick={acts.generateMine}>
+            {MISSION_ACTIONS.generateKey}
+          </Button>
+        ) : null;
       }
-      return answer ?? {};
-    } catch {
-      setError('The instance could not be reached.');
-      return null;
-    } finally {
-      setBusy(false);
+      return (
+        <span className={styles.rowActions}>
+          <Button type="button" size="sm" onClick={() => acts.open({ kind: 'kit' })}>
+            Kit
+          </Button>
+          {team.issuable && (
+            <Button
+              type="button"
+              size="sm"
+              aria-label="Replace my key"
+              onClick={() => acts.open({ kind: 'replace-mine' })}
+            >
+              {ACTIONS.replaceKey}
+            </Button>
+          )}
+        </span>
+      );
     }
-  }
-
-  async function generateMine() {
-    const answer = await post('/tokens/mine');
-    const kit = kitOf(answer);
-    if (kit) setRevealed({ title: `Your token for “${mission.name}”`, kit });
-  }
-
-  async function createNamed() {
-    const name = tokenName.trim();
-    const answer = await post('/tokens', { name });
-    const kit = kitOf(answer);
-    if (kit) {
-      setTokenName('');
-      setRevealed({ title: `Token “${name}” for “${mission.name}”`, kit });
+    if (!isCreator) return null;
+    if (row.machine && token) {
+      return (
+        <span className={styles.rowActions}>
+          {team.issuable && (
+            <Button
+              type="button"
+              size="sm"
+              aria-label={`Replace the machine key ${row.name}`}
+              onClick={() => acts.open({ kind: 'replace-machine', token })}
+            >
+              {ACTIONS.replaceKey}
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="danger"
+            aria-label={`Revoke the machine key ${row.name}`}
+            onClick={() => acts.open({ kind: 'revoke-key', token })}
+          >
+            {ACTIONS.revokeKey}
+          </Button>
+        </span>
+      );
     }
-  }
-
-  async function addMember() {
-    if ((await post('/members', { email: candidate })) !== null) {
-      setCandidate('');
-      router.refresh();
+    if (member && member.role === 'member') {
+      return (
+        <span className={styles.rowActions}>
+          {token?.revocable && (
+            <Button
+              type="button"
+              size="sm"
+              variant="danger"
+              aria-label={`Revoke the key of ${row.name}`}
+              onClick={() => acts.open({ kind: 'revoke-key', token })}
+            >
+              Revoke key
+            </Button>
+          )}
+          <Button
+            type="button"
+            size="sm"
+            variant="danger"
+            aria-label={`Remove ${row.name}`}
+            onClick={() =>
+              acts.open({ kind: 'remove-teammate', userId: member.user_id, email: member.email })
+            }
+          >
+            {MISSION_ACTIONS.removeTeammate}
+          </Button>
+        </span>
+      );
     }
-  }
-
-  async function removeMember(userId: string) {
-    if ((await post(`/members/${encodeURIComponent(userId)}/remove`)) !== null) router.refresh();
-  }
-
-  async function revoke(token: TeamTokenView) {
-    if ((await post(`/tokens/${encodeURIComponent(token.id)}/revoke`)) !== null) router.refresh();
+    return null;
   }
 
   return (
-    <Card data-testid="team-section">
-      <CardHeader>
-        <CardTitle>Members and tokens</CardTitle>
-        <span className={styles.muted}>
-          Each token has one holder, so every call is attributed. All tokens share the mission’s
-          resources, policy and one budget.
-        </span>
-      </CardHeader>
-
-      <CardBody>
-        <div className={styles.own} data-testid="my-token">
-          <div>
-            <strong>Your token</strong>{' '}
-            {team.my_token ? (
-              <>
-                <Slug kind="token">{masked(team.my_token.prefix)}</Slug>{' '}
-                <span className={styles.muted}>
-                  generated <LocalDate ts={team.my_token.created_at} />, last used{' '}
-                  <LastUsed at={team.my_token.last_used_at} />
-                </span>
-              </>
-            ) : (
-              <span className={styles.muted}>
-                you have none yet. It is shown once, to you alone
-                {isCreator ? '' : ': the creator of the mission never sees it'}.
-              </span>
-            )}
-          </div>
-          <div className={styles.buttons}>
-            {team.issuable && (
-              <Button type="button" variant="primary" onClick={generateMine} disabled={busy}>
-                {team.my_token ? 'Rotate my token' : 'Generate my token'}
-              </Button>
-            )}
-            {team.my_token && (
-              <Button
-                type="button"
-                variant="danger"
-                onClick={() => team.my_token && revoke(team.my_token)}
-                disabled={busy}
-              >
-                Revoke my token
-              </Button>
-            )}
-          </div>
-        </div>
-        {!team.issuable && (
-          <p className={styles.muted}>
-            No token can be generated now: the mission does not serve calls.
-          </p>
-        )}
-        {error && (
-          <p className={styles.refused} role="alert" data-testid="team-error">
-            {error}
-          </p>
-        )}
-      </CardBody>
-
-      <h3 className={styles.subhead}>Members</h3>
-      <Table data-testid="team-members">
-        <Thead>
-          <Tr>
-            <Th>Member</Th>
-            <Th>Role</Th>
-            <Th>Added</Th>
-            <Th>Token</Th>
-            {isCreator && <Th>Action</Th>}
-          </Tr>
-        </Thead>
-        <Tbody>
-          {team.members.map((member) => (
-            <Tr key={member.user_id} data-member={member.email}>
-              <Td>
-                <Slug kind="member" mono={false}>
-                  {member.email}
-                </Slug>{' '}
-                {!member.active && <Badge tone="danger">deactivated</Badge>}
-              </Td>
-              <Td>
-                {member.role === 'creator' ? (
-                  <>
-                    creator <span className={styles.muted}>— answers the requests</span>
-                  </>
-                ) : (
-                  'member'
-                )}
-              </Td>
-              <Td>{member.added_at ? <LocalDate ts={member.added_at} dateOnly /> : '—'}</Td>
-              <Td>{member.has_token ? 'generated' : 'not generated yet'}</Td>
-              {isCreator && (
-                <Td>
-                  {member.role === 'member' && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="danger"
-                      onClick={() => removeMember(member.user_id)}
-                      disabled={busy}
-                      aria-label={`Remove ${member.email}`}
-                    >
-                      Remove
-                    </Button>
-                  )}
-                </Td>
-              )}
-            </Tr>
-          ))}
-        </Tbody>
-      </Table>
-      {isCreator && (
-        <CardBody>
-          <form
-            className={styles.inlineForm}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void addMember();
-            }}
-          >
-            <label className={styles.field}>
-              <span>Add a member</span>
-              <Select
-                value={candidate}
-                onChange={(event) => setCandidate(event.target.value)}
-                aria-label="User to add as a member"
-                data-testid="member-candidate"
-              >
-                <option value="">choose a user…</option>
-                {team.candidates.map((user) => (
-                  <option key={user.id} value={user.email}>
-                    {user.email}
-                  </option>
-                ))}
-              </Select>
-            </label>
-            <Button type="submit" disabled={busy || candidate === ''}>
-              Add member
-            </Button>
-          </form>
-          {team.candidates.length === 0 ? (
-            <p className={styles.muted}>
-              Every active user of this instance is already on the mission. A user exists here once
-              they have signed in.
-            </p>
-          ) : (
-            <Help
-              id="mission-members"
-              line="A member uses the mission as it is and generates their own token; you never see it."
-            >
-              <p>
-                They cannot change the mission, add members or answer its requests. Removing a
-                member revokes their token.
-              </p>
-            </Help>
-          )}
-        </CardBody>
-      )}
-
-      <h3 className={styles.subhead}>Tokens that work now</h3>
-      {team.tokens.length === 0 ? (
-        <div className={styles.empty}>No token works on this mission now.</div>
-      ) : (
-        <Table data-testid="team-tokens">
-          <Thead>
-            <Tr>
-              <Th>Holder</Th>
-              <Th>Kind</Th>
-              <Th>Token</Th>
-              <Th>Created</Th>
-              <Th>Last used</Th>
-              {isCreator && <Th>Action</Th>}
-            </Tr>
-          </Thead>
-          <Tbody>
-            {team.tokens.map((token) => (
-              <Tr key={token.id} data-holder={token.holder.label}>
-                <Td>
-                  <Slug kind={token.holder.kind === 'member' ? 'member' : 'token'} mono={false}>
-                    {token.holder.label}
-                  </Slug>{' '}
-                  {token.mine && <Badge tone="info">you</Badge>}
-                </Td>
-                <Td>{token.holder.kind === 'member' ? 'member token' : 'named token'}</Td>
-                <Td>
-                  <Slug kind="token">{masked(token.prefix)}</Slug>
-                </Td>
-                <Td>
-                  <LocalDate ts={token.created_at} />
-                  {token.holder.kind === 'named' && (
-                    <div className={styles.muted}>by {token.created_by}</div>
-                  )}
-                </Td>
-                <Td>
-                  <LastUsed at={token.last_used_at} />
-                </Td>
-                {isCreator && (
-                  <Td>
-                    {token.revocable && (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="danger"
-                        onClick={() => revoke(token)}
-                        disabled={busy}
-                        aria-label={`Revoke the token of ${token.holder.label}`}
-                      >
-                        Revoke
-                      </Button>
-                    )}
-                  </Td>
-                )}
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
-      )}
-      {isCreator && (
-        <CardBody>
-          <form
-            className={styles.inlineForm}
-            onSubmit={(event) => {
-              event.preventDefault();
-              void createNamed();
-            }}
-          >
-            <label className={styles.field}>
-              <span>Named token, for something that has no account</span>
-              <Input
-                value={tokenName}
-                onChange={(event) => setTokenName(event.target.value)}
-                placeholder="CI runner"
-                maxLength={TOKEN_NAME_MAX_LENGTH}
-                title={TOKEN_NAME_RULE}
-                autoComplete="off"
-                aria-label="Name of the token"
-                data-testid="named-token-name"
-              />
-            </label>
-            <Button type="submit" disabled={busy || !team.issuable || tokenName.trim() === ''}>
-              Create named token
-            </Button>
-          </form>
-          <Help
-            id="mission-named-token"
-            line="For a CI runner or a shared machine: its calls are attributed to the name you give."
-          >
-            <p>
-              The token is shown once, to you: hand it to the machine. To replace it, revoke it and
-              create one with the same name.
-            </p>
-          </Help>
-        </CardBody>
-      )}
-
-      {revealed && (
-        <RevealDialog
-          title={revealed.title}
-          kit={revealed.kit}
-          onDone={() => {
-            setRevealed(null);
-            router.refresh();
-          }}
+    <DetailScope id={`mission:${team.mission.id}:people`}>
+      <Section
+        id="people"
+        title={SECTIONS.peopleAndKeys}
+        count={rows.length}
+        note={
+          <>
+            <span className={styles.noteText}>{MISSION_WORDS.sameForEveryone}</span>
+            <DetailToggle />
+          </>
+        }
+        testId="team-section"
+      >
+        <DataTable
+          caption="People and keys of this mission"
+          columns={columns}
+          rows={rows}
+          rowKey={(row) => row.id}
+          actions={actionsOf}
+          headless
+          testId="team-table"
         />
-      )}
-    </Card>
+        {team.tokens.length === 0 && (
+          <p className={styles.quiet} data-testid="no-key-works">
+            {MISSION_WORDS.noKeyWorks}
+          </p>
+        )}
+      </Section>
+    </DetailScope>
   );
-}
-
-function LastUsed({ at }: { at: string | null }) {
-  return at ? <LocalDate ts={at} /> : <>never</>;
 }

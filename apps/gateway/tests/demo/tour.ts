@@ -100,8 +100,9 @@ The named token "${seeded.team.named.name}" of "${seeded.team.mission.name}" (st
   export VAUBAAN_CI_TOKEN='${seeded.team.named.token}'
 
 Things to try
-  1. Sign in as Alice. Missions lists ${seeded.counts.missions} missions in every state: active,
-     quota spent, waiting for an approval, expired, revoked, issued by an agent.
+  1. Sign in as Alice. Missions lists ${seeded.counts.missions} missions in every state: running,
+     waiting for you (a limit reached, a yes to give), expired, stopped,
+     prepared by an agent.
   2. Connect an account: Accounts -> Connect a provider.
        Stripe      test key  sk_test_demo        live key  sk_live_demo
        Cloudflare  API token demo-cloudflare-token-0123456789
@@ -115,12 +116,13 @@ Things to try
      then four tabs: its presets side by side against the risks, each risk with
      the reason it is a risk and its six-cell profile, its data model, its
      tools. Supabase adds a plane control (db, storage, auth, functions).
-  4. Issue a mission on one screen: Missions -> New mission. Include a
-     connection and pick a preset: the block says what it allows, what waits
-     for your approval and what it leaves out. Switch to Custom to accept risks
-     one by one, each with its quota, rate limit and gate; then Issue.
-  5. Open the bootstrap kit shown right after issuing: the token (shown once),
-     the MCP client configuration, the instructions for the agent, a curl.
+  4. Create a mission on one screen: Missions -> New mission. Include an
+     account and pick a preset: it says what it yields here, and the rail says
+     what the mission will be able to do. "Edit the permissions one by one"
+     opens every permission with its limits and "ask me first". "Create
+     mission" lists every permission with its limit before anything exists.
+  5. Read what follows the creation: the key (shown once), then the kit — the
+     MCP client configuration, the instructions for the agent, a curl.
   6. Call tools/list on /mcp with a mission token (the kit's own command; here
      with the seeded mission "${seeded.activeMission.name}"):
      ${toolsListCommand(origin)}
@@ -140,22 +142,24 @@ Things to try
      mission comes back, same token, same counters.
  11. Work on a mission as a team. Alice added Bob as a member of
      "${seeded.team.mission.name}" and created the named token "${seeded.team.named.name}".
-     Sign in as Bob: Missions -> "Shared with me" -> that mission. He reads it and
-     cannot change it. In "Members and tokens", "Rotate my token": his new token
-     is shown once, to him, with the bootstrap kit; Alice never sees it. Copy the
-     export line of the dialog, then ask the gateway whose token it is:
+     Sign in as Bob: Missions -> "Shared with you" -> that mission. He reads it and
+     cannot change it. Behind "···", "Replace my key": the dialog says his current
+     key stops at once; his new key is shown once, to him, with the kit; Alice
+     never sees it. Copy the export line of the dialog, then ask the gateway
+     whose key it is:
      ${whoseTokenCommand(origin, 'VAUBAAN_MISSION_TOKEN')}
      The answer reads "token": { "kind": "member", "holder": "${seeded.team.member.email}" }.
      The machine's token answers with its name:
      ${whoseTokenCommand(origin, 'VAUBAAN_CI_TOKEN')}
-     Sign in as Alice: the same section lists Bob and "${seeded.team.named.name}" with when
-     each token was last used; "Session" has "Calls per token holder", and each
-     call of the timeline names its holder. Remove Bob: his token is refused at
-     once (401, reason "holder-removed"), the others keep working.
+     Sign in as Alice: "People and keys" lists Bob and "${seeded.team.named.name}" with what
+     each key did today; "Everything this mission did" has "Who called", and each
+     call of the timeline names its holder. Remove Bob (you type his address):
+     his key is refused at once (401, reason "holder-removed"), the others keep
+     working.
  12. Activity: every call and every administrative act, with filters (mission,
-     token holder, agent label, decision). On a mission, "Session" shows the
-     calls of the current period per token holder and per agent label
-     ("planner", "coder").
+     token holder, agent label, decision). On a mission, "Everything this
+     mission did" shows the calls of the current period per key holder and per
+     agent label ("planner", "coder").
  13. Settings, as Alice (she administers the gateway): under Administration,
      Sign-in, Company apps (the GitHub App), Teams ("GitHub admins",
      "Contractors"), Accounts without owner, Registered apps ("Claude Code

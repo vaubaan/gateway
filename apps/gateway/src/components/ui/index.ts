@@ -149,3 +149,9 @@ export {
   type Fact,
   type FeedTone,
 } from './Request.tsx';
+// Added with the mission pages: the rest behind "···", a choice among presets, a key shown
+// once, a form with its rail
+export { MoreMenu, MenuItem } from './Menu.tsx';
+export { ChoiceRow, ChoiceChip } from './Choice.tsx';
+export { SecretBox } from './Secret.tsx';
+export { FormWithRail, FormStep, FormColumns } from './Form.tsx';

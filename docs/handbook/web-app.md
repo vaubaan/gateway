@@ -42,7 +42,7 @@ tracks:
   - apps/gateway/src/app/(app)/reference/
   - apps/gateway/src/components/telemetry/ValidationBadge.tsx
   - apps/gateway/src/app/(app)/missions/message-of.ts
-  - apps/gateway/src/app/(app)/missions/state-badge.tsx
+  - apps/gateway/src/app/(app)/missions/mission-view.ts
   - apps/gateway/src/lib/auth/session.ts
   - apps/gateway/src/lib/connections/session.ts
   - apps/gateway/next.config.ts
@@ -505,6 +505,9 @@ The protocol keeps its names; this file is the bridge, keyed by them.
 | `NOW`, `FIRST_RUN`, `ANSWERS`, `REQUEST_WORDS`                                       | the words of the home, of a first run (the model in five nodes, the steps), of the answers keyed by the protocol's resolution, and of a request's page                             |
 | `ago(from, now)`                                                                     | "now", "4 min", "1 h", "yesterday", "4 d"                                                                                                                                          |
 | `THEME_WORDS`                                                                        | System, Light, Dark                                                                                                                                                                |
+| `MISSION_ACTIONS`, `MISSION_WORDS`                                                   | the acts and the sentences of the mission pages ("Stop the mission", "Generate my key", "Shown once. Lost it? …")                                                                  |
+| `limitsResetEvery`, `limitColumn`, `usedColumn`, `periodWord`                        | a period in words, from its length in seconds: "limits reset every week", "Per week", "Used this week", "this week"                                                                |
+| `shortDate`, `expiresOn`, `agoSentence`, `listed`                                    | "12 Nov" (UTC, the same on the server and in the browser), "expires 12 Nov", "4 min ago", "a, b and 3 more"                                                                        |
 
 A page that needs a word or a sentence pattern that is not there adds it
 there. A page never prints a protocol name as prose; it prints an id with
@@ -671,6 +674,19 @@ the page: `CredentialFieldInputs` (`components/connections/parts.tsx`) takes an
 `idPrefix`; Administration → Company apps passes `provider-app-<provider id>`
 because it renders one list per provider.
 
+**Added with the mission pages**
+
+| Export                                    | What it is                                                                                                                                                                                                                                                                              |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `MoreMenu`, `MenuItem`                    | client. The rest of a page's actions behind "···": a button (`aria-haspopup="menu"`) and a panel of `role="menuitem"` — a button, or a link with `href`; `danger` for an act that stops something, `disabled`, a `note`. Escape, a click outside and a choice close it; the arrows move |
+| `ChoiceRow`, `ChoiceChip`                 | one choice among a few, as radio chips in a `fieldset` named by `legend`; a chip takes a `hint` (a short fact) and `unavailable` (why it cannot be chosen: it is then dashed, disabled, and the reason replaces the hint)                                                               |
+| `SecretBox`                               | a key, whole, once: the accent box with the key in mono and a button that copies it                                                                                                                                                                                                     |
+| `FormWithRail`, `FormStep`, `FormColumns` | a form in numbered steps with a rail whose head and foot (the action) stay in view (an `aside`; after the steps under 1100 px); a step is its number, its `h2`, one short `hint`; a few fields of a step side by side                                                                   |
+
+`PermissionTable` takes `labels` (`limit`, `usage`) for a mission whose limits
+do not reset every day: "Per week" and "Used this week" instead of "Per day"
+and "Used today" (`limitColumn`, `usedColumn` in `lib/vocabulary.ts`).
+
 **Server or client.** Everything not marked "client" above has no hook and
 renders in server and client components alike. A client component takes
 rendered nodes from a server page (`select`, `usage`, `answers`), never a
@@ -680,8 +696,9 @@ function.
 
 `(app)/design/` renders every component in every state: `page.tsx`
 (`requirePrincipal()`, any session) and a client gallery (`gallery.tsx`,
-four files of sections — `sections-waiting.tsx` holds the running list, the
-inbox and the open request —, `specimen.tsx`). A `Specimen` draws its content twice,
+five files of sections — `sections-waiting.tsx` holds the running list, the
+inbox and the open request, `sections-missions.tsx` the components added with
+the mission pages —, `specimen.tsx`). A `Specimen` draws its content twice,
 on an island with `data-theme="light"` and on one with `data-theme="dark"`, so
 both themes are compared on one screen whatever the theme of the page. Every
 value on it is invented. It is linked from Settings, and it is what a page is
@@ -725,7 +742,7 @@ Shared by the pages that used to carry a copy each:
   plain word (mission page, session page, request page);
 - `app/(app)/missions/message-of.ts`: `messageOf(body, status)`, the `message`
   of a JSON refusal of the mission API or "The instance answered `<status>`."
-  (gate control, rotate and revoke, the mission form);
+  (the "ask me first" switch, the acts of a mission page, the mission form);
 - `components/auth/principal.ts`: `isOperatorPrincipal(principal)`
   ([The shell](#the-shell--componentsshell)).
 
@@ -751,9 +768,9 @@ handbook:
 - `components/telemetry/ValidationBadge.tsx`: the community validation status
   on the Connections list and the connection page, nothing when there is no
   status ([telemetry](telemetry.md));
-- `app/(app)/missions/state-badge.tsx`: `StateBadge({ state })` for a mission
-  state, with the count of exhausted risks on an active mission
-  ([missions](missions.md));
+- `app/(app)/missions/mission-view.ts`: `missionMark(state, waiting)`, the
+  state of a mission in words, with a tone only for an exception
+  ([missions](missions.md), "The mission pages");
 - `components/auth/AuthPage.tsx`: `AuthPage` and `AuthHeading`, the frame of a
   page outside the shell ([Pages outside the shell](#pages-outside-the-shell)).
 
@@ -1024,7 +1041,10 @@ calling a page as a function, naming a redirect or a "not found").
 and on the shipped Supabase and GitHub plugins. Three helpers have a unit file
 beside them: `components/auth/principal.test.ts`,
 `app/(app)/missions/message-of.test.ts` and
-`app/(app)/missions/new/form-state.test.ts`.
+`app/(app)/missions/new/form-state.test.ts`. The mission pages add two:
+`app/(app)/missions/mission-view.test.ts` and
+`app/(app)/missions/[id]/session/event-words.test.ts`
+([missions](missions.md)).
 
 - `now-and-waiting.test.tsx` renders the home, a first run and the page of a
   request to static markup over invented views: one `h1` and one primary

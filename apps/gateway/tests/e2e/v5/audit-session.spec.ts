@@ -31,96 +31,112 @@ async function signIn(page: Page): Promise<void> {
   await expect(page.getByText(E2E_AUDIT_USER.email)).toBeVisible();
 }
 
-test('a day of calls: session page, then the audit of the mission', async ({ page, request }) => {
+test('a day of calls: the mission, its activity, then the record of the mission', async ({
+  page,
+  request,
+}) => {
   const day = await seedDay(request);
   await signIn(page);
 
-  // ── From the mission to its session ───────────────────────────────────────
+  // ── The mission says what waits for an answer, with a link to answer ──────
   await page.goto(`/missions/${day.mission_id}`);
-  await page.getByRole('link', { name: 'Session', exact: true }).click();
+  await expect(page.getByTestId('mission-state')).toHaveText('Waiting for you');
+  const waiting = page.getByTestId('mission-waiting');
+  await expect(waiting).toContainText(/waiting for your yes|asks you for more room/);
+  await expect(waiting.getByRole('link', { name: 'Review and answer' })).toHaveAttribute(
+    'href',
+    new RegExp(`^/waiting/(${day.claim_id}|${day.approval_id})$`),
+  );
+  await expect(page.getByText('And 1 request more on this mission')).toBeVisible();
+  await expect(page.getByTestId('mission-allows')).toContainText('Limit reached');
+  await snap(page, 'mission-waiting');
+
+  // ── From the mission to its activity ──────────────────────────────────────
+  await page.getByRole('link', { name: 'Everything this mission did' }).click();
   await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/session$`));
-  await expect(page.getByRole('heading', { name: /Session/, level: 1 })).toContainText(
-    '1 risk exhausted',
+  await expect(page.getByRole('heading', { name: /^Activity of /, level: 1 })).toBeVisible();
+  await expect(page.getByTestId('mission-state')).toHaveText('Waiting for you');
+
+  // What waits: one row each, answered by link only.
+  const requests = page.getByTestId('open-requests');
+  await expect(requests.getByRole('listitem')).toHaveCount(2);
+  await expect(requests.locator('a[data-request="claim"]')).toHaveAttribute(
+    'href',
+    `/waiting/${day.claim_id}`,
+  );
+  await expect(requests.locator('a[data-request="approval"]')).toHaveAttribute(
+    'href',
+    `/waiting/${day.approval_id}`,
   );
 
-  // Counters per risk with what is left, and the gate of each.
-  const budget = page.locator('table').nth(0);
-  const row = (riskId: string) => budget.locator('tr', { hasText: riskId });
-  await expect(row('github.read-code')).toContainText('5'); // quota
-  await expect(row('github.read-code').locator('td').nth(2)).toHaveText('2');
-  await expect(row('github.read-code').locator('td').nth(3)).toHaveText('3');
-  await expect(row('github.create-pr').locator('td').nth(3)).toContainText('0');
-  await expect(row('github.create-pr')).toContainText('exhausted');
-  await expect(row('github.merge-protected').locator('td').nth(5)).toHaveText('approval');
-  await expect(row('github.read-code').locator('td').nth(5)).toHaveText('auto');
+  // Every permission with what was used and what is left, one click away.
+  const permissions = page.getByTestId('session-permissions');
+  await permissions.getByRole('button', { name: /^All \d+ permissions?/ }).click();
+  const row = (riskId: string) => permissions.locator(`tr[data-permission="${riskId}"]`);
+  await expect(row('github.read-code')).toContainText('2 / 5');
+  // A limit that is reached is a red meter that also says so in words.
+  await expect(row('github.create-pr')).toContainText('2 / 2');
+  await expect(row('github.create-pr')).toContainText('Limit reached');
+  await expect(row('github.merge-protected').locator('[data-gate]')).toHaveText('ask me first');
+  await expect(row('github.read-code').locator('[data-gate]')).toHaveText('runs freely');
 
-  // Counters per period: the current one.
-  const periods = page.locator('table').nth(1);
+  // What each period counted: the current one.
+  const periods = page.getByTestId('session-periods');
+  await periods.getByRole('button', { name: 'Show what each period counted' }).click();
   await expect(periods.locator('tbody tr')).toHaveCount(1);
   await expect(periods).toContainText('current');
   await expect(periods).toContainText('2 / 5');
   await expect(periods).toContainText('2 / 2');
 
-  // Open requests: by link only.
-  const requests = page.locator('table').nth(2);
-  await expect(requests.locator('tbody tr')).toHaveCount(2);
-  await expect(requests.getByRole('link', { name: 'Claim' })).toHaveAttribute(
-    'href',
-    `/waiting/${day.claim_id}`,
-  );
-  await expect(requests.getByRole('link', { name: 'Approval request' })).toHaveAttribute(
-    'href',
-    `/waiting/${day.approval_id}`,
-  );
-
-  // Agent labels seen.
-  await expect(page.getByText('Agent labels seen')).toBeVisible();
-  await expect(page.locator('dd', { hasText: 'planner' })).toContainText('1 call');
-  await expect(page.locator('dd', { hasText: 'planner' })).toContainText('coder');
-
-  // Calls of the current period per agent label: informational, beside the shared budget.
+  // Calls of the current period per agent label: counts, beside the shared limits.
   const activity = page.getByTestId('label-activity');
-  await expect(activity).toContainText('this is not a budget');
-  const labelRow = (label: string) => activity.locator(`tr[data-label="${label}"]`);
+  await expect(activity).toContainText('not verified, and it decides nothing');
+  await expect(activity.getByTestId('label-seen')).toHaveCount(2);
+  await expect(activity.getByTestId('label-seen').filter({ hasText: 'planner' })).toContainText(
+    '1 call',
+  );
+  const labelRow = (label: string) => activity.locator(`tr[data-row="${label}"]`);
   await expect(activity.locator('tbody tr')).toHaveCount(2);
   await expect(labelRow('coder').locator('td').nth(1)).toHaveText('3'); // allowed
   await expect(labelRow('coder').locator('td').nth(2)).toHaveText('2'); // refused
   await expect(labelRow('planner').locator('td').nth(1)).toHaveText('1');
   await expect(labelRow('planner').locator('td').nth(2)).toHaveText('0');
 
-  // Timeline, newest first: the merge awaiting approval is on top.
+  // Timeline, newest first: the merge that asked first is on top.
   const timeline = page.getByTestId('timeline').locator('table');
   await expect(timeline.locator('tbody tr')).toHaveCount(8); // 6 calls + 2 requests
+  await expect(timeline.locator('tbody tr').first()).toContainText('asked first');
   await expect(timeline.locator('tbody tr').first()).toContainText('approval-required');
   await expect(timeline.locator('tbody tr').last()).toContainText('github__get_file');
-  await expect(timeline.locator('tbody tr').last()).toContainText('github.read-code → 4');
-  // The refused call and the request it opened both lead to the request page.
-  await expect(timeline.getByRole('link', { name: 'open claim' })).toHaveCount(2);
-  await expect(timeline.getByRole('link', { name: 'open claim' }).first()).toHaveAttribute(
-    'href',
-    `/waiting/${day.claim_id}`,
+  await expect(timeline.locator('tbody tr').last()).toContainText('github.read-code');
+  await expect(timeline.locator('tbody tr').last()).toContainText('4 left');
+  // The refused call and the request it opened both lead to the page that answers it.
+  await expect(timeline.locator(`a[href="/waiting/${day.claim_id}"]`)).toHaveCount(2);
+  await expect(timeline.locator(`a[href="/waiting/${day.claim_id}"]`).first()).toHaveText(
+    'Review and answer',
   );
   await expect(page.locator('body')).not.toContainText(ARGUMENT_MARKER);
-  // The timeline is kept as long as the audit, and says so.
-  await expect(page.getByTestId('timeline-retention')).toContainText('Kept 90 days');
-  await snap(page, 'mission-session');
+  // The timeline is kept as long as the record, and the page says so.
+  await expect(page.getByTestId('timeline-retention')).toContainText('kept 90 days');
+  await snap(page, 'mission-activity');
 
-  // The timeline of one label: its calls only; the budget above does not move.
+  // The timeline of one label: its calls only; what was used does not move.
   await labelRow('planner').getByRole('link', { name: 'in the timeline' }).click();
   await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/session\\?agent=planner$`));
   await expect(page.getByTestId('timeline-filter')).toContainText('planner');
   await expect(timeline.locator('tbody tr')).toHaveCount(1);
   await expect(timeline.locator('tbody tr').first()).toContainText('github__get_file');
   await expect(timeline.locator('tbody tr').first()).toContainText('planner');
-  await expect(row('github.read-code').locator('td').nth(2)).toHaveText('2');
+  // The permissions stay open across the page's own links: the choice is remembered.
+  await expect(row('github.read-code')).toContainText('2 / 5');
   await expect(labelRow('coder').locator('td').nth(1)).toHaveText('3');
-  await snap(page, 'mission-session-one-label');
+  await snap(page, 'mission-activity-one-label');
   await page.getByRole('link', { name: 'Show the whole timeline' }).click();
   await expect(page).toHaveURL(new RegExp(`/missions/${day.mission_id}/session$`));
   await expect(timeline.locator('tbody tr')).toHaveCount(8);
 
   // ── The audit of this mission ─────────────────────────────────────────────
-  await page.getByRole('link', { name: 'Audit of this mission' }).click();
+  await page.getByRole('link', { name: 'Full record of this mission' }).click();
   await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   await expect(page).toHaveURL(new RegExp(`/activity\\?mission=${day.mission_id}$`));
   const entries = page.locator('table tbody tr');
@@ -217,10 +233,9 @@ test('the audit table shows every column at 1280 px', async ({ page, request }) 
   expect(table.content).toBeLessThanOrEqual(table.box);
 });
 
-test('the session timeline shows every column at 1280 px', async ({ page, request }) => {
-  // Five of the six columns hold values that do not wrap (dates, tool names, risk
-  // ids); the card takes the width of the window (`.wide`) and the Detail cell
-  // wraps (`.detail`), so the last column stays on screen at this width.
+test('the timeline of a mission shows every column at 1280 px', async ({ page, request }) => {
+  // Five columns; the page takes the wide measure and the last cell wraps, so the
+  // outcome of every event stays on screen at this width.
   const day = await seedDay(request);
   await signIn(page);
   await page.goto(`/missions/${day.mission_id}/session`);
@@ -237,7 +252,7 @@ test('the session timeline shows every column at 1280 px', async ({ page, reques
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
 });
 
-test('the session of a mission that is not yours does not exist', async ({ page }) => {
+test('the activity of a mission that is not yours does not exist', async ({ page }) => {
   await signIn(page);
   const response = await page.goto('/missions/no-such-mission/session');
   expect(response?.status()).toBe(404);

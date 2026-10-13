@@ -271,7 +271,7 @@ describe('missions: members and per-holder tokens', () => {
       expect(first.kit.reveals_secret).toBe(true);
       expect(first.kit.env).toContain(first.token.secret);
       expect(first.kit.agent_instructions).toContain('Ship the billing page');
-      expect(first.kit.agent_instructions).toContain('### Whose token this is');
+      expect(first.kit.agent_instructions).toContain('### Whose key this is');
       expect(first.kit.mcp_json).not.toContain(first.token.secret);
 
       const second = await team.generateToken(bob, mission.id);

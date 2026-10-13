@@ -288,24 +288,24 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     expect(byBob).toContain('github__get_file_contents');
   });
 
-  it('shows Bob the mission Alice shared with him, read-only, with his own token', async () => {
+  it('shows Bob the mission Alice shared with him, read-only, with his own key', async () => {
     const bob = new Browser(demo.origin);
     await signIn(bob, BOB);
     const list = await (await bob.get('/missions')).text();
-    expect(list).toContain('Shared with me');
+    expect(list).toContain('Shared with you');
     expect(list).toContain('Ship the billing page');
     expect(list).toContain(ALICE.email);
     const href = /href="(\/missions\/[^"/]+)"[^>]*>Ship the billing page/.exec(list)?.[1];
     expect(href).toBeDefined();
     const page = await (await bob.get(href ?? '/missions')).text();
-    expect(page).toContain('Shared with you');
-    expect(page).toContain('Members and tokens');
-    expect(page).toContain('Rotate my token');
+    expect(page).toContain('data-testid="shared-with-me"');
+    expect(page).toContain('People and keys');
+    expect(page).toContain('Replace my key');
     expect(page).toContain(CI_TOKEN_NAME);
     // Nothing of the creator's controls.
-    expect(page).not.toContain('Revoke mission');
-    expect(page).not.toContain('Add member');
-    expect(page).not.toContain('Create named token');
+    expect(page).not.toContain('Stop the mission');
+    expect(page).not.toContain('Add people');
+    expect(page).not.toContain('New machine key');
     // No secret on any page: the named token's and Alice's are shown nowhere to him.
     for (const secret of [demo.ciToken, demo.missionToken]) {
       expect(page).not.toContain(secret.slice(-32));

@@ -268,6 +268,17 @@ from `MissionDetailRisk` ([missions](missions.md)). The Gate cell of the budget 
 prints the badge and, under it, "open until <date>": `approval` alone would be wrong
 while calls pass. The cell carries `data-testid="gate-<risk id>"`.
 
+> **The page was redesigned** (handbook [missions](missions.md), "The activity of a
+> mission"). `/missions/<id>/session` now reads as "Activity of `<mission>`": what waits,
+> who called per key holder and per agent label, the timeline in five columns
+> (`ActivityTable`), and — one click away — the permissions with what was used and the
+> earlier periods. A gate is said "runs freely" / "ask me first" on the row of its
+> permission (`data-permission="<risk id>"`), with "runs freely until `<date>`" while it
+> is open for the period. What a row says of an event is `eventWords`
+> (`app/(app)/missions/[id]/session/event-words.ts`). The sections below describe the
+> view the page reads (`MissionSessionView`), which did not change, and — where they
+> name a card, a column or a sentence — the page as it was before.
+
 ### The Detail column (`session-event-detail.ts`)
 
 `eventDetailLines(event, { requestOpen })` turns the typed fields of a `SessionEventView`

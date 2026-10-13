@@ -25,9 +25,9 @@ export interface OrphanExplanation {
   readonly lines: readonly string[];
 }
 
-const KEPT = 'Its token, its session and its counters are kept as they are.';
+const KEPT = 'Its keys, its activity and what it counted are kept as they are.';
 const REVOKE_AND_REISSUE =
-  'Nothing brings it back: revoke this mission and issue a new one on a connection you hold.';
+  'Nothing brings it back: stop this mission and create a new one on an account you can use.';
 
 /** Longest list of risk ids quoted in full. */
 const RISKS_SHOWN = 6;
@@ -43,39 +43,40 @@ export function explainOrphan(
   connections: readonly { readonly id: string; readonly display_name: string }[],
 ): OrphanExplanation {
   const named = connections.find((c) => c.id === orphan.connection_id);
-  const connection = named ? `connection “${named.display_name}”` : 'one of its connections';
+  const connection = named ? `the account “${named.display_name}”` : 'one of its accounts';
+  const Connection = `${connection.charAt(0).toUpperCase()}${connection.slice(1)}`;
   switch (orphan.cause) {
     case 'connection-revoked':
       return {
         reversible: false,
-        title: 'Orphaned: a connection of this mission was revoked',
+        title: 'Needs an owner: an account of this mission was disconnected',
         lines: [
-          `The ${connection} was revoked by its owner, and a revoked connection never comes back. Every call is refused.`,
+          `${Connection} was disconnected by its owner, and a disconnected account never comes back. Every call is refused.`,
           REVOKE_AND_REISSUE,
         ],
       };
     case 'connection-missing':
       return {
         reversible: false,
-        title: 'Orphaned: a connection of this mission no longer exists',
+        title: 'Needs an owner: an account of this mission no longer exists',
         lines: [`Every call is refused.`, REVOKE_AND_REISSUE],
       };
     case 'creator-removed':
       return {
         reversible: true,
-        title: 'Orphaned: your account is no longer active at the identity provider',
+        title: 'Needs an owner: your sign-in is no longer active at your company',
         lines: [
-          'Every call is refused while it is so. The mission serves calls again as soon as your account is active again.',
+          'Every call is refused while it is so. The mission serves calls again as soon as your sign-in is active again.',
           KEPT,
         ],
       };
     case 'authority-lost':
       return {
         reversible: true,
-        title: 'Orphaned: you no longer hold the authority this mission was issued under',
+        title: 'Needs an owner: you may no longer allow what this mission allows',
         lines: [
-          `On the ${connection} you no longer cover ${orphan.uncovered.length === 1 ? 'this accepted risk' : 'these accepted risks'}: ${quoted(orphan.uncovered)}. Every call is refused while it is so.`,
-          'The mission serves calls again as soon as that authority is back: the owner shares the connection with you again, or your next sign-in carries the group that held it.',
+          `On ${connection} you may no longer allow ${orphan.uncovered.length === 1 ? 'this permission' : 'these permissions'}: ${quoted(orphan.uncovered)}. Every call is refused while it is so.`,
+          'The mission serves calls again as soon as you may allow them again: the owner gives you access to the account again, or your next sign-in carries the team that held it.',
           KEPT,
         ],
       };
