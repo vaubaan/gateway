@@ -254,13 +254,13 @@ bindings. `silentLogger` is for tests.
 
 ## Ports and their single-process implementations
 
-| Port             | Today                                                                                   | Hosted replacement                    |
-| ---------------- | --------------------------------------------------------------------------------------- | ------------------------------------- |
-| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                    | Postgres behind the same repositories |
-| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2                                      | same (static)                         |
-| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`)                          | Redis `INCR` + `PEXPIRE`              |
-| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded); one definition | Redis                                 |
-| `SessionStore`   | `MemorySessionStore`, built on `MemoryCacheClient` (TTL in ms at the port)              | store-backed rows or Redis            |
+| Port             | Today                                                                                                                                                                                       | Hosted replacement                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `StoreLiveness`  | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`)                                                                                                                        | Postgres behind the same repositories                            |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2                                                                                                                                          | same (static)                                                    |
+| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`); `SlidingWindowRateLimiter` (`server/rate-limit/`, handbook [budget-and-sessions](budget-and-sessions.md)) also satisfies it | Redis `INCR` + `PEXPIRE`, or a sorted set for the sliding window |
+| `CacheClient`    | `@vaubaan/gateway-core`'s `MemoryCacheClient` (TTL in seconds, bounded); one definition                                                                                                     | Redis                                                            |
+| `SessionStore`   | `MemorySessionStore`, built on `MemoryCacheClient` (TTL in ms at the port)                                                                                                                  | store-backed rows or Redis                                       |
 
 `GatewayRoot.store` is the full store with its repositories
 (`StoreLiveness` of `ports.ts` is only the slice `/healthz` and `close()`

@@ -178,6 +178,7 @@ export { prepareRequestArguments } from './repositories/requests.ts';
 export type {
   CreateRequestInput,
   InsertRequestInput,
+  OpenRequestLookup,
   PreparedArguments,
   RequestInput,
   RequestsRepo,

@@ -39,6 +39,27 @@ resources)` lets a plugin derive the environment carried by the call
   `fallback-risk-only-when-uncategorized`.
 
 - **Upstash Redis plugin on the v5 SDK (P1.2h).** `@vaubaan/plugin-upstash-redis` 1.0.0 is a `definePlugin()` descriptor: `api-key` credential (account email + Management API key, replacing the v4 `email:api_key` concatenation), `discoverResources` over the account's databases (one resource per database, capped at 200), classifier re-keyed to mission resources with keys containing `:` no longer embedded in slices (v4 produced unparseable slices), every write risk env-scoped on the owner's database label, three presets (`read-only`, `developer`, `operator` with approval on FLUSH outside development, database deletion and rename), Management API answers redacted of REST tokens, catalog v2 loaded from YAML (TS twin and sync test removed). Legacy v4 exports kept `@deprecated` until P1.6. Handbook `providers/upstash-redis` rewritten in English.
+- **Budget, session and decision core (P1.3).** `apps/gateway/src/server/budget/`:
+  the pure `decide(policy, counters, rate windows, period, fingerprint, approvals?)`
+  → allow (N risks → N decrements) or `budget-exhausted` / `rate-limited` /
+  `approval-required` (whole-call refusal, dimension-major order); period
+  arithmetic with rollover computed on read (`currentPeriod`, `periodIndex`,
+  one-off = single open-ended period); the canonical argument fingerprint
+  (`sha256` of key-sorted JSON) shared by approvals and requests; mission state
+  derivation (`active | exhausted per risk | expired | orphaned | revoked`);
+  `SessionService.recordCall` running the decision inside the store's
+  `BEGIN IMMEDIATE` primitive with session get-or-create, approval lookup and
+  consumption, request drop (reused on replay) and the call event; the
+  pipeline's `BudgetStage` adapter; the reusable structural check
+  `countersAgreeWithAudit` (`SUM(session_counters) == COUNT(audit allowed)`).
+  `apps/gateway/src/server/rate-limit/`: in-memory `SlidingWindowRateLimiter`
+  (`peek`/`push` for the budget, `take` for the composition root's port;
+  single-process only, Redis replacement documented). The store's
+  `DecideContext` gains `findApproval` and `findOpenRequest`. The credit of an
+  allowed call is not refunded when the upstream call fails. ADR
+  `atomic-budget-accounting`, handbook `budget-and-sessions`, 69 tests
+  including N=50 concurrent calls on the last credit.
+
 - **Stripe plugin on the v5 SDK (P1.2e).** `@vaubaan/plugin-stripe` implements
   `definePlugin()`: one `api-key` credential with optional test and live keys,
   one resource per mode (`acct_…/test`, `acct_…/live`) so `stripe[live].*`

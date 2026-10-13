@@ -62,6 +62,24 @@ function getApprovalRecord(ctx: RepoContext, id: string): ApprovalRecord | null 
 }
 
 /**
+ * Synchronous non-consuming lookup, meant to run inside an already-open write
+ * transaction: the budget decision checks every gated risk before consuming anything,
+ * so a call refused on one risk leaves the approvals of the others untouched.
+ */
+export function findApprovalSync(
+  ctx: RepoContext,
+  missionId: string,
+  riskId: RiskId,
+  fingerprint: string,
+  now: Iso,
+): ApprovalRecord | null {
+  const candidate = ctx.db
+    .prepare<[string, string, string, string], { id: string }>(SELECT_CANDIDATE)
+    .get(missionId, riskId, fingerprint, now);
+  return candidate ? getApprovalRecord(ctx, candidate.id) : null;
+}
+
+/**
  * Synchronous consumption, meant to run inside an already-open write transaction.
  * Picks the soonest-expiring valid approval so a later grant stays usable.
  */

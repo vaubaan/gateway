@@ -200,7 +200,9 @@ const result = await store.sessions.decideAndDecrement(
   { missionId, riskIds: risksTouched, periodStart },
   (ctx) => {
     // ctx.session, ctx.counters (consumed per risk this period), ctx.now
+    // ctx.findApproval(riskId, fingerprint)    -> ApprovalRecord | null   (non-consuming)
     // ctx.consumeApproval(riskId, fingerprint) -> ApprovalRecord | null   (single use)
+    // ctx.findOpenRequest({ kind, riskId, fingerprint? }) -> RequestRecord | null  (reuse on replay)
     // ctx.createRequest({ kind, riskId, tool?, fingerprint?, prepared?, expiresAt })
     //   prepared = await store.requests.prepareArguments(args), sealed BEFORE the call
     // ctx.recordEvent({ kind, riskId?, actorUserId?, details? })
@@ -215,8 +217,11 @@ Everything inside runs in one `BEGIN IMMEDIATE` transaction: session get-or-crea
 `allow` is true (`riskIds` are deduplicated: one credit per distinct risk per
 call), the outcome's event. A thrown callback rolls everything back,
 including the session creation. The accounting rules (period arithmetic, quota and
-rate comparison, gate) are feature P1.3's callback; this module only guarantees the
-atomicity. Rate-limit sliding windows are not stored here (in-memory, P1.3).
+rate comparison, gate) are the `SessionService` callback of
+[budget-and-sessions](budget-and-sessions.md); this module only guarantees the
+atomicity. `findApproval` / `findOpenRequest` are non-consuming lookups so that callback
+can decide on every risk before it consumes an approval or drops a request. Rate-limit
+sliding windows are not stored here (in-memory, same handbook).
 
 ## Backup
 

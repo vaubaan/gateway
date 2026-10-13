@@ -120,6 +120,39 @@ function getRequestRecord(ctx: RepoContext, id: string): RequestRecord | null {
   return row ? toRecord(row) : null;
 }
 
+export interface OpenRequestLookup {
+  readonly kind: RequestKind;
+  readonly riskId: RiskId;
+  /** Approval requests are keyed by fingerprint too; claims ignore it. */
+  readonly fingerprint?: string | null;
+}
+
+const SELECT_OPEN = `SELECT ${COLUMNS} FROM requests r
+  WHERE r.mission_id = ? AND r.kind = ? AND r.risk_id = ? AND r.state = 'open' AND r.expires_at > ?
+    AND (? IS NULL OR r.fingerprint = ?)
+  ORDER BY r.created_at LIMIT 1`;
+
+/**
+ * Synchronous lookup of a still-open request, meant to run inside an already-open
+ * write transaction: a replayed refusal reuses the request already in the creator's
+ * inbox instead of dropping a new one on every retry.
+ */
+export function findOpenRequestSync(
+  ctx: RepoContext,
+  missionId: string,
+  lookup: OpenRequestLookup,
+  now: Iso,
+): RequestRecord | null {
+  const fingerprint = lookup.kind === 'approval' ? (lookup.fingerprint ?? null) : null;
+  const row = ctx.db
+    .prepare<
+      [string, string, string, string, string | null, string | null],
+      RequestRow
+    >(SELECT_OPEN)
+    .get(missionId, lookup.kind, lookup.riskId, now, fingerprint, fingerprint);
+  return row ? toRecord(row) : null;
+}
+
 /** Synchronous insert, meant to run inside an already-open write transaction. */
 export function insertRequestSync(
   ctx: RepoContext,
