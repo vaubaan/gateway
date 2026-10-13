@@ -83,11 +83,21 @@ export function ToolTable({
           <table className={styles.tools} data-kind="tool" data-testid="tool-table">
             <thead>
               <tr>
-                <th scope="col">Tool</th>
+                <th scope="col" className={styles.colTool}>
+                  Tool
+                </th>
                 <th scope="col">What it does</th>
-                <th scope="col">Arguments</th>
-                {showPlane && <th scope="col">Plane</th>}
-                <th scope="col">Risks</th>
+                <th scope="col" className={styles.colArgs}>
+                  Arguments
+                </th>
+                {showPlane && (
+                  <th scope="col" className={styles.colPlane}>
+                    Plane
+                  </th>
+                )}
+                <th scope="col" className={styles.colRisks}>
+                  Risks
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -117,7 +127,7 @@ export function ToolTable({
                     ))}
                   </td>
                   {showPlane && (
-                    <td className={styles.nowrap}>
+                    <td>
                       {tool.planes.map((plane) =>
                         plane === OTHER_PLANE ? (
                           <span key={plane} className={styles.muted}>
@@ -133,7 +143,7 @@ export function ToolTable({
                   )}
                   <td>
                     {tool.declared_risks === null ? (
-                      <span className={`${styles.muted} ${styles.nowrap}`}>by arguments</span>
+                      <span className={styles.muted}>by arguments</span>
                     ) : (
                       <span className={styles.toolRisks}>
                         {tool.hands_token && (

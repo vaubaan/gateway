@@ -3,7 +3,10 @@
 .slug {
   /* Contains the visually hidden kind word, so that it never widens a scrolling table. */
   position: relative;
-  display: inline-block;
+  /* The glyph and the text are two boxes: a long id wraps inside its own, next to the glyph. */
+  display: inline-flex;
+  align-items: flex-start;
+  gap: var(--space-1);
   max-width: 100%;
   padding: 0 var(--space-1);
   border-radius: var(--radius-sm);
@@ -18,11 +21,13 @@
   font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 }
 .glyph {
-  margin-right: var(--space-1);
-  vertical-align: -1px;
+  flex: none;
+  /* Centred on the first line of text. */
+  margin-top: calc((1.5em - 12px) / 2);
   color: var(--kind-rail);
 }
 .text {
+  min-width: 0;
   overflow-wrap: anywhere;
 }
 /* A link reads as one at rest: underlined. */

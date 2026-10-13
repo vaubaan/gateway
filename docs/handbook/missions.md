@@ -725,18 +725,26 @@ One click on **Custom** opens the granular editor in place, on the values the
 preset filled (`enterCustom`: nothing is lost, nothing counts as edited yet):
 
 - a toolbar: "Start from preset…" (`startFromPreset`), "Select all", "Clear",
-  "Remove the N refused", and "N accepted of M you can accept here";
+  "Remove the N refused", and "N accepted of M you can accept here"; under it
+  one line of help, the rest behind "More" (`Help`, id `custom-editor`);
 - when the catalog has more than `SEARCH_THRESHOLD` (8) explicit ids, a search
   box (every word must appear in the label, the id, the reason, the
   environment, the kind or the severity level) and a filter (all, accepted, not
   accepted yet, unavailable to you): `filterRows`;
+- when the provider's data model has several planes (`riskPlanesOf`, computed
+  by `new/page.tsx` from the registry and passed down as `planes`), a **plane
+  filter** beside them: all planes, one plane, or `other`
+  ([web-app](web-app.md), "Planes"). It narrows what is listed, never what is
+  accepted;
 - **every explicit id of the catalog** (`editorRows`), grouped by `groupByKind`:
   Reads, Writes, Irreversible writes. An account-scoped entry is one row; an
   env-scoped entry states its label and reason once, then one row per
-  environment. A row is the shared `RiskExplain` (label, environment, severity,
-  markers, id linked to the reference, reason, the six vector badges), a
-  checkbox (`aria-label` "Accept risk `<id>`") and, once ticked, quota, rate
-  limit (`max` per `window` s) and gate;
+  environment. A row is the shared `RiskExplain` in three lines (label,
+  environment, severity and markers; the id linked to the reference and one
+  line of reason that unfolds; the six-cell vector strip), a checkbox
+  (`aria-label` "Accept risk `<id>`") and, once ticked, quota, rate limit
+  (`max` per `window` s) and gate, aligned in three columns whose captions
+  are written once per group;
 - a risk the creator does not hold, or that no selected resource can resolve,
   **stays listed**, greyed, with "Not available: `<reason>`" and a disabled
   checkbox; an entry ticked earlier that stopped resolving stays ticked,
@@ -784,13 +792,19 @@ its entry in the reference.
 One component, used by the Custom editor, the Share dialog's checklist, the
 policy table of `/missions/<id>` and the provider reference:
 
-| Export                           | Renders                                                                                                                            |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `RiskExplain({ risk })`          | label, environment, severity, markers, linked id; the reason; the six vector badges                                                |
-| `VectorBadges({ vector })`       | `Axis: value` per axis (`vectorBadges`): plain for the mildest value, highlighted further up the scale; the text carries the value |
-| `VectorLegend()`                 | each axis, the question it answers, its scale (`VECTOR_AXES`)                                                                      |
-| `RiskIdLink({ riskId })`         | the id, linked to `/providers/<provider>#risk-<base id>` (`riskReferencePath`); `newTab` on pages holding unsaved input            |
-| `RiskMarkers`, `RiskMarkerNotes` | the `fallback` and `deprecated` badges, and the sentence that explains each                                                        |
+| Export                           | Renders                                                                                                                                                                                                                                                                                          |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `RiskExplain({ risk })`          | a compact row: label, environment, class, severity, markers; then the id and one line of reason; then the vector strip. `kindTag={false}` in a list already grouped by class                                                                                                                     |
+| `VectorStrip({ vector })`        | six cells, the axis in a few letters over its value (`vectorBadges`): neutral at the mildest value, a status tone above it; the value is always written, each cell names its axis in full (`aria-label`, `title`), and the whole profile shows on hover and, with `focusable`, on keyboard focus |
+| `VectorLegend()`                 | each axis with its short name, the question it answers, its scale (`VECTOR_AXES`)                                                                                                                                                                                                                |
+| `RiskIdLink({ riskId })`         | the id as a `Slug` of kind `risk`, linked to `/providers/<provider>#risk-<base id>` (`riskReferencePath`); `newTab` on pages holding unsaved input                                                                                                                                               |
+| `RiskClassTag({ kind })`         | `read`, `write` or `irreversible` as an outlined word: the class of a risk where the list is not grouped by it (mission page, Share dialog)                                                                                                                                                      |
+| `RiskReason`                     | the reason on one line that unfolds in place (a native `<details>`: a button to the keyboard, no script)                                                                                                                                                                                         |
+| `RiskMarkers`, `RiskMarkerNotes` | the `fallback` and `deprecated` badges, and the sentence that explains each                                                                                                                                                                                                                      |
+
+The short names of the axes are `abbr` in `VECTOR_AXES` (Undo, Blast, Data,
+Cost, Seen, Lasts); `noteBody(note)` gives a marker's sentence without its lead
+word, for a callout that already has it as its title.
 
 `CatalogRisk` carries what they need: `vector` (resolved for the id's
 environment) and `kind` (`read` when every pattern of the entry ends in `.R`,

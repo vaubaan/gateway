@@ -110,8 +110,10 @@ Audit entries are the ones those acts and calls wrote.
    simulation: connecting it fails with a message that says so, and nothing
    is sent.
 3. **Read what a provider is**: Providers → GitHub. What the plugin connects
-   to, its data model as a tree, each risk with the reason it is a risk and
-   its six badges, each preset with everything it contains, the tools.
+   to, then four tabs: its presets side by side against the risks, each risk
+   with the reason it is a risk and its six-cell profile, its data model as an
+   outline, its tools. Supabase adds a plane control (db, storage, auth,
+   functions).
 4. **Issue a mission on one screen**: Missions → New mission. Include a
    connection and pick a preset: the block says what it allows, what waits
    for your approval and what it leaves out. Switch to **Custom** to accept
