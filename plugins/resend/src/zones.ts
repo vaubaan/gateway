@@ -45,10 +45,21 @@ export interface EmailAddress {
 }
 
 // RFC 5322 is far wider ; this accepts what Resend accepts in practice and
-// rejects anything with whitespace, brackets or a missing domain label.
+// rejects anything with whitespace, brackets, a list separator or a missing
+// domain label.
+//
+// One string must be one address. The field is classified on the address this
+// parser returns and sent to Resend as the string it was given, so a string
+// a mail API could read as several recipients — `x@evil.example, Bob
+// <bob@acme.com>` — would be zoned on one address and delivered to another.
+// The display name therefore takes no `,` `;` `@` `"` `\`, no angle bracket
+// and no control character (a line break there is a header break), and the
+// local part no `,` or `;`. A caller who wants several recipients passes an
+// array : each item is parsed, and zoned, on its own.
 const ADDRESS =
-  /^[^\s<>@"]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i;
-const ANGLE_FORM = /^[^<>]*<([^<>]+)>$/;
+  /^[^\s<>@",;]+@[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/i;
+// eslint-disable-next-line no-control-regex -- refusing control characters is the point
+const ANGLE_FORM = /^[^<>,;@"\\\u0000-\u001f\u007f]*<([^<>]+)>$/;
 
 /** `"Acme <noreply@acme.com>"` or `noreply@acme.com` → the address ; `null` when malformed. */
 export function parseAddress(value: unknown): EmailAddress | null {

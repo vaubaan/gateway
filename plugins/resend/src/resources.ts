@@ -28,8 +28,74 @@ import type { Resource } from '@vaubaan/plugin-sdk';
 
 export const RESEND_PROVIDER = 'resend';
 
-/** Identifier chars a slice segment accepts ; anything else is refused rather than escaped. */
-export const SAFE_IDENT = /^[a-zA-Z0-9_./~-]+$/;
+/**
+ * An identifier of the provider (the id of an email, a contact, a broadcast,
+ * a segment or a domain — UUIDs upstream) : one path segment, no dot, no
+ * separator, no escape. Every one of them lands in a slice **and** in the
+ * request path, so one grammar serves both. A wider class is not safe for a
+ * URL : `encodeURIComponent` leaves `.` and `..` untouched and every URL
+ * parser then removes them, so `/emails/..` would be sent as `/`. Anything
+ * outside the grammar is refused, never escaped.
+ */
+export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * The value as a path-safe identifier, or `null`. The one check `classify`
+ * and `execute` share : what is classified is what is sent.
+ */
+export function pathIdent(value: unknown): string | null {
+  return typeof value === 'string' && PATH_IDENT.test(value) ? value : null;
+}
+
+/** One label of a host name : letters, digits and inner hyphens, 63 characters at most. */
+const LABEL = '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?';
+
+/**
+ * A sending domain as the `domain` argument names it : dotted labels, 253
+ * characters at most. It is matched against the mission's domain refs and
+ * never reaches a request — the path carries the resource's `domain_id`.
+ */
+export const DOMAIN_NAME = new RegExp(`^(?=.{1,253}$)${LABEL}(?:\\.${LABEL})+$`, 'i');
+
+/** The value as a domain ref (lower-cased), or `null`. Shared by `classify` and `execute`. */
+export function domainName(value: unknown): string | null {
+  return typeof value === 'string' && DOMAIN_NAME.test(value) ? domainRef(value) : null;
+}
+
+/**
+ * An email address that names a contact in the request path : a bare
+ * `local@domain` (no display name, no surrounding space) whose local part
+ * holds letters, digits and `. _ + ' -` only — no separator, no
+ * percent-escape, no query or fragment delimiter.
+ */
+export const CONTACT_EMAIL = new RegExp(
+  `^(?=.{3,254}$)[A-Za-z0-9._+'-]{1,64}@${LABEL}(?:\\.${LABEL})+$`,
+  'i',
+);
+
+/** How a contact selector is sent (`segment`) and how the classifier names it (`ident`). */
+export interface ContactSelector {
+  /** The path segment, ready to interpolate. */
+  readonly segment: string;
+  /** The slice ident : the id itself, or the glob for a contact named by address. */
+  readonly ident: string;
+}
+
+/**
+ * A contact selector — a contact id or an email address — or `null`. Shared
+ * by `classify` and `execute`. An id is interpolated as it is. An address is
+ * percent-encoded into one segment : its `@` becomes `%40`, so the segment is
+ * never a dot segment, and the grammar leaves no character that could end it.
+ * An address is an unknown member for the classifier : the glob.
+ */
+export function contactSelector(value: unknown): ContactSelector | null {
+  const id = pathIdent(value);
+  if (id !== null) return { segment: id, ident: id };
+  if (typeof value === 'string' && CONTACT_EMAIL.test(value)) {
+    return { segment: encodeURIComponent(value), ident: '*' };
+  }
+  return null;
+}
 
 export const RESOURCE_KINDS = ['domain', 'segment'] as const;
 export type ResendResourceKind = (typeof RESOURCE_KINDS)[number];
@@ -106,23 +172,44 @@ export function resolveDomain(fromDomain: string, resources: readonly Resource[]
 
 /** The domain resource an explicit `domain` argument names (domain tools). */
 export function resolveDomainArg(value: unknown, resources: readonly Resource[]): Resolved {
-  if (typeof value !== 'string' || !SAFE_IDENT.test(value)) {
-    return { denied: 'domain: missing or malformed ref' };
-  }
-  const ref = domainRef(value);
+  const ref = domainName(value);
+  if (ref === null) return { denied: 'domain: missing or malformed ref' };
   const found = domainResources(resources).find((r) => r.ref === ref);
   return found
     ? { resource: found }
     : { denied: `domain: '${ref}' is not a sending domain of this mission` };
 }
 
-/** The segment resource an explicit `segment_id` argument names (segment, contact and broadcast tools). */
+/**
+ * The segment resource an explicit `segment_id` argument names (segment,
+ * contact and broadcast tools). The resolved ref is always a `pathIdent` : it
+ * is a segment of the request path.
+ */
 export function resolveSegmentArg(value: unknown, resources: readonly Resource[]): Resolved {
-  if (typeof value !== 'string' || !SAFE_IDENT.test(value)) {
-    return { denied: 'segment_id: missing or malformed ref' };
-  }
-  const found = segmentResources(resources).find((r) => r.ref === value);
+  const ref = pathIdent(value);
+  if (ref === null) return { denied: 'segment_id: missing or malformed ref' };
+  const found = segmentResources(resources).find((r) => r.ref === ref);
   return found
     ? { resource: found }
-    : { denied: `segment_id: '${value}' is not a segment of this mission` };
+    : { denied: `segment_id: '${ref}' is not a segment of this mission` };
+}
+
+export type ResolvedDomainId = { readonly id: string } | { readonly denied: string };
+
+/**
+ * The Resend id of a domain resource, from the metadata discovery wrote. It
+ * is the domain segment of the request path, so it must be a `pathIdent` :
+ * metadata is not an argument, but it is not trusted to be a path segment.
+ */
+export function domainIdOf(resource: Resource): ResolvedDomainId {
+  const raw = resource.metadata?.domain_id;
+  if (typeof raw !== 'string' || raw.length === 0) {
+    return {
+      denied: `resource '${resource.ref}' carries no domain_id — refresh the connection's resources`,
+    };
+  }
+  const id = pathIdent(raw);
+  return id === null
+    ? { denied: `resource '${resource.ref}' carries a malformed domain_id` }
+    : { id };
 }

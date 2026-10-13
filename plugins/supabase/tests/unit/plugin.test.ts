@@ -371,13 +371,21 @@ describe('executeSupabase with mockFetch', () => {
     });
     await supabasePlugin.execute(ctx, 'supabase__list_tables', {
       project_ref: STAGING_REF,
-      schemas: ["pub'lic"],
+      schemas: ['public', 'app_v2'],
     });
     await supabasePlugin.execute(ctx, 'supabase__list_migrations', { project_ref: STAGING_REF });
     expect(fetch.calls).toHaveLength(3);
     expect((fetch.calls[0]!.json as { query: string }).query).toBe('select 1');
-    expect((fetch.calls[1]!.json as { query: string }).query).toContain("in ('pub''lic')");
+    expect((fetch.calls[1]!.json as { query: string }).query).toContain("in ('public','app_v2')");
     expect((fetch.calls[2]!.json as { query: string }).query).toContain('schema_migrations');
+
+    // A schema name that is not an identifier is refused, not quoted into the SQL text.
+    const quoted = await supabasePlugin.execute(ctx, 'supabase__list_tables', {
+      project_ref: STAGING_REF,
+      schemas: ["pub'lic"],
+    });
+    expect(quoted.isError).toBe(true);
+    expect(fetch.calls).toHaveLength(3);
   });
 
   test('apply_migration posts name and query ; 204 answers become an ok payload', async () => {
@@ -427,15 +435,15 @@ describe('executeSupabase with mockFetch', () => {
       },
       {
         method: 'POST',
-        url: `https://${STAGING_REF}.supabase.co/storage/v1/object/avatars/dir/a%20b.png`,
-        body: { Key: 'avatars/dir/a b.png' },
+        url: `https://${STAGING_REF}.supabase.co/storage/v1/object/avatars/dir/a-b.png`,
+        body: { Key: 'avatars/dir/a-b.png' },
         times: 1,
       },
     ]);
     const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__upload_object', {
       project_ref: STAGING_REF,
       bucket: 'avatars',
-      path: 'dir/a b.png',
+      path: 'dir/a-b.png',
       content_base64: Buffer.from('hello').toString('base64'),
       content_type: 'image/png',
       upsert: true,
@@ -447,7 +455,7 @@ describe('executeSupabase with mockFetch', () => {
     expect(upload.headers['content-type']).toBe('image/png');
     expect(upload.headers['x-upsert']).toBe('true');
     expect(upload.body).toBe('hello');
-    expect(textOf(result)).toEqual({ Key: 'avatars/dir/a b.png' });
+    expect(textOf(result)).toEqual({ Key: 'avatars/dir/a-b.png' });
     expect(fetch.pending()).toEqual([]);
   });
 

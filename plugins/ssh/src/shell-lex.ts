@@ -81,11 +81,22 @@ const SIMPLE_EXPANSION = /\$(?:[A-Za-z_][A-Za-z0-9_]*|[0-9@*#?$!-])/y;
 /** What a `${…}` body may hold to stay a plain expansion : a name and the operators `:-`, `#`, `%`, `/` on literal text. */
 const PLAIN_EXPANSION_BODY = /^[A-Za-z0-9_@*#?!:=+%/.,^~-]*$/;
 
+/**
+ * Is one of `chars` present in the word where the shell still interprets it ?
+ * `bare` holds one flag per UTF-16 unit of `value`, so the word is walked by
+ * unit, never by code point : after a character outside the BMP the two
+ * indexes differ, and a quoted emoji must not lend its flag to what follows.
+ */
+function hasBare(word: Word, chars: string): boolean {
+  for (let i = 0; i < word.value.length; i += 1) {
+    if (word.bare[i] === true && chars.includes(word.value[i]!)) return true;
+  }
+  return false;
+}
+
 /** Does the word hold a glob character the shell would expand ? */
 export function hasGlob(word: Word): boolean {
-  return [...word.value].some(
-    (ch, i) => word.bare[i] === true && (ch === '*' || ch === '?' || ch === '['),
-  );
+  return hasBare(word, '*?[');
 }
 
 /**
@@ -94,7 +105,7 @@ export function hasGlob(word: Word): boolean {
  */
 export function hasBrace(word: Word): boolean {
   if (word.value === '{}' || word.value === '{' || word.value === '}') return false;
-  return [...word.value].some((ch, i) => word.bare[i] === true && (ch === '{' || ch === '}'));
+  return hasBare(word, '{}');
 }
 
 /** True when the value the command receives is not the text of the word : expansion, glob or brace. */

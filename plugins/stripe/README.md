@@ -94,6 +94,16 @@ declared arguments change what a call costs:
 - `create_invoice` with `auto_advance` set also needs `invoice-finalize`
   (without it, `execute` sends `auto_advance=false`).
 
+Identifier arguments (`id`, `product`, `customer`, `coupon`, `charge`,
+`payment_intent`) go through one grammar, `stripeId` in `src/resources.ts`:
+`^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$` — the ids Stripe issues and the custom
+ids of products and coupons. `id` is a segment of the request path, the
+others travel in the query string or the form body; `.`, `..`, a `/`, a
+percent-escape or any other character is refused by `classify` and by
+`execute` (`readIdArgs`, the same function), never escaped. `account` is
+`<account id>` or `<account id>/<mode>` (`stripeAccountRef`) and never
+reaches the request.
+
 Reads whose answer carries customer fields — `list_invoices`,
 `list_charges`, `list_payment_intents`, and `list_events` unless `type`
 names a family without customer payload (`payout.*`, `balance.*`,

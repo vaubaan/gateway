@@ -18,6 +18,13 @@
  * 401 / 403 → `UpstreamAuthError` so the host can refresh and retry ; the
  * API bases are facts about the provider, not instance configuration.
  *
+ * A project-scoped call is resolved by the classifier's own `resolveTarget`
+ * and `readVariableWrite` : the project, environment, service and deployment
+ * ids of the request are written from their answer, never copied from the
+ * arguments, so the call runs on what the slices named or not at all. No id
+ * reaches a URL : the rewrapped tools carry them as JSON-RPC arguments, the
+ * variable tools as GraphQL variables of a constant document.
+ *
  * The lower layer (`callUpstream`, `callGraphql`, `executeCall`) takes a
  * bare `fetch` + token ; `executeRailway` and `discoverRailwayResources`
  * feed it from the context.
@@ -34,7 +41,15 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER } from './classify.ts';
+import {
+  AMBIGUOUS_RAILWAY_TARGET,
+  NO_RAILWAY_PROJECT,
+  PROVIDER,
+  isProjectScopedTool,
+  railwayId,
+  readVariableWrite,
+  resolveTarget,
+} from './classify.ts';
 import {
   CUSTOM_TOOL_NAMES,
   DELETE_VARIABLE,
@@ -333,8 +348,12 @@ export async function executeRailway(
     return { content: [{ type: 'text', text: `unknown tool '${tool}'` }], isError: true };
   }
   const secret = expectCredentialKind(PROVIDER, ctx.credential, 'oauth2');
-  const effective = withDefaultProject(tool, args, ctx.resources);
-  const result = await executeCall(ctx.fetch, secret.accessToken, tool, effective, ctx.signal);
+  const effective = pinTarget(tool, args, ctx.resources);
+  // Declined here, before any request : a result the agent reads, not an upstream failure.
+  if ('refused' in effective) {
+    return { content: [{ type: 'text', text: effective.refused }], isError: true };
+  }
+  const result = await executeCall(ctx.fetch, secret.accessToken, tool, effective.args, ctx.signal);
 
   const mcp = asToolResult(result);
   if (tool === AGENT_TOOL) {
@@ -365,6 +384,13 @@ export async function discoverRailwayResources(
     );
     for (const edge of data.projects.edges) {
       const node = edge.node;
+      // A ref the classifier would refuse is of no use to a mission : say so
+      // at connection time instead of listing a resource no call can name.
+      if (railwayId(node.id) === null) {
+        throw new Error(
+          `${PROVIDER}: project id ${JSON.stringify(node.id)} is not a Railway identifier`,
+        );
+      }
       out.push({
         provider: PROVIDER,
         ref: node.id,
@@ -423,19 +449,41 @@ interface ProjectsPage {
   };
 }
 
-function withDefaultProject(
+/**
+ * The arguments to send, with every id written from what the classifier's
+ * own functions resolved : the project (filled in when the tool takes one and
+ * the caller named none), the environment, the service, the deployment. A
+ * call they deny is refused. Account-level tools name no resource of the
+ * mission and are forwarded as received.
+ *
+ * A call that names no project the mission can resolve is thrown, as it
+ * always was ; every other denial is a refusal the agent reads.
+ */
+function pinTarget(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
-): Readonly<Record<string, unknown>> {
-  if (!TOOLS_TAKING_PROJECT_ID.has(tool) || args.projectId !== undefined) return args;
-  const own = resources.filter((r) => r.provider === PROVIDER);
-  if (own.length !== 1) {
-    throw new Error(
-      'projectId: argument required when the mission touches several Railway projects',
-    );
+): { readonly args: Readonly<Record<string, unknown>> } | { readonly refused: string } {
+  if (!isProjectScopedTool(tool)) return { args };
+
+  const target = resolveTarget(tool, args, resources);
+  if ('denied' in target) {
+    if (target.denied === NO_RAILWAY_PROJECT || target.denied === AMBIGUOUS_RAILWAY_TARGET) {
+      throw new Error(`projectId: argument required (${target.denied})`);
+    }
+    return { refused: target.denied };
   }
-  return { ...args, projectId: own[0]!.ref };
+  const write = readVariableWrite(tool, args);
+  if (write !== null && 'denied' in write) return { refused: write.denied };
+
+  const out: Record<string, unknown> = { ...args };
+  if (TOOLS_TAKING_PROJECT_ID.has(tool) || args.projectId !== undefined) {
+    out.projectId = target.project.ref;
+  }
+  if (target.environmentId !== null) out.environmentId = target.environmentId;
+  if (target.serviceId !== null) out.serviceId = target.serviceId;
+  if (target.deploymentId !== null) out.deploymentId = target.deploymentId;
+  return { args: out };
 }
 
 /** The MCP server answers `tools/call` with an MCP result ; GraphQL tools answer with plain data. */

@@ -18,9 +18,16 @@
  *   - the environment is the owner's label on the database resource : the
  *     slice carries `database[<id>]`, which the host's default
  *     `resourceEnvResolver` maps to the label — no plugin hook needed ;
+ *   - the database ref is a segment of the Management API path : it goes
+ *     through `pathIdent` (one path segment, no dot, no separator), whether
+ *     it comes from the argument or from the mission's single database, and
+ *     `execute` resolves it with the same `resolveDatabase` ;
  *   - keys are embedded as idents when slice-safe and replaced by `[*]`
  *     otherwise (glob patterns, multi-key DEL) — the catalog patterns match
- *     any ident there, so audit precision is all that is lost ;
+ *     any ident there, so audit precision is all that is lost. A key never
+ *     reaches a URL : the command travels as a JSON array in the body ;
+ *   - `keys`, `scan` and `dbsize` read the whole key space : `[*]`, whatever
+ *     else the call carries ;
  *   - `execute` is routed on the Redis command it carries (the command
  *     table below) : every command belongs to exactly one class — read,
  *     write, delete, flush, arbitrary execution, administration — and the
@@ -41,12 +48,31 @@ import { ACCOUNT_TOOL_NAMES, DATA_TOOL_NAMES, MANAGEMENT_TOOL_NAMES } from './to
 export const PROVIDER = 'upstash-redis';
 
 /**
- * Slice DSL ident characters (`slice-dsl.ts` bracket grammar). Database ids
- * are UUIDs ; Redis keys with `:` (`session:123`) are NOT slice-safe and
- * fall back to `[*]` — embedding them would produce slices the DSL cannot
- * parse back.
+ * A database ref (Upstash database ids are UUIDs) : one path segment, no dot,
+ * no separator, no escape. It lands in a slice **and** in the Management API
+ * path (`/redis/database/{id}`), so one grammar serves both. A wider class is
+ * not safe for a URL : `encodeURIComponent` leaves `.` and `..` untouched and
+ * every URL parser then removes them, so `/redis/database/..` would be sent
+ * as `/redis/`. Anything outside the grammar is refused, never escaped.
  */
-const SAFE_IDENT = /^[a-zA-Z0-9_./~-]+$/;
+export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * The value as a path-safe identifier, or `null`. The one check `classify`
+ * and `execute` share : what is classified is what is sent.
+ */
+export function pathIdent(value: unknown): string | null {
+  return typeof value === 'string' && PATH_IDENT.test(value) ? value : null;
+}
+
+/**
+ * A Redis key that may be embedded in a slice : slice DSL ident characters
+ * (`slice-dsl.ts` bracket grammar), 128 at most. A key is never part of a
+ * URL — the command travels as a JSON array — so this grammar decides only
+ * what the audit shows : a key with `:` (`session:123`), a pattern or an
+ * overlong key is NOT slice-safe and falls back to `[*]`.
+ */
+const KEY_IDENT = /^[a-zA-Z0-9_./~-]{1,128}$/;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // The command table
@@ -550,6 +576,13 @@ const DATA_READS = new Set([
   'upstash_redis__dbsize',
 ]);
 
+/** Reads that send no `key` : they cover the key space, so no argument names a member. */
+const KEY_SPACE_READS = new Set([
+  'upstash_redis__keys',
+  'upstash_redis__scan',
+  'upstash_redis__dbsize',
+]);
+
 const DATA_WRITES = new Set([
   'upstash_redis__set',
   'upstash_redis__hset',
@@ -595,14 +628,19 @@ function keySpaceSlice(cls: RedisCommandClass, dbSeg: SliceSegment, keySeg: Slic
 }
 
 /** The `databaseId` argument (snake_case accepted), `undefined` when absent. */
-function databaseArg(args: Readonly<Record<string, unknown>>): unknown {
+export function databaseArg(args: Readonly<Record<string, unknown>>): unknown {
   return args.databaseId ?? args.database_id;
 }
 
+/** Refusal of a database ref that is not one path segment, shared with `execute`. */
+const MALFORMED_DATABASE = 'databaseId: malformed database ref';
+
 /**
- * Resolve the database a call touches. The explicit argument wins and must be
- * one of the mission's Upstash databases ; absent, the mission's single
- * database applies ; anything else is a refusal.
+ * Resolve the database a call touches, for `classify` and `execute` alike.
+ * The explicit argument wins and must be one of the mission's Upstash
+ * databases ; absent, the mission's single database applies ; anything else
+ * is a refusal. The resolved ref is always a `pathIdent`, whichever branch
+ * found it : it is a segment of the Management API path.
  */
 export function resolveDatabase(
   args: Readonly<Record<string, unknown>>,
@@ -612,16 +650,18 @@ export function resolveDatabase(
   const own = resources.filter((r) => r.provider === PROVIDER);
   const raw = databaseArg(args);
   if (raw !== undefined) {
-    if (typeof raw !== 'string' || raw.length === 0 || !SAFE_IDENT.test(raw)) {
-      return { denied: 'databaseId: malformed database ref' };
+    const explicit = pathIdent(raw);
+    if (explicit === null) return { denied: MALFORMED_DATABASE };
+    if (!own.some((r) => r.ref === explicit)) {
+      return { denied: `upstash-redis database '${explicit}' is not a resource of this mission.` };
     }
-    if (!own.some((r) => r.ref === raw)) {
-      return { denied: `upstash-redis database '${raw}' is not a resource of this mission.` };
-    }
-    return { ref: raw };
+    return { ref: explicit };
   }
   if (!required) return { ref: null };
-  if (own.length === 1) return { ref: own[0]!.ref };
+  if (own.length === 1) {
+    const only = pathIdent(own[0]!.ref);
+    return only === null ? { denied: MALFORMED_DATABASE } : { ref: only };
+  }
   return {
     denied:
       own.length === 0
@@ -649,7 +689,7 @@ export function classifyUpstashRedis(
 
   // ─── Data tools ────────────────────────────────────────────────────
   if (DATA_READS.has(tool)) {
-    const keySeg = tool === 'upstash_redis__dbsize' ? ANY_IDENT : keyIdent(args.key);
+    const keySeg = KEY_SPACE_READS.has(tool) ? ANY_IDENT : keyIdent(args.key);
     return { slices: [keySpaceSlice('read', dbSeg, keySeg)] };
   }
   if (DATA_WRITES.has(tool)) {
@@ -713,6 +753,6 @@ export function classifyUpstashRedis(
 
 /** A key as an ident segment when slice-safe, `[*]` otherwise. */
 function keyIdent(value: unknown): SliceSegment {
-  if (typeof value === 'string' && value.length > 0 && SAFE_IDENT.test(value)) return ident(value);
+  if (typeof value === 'string' && KEY_IDENT.test(value)) return ident(value);
   return ANY_IDENT;
 }

@@ -18,11 +18,12 @@ ADR [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract
 | `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets. Loaded by the SDK at boot; the only catalog artefact.                            |
 | `src/data-model.ts`       | Plane `repo`: repo → branch → file / commit; tag, release, pull_request, issue → comment, workflow → run, rules. |
 | `src/tools.ts`            | 26 MCP tools `github__<verb>_<noun>`; every repo-scoped tool takes `owner` + `repo`.                             |
+| `src/call.ts`             | The grammar of every identifier and `readGithubCall`, the one reader `classify` and `execute` share.             |
 | `src/classify.ts`         | Pure `(tool, args, resources) → slices \| denied`. The security-critical file.                                   |
 | `src/credential.ts`       | `app-install` `CredentialSpec`, app-config keys, `installationTokenFor(ctx, scope)`.                             |
 | `src/app-install.ts`      | RS256 App JWT → `POST /app/installations/{id}/access_tokens` (scoped to repositories and permissions).           |
 | `src/execute.ts`          | `execute` (per-call token + Octokit over `ctx.fetch`), `mint_install_token`, `discoverResources` (paged).        |
-| `src/octokit-dispatch.ts` | Tool name → Octokit call; a merge first checks the pull request's real base against the declared one.            |
+| `src/octokit-dispatch.ts` | Checked call → Octokit call; a merge first checks the pull request's real base against the declared one.         |
 
 The plugin imports the SDK only (plus `@octokit/rest` and `jose`); nothing
 from `apps/` or `@vaubaan/gateway-core`.
@@ -67,6 +68,30 @@ where a branch name is expected (`refs/heads/main`), a malformed `files`
 list. `merge_pull_request` is classified on the declared `base` (`main`
 when absent) and the merge is refused when the pull request targets
 another branch.
+
+What is classified is what is sent. `readGithubCall` (`src/call.ts`) reads
+the arguments once, against the mission's repositories, and both
+`classify` and `execute` start from the call it returns; `execute` refuses
+— it throws, before the token mint — whatever `classify` refuses. Each
+kind of identifier has one grammar, and a value outside it is refused,
+never escaped or repaired:
+
+| Identifier                                  | Grammar                                                                                                                                                |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `owner`, `repo`, `repoFullName`             | A login (`[A-Za-z0-9_-]`, ≤ 39) and a repository name (`[A-Za-z0-9._-]`, ≤ 100, not `.` or `..`), together one of the mission's repositories.          |
+| file `path`                                 | Relative, `/`-separated, no empty, `.` or `..` segment, no backslash, no control character, ≤ 4096 characters.                                         |
+| `branch`, `from_branch`, `base`, `head`     | A git branch name (`git check-ref-format`): no `..`, no component starting with `.`, no blank, none of `~ ^ : ? * [ \`; not a ref; `owner:` on a head. |
+| `tag_name`                                  | The same, as a tag name.                                                                                                                               |
+| `ref`, `sha`, `target_commitish`            | A revision: a branch, a tag, a full ref or a SHA, optionally with `~N` / `^N`.                                                                         |
+| `pull_number`, `issue_number`, `release_id` | A positive integer.                                                                                                                                    |
+| `workflow_id`                               | A positive integer, or one file name (no `/`, not `.` or `..`).                                                                                        |
+
+Octokit percent-encodes a path parameter with `encodeURIComponent`, which
+leaves `.` and `..` untouched, and a URL parser then removes those
+segments: without the grammars, `path: '..'` on `delete_file` would be
+sent as `DELETE /repos/{owner}/{repo}/`. The installation id of the
+connection (digits only) and the repository names discovery returns go
+through the same kind of check.
 
 ## Presets
 
@@ -142,6 +167,10 @@ npx vitest run plugins/github
 - `classify.test.ts` — the classifier's security suite: `(tool, args, resources)` → exact slices or denial.
 - `execute.test.ts` — JWT claims, mint request shape, per-call scoping,
   Octokit over `mockFetch`, `UpstreamAuthError`, mint tool, paged discovery.
+- `injection.test.ts` — every identifier position fed `..`, `.`, `a/../b`,
+  encoded forms, an empty, an overlong and a multi-line value, to `classify`
+  and to `execute`: refused by both with nothing sent, or sent as the exact
+  path that was classified.
 - `data-model.test.ts` — data-model integrity.
 - `token-cache.test.ts` — connection-scoped reuse of installation tokens.
 

@@ -58,12 +58,12 @@ three.
 Kind `ssh-key`, algorithm ed25519. The host generates the key pair, shows the
 public key, and collects four non-secret fields:
 
-| Field                  | Required | Pattern                    | Purpose                                                                                       |
-| ---------------------- | -------- | -------------------------- | --------------------------------------------------------------------------------------------- |
-| `host`                 | yes      | hostname or IPv4           | The resource ref the agent cites (`host[vps-1.example.com]`). IPv6 literals are not accepted. |
-| `port`                 | no       | 1–65535                    | 22 when empty.                                                                                |
-| `user`                 | yes      | POSIX user name            | The account whose `~/.ssh/authorized_keys` receives the public key.                           |
-| `host_key_fingerprint` | yes      | `SHA256:<base64>` (`=` ok) | The host's key, verified on every connection; no trust-on-first-use.                          |
+| Field                  | Required | Pattern                    | Purpose                                                                                                                                                                                        |
+| ---------------------- | -------- | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `host`                 | yes      | hostname or IPv4, ≤ 253    | The resource ref the agent cites (`host[vps-1.example.com]`). IPv6 literals are not accepted. One grammar (`hostRef`) for the credential, the resource ref, the `host` argument and the slice. |
+| `port`                 | no       | 1–65535                    | 22 when empty.                                                                                                                                                                                 |
+| `user`                 | yes      | POSIX user name            | The account whose `~/.ssh/authorized_keys` receives the public key.                                                                                                                            |
+| `host_key_fingerprint` | yes      | `SHA256:<base64>` (`=` ok) | The host's key, verified on every connection; no trust-on-first-use.                                                                                                                           |
 
 Setting up a host:
 
@@ -202,6 +202,7 @@ npx vitest run plugins/ssh
 | `adversarial.test.ts`      | 181   | Command lines written to be read as milder than what the shell runs — quoting, comments, redirections, wrappers, interpreters, paths — each with its exact slices.                                                                                                                                                                                                    |
 | `classify.test.ts`         | 90    | One scenario per command line and the credential-path table.                                                                                                                                                                                                                                                                                                          |
 | `host-key-pinning.test.ts` | 37    | The real `ssh2Transport` against an in-process `ssh2.Server` on `127.0.0.1` (ephemeral port, closed after each test): a missing, malformed or mismatched pin is refused before authentication, proven from the server's side.                                                                                                                                         |
+| `injection.test.ts`        | 87    | `host` and `cmd` fed `..`, `a/../b`, encoded forms, empty, overlong and multi-line values, to `classify` and to `execute` over a recording transport: only a hostname or an IPv4 address names a host (argument or resource ref), a refused value opens no connection, and the line sent is the line classified.                                                      |
 | `data-model.test.ts`       | 2     | The data model's integrity and its markers.                                                                                                                                                                                                                                                                                                                           |
 
 No test reaches an external host or needs an `ssh` binary; only

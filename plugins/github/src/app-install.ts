@@ -81,9 +81,26 @@ export async function buildAppJwt(creds: AppCredentials, now: Date = new Date())
     .sign(key);
 }
 
+/** An installation id as GitHub issues it : decimal digits. It is a segment of the mint path. */
+const INSTALLATION_ID = /^[0-9]{1,20}$/;
+
+/**
+ * The installation id as a path-safe segment, or `null`. `encodeURIComponent`
+ * would leave `.` and `..` untouched and a URL parser would then remove them
+ * (`/app/installations/../access_tokens` is `/app/access_tokens`), so the id
+ * is checked, never escaped.
+ */
+export function installationIdOf(value: unknown): string | null {
+  return typeof value === 'string' && INSTALLATION_ID.test(value) ? value : null;
+}
+
 export async function mintInstallationToken(
   input: MintInstallationTokenInput,
 ): Promise<ScopedInstallationToken> {
+  const installationId = installationIdOf(input.installationId);
+  if (installationId === null) {
+    throw new Error('github: the installation id of the connection is not a number');
+  }
   const jwt = await buildAppJwt(input);
   const body: Record<string, unknown> = {};
   if (input.repositories && input.repositories.length > 0) body.repositories = input.repositories;
@@ -92,7 +109,7 @@ export async function mintInstallationToken(
   }
   const hasBody = Object.keys(body).length > 0;
   const res = await input.fetchImpl(
-    `${GITHUB_API_BASE}/app/installations/${encodeURIComponent(input.installationId)}/access_tokens`,
+    `${GITHUB_API_BASE}/app/installations/${installationId}/access_tokens`,
     {
       method: 'POST',
       headers: {

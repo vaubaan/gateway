@@ -324,15 +324,21 @@ describe('classifyGithub — refuses what it cannot place exactly', () => {
   });
 
   test('wildcard characters never reach a concrete slice', () => {
-    const branch = classifyGithub('github__create_branch', { ...baseArgs, branch: '*' }, resources);
-    expect(expectSlices(branch)).toEqual([`github.repo[${repoRef}].branch[-].W`]);
+    // No branch holds a `*` (git refuses it) : the call is refused, not rewritten.
+    for (const branch of ['*', 'feature/**']) {
+      const r = classifyGithub('github__create_branch', { ...baseArgs, branch }, resources);
+      expect(expectDenied(r)).toBe(
+        `tool 'github__create_branch' branch '${branch}' is not a branch name`,
+      );
+    }
+    // In a file path `*` is an ordinary character : the slice stays concrete.
     const file = classifyGithub(
       'github__create_or_update_file',
-      { ...baseArgs, branch: 'feature/**', path: 'src/*.ts', content: 'x', message: 'm' },
+      { ...baseArgs, branch: 'feature/x', path: 'src/*.ts', content: 'x', message: 'm' },
       resources,
     );
     expect(expectSlices(file)).toEqual([
-      `github.repo[${repoRef}].branch[feature/--].file[src/-.ts].W`,
+      `github.repo[${repoRef}].branch[feature/x].file[src/-.ts].W`,
     ]);
   });
 });

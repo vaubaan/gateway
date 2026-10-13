@@ -18,7 +18,14 @@
  *   - the target project is resolved **once**, by the classifier's own
  *     `resolveProjectRef(args, ctx.resources)` : every URL is built from its
  *     answer, never from `args.project_ref`, so a call reaches the project
- *     its authorised slices name or no project at all.
+ *     its authorised slices name or no project at all ;
+ *   - every other identifier that lands in a path, a query string, a header
+ *     or the SQL text of `list_tables` comes from the classifier's own
+ *     `readIdentifiers(tool, args)` / `tableSchemas(args)`, never from
+ *     `args` : each is within the grammar of its kind (no dot-only segment,
+ *     no separator, no escape), so the request names the function, user,
+ *     bucket or object the slices named. A call the classifier denies is
+ *     refused before any request, the `service_role` key lookup included.
  *
  * Data plane (GoTrue admin, Storage) : the Management API token cannot call
  * `{ref}.supabase.co/auth/v1/admin` or `/storage/v1`. The plugin fetches the
@@ -136,6 +143,14 @@ export async function discoverSupabaseResources(
     const ref = p.ref ?? p.id;
     return typeof ref === 'string' && ref.length > 0;
   });
+  // A ref the classifier would refuse is of no use to a mission : say so at
+  // connection time instead of listing a resource no call can name.
+  const unusable = all.find((p) => projectRefIdent(p.ref ?? p.id) === null);
+  if (unusable) {
+    throw new Error(
+      `supabase: project ref ${JSON.stringify(unusable.ref ?? unusable.id)} is not a project ref (a host label)`,
+    );
+  }
   if (all.length > MAX_DISCOVERED_PROJECTS) {
     ctx.logger?.warn('supabase: more projects than the discovery cap, list truncated', {
       total: all.length,
@@ -221,18 +236,21 @@ async function fetchServiceRoleKey(
 }
 
 /**
- * Dispatch one tool call on `projectRef`, the project `resolveProjectRef`
- * answered. Throws on unknown tool.
+ * Dispatch one resolved call. The project ref and every `id(…)` went through
+ * the classifier's grammars : an opaque id or a slug is one path segment and
+ * is interpolated as it is ; a bucket id and the segments of an object path
+ * may hold dots (never dots alone) and are percent-encoded. Nothing that
+ * reaches a path, a query string or a header is read from `args`.
+ * Throws on unknown tool.
  */
 async function callSupabase(
-  fetchImpl: FetchImpl,
-  token: string,
+  call: SupabaseCall,
   tool: string,
-  projectRef: string,
   args: Readonly<Record<string, unknown>>,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const ref = encodeURIComponent(projectRef);
+  const { fetchImpl, token, projectRef, id } = call;
+  const ref = projectRef;
   const mgmt = (path: string, init?: RequestInit) =>
     mgmtFetch(fetchImpl, token, path, init, signal);
   const readOnlyQuery = (query: string) =>
@@ -252,11 +270,11 @@ async function callSupabase(
       return { url: projectUrl(projectRef), anon_key: anon };
     }
     case 'supabase__list_tables': {
-      const named = Array.isArray(args.schemas)
-        ? args.schemas.filter((s): s is string => typeof s === 'string')
-        : [];
-      const schemas = named.length > 0 ? named : ['public'];
-      const listLiteral = schemas.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
+      // Schema identifiers only (`tableSchemas`) : no quote, no backslash, so
+      // each one is written between quotes as it is.
+      const schemas = tableSchemas(args);
+      if (schemas === null) throw new Error('supabase list_tables: schemas were not validated');
+      const listLiteral = schemas.map((s) => `'${s}'`).join(',');
       return readOnlyQuery(
         `select table_schema, table_name, table_type
         from information_schema.tables
@@ -271,9 +289,7 @@ async function callSupabase(
     case 'supabase__execute_sql':
       return readOnlyQuery(String(args.query));
     case 'supabase__get_advisors':
-      return mgmt(
-        `/projects/${ref}/advisors/${encodeURIComponent(String(args.type ?? 'security'))}`,
-      );
+      return mgmt(`/projects/${ref}/advisors/${id('type')}`);
     case 'supabase__apply_migration':
       return mgmt(`/projects/${ref}/database/migrations`, {
         method: 'POST',
@@ -302,32 +318,32 @@ async function callSupabase(
     case 'supabase__list_sso_providers':
       return mgmt(`/projects/${ref}/config/auth/sso/providers`);
     case 'supabase__get_sso_provider':
-      return mgmt(`/projects/${ref}/config/auth/sso/providers/${enc(args.provider_id)}`);
+      return mgmt(`/projects/${ref}/config/auth/sso/providers/${id('provider_id')}`);
     case 'supabase__create_sso_provider':
       return mgmt(`/projects/${ref}/config/auth/sso/providers`, {
         method: 'POST',
         body: JSON.stringify(bodyOf(args)),
       });
     case 'supabase__update_sso_provider':
-      return mgmt(`/projects/${ref}/config/auth/sso/providers/${enc(args.provider_id)}`, {
+      return mgmt(`/projects/${ref}/config/auth/sso/providers/${id('provider_id')}`, {
         method: 'PUT',
         body: JSON.stringify(bodyOf(args, ['provider_id'])),
       });
     case 'supabase__delete_sso_provider':
-      return mgmt(`/projects/${ref}/config/auth/sso/providers/${enc(args.provider_id)}`, {
+      return mgmt(`/projects/${ref}/config/auth/sso/providers/${id('provider_id')}`, {
         method: 'DELETE',
       });
     case 'supabase__list_third_party_auth':
       return mgmt(`/projects/${ref}/config/auth/third-party-auth`);
     case 'supabase__get_third_party_auth':
-      return mgmt(`/projects/${ref}/config/auth/third-party-auth/${enc(args.tpa_id)}`);
+      return mgmt(`/projects/${ref}/config/auth/third-party-auth/${id('tpa_id')}`);
     case 'supabase__create_third_party_auth':
       return mgmt(`/projects/${ref}/config/auth/third-party-auth`, {
         method: 'POST',
         body: JSON.stringify(bodyOf(args)),
       });
     case 'supabase__delete_third_party_auth':
-      return mgmt(`/projects/${ref}/config/auth/third-party-auth/${enc(args.tpa_id)}`, {
+      return mgmt(`/projects/${ref}/config/auth/third-party-auth/${id('tpa_id')}`, {
         method: 'DELETE',
       });
 
@@ -335,27 +351,30 @@ async function callSupabase(
     case 'supabase__list_functions':
       return mgmt(`/projects/${ref}/functions`);
     case 'supabase__get_function':
-      return mgmt(`/projects/${ref}/functions/${enc(args.function_slug)}`);
+      return mgmt(`/projects/${ref}/functions/${id('function_slug')}`);
     case 'supabase__get_function_body':
-      return mgmt(`/projects/${ref}/functions/${enc(args.function_slug)}/body`);
+      return mgmt(`/projects/${ref}/functions/${id('function_slug')}/body`);
     case 'supabase__create_function':
       return mgmt(`/projects/${ref}/functions`, {
         method: 'POST',
         body: JSON.stringify(bodyOf(args)),
       });
     case 'supabase__update_function':
-      return mgmt(`/projects/${ref}/functions/${enc(args.function_slug)}`, {
+      return mgmt(`/projects/${ref}/functions/${id('function_slug')}`, {
         method: 'PATCH',
         body: JSON.stringify(bodyOf(args, ['function_slug'])),
       });
     case 'supabase__delete_function':
-      return mgmt(`/projects/${ref}/functions/${enc(args.function_slug)}`, { method: 'DELETE' });
+      return mgmt(`/projects/${ref}/functions/${id('function_slug')}`, { method: 'DELETE' });
     case 'supabase__deploy_function':
       // The slug travels as a query parameter ; the body describes the bundle.
-      return mgmt(`/projects/${ref}/functions/deploy?slug=${enc(args.slug)}`, {
-        method: 'POST',
-        body: JSON.stringify(bodyOf(args, ['slug'])),
-      });
+      return mgmt(
+        `/projects/${ref}/functions/deploy?${new URLSearchParams({ slug: id('slug') }).toString()}`,
+        {
+          method: 'POST',
+          body: JSON.stringify(bodyOf(args, ['slug'])),
+        },
+      );
     case 'supabase__list_function_secrets':
       return mgmt(`/projects/${ref}/secrets`);
     case 'supabase__create_function_secrets':
@@ -383,7 +402,7 @@ async function callSupabase(
     case 'supabase__upload_object':
     case 'supabase__delete_object':
     case 'supabase__create_signed_url':
-      return executeDataPlane(fetchImpl, token, tool, projectRef, args, signal);
+      return executeDataPlane(call, tool, args, signal);
 
     default:
       throw new Error(`Unknown Supabase MCP tool: ${tool}`);
@@ -440,13 +459,12 @@ async function dataApiFetch(
 }
 
 async function executeDataPlane(
-  fetchImpl: FetchImpl,
-  token: string,
+  call: SupabaseCall,
   tool: string,
-  projectRef: string,
   args: Readonly<Record<string, unknown>>,
   signal?: AbortSignal,
 ): Promise<unknown> {
+  const { fetchImpl, token, projectRef, id } = call;
   const serviceRole = await fetchServiceRoleKey(fetchImpl, token, projectRef, signal);
   const data = (path: string, init?: DataApiInit) =>
     dataApiFetch(fetchImpl, serviceRole, projectRef, path, init, signal);
@@ -454,21 +472,20 @@ async function executeDataPlane(
   switch (tool) {
     // ─── auth / users ───────────────────────────────────────────────────────
     case 'supabase__list_users': {
-      const page = typeof args.page === 'number' ? args.page : 1;
-      const perPage = typeof args.per_page === 'number' ? args.per_page : 50;
-      return data(`/auth/v1/admin/users?page=${page}&per_page=${perPage}`);
+      const query = new URLSearchParams({ page: id('page'), per_page: id('per_page') });
+      return data(`/auth/v1/admin/users?${query.toString()}`);
     }
     case 'supabase__get_user':
-      return data(`/auth/v1/admin/users/${enc(args.user_id)}`);
+      return data(`/auth/v1/admin/users/${id('user_id')}`);
     case 'supabase__create_user':
       return data('/auth/v1/admin/users', { method: 'POST', body: JSON.stringify(bodyOf(args)) });
     case 'supabase__update_user':
-      return data(`/auth/v1/admin/users/${enc(args.user_id)}`, {
+      return data(`/auth/v1/admin/users/${id('user_id')}`, {
         method: 'PUT',
         body: JSON.stringify(bodyOf(args, ['user_id'])),
       });
     case 'supabase__delete_user':
-      return data(`/auth/v1/admin/users/${enc(args.user_id)}`, { method: 'DELETE' });
+      return data(`/auth/v1/admin/users/${id('user_id')}`, { method: 'DELETE' });
     case 'supabase__generate_link':
       return data('/auth/v1/admin/generate_link', {
         method: 'POST',
@@ -479,38 +496,36 @@ async function executeDataPlane(
     case 'supabase__create_bucket':
       return data('/storage/v1/bucket', { method: 'POST', body: JSON.stringify(bodyOf(args)) });
     case 'supabase__update_bucket':
-      return data(`/storage/v1/bucket/${enc(args.id)}`, {
+      return data(`/storage/v1/bucket/${enc(id('id'))}`, {
         method: 'PUT',
         body: JSON.stringify(bodyOf(args, ['id'])),
       });
     case 'supabase__delete_bucket':
-      return data(`/storage/v1/bucket/${enc(args.id)}`, { method: 'DELETE' });
+      return data(`/storage/v1/bucket/${enc(id('id'))}`, { method: 'DELETE' });
 
     // ─── storage / objects ──────────────────────────────────────────────────
     case 'supabase__list_objects':
-      return data(`/storage/v1/object/list/${enc(args.bucket)}`, {
+      return data(`/storage/v1/object/list/${enc(id('bucket'))}`, {
         method: 'POST',
         body: JSON.stringify(bodyOf(args, ['bucket'])),
       });
     case 'supabase__upload_object': {
-      const contentType =
-        typeof args.content_type === 'string' ? args.content_type : 'application/octet-stream';
-      return data(`/storage/v1/object/${enc(args.bucket)}/${encodePath(String(args.path))}`, {
+      return data(`/storage/v1/object/${enc(id('bucket'))}/${encodePath(id('path'))}`, {
         method: 'POST',
         body: Buffer.from(String(args.content_base64), 'base64'),
         headers: {
-          'Content-Type': contentType,
+          'Content-Type': id('content_type'),
           'x-upsert': args.upsert === true ? 'true' : 'false',
         },
       });
     }
     case 'supabase__delete_object':
-      return data(`/storage/v1/object/${enc(args.bucket)}/${encodePath(String(args.path))}`, {
+      return data(`/storage/v1/object/${enc(id('bucket'))}/${encodePath(id('path'))}`, {
         method: 'DELETE',
       });
     case 'supabase__create_signed_url': {
       const expiresIn = typeof args.expires_in === 'number' ? args.expires_in : 3600;
-      return data(`/storage/v1/object/sign/${enc(args.bucket)}/${encodePath(String(args.path))}`, {
+      return data(`/storage/v1/object/sign/${enc(id('bucket'))}/${encodePath(id('path'))}`, {
         method: 'POST',
         body: JSON.stringify({ expiresIn }),
       });
@@ -529,11 +544,12 @@ export function projectUrl(projectRef: string): string {
   return `https://${projectRef}.supabase.co`;
 }
 
-function enc(value: unknown): string {
-  return encodeURIComponent(String(value));
+/** Percent-encode one dotted path segment the classifier's grammar accepted (never dot-only). */
+function enc(segment: string): string {
+  return encodeURIComponent(segment);
 }
 
-/** Encode a `/`-separated object path, keeping the separators. */
+/** Encode a `/`-separated object path, keeping the separators ; no segment is empty or dot-only. */
 function encodePath(p: string): string {
   return p.split('/').map(encodeURIComponent).join('/');
 }

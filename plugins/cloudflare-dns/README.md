@@ -65,7 +65,16 @@ the gateway and never forwarded.
 single path-safe segment: `^[A-Za-z0-9_-]{1,64}$` (`pathIdent` in
 `src/resources.ts`, applied by `classify` and by `execute`). `.`, `..`, a
 `/` or any other character is refused before classification and before any
-call — `dns_records/..` would otherwise be sent as the zone endpoint.
+call — `dns_records/..` would otherwise be sent as the zone endpoint. The
+zone's account id goes through the same grammar before it is embedded in a
+slice (the glob `*` otherwise).
+
+A record's `type` and `name` travel in the JSON body and decide the
+critical-record verdict. They are read by `recordType` and `dnsName`
+(`src/resources.ts`): a type that is not a type name, or a name that is not
+a DNS name (whitespace, a control or non-ASCII character, a separator, an
+escape, an inner wildcard…), makes the write a critical one — never an
+ordinary one.
 
 Reads (7): `list_zones`, `get_zone`, `list_records`, `get_record`,
 `export_records`, `get_zone_settings`, `get_dnssec`.

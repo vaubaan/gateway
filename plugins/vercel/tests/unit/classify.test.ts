@@ -114,9 +114,17 @@ describe('classifyVercel — bug-fix #3 : get_access_to_vercel_url is a credenti
   test('emits bypass-token.W (not deployment.R)', () => {
     const slices = classify('vercel__get_access_to_vercel_url', {
       projectId: 'prj_abc',
-      url: 'dep-foo',
+      url: 'https://dep-foo.vercel.app/admin',
     });
-    expect(slices).toEqual(['vercel.project[prj_abc].deployment[dep-foo].bypass-token.W']);
+    expect(slices).toEqual(['vercel.project[prj_abc].deployment[*].bypass-token.W']);
+  });
+
+  test('a `url` that is not an http(s) URL is denied, as `execute` refuses it', () => {
+    expect(
+      classifyVercel('vercel__get_access_to_vercel_url', { projectId: 'prj_abc', url: 'dep-foo' }, [
+        resource,
+      ]),
+    ).toEqual({ denied: 'url: expected an absolute http(s) URL of a deployment.' });
   });
 
   test('non-ident URL value falls back to wildcard ident', () => {
@@ -281,12 +289,16 @@ describe('classifyVercel — one spelling per argument, the one of the schema', 
   });
 
   test('verify / remove read `domain`, add reads `name`', () => {
-    expect(classify('vercel__verify_project_domain', { name: 'staging' })).toEqual([
-      'vercel.project[prj_abc].domain[*].W',
-    ]);
-    expect(classify('vercel__add_project_domain', { domain: 'staging' })).toEqual([
-      'vercel.project[prj_abc].domain[*].W',
-    ]);
+    // The other spelling is not read : the domain is missing, and `execute`
+    // would refuse the call for the same reason.
+    expect(
+      classifyVercel('vercel__verify_project_domain', { name: 'staging' }, [resource]),
+    ).toEqual({ denied: 'domain: missing or malformed domain name' });
+    expect(classifyVercel('vercel__add_project_domain', { domain: 'staging' }, [resource])).toEqual(
+      {
+        denied: 'name: missing or malformed domain name',
+      },
+    );
   });
 });
 

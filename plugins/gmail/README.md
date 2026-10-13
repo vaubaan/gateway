@@ -77,6 +77,12 @@ refuses the call:
   required and validated. A user label id cannot be mapped to a name, so on a
   mailbox with sensitive labels only system label ids (`INBOX`, `STARRED`,
   `UNREAD`, `IMPORTANT`…) are plain `label-write`.
+- **Identifiers.** A thread or message id is one opaque token
+  (`gmailId`: `[A-Za-z0-9_-]`, at most 64 characters); a label is an id or a
+  name without spaces (`labelRef`: at most 225 characters, `/` for nesting,
+  no empty, `.` or `..` segment). Anything else is refused, never escaped.
+  Both functions are exported for the executor to come, which must take its
+  path segments from them and from nothing else.
 
 Any other tool name is `denied`.
 

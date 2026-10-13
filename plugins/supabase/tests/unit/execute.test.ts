@@ -87,13 +87,21 @@ describe('executeSupabase — Management API reads', () => {
     expect(textOf(result)).toEqual([{ id: 'avatars' }]);
   });
 
-  test('get_function GETs /projects/:ref/functions/:slug with the slug URL-encoded', async () => {
+  test('get_function GETs /projects/:ref/functions/:slug ; a slug that is not one path segment is refused, not encoded', async () => {
     const { call } = await runMgmt(
       { method: 'GET', url: /\/functions\//, body: { slug: 'my-fn' } },
       'supabase__get_function',
-      { function_slug: 'my fn/with space' },
+      { function_slug: 'my-fn' },
     );
-    expect(call.url).toBe(`${MGMT}/functions/my%20fn%2Fwith%20space`);
+    expect(call.url).toBe(`${MGMT}/functions/my-fn`);
+
+    const fetch = mockFetch([]);
+    const refused = await supabasePlugin.execute(execCtx(fetch), 'supabase__get_function', {
+      project_ref: REF,
+      function_slug: 'my fn/with space',
+    });
+    expect(refused.isError).toBe(true);
+    expect(fetch.calls).toHaveLength(0);
   });
 
   test('get_anon_key fails when the Management API returns no anon entry', async () => {
@@ -178,9 +186,9 @@ describe('executeSupabase — Management API writes', () => {
     const { call } = await runMgmt(
       { method: 'POST', url: /\/functions\/deploy/, body: { version: 2 } },
       'supabase__deploy_function',
-      { slug: 'my fn', entrypoint_path: 'index.ts', files: [{ name: 'index.ts', content: 'x' }] },
+      { slug: 'my-fn', entrypoint_path: 'index.ts', files: [{ name: 'index.ts', content: 'x' }] },
     );
-    expect(call.url).toBe(`${MGMT}/functions/deploy?slug=my%20fn`);
+    expect(call.url).toBe(`${MGMT}/functions/deploy?slug=my-fn`);
     expect(call.json).toEqual({
       entrypoint_path: 'index.ts',
       files: [{ name: 'index.ts', content: 'x' }],
@@ -425,11 +433,20 @@ describe('executeSupabase — the target project is resolved like the classifier
     }
   });
 
-  test('list_tables ignores schema names that are not strings', async () => {
+  test('list_tables refuses schema names that are not strings : none is dropped silently', async () => {
+    const fetch = mockFetch([]);
+    const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__list_tables', {
+      project_ref: REF,
+      schemas: ['app', 7, null, { a: 1 }],
+    });
+    expect(result.isError).toBe(true);
+    expect(errorText(result)).toBe('schemas: missing or malformed.');
+    expect(fetch.calls).toHaveLength(0);
+
     const { call } = await runMgmt(
       { method: 'POST', url: `${MGMT}/database/query/read-only`, body: [] },
       'supabase__list_tables',
-      { schemas: ['app', 7, null, { a: 1 }] },
+      { schemas: ['app'] },
     );
     expect((call.json as { query: string }).query).toContain("in ('app')");
   });

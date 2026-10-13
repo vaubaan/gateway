@@ -58,6 +58,14 @@ argument must be one of the discovered environments of the resolved
 project, or the call is refused — refresh the connection's resources after
 creating an environment.
 
+`execute` resolves the call with the classifier's own `resolveTarget` and
+`readVariableWrite` and writes `projectId`, `environmentId`, `serviceId` and
+`deploymentId` from their answer : a Railway id is `[A-Za-z0-9_-]{1,64}`,
+anything else is denied and refused before any request. No id reaches a URL
+(JSON-RPC arguments, GraphQL variables of a constant document). `serviceId`
+and `deploymentId` are checked for their shape only : discovery stores the
+environments of a project, not its services or deployments.
+
 ## Catalog and presets
 
 `src/risk-catalog.yaml` — nine risks plus the mandatory

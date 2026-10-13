@@ -27,8 +27,15 @@
  *     project (`prod`, `staging`…), so env-qualified risks resolve ; an
  *     unlabelled project yields a wildcard segment, on which the policy
  *     engine refuses every env-scoped risk.
- *   - Identifiers embedded in a slice (`serviceId`, variable names) are
- *     validated against a safe character class ; a malformed one is denied.
+ *   - Every identifier has one grammar, which `execute` uses too : a Railway
+ *     id (`projectId`, `environmentId`, `serviceId`, `deploymentId`) is a
+ *     `railwayId`, a variable name a `variableName` ; a malformed one is
+ *     denied, never escaped. `execute` resolves the call with the same
+ *     `resolveTarget` and `readVariableWrite`, and sends the ids they return :
+ *     what is classified is what is sent.
+ *   - `serviceId` and `deploymentId` are checked for their shape only :
+ *     discovery stores the environments of a project, not its services or
+ *     deployments, so the classifier cannot tell which project owns them.
  *
  * Crucial cases :
  *   1. Variable writes emit `service-var[K1,K2,…].W`, which matches
@@ -50,8 +57,33 @@ import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/pl
 
 export const PROVIDER = 'railway';
 
-/** Identifier chars a slice segment accepts ; anything else is refused rather than escaped. */
-const SAFE_IDENT = /^[a-zA-Z0-9_./~-]+$/;
+// ─────────────────────────────────────────────────────────────────────────────
+// Identifier grammars — one per kind, shared with `execute`
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * An id Railway issues (project, environment, service, deployment — UUIDs) :
+ * letters, digits, `_` and `-`, bounded. No dot, no separator, no escape :
+ * the value is safe in a slice segment and names one object wherever the
+ * provider places it. Anything else is refused rather than escaped.
+ */
+export const RAILWAY_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** The value as a Railway id, or `null`. */
+export function railwayId(value: unknown): string | null {
+  return typeof value === 'string' && RAILWAY_ID.test(value) ? value : null;
+}
+
+/**
+ * A variable name : the characters a slice list item accepts (no comma, no
+ * bracket, no whitespace), bounded. It travels as a GraphQL variable only.
+ */
+export const VARIABLE_NAME = /^[a-zA-Z0-9_./~-]{1,256}$/;
+
+/** The value as a variable name, or `null`. */
+export function variableName(value: unknown): string | null {
+  return typeof value === 'string' && VARIABLE_NAME.test(value) ? value : null;
+}
 
 /**
  * Leaf of the marker slice a "replace every variable" write emits next to
@@ -137,24 +169,80 @@ export function classifyRailway(
 
   if (isAccountKind(kind)) return classifyAccountOnly(kind);
 
-  const project = locateProject(args, resources);
-  if ('denied' in project) return project;
+  const target = resolveTarget(tool, args, resources);
+  if ('denied' in target) return target;
 
-  const foreignEnvironment = environmentDenial(tool, args, project);
-  if (foreignEnvironment) return foreignEnvironment;
+  const write = readVariableWrite(tool, args);
+  if (write !== null && 'denied' in write) return write;
 
-  const service = serviceSegment(args);
-  if ('denied' in service) return service;
-
-  return classifyProjectScoped(kind, args, project.ref, project.env ?? null, service.segment);
+  const service: SliceSegment =
+    target.serviceId === null ? wildOne() : { kind: 'ident', value: target.serviceId };
+  return classifyProjectScoped(
+    kind,
+    target.project.ref,
+    target.project.env ?? null,
+    service,
+    write,
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Resource resolution
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface Denial {
+export interface Denial {
   readonly denied: string;
+}
+
+/** Refusals of a call that names no project the mission could resolve ; `execute` reads them. */
+export const NO_RAILWAY_PROJECT = 'railway target: the mission touches no Railway project.';
+export const AMBIGUOUS_RAILWAY_TARGET = 'ambiguous railway target: specify projectId.';
+
+/**
+ * What a project-scoped call runs on, as `classify` and `execute` both read
+ * it. Every id went through `railwayId` ; `project` is a resource of the
+ * mission and `environmentId`, when given, one of its discovered environments.
+ */
+export interface RailwayTarget {
+  readonly project: Resource;
+  readonly environmentId: string | null;
+  readonly serviceId: string | null;
+  readonly deploymentId: string | null;
+}
+
+/**
+ * Resolve the target of a project-scoped call — the **only** place that
+ * decides it. `execute` calls it with the same inputs and writes the request
+ * from its answer, so a call reaches the project, environment and service its
+ * slices name, or nothing at all.
+ */
+export function resolveTarget(
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+  resources: readonly Resource[],
+): RailwayTarget | Denial {
+  const project = locateProject(args, resources);
+  if ('denied' in project) return project;
+  // The ref of the resource is sent like an argument is : same grammar.
+  if (railwayId(project.ref) === null) {
+    return { denied: 'projectId: the project ref of this mission is not a Railway identifier.' };
+  }
+
+  const environment = readEnvironment(tool, args, project);
+  if ('denied' in environment) return environment;
+
+  const serviceId = optionalId(args.serviceId, 'serviceId');
+  if (typeof serviceId === 'object' && serviceId !== null) return serviceId;
+  const deploymentId = optionalId(args.deploymentId, 'deploymentId');
+  if (typeof deploymentId === 'object' && deploymentId !== null) return deploymentId;
+
+  return { project, environmentId: environment.id, serviceId, deploymentId };
+}
+
+/** `null` when the argument is absent, the id when well-formed, a denial otherwise. */
+function optionalId(value: unknown, arg: string): string | null | Denial {
+  if (value === undefined) return null;
+  return railwayId(value) ?? { denied: `${arg}: malformed ref.` };
 }
 
 /** `{ id, name }` pairs the discovery stores under `metadata.environments`. */
@@ -189,49 +277,45 @@ function locateProject(
   const own = resources.filter((r) => r.provider === PROVIDER);
 
   if (args.projectId !== undefined) {
-    if (typeof args.projectId !== 'string' || !SAFE_IDENT.test(args.projectId)) {
-      return { denied: 'projectId: malformed ref.' };
-    }
-    const match = own.find((r) => r.ref === args.projectId);
+    const explicit = railwayId(args.projectId);
+    if (explicit === null) return { denied: 'projectId: malformed ref.' };
+    const match = own.find((r) => r.ref === explicit);
     if (!match) {
-      return { denied: `railway project '${args.projectId}' is not a resource of this mission.` };
+      return { denied: `railway project '${explicit}' is not a resource of this mission.` };
     }
     return match;
   }
 
   if (own.length === 1) return own[0]!;
-  if (own.length === 0)
-    return { denied: 'railway target: the mission touches no Railway project.' };
+  if (own.length === 0) return { denied: NO_RAILWAY_PROJECT };
 
   // `accept-deploy` carries no projectId : find the project owning the environment.
   if (typeof args.environmentId === 'string') {
     const byEnv = own.filter((r) => environmentsOf(r).some((e) => e.id === args.environmentId));
     if (byEnv.length === 1) return byEnv[0]!;
   }
-  return { denied: 'ambiguous railway target: specify projectId.' };
+  return { denied: AMBIGUOUS_RAILWAY_TARGET };
 }
 
 /**
- * Bind `environmentId` to the located project, whichever way it was located.
- * The id is forwarded upstream unchanged and the OAuth token reaches every
+ * Read `environmentId` and bind it to the located project, whichever way it
+ * was located. The id is sent upstream and the OAuth token reaches every
  * project of the workspace, so an id the project does not own would run the
  * call outside the mission while the slice names the mission's project.
- * Returns the denial, or `null` when the call may be classified.
+ * `id` is `null` when the call names no environment.
  */
-function environmentDenial(
+function readEnvironment(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   project: Resource,
-): Denial | null {
-  const environmentId = args.environmentId;
-  if (environmentId === undefined) {
+): { readonly id: string | null } | Denial {
+  if (args.environmentId === undefined) {
     return TOOLS_ADDRESSED_BY_ENVIRONMENT.has(tool)
       ? { denied: 'environmentId: required, it is the only argument naming the target.' }
-      : null;
+      : { id: null };
   }
-  if (typeof environmentId !== 'string' || !SAFE_IDENT.test(environmentId)) {
-    return { denied: 'environmentId: malformed ref.' };
-  }
+  const environmentId = railwayId(args.environmentId);
+  if (environmentId === null) return { denied: 'environmentId: malformed ref.' };
   const known = environmentsOf(project);
   if (known.length === 0) {
     return {
@@ -243,16 +327,7 @@ function environmentDenial(
   if (!known.some((e) => e.id === environmentId)) {
     return { denied: `environmentId: not an environment of railway project '${project.ref}'.` };
   }
-  return null;
-}
-
-function serviceSegment(
-  args: Readonly<Record<string, unknown>>,
-): { segment: SliceSegment } | Denial {
-  if (args.serviceId === undefined) return { segment: wildOne() };
-  const id = ident(args.serviceId);
-  if (!id) return { denied: 'serviceId: malformed ref.' };
-  return { segment: id };
+  return { id: environmentId };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -279,10 +354,10 @@ function unsupportedKind(kind: never): Denial {
 
 function classifyProjectScoped(
   kind: ProjectKind,
-  args: Readonly<Record<string, unknown>>,
   projectRef: string,
   env: string | null,
   service: SliceSegment,
+  write: VariableWrite | null,
 ): ClassifyOutcome {
   const envSeg: SliceSegment = env === null ? wildOne() : { kind: 'ident', value: env };
   const project = [name('project'), { kind: 'ident', value: projectRef } as SliceSegment];
@@ -368,16 +443,9 @@ function classifyProjectScoped(
         ],
       };
 
-    case 'write-variable': {
-      const leaf = singleVariableSegment(args);
-      if ('denied' in leaf) return leaf;
-      const scope = [...project, name('environment'), envSeg, name('service'), service];
-      return { slices: [variableWriteSlice(scope, leaf.segment)] };
-    }
-
+    case 'write-variable':
     case 'write-variables-bulk': {
-      const write = bulkVariableWrite(args);
-      if ('denied' in write) return write;
+      if (write === null) return { denied: 'variables: the write could not be read.' };
       const scope = [...project, name('environment'), envSeg, name('service'), service];
       return {
         slices: write.replacesAll
@@ -421,18 +489,36 @@ function replaceAllVariablesSlice(scope: readonly SliceSegment[]): Slice {
   return slice([...scope, name(REPLACE_ALL_VARIABLES_ENTITY)], 'W');
 }
 
+/** The variable leaf of a write, and whether the write replaces every variable. */
+export interface VariableWrite {
+  readonly segment: SliceSegment;
+  readonly replacesAll: boolean;
+}
+
+/**
+ * The variables a call writes, as `classify` and `execute` both read them ;
+ * `null` for a tool that writes none. A denial here is a refusal there.
+ */
+export function readVariableWrite(
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): VariableWrite | Denial | null {
+  const kind = TOOL_KIND[tool];
+  if (kind === 'write-variable') return singleVariableWrite(args);
+  if (kind === 'write-variables-bulk') return bulkVariableWrite(args);
+  return null;
+}
+
 /**
  * `upsert-variable` / `delete-variable` : the named variable as a one-item
  * list (name-aware audit). A missing or malformed name is denied : without
  * it the classifier cannot tell which variable the call writes.
  */
-function singleVariableSegment(
-  args: Readonly<Record<string, unknown>>,
-): { segment: SliceSegment } | Denial {
+function singleVariableWrite(args: Readonly<Record<string, unknown>>): VariableWrite | Denial {
   if (args.name === undefined || args.name === '') return { denied: 'name: required.' };
-  const id = ident(args.name);
-  if (!id) return { denied: 'name: malformed variable name.' };
-  return { segment: { kind: 'list', values: [id.value] } };
+  const id = variableName(args.name);
+  if (id === null) return { denied: 'name: malformed variable name.' };
+  return { segment: { kind: 'list', values: [id] }, replacesAll: false };
 }
 
 /**
@@ -442,9 +528,7 @@ function singleVariableSegment(
  * not trusted to mean "no"), and when the payload is empty or not an object
  * (pessimistic). A malformed key is denied.
  */
-function bulkVariableWrite(
-  args: Readonly<Record<string, unknown>>,
-): { segment: SliceSegment; replacesAll: boolean } | Denial {
+function bulkVariableWrite(args: Readonly<Record<string, unknown>>): VariableWrite | Denial {
   if (args.replace !== undefined && args.replace !== false) {
     return { segment: wildOne(), replacesAll: true };
   }
@@ -452,7 +536,7 @@ function bulkVariableWrite(
   if (vars && typeof vars === 'object' && !Array.isArray(vars)) {
     const keys = Object.keys(vars);
     if (keys.length > 0) {
-      if (!keys.every((k) => SAFE_IDENT.test(k))) {
+      if (!keys.every((k) => variableName(k) !== null)) {
         return { denied: 'variables: malformed variable name.' };
       }
       return { segment: { kind: 'list', values: keys }, replacesAll: false };
@@ -471,10 +555,6 @@ function name(value: string): SliceSegment {
 
 function wildOne(): SliceSegment {
   return { kind: 'wild-one' };
-}
-
-function ident(value: unknown): Extract<SliceSegment, { kind: 'ident' }> | null {
-  return typeof value === 'string' && SAFE_IDENT.test(value) ? { kind: 'ident', value } : null;
 }
 
 function slice(path: SliceSegment[], action: Slice['action']): Slice {

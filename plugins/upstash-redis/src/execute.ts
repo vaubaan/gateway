@@ -28,9 +28,15 @@
  *     one flat command of strings and finite numbers. A pipeline-shaped
  *     `command` is refused here — no pipeline endpoint is wired — whatever
  *     it was classified as ;
- *   - the database a data tool targets must be a resource of the mission ;
- *     absent, the mission's single database applies ; anything else is
- *     refused before any network call ;
+ *   - the database a call runs on is resolved by the classifier's own
+ *     `resolveDatabase` : a resource of the mission whose ref is one path
+ *     segment (`pathIdent`), or the mission's single database when a data
+ *     tool names none ; anything else is refused before any network call.
+ *     The resolved ref is what is interpolated into the Management API
+ *     path — the argument is not read a second time ;
+ *   - a Redis command (verb, keys, values) is sent as a JSON array in the
+ *     body of a POST to the database's REST endpoint : no word of it is ever
+ *     part of a URL ;
  *   - Management API answers about a database are **redacted** : the REST
  *     tokens and password never reach the agent (`read-database-metadata`
  *     promises "no credential leak").
@@ -45,9 +51,9 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER, redisCommandOf } from './classify.ts';
+import { PROVIDER, databaseArg, redisCommandOf, resolveDatabase } from './classify.ts';
 import { basicAuthHeader, upstashAuth, type UpstashAuth } from './credential.ts';
-import { MANAGEMENT_TOOL_NAMES } from './tools.ts';
+import { ACCOUNT_TOOL_NAMES, MANAGEMENT_TOOL_NAMES } from './tools.ts';
 
 /** The Upstash Developer (Management) API. A fact about the provider. */
 export const UPSTASH_MANAGEMENT_API = 'https://api.upstash.com/v2';
@@ -98,30 +104,23 @@ export async function executeUpstashRedis(
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   };
 
-  const own = ctx.resources.filter((r) => r.provider === PROVIDER);
-  const explicit = args.databaseId ?? args.database_id;
-  if (explicit !== undefined) {
-    if (typeof explicit !== 'string' || !own.some((r) => r.ref === explicit)) {
-      return errorResult(
-        `databaseId '${String(explicit)}' is not a database of this mission — omit the argument or name one of the mission's databases.`,
-      );
-    }
-  }
+  // The classifier's own resolution : the database the slices named, as one
+  // path segment, or a refusal. Account tools need none but still refuse a
+  // database outside the mission.
+  const database = resolveDatabase(args, ctx.resources, !ACCOUNT_TOOL_NAMES.has(tool));
+  if ('denied' in database) return errorResult(database.denied);
 
   try {
     if (MANAGEMENT_TOOL_NAMES.has(tool)) {
-      return toToolResult(await executeManagementTool(call, tool, args));
+      // A management tool acts on the database the call names : the mission's
+      // single database is not a default for it (its schema requires the id).
+      const named = databaseArg(args) === undefined ? null : database.ref;
+      return toToolResult(await executeManagementTool(call, tool, args, named));
     }
-    const databaseId =
-      typeof explicit === 'string' ? explicit : own.length === 1 ? own[0]!.ref : null;
-    if (databaseId === null) {
-      return errorResult(
-        own.length === 0
-          ? `Upstash Redis data tool '${tool}' requires a databaseId and the mission touches no Upstash database.`
-          : `Upstash Redis data tool '${tool}' requires a databaseId : the mission touches ${own.length} Upstash databases — name one.`,
-      );
+    if (database.ref === null) {
+      return errorResult(`Upstash Redis data tool '${tool}' requires a databaseId.`);
     }
-    return toToolResult(await executeDataTool(call, databaseId, tool, args));
+    return toToolResult(await executeDataTool(call, database.ref, tool, args));
   } catch (e) {
     if (e instanceof ExecutorRefusal) return errorResult(e.message);
     throw e;
@@ -223,17 +222,23 @@ async function callManagementApi(
   }
 }
 
+/**
+ * `databaseId` is the ref `resolveDatabase` returned for the database the
+ * call names (one path segment, interpolated as it is), `null` when the call
+ * names none.
+ */
 async function executeManagementTool(
   call: UpstashCall,
   tool: string,
   args: Readonly<Record<string, unknown>>,
+  databaseId: string | null,
 ): Promise<unknown> {
   switch (tool) {
     case 'upstash_redis__list_databases':
       return redactDatabases(await callManagementApi(call, 'GET', '/redis/databases'));
     case 'upstash_redis__get_database':
       return redactDatabases(
-        await callManagementApi(call, 'GET', `/redis/database/${databasePath(args)}`),
+        await callManagementApi(call, 'GET', `/redis/database/${databasePath(databaseId)}`),
       );
     case 'upstash_redis__create_database': {
       const body: Record<string, unknown> = { name: args.name, region: args.region };
@@ -244,25 +249,23 @@ async function executeManagementTool(
       return redactDatabases(await callManagementApi(call, 'POST', '/redis/database', body));
     }
     case 'upstash_redis__delete_database':
-      return callManagementApi(call, 'DELETE', `/redis/database/${databasePath(args)}`);
+      return callManagementApi(call, 'DELETE', `/redis/database/${databasePath(databaseId)}`);
     case 'upstash_redis__rename_database':
       return redactDatabases(
-        await callManagementApi(call, 'POST', `/redis/rename/${databasePath(args)}`, {
+        await callManagementApi(call, 'POST', `/redis/rename/${databasePath(databaseId)}`, {
           name: args.name,
         }),
       );
     case 'upstash_redis__get_database_stats':
-      return callManagementApi(call, 'GET', `/redis/stats/${databasePath(args)}`);
+      return callManagementApi(call, 'GET', `/redis/stats/${databasePath(databaseId)}`);
     default:
       throw new ExecutorRefusal(`Upstash Redis management tool not implemented: ${tool}`);
   }
 }
 
-function databasePath(args: Readonly<Record<string, unknown>>): string {
-  const id = args.databaseId ?? args.database_id;
-  if (typeof id !== 'string' || id.length === 0)
-    throw new ExecutorRefusal('databaseId is required.');
-  return encodeURIComponent(id);
+function databasePath(databaseId: string | null): string {
+  if (databaseId === null) throw new ExecutorRefusal('databaseId is required.');
+  return databaseId;
 }
 
 /** Strip the per-database credentials from a Management API answer (object or list). */
@@ -280,16 +283,15 @@ export function redactDatabases(payload: unknown): unknown {
 // Data API (per-database Bearer token)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The REST endpoint and token of a database, read from the Management API. */
+/**
+ * The REST endpoint and token of a database, read from the Management API.
+ * `databaseId` is a ref `resolveDatabase` returned : one path segment.
+ */
 async function databaseConnection(
   call: UpstashCall,
   databaseId: string,
 ): Promise<{ endpoint: string; restToken: string }> {
-  const answer: unknown = await callManagementApi(
-    call,
-    'GET',
-    `/redis/database/${encodeURIComponent(databaseId)}`,
-  );
+  const answer: unknown = await callManagementApi(call, 'GET', `/redis/database/${databaseId}`);
   const db: Partial<DatabaseDto> = isDatabaseDto(answer) ? answer : {};
   const text = (value: unknown): string | undefined =>
     typeof value === 'string' && value.length > 0 ? value : undefined;

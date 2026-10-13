@@ -30,15 +30,15 @@ import {
 import { GITHUB_API_BASE, GITHUB_API_HEADERS } from './app-install.ts';
 import {
   MINT_TOOL,
-  NO_REPOSITORY_SELECTED,
+  PROVIDER,
   githubRepoRefs,
-  repositoryNotSelectedMessage,
-} from './classify.ts';
+  readGithubCall,
+  repoFullName,
+  type GithubCall,
+} from './call.ts';
 import { installationTokenFor } from './credential.ts';
 import { dispatchGithubTool, type OctokitLike } from './octokit-dispatch.ts';
 import { installationTokenForCall } from './token-cache.ts';
-
-const PROVIDER = 'github';
 
 /** Permission sets of `github__mint_install_token`, by purpose. */
 export const MINT_PERMISSIONS: Readonly<
@@ -149,6 +149,7 @@ export async function discoverGithubResources(
 ): Promise<readonly Resource[]> {
   const { token } = await installationTokenFor(ctx);
   const out: Resource[] = [];
+  let listed = 0;
   for (let page = 1; page <= DISCOVERY_MAX_PAGES; page++) {
     const url = `${GITHUB_API_BASE}/installation/repositories?per_page=${DISCOVERY_PAGE_SIZE}&page=${page}`;
     const res = await ctx.fetch(url, {
@@ -169,11 +170,22 @@ export async function discoverGithubResources(
       repositories?: readonly InstallationRepositoryDto[];
     };
     const repositories = body.repositories ?? [];
+    listed += repositories.length;
     for (const r of repositories) {
+      // A name the reader of the calls would refuse is of no use to a
+      // mission : it is left out, and said, instead of listing a resource no
+      // call can name.
+      const named = repoFullName(r.full_name);
+      if (named === null) {
+        ctx.logger?.warn('github: repository left out, its name is not owner/repo', {
+          full_name: String(r.full_name).slice(0, 200),
+        });
+        continue;
+      }
       out.push({
         provider: PROVIDER,
-        ref: r.full_name,
-        displayName: r.full_name,
+        ref: named.ref,
+        displayName: named.ref,
         metadata: {
           ...(r.default_branch !== undefined ? { default_branch: r.default_branch } : {}),
           ...(r.private !== undefined ? { private: r.private } : {}),
@@ -182,7 +194,7 @@ export async function discoverGithubResources(
       });
     }
     const total = body.total_count;
-    if (repositories.length < DISCOVERY_PAGE_SIZE || (total !== undefined && out.length >= total))
+    if (repositories.length < DISCOVERY_PAGE_SIZE || (total !== undefined && listed >= total))
       break;
   }
   return out;
@@ -198,12 +210,6 @@ function octokitLog(logger: PluginLogger | undefined): OctokitLog {
       logger[level](parts.map(String).join(' '), { source: 'octokit' });
     };
   return { debug: to('debug'), info: to('info'), warn: to('warn'), error: to('error') };
-}
-
-/** `owner/repo` → `repo` (the access_tokens endpoint takes names without owner). */
-function repoNameOf(fullName: string): string {
-  const slash = fullName.indexOf('/');
-  return slash >= 0 ? fullName.slice(slash + 1) : fullName;
 }
 
 function json(payload: unknown): McpToolResult {

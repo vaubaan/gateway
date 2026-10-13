@@ -8,6 +8,12 @@
  *   - `fetch` comes from the context, never from the global ;
  *   - every call re-runs the classifier first : a call the classifier refuses
  *     is never executed, whatever the host did before (fail closed) ;
+ *   - every identifier interpolated into the request path is read by the
+ *     grammar function the classifier used (`pathIdent`, `contactSelector`,
+ *     `resolveSegmentArg`), and the ones that do not come from the arguments
+ *     — a domain's `domain_id`, the id of a contact Resend just created — go
+ *     through `pathIdent` too : a dot segment or a separator is refused
+ *     before the call, never escaped ;
  *   - broadcast calls re-read the broadcast upstream and refuse to act on one
  *     that belongs to another segment than the one the mission named ;
  *   - list calls return only the mission's resources (domains, segments) and
@@ -29,11 +35,14 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { classifyResend } from './classify.ts';
+import { MALFORMED_CONTACT, MALFORMED_ID, classifyResend } from './classify.ts';
 import {
   RESEND_PROVIDER,
+  contactSelector,
+  domainIdOf,
   domainRef,
   domainResources,
+  pathIdent,
   resolveDomain,
   resolveDomainArg,
   resolveSegmentArg,
@@ -94,21 +103,21 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
   switch (tool) {
     // ─── Reads ────────────────────────────────────────────────────────────
     case 'resend__get_email':
-      return request(ctx, 'GET', `/emails/${enc(args.id)}`);
+      return request(ctx, 'GET', `/emails/${idSegment(args.id)}`);
     case 'resend__list_domains': {
       const refs = new Set(domainResources(ctx.resources).map((r) => r.ref));
       const all = await listAll<DomainDto>(ctx, '/domains');
       return { data: all.filter((d) => refs.has(domainRef(d.name))) };
     }
     case 'resend__get_domain':
-      return request(ctx, 'GET', `/domains/${enc(domainId(args.domain, ctx.resources))}`);
+      return request(ctx, 'GET', `/domains/${domainId(args.domain, ctx.resources)}`);
     case 'resend__list_segments': {
       const refs = new Set(segmentResources(ctx.resources).map((r) => r.ref));
       const all = await listAll<SegmentDto>(ctx, '/segments');
       return { data: all.filter((s) => refs.has(s.id)) };
     }
     case 'resend__get_segment':
-      return request(ctx, 'GET', `/segments/${enc(segmentRef(args.segment_id, ctx.resources))}`);
+      return request(ctx, 'GET', `/segments/${segmentRef(args.segment_id, ctx.resources)}`);
     case 'resend__list_contacts': {
       const query = forwarded(tool, args, ['segment_id']);
       if (args.segment_id !== undefined) {
@@ -117,7 +126,7 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
       return request(ctx, 'GET', '/contacts', undefined, query);
     }
     case 'resend__get_contact':
-      return request(ctx, 'GET', `/contacts/${enc(args.id)}`);
+      return request(ctx, 'GET', `/contacts/${contactSegment(args.id)}`);
     case 'resend__list_broadcasts': {
       const refs = new Set(segmentResources(ctx.resources).map((r) => r.ref));
       const all = await listAll<BroadcastDto>(ctx, '/broadcasts');
@@ -140,51 +149,54 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
       return request(
         ctx,
         'PATCH',
-        `/domains/${enc(domainId(args.domain, ctx.resources))}`,
+        `/domains/${domainId(args.domain, ctx.resources)}`,
         forwarded(tool, args, ['domain']),
       );
     case 'resend__delete_domain':
-      return request(ctx, 'DELETE', `/domains/${enc(domainId(args.domain, ctx.resources))}`);
+      return request(ctx, 'DELETE', `/domains/${domainId(args.domain, ctx.resources)}`);
     case 'resend__verify_domain':
-      return request(ctx, 'POST', `/domains/${enc(domainId(args.domain, ctx.resources))}/verify`);
+      return request(ctx, 'POST', `/domains/${domainId(args.domain, ctx.resources)}/verify`);
 
     // ─── Writes — segments and members ────────────────────────────────────
     case 'resend__create_segment':
       return request(ctx, 'POST', '/segments', { name: args.name });
     case 'resend__delete_segment':
-      return request(ctx, 'DELETE', `/segments/${enc(segmentRef(args.segment_id, ctx.resources))}`);
+      return request(ctx, 'DELETE', `/segments/${segmentRef(args.segment_id, ctx.resources)}`);
     case 'resend__create_contact': {
       const body = forwarded(tool, args, ['segment_id']);
       const created = await request(ctx, 'POST', '/contacts', body);
       if (args.segment_id === undefined) return created;
       const seg = segmentRef(args.segment_id, ctx.resources);
-      if (!isRecord(created) || typeof created.id !== 'string' || created.id.length === 0) {
+      // The id comes from the provider's answer : it is not trusted to be a path segment.
+      const contact = isRecord(created) ? pathIdent(created.id) : null;
+      if (!isRecord(created) || contact === null) {
         throw new Error(
           `resend: the contact was created but Resend returned no id — it was not added to segment '${seg}'`,
         );
       }
-      const membership = await request(
-        ctx,
-        'POST',
-        `/contacts/${enc(created.id)}/segments/${enc(seg)}`,
-      );
+      const membership = await request(ctx, 'POST', `/contacts/${contact}/segments/${seg}`);
       return { ...created, segment: membership };
     }
     case 'resend__update_contact':
-      return request(ctx, 'PATCH', `/contacts/${enc(args.id)}`, forwarded(tool, args, ['id']));
+      return request(
+        ctx,
+        'PATCH',
+        `/contacts/${contactSegment(args.id)}`,
+        forwarded(tool, args, ['id']),
+      );
     case 'resend__delete_contact':
-      return request(ctx, 'DELETE', `/contacts/${enc(args.id)}`);
+      return request(ctx, 'DELETE', `/contacts/${contactSegment(args.id)}`);
     case 'resend__add_contact_to_segment':
       return request(
         ctx,
         'POST',
-        `/contacts/${enc(args.id)}/segments/${enc(segmentRef(args.segment_id, ctx.resources))}`,
+        `/contacts/${contactSegment(args.id)}/segments/${segmentRef(args.segment_id, ctx.resources)}`,
       );
     case 'resend__remove_contact_from_segment':
       return request(
         ctx,
         'DELETE',
-        `/contacts/${enc(args.id)}/segments/${enc(segmentRef(args.segment_id, ctx.resources))}`,
+        `/contacts/${contactSegment(args.id)}/segments/${segmentRef(args.segment_id, ctx.resources)}`,
       );
 
     // ─── Writes — broadcasts ──────────────────────────────────────────────
@@ -198,15 +210,15 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
       return request(
         ctx,
         'PATCH',
-        `/broadcasts/${enc(args.id)}`,
+        `/broadcasts/${idSegment(args.id)}`,
         forwarded(tool, args, ['segment_id', 'id']),
       );
     case 'resend__send_broadcast':
       await broadcastInSegment(ctx, args);
-      return request(ctx, 'POST', `/broadcasts/${enc(args.id)}/send`, {});
+      return request(ctx, 'POST', `/broadcasts/${idSegment(args.id)}/send`, {});
     case 'resend__delete_broadcast':
       await broadcastInSegment(ctx, args);
-      return request(ctx, 'DELETE', `/broadcasts/${enc(args.id)}`);
+      return request(ctx, 'DELETE', `/broadcasts/${idSegment(args.id)}`);
 
     // ─── Synthetic ────────────────────────────────────────────────────────
     case 'resend__describe_zones':
@@ -303,23 +315,34 @@ function batchBody(emails: unknown): Record<string, unknown>[] {
 
 // ─── Resource plumbing ───────────────────────────────────────────────────────
 
-/** The Resend id of a mission domain, from the resource metadata discovery wrote. */
+/** The Resend id of a mission domain (one path segment), from the resource metadata discovery wrote. */
 function domainId(value: unknown, resources: readonly Resource[]): string {
   const target = resolveDomainArg(value, resources);
   if ('denied' in target) throw new Error(`resend: ${target.denied}`);
-  const id = target.resource.metadata?.domain_id;
-  if (typeof id !== 'string' || id.length === 0) {
-    throw new Error(
-      `resend: resource '${target.resource.ref}' carries no domain_id — refresh the connection's resources`,
-    );
-  }
-  return id;
+  const id = domainIdOf(target.resource);
+  if ('denied' in id) throw new Error(`resend: ${id.denied}`);
+  return id.id;
 }
 
+/** The ref of a mission segment : one path segment (`resolveSegmentArg` returns nothing else). */
 function segmentRef(value: unknown, resources: readonly Resource[]): string {
   const seg = resolveSegmentArg(value, resources);
   if ('denied' in seg) throw new Error(`resend: ${seg.denied}`);
   return seg.resource.ref;
+}
+
+/** The `id` of an email or a broadcast as a path segment, read as the classifier read it. */
+function idSegment(value: unknown): string {
+  const id = pathIdent(value);
+  if (id === null) throw new Error(`resend: ${MALFORMED_ID}`);
+  return id;
+}
+
+/** A contact id or address as a path segment, read as the classifier read it. */
+function contactSegment(value: unknown): string {
+  const contact = contactSelector(value);
+  if (contact === null) throw new Error(`resend: ${MALFORMED_CONTACT}`);
+  return contact.segment;
 }
 
 function segmentOf(broadcast: BroadcastDto): string | null {
@@ -329,7 +352,11 @@ function segmentOf(broadcast: BroadcastDto): string | null {
 /** Read the broadcast and refuse it unless it targets the segment the call names. */
 async function broadcastInSegment(ctx: ExecuteContext, args: Args): Promise<BroadcastDto> {
   const seg = segmentRef(args.segment_id, ctx.resources);
-  const broadcast = (await request(ctx, 'GET', `/broadcasts/${enc(args.id)}`)) as BroadcastDto;
+  const broadcast = (await request(
+    ctx,
+    'GET',
+    `/broadcasts/${idSegment(args.id)}`,
+  )) as BroadcastDto;
   const actual = segmentOf(broadcast);
   if (actual !== seg) {
     throw new Error(
@@ -367,10 +394,6 @@ async function listAll<T extends { readonly id: string }>(
     after = last.id;
   }
   return out;
-}
-
-function enc(value: unknown): string {
-  return encodeURIComponent(String(value));
 }
 
 function toQueryString(query: Args): string {

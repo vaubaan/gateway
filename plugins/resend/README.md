@@ -94,8 +94,13 @@ Rules the classifier enforces, all `denied` (audited, never executed):
   malformed header name, a value that is not a single-line string — the
   zone is computed from `from`, `to`, `cc` and `bcc` only;
 - a batch with no email or more than 100;
-- a `domain` or `segment_id` outside the mission, a malformed identifier
-  (an id made of dots only included).
+- a `domain` or `segment_id` outside the mission, a malformed identifier.
+  An id that reaches the request path (`id`, `segment_id`) is one path
+  segment, `^[A-Za-z0-9_-]{1,64}$` (`pathIdent`); a contact may also be
+  named by a bare email address (`contactSelector`), sent percent-encoded;
+  `domain` is a dotted host name (`domainName`) and never reaches the path
+  — the resource's `domain_id` does, checked by `pathIdent` too. `classify`
+  and `execute` share these functions; nothing is escaped or repaired.
 
 A single send classifies to one slice, `domain[D].to-zone[Z].W`, whatever
 its number of recipients; a batch adds `domain[D].recipient-count[batch].W`

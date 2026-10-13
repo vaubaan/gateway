@@ -12,6 +12,10 @@
  *   - Stripe takes `application/x-www-form-urlencoded` bodies with bracket
  *     notation for nested keys (`items[0][price]=…`), and query parameters on
  *     GET ; the `account` argument is consumed here and never forwarded ;
+ *   - the resource is resolved by the classifier's own `resolveStripeResource`
+ *     and every identifier argument is read by its `readIdArgs` / `stripeId` :
+ *     the id in the path and the ids in the query or the body are the ones
+ *     the slices named, or the call is not made ;
  *   - only the arguments the tool's schema declares are forwarded
  *     (`declaredArgsOf`) : the classifier judged those and no other, so a
  *     Stripe parameter nobody classified (`expand`, `collection_method`…)
@@ -34,7 +38,9 @@ import {
   STRIPE_PROVIDER,
   keyMatchesMode,
   modeOf,
+  readIdArgs,
   resolveStripeResource,
+  stripeId,
   stripeResourceRef,
   type StripeMode,
 } from './resources.ts';
@@ -58,13 +64,15 @@ interface Route {
   readonly defaults?: Args;
 }
 
-/** The object id a path is built from ; a call without one never reaches a collection endpoint. */
+/**
+ * The object id a path is built from, read by the classifier's own `stripeId` :
+ * one path segment of unreserved characters, interpolated as it is. A call
+ * without one never reaches a collection endpoint.
+ */
 function pathId(args: Args): string {
-  const id = args.id;
-  if (typeof id !== 'string' || id === '' || /^\.+$/.test(id)) {
-    throw new Error('stripe: id: missing or malformed');
-  }
-  return encodeURIComponent(id);
+  const id = stripeId(args.id);
+  if (id === null) throw new Error('stripe: id: missing or malformed');
+  return id;
 }
 
 const byId = (prefix: string, suffix = '') => ({
@@ -133,11 +141,17 @@ export async function executeStripe(
   }
   const key = keyFor(ctx, mode);
 
+  const path = route.path(args);
+  // Every identifier argument is read the way the classifier read it : one
+  // that it would have refused is not sent in a query string or a body either.
+  const ids = readIdArgs(args);
+  if ('denied' in ids) throw new Error(`stripe: ${ids.denied}`);
+
   const payload = await callStripeApi(
     ctx.fetch,
     key,
     route.method,
-    route.path(args),
+    path,
     forwardedArgs(tool, route, args),
     ctx.signal,
   );

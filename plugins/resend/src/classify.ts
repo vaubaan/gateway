@@ -42,9 +42,12 @@
  * the environment list lives in the catalog only, and the refusal reaches the
  * audit log with the risk id.
  *
- * Identifiers from the arguments must match `SAFE_IDENT` before they are
- * embedded ; a contact looked up by email address is the glob `*` (an unknown
- * member — same risk, less precision), anything else malformed is `denied`.
+ * Identifiers from the arguments go through one grammar per kind
+ * (`resources.ts` : `pathIdent` for an id, `contactSelector` for a contact id
+ * or address, `domainName` for a domain) before they are embedded — the
+ * functions `execute` builds its request path from ; a contact looked up by
+ * email address is the glob `*` (an unknown member — same risk, less
+ * precision), anything else malformed is `denied`, never escaped.
  * Fields the classifier does not read never reach Resend : `execute` forwards
  * the declared fields of each tool only.
  */
@@ -53,7 +56,8 @@ import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/pl
 
 import {
   RESEND_PROVIDER,
-  SAFE_IDENT,
+  contactSelector,
+  pathIdent,
   resolveDomain,
   resolveDomainArg,
   resolveSegmentArg,
@@ -81,29 +85,21 @@ const ANY: SliceSegment = { kind: 'ident', value: '*' };
 type Denied = { readonly denied: string };
 type Ident = { readonly ident: string };
 
-/**
- * An identifier that ends up in a URL path : `SAFE_IDENT`, and not made of
- * dots only — `.` and `..` survive `encodeURIComponent` and the URL parser
- * collapses them, so `/emails/..` would be another endpoint.
- */
-function isPathIdent(value: unknown): value is string {
-  return typeof value === 'string' && SAFE_IDENT.test(value) && !/^\.+$/.test(value);
-}
+/** Refusal of a missing or malformed `id`, shared with `execute`. */
+export const MALFORMED_ID = 'id: missing or malformed identifier';
+/** Refusal of a missing or malformed contact selector, shared with `execute`. */
+export const MALFORMED_CONTACT = 'id: missing or malformed contact id or email';
 
-/** A required identifier argument (uuid-like ids) ; anything else is refused. */
-function requireIdent(args: Args, key: string): Ident | Denied {
-  const value = args[key];
-  return isPathIdent(value)
-    ? { ident: value }
-    : { denied: `${key}: missing or malformed identifier` };
+/** The required `id` argument (uuid-like ids, a segment of the request path) ; anything else is refused. */
+function requireIdent(args: Args): Ident | Denied {
+  const id = pathIdent(args.id);
+  return id === null ? { denied: MALFORMED_ID } : { ident: id };
 }
 
 /** A contact selector : an id (ident) or an email address (glob — unknown member). */
-function contactIdent(args: Args, key = 'id'): Ident | Denied {
-  const value = args[key];
-  if (isPathIdent(value)) return { ident: value };
-  if (parseAddress(value)) return { ident: '*' };
-  return { denied: `${key}: missing or malformed contact id or email` };
+function contactIdent(args: Args): Ident | Denied {
+  const contact = contactSelector(args.id);
+  return contact === null ? { denied: MALFORMED_CONTACT } : { ident: contact.ident };
 }
 
 /** Anything but an absent field or an empty list : a non-array value is unreadable, not absent. */
@@ -212,7 +208,7 @@ export function classifyResend(
   switch (tool) {
     // ─── Reads — sent emails ──────────────────────────────────────────────
     case 'resend__get_email': {
-      const id = requireIdent(args, 'id');
+      const id = requireIdent(args);
       if ('denied' in id) return id;
       return { slices: [slice('R', [name('email'), ident(id.ident)])] };
     }
@@ -380,7 +376,7 @@ function broadcastSlice(
 ): ClassifyOutcome {
   const seg: Resolved = resolveSegmentArg(args.segment_id, resources);
   if ('denied' in seg) return seg;
-  const id = requireIdent(args, 'id');
+  const id = requireIdent(args);
   if ('denied' in id) return id;
   const path = [name('segment'), ident(seg.resource.ref), name('broadcast'), ident(id.ident)];
   return { slices: [slice(action, leaf ? [...path, name(leaf)] : path)] };

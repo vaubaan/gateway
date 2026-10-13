@@ -444,7 +444,10 @@ describe('classifyResend — fields that would escape the classification', () =>
         classifyResend('resend__send_broadcast', { segment_id: 'seg_x', id }, mission),
       ).toEqual({ denied: 'id: missing or malformed identifier' });
     }
-    expect('slices' in classifyResend('resend__get_email', { id: 'a.b' }, mission)).toBe(true);
+    // Resend ids are UUIDs : a dot is refused wherever it stands, not only alone.
+    expect(classifyResend('resend__get_email', { id: 'a.b' }, mission)).toEqual({
+      denied: 'id: missing or malformed identifier',
+    });
   });
 });
 
