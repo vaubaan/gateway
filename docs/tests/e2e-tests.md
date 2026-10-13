@@ -131,8 +131,10 @@ le **plan de test** validé en spec ; ils seront codés en Phase 5
 3. **Complete configuration** — the container stays up and
    `GET /healthz` answers 200 `{"status":"ok",...}` within 30 s; the logs
    contain neither the master key nor the bootstrap token.
-4. **Native addons** — `argon2` hashes and `libsodium-wrappers` loads inside
-   the image (file tracing of prebuilt binaries).
+4. **Native addons** — `argon2` hashes, `better-sqlite3` opens an in-memory
+   database and runs a query, and `libsodium-wrappers` loads inside the image
+   (file tracing of prebuilt binaries and runtime files; P0.6 added the
+   `better-sqlite3` check).
 5. **Non-root** — the process runs as uid 10001.
 
 ## Sweeper

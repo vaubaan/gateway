@@ -12,6 +12,8 @@ tracks:
   - apps/gateway/src/app/healthz/route.ts
   - apps/gateway/src/lib/crypto/index.ts
   - apps/gateway/next.config.ts
+  - apps/gateway/tsconfig.json
+  - apps/gateway/tests/integration/standalone-native-addons.test.ts
   - deploy/config/gateway.example.yaml
   - deploy/config/.env.example
   - scripts/gen-master-key.mjs
@@ -90,6 +92,40 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
 built. `version` and `commit` are frozen into the bundle by `next.config.ts`
 (`NEXT_PUBLIC_GATEWAY_VERSION`, `NEXT_PUBLIC_COMMIT_SHA`; `dev` outside a
 build).
+
+## Framework
+
+`apps/gateway` runs on **Next.js 16.4.0** with React 19.3.0 (P0.6, from
+15.5.18 / 19.1.1). What the upgrade means for this module:
+
+- `next build` and `next dev` use **Turbopack**; nothing here depends on
+  webpack. The standalone output keeps the same entry (`apps/gateway/server.js`,
+  now an ES module) and the same layout for the Dockerfile; it no longer
+  copies the `packages/` and `plugins/` sources, which Turbopack bundles
+  from `transpilePackages`.
+- `serverExternalPackages`: `argon2` and `better-sqlite3` are in Next's
+  default external list, `ssh2` is added. `outputFileTracingIncludes` lists
+  the `argon2` prebuilds (nft does not follow `node-gyp-build`) and the
+  runtime files of `better-sqlite3` (`package.json`, `lib/`, the `.node`
+  binary, `bindings`, `file-uri-to-path`): nothing in the route graph
+  imports the store yet, so nft never reaches the package on its own. The
+  globs stay correct, and become redundant, once the store is wired.
+- `instrumentation.ts`, the `globalThis` root and `/healthz` behave the same
+  in `next dev` and in the standalone `server.js` (checked by hand and by
+  the container smoke test); `register()` still runs on the Node runtime
+  only and is skipped during `next build`.
+- `agentRules: false`: Next 16's `next dev` writes an `AGENTS.md` next to the
+  app unless told otherwise; the harness owns that file in this repository.
+- `experimental.serverActions.allowedOrigins` is still the documented place
+  for the option in 16.x.
+- `tsconfig.json` includes `.next/dev/types/**/*.ts` as well as
+  `.next/types/**/*.ts`: development now writes to `.next/dev`, and
+  `next-env.d.ts` (gitignored, generated) points at whichever ran last.
+- No `middleware.ts` existed, so no `proxy.ts`; the 16.0 codemods
+  (`remove-unstable-prefix`, `remove-experimental-ppr`, `middleware-to-proxy`,
+  `next-experimental-turbo-to-turbopack`) changed nothing;
+  `next-async-request-api` produced one false positive (a page already using
+  `use(params)`) that was reverted.
 
 ## Configuration keys
 
@@ -197,5 +233,9 @@ env parsing, key rotation; crypto: round trip, AD mismatch, tampering,
 `bootOrExit()` exit codes, in-memory ports; http: `/healthz` states) plus
 the structural test `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`
 (no literal URL, secret or project ref in the v5 perimeter except
-`telemetry-default.ts` and `deploy/config/*.example*`). The container
-smoke test is `deploy/docker/smoke.sh`.
+`telemetry-default.ts` and `deploy/config/*.example*`) and
+`apps/gateway/tests/integration/standalone-native-addons.test.ts` (skipped
+without a build: the `/healthz` route trace lists the `argon2` and
+`better-sqlite3` binaries, and both load from the standalone
+`node_modules`). The container smoke test is `deploy/docker/smoke.sh`; it
+loads `argon2` and `better-sqlite3` inside the image.

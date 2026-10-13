@@ -87,8 +87,10 @@ not buffer responses (the MCP doors stream), and list its address in
 
 ## What the image contains
 
-Next.js standalone output (`apps/gateway/server.js`, traced
-`node_modules`, `.next/static`, `public`), running as uid 10001. Native
-addons (`argon2`, later `better-sqlite3`) are prebuilt for glibc, which is
-why the base is Debian slim rather than Alpine. Build-time arguments:
+Next.js 16 standalone output built with Turbopack (`apps/gateway/server.js`,
+traced `node_modules`, `.next/static`, `public`), running as uid 10001.
+Native addons (`argon2`, `better-sqlite3`) are prebuilt for glibc, which is
+why the base is Debian slim rather than Alpine; `next.config.ts` traces
+their binaries and runtime files explicitly (`outputFileTracingIncludes`)
+and the smoke test loads both inside the image. Build-time arguments:
 `NODE_VERSION` (22) and `GIT_COMMIT_SHA` (shown by `/healthz`).

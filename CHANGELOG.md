@@ -52,6 +52,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **Next.js 16 (P0.6).** `apps/gateway` runs on Next.js 16.4.0 with React
+  19.3.0 (from 15.5.18 / 19.1.1); `next build` and `next dev` use Turbopack.
+  The process shape is unchanged (standalone `server.js`, route handlers,
+  `instrumentation.ts`, `globalThis` root). `next.config.ts` now traces the
+  runtime files of `better-sqlite3` (not only its `.node` binary) so the
+  driver loads inside the image before the store is wired into the root;
+  `agentRules: false` keeps `next dev` from writing an `AGENTS.md` next to
+  the app. The container smoke test also loads `better-sqlite3`, and a new
+  integration test checks the standalone output after a build. No feature
+  work; the same 1655 tests pass.
 - **`@vaubaan/gateway-core` speaks v5 (P0.5).** Eight typed structured
   refusals (`risk-not-accepted`, `budget-exhausted`, `approval-required`,
   `resource-not-in-mission`, `rate-limited`, `connection-unavailable`,

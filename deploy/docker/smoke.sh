@@ -6,7 +6,7 @@
 # 1. incomplete configuration  -> the container exits non-zero and names the key
 # 2. http public URL           -> same, naming public_url
 # 3. complete configuration    -> /healthz answers 200 within the start period
-# 4. native addons traced      -> argon2 (prebuilt .node) loads inside the image
+# 4. native addons traced      -> argon2 and better-sqlite3 (prebuilt .node) load inside the image
 set -euo pipefail
 
 IMAGE="${1:?usage: smoke.sh <image>}"
@@ -73,10 +73,15 @@ docker logs "$NAME" 2>&1 | grep -q "$MASTER_KEY" && fail "master key leaked into
 docker logs "$NAME" 2>&1 | grep -q "$BOOTSTRAP" && fail "bootstrap token leaked into the logs"
 pass "no secret in the container logs"
 
-# 4. Native addons are present in the traced output and load.
+# 4. Native addons are present in the traced output and load. The image has
+#    no node_modules besides the traced standalone tree, so a passing hash /
+#    query proves the prebuilt .node binaries were traced by the build.
 docker exec "$NAME" node -e "require('argon2').hash('smoke').then(h=>{if(!h.startsWith('\$argon2id'))process.exit(1)})" \
   || fail "argon2 does not load inside the image (check outputFileTracingIncludes)"
 pass "argon2 loads inside the image (libsodium is bundled; the encryptor ran during boot)"
+docker exec "$NAME" node -e "const D=require('better-sqlite3');const r=new D(':memory:').prepare('select 1 as one').get();if(r.one!==1)process.exit(1)" \
+  || fail "better-sqlite3 does not load inside the image (check outputFileTracingIncludes)"
+pass "better-sqlite3 loads inside the image (in-memory query ran)"
 
 # Non-root.
 [ "$(docker exec "$NAME" id -u)" = "10001" ] || fail "process is not running as uid 10001"
