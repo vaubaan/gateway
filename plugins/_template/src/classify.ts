@@ -21,8 +21,27 @@ import { parseSlice, type ClassifyOutcome, type Resource } from '@vaubaan/plugin
 
 import { PROVIDER_ID, TOOL } from './identity.ts';
 
-/** Identifier chars a slice segment accepts ; anything else is refused rather than escaped. */
-const SAFE_IDENT = /^[a-zA-Z0-9_./~-]+$/;
+/**
+ * An identifier of the provider : one path segment, no dot, no separator, no
+ * escape. Both identifiers of this plugin (workspace ref, widget id) land in
+ * a slice **and** in the request path, so one grammar serves both. A wider
+ * class is not safe for a URL : `encodeURIComponent` leaves `.` and `..`
+ * untouched and every URL parser then removes them, so `/widgets/..` would
+ * be sent as the workspace endpoint while the slice named a widget. Anything
+ * outside the grammar is refused, never escaped.
+ */
+export const PATH_IDENT = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * The value as a path-safe identifier, or `null`. The one check `classify`
+ * and `execute` share : what is classified is what is sent.
+ */
+export function pathIdent(value: unknown): string | null {
+  return typeof value === 'string' && PATH_IDENT.test(value) ? value : null;
+}
+
+/** Refusal sentence of a missing or malformed widget id, shared with `execute`. */
+export const MALFORMED_WIDGET_ID = 'widget_id: missing or malformed';
 
 export function classifyTemplate(
   tool: string,
@@ -37,13 +56,13 @@ export function classifyTemplate(
     case TOOL.listWidgets:
       return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[*].R`)] };
     case TOOL.getWidget: {
-      const id = ident(args.widget_id);
-      if (!id) return { denied: 'widget_id: missing or malformed' };
+      const id = pathIdent(args.widget_id);
+      if (!id) return { denied: MALFORMED_WIDGET_ID };
       return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[${id}].R`)] };
     }
     case TOOL.updateWidget: {
-      const id = ident(args.widget_id);
-      if (!id) return { denied: 'widget_id: missing or malformed' };
+      const id = pathIdent(args.widget_id);
+      if (!id) return { denied: MALFORMED_WIDGET_ID };
       return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[${id}].W`)] };
     }
     default:
@@ -66,7 +85,7 @@ export function resolveWorkspace(
 ): { ref: string } | { denied: string } {
   const own = resources.filter((r) => r.provider === PROVIDER_ID);
   if (args.workspace !== undefined) {
-    const explicit = ident(args.workspace);
+    const explicit = pathIdent(args.workspace);
     if (!explicit) return { denied: 'workspace: malformed ref' };
     return own.some((r) => r.ref === explicit)
       ? { ref: explicit }
@@ -79,8 +98,4 @@ export function resolveWorkspace(
         ? 'workspace: argument missing and the mission touches no workspace of this provider'
         : `workspace: argument missing and the mission touches ${own.length} workspaces — name one`,
   };
-}
-
-function ident(value: unknown): string | null {
-  return typeof value === 'string' && SAFE_IDENT.test(value) ? value : null;
 }

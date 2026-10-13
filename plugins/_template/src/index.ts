@@ -28,18 +28,32 @@ export const templateCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url
 export const templatePlugin = definePlugin({
   id: PROVIDER_ID,
   displayName: 'Template provider',
+  // Always equal to `version` in this plugin's package.json (a test checks it).
   version: '0.1.0',
   description: 'Scaffold plugin. Copy it to start a real one.',
+  // Add `docsUrl` once the provider handbook exists (docs/handbook/providers/<id>.md).
   tools: templateTools,
   dataModel: templateDataModel,
   catalog: templateCatalog.catalog,
+  // How a connection of this provider is obtained. The host runs the flow
+  // from this declaration (here : a form with one secret field) ; the plugin
+  // writes no route and never reads the environment. The other kinds —
+  // `oauth2`, `app-install` (with `userVerification`), `ssh-key` — are in
+  // plugins/README.md, step 5.
   credential: {
     kind: 'api-key',
+    // Where the user creates the key ; shown as a link next to the form.
+    createUrl: 'https://example.com/settings/api-keys',
     fields: [
       {
         name: API_KEY_FIELD,
         label: 'API key',
         secret: true,
+        required: true,
+        placeholder: 'Template API key',
+        // Checked by the host before any call : a value that cannot be a key
+        // of this provider is refused at the form.
+        pattern: '^[A-Za-z0-9_-]{8,}$',
         help: 'Create a key with read and write access to the workspaces you want to connect.',
       },
     ],
@@ -53,5 +67,11 @@ export const templatePlugin = definePlugin({
   discoverResources: discoverTemplateResources,
 });
 
+// The gateway registers a plugin through its default export
+// (apps/gateway/src/server/compose/shipped-plugins.ts).
+export default templatePlugin;
+
 export { classifyTemplate, templateDataModel, templateTools };
+export { MALFORMED_WIDGET_ID, PATH_IDENT, pathIdent, resolveWorkspace } from './classify.ts';
+export { TEMPLATE_API_BASE, discoverTemplateResources, executeTemplate } from './execute.ts';
 export { API_KEY_FIELD, PROVIDER_ID, TOOL } from './identity.ts';

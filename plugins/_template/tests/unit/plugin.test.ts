@@ -2,7 +2,8 @@
  * Mandatory test suite of a plugin : the SDK kit plus classifier cases.
  * No network : `execute` runs against `mockFetch`.
  */
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
@@ -22,9 +23,14 @@ import {
   mockFetch,
 } from '@vaubaan/plugin-sdk/testing';
 
+import { MALFORMED_WIDGET_ID } from '../../src/classify.ts';
 import { TEMPLATE_API_BASE } from '../../src/execute.ts';
 import { API_KEY_FIELD, PROVIDER_ID, TOOL } from '../../src/identity.ts';
-import { classifyTemplate, templateCatalog, templatePlugin } from '../../src/index.ts';
+import defaultExport, {
+  classifyTemplate,
+  templateCatalog,
+  templatePlugin,
+} from '../../src/index.ts';
 
 const staging: Resource = {
   provider: PROVIDER_ID,
@@ -72,8 +78,10 @@ describe('template plugin — structural kit', () => {
     // Same computation as src/index.ts, from the test's own location : the
     // path must exist on disk (vitest here ; `next build` and the standalone
     // server are covered by apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts).
+    // The expected path is computed from this file too, so a copy of the
+    // template needs no edit here whatever its folder is called.
     const path = catalogPathNextTo(new URL('../../src/index.ts', import.meta.url));
-    expect(path.endsWith('/plugins/_template/src/risk-catalog.yaml')).toBe(true);
+    expect(path).toBe(fileURLToPath(new URL('../../src/risk-catalog.yaml', import.meta.url)));
     expect(existsSync(path)).toBe(true);
     expect(templateCatalog.catalog.provider).toBe(PROVIDER_ID);
     expect(templatePlugin.id).toBe(PROVIDER_ID);
@@ -90,6 +98,30 @@ describe('template plugin — structural kit', () => {
       kind: 'api-key',
       fields: [{ name: API_KEY_FIELD, secret: true }],
     });
+  });
+
+  test('the plugin is the default export, and its version is the package version', () => {
+    // The gateway imports the default export ; telemetry reports `version`,
+    // so the two places it is written must never disagree.
+    expect(defaultExport).toBe(templatePlugin);
+    const manifest: unknown = JSON.parse(
+      readFileSync(new URL('../../package.json', import.meta.url), 'utf8'),
+    );
+    expect(manifest).toMatchObject({ version: templatePlugin.version });
+  });
+
+  test('presets : explicit risks of this catalog, the fallback in none', () => {
+    const { risks, presets } = templateCatalog.catalog;
+    const fallback = risks.find((r) => r.fallback)?.id;
+    expect(presets?.length).toBeGreaterThan(0);
+    for (const preset of presets ?? []) {
+      expect(preset.entries.length).toBeGreaterThan(0);
+      for (const entry of preset.entries) {
+        expect(entry.risk_id).not.toMatch(/[*?]/);
+        expect(entry.risk_id).not.toBe(fallback);
+        expect(Number.isInteger(entry.quota) && entry.quota > 0).toBe(true);
+      }
+    }
   });
 });
 
@@ -151,11 +183,32 @@ describe('classifyTemplate', () => {
       denied: 'workspace: malformed ref',
     });
     expect(classifyTemplate(TOOL.getWidget, { workspace: 'ws-stg' }, [staging])).toEqual({
-      denied: 'widget_id: missing or malformed',
+      denied: MALFORMED_WIDGET_ID,
     });
     const unknown = `${toolPrefixFor(PROVIDER_ID)}delete_all`;
     expect(classifyTemplate(unknown, { workspace: 'ws-stg' }, [staging])).toEqual({
       denied: `unknown tool '${unknown}'`,
+    });
+  });
+
+  test('an identifier that is not one path segment is refused, never escaped', () => {
+    // `..` would survive `encodeURIComponent` and be removed by the URL
+    // parser : the request would hit the workspace while the slice named a widget.
+    for (const hostile of ['..', '.', 'a/b', 'a%2Fb', 'w 1', '', 'x'.repeat(65), 7, null]) {
+      expect(
+        classifyTemplate(TOOL.getWidget, { workspace: 'ws-stg', widget_id: hostile }, [staging]),
+      ).toEqual({ denied: MALFORMED_WIDGET_ID });
+      expect(
+        classifyTemplate(
+          TOOL.updateWidget,
+          { workspace: 'ws-stg', widget_id: hostile, name: 'n' },
+          [staging],
+        ),
+      ).toEqual({ denied: MALFORMED_WIDGET_ID });
+    }
+    const dotted: Resource = { provider: PROVIDER_ID, ref: '..', displayName: 'Dots' };
+    expect(classifyTemplate(TOOL.listWidgets, { workspace: '..' }, [dotted])).toEqual({
+      denied: 'workspace: malformed ref',
     });
   });
 
@@ -259,6 +312,40 @@ describe('executeTemplate with mockFetch', () => {
     expect(ambiguous.isError).toBe(true);
     expect(JSON.stringify(ambiguous.content)).toMatch(/the mission touches 2 workspaces/);
     expect(fetch.calls).toHaveLength(0);
+  });
+
+  test("execute applies the classifier's identifier check : nothing is sent for an unsafe id", async () => {
+    const fetch = mockFetch([]);
+    for (const tool of [TOOL.getWidget, TOOL.updateWidget]) {
+      const result = await templatePlugin.execute(ctx(fetch), tool, {
+        workspace: 'ws-stg',
+        widget_id: '..',
+        name: 'n',
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([{ type: 'text', text: MALFORMED_WIDGET_ID }]);
+    }
+    const unnamed = await templatePlugin.execute(ctx(fetch), TOOL.updateWidget, {
+      workspace: 'ws-stg',
+      widget_id: 'w1',
+    });
+    expect(unnamed.isError).toBe(true);
+    const unknown = await templatePlugin.execute(
+      ctx(fetch),
+      `${toolPrefixFor(PROVIDER_ID)}delete_all`,
+      { workspace: 'ws-stg' },
+    );
+    expect(unknown.isError).toBe(true);
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('discoverResources refuses a workspace id no call could name', async () => {
+    const fetch = mockFetch([
+      { url: `${TEMPLATE_API_BASE}/workspaces`, body: [{ id: 'a/b', name: 'Odd' }] },
+    ]);
+    await expect(templatePlugin.discoverResources(ctx(fetch))).rejects.toThrow(
+      /not a path-safe identifier/,
+    );
   });
 
   test('execute falls back to the single mission workspace', async () => {
