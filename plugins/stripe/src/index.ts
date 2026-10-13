@@ -12,6 +12,9 @@
  * here, once, at import (that is, at gateway boot).
  */
 
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
 import { definePlugin, loadCatalogFile, type RiskCatalog } from '@vaubaan/plugin-sdk';
 
 import { classifyStripe } from './classify.ts';
@@ -19,7 +22,13 @@ import { stripeDataModel } from './data-model.ts';
 import { discoverStripeResources, executeStripe } from './execute.ts';
 import { stripeTools } from './tools.ts';
 
-export const stripeCatalog = loadCatalogFile(new URL('./risk-catalog.yaml', import.meta.url));
+// The path is built from `import.meta.url` with `node:path`, not with
+// `new URL('./risk-catalog.yaml', import.meta.url)` : a bundler (Turbopack in
+// `apps/gateway`) rewrites that literal into a static asset URL and the YAML
+// can no longer be read from disk at boot.
+export const stripeCatalog = loadCatalogFile(
+  join(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml'),
+);
 
 const KEY_HELP =
   'A restricted key (rk_…) limited to the objects you expect the agent to touch is preferable ' +
