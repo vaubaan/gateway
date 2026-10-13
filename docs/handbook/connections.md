@@ -715,7 +715,7 @@ Unit, co-located (`src/server/connections/*.test.ts`,
 `src/server/provider-apps/service.test.ts`), all on `openTestStore()` and
 `mockFetch` through `connectionsHarness()`:
 
-- `oauth2.test.ts` (16) — authorization URL, RFC 7636 vector, the three
+- `oauth2.test.ts` (28) — authorization URL, RFC 7636 vector, the three
   client authentication methods, resource indicator, error mapping,
   rotation, a PKCE exchange without a verifier refused before any request.
 - `service.test.ts` (33) — the driver per credential kind against mocked

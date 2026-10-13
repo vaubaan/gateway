@@ -1117,7 +1117,7 @@ creator reading everything and every table without finding a member's secret;
 the handlers' statuses and guard), `team-interleaving.test.ts` (6: a token insert that
 lost the race — the member removed, removed while rotating, or deactivated, and the
 mission revoked, while the hash was computed; two creations of one name at once; nothing
-happened meanwhile), `mission-lifecycle.test.ts` (28), `mission-handlers.test.ts` (8) and
+happened meanwhile), `mission-lifecycle.test.ts` (33), `mission-handlers.test.ts` (8) and
 `gate.test.ts` (20: both directions and what the next call answers, the audit entry and
 the session event, a no-op, `approval` asked on a gate open for the period closing the
 opening with one entry and one event, the same on an expired mission and what the next

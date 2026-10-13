@@ -344,7 +344,7 @@ test('a call that touches two gated risks asks once: one request, one approval, 
 
   // ── The creator reads both risks on one page, and answers once ──────────
   await hedy.goto(approvalUrl);
-  await expect(hedy).toHaveURL(/\/requests\/[0-9a-f-]{36}$/);
+  await expect(hedy).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
   const gated = hedy.getByTestId('approval-gated-risks');
   await expect(gated).toContainText('This call touches 2 risks that wait for your approval');
   await expect(gated).toContainText('one decision for the call');
@@ -357,7 +357,6 @@ test('a call that touches two gated risks asks once: one request, one approval, 
   await expect(hedy.getByTestId(`approval-risk-${UNGATED}`).locator('td').nth(1)).toHaveText(
     'approval',
   );
-  await expect(hedy.getByTestId('open-request-count')).toHaveText('1');
   await snap(hedy, 'approval-two-gated-risks');
 
   // The inbox holds one line for the call, with both risks.
@@ -371,7 +370,7 @@ test('a call that touches two gated risks asks once: one request, one approval, 
   await hedy.goto(approvalUrl);
   await hedy.getByRole('button', { name: 'Approve this action' }).click();
   await expect(hedy.getByText('Decision recorded')).toBeVisible();
-  await expect(hedy.getByTestId('open-request-count')).toHaveCount(0);
+  await expect(hedy.getByText('granted', { exact: true })).toBeVisible();
 
   // ── One replay passes; the approval was for that one call ───────────────
   expect(await executor.call(TOOL, { ...WORKFLOW })).toMatchObject({ outcome: 'allowed' });

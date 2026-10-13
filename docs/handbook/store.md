@@ -755,14 +755,14 @@ capture both files atomically are also fine.
   earlier image wrote (every token a member token of its creator, unchanged otherwise; no
   member row; the audit entry left without a holder; the new indexes), `holderColumns`,
   the timeline of one holder by keyset with `tokenHolderActivity`, the search by holder.
-  `missions.test.ts` (17) holds the repository's side: one active token per member, a
+  `missions.test.ts` (18) holds the repository's side: one active token per member, a
   rotation that retires its holder's token only, one token revoked on its own, a name
   identifying one active token, a token inserted only for a mission that serves and a
   holder who is on it (`TokenNotIssuableError`, checked in the insert), the schema's
   CHECKs, the columns of a token row (a hash, no secret), `markTokenUsed`, members added
   (a working token that predates the membership revoked), removed with their token and
   added again, `revokeMemberTokensOf`.
-- `tests/integration/store/approval-decisions.test.ts` (17) — migration 0005 (column and
+- `tests/integration/store/approval-decisions.test.ts` (20) — migration 0005 (column and
   index), `decideApproval` (decision, erasure and approval in one transaction; a thrown
   apply writes nothing; already decided; overdue; a claim; unknown), `getArguments` on an
   overdue request, the open request of a call by tool and fingerprint, `riskEvents`,

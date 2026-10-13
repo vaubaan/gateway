@@ -440,7 +440,7 @@ session view"). A `rotation` or `revocation` event names its holder in its detai
 - `packages/gateway-core/tests/unit/fingerprint.test.ts` (12) — the canonical JSON, the fingerprint and
   `unfaithfulArgument` (a value JSON would rewrite), next to their implementation
   ([gateway-core](gateway-core.md)).
-- `tests/unit/server/budget/decide.test.ts` (15) — N risks → N decrements, no risk,
+- `tests/unit/server/budget/decide.test.ts` (20) — N risks → N decrements, no risk,
   remaining, approval to consume, opened gate; `budget-exhausted` (recurring and one-off),
   whole-call refusal, `rate-limited` (≥ 1 s), `approval-required`, multi-risk gate
   refusal, dimension order, approval does not bypass quota or rate; invariant on an

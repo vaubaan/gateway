@@ -101,6 +101,8 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
     `/waiting/${day.claim_id}`,
   );
   await expect(page.locator('body')).not.toContainText(ARGUMENT_MARKER);
+  // The timeline is kept as long as the audit, and says so.
+  await expect(page.getByTestId('timeline-retention')).toContainText('Kept 90 days');
   await snap(page, 'mission-session');
 
   // The timeline of one label: its calls only; the budget above does not move.

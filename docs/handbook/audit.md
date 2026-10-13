@@ -535,7 +535,7 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
 
 ## Tests
 
-- `src/server/audit/filters.test.ts` (20) — every filter, repeated and blank values,
+- `src/server/audit/filters.test.ts` (24) — every filter, repeated and blank values,
   closed sets, unreadable dates, reversed period, single day, oversized value, cursor
   round trip and refusals, `auditQueryString`, `scopeOf` for the three viewers,
   `withoutArguments`.
@@ -544,7 +544,7 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   asked / refused / expired, an approval and its deadline, a gate opened and a gate
   edited, credits given back and an expiry moved, a rotation and a revocation, nothing
   for malformed details or a kind of a later version.
-- `tests/integration/audit/audit-query.test.ts` (25) — visibility (creator, connection
+- `tests/integration/audit/audit-query.test.ts` (35) — visibility (creator, connection
   owner, owning group, operator, bootstrap operator, requests of a mission), "a filter
   never widens the scope", the label of the object of an entry for each of the nine
   object types (and `null` for an object that is gone), each filter (the agent label:

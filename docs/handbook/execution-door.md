@@ -1077,7 +1077,7 @@ plugin streams), and a run behind a proxy other than Caddy.
 
 ## Tests
 
-- `src/server/execution/execution.test.ts` (26) — agent label (shape, absent,
+- `src/server/execution/execution.test.ts` (21) — agent label (shape, absent,
   rejected with its reason, carrier and what was dropped), client address
   (hop with a port, brackets, spaces, invalid CIDR), `citedRefs`, tool filter,
   token verifier (nothing remembered: the standing is asked again on every
@@ -1106,7 +1106,7 @@ plugin streams), and a run behind a proxy other than Caddy.
   host-built summary in the audit, the detail to the agent, the HTTP status
   of a client error), 401 → refresh → retry, rejected refresh → `expired`,
   403, credential cache.
-- `tests/integration/execution/door-http.test.ts` (21) — the official MCP
+- `tests/integration/execution/door-http.test.ts` (23) — the official MCP
   client in both eras against the real GitHub plugin on a mocked upstream,
   refusal `data` as the client sees it, plain JSON for `curl`, 405, tool filter,
   catalog, the 401 cases, session and delegated token refused, foreign origin,
@@ -1122,7 +1122,7 @@ plugin streams), and a run behind a proxy other than Caddy.
   that claims an identity; a value that is not a label dropped, logged
   without its value, the call served; `_meta.agent` over the header and the
   fallback; the official MCP client in both eras.
-- `tests/integration/execution/approval-door.test.ts` (7) — the GitHub
+- `tests/integration/execution/approval-door.test.ts` (8) — the GitHub
   `developer` preset as shipped: the workflow write is the gated risk;
   refusal → grant → the identical replay passes → a second identical replay
   is refused; one byte changed asks again and leaves the other approval

@@ -598,6 +598,9 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await expect(page.getByTestId('token-handout-note')).toContainText(
     'What the agent then does with that token is outside the gateway',
   );
+  await expect(page.getByTestId('token-handout-note')).toContainText(
+    'a token that can write is handed only after the creator approves the call',
+  );
   await mint.getByRole('link', { name: 'github.mint-install-token-push' }).click();
   const push = page.getByTestId('risk-github.mint-install-token-push');
   await expect(push).toBeInViewport();
@@ -609,9 +612,6 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   );
   await expect(page.getByTestId('risk-github.read-code')).not.toContainText('hands a');
   await snap(page, 'provider-token-handouts');
-  await expect(page.getByTestId('token-handout-note')).toContainText(
-    'a token that can write is handed only after the creator approves the call',
-  );
   // An unknown provider is not found.
   const missing = await page.goto('/reference/no-such-provider');
   expect(missing?.status()).toBe(404);

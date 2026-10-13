@@ -268,6 +268,19 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(ines.getByText('Shared', { exact: true })).toBeVisible();
   await expect(ines.getByText('This share brings')).toHaveCount(0);
   expect(await read()).toMatchObject({ outcome: 'refused' });
+
+  // ── Revoking the connection says what becomes of the access at the provider ──
+  await ines.goto(`/accounts/${connectionId}`);
+  await ines.getByRole('button', { name: 'Revoke', exact: true }).first().click();
+  const revokeDialog = ines.getByRole('dialog');
+  // A GitHub App installation is not uninstalled by the gateway: the owner is told so first.
+  await expect(revokeDialog).toContainText('The gateway cannot withdraw the access at GitHub');
+  await snap(ines, 'connection-revoke-dialog');
+  await revokeDialog.getByRole('textbox').fill(connectionName);
+  await revokeDialog.getByRole('button', { name: 'Revoke', exact: true }).click();
+  await expect(ines.getByText('revoked', { exact: true }).first()).toBeVisible();
+  await expect(ines.locator('body')).toContainText('by hand');
+  await snap(ines, 'connection-revoked-provider-grant');
 });
 
 test('transfer to a group; the group empties; the operator reassigns the connection', async ({
