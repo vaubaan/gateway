@@ -7,7 +7,14 @@
 
 import { withImmediateTransaction } from '../db.ts';
 import { openSealedColumn, sealText } from '../encryptor.ts';
+import { InvariantError } from '../errors.ts';
 import { nowIso, type RepoContext } from './context.ts';
+
+/** One change of `ConfigRepo.apply`: a clear value, a sealed secret, or a removal. */
+export type ConfigWrite =
+  | { readonly kind: 'value'; readonly key: string; readonly value: string }
+  | { readonly kind: 'secret'; readonly key: string; readonly plain: string }
+  | { readonly kind: 'delete'; readonly key: string };
 
 export interface ConfigRepo {
   get(key: string): Promise<string | null>;
@@ -15,6 +22,12 @@ export interface ConfigRepo {
   getSecret(key: string): Promise<string | null>;
   setSecret(key: string, plain: string): Promise<void>;
   delete(key: string): Promise<boolean>;
+  /**
+   * Applies every write in one transaction, in order: all of them or none. For
+   * settings spread over several keys (the IdP, a provider app), where a
+   * half-saved set would pair one value with another's secret.
+   */
+  apply(writes: readonly ConfigWrite[]): Promise<void>;
   keys(): Promise<string[]>;
 }
 
@@ -63,6 +76,29 @@ export function createConfigRepo(ctx: RepoContext): ConfigRepo {
     },
     async delete(key) {
       return remove.run(key).changes > 0;
+    },
+    async apply(writes) {
+      // Sealing is asynchronous and the transaction is not: seal first, write after.
+      const sealed = new Map<string, Awaited<ReturnType<typeof sealText>>>();
+      for (const write of writes) {
+        if (write.kind === 'secret') {
+          sealed.set(write.key, await sealText(encryptor, secretAd(write.key), write.plain));
+        }
+      }
+      const now = nowIso(ctx);
+      withImmediateTransaction(db, () => {
+        for (const write of writes) {
+          if (write.kind === 'delete') {
+            remove.run(write.key);
+          } else if (write.kind === 'value') {
+            upsertValue.run(write.key, write.value, now);
+          } else {
+            const blob = sealed.get(write.key);
+            if (!blob) throw new InvariantError(`instance_config: '${write.key}' was not sealed`);
+            upsertSecret.run(write.key, blob.blob, blob.keyVersion, now);
+          }
+        }
+      });
     },
     async keys() {
       return allKeys.all().map((r) => r.key);

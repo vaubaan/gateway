@@ -6,6 +6,7 @@
  */
 import Link from 'next/link';
 
+import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/connections/connections.module.css';
 import {
   credentialKindLabel,
@@ -14,8 +15,8 @@ import {
 } from '@/components/connections/parts';
 import { Banner, Stack } from '@/components/ui';
 import {
+  currentActor,
   firstParam,
-  requireUser,
   takeNotice,
   type PageSearchParams,
 } from '@/lib/connections/session';
@@ -28,8 +29,10 @@ export default async function ConnectProviderPage({
 }: {
   searchParams: PageSearchParams;
 }) {
+  const session = await currentActor();
+  if (!session) return <NeedsUser />;
+  const { root, principal } = session;
   const params = await searchParams;
-  const { root, principal } = await requireUser();
   const notice = await takeNotice(root, principal.sessionId, params);
   const providers = await root.connections.service.providers();
   const available = providers.filter((p) => p.configured);

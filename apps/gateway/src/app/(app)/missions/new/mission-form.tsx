@@ -20,6 +20,7 @@ import type {
   IssuanceConnection,
   MissionPreview,
   PreviewIssue,
+  PreviewNotice,
   ResolvedDraftConnection,
 } from '@/server/missions/model';
 import { defaultResources, previewDraft } from '@/server/missions/preview';
@@ -582,6 +583,18 @@ export function MissionForm({
               ))}
             </ul>
           )}
+          {preview.notices.length > 0 && (
+            <ul className={styles.notices} data-testid="notices">
+              {preview.notices.map((n) => (
+                <li key={`${n.code}:${n.connection_index ?? ''}:${n.resource_refs.join(',')}`}>
+                  <details>
+                    <summary>{noticeHeadline(n)}</summary>
+                    {n.message}
+                  </details>
+                </li>
+              ))}
+            </ul>
+          )}
           {error && (
             <Banner tone="danger" title="Not issued">
               {error}
@@ -610,6 +623,17 @@ function toLocalInput(iso: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null;
+}
+
+/** The one line of a notice; its full sentence (consequence, remedy) unfolds below it. */
+function noticeHeadline(notice: PreviewNotice): string {
+  const refs = notice.resource_refs.join(', ');
+  switch (notice.code) {
+    case 'resource-without-env':
+      return `Warning: no environment label on ${refs}. Environment-scoped risks are refused there.`;
+    case 'resource-env-not-in-catalog':
+      return `Warning: the environment label of ${refs} is not one the catalog knows. Environment-scoped risks are refused there.`;
+  }
 }
 
 function isIssuedBody(

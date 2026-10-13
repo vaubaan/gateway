@@ -171,8 +171,13 @@ describe('upstash-redis plugin — structural kit', () => {
         upstash_redis__execute: [
           { args: { ...d, command: ['GET', 'k'] } },
           { args: { ...d, command: ['SET', 'k', 'v'] } },
+          { args: { ...d, command: ['DEL', 'k'] } },
+          { args: { ...d, command: ['EXPIRE', 'k', '0'] } },
           { args: { ...d, command: ['FLUSHDB'] } },
           { args: { ...d, command: ['CONFIG', 'SET', 'maxmemory', '0'] } },
+          { args: { ...d, command: ['EVAL', 'return 1', '0'] } },
+          { args: { ...d, command: [['MULTI'], ['SET', 'k', 'v'], ['DEL', 'j'], ['EXEC']] } },
+          { args: { ...d, command: [] } },
           { args: { command: ['PING'] } },
         ],
         upstash_redis__get: [{ args: { ...d, key: 'session:1' } }, { args: { key: 'k' } }],
@@ -184,7 +189,10 @@ describe('upstash-redis plugin — structural kit', () => {
         upstash_redis__keys: [{ args: { ...d, pattern: 'user:*' } }],
         upstash_redis__scan: [{ args: { ...d, cursor: 0 } }],
         upstash_redis__ttl: [{ args: { ...d, key: 'k' } }],
-        upstash_redis__expire: [{ args: { ...d, key: 'k', seconds: 60 } }],
+        upstash_redis__expire: [
+          { args: { ...d, key: 'k', seconds: 60 } },
+          { args: { ...d, key: 'k', seconds: 0 } },
+        ],
         upstash_redis__hset: [{ args: { ...d, key: 'h', fields: { f: 'v' } } }],
         upstash_redis__hgetall: [{ args: { ...d, key: 'h' } }],
         upstash_redis__lpush: [{ args: { ...d, key: 'l', values: ['a'] } }],
@@ -266,10 +274,11 @@ describe('classifyUpstashRedis — database resolution against mission resources
     });
   });
 
-  test('execute is routed on the verb : read, write, flush, unknown ; empty command is the catch-all', () => {
+  test('execute is routed on the command : read, write, delete, flush, unknown ; empty command is the catch-all', () => {
     const run = (command: unknown) => slices('upstash_redis__execute', { command }, [cache]);
     expect(run(['hgetall', 'h'])).toEqual(['upstash-redis.database[db-abc-123].key-space[*].R']);
-    expect(run(['DEL', 'k'])).toEqual(['upstash-redis.database[db-abc-123].key-space[*].W']);
+    expect(run(['INCR', 'k'])).toEqual(['upstash-redis.database[db-abc-123].key-space[*].W']);
+    expect(run(['DEL', 'k'])).toEqual(['upstash-redis.database[db-abc-123].key-space[*].delete.W']);
     expect(run(['flushall'])).toEqual(['upstash-redis.database[db-abc-123].key-space.flush.W']);
     expect(run(['CONFIG', 'SET', 'x', 'y'])).toEqual([
       'upstash-redis.database[db-abc-123].key-space[*].execute.W',

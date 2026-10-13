@@ -18,10 +18,23 @@
  * id, never as text in the URL.
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
+import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
-import type { Authenticator, Principal, UserPrincipal } from '../auth/authenticator';
-import { statusResponse } from '../auth/handlers';
-import { forbiddenOriginResponse, isSameOrigin } from '../auth/origin';
+import {
+  auditActorId,
+  type Authenticator,
+  type Principal,
+  type UserPrincipal,
+} from '../auth/authenticator';
+import {
+  guardMutation,
+  guardSession,
+  OPERATOR_REFUSALS,
+  refusalResponse,
+  type RefusalWording,
+} from '../auth/guard';
+import { notAFormResponse, readForm } from '../auth/handlers';
+import { resolveReturnTo } from '../http/return-to';
 import type { Logger } from '../logging';
 import {
   ProviderAppError,
@@ -49,13 +62,21 @@ export const METADATA_PREFIX = 'meta.';
 /** `action` values of the provider-app form besides the default save and `clear`. */
 export const ACCEPT_UNVERIFIED_ACTION = 'accept-unverified';
 export const REFUSE_UNVERIFIED_ACTION = 'refuse-unverified';
+const CLEAR_ACTION = 'clear';
 const LOGIN_PAGE = '/login';
 const SEE_OTHER = 303;
+const USER_REFUSALS: RefusalWording = {
+  field: 'reason',
+  noSession: 'no session',
+  forbidden: 'connections belong to users; sign in through the IdP',
+};
 
 export interface ConnectionHandlerDeps {
   readonly publicUrl: URL;
   readonly authenticator: Authenticator;
   readonly connections: ConnectionService;
+  /** Tells a provider this instance does not know from a failure of its app settings. */
+  readonly registry: Pick<PluginRegistry, 'has'>;
   readonly providerApps: ProviderAppsService;
   readonly notices: NoticeStore;
   readonly audit: AuditWriter;
@@ -88,7 +109,10 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     notice: Notice,
   ): Promise<Response> {
     const id = await deps.notices.put(principal.sessionId, notice);
-    const url = new URL(path, deps.publicUrl);
+    // `path` was validated when it was stored; it is validated again where it
+    // becomes a `Location`, so a value stored by an older build cannot leave
+    // the instance.
+    const url = new URL(resolveReturnTo(path, deps.publicUrl) ?? CONNECTIONS_PATH, deps.publicUrl);
     url.searchParams.set(NOTICE_PARAM, id);
     return redirect(`${url.pathname}${url.search}${url.hash}`);
   }
@@ -111,24 +135,129 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
   async function userOf(
     request: Request,
   ): Promise<{ principal: UserPrincipal; actor: Actor } | { response: Response }> {
-    if (!isSameOrigin(request.headers, deps.publicUrl)) {
-      return { response: forbiddenOriginResponse() };
+    const guard = await guardMutation(request, deps, 'user');
+    if (!guard.ok) return { response: refusalResponse(guard, USER_REFUSALS) };
+    return { principal: guard.principal, actor: actorOf(guard.principal) };
+  }
+
+  /**
+   * The one audit entry of a provider-app change: what the settings were, what
+   * they are. Written after the change is committed, so a failing write is
+   * logged and never reported to the operator as a failed save.
+   */
+  async function auditProviderApp(
+    principal: Principal,
+    providerId: string,
+    before: ProviderAppStatus,
+    after: ProviderAppStatus,
+  ): Promise<void> {
+    const actor = auditActorId(principal);
+    try {
+      await deps.audit.write({
+        kind: 'admin',
+        ts: toIso(deps.clock.now()),
+        user_id: actor,
+        act: 'config-changed',
+        object: { type: 'instance-config', id: `provider-app:${providerId}` },
+        before: auditView(before),
+        after: auditView(after),
+        delegated_client_id: null,
+      });
+    } catch (err) {
+      logger.error('audit entry not written for a saved configuration change', {
+        actor,
+        provider: providerId,
+        object: `provider-app:${providerId}`,
+        err,
+      });
     }
-    const principal = await deps.authenticator.authenticate(request.headers);
-    if (!principal) return { response: statusResponse(401, 'no session') };
-    if (principal.kind !== 'user') {
-      return {
-        response: statusResponse(403, 'connections belong to users; sign in through the IdP'),
-      };
+  }
+
+  /** Accepts or refuses installations the plugin cannot verify. */
+  async function setInstallAcceptance(
+    providerId: string,
+    accept: boolean,
+  ): Promise<ProviderAppChange> {
+    const after = await deps.providerApps.setAcceptUnverifiedInstallations(providerId, accept);
+    logger.warn('provider app: acceptance of unverified installations changed', {
+      provider: providerId,
+      accept,
+    });
+    return {
+      after,
+      notice: accept
+        ? {
+            tone: 'warning',
+            title: `${after.displayName}: unverified installations are now accepted`,
+            lines: [
+              'Any signed-in user who knows the id of an installation of this app can connect it. Turn this off as soon as the plugin can verify installations.',
+            ],
+          }
+        : {
+            tone: 'success',
+            title: `${after.displayName}: unverified installations are refused`,
+            lines: ['Existing connections are unchanged; new ones are refused.'],
+          },
+    };
+  }
+
+  /** Removes the stored company app; refused when the mounted configuration sets it. */
+  async function clearProviderApp(
+    providerId: string,
+    before: ProviderAppStatus,
+  ): Promise<ProviderAppChange> {
+    if (deps.providerApps.isReadOnly(providerId)) {
+      throw new ProviderAppError([
+        `${before.displayName} is set by the mounted configuration; edit it there`,
+      ]);
     }
-    return { principal, actor: actorOf(principal) };
+    await deps.providerApps.clear(providerId);
+    const after = await deps.providerApps.status(providerId);
+    logger.info('provider app settings saved', { provider: providerId, cleared: true });
+    return {
+      after,
+      notice: {
+        tone: 'success',
+        title: `${after.displayName}: settings removed`,
+        lines: ['Users can no longer start new connections to this provider.'],
+      },
+    };
+  }
+
+  /** Stores the company app from the form's `field.<name>` values. */
+  async function storeProviderApp(providerId: string, form: FormData): Promise<ProviderAppChange> {
+    await deps.providerApps.save(providerId, prefixedFields(form, FIELD_PREFIX));
+    const after = await deps.providerApps.status(providerId);
+    logger.info('provider app settings saved', { provider: providerId, cleared: false });
+    return {
+      after,
+      notice: {
+        tone: 'success',
+        title: `${after.displayName}: saved`,
+        lines: ['Secrets are encrypted at rest with the master key and never shown again.'],
+      },
+    };
+  }
+
+  /** The form's `action` picks the change; no action is a save. */
+  function applyProviderAppAction(
+    providerId: string,
+    form: FormData,
+    before: ProviderAppStatus,
+  ): Promise<ProviderAppChange> {
+    const action = stringField(form, 'action');
+    if (action === ACCEPT_UNVERIFIED_ACTION) return setInstallAcceptance(providerId, true);
+    if (action === REFUSE_UNVERIFIED_ACTION) return setInstallAcceptance(providerId, false);
+    if (action === CLEAR_ACTION) return clearProviderApp(providerId, before);
+    return storeProviderApp(providerId, form);
   }
 
   return {
     async connect(request, providerId) {
       const who = await userOf(request);
       if ('response' in who) return who.response;
-      const form = await request.formData();
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
       const reconnectId = stringField(form, 'connection_id') || null;
       try {
         const result = await deps.connections.start(who.actor, providerId, {
@@ -155,8 +284,9 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     },
 
     async callback(request, providerId) {
-      const principal = await deps.authenticator.authenticate(request.headers);
-      if (!principal || principal.kind !== 'user') return redirect(LOGIN_PAGE);
+      const guard = await guardSession(request, deps, 'user');
+      if (!guard.ok) return redirect(LOGIN_PAGE);
+      const { principal } = guard;
       try {
         const result = await deps.connections.complete(
           actorOf(principal),
@@ -217,7 +347,8 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     async updateResource(request, connectionId, resourceId) {
       const who = await userOf(request);
       if ('response' in who) return who.response;
-      const form = await request.formData();
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
       try {
         const resource = await deps.connections.updateResource(
           who.actor,
@@ -247,96 +378,29 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
     },
 
     async saveProviderApp(request, providerId) {
-      if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-      const principal = await deps.authenticator.authenticate(request.headers);
-      const decision = await deps.authenticator.authorizeAdmin(principal);
-      if (!decision.ok) return statusResponse(decision.status, decision.reason);
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
 
-      const form = await request.formData();
-      const anchor = `${PROVIDER_APPS_PAGE}#${encodeURIComponent(providerId)}`;
-      let before: ProviderAppStatus;
-      try {
-        before = await deps.providerApps.status(providerId);
-      } catch {
-        return redirectWithNotice(decision.principal, PROVIDER_APPS_PAGE, {
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      // Only a provider this instance does not know is reported as unknown; a failure
+      // to read its settings (the store, the configuration) is not, and propagates.
+      if (!deps.registry.has(providerId)) {
+        return redirectWithNotice(guard.principal, PROVIDER_APPS_PAGE, {
           tone: 'danger',
           title: 'Not saved',
           lines: [CONNECT_ERROR_MESSAGES['provider-unknown']],
         });
       }
+      const anchor = `${PROVIDER_APPS_PAGE}#${encodeURIComponent(providerId)}`;
+      const before = await deps.providerApps.status(providerId);
       try {
-        const action = stringField(form, 'action');
-        if (action === ACCEPT_UNVERIFIED_ACTION || action === REFUSE_UNVERIFIED_ACTION) {
-          const accept = action === ACCEPT_UNVERIFIED_ACTION;
-          const after = await deps.providerApps.setAcceptUnverifiedInstallations(
-            providerId,
-            accept,
-          );
-          await deps.audit.write({
-            kind: 'admin',
-            ts: toIso(deps.clock.now()),
-            user_id: decision.principal.kind === 'user' ? decision.principal.user.id : 'bootstrap',
-            act: 'config-changed',
-            object: { type: 'instance-config', id: `provider-app:${providerId}` },
-            before: auditView(before),
-            after: auditView(after),
-            delegated_client_id: null,
-          });
-          logger.warn('provider app: acceptance of unverified installations changed', {
-            provider: providerId,
-            accept,
-          });
-          return await redirectWithNotice(
-            decision.principal,
-            anchor,
-            accept
-              ? {
-                  tone: 'warning',
-                  title: `${after.displayName}: unverified installations are now accepted`,
-                  lines: [
-                    'Any signed-in user who knows the id of an installation of this app can connect it. Turn this off as soon as the plugin can verify installations.',
-                  ],
-                }
-              : {
-                  tone: 'success',
-                  title: `${after.displayName}: unverified installations are refused`,
-                  lines: ['Existing connections are unchanged; new ones are refused.'],
-                },
-          );
-        }
-        const clear = action === 'clear';
-        if (clear) {
-          if (deps.providerApps.isReadOnly(providerId)) {
-            throw new ProviderAppError([
-              `${before.displayName} is set by the mounted configuration; edit it there`,
-            ]);
-          }
-          await deps.providerApps.clear(providerId);
-        } else {
-          await deps.providerApps.save(providerId, prefixedFields(form, FIELD_PREFIX));
-        }
-        const after = await deps.providerApps.status(providerId);
-        await deps.audit.write({
-          kind: 'admin',
-          ts: toIso(deps.clock.now()),
-          user_id: decision.principal.kind === 'user' ? decision.principal.user.id : 'bootstrap',
-          act: 'config-changed',
-          object: { type: 'instance-config', id: `provider-app:${providerId}` },
-          before: auditView(before),
-          after: auditView(after),
-          delegated_client_id: null,
-        });
-        logger.info('provider app settings saved', { provider: providerId, cleared: clear });
-        return await redirectWithNotice(decision.principal, anchor, {
-          tone: 'success',
-          title: clear ? `${after.displayName}: settings removed` : `${after.displayName}: saved`,
-          lines: clear
-            ? ['Users can no longer start new connections to this provider.']
-            : ['Secrets are encrypted at rest with the master key and never shown again.'],
-        });
+        const change = await applyProviderAppAction(providerId, form, before);
+        await auditProviderApp(guard.principal, providerId, before, change.after);
+        return await redirectWithNotice(guard.principal, anchor, change.notice);
       } catch (err) {
         if (err instanceof ProviderAppError) {
-          return redirectWithNotice(decision.principal, anchor, {
+          return redirectWithNotice(guard.principal, anchor, {
             tone: 'danger',
             title: `${before.displayName}: not saved`,
             lines: err.problems,
@@ -346,6 +410,12 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
       }
     },
   };
+}
+
+/** What a provider-app action changed, and what the operator is told. */
+interface ProviderAppChange {
+  readonly after: ProviderAppStatus;
+  readonly notice: Notice;
 }
 
 export function connectionPath(connectionId: string): string {

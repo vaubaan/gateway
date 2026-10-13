@@ -12,12 +12,13 @@ period; it will be completed when the first `v2.0.0` release approaches.
 
 ```bash
 npm ci
-npm run ci        # type-check + lint + format check + tests + build
+npm run ci        # type-check + lint + format check + build + tests
 ```
 
-`npm run ci` is the exact gate CI runs. The pre-commit hook (husky +
-lint-staged) only lints and format-checks staged files; run the full gate
-before pushing.
+`npm run ci` is the gate of CI's `check` job; CI then builds the image and
+runs `deploy/docker/smoke.sh`. The pre-commit hook (husky + lint-staged)
+only lints and format-checks staged files; run the full gate before
+pushing.
 
 The optional dependency `@sbw-vaubaan/harness` is served from a private
 registry (`.npmrc` scope `@sbw-vaubaan`). It is **optional**: without
@@ -66,14 +67,19 @@ of the layout ADR).
 ## Language
 
 Everything written from v5 on is in **English**: code, comments, commit
-messages, documentation, issues. Older documents in French are marked
-`status: legacy` and are not translated.
+messages, documentation, issues. Pre-v5 documents in French are not
+translated: they are either under a `legacy/` folder or carry a banner
+saying they are pre-v5 or superseded (ADR
+[legacy-status-of-v4-adrs-and-handbooks](docs/decisions/legacy-status-of-v4-adrs-and-handbooks.md)).
+The exception is three specifications still in French and unmarked under
+`docs/spec/`: `gateway-risk-model.md`, `risk-entry-per-env-vector.md` and
+`style-guide.md`.
 
 ## Branches and pull requests
 
 - `main` is protected. Work happens on `feat/*` (or `fix/*`) branches.
   During the v5 build, features integrate into the `v5` branch first.
-- One feature or fix per PR; squash merge.
+- One feature or fix per PR; PRs into `main` are squash merged.
 - Commit messages follow Conventional Commits (`feat(scope): …`,
   `fix(scope): …`, `docs: …`, `refactor(repo): …`).
 - The PR template has the checklist: spec touched? ADR? handbook? tests?

@@ -76,9 +76,11 @@ export {
 export {
   CLOUDFLARE_DNS_PROVIDER,
   CRITICAL_RECORD_TYPES,
+  PATH_IDENT,
   SAFE_IDENT,
   accountIdOf,
   isCriticalRecord,
+  pathIdent,
   recordSensitivity,
   resolveZoneResource,
   zoneNameOf,

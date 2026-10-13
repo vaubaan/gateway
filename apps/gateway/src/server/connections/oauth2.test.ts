@@ -133,6 +133,18 @@ describe('code exchange', () => {
     });
   });
 
+  it('refuses a PKCE exchange without a verifier before calling the provider', async () => {
+    const fetch = tokenRoute({ access_token: 'at' });
+    await expect(
+      exchangeCode(OAUTH_SPEC, CLIENT, { ...exchange, codeVerifier: null }, io(fetch)),
+    ).rejects.toThrow('PKCE is required');
+    expect(fetch.calls).toHaveLength(0);
+
+    const noPkce: OAuth2CredentialSpec = { ...OAUTH_SPEC, pkce: false };
+    await exchangeCode(noPkce, CLIENT, { ...exchange, codeVerifier: null }, io(fetch));
+    expect(form(fetch.calls[0]!.body).has('code_verifier')).toBe(false);
+  });
+
   it('sends the credentials in the body for client_secret_post', async () => {
     const fetch = tokenRoute({ access_token: 'at-1' });
     const spec = { ...OAUTH_SPEC, clientAuthMethod: 'client_secret_post' as const };

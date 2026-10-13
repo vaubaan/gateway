@@ -227,7 +227,7 @@ export async function seedConnection(
     displayName: input.displayName,
     credential: JSON.stringify({ kind: 'test', note: 'never sent upstream' }),
   });
-  const resources = await store.connections.replaceResources(
+  const resources = await store.connections.syncDiscoveredResources(
     connection.id,
     input.resources.map((r) => ({
       ref: r.ref,

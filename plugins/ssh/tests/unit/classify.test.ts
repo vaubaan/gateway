@@ -68,6 +68,21 @@ describe('classifySsh — argument validation', () => {
     const r = classifySsh('ssh__exec', { host: 42, cmd: 'ls' }, MISSION);
     expect(r).toEqual({ denied: 'host: malformed ref' });
   });
+
+  test('refuses a non-string cmd, an oversized cmd, a non-finite or non-positive timeout', () => {
+    expect(classifySsh('ssh__exec', { host: 'vps-rp', cmd: 42 }, MISSION)).toEqual({
+      denied: 'cmd: a non-empty string is required',
+    });
+    expect(
+      classifySsh('ssh__exec', { host: 'vps-rp', cmd: 'x'.repeat(16 * 1024 + 1) }, MISSION),
+    ).toEqual({ denied: 'cmd: longer than 16384 characters' });
+    for (const timeout_s of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, '30']) {
+      expect(
+        classifySsh('ssh__exec', { host: 'vps-rp', cmd: 'ls', timeout_s }, MISSION),
+        String(timeout_s),
+      ).toEqual({ denied: 'timeout_s: must be a positive number of seconds' });
+    }
+  });
 });
 
 describe('classifySsh — read vs write', () => {
@@ -191,6 +206,60 @@ describe('looksLikeSecretFileRead — direct unit tests', () => {
     ['cat /tmp/foo', false],
     ['cat ./README.md', false],
     ['grep secret /var/log/nginx', false],
+    ['ls ~', false],
+    ['cat /proc/meminfo', false],
+    ['ls /dev', false],
+    ['echo x > /dev/null', false],
+    ['cat /dev/fd/3', false],
+    ['rm /tmp/build/*.o', false],
+    ["grep '.env' /srv/app/README.md", true],
+    ['curl https://example.com/install.sh', false],
+    // Spellings of the home directory.
+    ['cat $HOME/.ssh/id_rsa', true],
+    ['cat ${HOME}/.aws/credentials', true],
+    ['cat ~/.kube/config', true],
+    ['cat ~root/notes', true],
+    ['cat /home/dev/.docker/config.json', true],
+    ['tar czf - /root', true],
+    ['cat /etc/sudoers.d/deploy', true],
+    // Relative, doubled, dotted and parent segments.
+    ['cat .ssh/id_ed25519', true],
+    ['cat /home/deploy//.ssh/id_ed25519', true],
+    ['cat /home/deploy/./.ssh/id_ed25519', true],
+    ['cat /var/../etc/shadow', true],
+    ['cat ../notes.txt', true],
+    ['cat /etc//shadow', true],
+    ['cd /etc && cat shadow', true],
+    // Globs, braces, expansions : the path cannot be seen, or it can match.
+    ["grep '' /etc/shad?w", true],
+    ['cat /etc/sh*', true],
+    ['cat /srv/app/.e[n]v', true],
+    ['cat /srv/app/*', true],
+    ['cat /srv/app/certs/*.pem', true],
+    ["grep '' /etc/{shadow,hostname}", true],
+    ['cat $FILE', true],
+    ['cat /*/shadow', true],
+    // Redirections and glued options.
+    ['grep . </etc/shadow', true],
+    ['sort < .env', true],
+    ['grep -f/etc/ssl/private/patterns x', true],
+    ['dd if=/etc/shadow of=/tmp/x', true],
+    ['scp host:/root/x .', true],
+    // File names that are credentials wherever they sit.
+    ['cat .env', true],
+    ['cat /srv/app/.env.production', true],
+    ['cat /srv/app/certs/server.key', true],
+    ['cat /etc/ssh/ssh_host_ed25519_key', true],
+    ['cat /home/dev/.netrc', true],
+    ['cat /proc/self/environ', true],
+    ['cat /proc/1/mem', true],
+    ['cat /etc/ssl/private/server.crt', true],
+    // Raw devices and bash network pseudo-files.
+    ['cat /dev/sda', true],
+    ['head -c 512 /dev/nvme0n1', true],
+    ['cat < /dev/tcp/10.0.0.1/22', true],
+    // A line that cannot be seen through counts as one.
+    ['echo $(cat /etc/hostname)', true],
   ])('looksLikeSecretFileRead(%j) === %s', (cmd, expected) => {
     expect(looksLikeSecretFileRead(cmd)).toBe(expected);
   });

@@ -8,6 +8,8 @@
  * The transport is an interface so `execute` and `discoverResources` can be
  * tested without a network : `createSshPlugin({ transport })` takes a fake.
  * `ssh2Transport` is the real one. Rules :
+ *   - a target without a well-formed `SHA256:` pin is refused before any
+ *     socket is opened (`SshHostKeyNotPinnedError`) ;
  *   - the host key is checked **before** authentication : a mismatch ends the
  *     handshake and surfaces as `SshHostKeyMismatchError`, never as a retry ;
  *   - an authentication failure is an `UpstreamAuthError` (the host marks the
@@ -22,7 +24,12 @@ import { Client } from 'ssh2';
 
 import { UpstreamAuthError, type PluginLogger } from '@vaubaan/plugin-sdk';
 
-import { fingerprintOf, hostKeyMatches, type SshTarget } from './credential.ts';
+import {
+  fingerprintOf,
+  hostKeyMatches,
+  normalizeFingerprint,
+  type SshTarget,
+} from './credential.ts';
 
 export interface ExecResult {
   readonly stdout: string;
@@ -62,6 +69,17 @@ export class SshHostKeyMismatchError extends Error {
   }
 }
 
+/** The target carries no usable pin : nothing is sent to the host, not even a TCP connection. */
+export class SshHostKeyNotPinnedError extends Error {
+  constructor(readonly host: string) {
+    super(
+      `ssh host '${host}' has no pinned 'SHA256:…' host key fingerprint — refusing to connect. ` +
+        'The owner must reconnect the host with its fingerprint.',
+    );
+    this.name = 'SshHostKeyNotPinnedError';
+  }
+}
+
 interface Ssh2Error extends Error {
   readonly level?: string;
   readonly code?: string;
@@ -92,6 +110,10 @@ function humanizeConnError(err: Ssh2Error, target: SshTarget): Error {
 /** The real transport : one `ssh2` client per command. */
 export const ssh2Transport: SshTransport = {
   exec(target, cmd, options) {
+    // `sshTarget()` never builds an unpinned target ; this guards any other caller.
+    if (normalizeFingerprint(target.hostKeyFingerprint) === null) {
+      return Promise.reject(new SshHostKeyNotPinnedError(target.host));
+    }
     const start = Date.now();
     return new Promise<ExecResult>((resolve, reject) => {
       const conn = new Client();

@@ -12,24 +12,36 @@
  * and emits synthetic marker slices (`from-zone[z]`, `to-zone[z]`,
  * `bulk-marker`, `sensitive-label[l]`) the catalog matches.
  *
- * Modelling rules (handbook §4) :
+ * It fails closed : what it cannot read costs the worst case or refuses the
+ * call, never less. Modelling rules (handbook, "Classification rules") :
  *
  *   1. `get_thread` is classified worst-case `from-zone[unknown]` : the sender
  *      is unknown until the thread is fetched. Agents search first.
- *   2. A `search_threads` query with neither `from:` nor `to:` nor `label:`
- *      is non-discriminating → `bulk-marker.R` plus `from-zone[unknown].R`.
- *   3. A well-known no-reply local part (`no-reply@myorg.com`) is `automated`
- *      before being `internal`.
- *   4. A `label:` clause naming a sensitive label adds `sensitive-label[l].R`
- *      whatever the sender.
- *   5. The to-zone of a draft is the *worst* of its recipients ; any address
- *      outside internal domains and allowlists is `external-unbounded`.
- *   6. One mission, one mailbox : zero gmail resources is denied, two or more
+ *   2. A `search_threads` query is bounded only when it is a pure conjunction
+ *      holding at least one positive `from:<full address>`. Anything else —
+ *      `OR`, grouping, quoting, a `from:` that is not one address, no `from:`
+ *      at all — is `from-zone[unknown].R` plus `bulk-marker.R`. A negation or
+ *      an operator the parser does not model adds `from-zone[unknown].R`.
+ *   3. A sender is `automated` only when the local part of its full address
+ *      *is* a well-known no-reply name (`no-reply@myorg.com`) ; that rule
+ *      runs before the internal-domain rule.
+ *   4. When the mailbox declares sensitive labels, every read carries the
+ *      `sensitive-label` marker : `get_thread` always, a search for each
+ *      label its query does not provably exclude with `-label:<name>`.
+ *   5. Every recipient of a draft is parsed strictly and counted ; one that
+ *      does not parse refuses the call. The to-zone is the *worst* of the
+ *      recipients, and a recipient outside the internal domains and the
+ *      allowlists refuses the draft.
+ *   6. A label write needs well-formed ids and a label ; `TRASH` and `SPAM`
+ *      are refused ; a label that is, or may be, a sensitive one adds
+ *      `sensitive-label[l].W`.
+ *   7. One mission, one mailbox : zero gmail resources is denied, two or more
  *      is denied as ambiguous (no argument selects a mailbox today).
  */
 
 import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
 
+import { collectRecipients, parseBareAddress, type EmailAddress } from './address.ts';
 import { parseQ, type QParsed } from './q-parser.ts';
 import { GMAIL_CLASSIFIED_TOOLS } from './tools.ts';
 
@@ -64,11 +76,12 @@ export const GMAIL_METADATA_KEYS = [
 ] as const;
 
 /**
- * Well-known no-reply local parts — a tiebreaker that classifies a sender as
- * `automated` before any domain match. Deliberately narrow : the universe of
- * automated senders is not enumerable.
+ * Well-known no-reply local parts — a sender whose local part **is** one of
+ * them is `automated` before any domain match. Deliberately narrow : the
+ * universe of automated senders is not enumerable, and a substring match
+ * would turn `supportive.ceo@` into an automated sender.
  */
-const KNOWN_AUTOMATED_LOCAL_PARTS = [
+const KNOWN_AUTOMATED_LOCAL_PARTS: ReadonlySet<string> = new Set([
   'no-reply',
   'noreply',
   'do-not-reply',
@@ -76,7 +89,7 @@ const KNOWN_AUTOMATED_LOCAL_PARTS = [
   'notifications',
   'alerts',
   'support',
-] as const;
+]);
 
 /** Read the zoning configuration of a mailbox resource. Missing or ill-typed lists are empty. */
 export function readMailboxMetadata(resource: Resource): GmailMailboxMetadata {
@@ -103,30 +116,22 @@ function toStringArray(v: unknown): string[] {
 
 const lower = (s: string): string => s.toLowerCase();
 
-// ─── Address parsing & zone classification ────────────────────────────────
+// ─── Zone classification ───────────────────────────────────────────────────
 
-/** Lower-cased address out of `"Name <addr@x.com>"` or `"addr@x.com"` ; null when there is none. */
-function extractAddress(raw: string): string | null {
-  const m = /<([^>]+)>/.exec(raw);
-  const candidate = (m ? m[1]! : raw).trim().toLowerCase();
-  return candidate.includes('@') ? candidate : null;
-}
-
-function domainOf(address: string): string | null {
-  const at = address.lastIndexOf('@');
-  return at < 0 ? null : address.slice(at + 1);
-}
-
-/** From-zone of one sender address. */
+/**
+ * From-zone of one sender. `address` must be exactly one full address ; a
+ * bare word, a domain or a list is `unknown` (Gmail would match it loosely).
+ */
 export function classifyFromAddress(address: string, md: GmailMailboxMetadata): FromZone {
-  const local = address.split('@')[0]!;
-  const domain = domainOf(address);
-  if (KNOWN_AUTOMATED_LOCAL_PARTS.some((p) => local.includes(p))) return 'automated';
-  if (domain) {
-    if (md.internal_domains.includes(domain)) return 'internal';
-    if (md.allowlist_domains.includes(domain)) return 'known-external';
-  }
-  if (md.allowlist_addresses.includes(address)) return 'known-external';
+  const parsed = parseBareAddress(address);
+  return parsed ? fromZoneOf(parsed, md) : 'unknown';
+}
+
+function fromZoneOf(sender: EmailAddress, md: GmailMailboxMetadata): FromZone {
+  if (KNOWN_AUTOMATED_LOCAL_PARTS.has(sender.local)) return 'automated';
+  if (md.internal_domains.includes(sender.domain)) return 'internal';
+  if (md.allowlist_domains.includes(sender.domain)) return 'known-external';
+  if (md.allowlist_addresses.includes(sender.address)) return 'known-external';
   return 'unknown';
 }
 
@@ -137,38 +142,36 @@ const TO_ZONE_RANK: Readonly<Record<ToZone, number>> = {
   'external-unbounded': 3,
 };
 
-/** To-zone of a recipient set : the worst of the individual zones ; `self` when empty. */
+/**
+ * To-zone of a recipient set : the worst of the individual zones ; `self`
+ * when empty. Each entry must be exactly one full address ; one that is not
+ * is `external-unbounded`.
+ */
 export function classifyRecipients(addresses: readonly string[], md: GmailMailboxMetadata): ToZone {
+  return worstToZone(
+    addresses.map((a) => parseBareAddress(a)),
+    md,
+  );
+}
+
+function worstToZone(
+  recipients: readonly (EmailAddress | null)[],
+  md: GmailMailboxMetadata,
+): ToZone {
   let worst: ToZone = 'self';
-  for (const addr of addresses) {
-    const z = classifyOneRecipient(addr, md);
+  for (const recipient of recipients) {
+    const z = recipient ? toZoneOf(recipient, md) : 'external-unbounded';
     if (TO_ZONE_RANK[z] > TO_ZONE_RANK[worst]) worst = z;
   }
   return worst;
 }
 
-function classifyOneRecipient(address: string, md: GmailMailboxMetadata): ToZone {
-  if (md.account_email !== null && address === md.account_email) return 'self';
-  const domain = domainOf(address);
-  if (domain && md.internal_domains.includes(domain)) return 'internal';
-  if (md.allowlist_addresses.includes(address)) return 'allowlist';
-  if (domain && md.allowlist_domains.includes(domain)) return 'allowlist';
+function toZoneOf(recipient: EmailAddress, md: GmailMailboxMetadata): ToZone {
+  if (md.account_email !== null && recipient.address === md.account_email) return 'self';
+  if (md.internal_domains.includes(recipient.domain)) return 'internal';
+  if (md.allowlist_addresses.includes(recipient.address)) return 'allowlist';
+  if (md.allowlist_domains.includes(recipient.domain)) return 'allowlist';
   return 'external-unbounded';
-}
-
-/** Addresses of `to` / `cc` / `bcc` — each a string (comma-separated allowed) or a string list. */
-function collectRecipients(args: Readonly<Record<string, unknown>>): string[] {
-  const out: string[] = [];
-  for (const key of ['to', 'cc', 'bcc']) {
-    const v = args[key];
-    const parts = typeof v === 'string' ? v.split(',') : Array.isArray(v) ? v : [];
-    for (const part of parts) {
-      if (typeof part !== 'string') continue;
-      const addr = extractAddress(part);
-      if (addr) out.push(addr);
-    }
-  }
-  return out;
 }
 
 // ─── Slice helpers ─────────────────────────────────────────────────────────
@@ -180,30 +183,138 @@ const name = (value: string): SliceSegment => ({ kind: 'name', value });
 const ident = (value: string): SliceSegment => ({ kind: 'ident', value });
 const ANY_IDENT: SliceSegment = { kind: 'ident', value: '*' };
 
-// ─── Query helpers ─────────────────────────────────────────────────────────
+const fromZoneSlice = (zone: FromZone): Slice =>
+  slice('R', [name('mailbox'), name('from-zone'), ident(zone)]);
 
-/** A query with neither `from:` nor `to:` nor `label:` may match the whole mailbox. */
-function isNonDiscriminatingQ(parsed: QParsed): boolean {
-  return (
-    parsed.fromAddresses.length === 0 &&
-    parsed.toAddresses.length === 0 &&
-    parsed.labels.length === 0
-  );
+/** `sensitive-label[<name>]` ; `*` when the owner's label name is not a legal slice identifier. */
+function sensitiveLabelSlice(action: 'R' | 'W', label: string | null): Slice {
+  const segment = label !== null && SLICE_IDENT.test(label) ? ident(label) : ANY_IDENT;
+  return slice(action, [name('mailbox'), name('sensitive-label'), segment]);
 }
 
-/** Distinct from-zones of the `from:` clauses ; `unknown` added when the query carries operators we do not model. */
-function fromZonesFromQ(parsed: QParsed, md: GmailMailboxMetadata): FromZone[] {
-  const out = new Set<FromZone>();
-  for (const addr of parsed.fromAddresses) out.add(classifyFromAddress(addr.toLowerCase(), md));
-  if (parsed.hasUnknownOps) out.add('unknown');
-  return [...out];
+// ─── Argument validation ───────────────────────────────────────────────────
+
+/** Gmail thread and message ids are opaque tokens ; anything else is refused before it reaches a slice. */
+const GMAIL_ID = /^[A-Za-z0-9_-]+$/;
+/** A label argument : a system label id, a user label id, or a label name without spaces. */
+const LABEL_ARG = /^[A-Za-z0-9_./-]+$/;
+/** What a bracket identifier of a slice may hold (the slice grammar of the policy engine). */
+const SLICE_IDENT = /^[A-Za-z0-9_./~-]+$/;
+
+/** A required id argument, or the denial that names it. */
+function requireArg(
+  args: Readonly<Record<string, unknown>>,
+  key: string,
+  shape: RegExp,
+): string | { denied: string } {
+  const value = args[key];
+  if (typeof value !== 'string' || value.length === 0) return { denied: `${key}: missing.` };
+  if (!shape.test(value)) return { denied: `${key}: malformed.` };
+  return value;
 }
 
-/** The `label:` clauses naming a sensitive label, as written in the query. */
-function sensitiveLabelsTouched(parsed: QParsed, md: GmailMailboxMetadata): string[] {
-  if (md.sensitive_labels.length === 0) return [];
-  const sensitive = new Set(md.sensitive_labels.map(lower));
-  return parsed.labels.filter((l) => sensitive.has(l.toLowerCase()));
+// ─── Labels ────────────────────────────────────────────────────────────────
+
+/**
+ * Comparison key of a label name : Gmail's search syntax is case-insensitive
+ * and writes a space or a `/` of the name as `-` (`label:legal-contracts`).
+ */
+const labelKey = (label: string): string => label.toLowerCase().replace(/[\s/]+/g, '-');
+
+/** `candidate` is `parent` or a label nested under it (`legal/contracts`, `legal-contracts`). */
+function isLabelOrNested(candidate: string, parent: string): boolean {
+  const c = labelKey(candidate);
+  const p = labelKey(parent);
+  return c === p || c.startsWith(`${p}-`);
+}
+
+/** Label ids that move a message to the bin or to spam : a deletion, which no risk models. */
+const DELETING_LABELS: ReadonlySet<string> = new Set(['TRASH', 'SPAM']);
+
+/**
+ * System label ids a write may name. A user label is addressed by an opaque
+ * id (`Label_42`) the classifier cannot map to a name, so only these ids are
+ * known not to be one of the owner's sensitive labels.
+ */
+const SYSTEM_LABEL_IDS: ReadonlySet<string> = new Set([
+  'INBOX',
+  'STARRED',
+  'UNREAD',
+  'IMPORTANT',
+  'SENT',
+  'DRAFT',
+  'CHAT',
+  'CATEGORY_PERSONAL',
+  'CATEGORY_SOCIAL',
+  'CATEGORY_PROMOTIONS',
+  'CATEGORY_UPDATES',
+  'CATEGORY_FORUMS',
+]);
+
+/**
+ * The sensitive-label marker of a label write, if any. A label that names a
+ * sensitive label (or one nested under it) carries that label ; a label the
+ * classifier cannot resolve — anything but a system label id, when the
+ * mailbox declares sensitive labels — carries `*`.
+ */
+function sensitiveLabelWritten(label: string, md: GmailMailboxMetadata): Slice | null {
+  if (md.sensitive_labels.length === 0) return null;
+  const named = md.sensitive_labels.find((s) => isLabelOrNested(label, s));
+  if (named !== undefined) return sensitiveLabelSlice('W', named);
+  if (SYSTEM_LABEL_IDS.has(label)) return null;
+  return sensitiveLabelSlice('W', null);
+}
+
+/** The label argument of a label write, or the denial. */
+function requireWritableLabel(
+  args: Readonly<Record<string, unknown>>,
+): string | { denied: string } {
+  const label = requireArg(args, 'label', LABEL_ARG);
+  if (typeof label !== 'string') return label;
+  if (DELETING_LABELS.has(label.toUpperCase())) {
+    return { denied: `label: '${label.toUpperCase()}' deletes mail ; this is not a label write.` };
+  }
+  return label;
+}
+
+// ─── search_threads ────────────────────────────────────────────────────────
+
+/**
+ * Slices of a search. The sender zone is the whole security model of the
+ * plugin, so a query the parser does not fully bound costs
+ * `from-zone[unknown]` and the bulk marker, never less.
+ */
+function classifySearch(q: unknown, md: GmailMailboxMetadata): Slice[] {
+  const parsed = parseQ(typeof q === 'string' ? q : '');
+  const senders = parsed.fromAddresses.map((value) => parseBareAddress(value));
+  const zones = new Set<FromZone>();
+  for (const sender of senders) if (sender) zones.add(fromZoneOf(sender, md));
+
+  // Bounded : a pure conjunction with at least one positive `from:`, each one a full address.
+  const bounded = senders.length > 0 && !senders.includes(null) && !parsed.hasDisjunction;
+  if (!bounded || parsed.hasNegation || parsed.hasUnknownOps) zones.add('unknown');
+
+  const slices: Slice[] = [slice('R', [name('mailbox'), name('label'), ANY_IDENT])];
+  for (const zone of zones) slices.push(fromZoneSlice(zone));
+  if (!bounded) slices.push(slice('R', [name('mailbox'), name('bulk-marker')]));
+  for (const label of sensitiveLabelsReadBySearch(parsed, md)) {
+    slices.push(sensitiveLabelSlice('R', label));
+  }
+  return slices;
+}
+
+/**
+ * The sensitive labels a search may return. The labels of a thread are
+ * unknown before the fetch, so each declared label is read unless the query
+ * proves otherwise : a pure conjunction carrying `-label:<name>` for it and
+ * no positive `label:` clause on it or under it.
+ */
+function sensitiveLabelsReadBySearch(parsed: QParsed, md: GmailMailboxMetadata): string[] {
+  return md.sensitive_labels.filter((sensitive) => {
+    if (parsed.hasDisjunction) return true;
+    if (parsed.labels.some((l) => isLabelOrNested(l, sensitive))) return true;
+    return !parsed.negatedLabels.some((l) => labelKey(l) === labelKey(sensitive));
+  });
 }
 
 // ─── Resource selection ────────────────────────────────────────────────────
@@ -226,8 +337,8 @@ export function selectMailbox(resources: readonly Resource[]): Resource | { deni
 
 /**
  * Classify a Gmail tool call into the slices it touches. `denied` for an
- * unknown tool or when the mission has no single mailbox ; otherwise one or
- * more slices the catalog matches.
+ * unknown tool, when the mission has no single mailbox, or when an argument
+ * cannot be read safely ; otherwise one or more slices the catalog matches.
  */
 export function classifyGmail(
   tool: string,
@@ -246,40 +357,36 @@ export function classifyGmail(
     case 'gmail__describe_zones':
       return { slices: [slice('R', [name('mailbox'), name('label'), ANY_IDENT])] };
 
-    case 'gmail__search_threads': {
-      const parsed = parseQ(typeof args.q === 'string' ? args.q : '');
-      const slices: Slice[] = [slice('R', [name('mailbox'), name('label'), ANY_IDENT])];
-      for (const z of fromZonesFromQ(parsed, md)) {
-        slices.push(slice('R', [name('mailbox'), name('from-zone'), ident(z)]));
-      }
-      if (isNonDiscriminatingQ(parsed)) {
-        slices.push(slice('R', [name('mailbox'), name('bulk-marker')]));
-        if (parsed.fromAddresses.length === 0) {
-          slices.push(slice('R', [name('mailbox'), name('from-zone'), ident('unknown')]));
-        }
-      }
-      for (const lbl of sensitiveLabelsTouched(parsed, md)) {
-        slices.push(slice('R', [name('mailbox'), name('sensitive-label'), ident(lbl)]));
-      }
-      return { slices };
-    }
+    case 'gmail__search_threads':
+      return { slices: classifySearch(args.q, md) };
 
-    // Worst case : the sender is unknown until the thread is fetched.
+    // Worst case : neither the sender nor the labels are known until the thread is fetched.
     case 'gmail__get_thread': {
-      const tid = typeof args.id === 'string' && args.id.length > 0 ? args.id : '*';
-      return {
-        slices: [
-          slice('R', [name('mailbox'), name('thread'), ident(tid), name('message'), ANY_IDENT]),
-          slice('R', [name('mailbox'), name('from-zone'), ident('unknown')]),
-        ],
-      };
+      const tid = requireArg(args, 'id', GMAIL_ID);
+      if (typeof tid !== 'string') return tid;
+      const slices: Slice[] = [
+        slice('R', [name('mailbox'), name('thread'), ident(tid), name('message'), ANY_IDENT]),
+        fromZoneSlice('unknown'),
+      ];
+      if (md.sensitive_labels.length > 0) slices.push(sensitiveLabelSlice('R', null));
+      return { slices };
     }
 
     case 'gmail__list_drafts':
       return { slices: [slice('R', [name('mailbox'), name('draft'), ANY_IDENT])] };
 
     case 'gmail__create_draft': {
-      const zone = classifyRecipients(collectRecipients(args), md);
+      const collected = collectRecipients(args);
+      if ('denied' in collected) return collected;
+      const zone = worstToZone(collected.recipients, md);
+      // The exfiltration vector of the plugin : refused here, because no
+      // catalog field can make a risk unacceptable to every mission.
+      if (zone === 'external-unbounded') {
+        return {
+          denied:
+            'recipients outside the internal domains and the allowlist: not acceptable for a draft.',
+        };
+      }
       return {
         slices: [
           slice('W', [name('mailbox'), name('draft')]),
@@ -293,31 +400,37 @@ export function classifyGmail(
 
     case 'gmail__label_message':
     case 'gmail__unlabel_message': {
-      const tid = typeof args.thread_id === 'string' ? args.thread_id : '*';
-      const mid = typeof args.message_id === 'string' ? args.message_id : '*';
-      return {
-        slices: [
-          slice('W', [
-            name('mailbox'),
-            name('thread'),
-            ident(tid),
-            name('message'),
-            ident(mid),
-            name('label'),
-          ]),
-        ],
-      };
+      const tid = requireArg(args, 'thread_id', GMAIL_ID);
+      if (typeof tid !== 'string') return tid;
+      const mid = requireArg(args, 'message_id', GMAIL_ID);
+      if (typeof mid !== 'string') return mid;
+      const label = requireWritableLabel(args);
+      if (typeof label !== 'string') return label;
+      const target = [name('mailbox'), name('thread'), ident(tid), name('message'), ident(mid)];
+      return { slices: labelWriteSlices([...target, name('label')], label, md) };
     }
 
     case 'gmail__label_thread':
     case 'gmail__unlabel_thread': {
-      const tid = typeof args.thread_id === 'string' ? args.thread_id : '*';
-      return {
-        slices: [slice('W', [name('mailbox'), name('thread'), ident(tid), name('label')])],
-      };
+      const tid = requireArg(args, 'thread_id', GMAIL_ID);
+      if (typeof tid !== 'string') return tid;
+      const label = requireWritableLabel(args);
+      if (typeof label !== 'string') return label;
+      const target = [name('mailbox'), name('thread'), ident(tid), name('label')];
+      return { slices: labelWriteSlices(target, label, md) };
     }
 
     default:
       return { denied: `unknown gmail tool '${tool}'.` };
   }
+}
+
+/** The containment slice of a label write, plus the sensitive-label marker when it applies. */
+function labelWriteSlices(
+  target: readonly SliceSegment[],
+  label: string,
+  md: GmailMailboxMetadata,
+): Slice[] {
+  const sensitive = sensitiveLabelWritten(label, md);
+  return sensitive ? [slice('W', target), sensitive] : [slice('W', target)];
 }

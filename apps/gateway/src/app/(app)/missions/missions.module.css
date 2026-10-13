@@ -221,6 +221,25 @@
   display: grid;
   gap: 2px;
 }
+/* Non-blocking: the mission can be issued as written. One line each, the detail unfolds. */
+.notices {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--text-xs);
+  color: var(--accent-warning-fg);
+  display: grid;
+  gap: 2px;
+}
+.notices summary {
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.notices details[open] summary {
+  white-space: normal;
+}
 .issueButton {
   min-width: 180px;
 }

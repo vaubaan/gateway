@@ -21,6 +21,7 @@ export const CONNECT_ERROR_CODES = [
   'provider-unreachable',
   'not-found',
   'connection-revoked',
+  'connection-unowned',
   'provider-mismatch',
   'label-read-only',
 ] as const;
@@ -46,6 +47,8 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
   'provider-unreachable': 'The provider could not be reached. Retry in a moment.',
   'not-found': 'This connection does not exist or is not yours.',
   'connection-revoked': 'This connection is revoked; revocation is final. Create a new connection.',
+  'connection-unowned':
+    'This connection has no owner any more. It keeps serving its missions, but it cannot be reconnected until an operator reassigns an owner.',
   'provider-mismatch': 'This connection belongs to another provider.',
   'label-read-only':
     'The environment of this resource is set by the provider plugin and cannot be edited.',
@@ -66,6 +69,7 @@ const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
   'provider-unreachable': 502,
   'not-found': 404,
   'connection-revoked': 409,
+  'connection-unowned': 409,
   'provider-mismatch': 409,
   'label-read-only': 409,
 };
@@ -89,7 +93,10 @@ export class ConnectError extends Error {
   }
 }
 
-/** The connection cannot serve a call: it is `expired`, `revoked` or `unowned`, or gone. */
+/**
+ * The connection cannot serve a call: it is `expired` or `revoked`, or gone (`missing`).
+ * An `unowned` connection keeps serving (spec §2.3) and never raises this.
+ */
 export class ConnectionUnavailableError extends Error {
   constructor(
     readonly connectionId: string,

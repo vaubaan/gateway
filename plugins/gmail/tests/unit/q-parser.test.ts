@@ -1,7 +1,10 @@
 /**
  * Unit tests for `parseQ` — the minimal Gmail `q` query parser.
  *
- * Research : .vaubaan/research/providers/gmail.md §6.ter Q8.
+ * Handbook : docs/handbook/providers/gmail.md, "Classification rules".
+ *
+ * The parser reports what it cannot bound (`hasDisjunction`, `hasNegation`,
+ * `hasUnknownOps`) ; the classifier turns each of them into the worst case.
  */
 import { describe, expect, test } from 'vitest';
 
@@ -43,9 +46,32 @@ describe('parseQ — combinators', () => {
     expect([...r.fromAddresses].sort()).toEqual(['alice@x.com', 'bob@y.com']);
   });
 
-  test('OR-explicit : OR is silently consumed', () => {
+  test('OR-explicit : a union is reported, never read as a conjunction', () => {
     const r = parseQ('from:alice@x.com OR from:bob@y.com');
     expect([...r.fromAddresses].sort()).toEqual(['alice@x.com', 'bob@y.com']);
+    expect(r.hasDisjunction).toBe(true);
+  });
+
+  test.each([
+    ['lower-case or', 'from:alice@x.com or newer_than:3650d'],
+    ['parentheses', 'from:(alice@x.com bob@y.com)'],
+    ['spaced parentheses', '( from:alice@x.com from:bob@y.com )'],
+    ['braces', '{from:alice@x.com from:bob@y.com}'],
+    ['pipe', 'from:alice@x.com|from:bob@y.com'],
+    ['quoted phrase', 'subject:"x from:alice@x.com y"'],
+  ])('grouping (%s) is reported as a disjunction', (_name, q) => {
+    expect(parseQ(q).hasDisjunction).toBe(true);
+  });
+
+  test('a grouped token yields no address (its bounds are not modelled)', () => {
+    const r = parseQ('{from:alice@x.com from:bob@y.com}');
+    expect(r.fromAddresses).toEqual([]);
+  });
+
+  test('a pure conjunction reports no disjunction', () => {
+    const r = parseQ('from:alice@x.com label:Inbox newer_than:7d');
+    expect(r.hasDisjunction).toBe(false);
+    expect(r.hasNegation).toBe(false);
     expect(r.hasUnknownOps).toBe(false);
   });
 
@@ -55,9 +81,28 @@ describe('parseQ — combinators', () => {
     expect(r.labels).toEqual(['Inbox']);
   });
 
-  test('negation `-` is treated as a from match (we extract regardless of sign)', () => {
+  test('`-from:` is a negation, never a sender bound', () => {
     const r = parseQ('-from:spam@bad.com');
-    expect(r.fromAddresses).toEqual(['spam@bad.com']);
+    expect(r.fromAddresses).toEqual([]);
+    expect(r.hasNegation).toBe(true);
+  });
+
+  test.each(['-to:bob@y.com', '-newer_than:7d', '-is:unread', '-invoice'])(
+    '`%s` is reported as a negation and extracts nothing',
+    (q) => {
+      const r = parseQ(q);
+      expect(r.hasNegation).toBe(true);
+      expect(r.toAddresses).toEqual([]);
+      expect(r.newerThanDays).toBeUndefined();
+    },
+  );
+
+  test('`-label:` is the one modelled negation : collected apart, not a positive label', () => {
+    const r = parseQ('from:alice@x.com -label:LEGAL -label:HR');
+    expect(r.labels).toEqual([]);
+    expect(r.negatedLabels).toEqual(['LEGAL', 'HR']);
+    expect(r.hasNegation).toBe(false);
+    expect(r.hasUnknownOps).toBe(false);
   });
 
   test('multiple newer_than keeps the smallest window (most restrictive)', () => {
@@ -66,7 +111,7 @@ describe('parseQ — combinators', () => {
   });
 });
 
-describe('parseQ — unknown operators fall through silently', () => {
+describe('parseQ — unknown operators are flagged', () => {
   test('`has:attachment` is unknown → hasUnknownOps true', () => {
     const r = parseQ('has:attachment');
     expect(r.hasUnknownOps).toBe(true);
@@ -96,8 +141,11 @@ describe('parseQ — edge cases', () => {
     expect(r.fromAddresses).toEqual([]);
     expect(r.toAddresses).toEqual([]);
     expect(r.labels).toEqual([]);
+    expect(r.negatedLabels).toEqual([]);
     expect(r.newerThanDays).toBeUndefined();
     expect(r.hasUnknownOps).toBe(false);
+    expect(r.hasDisjunction).toBe(false);
+    expect(r.hasNegation).toBe(false);
   });
 
   test('whitespace-only q → empty', () => {

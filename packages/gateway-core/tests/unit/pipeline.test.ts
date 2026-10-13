@@ -15,7 +15,10 @@ import {
   evaluateCallForToken,
   fingerprintArguments,
   refuse,
+  UPSTREAM_ERROR_SUMMARY_MAX_LENGTH,
+  UpstreamFailureError,
   UpstreamRefusalError,
+  upstreamErrorClassName,
   type AuditWriter,
   type BudgetStage,
   type CallPipelineDeps,
@@ -210,6 +213,27 @@ describe('checkMissionActive', () => {
       expect(r.status).toBe('expired');
       expect(r.reason).toContain('2026-10-13T09:59:59.000Z');
     }
+  });
+
+  test('an unreadable expires_at is mission-inactive/expired: the check fails closed', () => {
+    for (const expires_at of ['not-a-date', '', '13/10/2026 at noon']) {
+      const r = checkMissionActive({ ...ctx, mission: { ...ctx.mission, expires_at } }, NOW);
+      expect(r?.code).toBe('mission-inactive');
+      if (r?.code === 'mission-inactive') {
+        expect(r.status).toBe('expired');
+        expect(r.reason).toContain('unreadable');
+      }
+    }
+  });
+
+  test('an expired status without a stored expiry says so', () => {
+    const r = checkMissionActive(
+      { ...ctx, mission: { ...ctx.mission, status: 'expired', expires_at: null } },
+      NOW,
+    );
+    expect(r?.code === 'mission-inactive' && r.reason).toBe(
+      'the mission expired at an unknown time',
+    );
   });
 
   test('a future expires_at passes', () => {
@@ -441,9 +465,68 @@ describe('CallPipeline', () => {
     if (out.kind === 'failed') expect(out.error).toBe('boom');
     expect(audit.calls[0]).toMatchObject({
       decision: 'allowed',
-      upstream_error: 'boom',
+      upstream_error: 'upstream call failed (Error)',
       session_id: 'ses_1',
     });
+  });
+
+  test('UpstreamFailureError: the audit stores the summary, the outcome carries the detail', async () => {
+    const marker = 'select-marker-7f3a9c';
+    const detail = `Supabase API POST /query 400: syntax error at or near "${marker}"`;
+    const { p, audit } = pipeline({
+      upstream: {
+        execute: async () => {
+          throw new UpstreamFailureError({
+            summary: 'supabase answered HTTP 400 (Error)',
+            detail,
+            status: 400,
+          });
+        },
+      },
+    });
+    const out = await p.execute(ctx, { ...call, args: { ...call.args, sql: marker } });
+    expect(out).toMatchObject({ kind: 'failed', error: detail, refusal: null });
+    expect(audit.calls[0]?.upstream_error).toBe('supabase answered HTTP 400 (Error)');
+    expect(JSON.stringify(audit.calls)).not.toContain(marker);
+    expect(JSON.stringify(out.audit)).not.toContain(marker);
+  });
+
+  test('a stage that throws a plain error: its message never reaches the audit', async () => {
+    const marker = 'object-marker-7f3a9c';
+    const { p, audit } = pipeline({
+      upstream: {
+        execute: async () => {
+          throw new TypeError(`no such object ${marker}`);
+        },
+      },
+    });
+    const out = await p.execute(ctx, call);
+    expect(out).toMatchObject({ kind: 'failed', error: `no such object ${marker}` });
+    expect(audit.calls[0]?.upstream_error).toBe('upstream call failed (TypeError)');
+    expect(JSON.stringify(audit.calls)).not.toContain(marker);
+  });
+
+  test('the stored summary is bounded, whatever the stage hands over', async () => {
+    const { p, audit } = pipeline({
+      upstream: {
+        execute: async () => {
+          throw new UpstreamFailureError({ summary: 'x'.repeat(5000), detail: 'd', status: null });
+        },
+      },
+    });
+    await p.execute(ctx, call);
+    expect(audit.calls[0]?.upstream_error).toHaveLength(UPSTREAM_ERROR_SUMMARY_MAX_LENGTH);
+  });
+
+  test('upstreamErrorClassName: an identifier-shaped name, never free text', () => {
+    expect(upstreamErrorClassName(new RangeError('x'))).toBe('RangeError');
+    const renamed = new Error('x');
+    renamed.name = "syntax error near 'secret'";
+    expect(upstreamErrorClassName(renamed)).toBe('Error');
+    renamed.name = 'A'.repeat(200);
+    expect(upstreamErrorClassName(renamed)).toBe('Error');
+    expect(upstreamErrorClassName('a thrown string')).toBe('Error');
+    expect(upstreamErrorClassName(null)).toBe('Error');
   });
 
   test('a plain upstream failure carries no refusal', async () => {
@@ -481,7 +564,9 @@ describe('CallPipeline', () => {
     expect(audit.calls[0]).toMatchObject({
       decision: 'allowed',
       refusal_code: null,
-      upstream_error: 'connection-unavailable: the provider rejected the credential',
+      // The refusal and its status; the broker's message (which may quote the
+      // provider) stays on the outcome.
+      upstream_error: 'connection-unavailable: expired',
       remaining_budget: expect.any(Object) as object,
     });
   });
@@ -515,6 +600,52 @@ describe('CallPipeline', () => {
       },
     };
     const { p } = pipeline({ audit: failing });
+    await expect(p.execute(ctx, call)).rejects.toThrow('disk full');
+  });
+
+  test('an audit write that fails after a successful forward is not an upstream failure', async () => {
+    // The provider call happened. A writer that fails once must make the
+    // call reject (no entry, no completed call) — never be caught as "the
+    // provider failed" and stored as `upstream_error` on a second write.
+    const stored = new MemoryAuditWriter();
+    let writes = 0;
+    const failsOnce: AuditWriter = {
+      write: async (entry) => {
+        writes += 1;
+        if (writes === 1) throw new Error('SQLITE_BUSY');
+        await stored.write(entry);
+      },
+    };
+    let upstreamCalls = 0;
+    const { p } = pipeline({
+      audit: failsOnce,
+      upstream: {
+        execute: async () => {
+          upstreamCalls += 1;
+          return { rows: [] };
+        },
+      },
+    });
+    await expect(p.execute(ctx, call)).rejects.toThrow('SQLITE_BUSY');
+    expect(upstreamCalls).toBe(1);
+    expect(writes).toBe(1);
+    expect(stored.calls.filter((e) => e.upstream_error !== null)).toEqual([]);
+  });
+
+  test('an audit write that fails after an upstream failure propagates too', async () => {
+    const failing: AuditWriter = {
+      write: async () => {
+        throw new Error('disk full');
+      },
+    };
+    const { p } = pipeline({
+      audit: failing,
+      upstream: {
+        execute: async () => {
+          throw new Error('boom');
+        },
+      },
+    });
     await expect(p.execute(ctx, call)).rejects.toThrow('disk full');
   });
 });

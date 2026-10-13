@@ -12,6 +12,9 @@
  *     that belongs to another segment than the one the mission named ;
  *   - list calls return only the mission's resources (domains, segments) and
  *     the broadcasts of those segments ;
+ *   - only the fields a tool declares are forwarded (`declaredFieldsOf`) : an
+ *     argument the schema does not name was read by no classifier rule, so it
+ *     is dropped before the call ;
  *   - 401 → `UpstreamAuthError` ; 403 → `UpstreamAuthError` unless Resend
  *     names a `validation_error` (an unverified `from` domain is a 403 too).
  */
@@ -36,6 +39,7 @@ import {
   segmentResources,
   zoneConfigOf,
 } from './resources.ts';
+import { EMAIL_FIELDS, declaredFieldsOf } from './tools.ts';
 import { parseAddress } from './zones.ts';
 
 /** Public API of the provider — a fact about Resend, not instance configuration. */
@@ -68,10 +72,6 @@ interface BroadcastDto {
   readonly segment_id?: string | null;
   readonly audience_id?: string | null;
 }
-interface ContactDto {
-  readonly id: string;
-}
-
 // ─── v5 entry points ──────────────────────────────────────────────────────────
 
 export async function executeResend(
@@ -109,9 +109,10 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
     case 'resend__get_segment':
       return request(ctx, 'GET', `/segments/${enc(segmentRef(args.segment_id, ctx.resources))}`);
     case 'resend__list_contacts': {
-      const { segment_id, ...rest } = args;
-      const query: Record<string, unknown> = { ...rest };
-      if (segment_id !== undefined) query.segment_id = segmentRef(segment_id, ctx.resources);
+      const query = forwarded(tool, args, ['segment_id']);
+      if (args.segment_id !== undefined) {
+        query.segment_id = segmentRef(args.segment_id, ctx.resources);
+      }
       return request(ctx, 'GET', '/contacts', undefined, query);
     }
     case 'resend__get_contact':
@@ -126,18 +127,21 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
 
     // ─── Writes — sends ───────────────────────────────────────────────────
     case 'resend__send_email':
-      return request(ctx, 'POST', '/emails', args);
+      return request(ctx, 'POST', '/emails', forwarded(tool, args));
     case 'resend__send_batch_emails':
       // The batch endpoint takes the bare array as its body.
-      return request(ctx, 'POST', '/emails/batch', args.emails);
+      return request(ctx, 'POST', '/emails/batch', batchBody(args.emails));
 
     // ─── Writes — domains ─────────────────────────────────────────────────
     case 'resend__create_domain':
-      return request(ctx, 'POST', '/domains', args);
-    case 'resend__update_domain': {
-      const { domain, ...body } = args;
-      return request(ctx, 'PATCH', `/domains/${enc(domainId(domain, ctx.resources))}`, body);
-    }
+      return request(ctx, 'POST', '/domains', forwarded(tool, args));
+    case 'resend__update_domain':
+      return request(
+        ctx,
+        'PATCH',
+        `/domains/${enc(domainId(args.domain, ctx.resources))}`,
+        forwarded(tool, args, ['domain']),
+      );
     case 'resend__delete_domain':
       return request(ctx, 'DELETE', `/domains/${enc(domainId(args.domain, ctx.resources))}`);
     case 'resend__verify_domain':
@@ -149,10 +153,15 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
     case 'resend__delete_segment':
       return request(ctx, 'DELETE', `/segments/${enc(segmentRef(args.segment_id, ctx.resources))}`);
     case 'resend__create_contact': {
-      const { segment_id, ...body } = args;
-      const created = (await request(ctx, 'POST', '/contacts', body)) as ContactDto;
-      if (segment_id === undefined) return created;
-      const seg = segmentRef(segment_id, ctx.resources);
+      const body = forwarded(tool, args, ['segment_id']);
+      const created = await request(ctx, 'POST', '/contacts', body);
+      if (args.segment_id === undefined) return created;
+      const seg = segmentRef(args.segment_id, ctx.resources);
+      if (!isRecord(created) || typeof created.id !== 'string' || created.id.length === 0) {
+        throw new Error(
+          `resend: the contact was created but Resend returned no id — it was not added to segment '${seg}'`,
+        );
+      }
       const membership = await request(
         ctx,
         'POST',
@@ -160,10 +169,8 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
       );
       return { ...created, segment: membership };
     }
-    case 'resend__update_contact': {
-      const { id, ...body } = args;
-      return request(ctx, 'PATCH', `/contacts/${enc(id)}`, body);
-    }
+    case 'resend__update_contact':
+      return request(ctx, 'PATCH', `/contacts/${enc(args.id)}`, forwarded(tool, args, ['id']));
     case 'resend__delete_contact':
       return request(ctx, 'DELETE', `/contacts/${enc(args.id)}`);
     case 'resend__add_contact_to_segment':
@@ -180,18 +187,19 @@ async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<
       );
 
     // ─── Writes — broadcasts ──────────────────────────────────────────────
-    case 'resend__create_broadcast': {
-      const { segment_id, ...body } = args;
+    case 'resend__create_broadcast':
       return request(ctx, 'POST', '/broadcasts', {
-        ...body,
-        segment_id: segmentRef(segment_id, ctx.resources),
+        ...forwarded(tool, args, ['segment_id']),
+        segment_id: segmentRef(args.segment_id, ctx.resources),
       });
-    }
-    case 'resend__update_broadcast': {
+    case 'resend__update_broadcast':
       await broadcastInSegment(ctx, args);
-      const { segment_id: _segment, id, ...body } = args;
-      return request(ctx, 'PATCH', `/broadcasts/${enc(id)}`, body);
-    }
+      return request(
+        ctx,
+        'PATCH',
+        `/broadcasts/${enc(args.id)}`,
+        forwarded(tool, args, ['segment_id', 'id']),
+      );
     case 'resend__send_broadcast':
       await broadcastInSegment(ctx, args);
       return request(ctx, 'POST', `/broadcasts/${enc(args.id)}/send`, {});
@@ -255,6 +263,43 @@ export async function discoverResendResources(
   ];
 }
 
+// ─── Forwarded fields ────────────────────────────────────────────────────────
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** The listed keys the source really carries ; nothing else leaves the plugin. */
+function pick(source: Args, keys: readonly string[]): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const key of keys) {
+    if (Object.hasOwn(source, key) && source[key] !== undefined) out[key] = source[key];
+  }
+  return out;
+}
+
+/**
+ * The upstream payload of a tool : its declared arguments, minus the ones
+ * that route the call (`routing` — a resource ref or an id that goes in the
+ * path, resolved against the mission separately).
+ */
+function forwarded(
+  tool: string,
+  args: Args,
+  routing: readonly string[] = [],
+): Record<string, unknown> {
+  return pick(
+    args,
+    declaredFieldsOf(tool).filter((key) => !routing.includes(key)),
+  );
+}
+
+/** The bare array `POST /emails/batch` takes, each email reduced to its declared fields. */
+function batchBody(emails: unknown): Record<string, unknown>[] {
+  if (!Array.isArray(emails)) throw new Error('resend: emails: expected a list of emails');
+  return emails.map((email: unknown) => pick(isRecord(email) ? email : {}, EMAIL_FIELDS));
+}
+
 // ─── Resource plumbing ───────────────────────────────────────────────────────
 
 /** The Resend id of a mission domain, from the resource metadata discovery wrote. */
@@ -293,7 +338,7 @@ async function broadcastInSegment(ctx: ExecuteContext, args: Args): Promise<Broa
   return broadcast;
 }
 
-/** Exported for the host and tests : is this `from` on a mission domain ? */
+/** The mission's domain resource a `from` address is on, or `null`. */
 export function fromDomainOf(from: unknown, resources: readonly Resource[]): Resource | null {
   const parsed = parseAddress(from);
   if (!parsed) return null;

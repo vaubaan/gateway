@@ -9,15 +9,17 @@
  * A granted claim (`reset` / quota `extension`, handbook requests) lowers the counters
  * without touching the audit; its session event records, per risk, how many actions it
  * gave back (`details.credits` for the period `details.period_start`), and the check
- * adds them back.
+ * adds them back. Details are read through `parseEventDetails`: an event whose stored
+ * details do not have the shape of its kind gives back nothing.
  *
  * Reusable: the integration suite asserts an empty `mismatches`; an operator
  * diagnostic may run it on a live store.
  */
 
-import type { RiskId } from '@vaubaan/shared';
+import { parseEventDetails, type RiskId, type SessionEventKind } from '@vaubaan/shared';
 import type { AuditRepo, EventRecord, SessionsRepo } from '../store/index.ts';
-import type { BudgetMission } from './mapping.ts';
+import { sessionCounterOf, type BudgetMission } from './mapping.ts';
+import { consumedInPeriod } from './mission-state.ts';
 import { currentPeriod, type CurrentPeriod } from './period.ts';
 
 /** Upper bound of a one-off period's audit range: the period never ends. */
@@ -35,7 +37,10 @@ export interface CounterAuditLine {
 export type CounterAuditMismatch = CounterAuditLine;
 
 /** Session event kinds that may carry `details.credits` (a granted claim). */
-export const CREDIT_EVENT_KINDS = ['reset', 'extension'] as const;
+export const CREDIT_EVENT_KINDS = [
+  'reset',
+  'extension',
+] as const satisfies readonly SessionEventKind[];
 
 export interface CounterAuditReport {
   readonly mission_id: string;
@@ -58,6 +63,7 @@ export async function countersAgreeWithAudit(
   const period = currentPeriod(mission.period, now);
   const session = await deps.sessions.getByMission(mission.id);
   const counters = session ? await deps.sessions.counters(session.id, period.start) : [];
+  const counted = consumedInPeriod(counters.map(sessionCounterOf), period.start);
   const credited = session
     ? creditsOf(
         await deps.sessions.listEvents(session.id, {
@@ -71,9 +77,7 @@ export async function countersAgreeWithAudit(
   const risks = await Promise.all(
     mission.policy.map(async (entry) => ({
       risk_id: entry.risk_id,
-      counted: counters
-        .filter((c) => c.riskId === entry.risk_id)
-        .reduce((sum, c) => sum + c.consumed, 0),
+      counted: counted.get(entry.risk_id) ?? 0,
       credited: credited.get(entry.risk_id) ?? 0,
       audited: await deps.audit.countAllowedTouches(
         mission.id,
@@ -95,12 +99,11 @@ export async function countersAgreeWithAudit(
 function creditsOf(events: readonly EventRecord[], periodStart: string): Map<RiskId, number> {
   const total = new Map<RiskId, number>();
   for (const event of events) {
-    const details = event.details;
-    if (!details || details.period_start !== periodStart) continue;
-    const credits = details.credits;
-    if (typeof credits !== 'object' || credits === null) continue;
-    for (const [riskId, amount] of Object.entries(credits)) {
-      if (typeof amount === 'number') total.set(riskId, (total.get(riskId) ?? 0) + amount);
+    const parsed = parseEventDetails(event.kind, event.details);
+    if (!parsed || !('credits' in parsed.details)) continue;
+    if (parsed.details.period_start !== periodStart) continue;
+    for (const [riskId, amount] of Object.entries(parsed.details.credits)) {
+      total.set(riskId, (total.get(riskId) ?? 0) + amount);
     }
   }
   return total;

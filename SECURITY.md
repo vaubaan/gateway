@@ -11,8 +11,8 @@ seriously and handled privately.
 | 2.x (pre-release, `v5`) | Under construction on the `v5` branch; best effort  |
 | v4 SaaS (`v4-final`)    | Historical tag, not maintained, no security support |
 
-Until the first `v2.0.0` release, fixes land on `main` only; there is no
-backport.
+Until the first `v2.0.0` release, fixes land on the `v5` integration branch
+and reach `main` with it; there is no backport.
 
 ## Reporting a vulnerability
 

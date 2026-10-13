@@ -5,10 +5,12 @@
 > the gateway executes each tool call upstream only if the mission's policy,
 > budget and approval rules allow it, then writes an immutable audit row.
 
-**v5 is under construction on the `v5` integration branch (public product
-name: v2).** The last v4 SaaS release is tag
+**v5 (public product name: v2) is in pre-release on the `v5` integration
+branch.** That branch builds a runnable image, and
+[`deploy/README.md`](deploy/README.md) documents running it. No v2 release is
+tagged yet and no image is published; moving an existing v4 deployment over
+is a separate step. The last v4 SaaS release is tag
 [`v4-final`](https://github.com/sbw-vaubaan/vaubaan-gateway/releases/tag/v4-final).
-Nothing on `main` or `v5` is deployable yet.
 
 ## What v5 is
 
@@ -25,11 +27,11 @@ Nothing on `main` or `v5` is deployable yet.
 - **Structured refusals** tell the agent why a call was refused and where a
   human can grant more; the human answers from an inbox, never from the
   agent's terminal.
-
 - **One door for agents.** `POST /mcp` (MCP Streamable HTTP, stateless)
   with `Authorization: Bearer <mission token>`: `tools/list`, `tools/call`,
   and `GET /mcp/catalog` for the resources and the remaining budget. The
-  human interface (`/connections`, `/missions`, `/requests`, `/admin`) opens
+  human interface (`/connections`, `/missions`, `/requests`, `/audit`,
+  `/admin`) opens
   with a browser session only; neither credential opens the other surface.
 
 The full picture is in the spec; the reasoning is in the pivot ADR.
@@ -43,7 +45,9 @@ packages/policy-engine/  slice DSL, matcher, evaluator, runtime @vaubaan/policy-
 packages/gateway-core/   pipeline, decisions, refusals, audit   @vaubaan/gateway-core
 packages/plugin-sdk/     the plugin contract, registry, test kit @vaubaan/plugin-sdk
 plugins/<provider>/  one provider plugin per folder             @vaubaan/plugin-<provider>
+plugins/_template/   scaffold for a new plugin                  @vaubaan/plugin-template
 deploy/              Dockerfile, compose, example configuration
+scripts/             gen-master-key.mjs (npm run gen-master-key)
 docs/                spec, decisions (ADRs), handbook, tests, workflow
 ```
 
@@ -51,7 +55,7 @@ Workspaces: `apps/*`, `packages/*`, `plugins/*` (npm). Node >= 20.
 
 ```bash
 npm ci
-npm run ci        # type-check, lint, format check, tests, build
+npm run ci        # type-check, lint, format check, build, tests
 ```
 
 Running an instance (Docker image, Compose with TLS proxy, every
@@ -63,9 +67,11 @@ configuration key): [`deploy/README.md`](deploy/README.md).
 | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Spec      | [`docs/spec/vaubaan-gateway.md`](docs/spec/vaubaan-gateway.md) (v5), [`docs/spec/gateway-risk-model.md`](docs/spec/gateway-risk-model.md)                                                                                 |
 | Decisions | [`docs/decisions/`](docs/decisions/) — start with [the v4 → v5 pivot](docs/decisions/pivot-v4-to-v5-on-prem-mission-tokens.md) and [the repository layout](docs/decisions/repository-layout-and-contribution-workflow.md) |
-| Handbook  | [`docs/handbook/`](docs/handbook/) — how things actually work (v4 documents carry a legacy banner until rewritten)                                                                                                        |
+| Handbook  | [`docs/handbook/`](docs/handbook/) — how things actually work, listed below (pre-v5 handbooks are kept under [`docs/handbook/legacy/`](docs/handbook/legacy/))                                                            |
 | Tests     | [`docs/tests/`](docs/tests/)                                                                                                                                                                                              |
 | Workflow  | [`docs/workflow/coding-workflow.md`](docs/workflow/coding-workflow.md)                                                                                                                                                    |
+
+Handbooks: [configuration](docs/handbook/configuration.md), [store](docs/handbook/store.md), [authentication](docs/handbook/authentication.md), [connections](docs/handbook/connections.md), [missions](docs/handbook/missions.md), [budget-and-sessions](docs/handbook/budget-and-sessions.md), [execution-door](docs/handbook/execution-door.md), [requests](docs/handbook/requests.md), [audit](docs/handbook/audit.md), [web-app](docs/handbook/web-app.md), [gateway-core](docs/handbook/gateway-core.md), [policy-engine](docs/handbook/policy-engine.md), [plugin-sdk](docs/handbook/plugin-sdk.md), and one per provider under [providers](docs/handbook/providers/README.md).
 
 Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). Security:
 [`SECURITY.md`](SECURITY.md). Changes: [`CHANGELOG.md`](CHANGELOG.md).

@@ -4,6 +4,8 @@
  * `authenticate()` then `authorizeAdmin()`; nothing is read from the session
  * record but the user id.
  */
+import { BOOTSTRAP_ACTOR_ID } from '@vaubaan/gateway-core';
+
 import type { AdminRule } from '../config/types';
 import type { Store } from '../store';
 import type { GroupRecord, UserRecord } from '../store/types';
@@ -28,6 +30,11 @@ export interface BootstrapPrincipal {
 
 export type Principal = UserPrincipal | BootstrapPrincipal;
 
+/** The `user_id` an administrative audit entry records for this principal. */
+export function auditActorId(principal: Principal): string {
+  return principal.kind === 'user' ? principal.user.id : BOOTSTRAP_ACTOR_ID;
+}
+
 export type AdminDecision =
   | { readonly ok: true; readonly principal: Principal }
   | { readonly ok: false; readonly status: 401 | 403; readonly reason: string };
@@ -44,7 +51,12 @@ export class Authenticator {
     const session = await this.sessions.read(headers);
     if (!session) return null;
     if (session.record.kind === 'bootstrap') {
-      return { kind: 'bootstrap', sessionId: session.id };
+      // Decided where the principal is made, not by each caller: once the
+      // token is revoked its open sessions are nobody, on every surface.
+      const state = await this.bootstrap.state();
+      if (state.status === 'active') return { kind: 'bootstrap', sessionId: session.id };
+      await this.sessions.destroyById(session.id);
+      return null;
     }
     const user = await this.store.users.getById(session.record.userId);
     if (!user || user.status !== 'active') {
@@ -58,15 +70,13 @@ export class Authenticator {
   /**
    * Admin surface: the bootstrap operator while the token is active, a user
    * matching the admin rule afterwards (and before, if one exists).
+   * `authenticate()` already decided whether a bootstrap session is still
+   * somebody (a revoked token makes it `null`), so a bootstrap principal is
+   * an operator here.
    */
   async authorizeAdmin(principal: Principal | null): Promise<AdminDecision> {
     if (!principal) return { ok: false, status: 401, reason: 'no session' };
-    if (principal.kind === 'bootstrap') {
-      const state = await this.bootstrap.state();
-      if (state.status === 'active') return { ok: true, principal };
-      await this.sessions.destroyById(principal.sessionId);
-      return { ok: false, status: 401, reason: `bootstrap token ${state.status}` };
-    }
+    if (principal.kind === 'bootstrap') return { ok: true, principal };
     if (!principal.isOperator) {
       return { ok: false, status: 403, reason: 'user does not match the admin rule' };
     }

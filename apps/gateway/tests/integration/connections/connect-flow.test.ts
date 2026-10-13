@@ -16,7 +16,7 @@
  */
 import { createRegistry, type Resource } from '@vaubaan/plugin-sdk';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
@@ -643,5 +643,41 @@ describe('connections: provider app, connect, resources, revoke', () => {
     // The stored client secret is sealed like any other secret.
     expect(databaseDump()).not.toContain(CLIENT_SECRET);
     expect(await root.store.config.get(providerAppKey('oauthco', 'client_secret'))).toBeNull();
+  });
+
+  it('reports an unknown provider as unknown, and a failure to read the app settings as a failure', async () => {
+    const operator = await signIn(OPERATOR);
+    const handlers = root.connections.handlers;
+    const adminEntries = async () => (await root.store.audit.list({ kind: 'admin' })).length;
+    const before = await adminEntries();
+
+    const unknown = await handlers.saveProviderApp(
+      post('/admin/provider-apps/nope', operator, { 'field.client_id': 'x' }),
+      'nope',
+    );
+    expect(location(unknown).pathname).toBe('/admin/provider-apps');
+    expect(await noticeOf(unknown, operator)).toMatchObject({
+      tone: 'danger',
+      title: 'Not saved',
+      lines: ['This provider is not available on this instance.'],
+    });
+
+    // The store failing is not "provider unknown": the error reaches the caller.
+    const status = vi
+      .spyOn(root.providerApps, 'status')
+      .mockRejectedValueOnce(new Error('store unavailable'));
+    await expect(
+      handlers.saveProviderApp(
+        post('/admin/provider-apps/oauthco', operator, {
+          'field.client_id': 'company-client-id',
+          'field.client_secret': CLIENT_SECRET,
+        }),
+        'oauthco',
+      ),
+    ).rejects.toThrow('store unavailable');
+    status.mockRestore();
+
+    expect((await root.providerApps.status('oauthco')).configured).toBe(false);
+    expect(await adminEntries()).toBe(before);
   });
 });

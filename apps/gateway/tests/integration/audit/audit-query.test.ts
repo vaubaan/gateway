@@ -6,6 +6,7 @@
  * the real services.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { BOOTSTRAP_ACTOR_ID, BOOTSTRAP_ACTOR_LABEL } from '@vaubaan/gateway-core';
 
 import {
   ARGUMENTS_NOT_SHOWN,
@@ -167,8 +168,29 @@ describe('audit search: visibility, filters, paging', () => {
     });
     const config = entries.find((e) => e.kind === 'admin' && e.act === 'config-changed');
     expect(config).toMatchObject({
-      actor: { email: 'ops@example.com' },
+      actor: { email: 'ops@example.com', label: 'ops@example.com' },
       object: { type: 'instance-config', id: 'idp', label: null },
+    });
+  });
+
+  it('names the bootstrap operator instead of showing its actor id', async () => {
+    await rig.root.store.auditWriter.write({
+      kind: 'admin',
+      ts: '2026-10-13T08:00:00.000Z',
+      user_id: BOOTSTRAP_ACTOR_ID,
+      act: 'config-changed',
+      object: { type: 'instance-config', id: 'idp' },
+      before: null,
+      after: null,
+      delegated_client_id: null,
+    });
+    const entries = await search(userViewer(rig.operator, true));
+    const byBootstrap = entries.filter(
+      (e) => e.kind === 'admin' && e.actor.id === BOOTSTRAP_ACTOR_ID,
+    );
+    expect(byBootstrap).toHaveLength(1);
+    expect(byBootstrap[0]).toMatchObject({
+      actor: { id: BOOTSTRAP_ACTOR_ID, email: null, label: BOOTSTRAP_ACTOR_LABEL },
     });
   });
 

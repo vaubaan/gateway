@@ -100,7 +100,12 @@ describe('cloudflare-dns plugin — structural kit', () => {
           { args: { zone_id: 'z1', record_id: 'r1', type: 'MX', name: 'example.com' } },
           { args: { zone_id: 'z1', type: 'A', name: 'www.example.com' }, expectDenied: true },
         ],
-        cloudflare_dns__delete_record: [{ args: { zone_id: 'z1', record_id: 'r1' } }],
+        cloudflare_dns__delete_record: [
+          { args: { zone_id: 'z1', record_id: 'r1' } },
+          { args: { zone_id: 'z1', record_id: 'r1', type: 'A', name: 'www.example.com' } },
+          { args: { zone_id: 'z1', record_id: 'r1', type: 'NS', name: 'sub.example.com' } },
+          { args: { zone_id: 'z1', record_id: '..' }, expectDenied: true },
+        ],
         cloudflare_dns__import_records: [{ args: { zone_id: 'z1', file: ';; bind' } }],
         cloudflare_dns__edit_zone_settings: [
           { args: { zone_id: 'z1', items: [{ id: 'ssl', value: 'strict' }] } },
@@ -113,6 +118,7 @@ describe('cloudflare-dns plugin — structural kit', () => {
     );
     expect(report.toolsChecked).toBe(15);
     expect(report.risksUntouched).toEqual([]);
+    expect(report.fallbackHits).toEqual([]);
   });
 });
 
@@ -135,10 +141,14 @@ describe('classifyCloudflareDns — zone resolution', () => {
 
   test('refuses an ambiguous, absent, unknown or malformed zone', () => {
     const both = [exampleCom, exampleOrg];
-    expect(denied('cloudflare_dns__get_zone', {}, both)).toMatch(/touches 2 Cloudflare DNS zones/);
-    expect(denied('cloudflare_dns__get_zone', {}, [])).toMatch(/touches no Cloudflare DNS zone/);
-    expect(denied('cloudflare_dns__get_zone', { zone_id: 'z9' }, both)).toMatch(
-      /not a Cloudflare DNS zone of this mission/,
+    expect(denied('cloudflare_dns__get_zone', {}, both)).toBe(
+      'zone_id: argument missing and the mission touches 2 Cloudflare DNS zones — name one',
+    );
+    expect(denied('cloudflare_dns__get_zone', {}, [])).toBe(
+      'zone_id: argument missing and the mission touches no Cloudflare DNS zone',
+    );
+    expect(denied('cloudflare_dns__get_zone', { zone_id: 'z9' }, both)).toBe(
+      "zone_id: 'z9' is not a Cloudflare DNS zone of this mission",
     );
     expect(denied('cloudflare_dns__get_zone', { zone_id: 'z 1' })).toBe(
       'zone_id: malformed zone id',
@@ -226,14 +236,63 @@ describe('classifyCloudflareDns — record writes', () => {
         { type: 'A', name: 'www.example.com', content: 'x' },
         [nameless],
       ),
-    ).toHaveLength(2);
+    ).toEqual([
+      'cloudflare-dns.account[*].zone[z8].record.W',
+      'cloudflare-dns.account[*].zone[z8].record.critical.W',
+    ]);
   });
 
-  test('deletion emits the delete verb leaf ; record_id is required and validated', () => {
+  test('deleting an ordinary record emits the delete verb leaf only', () => {
+    expect(
+      slices('cloudflare_dns__delete_record', {
+        zone_id: 'z1',
+        record_id: 'r1',
+        type: 'CNAME',
+        name: 'api.example.com',
+      }),
+    ).toEqual(['cloudflare-dns.account[acct1].zone[z1].record[r1].delete.W']);
+  });
+
+  test('deleting an apex, wildcard, MX or NS record also emits the critical overlay', () => {
+    const expected = [
+      'cloudflare-dns.account[acct1].zone[z1].record[r1].delete.W',
+      'cloudflare-dns.account[acct1].zone[z1].record[r1].critical.W',
+    ];
+    const del = (args: Record<string, unknown>) =>
+      slices('cloudflare_dns__delete_record', { zone_id: 'z1', record_id: 'r1', ...args });
+    expect(del({ type: 'A', name: 'example.com' })).toEqual(expected);
+    expect(del({ type: 'A', name: 'EXAMPLE.COM.' })).toEqual(expected);
+    expect(del({ type: 'TXT', name: '@' })).toEqual(expected);
+    expect(del({ type: 'A', name: '*.example.com' })).toEqual(expected);
+    expect(del({ type: 'mx', name: 'mail.example.com' })).toEqual(expected);
+    expect(del({ type: 'NS', name: 'sub.example.com' })).toEqual(expected);
+  });
+
+  test('a deletion that does not name the record, or on an unknown zone name, is critical', () => {
     expect(slices('cloudflare_dns__delete_record', { zone_id: 'z1', record_id: 'r1' })).toEqual([
       'cloudflare-dns.account[acct1].zone[z1].record[r1].delete.W',
+      'cloudflare-dns.account[acct1].zone[z1].record[r1].critical.W',
     ]);
+    const nameless: Resource = { provider: 'cloudflare-dns', ref: 'z8', displayName: '' };
+    expect(
+      slices(
+        'cloudflare_dns__delete_record',
+        { record_id: 'r1', type: 'A', name: 'www.example.com' },
+        [nameless],
+      ),
+    ).toEqual([
+      'cloudflare-dns.account[*].zone[z8].record[r1].delete.W',
+      'cloudflare-dns.account[*].zone[z8].record[r1].critical.W',
+    ]);
+  });
+
+  test('record_id is required and validated ; a dot segment is refused', () => {
     expect(denied('cloudflare_dns__delete_record', { zone_id: 'z1' })).toBe('record_id: missing');
+    for (const record_id of ['.', '..', 'r1/..', 'a.b']) {
+      expect(denied('cloudflare_dns__delete_record', { zone_id: 'z1', record_id }), record_id).toBe(
+        'record_id: malformed identifier',
+      );
+    }
     expect(denied('cloudflare_dns__get_record', { zone_id: 'z1', record_id: 'r 1' })).toBe(
       'record_id: malformed identifier',
     );
@@ -277,12 +336,24 @@ describe('isCriticalRecord / recordSensitivity', () => {
     expect(isCriticalRecord('A', '*', 'example.com')).toBe(true);
   });
 
+  test('trailing dots never hide the apex ; a non-ASCII zone name is never compared', () => {
+    expect(isCriticalRecord('A', 'example.com..', 'example.com')).toBe(true);
+    expect(isCriticalRecord('A', '*.example.com..', 'example.com.')).toBe(true);
+    expect(isCriticalRecord('A', 'www.example.com..', 'example.com')).toBe(false);
+    expect(isCriticalRecord('A', 'xn--bcher-kva.example', 'bücher.example')).toBe(true);
+    expect(isCriticalRecord('A', 'www.xn--bcher-kva.example', 'bücher.example')).toBe(true);
+  });
+
   test('recordSensitivity needs both type and name as strings', () => {
     expect(recordSensitivity({ type: 'A', name: 'www.example.com' }, 'example.com')).toBe(
       'regular',
     );
     expect(recordSensitivity({ type: 'A' }, 'example.com')).toBe('critical');
     expect(recordSensitivity({ type: 1, name: 'www.example.com' }, 'example.com')).toBe('critical');
+    expect(recordSensitivity({ type: 'A', name: ['www.example.com'] }, 'example.com')).toBe(
+      'critical',
+    );
+    expect(recordSensitivity({ name: 'www.example.com' }, 'example.com')).toBe('critical');
   });
 });
 
@@ -354,7 +425,7 @@ describe('executeCloudflareDns with mockFetch', () => {
     expect(fetch.calls).toHaveLength(0);
   });
 
-  test('create_record POSTs JSON without zone_id ; delete sends no body', async () => {
+  test('create_record POSTs JSON without zone_id ; an undeclared delete goes straight out, no body', async () => {
     const fetch = mockFetch([
       { method: 'POST', url: `${BASE}/zones/z1/dns_records`, body: { result: { id: 'r2' } } },
       { method: 'DELETE', url: `${BASE}/zones/z1/dns_records/r2`, body: { result: { id: 'r2' } } },
@@ -377,8 +448,131 @@ describe('executeCloudflareDns with mockFetch', () => {
       zone_id: 'z1',
       record_id: 'r2',
     });
+    expect(fetch.calls.map((c) => c.method)).toEqual(['POST', 'DELETE']);
     expect(fetch.calls[1]!.body).toBeNull();
     expect(fetch.pending()).toEqual([]);
+  });
+
+  test('a dot-segment or otherwise path-unsafe record_id never reaches the API', async () => {
+    const fetch = mockFetch([]);
+    for (const record_id of ['.', '..', '../..', 'r1/../r2', 'a/b', 'a.b', '~', '', undefined]) {
+      for (const tool of [
+        'cloudflare_dns__get_record',
+        'cloudflare_dns__update_record',
+        'cloudflare_dns__delete_record',
+      ]) {
+        await expect(
+          cloudflareDnsPlugin.execute(ctx(fetch), tool, {
+            zone_id: 'z1',
+            record_id,
+            type: 'MX',
+            name: 'example.com',
+          }),
+          `${tool} ${String(record_id)}`,
+        ).rejects.toThrow(/record_id: missing or malformed identifier/);
+      }
+    }
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('a path-unsafe zone never reaches the API, as an argument or as the mission zone', async () => {
+    const fetch = mockFetch([]);
+    for (const zone_id of ['.', '..', 'z1/..', 'z1/dns_records', '*']) {
+      await expect(
+        cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__delete_zone', { zone_id }),
+        zone_id,
+      ).rejects.toThrow(/zone_id: malformed zone id/);
+    }
+    const unsafe: Resource = { ...exampleCom, ref: '..' };
+    await expect(
+      cloudflareDnsPlugin.execute(ctx(fetch, [unsafe]), 'cloudflare_dns__delete_zone', {}),
+    ).rejects.toThrow(/zone_id: malformed zone id/);
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('delete_record declared ordinary : reads the record first, then DELETEs without a body', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${BASE}/zones/z1/dns_records/r1`,
+        body: { result: { id: 'r1', type: 'A', name: 'www.example.com' } },
+        times: 1,
+      },
+      {
+        method: 'DELETE',
+        url: `${BASE}/zones/z1/dns_records/r1`,
+        body: { result: { id: 'r1' } },
+        times: 1,
+      },
+    ]);
+    await cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__delete_record', {
+      zone_id: 'z1',
+      record_id: 'r1',
+      type: 'A',
+      name: 'www.example.com',
+    });
+    expect(fetch.calls.map((c) => c.method)).toEqual(['GET', 'DELETE']);
+    expect(fetch.calls[1]!.body).toBeNull();
+    expect(fetch.calls[1]!.url).toBe(`${BASE}/zones/z1/dns_records/r1`);
+    expect(fetch.pending()).toEqual([]);
+  });
+
+  test('delete_record declared ordinary on an apex, MX or NS record is refused before the DELETE', async () => {
+    for (const actual of [
+      { type: 'A', name: 'example.com' },
+      { type: 'MX', name: 'mail.example.com' },
+      { type: 'NS', name: 'sub.example.com' },
+      { type: 'A', name: '*.example.com' },
+    ]) {
+      const fetch = mockFetch([
+        {
+          method: 'GET',
+          url: `${BASE}/zones/z1/dns_records/r1`,
+          body: { result: { id: 'r1', ...actual } },
+        },
+      ]);
+      await expect(
+        cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__delete_record', {
+          zone_id: 'z1',
+          record_id: 'r1',
+          type: 'A',
+          name: 'www.example.com',
+        }),
+        `${actual.type} ${actual.name}`,
+      ).rejects.toThrow(/the record is a critical record/);
+      expect(fetch.calls.map((c) => c.method)).toEqual(['GET']);
+    }
+  });
+
+  test('delete_record declared critical goes straight to the DELETE', async () => {
+    const fetch = mockFetch([
+      { method: 'DELETE', url: `${BASE}/zones/z1/dns_records/r1`, body: { result: { id: 'r1' } } },
+    ]);
+    await cloudflareDnsPlugin.execute(ctx(fetch), 'cloudflare_dns__delete_record', {
+      zone_id: 'z1',
+      record_id: 'r1',
+      type: 'MX',
+      name: 'example.com',
+    });
+    expect(fetch.calls.map((c) => c.method)).toEqual(['DELETE']);
+  });
+
+  test('the guard refuses when the record read has no usable result (fail closed)', async () => {
+    for (const tool of ['cloudflare_dns__update_record', 'cloudflare_dns__delete_record']) {
+      for (const body of [{ success: true }, { result: null }, { result: { id: 'r1' } }, 'gone']) {
+        const fetch = mockFetch([{ method: 'GET', url: `${BASE}/zones/z1/dns_records/r1`, body }]);
+        await expect(
+          cloudflareDnsPlugin.execute(ctx(fetch), tool, {
+            zone_id: 'z1',
+            record_id: 'r1',
+            type: 'A',
+            name: 'www.example.com',
+          }),
+          `${tool} ${JSON.stringify(body)}`,
+        ).rejects.toThrow(/the record is a critical record/);
+        expect(fetch.calls.map((c) => c.method)).toEqual(['GET']);
+      }
+    }
   });
 
   test('update_record declared ordinary : reads the record first, then PATCHes', async () => {
@@ -639,6 +833,15 @@ describe('discoverCloudflareDnsResources with mockFetch', () => {
     );
     expect(silent.calls).toHaveLength(0);
   });
+
+  test('an answer whose result is not a list fails discovery instead of yielding resources', async () => {
+    for (const result of ['z1', { id: 'z1' }, 42]) {
+      const fetch = mockFetch([{ method: 'GET', url: /\/zones\?/, body: { result } }]);
+      await expect(cloudflareDnsPlugin.discoverResources(ctx(fetch))).rejects.toThrow(
+        /GET \/zones: 'result' is not a list/,
+      );
+    }
+  });
 });
 
 describe('credential spec and presets', () => {
@@ -665,18 +868,24 @@ describe('credential spec and presets', () => {
       'cloudflare-dns.read-zone-metadata',
       'cloudflare-dns.read-records',
     ]);
-    const operator = ids('dns-operator');
-    expect(operator).toContain('cloudflare-dns.record-write');
-    for (const excluded of [
+    expect(ids('dns-operator')).toEqual([
+      'cloudflare-dns.read-zone-metadata',
+      'cloudflare-dns.read-records',
+      'cloudflare-dns.record-write',
+      'cloudflare-dns.cache-purge',
+    ]);
+    expect(ids('zone-admin')).toEqual([
+      'cloudflare-dns.read-zone-metadata',
+      'cloudflare-dns.read-records',
+      'cloudflare-dns.export-zone-file',
+      'cloudflare-dns.record-write',
       'cloudflare-dns.critical-record-write',
       'cloudflare-dns.record-delete',
       'cloudflare-dns.import-records',
       'cloudflare-dns.zone-settings-write',
       'cloudflare-dns.dnssec-write',
-      'cloudflare-dns.export-zone-file',
-    ]) {
-      expect(operator, excluded).not.toContain(excluded);
-    }
+      'cloudflare-dns.cache-purge',
+    ]);
 
     const admin = presets.find((p) => p.id === 'zone-admin')!;
     const approval = admin.entries

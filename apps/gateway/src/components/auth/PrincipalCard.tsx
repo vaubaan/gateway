@@ -4,13 +4,14 @@
  * so the origin check applies.
  */
 import Link from 'next/link';
+import { BOOTSTRAP_ACTOR_LABEL } from '@vaubaan/gateway-core';
 
 import type { Principal } from '@/server/auth';
 import { Badge, Button, Card, CardBody } from '@/components/ui';
 import styles from './auth.module.css';
 
 export function OperatorBadge({ principal }: { principal: Principal }) {
-  if (principal.kind === 'bootstrap') return <Badge tone="warning">Bootstrap operator</Badge>;
+  if (principal.kind === 'bootstrap') return <Badge tone="warning">{BOOTSTRAP_ACTOR_LABEL}</Badge>;
   return principal.isOperator ? <Badge tone="success">Operator</Badge> : <Badge>User</Badge>;
 }
 

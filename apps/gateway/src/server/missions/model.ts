@@ -179,6 +179,33 @@ export interface PreviewIssue {
   readonly resource_refs?: readonly string[];
 }
 
+export const PREVIEW_NOTICE_CODES = [
+  'resource-without-env',
+  'resource-env-not-in-catalog',
+] as const;
+export type PreviewNoticeCode = (typeof PREVIEW_NOTICE_CODES)[number];
+
+/**
+ * Something the creator should know about a draft that can be issued as
+ * written. A notice never blocks (`MissionPreview.ok` ignores it).
+ *
+ * Both codes are about the same runtime rule: an env-scoped risk touched on a
+ * resource whose environment label is absent, or is not one the risk is
+ * acceptable in, refuses the call (`risk-not-accepted`) whatever the mission
+ * accepts. On such a resource the mission therefore reaches the account-scoped
+ * risks only.
+ */
+export interface PreviewNotice {
+  readonly code: PreviewNoticeCode;
+  readonly message: string;
+  readonly connection_index?: number;
+  readonly connection_id?: string;
+  /** The selected resources the notice is about. */
+  readonly resource_refs: readonly string[];
+  /** The env-scoped ids the draft accepts on this connection, unreachable on those resources. */
+  readonly risk_ids: readonly RiskId[];
+}
+
 export interface UnresolvableEntry {
   readonly risk_id: RiskId;
   /** The environment no selected resource carries. */
@@ -236,6 +263,8 @@ export interface MissionPreview {
   /** True when `issue()` would accept this draft unchanged. */
   readonly ok: boolean;
   readonly issues: readonly PreviewIssue[];
+  /** What the creator should know although the draft passes; never blocks. */
+  readonly notices: readonly PreviewNotice[];
   readonly name: string;
   readonly connections: readonly ConnectionPreview[];
   /** What becomes callable: the mission policy as it would be persisted. */

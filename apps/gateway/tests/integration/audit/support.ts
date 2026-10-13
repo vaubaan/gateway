@@ -1,18 +1,21 @@
 /**
  * Shared rig of the audit suites: the real composition root on the `:memory:`
  * store (shipped plugins, seeded connections), a mission issued through the
- * real `MissionService`, and calls seeded the way the execution door will
- * produce them (P1.6 is not merged): `SessionService.recordCall` for the
+ * real `MissionService`, and calls seeded the way the execution door
+ * produces them: `SessionService.recordCall` for the
  * session, counters and events, then the store's audit writer for the entry —
  * the two halves `CallPipeline` runs for every call.
  */
 import { fingerprintArguments, type CallAuditEntry } from '@vaubaan/gateway-core';
 import type { RiskId } from '@vaubaan/shared';
 
-import { budgetMissionOf, SessionService, type RecordCallResult } from '../../../src/server/budget';
+import {
+  budgetMissionOf,
+  type RecordCallResult,
+  type SessionService,
+} from '../../../src/server/budget';
 import type { GatewayRoot } from '../../../src/server/compose/root';
 import type { MissionDraft } from '../../../src/server/missions';
-import { SlidingWindowRateLimiter } from '../../../src/server/rate-limit';
 import type { MissionRecord, UserRecord } from '../../../src/server/store/types';
 import { buildTestRoot, seedInstance, type SeededInstance } from '../missions/support';
 
@@ -37,14 +40,8 @@ export interface OperatorRig extends AuditRig {
 
 /** The rig over a root that already exists (the browser tests' ephemeral instance). */
 export function auditRigOn(root: GatewayRoot, seeded: SeededInstance): AuditRig {
-  const budget = new SessionService({
-    sessions: root.store.sessions,
-    requests: root.store.requests,
-    rateWindows: new SlidingWindowRateLimiter(),
-    requestUrl: root.requests.requestUrl,
-    requestExpirySeconds: root.config.requests.expirySeconds,
-  });
-  return { root, seeded, budget };
+  // The service the execution door decides with, not a second one over the same store.
+  return { root, seeded, budget: root.budget };
 }
 
 export async function openAuditRig(): Promise<OperatorRig> {

@@ -4,9 +4,9 @@ import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'Vaubaan — MCP gateway for coding agents',
+  title: 'Vaubaan Gateway',
   description:
-    'Policy-enforcing MCP gateway. Filter and audit each MCP tool call from Claude Code, Cursor and the rest — without ever giving them a cloud provider token.',
+    'Self-hosted MCP gateway: agents call provider tools with a mission token; every call is checked against the accepted risks and budget of the mission, executed with a credential that stays on the instance, and audited.',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

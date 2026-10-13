@@ -1,28 +1,32 @@
 # Risk catalog of the `resend` provider.
 #
-# Spec : docs/spec/resend.md §5 (v4 modelling), docs/spec/gateway-risk-model.md §4
+# Spec : docs/spec/resend.md §5 (modelling), docs/spec/gateway-risk-model.md §4
 #        + §4bis (scope caps), docs/spec/vaubaan-gateway.md §3.2 (presets).
-# ADR  : docs/decisions/scope-caps-amplification-axis.md (caps + infra_limits),
+# ADR  : docs/decisions/scope-caps-amplification-axis.md,
+#        docs/decisions/scope-caps-not-enforced-in-v5-0.md (only the rate ceiling
+#        `infra_limits.calls_per_minute_max` is declared : it is the one enforced),
 #        docs/decisions/unified-gates-drop-confirm.md (no default_gate),
 #        docs/decisions/plugin-contract-and-credential-spec.md (presets, loader).
 #
-# Version 2 (v5 SDK migration). Slices are rooted at the mission resources —
-# `domain[<name>]` for everything that sends, `segment[<id>]` for broadcasts
-# and membership — instead of the v4 `account[<binding slug>]`. Two v4 risks
-# named after Resend's retired "audiences" are deprecated and replaced :
+# 18 entries : 15 live named risks, the fallback, and 2 deprecated ids.
+# Slices are rooted at the mission resources — `domain[<name>]` for everything
+# that sends, `segment[<id>]` for broadcasts and membership. Two risks named
+# after Resend's retired "audiences" are deprecated and replaced :
 # `read-audiences` → `read-segments`, `audience-write` → `segment-write`.
-# Their patterns are kept verbatim so the ids stay resolvable ; they never
-# match a v5 slice and no preset offers them.
+# Their patterns are kept verbatim so the ids stay resolvable ; no slice the
+# classifier emits matches them and no preset offers them.
 #
 # Pattern discipline : `[**]` spans any number of segments, `[*]` exactly one
 # identifier. Write patterns use `[*]` and explicit leaves so that a contact
 # write never touches `segment-write`, and a broadcast send never touches
-# `broadcast-draft` — the v4 catalog conflated them.
+# `broadcast-draft`.
 #
 # Only `send-email-external-unbounded` is env-scoped : the owner labels domain
-# resources with free-form environments, and that one risk is refused outside
-# `staging` / `dev`. The fallback is never offered in a preset : the engine
-# counts it only when no specific risk matched.
+# resources with free-form environments, and a call touching that risk on a
+# domain labelled anything but `staging` / `dev`, or not labelled, is refused
+# whatever the mission accepted. The fallback is never offered in a preset :
+# the engine counts it only when no specific risk matched, and no tool of
+# this plugin emits a slice that reaches it.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
@@ -65,9 +69,9 @@ risks:
       persistence: stateless
 
   - id: resend.read-audiences
-    label: 'Read audiences and contacts (PII) — v4, replaced by read-segments'
+    label: 'Read audiences and contacts (PII) — deprecated, replaced by read-segments'
     reason: >-
-      v4 risk rooted at the binding account. Resend renamed audiences to
+      Deprecated : matches no call any more. Resend renamed audiences to
       segments and made contacts account-level ; `resend.read-segments`
       carries the same PII read. Kept so the id stays resolvable.
     matches:
@@ -182,19 +186,13 @@ risks:
       cost: moderate
       visibility: team
       persistence: session
-    caps:
-      items_per_call_max: 100
-      calls_per_minute_max: 5
-      calls_per_session_max: 50
-    infra_limits:
-      items_per_call_max: 100
 
   # ─── WRITES — SEGMENTS & CONTACTS ──────────────────────────────────────
 
   - id: resend.audience-write
-    label: 'Create or delete an audience — v4, replaced by segment-write'
+    label: 'Create or delete an audience — deprecated, replaced by segment-write'
     reason: >-
-      v4 risk rooted at the binding account. Resend renamed audiences to
+      Deprecated : matches no call any more. Resend renamed audiences to
       segments ; `resend.segment-write` carries the same structural change.
       Kept so the id stays resolvable.
     matches: 'resend.account[**].audience[**].W'
@@ -280,9 +278,6 @@ risks:
       cost: unbounded
       visibility: public
       persistence: posture
-    caps:
-      calls_per_minute_max: 1
-      calls_per_session_max: 5
     infra_limits:
       calls_per_minute_max: 10
 
@@ -381,7 +376,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One token per code project — transactional sends to internal and allow-listed recipients, generous budgets ; no bulk, no PII, no domain change.
+    description: One mission per code project — transactional sends to internal and allow-listed recipients, generous budgets ; no bulk, no PII, no domain change.
     entries:
       - risk_id: resend.read-email-status
         quota: 5000

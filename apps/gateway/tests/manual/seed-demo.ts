@@ -36,7 +36,7 @@ async function main(): Promise<void> {
       displayName: 'acme-org',
       credential: serializeSecret({ kind: 'app-install', installationId: '1', metadata: {} }),
     });
-    await store.connections.replaceResources(connection.id, [
+    await store.connections.syncDiscoveredResources(connection.id, [
       { ref: 'acme/app', displayName: 'acme/app', env: null },
       { ref: 'acme/infra', displayName: 'acme/infra', env: null },
     ]);

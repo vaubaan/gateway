@@ -11,6 +11,7 @@ tracks:
   - apps/gateway/tests/integration/audit/
   - apps/gateway/tests/e2e/v5/audit-session.spec.ts
   - packages/gateway-core/src/audit.ts
+  - apps/gateway/src/server/compose/root.ts
 ---
 
 # Audit — search, mission session view, retention, administrative entries
@@ -102,6 +103,16 @@ following pages, and entries with the same timestamp are neither repeated nor sk
 - An audit entry never holds arguments: `arguments_hash` is
   `fingerprintArguments(args)` (sha256 of the canonical JSON, 64 hex — the fingerprint that
   also binds approvals) and nothing else is stored (gateway-core).
+- `upstream_error` never holds the provider's text. A provider error can echo the call's
+  input (a SQL fragment, an object id) and plugins quote the start of the provider's body
+  in the error they throw, so the entry stores a summary the host builds instead, cut at
+  `UPSTREAM_ERROR_SUMMARY_MAX_LENGTH` (200) characters. It is one of:
+  `<provider id> answered HTTP <status> (<error class>)` when the error carries a status,
+  `<provider id> call failed (<error class>)` when it does not, or
+  `connection-unavailable: <connection status>` when the credential was rejected for good.
+  The error class is the error's `name` when it is identifier-shaped, `Error` otherwise.
+  The provider's message goes to the agent that made the call, in the tool result, and is
+  stored nowhere ([execution door](execution-door.md), "Upstream stage").
 - `AuditCallView` / `AuditAdminView` are explicit field lists built by `toView`; nothing
   else of a record reaches a page.
 - `before` / `after` of an administrative entry pass through `withoutArguments`, which
@@ -109,8 +120,13 @@ following pages, and entries with the same timestamp are neither repeated nor sk
   depth, by `[not shown]` — defence in depth against a future writer's mistake.
 - The session timeline is built by `eventView`, which surfaces `tool`, `refusal_code`,
   `agent_label`, `remaining`, `risk_ids`, `request_id`, `request_kind`, `token_prefix`,
-  `credits`, `dimension`, `expires_at` and ignores the rest of the event's free-form
-  `details`.
+  `credits`, `dimension`, `expires_at` and ignores the rest of the event's `details`.
+  It reads them through `parseEventDetails` (`@vaubaan/shared`, see
+  [budget and sessions](budget-and-sessions.md)): each field comes from the kinds that
+  carry it, and an event whose stored details do not have the shape of its kind is listed
+  with its kind, time, risk and actor, every detail field `null`.
+- Open requests are those `isDecidable` (`server/requests/state.ts`) says are still open
+  as of now: the same rule as the inbox, not a second comparison of dates.
 - Open requests are listed **by link** to the creator's view of the request
   (`inboxRequestPath(id)` of `server/requests/url.ts` = `/requests/<id>`): kind, risk,
   opened, expires. The sealed arguments of an approval request stay with the requests
@@ -122,15 +138,15 @@ following pages, and entries with the same timestamp are neither repeated nor sk
 mission that does not exist or is not the user's (the same answer, as on the mission
 detail page: it goes through `MissionService.get`), otherwise:
 
-| Field           | Content                                                                                                                                    |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `state`         | `deriveMissionState` (active with its current period, expired, revoked, orphaned)                                                          |
-| `session`       | `{ id, created_at }`, or `null` until the first call                                                                                       |
-| `risks`         | one row per accepted risk: catalog label, `quota`, `consumed` and `remaining` this period, `exhausted`, `rate_limit`, `gate`               |
-| `periods`       | the counters per period, newest first: the current one (listed even before its first action) then up to `PAST_PERIODS_SHOWN` (7) past ones |
-| `events`        | the timeline, newest first, `SESSION_EVENTS_PAGE_SIZE` (100) per page, keyset-paged with `next_events` (`SessionsRepo.listRecentEvents`)   |
-| `open_requests` | requests in state `open` whose expiry is in the future, with their `path`                                                                  |
-| `agent_labels`  | distinct `agent_label` of the mission's call entries with call count and last seen (`AuditRepo.agentLabels`)                               |
+| Field           | Content                                                                                                                                           |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`         | `deriveMissionState` (active with its current period, expired, revoked, orphaned)                                                                 |
+| `session`       | `{ id, created_at }`, or `null` until the first call                                                                                              |
+| `risks`         | one row per accepted risk: catalog label and severity `level`, `quota`, `consumed` and `remaining` this period, `exhausted`, `rate_limit`, `gate` |
+| `periods`       | the counters per period, newest first: the current one (listed even before its first action) then up to `PAST_PERIODS_SHOWN` (7) past ones        |
+| `events`        | the timeline, newest first, `SESSION_EVENTS_PAGE_SIZE` (100) per page, keyset-paged with `next_events` (`SessionsRepo.listRecentEvents`)          |
+| `open_requests` | requests in state `open` whose expiry is in the future, with their `path`                                                                         |
+| `agent_labels`  | distinct `agent_label` of the mission's call entries with call count and last seen (`AuditRepo.agentLabels`)                                      |
 
 `consumed` and `remaining` are read from `session_counters` as they stand, never
 recomputed from the audit: a granted claim (period reset, quota extension —
@@ -139,8 +155,8 @@ The `reset` and `extension` events of the timeline carry what was given back per
 (`credits`), which the page shows as "+N given back"; an expiry extension shows the new
 date. `countersAgreeWithAudit` is the check `counted + credited == audited`.
 
-For a mission that is not active, `consumed` / `remaining` are `null` and every stored
-period is listed as past. The mission detail page links to the session page; the session
+For a mission that is not active, `consumed` / `remaining` are `null` and the stored
+periods are listed as past (the 8 most recent). The mission detail page links to the session page; the session
 page links to the audit filtered on the mission.
 
 ## Retention (`retention.ts`)
@@ -177,6 +193,14 @@ A resource edit and a discovery name the **connection** as their object so that 
 connection filter and the owner's visibility find them with no join; the resource is in
 `before` / `after`. A request decision names the request; the search resolves it to its
 mission through `requests.mission_id`.
+
+The actor of an administrative entry is stored as `user_id`: a user id, or
+`BOOTSTRAP_ACTOR_ID` (`'bootstrap'`, `packages/gateway-core/src/audit.ts`) for the holder
+of the bootstrap token, who has no user row. `AuditAdminView.actor` is
+`{ id, email, label }`, built by `actorView` (`query-service.ts`); `label` is what the
+Audit page prints: the user's email, else `BOOTSTRAP_ACTOR_LABEL` ("Bootstrap operator")
+when the id is `BOOTSTRAP_ACTOR_ID` (its `email` is `null`), else the raw id (a user
+whose row is gone).
 
 The structural test `tests/integration/audit/admin-mutations.test.ts` reads, with the
 TypeScript parser, the public methods of every class under
@@ -220,12 +244,12 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   closed sets, unreadable dates, reversed period, single day, oversized value, cursor
   round trip and refusals, `auditQueryString`, `scopeOf` for the three viewers,
   `withoutArguments`.
-- `tests/integration/audit/audit-query.test.ts` (21) — visibility (creator, connection
+- `tests/integration/audit/audit-query.test.ts` (22) — visibility (creator, connection
   owner, owning group, operator, bootstrap operator, requests of a mission), "a filter
   never widens the scope", each filter and their combination, remaining budget per call,
   keyset paging (page sizes, no repeat, equal timestamps, concurrent write), no raw
   argument for any viewer, filter options.
-- `tests/integration/audit/mission-session.test.ts` (14) — creator only, before the
+- `tests/integration/audit/mission-session.test.ts` (15) — creator only, before the
   first call, counters / remaining / exhausted, past periods, one-off mission, open
   requests by link only, decided request, agent labels, timeline content and paging,
   revoked mission, `eventView`.
@@ -235,9 +259,11 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   stop, failure logged, shared sweep), wiring in the composition root.
 - `tests/integration/audit/admin-mutations.test.ts` (20) — the structural test above,
   plus `before` / `after` of a resource edit and a failed discovery.
-- `tests/e2e/v5/audit-session.spec.ts` (2, Playwright on the ephemeral instance) — a day
-  of calls on the session page and on the audit page, filters in one row, 404 for a
-  mission that is not the user's.
+- `tests/e2e/v5/audit-session.spec.ts` (3, Playwright on the ephemeral instance) — a day
+  of calls on the session page and on the audit page, filters in one row; every column
+  of the audit table on screen at 1280 px with no sideways scroll (the fingerprint cell
+  wraps; the check is a plain test, no longer an expected failure); 404 for a mission
+  that is not the user's.
 
 ## References
 

@@ -5,10 +5,11 @@
  */
 import Link from 'next/link';
 
+import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/connections/connections.module.css';
 import { ExperimentalBadge, NoticeBanner, StateBadge } from '@/components/connections/parts';
 import { Card, Stack, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
-import { requireUser, takeNotice, type PageSearchParams } from '@/lib/connections/session';
+import { currentActor, takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import { connectionPath, NEW_CONNECTION_PATH } from '@/server/connections';
 
 export const dynamic = 'force-dynamic';
@@ -18,7 +19,9 @@ export default async function ConnectionsPage({
 }: {
   searchParams: PageSearchParams;
 }) {
-  const { root, principal, actor } = await requireUser();
+  const session = await currentActor();
+  if (!session) return <NeedsUser />;
+  const { root, principal, actor } = session;
   const notice = await takeNotice(root, principal.sessionId, await searchParams);
   const connections = await root.connections.service.listFor(actor);
 

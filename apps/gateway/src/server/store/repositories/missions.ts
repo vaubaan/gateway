@@ -1,18 +1,18 @@
 import { assertKnownRiskIds } from '../catalog-index.ts';
 import { withImmediateTransaction } from '../db.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
-import type {
-  Gate,
-  Iso,
-  MissionConnection,
-  MissionPolicyEntry,
-  MissionRecord,
-  MissionStatus,
-  MissionTokenRecord,
-  MissionTokenStatus,
-  ResourceScope,
+import {
+  MISSION_TOKEN_STATUSES,
+  RESOURCE_SCOPES,
+  type Iso,
+  type MissionConnection,
+  type MissionPolicyEntry,
+  type MissionRecord,
+  type MissionStatus,
+  type MissionTokenRecord,
 } from '../types.ts';
-import { nowIso, requireRow, type RepoContext } from './context.ts';
+import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
+import { GATES, MISSION_STATUSES } from './enums.ts';
 
 export interface CreateMissionInput {
   readonly name: string;
@@ -103,9 +103,31 @@ function tokenToRecord(row: TokenRow): MissionTokenRecord {
     prefix: row.prefix,
     hash: row.hash,
     hashAlg: row.hash_alg,
-    status: row.status as MissionTokenStatus,
+    status: parseEnum(MISSION_TOKEN_STATUSES, row.status, 'mission_tokens.status'),
     createdAt: row.created_at,
     retiredAt: row.retired_at,
+  };
+}
+
+function policyToRecord(row: PolicyRow): MissionPolicyEntry {
+  return {
+    riskId: row.risk_id,
+    quota: row.quota,
+    rateLimit: row.rate_limit,
+    rateWindowSeconds: row.rate_window_seconds,
+    gate: parseEnum(GATES, row.gate, 'mission_policy.gate'),
+  };
+}
+
+function connectionToRecord(row: ConnectionRow, resourceIds: string[]): MissionConnection {
+  return {
+    connectionId: row.connection_id,
+    resourceScope: parseEnum(
+      RESOURCE_SCOPES,
+      row.resource_scope,
+      'mission_connections.resource_scope',
+    ),
+    resourceIds,
   };
 }
 
@@ -228,7 +250,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       id: row.id,
       name: row.name,
       creatorUserId: row.creator_user_id,
-      status: row.status as MissionStatus,
+      status: parseEnum(MISSION_STATUSES, row.status, 'missions.status'),
       periodAnchor: row.period_anchor,
       periodSeconds: row.period_seconds,
       expiresAt: row.expires_at,
@@ -236,18 +258,14 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       closedAt: row.closed_at,
-      connections: connectionsOf.all(row.id).map((c) => ({
-        connectionId: c.connection_id,
-        resourceScope: c.resource_scope as ResourceScope,
-        resourceIds: resourcesOf.all(row.id, c.connection_id).map((r) => r.resource_id),
-      })),
-      policy: policyOf.all(row.id).map((p) => ({
-        riskId: p.risk_id,
-        quota: p.quota,
-        rateLimit: p.rate_limit,
-        rateWindowSeconds: p.rate_window_seconds,
-        gate: p.gate as Gate,
-      })),
+      // perf: one query per connection; a Postgres port joins or aggregates instead.
+      connections: connectionsOf.all(row.id).map((c) =>
+        connectionToRecord(
+          c,
+          resourcesOf.all(row.id, c.connection_id).map((r) => r.resource_id),
+        ),
+      ),
+      policy: policyOf.all(row.id).map(policyToRecord),
     };
   }
 

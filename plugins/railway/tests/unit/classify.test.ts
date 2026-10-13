@@ -8,13 +8,17 @@
  * Coverage targets :
  *  - Each of the 14 Railway tools emits the expected slice shape.
  *  - `upsert-variables` with `replace:true` emits a *wildcard* var leaf
- *    (matches the destructive `bulk-variables-replace` risk).
- *  - `upsert-variables` with `replace:false` emits a *list* var leaf
- *    (matches only the non-destructive upsert-variable risks).
- *  - `railway-agent` emits THREE slices in parallel (agent-session +
- *    deployment catch-all + service-var catch-all), so the token must
- *    accept ALL possible write risks the agent could touch.
+ *    plus the `service-var-replace` marker slice (the only slice the
+ *    destructive `bulk-variables-replace` risk matches).
+ *  - `upsert-variables` with `replace:false` emits a *list* var leaf and
+ *    no marker (matches only the non-destructive upsert-variable risk).
+ *  - `railway-agent` emits FOUR slices in parallel (agent-session +
+ *    deployment catch-all + service-var catch-all + replace marker), so
+ *    the mission must accept ALL possible write risks the agent could touch.
  *  - Unknown tool → `denied`. Ambiguous target → `denied`.
+ *
+ * The decisions these slices lead to, preset by preset, are in
+ * `policy.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 import {
@@ -32,12 +36,27 @@ const PROJECT = '00000000-0000-4000-8000-000000000001';
 const SERVICE = '00000000-0000-4000-8000-000000000002';
 const ENV_ID = '00000000-0000-4000-8000-000000000003';
 
+/** What discovery stores on a project : the classifier binds `environmentId` to it. */
+const DISCOVERED = { environments: [{ id: ENV_ID, name: 'main' }] };
+
 function stagingResource(): Resource {
-  return { provider: 'railway', ref: PROJECT, displayName: 'railway-staging', env: 'staging' };
+  return {
+    provider: 'railway',
+    ref: PROJECT,
+    displayName: 'railway-staging',
+    env: 'staging',
+    metadata: DISCOVERED,
+  };
 }
 
 function prodResource(): Resource {
-  return { provider: 'railway', ref: PROJECT, displayName: 'railway-prod', env: 'prod' };
+  return {
+    provider: 'railway',
+    ref: PROJECT,
+    displayName: 'railway-prod',
+    env: 'prod',
+    metadata: DISCOVERED,
+  };
 }
 
 function ok(result: ClassifyOutcome): readonly Slice[] {
@@ -147,7 +166,7 @@ describe('classifyRailway — deploys', () => {
 // ─── Variables : the crucial replace=true / replace=false branching ────────
 
 describe('classifyRailway — upsert-variables (replace branching)', () => {
-  test('upsert-variables replace=true → service-var[*].W (wildcard / destructive)', () => {
+  test('upsert-variables replace=true → service-var[*].W + the replace marker', () => {
     const slices = ok(
       classifyRailway(
         'railway__upsert-variables',
@@ -161,12 +180,10 @@ describe('classifyRailway — upsert-variables (replace branching)', () => {
         [stagingResource()],
       ),
     );
-    expect(slices).toHaveLength(1);
-    const seg = slices[0]!.path[slices[0]!.path.length - 1];
-    expect(seg).toEqual({ kind: 'wild-one' });
-    const text = serializeSlice(slices[0]!);
-    expect(text).toContain('service-var');
-    expect(text).toMatch(/service-var\[\*\]\.W$/);
+    expect(slices.map(serializeSlice)).toEqual([
+      `railway.project[${PROJECT}].environment[staging].service[${SERVICE}].service-var[*].W`,
+      `railway.project[${PROJECT}].environment[staging].service[${SERVICE}].service-var-replace.W`,
+    ]);
   });
 
   test('upsert-variables replace=false → service-var[K1,K2,…].W (bounded list)', () => {
@@ -209,7 +226,7 @@ describe('classifyRailway — upsert-variables (replace branching)', () => {
     expect(seg).toEqual({ kind: 'list', values: ['STRIPE_SECRET_KEY'] });
   });
 
-  test('upsert-variables replace=false with empty variables → falls back to wildcard', () => {
+  test('upsert-variables replace=false with empty variables → treated as a replace', () => {
     const slices = ok(
       classifyRailway(
         'railway__upsert-variables',
@@ -217,9 +234,25 @@ describe('classifyRailway — upsert-variables (replace branching)', () => {
         [stagingResource()],
       ),
     );
-    // Empty bulk → pessimistic wildcard.
-    const seg = slices[0]!.path[slices[0]!.path.length - 1];
-    expect(seg).toEqual({ kind: 'wild-one' });
+    // Empty bulk → pessimistic : wildcard leaf and the replace marker.
+    expect(slices.map(serializeSlice)).toEqual([
+      `railway.project[${PROJECT}].environment[staging].service[*].service-var[*].W`,
+      `railway.project[${PROJECT}].environment[staging].service[*].service-var-replace.W`,
+    ]);
+  });
+
+  test('upsert-variables with a replace flag that is not `false` → treated as a replace', () => {
+    for (const replace of ['true', 'false', 1, 0, null]) {
+      const slices = ok(
+        classifyRailway(
+          'railway__upsert-variables',
+          { projectId: PROJECT, environmentId: ENV_ID, variables: { FOO: 'a' }, replace },
+          [stagingResource()],
+        ),
+      );
+      expect(slices).toHaveLength(2);
+      expect(serializeSlice(slices[1]!)).toMatch(/service-var-replace\.W$/);
+    }
   });
 });
 
@@ -250,6 +283,18 @@ describe('classifyRailway — single variable upsert/delete', () => {
     const last = slices[0]!.path[slices[0]!.path.length - 1];
     expect(last).toEqual({ kind: 'list', values: ['OBSOLETE_VAR'] });
   });
+
+  test('a missing or empty variable name is denied, never widened to a wildcard', () => {
+    for (const tool of ['railway__upsert-variable', 'railway__delete-variable']) {
+      for (const name of [undefined, '']) {
+        expect(
+          classifyRailway(tool, { projectId: PROJECT, environmentId: ENV_ID, name }, [
+            stagingResource(),
+          ]),
+        ).toEqual({ denied: 'name: required.' });
+      }
+    }
+  });
 });
 
 // ─── Account writes ────────────────────────────────────────────────────────
@@ -270,7 +315,7 @@ describe('classifyRailway — account writes', () => {
 // ─── Meta-tool : railway-agent — multi-slice pessimistic emission ──────────
 
 describe('classifyRailway — railway-agent (meta-tool, pessimistic)', () => {
-  test('railway-agent emits 3 slices : agent-session + deployment + service-var', () => {
+  test('railway-agent emits 4 slices : agent-session + deployment + service-var + replace marker', () => {
     const slices = ok(
       classifyRailway(
         'railway__railway-agent',
@@ -278,7 +323,7 @@ describe('classifyRailway — railway-agent (meta-tool, pessimistic)', () => {
         [stagingResource()],
       ),
     );
-    expect(slices).toHaveLength(3);
+    expect(slices).toHaveLength(4);
 
     // Slice 1 : account[*].agent-session.W — touches `railway.agent-action`.
     expect(slices[0]).toMatchObject({ action: 'W' });
@@ -296,11 +341,17 @@ describe('classifyRailway — railway-agent (meta-tool, pessimistic)', () => {
     expect(text2).toMatch(/deployment\.W$/);
 
     // Slice 3 : project[X].environment[Y].service[*].service-var[*].W —
-    // catch-all for upsert-variable + bulk-variables-replace.
+    // catch-all for upsert-variable.
     const text3 = serializeSlice(slices[2]!);
     expect(text3).toContain(`project[${PROJECT}]`);
     expect(text3).toContain('environment[staging]');
     expect(text3).toMatch(/service-var\[\*\]\.W$/);
+
+    // Slice 4 : project[X].environment[Y].service[*].service-var-replace.W —
+    // the agent may replace every variable : bulk-variables-replace.
+    expect(serializeSlice(slices[3]!)).toBe(
+      `railway.project[${PROJECT}].environment[staging].service[*].service-var-replace.W`,
+    );
   });
 
   test('railway-agent on a prod resource stamps env=prod in the catch-all slices', () => {
@@ -311,11 +362,10 @@ describe('classifyRailway — railway-agent (meta-tool, pessimistic)', () => {
         [prodResource()],
       ),
     );
-    expect(slices).toHaveLength(3);
-    const text2 = serializeSlice(slices[1]!);
-    const text3 = serializeSlice(slices[2]!);
-    expect(text2).toContain('environment[prod]');
-    expect(text3).toContain('environment[prod]');
+    expect(slices).toHaveLength(4);
+    for (const projectScoped of slices.slice(1)) {
+      expect(serializeSlice(projectScoped)).toContain('environment[prod]');
+    }
   });
 });
 

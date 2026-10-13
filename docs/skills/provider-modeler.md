@@ -1,355 +1,148 @@
 ---
-title: Provider Modeler — onboarding d'un nouveau provider
+title: Provider modeler — modelling a new provider plugin
 status: current
-date: 2026-06-16
----
-
-# Provider Modeler — modélisation v4 risk-based d'un nouveau provider
-
-> **Comment l'invoquer.** Cette skill n'est pas auto-loadée. Pour la mobiliser,
-> dis à Claude : _« Lis `docs/skills/provider-modeler.md` puis modélise le
-> provider `<vendor>` »_ (ou délègue à un subagent en mettant le fichier en
-> input). Voir §"Workflow par défaut" pour les inputs cardinaux à fournir.
-
-Tu es un **subagent de modélisation**. Le human (ou l'agent orchestrateur)
-te demande d'ajouter un nouveau provider à Vaubaan Gateway. Ton job est
-de produire les **5 artefacts de modélisation v4 risk-based** dans
-l'ordre canonique, en t'appuyant sur la spec et sur les 5 providers
-déjà modélisés comme références.
-
-Tu **ne touches pas** au code d'exécution (adapter, execute, tools wire,
-tests d'intégration). Ces étapes restent à la charge du coding agent
-une fois ta modélisation validée par le human.
-
-## La bible : un seul document à connaître par cœur
-
-`docs/spec/gateway-risk-model.md` est ta **source de vérité unique**.
-Lis-la **intégralement** avant tout output. Pas d'extrapolation, pas
-d'invention de notation. Points cardinaux à mémoriser :
-
-- §2 — Le data-model par plane (entités + cardinalités + containment).
-- §3 — Le DSL des slices (path-based, `R | W`, globs `*`/`**`, listes
-  `[a,b,c]`, pas de regex).
-- §4 — Le catalogue de risks (schéma `RiskEntry`, vecteur 6D,
-  qualification par binding).
-- §7 — Les 2 responsabilités du plugin (`dataModel` + `classify`).
-- §13 — Les 7 phases de migration (Phase 0 → 2 = ton périmètre).
-
-Le `default_gate` mentionné dans la spec **n'existe plus** post
-ADR `unified-gates-drop-confirm` — un risk est accepté ou pas, point.
-N'écris JAMAIS de `default_gate:` dans un risk-catalog.yaml. Vérifie en
-lisant `packages/shared/src/risk.ts` (le type `RiskEntry` ne le contient
-pas).
-
-## Inputs attendus du human / orchestrateur
-
-À ton invocation, le human te fournit a minima :
-
-- Le **nom canonique** du provider (slug minuscule, sans espace —
-  `notion`, `linear`, `cloudflare`, ...).
-- L'**API surface** ciblée : URL doc upstream, ou liste des tools MCP
-  envisagés, ou lien repo d'un MCP server existant.
-- Le **why** : quel use-case opérationnel motive l'ajout. Sert à
-  cadrer le périmètre des risks (compute uniquement vs aussi DNS vs
-  aussi billing, etc.).
-
-Si l'un des trois manque, demande-le **avant** de commencer. Pas de
-modélisation à l'aveugle.
-
-## Les 5 artefacts à produire — dans cet ordre
-
-### Phase A — Research (`.vaubaan/research/providers/<vendor>.md`)
-
-**But** : poser à plat ce que tu as appris du provider, sans encore
-formaliser au format Vaubaan. C'est ton brouillon de pensée.
-
-Lis pour t'inspirer du style maison :
-
-- `.vaubaan/research/providers/vercel.md` (1 plane, structure simple).
-- `.vaubaan/research/providers/supabase.md` (4 planes, le cas le
-  plus dense).
-- `.vaubaan/research/providers/github.md` (multiple écosystèmes —
-  install token, secrets, branch-protection).
-
-Sections obligatoires (mêmes que celles du handbook final — cf. Phase E) :
-
-1. **Data-model** du / des planes — graphe entités + cardinalités, en
-   prose et en mermaid.
-2. **Mapping tool → slice(s)** — tableau exhaustif des tools MCP
-   envisagés × slice(s) qu'ils émettent.
-3. **Catalogue de risks** — premier jet YAML, ~10-15 entrées + 1
-   fallback `<provider>.uncategorized-write`.
-4. **Lint coverage** — matrice tool × risk : chaque tool doit être
-   couvert par ≥ 1 risk (au pire le fallback).
-5. **Edge cases** — décisions de classification non-évidentes
-   (entités synthétiques type "fan-out", credentials minted via GET,
-   etc.).
-6. **Trous identifiés** — questions ouvertes nécessitant décision
-   humaine avant codage.
-
-**Outil canonique pour la doc upstream** : Context7 MCP
-(`mcp__context7__resolve-library-id` puis `mcp__context7__query-docs`).
-N'utilise pas WebFetch ad-hoc sauf si Context7 n'a pas le provider.
-
-### Phase B — Data-model TS (`plugins/<vendor>/src/data-model.ts`)
-
-**But** : matérialiser le graphe d'entités de la Phase A en TypeScript
-typé, utilisable par le runtime et les lints.
-
-Référence du type : `packages/shared/src/data-model.ts` (interface
-`DataModel`, `DataModelPlane`, `DataModelEntity`, cardinalités, champ
-`envScopable`).
-
-Exemples canoniques :
-
-- `plugins/vercel/src/data-model.ts` (1 plane, 15 entités).
-- `plugins/supabase/src/data-model.ts` (4 planes).
-- `plugins/github/src/data-model.ts` (entité synthétique
-  `agent-session` — étudie le pattern).
-
-Règles :
-
-- Chaque entité a `name`, `parent`, `cardinalities`, `description`.
-- `parent: null` uniquement pour la racine du plane.
-- `envScopable: true` sur l'entité qui porte le calque env du provider
-  (cf. doc dans `shared/src/data-model.ts`).
-- Le fichier exporte une const `dataModel: DataModel` typée — pas de
-  `as DataModel`, on veut le check structurel à la compile.
-
-**Test obligatoire** : créer `plugins/<vendor>/tests/unit/data-model.test.ts`
-qui appelle `validateDataModel(dataModel)` (depuis `@vaubaan/shared`) et
-asserte zero erreur. Copie le pattern de `plugins/vercel/tests/unit/data-model.test.ts`.
-
-### Phase C — Risk catalog YAML (`plugins/<vendor>/src/risk-catalog.yaml`)
-
-**But** : déclarer les ~10-15 intentions métier que le manager peut
-accepter sur ce provider.
-
-Référence du type : `packages/shared/src/risk.ts` (interface `RiskEntry`,
-`RiskVector` 6D, `RiskId` regex). **Pas de `default_gate`** (cf.
-note "bible" ci-dessus).
-
-Exemples canoniques :
-
-- `plugins/vercel/src/risk-catalog.yaml` (15 + fallback).
-- `plugins/github/src/risk-catalog.yaml` (focus permissions
-  scopes GitHub App).
-- `plugins/supabase/src/risk-catalog.yaml` (le plus dense,
-  multi-plane).
-
-Règles :
-
-- `RiskId` format : `<provider>.<name>` ou `<provider>[<env>].<name>`.
-  La qualification env est encodée dans le **nom** du risk (`-prod`,
-  `-preview`), pas dans la bracket, parce que la bracket est résolue au
-  runtime depuis le binding.
-- Chaque risk : `id`, `label`, `reason` (≤ 2 phrases), `matches`
-  (pattern slice DSL), `vector` (6 axes complets).
-- **Fallback obligatoire** : `<provider>.uncategorized-write` qui match
-  `<provider>.[**].W` — catch-all pour fail-loud quand un tool est
-  ajouté sans risk associé.
-- `acceptable_in_envs: [...]` quand un risk n'a structurellement pas
-  de sens sur certains envs (ex : empêcher un risk "bulk-write" sur
-  prod même si la policy l'autorise).
-
-#### Caps & InfraLimits — à considérer en C, pas obligatoires
-
-ADR [[scope-caps-amplification-axis]] introduit deux champs optionnels
-sur `RiskEntry` (cf. spec §4bis) :
-
-- `caps?: ScopeCaps` — default recommandé soft (temporal window, items
-  per call, bytes per call, rate). Loosenable au niveau org (informed
-  acceptance), tighten-only en aval (binding, token).
-- `infra_limits?: InfraLimits` — hard ceiling non-overrideable
-  (budget mémoire gateway, quotas Upstash partagés, plafonds upstream
-  durs imposés par le provider tiers).
-
-**Pour chaque risk du catalog, pose-toi la question** :
-
-1. Y a-t-il une amplitude par défaut "raisonnable" qu'on suggère ?
-   → `caps`.
-2. Y a-t-il une limite physique au-dessus de laquelle ça crashera
-   ou DOSera la plateforme ? → `infra_limits`.
-
-Si non aux deux, n'ajoute aucun des deux champs — c'est l'option par
-défaut et c'est OK pour beaucoup de risks.
-
-#### Guideline anti-duplication — un slice, plusieurs amplitudes
-
-Tentation possible : créer deux risks pour la même slice à des
-amplitudes différentes (`gmail.read-recent` items=50, `gmail.read-historical`
-sans cap). **Ne duplique que si le vecteur 6D ou le `reason` change
-matériellement** entre les deux niveaux d'amplitude :
-
-| Cas                                                                                                           | Action                                                    |
-| ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
-| Mêmes vecteur 6D + reason, juste un nombre différent                                                          | UN risk + caps au niveau acceptance (binding, org, token) |
-| Vecteur 6D différent (ex. `persistence: posture` quand on lit l'historique complet)                           | DEUX risks distincts                                      |
-| `reason` audit différent ("read-recent = contexte courant" vs "read-historical = révèle l'histoire de l'org") | DEUX risks distincts                                      |
-
-Concrètement : si la décision **qualitative** du manager ("est-ce que
-j'accepte ça ?") change avec l'amplitude, c'est deux risks. Sinon,
-c'est un seul risk + caps. La duplication précoce alourdit le catalog
-sans gain.
-
-**Test obligatoire** : `plugins/<vendor>/tests/unit/risk-catalog.test.ts`.
-Copie le pattern de `plugins/railway/tests/unit/risk-catalog.test.ts`.
-Le test doit vérifier :
-
-- Nombre d'entrées attendu (count des risks + fallback).
-- `prepareCatalog` (depuis `@vaubaan/policy-engine`) round-trip OK
-  (RiskId regex valide, ids uniques, fallback présent, patterns
-  parsent comme slices).
-- `risksTouchedBy` sur 3-5 slices représentatifs retourne les RiskIds
-  attendus (sanity check matching).
-
-**No TypeScript twin**: the YAML is the only catalog artefact. Every
-plugin loads it at import with
-`loadCatalogFile(catalogPathNextTo(import.meta.url))`; do not write a
-`risk-catalog.ts` or a sync test.
-
-### Phase D — Classifier (`plugins/<vendor>/src/classify.ts`)
-
-**But** : pour chaque tool MCP exposé par le provider, retourner les
-slices que le call touche. C'est la pièce qui rend la Phase C
-opérationnelle.
-
-Reference: `plugins/vercel/src/classify.ts` (the most didactic one:
-helpers `slice` / `name` / `ident`, one entry point `classifyVercel`).
-
-Règles :
-
-- Export a function `classify<Vendor>(tool, args, resources):
-ClassifyOutcome`, where `ClassifyOutcome` (from `@vaubaan/plugin-sdk`) is
-  `{ slices: Slice[] } | { denied: string }` and `resources` are the
-  mission's resources on the connection.
-- Un call peut émettre **plusieurs slices** (multi-entity touch — cf.
-  spec §7.1). Le moteur intersect chacune avec le catalogue.
-- Un tool inconnu OU une ressource hors-binding → `{ denied: ... }`.
-- Pas de logique de gates ici. Le classifier ne sait rien des
-  `accepted_risks` du token — étanchéité §7 spec.
-- Pour les credential mints via GET upstream (ex Vercel
-  `get_access_to_vercel_url`), classifier comme `W` — la sémantique
-  prime sur le verbe HTTP.
-
-**Mandatory test**: `plugins/<vendor>/tests/unit/classify.test.ts`. Copy
-the pattern of `plugins/vercel/tests/unit/classify.test.ts`: one test per
-MCP tool, checking the slice(s) emitted for representative arguments.
-
-### Phase E — Handbook (`docs/handbook/providers/<vendor>.md`)
-
-**But** : version finalisée de la Phase A, alignée mot pour mot sur ce
-que tu viens de coder en B/C/D.
-
-Différences vs Phase A :
-
-- Pas de "trous identifiés" à laisser ouverts (sauf si validation
-  humaine bloquante encore en attente).
-- Tableau **lint coverage** complet : chaque tool MCP doit être tracé
-  vers ≥ 1 risk.
-- Liens vers les chemins de code via frontmatter `tracks:` (ceci
-  active le drift-detector côté review).
-
-Frontmatter obligatoire :
-
-```yaml
----
-title: <Vendor> provider — modélisation v4 risk-based
-status: current
-date: <YYYY-MM-DD>
+date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
-  - plugins/<vendor>/src/data-model.ts
-  - plugins/<vendor>/src/risk-catalog.yaml
-  - plugins/<vendor>/src/classify.ts
+  - plugins/README.md
+  - plugins/_template/src/
+  - plugins/_template/tests/unit/
+  - packages/plugin-sdk/src/index.ts
+  - packages/plugin-sdk/src/plugin.ts
+  - packages/plugin-sdk/src/define-plugin.ts
+  - packages/plugin-sdk/src/catalog-loader.ts
+  - apps/gateway/src/server/compose/shipped-plugins.ts
 ---
-```
 
-**Mets à jour aussi** `docs/handbook/providers/README.md` (table avec
-le nouveau provider, lien, planes, count risks).
+# Provider modeler
 
-## Workflow par défaut (subagent autonome)
+> **How to use.** This skill is not loaded automatically. Tell the agent:
+> "Read `docs/skills/provider-modeler.md`, then model the provider
+> `<vendor>`."
 
-1. **Confirme** les 3 inputs (nom, surface API, why). Si manque →
-   demande au human et stoppe.
-2. **Lis** la spec entièrement + 1 provider de référence proche
-   (cf. heuristique ci-dessous).
-3. **Phase A** : research file. Soumets au human pour validation
-   **avant** de passer en B (la research est l'étape où les
-   désaccords structurels sont les moins chers à corriger).
-4. **Phases B → C → D** : code + tests en parallèle. Run
-   `npm test -w @vaubaan/plugin-<vendor>` au moindre changement.
-5. **Phase E** : handbook + maj du README providers.
-6. **Output final** : un résumé au human listant chaque fichier créé,
-   le run test passing, et les open questions restantes (à
-   trancher éventuellement par ADR via `/decision`).
+You model a new provider for Vaubaan Gateway as a plugin on the v5 SDK
+(`@vaubaan/plugin-sdk`). A plugin is complete or it does not load:
+`definePlugin` rejects a definition without a data model, a catalog, a
+`CredentialSpec`, `classify`, `execute` and `discoverResources`, and the
+catalog loader rejects a catalog without a preset. The mechanics (file by file, YAML shape, SDK calls) are in
+[`plugins/README.md`](../../plugins/README.md), "Writing a plugin"; this file
+is the method around it.
 
-## Heuristique de choix du provider de référence
+## Inputs — ask before starting
 
-| Si le nouveau provider...                             | Inspire-toi de... |
-| ----------------------------------------------------- | ----------------- |
-| A un seul plane et un set de tools API REST           | `vercel`          |
-| A plusieurs plans (db + storage + auth + ...)         | `supabase`        |
-| Tourne autour de permissions / scopes / install token | `github`          |
-| Exécute des commandes shell sur un host distant       | `ssh`             |
-| A des resources type "service / project / env"        | `railway`         |
+1. The provider id: a lowercase slug (`notion`, `cloudflare-dns`). The tool
+   prefix turns `-` into `_` (`cloudflare_dns__`).
+2. The API surface: the upstream documentation, the list of tools wanted, or
+   an existing MCP server to rewrap.
+3. The why: the operational use case, which bounds the risks worth modelling.
 
-## Critères d'acceptation (avant de rendre la main)
+## Read first
 
-- `npm run typecheck` passe (TS types corrects).
-- `npm run lint` passe.
-- `npm test -w @vaubaan/plugin-<vendor>` passe.
-- `validateDataModel(dataModel)` → zero erreur.
-- Catalog coverage : chaque tool MCP émet ≥ 1 slice matchée par ≥ 1 risk.
-- Frontmatter `tracks:` du handbook pointe vers les 3-4 fichiers code
-  réellement créés.
-- `docs/handbook/providers/README.md` mis à jour.
+- [`plugins/README.md`](../../plugins/README.md) and the scaffold
+  [`plugins/_template`](../../plugins/_template/README.md).
+- [`docs/handbook/plugin-sdk.md`](../handbook/plugin-sdk.md): the contract,
+  the catalog loader, environment resolution, the test kit.
+- [`docs/spec/gateway-risk-model.md`](../spec/gateway-risk-model.md) §2 (data
+  model), §3 (slice DSL), §4 (risk catalog), §7 (plugin). Where the spec and
+  the SDK disagree, the loader and the test kit are the rules that run.
+- One existing plugin and its handbook under
+  [`docs/handbook/providers/`](../handbook/providers/README.md): `vercel` (one
+  plane, environment in the call), `supabase` (several planes), `github`
+  (app installation, per-call token), `ssh` (shell commands on a host),
+  `railway` (rewrapped remote MCP server, OAuth with refresh).
 
-## Garde-fous
+Provider documentation comes from Context7
+(`mcp__context7__resolve-library-id`, then `mcp__context7__query-docs`), not
+from memory and not from ad-hoc web fetches.
 
-- **Pas de spec touchée**. `docs/spec/gateway-risk-model.md` est
-  read-only depuis cette skill. Si tu sens un manque ou une ambiguïté
-  dans la spec, signale-le au human — un agent `planning` traitera.
-- **Pas d'invention de notation**. La grammaire de slice (§3 spec) est
-  fermée : `*` / `**` / `[a,b,c]` / ident. Pas de regex, pas de globs
-  custom.
-- **Pas de `default_gate`**. Le modèle a drop-confirm (cf. ADR
-  `unified-gates-drop-confirm.md`). Si un example dans la spec en
-  mentionne, c'est une rémanence — n'écris jamais ce champ dans un
-  YAML neuf.
-- **Pas d'adapter / execute / tools wire**. Hors-scope. Ton output
-  s'arrête au classifier. Le coding agent qui te succède s'occupe du
-  wiring runtime via les autres skills (`/handbook` pour les tests
-  d'intégration, etc.).
-- **Pas de commit**. Tu écris les fichiers via `Write` ; le commit est
-  fait par le human ou par l'agent `coding` qui te coordonne.
-- **Research validée avant code**. Si le human n'a pas explicitement
-  approuvé la Phase A, **ne démarre pas** B. Coût d'une erreur
-  structurelle en phase D = 10× coût en phase A.
+## Phases
 
-## Sortie attendue (résumé final au human)
+1. **Research — validated by a human before any code.** Draft the handbook
+   `docs/handbook/providers/<vendor>.md` with the six sections listed in
+   [`providers/README.md`](../handbook/providers/README.md) (data model,
+   tool → slice mapping, catalog and presets, coverage, edge cases,
+   credential / discovery / execution / tests) and the open questions. Stop
+   and submit it.
+2. **Scaffold.** Copy `plugins/_template` to `plugins/<vendor>` and rename
+   `template` everywhere (folder, `package.json` name, plugin `id`, catalog
+   `provider:`, tool prefix, data-model provider).
+3. **Data model** — `src/data-model.ts`, exported as `<vendor>DataModel`
+   (`vercelDataModel`, `gmailDataModel`): planes, entities with `parent` and
+   `cardinalities`, and the `envScopable` entity. `definePlugin` runs
+   `validateDataModel` on it.
+4. **Risk catalog** — `src/risk-catalog.yaml`, the only catalog artefact:
+   - Every risk has an explicit id `<vendor>.<name>`, never renamed and never
+     deleted (`deprecated: true` with `replaced_by` instead).
+   - Exactly one `<vendor>.uncategorized-write` entry flagged
+     `fallback: true`. It is touched only when no dedicated entry matches a
+     write, so every tool must be covered by a dedicated risk.
+   - A risk that depends on the environment is one entry with
+     `acceptable_in_envs` (and `vector_overrides.<env>` when the vector
+     changes), never two ids with the environment in the name. The runtime
+     qualifies it as `<vendor>[<env>].<name>` from the owner's label on the
+     resource, or from the plugin's `envOf` when the environment lives in
+     the call.
+   - `presets:` is mandatory, at least one. Each entry names an explicit
+     risk id of this catalog (env-qualified where the risk is env-scoped)
+     with a numeric `quota`, a `rate_limit` and a `gate` (`auto` or
+     `approval`). Never a wildcard or a sentinel, never the fallback, never
+     a deprecated id: an "allow all" preset is the explicit enumeration.
+5. **Classifier** — `src/classify.ts`:
+   `classify<Vendor>(tool, args, resources): ClassifyOutcome`. Pure. It fails
+   closed: an unknown tool, a resource that is ambiguous or outside the
+   mission, or a missing or malformed identifier is `{ denied }`, never a
+   broader slice. A call touching several entities returns several slices; a
+   credential minted by a call is a write.
+6. **Execute** — `src/execute.ts`: `ctx.fetch` only, the secret narrowed with
+   `expectCredentialKind`, `UpstreamAuthError` on 401 / 403, an
+   `McpToolResult` back.
+7. **Credential** — the `CredentialSpec` in `definePlugin`: `api-key`,
+   `oauth2`, `app-install` or `ssh-key`. The host runs the flow and the
+   standard `refresh_token` grant; declare `refresh()` only for a
+   non-standard one.
+8. **Discovery** — `discoverResources(ctx)`: the `Resource` refs
+   (`provider`, `ref`, `displayName`, optional `metadata`) the owner will
+   label and a mission will select. The classifier sees the same refs.
+9. **Tests** — keep `tests/unit/plugin.test.ts` from the template: the kit of
+   `@vaubaan/plugin-sdk/testing` (`assertPluginWellFormed`,
+   `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage` with at
+   least one sample per tool), asserting that the coverage report has no
+   `fallbackHits` and an explained `risksUntouched`. Add one classifier case
+   per branch, `denied` paths included, and run `execute` and
+   `discoverResources` against `mockFetch`. No test calls a real provider.
+10. **Handbook** — align `docs/handbook/providers/<vendor>.md` with the code,
+    with this frontmatter, and add the row to the index table of
+    `docs/handbook/providers/README.md`:
 
-```
-Provider <vendor> — modélisation terminée
+    ```yaml
+    ---
+    title: <Vendor> provider plugin
+    status: current
+    date: <YYYY-MM-DD>
+    last_synced: <YYYY-MM-DD>
+    tracks:
+      - plugins/<vendor>/src/
+      - plugins/<vendor>/tests/unit/
+    ---
+    ```
 
-Fichiers créés :
-  - .vaubaan/research/providers/<vendor>.md   (Phase A, validé <date>)
-  - plugins/<vendor>/src/data-model.ts
-  - plugins/<vendor>/src/risk-catalog.yaml
-  - plugins/<vendor>/src/classify.ts
-  - plugins/<vendor>/tests/unit/data-model.test.ts
-  - plugins/<vendor>/tests/unit/risk-catalog.test.ts
-  - plugins/<vendor>/tests/unit/classify.test.ts
-  - docs/handbook/providers/<vendor>.md
+11. **Registration** — one import and one array entry in
+    `apps/gateway/src/server/compose/shipped-plugins.ts`, plus the
+    `@vaubaan/plugin-<vendor>` dependency in `apps/gateway/package.json`. That
+    registry is the single provider list; add the provider to no other list.
 
-Stats :
-  - N planes, M entités, R risks (+ fallback), T tools couverts.
-  - Tests : npm test -w @vaubaan/plugin-<vendor> → X passing.
+## Commands
 
-Reste à faire (hors-scope de cette skill, pour le coding agent) :
-  - adapter / execute / tools wire (handbook indique les surfaces).
-  - intégration dans le routeur MCP (`packages/gateway-core`).
-  - tests E2E / intégration runtime.
+- `npx vitest run plugins/<vendor>` — the plugin's tests (plugin packages
+  have no `test` script).
+- `npm run type-check` — every workspace.
+- `npm run ci` — type-check, lint, format check, build, tests; must be green.
 
-Open questions :
-  - <liste de décisions qui méritent un /decision avant scaling>.
-```
+## Guard rails
+
+- The specs are read-only from here; report a gap instead of working around
+  it.
+- No new slice notation: names, identifiers, `*`, `**` and lists only.
+- English only, in code, YAML labels and the handbook.
+- Add a `CHANGELOG.md` entry under `[Unreleased]`; hand back the file list,
+  the test run and the open questions.

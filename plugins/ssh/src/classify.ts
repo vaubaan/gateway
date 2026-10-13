@@ -2,7 +2,7 @@
  * Classifier of the `ssh` provider : `(tool, args, resources) → slices`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §10.
- * Handbook : docs/handbook/providers/ssh.md §2.
+ * Handbook : docs/handbook/providers/ssh.md §3.
  *
  * Pure. The host is a mission resource : named by `host`, or the mission's
  * single SSH host when the argument is absent ; a host the mission does not
@@ -10,12 +10,17 @@
  * profiled by `command-classes.ts` and becomes :
  *
  *   ssh.host[<ref>].command.R                 a whitelisted read is present
- *   ssh.host[<ref>].command.secret-file.R     a credential-bearing path is read
- *   ssh.host[<ref>].command.W                 a non-whitelisted command, a redirection or a substitution
+ *   ssh.host[<ref>].command.secret-file.R     a credential-bearing path is referenced, or a path cannot be seen
+ *   ssh.host[<ref>].command.W                 a non-whitelisted command or a redirection to a file
  *   ssh.host[<ref>].command.destructive.W     + one marker per detected class
  *   ssh.host[<ref>].command.package.W
  *   ssh.host[<ref>].command.service.W
  *   ssh.host[<ref>].command.privilege.W
+ *
+ * A line the classifier cannot see through (substitution, here-document,
+ * `$'…'`, inline code, another host or container…) emits `secret-file.R`,
+ * `W` and the four markers, and never `R` : it fails closed on the union of
+ * the classes.
  *
  * The runtime intersects each slice with the catalog ; a `rm -rf` on a prod
  * host touches `ssh[prod].exec-write` and `ssh[prod].exec-destructive`, both

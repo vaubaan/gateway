@@ -9,6 +9,20 @@ extends:
 
 # Legacy status of v4 ADRs and handbooks
 
+> **Amendment 2026-10-13 (Phase 1 cycle-end).** The v4 handbooks that
+> mechanism 1 kept in place moved to `docs/handbook/legacy/` (mechanism 2)
+> once their English replacements landed: `auth-github-sso.md` →
+> `authentication.md`; `mcp-gateway.md` → `execution-door.md` (and
+> `gateway-core.md`); `escalation.md` → `requests.md` (closest successor, the
+> escalation concept itself is dropped in v5); `github-provider.md` →
+> `providers/github.md`; `vercel-provider.md` → `providers/vercel.md`;
+> `railway-provider.md` → `providers/railway.md`; `bash-provider.md` and
+> `providers/railway-ssh.md` → `providers/ssh.md` (and `providers/railway.md`
+> for the Railway half); `web-app.md` → the new `web-app.md`.
+> `permission-threat-model-state-of-the-art.md` (research note, no
+> replacement) moved with them. Each moved file is `status: legacy`, has no
+> `tracks:` and opens with the legacy banner. The body below is unchanged.
+
 > Fixes the mechanics by which the v4 documentation (French, written for
 > the multi-tenant SaaS) is marked historical without being rewritten,
 > translated or deleted, so that wikilinks keep resolving and the doc

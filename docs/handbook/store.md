@@ -10,6 +10,10 @@ tracks:
   - apps/gateway/tests/integration/store/
   - apps/gateway/src/server/compose/store.ts
   - apps/gateway/src/server/compose/registry.ts
+  - apps/gateway/src/server/compose/testing.ts
+  - apps/gateway/src/server/compose/shipped-plugins.ts
+  - apps/gateway/src/server/compose/ports.ts
+  - apps/gateway/tests/integration/compose/boot.test.ts
 ---
 
 # Store — embedded SQLite, schema and migrations, repositories
@@ -31,8 +35,10 @@ apps/gateway/migrations/
                                   renamed / hidden / stale flags (schema version 4, P1.4)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
-  db.ts                           better-sqlite3 handle, pragmas, withImmediateTransaction, backupTo
+  db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
+                                  withImmediateTransaction, backupTo, journalMode
   migrate.ts                      loadMigrations(), runMigrations(), schema_migrations bootstrap
+                                  (ensureMigrationsTable, listApplied), checksumOf, DEFAULT_MIGRATIONS_DIR
   ids.ts                          newId() — UUIDv7 as text
   clock.ts                        Clock, systemClock, ManualClock (tests)
   encryptor.ts                    re-exports the crypto module's Encryptor port + sealText/openText helpers
@@ -43,8 +49,9 @@ apps/gateway/src/server/store/
   testing.ts                      StubEncryptor, TEST_RISK_IDS, openTestStore() — tests only
   repositories/
     context.ts                    RepoContext (db, clock, newId, encryptor, catalog) + row helpers
+    enums.ts                      the closed sets of the shared and gateway-core unions, as lists for parseEnum
     users.ts groups.ts connections.ts shares.ts missions.ts sessions.ts
-    requests.ts approvals.ts delegations.ts audit.ts config.ts
+    requests.ts approvals.ts delegations.ts audit.ts config.ts web-sessions.ts
 ```
 
 ## Opening the store
@@ -53,8 +60,8 @@ The composition root does it at boot: `openEmbeddedStore(ctx)` in
 `apps/gateway/src/server/compose/store.ts` wraps `openStore()` and is injected
 through `RootDeps.openStore` (handbook [configuration](configuration.md)); a
 failure becomes a boot error naming `store.path` and its variable, a success
-logs `store opened` with `kind` and `schema_version`. Root tests swap in
-`openMemoryStore` through `memoryStoreDeps()` (`compose/testing.ts`).
+logs `store opened` with `kind`, `path` and `schema_version`. Root tests swap in
+`openMemoryStore` through `memoryStoreDeps` (`compose/testing.ts`).
 Illustrative call:
 
 ```ts
@@ -67,10 +74,10 @@ const store = openStore({
 });
 // store.users, store.groups, store.connections, store.shares, store.missions,
 // store.sessions, store.requests, store.approvals, store.delegations, store.audit,
-// store.config, store.auditWriter, store.schemaVersion, store.backupTo(),
-// store.kind ('sqlite' | 'memory'), store.ping(), store.close()  <- compose/ports.ts Store port
-// store.db: raw handle — structural tests, diagnostics, and the SQLite-backed
-//           ports the root builds over the same connection (SqliteSessionStore)
+// store.config, store.webSessions, store.auditWriter, store.schemaVersion, store.backupTo(),
+// store.kind ('sqlite' | 'memory'), store.ping(), store.close()  <- compose/ports.ts StoreLiveness port
+// store.db: raw handle — structural tests and diagnostics only; no production
+//           code prepares a statement on it outside this module
 ```
 
 `RegistryCatalogIndex` (`compose/registry.ts`) answers `has(riskId)` from
@@ -107,13 +114,32 @@ five-id catalog).
 
 - **Closed sets** (`ConnectionStatus`, `ShareStatus`, `MissionStatus`, `Gate`, `Principal`,
   `RequestKind`, `RequestState` = `RequestStatus`, `Iso` = `Iso8601`) are
-  `@vaubaan/shared`'s types re-exported by `types.ts`; the store defines none of its own
-  except `MissionTokenStatus` (it keeps `rotated` apart from `revoked`). Record shapes
-  stay camelCase persistence records; the domain layer (P1) maps them.
+  `@vaubaan/shared`'s types re-exported by `types.ts`. The sets that exist only in the
+  store (`UserStatus`, `MissionTokenStatus`, which keeps `rotated` apart from `revoked`,
+  `ResourceScope`, `DelegationStatus`, `CodeChallengeMethod`, `ResourceEnvSource`) are
+  `as const` lists in `types.ts` from which the union is derived. Records are camelCase
+  persistence records that stay inside `server/**`: each service builds its own view from
+  them, and only missions and counters are translated to the shared snake_case shapes
+  (`server/budget/mapping.ts`).
+- **No enum column is cast.** Every row mapper reads a closed-set column through
+  `parseEnum(list, value, 'table.column')`; a value outside the list throws
+  `InvariantError` (`table.column: unexpected value '…'`), so a row the code does not
+  understand stops the read instead of flowing into a decision. This covers
+  `users.status`, `connections.status`, `connection_resources.env_source`,
+  `shares.status`, `missions.status`, `mission_connections.resource_scope`,
+  `mission_policy.gate`, `mission_tokens.status`, `requests.kind` / `state`,
+  `delegations.status`, `oauth_codes.code_challenge_method` and `audit.kind` / `decision` /
+  `act` / `object_type` (the last two have no schema `CHECK`: the list is their only
+  guard) and `groups.source`: no enum column is cast any more. The lists of the unions defined outside the store are in
+  `repositories/enums.ts`, written from the union through `membersOf`, which fails to
+  compile when a member is added to or removed from the union; they are meant to move
+  next to their types in `@vaubaan/shared` and `@vaubaan/gateway-core`.
+- **One mapper per table.** Each row type has one `…ToRecord` function, used by every
+  statement that reads the table; only single-column projections and aggregates are
+  read in place.
 - **Helpers** in `repositories/context.ts`: `requireRow` (a row just written must exist),
-  `requireColumn` (a NOT NULL column of the row kind), `parseEnum` (a column against the
-  set that defines its type), `parseJson` returns `unknown` and `parseJsonObject` checks
-  the shape; `openSealedColumn` (`encryptor.ts`) is the one null rule for encrypted
+  `requireColumn` (a NOT NULL column of the row kind), `parseEnum` (above), `parseJson`
+  returns `unknown` and `parseJsonObject` checks the shape; `openSealedColumn` (`encryptor.ts`) is the one null rule for encrypted
   column pairs. Prepared statements that share a name with a repository method carry the
   `Stmt` suffix. Check-then-act writes (`requests.decide`, `shares.revoke`) are one
   conditional `UPDATE` whose `changes` decides, and `transferOwner` / `replacePolicy` /
@@ -153,7 +179,7 @@ owner-curation columns of `connection_resources` (plain `ADD COLUMN`s).
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                     |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Instance    | `instance_config`, `schema_migrations`                                                                                     | key → clear `value` **or** `secret_blob`+`key_version`, never both                                                                                                                                                                                                                                                                                                        |
-| Web session | `web_sessions`                                                                                                             | `id` = cookie value, `value_json`, `expires_at`; owned by `server/session/SqliteSessionStore` (handbook [authentication](authentication.md)), not by a repository                                                                                                                                                                                                         |
+| Web session | `web_sessions`                                                                                                             | `id` = SHA-256 (hex) of the session key — the cookie value is a bearer and is never stored; `value_json`, `expires_at`; repository `store.webSessions` (`repositories/web-sessions.ts`), which is the composition root's `SessionStore` port (handbook [authentication](authentication.md)); expired rows swept on write                                                  |
 | Identities  | `users`, `groups`, `group_members`                                                                                         | `users.subject` unique (IdP), `status active\|removed`; `groups.source idp\|local`                                                                                                                                                                                                                                                                                        |
 | Delegations | `oauth_clients`, `oauth_client_redirect_uris`, `delegations`, `oauth_codes`, `oauth_refresh_tokens`, `oauth_access_tokens` | all secrets stored as hashes by the caller; codes single-use; refresh tokens chain through `replaced_by_id`                                                                                                                                                                                                                                                               |
 | Connections | `connections`, `connection_resources`                                                                                      | owner = `owner_kind` + `owner_user_id`/`owner_group_id` with a CHECK; status `active\|expired\|revoked\|unowned`; resources unique per `(connection_id, ref)` with an `env` label, its `env_source` (`owner`\|`plugin`), `metadata_json` (provider facts) and `owner_metadata_json` (owner edits), `display_name_edited`, `hidden`, `stale_since` (see Connections below) |
@@ -164,13 +190,26 @@ owner-curation columns of `connection_resources` (plain `ADD COLUMN`s).
 | Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                                                                                                                 |
 
 SQLite-only constructs are marked `-- sqlite:` in the file (`STRICT`, `RAISE(ABORT)`);
-the ADR lists the Postgres replacement for each.
+the ADR lists the Postgres replacement for each. Three more are SQLite-only and carry no
+mark, because an applied migration is immutable (its checksum is recorded): the `BLOB`
+column type (`BYTEA` on Postgres), the trigger body written inline (`CREATE TRIGGER … BEGIN
+… END`, a trigger function on Postgres) and `DROP TRIGGER` without `ON <table>` in `0002`.
+A Postgres port writes its own schema files for these.
+
+The repositories' SQL itself is portable: positional `?` parameters, `ON CONFLICT … DO
+UPDATE` / `DO NOTHING`, plain subqueries and `IN` lists, no SQLite function, no parameter
+whose only use is a comparison with `NULL` (Postgres cannot type it; the open-request
+lookup is two statements for that reason). What a port has to replace besides `db.ts` is
+the driver surface the repositories call directly: the synchronous `prepare().get / all /
+run` statements and their `changes` count, `?` placeholders (`$n` for node-postgres), and
+the synchronous callbacks of `decideAndDecrement` and `decideClaim`, which rely on a
+transaction that never yields.
 
 ## Connections and resources
 
 Beyond the P0.3 primitives (`create`, `getById`, `list`, `listOwnedBy`,
 `getCredential`, `setCredential`, `setStatus`, `transferOwner`, `setMetadata`,
-`replaceResources`, `listResources`, `getResource`, `setResourceEnv`), the repository
+`listResources`, `getResource`, `setResourceEnv`), the repository
 carries the operations the connect flows need (P1.4, handbook
 [connections](connections.md)). All are additive; the state changes are single
 conditional `UPDATE`s whose `changes` is the answer:
@@ -189,8 +228,12 @@ conditional `UPDATE`s whose `changes` is the answer:
 `setResourceEnv` also sets `env_source = 'owner'`. `ConnectionResourceRecord` exposes
 `envSource`, `metadata` (the effective merge `{ ...discovered, ...owner }`),
 `ownerMetadata`, `displayNameEdited`, `hidden`, `staleSince`; `listResources` returns
-every row, hidden and stale included. `replaceResources` still **deletes** refs it is
-not given (cascading to `mission_resources`); no flow calls it any more.
+every row, hidden and stale included. `replaceResources`, the P0.3 sync that deleted the
+refs it was not given (cascading to `mission_resources`), was removed once its last
+callers (test fixtures) moved to `syncDiscoveredResources`. `setCredential` and
+`setStatus` remain, deprecated: `setStatus` is how fixtures produce `unowned` until P2.2
+names that transition, and both are exercised by
+`tests/integration/connections/repository-status.test.ts`.
 
 ## Audit
 
@@ -216,9 +259,7 @@ principals, optionally every administrative entry) applied before the filters
 newest first (`ts DESC, id DESC`), paged by keyset (`before: { ts, id }`, `limit`).
 `agentLabels(missionId)` lists the distinct agent labels of a mission's calls with
 their count and last timestamp. The sessions repository gained the matching
-`listRecentEvents(sessionId, { before?, limit })` (newest first, same keyset;
-`listEvents` with `order: 'desc'` returns the same first page but cannot resume after a
-position).
+`listRecentEvents(sessionId, { before?, limit })` (newest first, same keyset).
 
 Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks` aborts;
 a `DELETE` on `audit` or on `audit_risks` aborts unless `audit_purge_guard` holds a
@@ -248,7 +289,9 @@ const result = await store.sessions.decideAndDecrement(
     // ctx.createRequest({ kind, riskId, tool?, fingerprint?, prepared?, expiresAt })
     //   prepared = await store.requests.prepareArguments(args), sealed BEFORE the call
     // ctx.recordEvent({ kind, riskId?, actorUserId?, details? })
-    return { allow, event: { kind: allow ? 'allowed-call' : 'refused-call' } };
+    //   stored as given (`UntypedNewEvent`); the gateway's writers build a typed
+    //   `NewEvent` and readers use `parseEventDetails` (budget handbook)
+    return { allow, event: { kind: allow ? 'call-allowed' : 'call-refused' } };
   },
 );
 // result.outcome (what decide returned), result.session, result.counters (after)
@@ -277,6 +320,14 @@ that stores the outcome. `ClaimDecisionContext` offers `counters(periodStart)`,
 take a counter below zero), `setMissionExpiry(iso)` (a mission stored `expired` becomes
 `active`, `closed_at` cleared) and `recordEvent(event)`. A thrown callback rolls
 everything back.
+
+`sessions`, `session_counters` and `events` have one writer, `repositories/sessions.ts`.
+The requests repository does not prepare statements on those tables: its claim context
+and its sweeper call `createSessionPrimitives(ctx)` (`sessionOfMission`, `recordEvent`,
+`countersOfPeriod`, `resetPeriod`, `creditCounter`), synchronous functions with no
+transaction of their own that run inside the caller's `BEGIN IMMEDIATE`. An event is
+therefore inserted and mapped by the same code whether it comes from a call decision, a
+claim decision or the sweeper, and `recordEvent` always returns the stored row.
 
 `store.requests.sweepExpired()` flips every overdue open request to `expired`, erases
 its argument blob and records a `request` event (`state: 'expired'`) on the mission's
@@ -309,8 +360,10 @@ capture both files atomically are also fine.
   round-trip, `UPDATE`/`DELETE` abort (entries and, since `0002`, their risk rows
   inside an open window), purge path and its boundaries, retention default, filters,
   allowed-touch count, schema `CHECK`s, writer contract.
-- `tests/integration/store/{identities,connections-shares,missions,sessions,requests-approvals,delegations,config}.test.ts`
-  — one suite per repository on `:memory:`, including the catalog check and the
+- `tests/integration/store/{identities,connections-shares,missions,sessions,requests-approvals,delegations,config,web-sessions}.test.ts`
+  — one suite per repository on `:memory:` (`web-sessions`: the row key is the
+  digest and never the id, a clear-keyed row is not read, TTL and sweep,
+  an unreadable value is removed), including the catalog check and the
   schema-level wildcard `CHECK`, the N=50 concurrent `decideAndDecrement` on quota 1
   (exactly one allow), two connections on one file (`SQLITE_BUSY` while the other
   transaction is open, then success), an unknown mission as `NotFoundError`,
@@ -318,7 +371,13 @@ capture both files atomically are also fine.
   counters-vs-audit structural check, argument erasure on decision and expiry,
   the `listEvents` kind filter and descending order. `decideClaim` and
   `sweepExpired` are exercised by `tests/integration/requests/request-service.test.ts`
-  (handbook [requests](requests.md)).
+  (handbook [requests](requests.md)). `search`, `agentLabels` and `listRecentEvents`
+  are exercised by `tests/integration/audit/{audit-query,mission-session}.test.ts`
+  (handbook [audit](audit.md)).
+- `tests/integration/store/corrupt-rows.test.ts` — a value outside the closed set of an
+  enum column (forced in with the `CHECK`s off, or inserted for the unchecked `audit.act`
+  / `audit.object_type`) makes the read throw `InvariantError` naming the column, for
+  every repository; a corrupt request aborts `decideClaim` before the callback runs.
 - `tests/integration/compose/boot.test.ts` (handbook [configuration](configuration.md)) — the
   composition root opening this store on a temporary file with the real encryptor
   and the registry-backed catalog index.

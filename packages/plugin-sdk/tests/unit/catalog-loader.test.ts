@@ -3,12 +3,18 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
+import type { RiskCatalog } from '@vaubaan/shared';
+
 import {
   CatalogError,
   catalogWarnings,
+  isCompleteVector,
   loadCatalogFile,
   parseCatalogYaml,
+  presetWildcardIssues,
+  riskIdWildcardIssues,
   validateCatalog,
+  wildcardIssues,
 } from '../../src/catalog-loader.ts';
 
 const FIXTURE = new URL('../fixtures/acme/risk-catalog.yaml', import.meta.url);
@@ -177,7 +183,7 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     const misnamed = doc({
       risks: [
         risk('acme.read-things', 'acme.space[**].R'),
-        { ...risk('acme.catch-all', 'acme.space[**].W'), fallback: true },
+        { ...risk('acme.catch-all', 'acme.**.W'), fallback: true },
       ],
     });
     expect(issuesOf(() => validateCatalog(misnamed))).toEqual([
@@ -195,6 +201,64 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     const bad = doc();
     (bad.risks as Record<string, unknown>[])[2]!.fallback = 'yes';
     expect(issuesOf(() => validateCatalog(bad))).toEqual(['risks[2].fallback: expected a boolean']);
+  });
+
+  test('the fallback must match the catch-all write, whatever made it the fallback', () => {
+    // Flagged on a narrow pattern : that risk would be left out of the
+    // touched risks as soon as another entry matched the same slice.
+    const flagged = doc({
+      risks: [
+        risk('acme.read-things', 'acme.space[**].R'),
+        { ...risk('acme.uncategorized-write', 'acme.space[**].thing[**].W'), fallback: true },
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(flagged))).toEqual([
+      "risks[1].matches: the fallback 'acme.uncategorized-write' must match the catch-all write 'acme.**.W'",
+    ]);
+    // Recognised by its id alone : same rule.
+    const byId = doc({
+      risks: [
+        risk('acme.read-things', 'acme.space[**].R'),
+        risk('acme.uncategorized-write', 'acme.space[**].W'),
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(byId))).toEqual([
+      "risks[1].matches: the fallback 'acme.uncategorized-write' must match the catch-all write 'acme.**.W'",
+    ]);
+    // One catch-all among several patterns is enough ; the bracketed spelling counts.
+    const listed = doc();
+    (listed.risks as Record<string, unknown>[])[2]!.matches = ['acme.space[**].W', 'acme.[**].W'];
+    expect(() => validateCatalog(listed)).not.toThrow();
+    // A read catch-all is not the catch-all write.
+    const read = doc();
+    (read.risks as Record<string, unknown>[])[2]!.matches = 'acme.**.R';
+    expect(issuesOf(() => validateCatalog(read)).join('\n')).toMatch(
+      /risks\[2\]\.matches: the fallback .* must match the catch-all write/,
+    );
+  });
+
+  test('the uncategorized- id convention needs its dash', () => {
+    // `acme.uncategorizedfoo` is an ordinary risk : without a flag and
+    // without the catch-all pattern, the catalog has no fallback.
+    const d = doc({
+      risks: [
+        risk('acme.read-things', 'acme.space[**].R'),
+        risk('acme.uncategorizedfoo', 'acme.space[**].W'),
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      "missing fallback risk: declare a 'acme.uncategorized-*' entry matching 'acme.**.W' with fallback: true (risk-model spec §4.3)",
+    ]);
+    // Flagged, it is the fallback — and then it is misnamed.
+    const flagged = doc({
+      risks: [
+        risk('acme.read-things', 'acme.space[**].R'),
+        { ...risk('acme.uncategorizedfoo', 'acme.**.W'), fallback: true },
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(flagged))).toEqual([
+      "risks[1].id 'acme.uncategorizedfoo' is the fallback and must be named 'acme.uncategorized-*'",
+    ]);
   });
 
   test('a fallback recognised by convention alone loads with a warning asking for the flag', () => {
@@ -339,6 +403,114 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     );
   });
 
+  test('an unknown key inside rate_limit is reported at its path', () => {
+    const d = doc();
+    (d.presets as Array<{ entries: Record<string, unknown>[] }>)[0]!.entries[0]!.rate_limit = {
+      max: 1,
+      window_seconds: 60,
+      burst: 5,
+    };
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      'presets[0].entries[0].rate_limit.burst: unknown key',
+    ]);
+  });
+
+  test('a preset id declared twice, a risk repeated inside one preset', () => {
+    const entry = {
+      risk_id: 'acme.read-things',
+      quota: 1,
+      rate_limit: { max: 1, window_seconds: 1 },
+    };
+    const twice = doc({
+      presets: [
+        { id: 'reader', label: 'A', description: 'a', entries: [entry] },
+        { id: 'reader', label: 'B', description: 'b', entries: [entry] },
+      ],
+    });
+    expect(issuesOf(() => validateCatalog(twice))).toEqual([
+      "presets[1].id 'reader' is declared twice",
+    ]);
+    const repeated = doc({
+      presets: [{ id: 'reader', label: 'A', description: 'a', entries: [entry, entry] }],
+    });
+    expect(issuesOf(() => validateCatalog(repeated))).toEqual([
+      "presets[0].entries[1].risk_id 'acme.read-things' repeated in preset 'reader'",
+    ]);
+  });
+
+  test('caps and infra_limits : known keys, positive integers, typed result', () => {
+    const ok = doc();
+    (ok.risks as Record<string, unknown>[])[0]!.caps = {
+      items_per_call_max: 50,
+      temporal_window_days: 7,
+    };
+    (ok.risks as Record<string, unknown>[])[0]!.infra_limits = {
+      bytes_per_call_max: 1024,
+      calls_per_minute_max: 30,
+      calls_per_session_max: 5,
+    };
+    const loaded = validateCatalog(ok).catalog.risks[0]!;
+    expect(loaded.caps).toEqual({ items_per_call_max: 50, temporal_window_days: 7 });
+    expect(loaded.infra_limits).toEqual({
+      bytes_per_call_max: 1024,
+      calls_per_minute_max: 30,
+      calls_per_session_max: 5,
+    });
+    // An empty mapping is kept as an empty mapping.
+    const empty = doc();
+    (empty.risks as Record<string, unknown>[])[0]!.caps = {};
+    expect(validateCatalog(empty).catalog.risks[0]!.caps).toEqual({});
+
+    const bad = doc();
+    (bad.risks as Record<string, unknown>[])[0]!.caps = {
+      items_per_call_max: -5,
+      pages_max: 3,
+      bytes_per_call_max: null,
+    };
+    (bad.risks as Record<string, unknown>[])[0]!.infra_limits = { calls_per_minute_max: 0 };
+    (bad.risks as Record<string, unknown>[])[1]!.caps = [1];
+    expect(issuesOf(() => validateCatalog(bad))).toEqual([
+      'risks[0].caps.pages_max: unknown key',
+      'risks[0].caps.items_per_call_max: expected a positive integer',
+      'risks[0].caps.bytes_per_call_max: expected a positive integer',
+      'risks[0].infra_limits.calls_per_minute_max: expected a positive integer',
+      'risks[1].caps: expected a mapping',
+    ]);
+  });
+
+  test('replaced_by, catalog_version, catalog_date and an empty matches list', () => {
+    const d = doc({ catalog_version: 0, catalog_date: '13 October 2026' });
+    (d.risks as Record<string, unknown>[])[0]!.replaced_by = 'Not An Id';
+    (d.risks as Record<string, unknown>[])[1]!.matches = [];
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      'catalog_version: expected a positive integer',
+      'catalog_date: expected an ISO date (YYYY-MM-DD)',
+      'risks[0].replaced_by: expected a RiskId',
+      'risks[1].matches: expected a slice pattern or a non-empty list of patterns',
+    ]);
+    const ok = doc({ catalog_version: 2, catalog_date: '2026-10-13' });
+    (ok.risks as Record<string, unknown>[])[0]!.replaced_by = 'acme.thing-write';
+    const loaded = validateCatalog(ok).catalog;
+    expect(loaded.catalog_version).toBe(2);
+    expect(loaded.catalog_date).toBe('2026-10-13');
+    expect(loaded.risks[0]!.replaced_by).toBe('acme.thing-write');
+  });
+
+  test('a vector must name its six axes ; an override may name a subset', () => {
+    const d = doc();
+    delete ((d.risks as Record<string, unknown>[])[0]!.vector as Record<string, unknown>).cost;
+    (d.risks as Record<string, unknown>[])[1]!.vector_overrides = {
+      prod: { blast: 'account' },
+      Prod: { blast: 'planet', colour: 'red' },
+    };
+    expect(issuesOf(() => validateCatalog(d))).toEqual([
+      'risks[0].vector.cost: missing (one of free | moderate | unbounded)',
+      'risks[1].vector_overrides.Prod: invalid env label',
+      'risks[1].vector_overrides.Prod.blast: expected one of single | env | account | bulk',
+      'risks[1].vector_overrides.Prod.colour: unknown axis',
+    ]);
+  });
+
   test('deprecated risks may not appear in a preset', () => {
     const d = doc();
     (d.risks as unknown[]).push({ ...risk('acme.old', 'acme.space[**].old.R'), deprecated: true });
@@ -391,5 +563,55 @@ describe('validateCatalog — errors are collected and path-qualified', () => {
     expect(err).toBeInstanceOf(CatalogError);
     expect(err!.source).toBe('broken.yaml');
     expect(err!.issues[0]).toMatch(/^YAML syntax:/);
+  });
+});
+
+describe('isCompleteVector', () => {
+  const full = {
+    reversibility: 'reversible',
+    blast: 'single',
+    data: 'data',
+    cost: 'free',
+    visibility: 'internal',
+    persistence: 'stateless',
+  } as const;
+
+  test('true only when the six axes are set', () => {
+    expect(isCompleteVector(full)).toBe(true);
+    expect(isCompleteVector({})).toBe(false);
+    expect(isCompleteVector({ ...full, persistence: undefined })).toBe(false);
+  });
+});
+
+describe('wildcardIssues — two rules, one concatenation', () => {
+  const base = validateCatalog(doc()).catalog;
+  const catalog: RiskCatalog = {
+    ...base,
+    risks: [...base.risks, { ...base.risks[0]!, id: 'acme.read-*' }],
+    presets: [
+      {
+        id: 'p',
+        label: 'P',
+        description: 'p',
+        entries: [
+          { risk_id: 'acme.*', quota: 1, rate_limit: { max: 1, window_seconds: 1 }, gate: 'auto' },
+          { risk_id: 'all', quota: 1, rate_limit: { max: 1, window_seconds: 1 }, gate: 'auto' },
+        ],
+      },
+    ],
+  };
+
+  test('risk ids and preset entries are reported by their own function', () => {
+    expect(riskIdWildcardIssues(catalog)).toEqual([
+      "risks[3].id 'acme.read-*' contains a wildcard",
+    ]);
+    expect(presetWildcardIssues(catalog)).toEqual([
+      "presets[0].entries[0].risk_id 'acme.*' is not an explicit RiskId (no wildcard, no sentinel)",
+      "presets[0].entries[1].risk_id 'all' is not an explicit RiskId (no wildcard, no sentinel)",
+    ]);
+    expect(wildcardIssues(catalog)).toEqual([
+      ...riskIdWildcardIssues(catalog),
+      ...presetWildcardIssues(catalog),
+    ]);
   });
 });

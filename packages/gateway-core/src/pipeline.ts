@@ -24,7 +24,11 @@
  * `upstream_error` (the decision is what the gateway did) — including when
  * the failure is the provider rejecting the connection's credential for
  * good: the upstream stage then throws `UpstreamRefusalError` and the
- * outcome carries the `connection-unavailable` refusal the agent reads. An
+ * outcome carries the `connection-unavailable` refusal the agent reads.
+ * `upstream_error` is a bounded summary the host built (`UpstreamFailureError
+ * .summary`), never the provider's text: providers echo input in their
+ * errors, and the audit keeps no trace of the arguments but their hash. The
+ * provider's text goes to the caller only, on the `failed` outcome. An
  * audit write that fails propagates: no call completes without its entry.
  *
  * What is deliberately NOT here: JSON-RPC routing, `tools/list` filtering,
@@ -159,7 +163,17 @@ export function checkMissionActive(ctx: MissionContext, now: Date): Refusal | nu
   if (status !== 'active') {
     return refuse.missionInactive({ status, reason: INACTIVE_MISSION_REASON[status](expires_at) });
   }
-  if (expires_at !== null && Date.parse(expires_at) <= now.getTime()) {
+  if (expires_at === null) return null;
+  const expiresAtMs = Date.parse(expires_at);
+  // An expiry that cannot be read is treated as passed: `NaN <= now` is
+  // false, so comparing alone would let a corrupt row never expire.
+  if (Number.isNaN(expiresAtMs)) {
+    return refuse.missionInactive({
+      status: 'expired',
+      reason: `the mission's expiry '${expires_at}' is unreadable; it is treated as passed`,
+    });
+  }
+  if (expiresAtMs <= now.getTime()) {
     return refuse.missionInactive({
       status: 'expired',
       reason: `the mission expired at ${expires_at}`,
@@ -260,8 +274,9 @@ export interface BudgetStage {
 /** Mint or decrypt the ephemeral upstream credential, forward, return the
  *  provider's result. The executor never sees the credential (spec §2.4).
  *  Throws `UpstreamRefusalError` when the provider rejected the credential
- *  and it could not be refreshed (spec §2.3 connection `expired`); any other
- *  throw is a plain upstream failure. */
+ *  and it could not be refreshed (spec §2.3 connection `expired`), and
+ *  `UpstreamFailureError` for any other failure. A throw of another type is
+ *  still an upstream failure, audited by its class name alone. */
 export interface UpstreamStage {
   execute(ctx: MissionContext, call: CallRequest, target: CallTarget): Promise<unknown>;
 }
@@ -286,6 +301,84 @@ export class UpstreamRefusalError extends Error {
   }
 }
 
+/** Upper bound of what `upstream_error` stores for one call. */
+export const UPSTREAM_ERROR_SUMMARY_MAX_LENGTH = 200;
+
+const ERROR_CLASS_NAME_SHAPE = /^[A-Za-z_$][A-Za-z0-9_$]{0,63}$/;
+const ANONYMOUS_ERROR_CLASS = 'Error';
+
+/**
+ * The class name of a thrown value, for an audit summary. Only an
+ * identifier-shaped name is returned: an error whose `name` was set to free
+ * text (or a value that is not an error) reads `Error`.
+ */
+export function upstreamErrorClassName(thrown: unknown): string {
+  if (!(thrown instanceof Error)) return ANONYMOUS_ERROR_CLASS;
+  return ERROR_CLASS_NAME_SHAPE.test(thrown.name) ? thrown.name : ANONYMOUS_ERROR_CLASS;
+}
+
+/**
+ * Thrown by an `UpstreamStage` when the call was allowed and counted and the
+ * provider call failed. It separates what the two readers of the failure get:
+ *
+ * - `summary` is written to the immutable audit (`upstream_error`). The stage
+ *   builds it from what the host knows — the provider id, the HTTP status,
+ *   the error's class name — and never from the provider's text, which can
+ *   echo the call's arguments. The pipeline bounds its length.
+ * - `detail` is the provider's own message. It goes to the caller of the
+ *   tool, which knows its own arguments, on the `failed` outcome, and is
+ *   stored nowhere.
+ */
+export class UpstreamFailureError extends Error {
+  readonly summary: string;
+  readonly detail: string;
+  /** HTTP status of the provider's answer, when the failure carries one. */
+  readonly status: number | null;
+
+  constructor(input: {
+    readonly summary: string;
+    readonly detail: string;
+    readonly status: number | null;
+    readonly cause?: unknown;
+  }) {
+    super(input.detail, { cause: input.cause });
+    this.name = 'UpstreamFailureError';
+    this.summary = input.summary;
+    this.detail = input.detail;
+    this.status = input.status;
+  }
+}
+
+/** What the audit and the caller each read of a failed forward. */
+interface UpstreamFailure {
+  /** Stored as `upstream_error`: host-built, bounded. */
+  readonly summary: string;
+  /** Returned on the `failed` outcome: the provider's text. */
+  readonly detail: string;
+  readonly refusal: Refusal | null;
+}
+
+function describeUpstreamFailure(thrown: unknown): UpstreamFailure {
+  const message = thrown instanceof Error ? thrown.message : String(thrown);
+  if (thrown instanceof UpstreamRefusalError) {
+    const { refusal } = thrown;
+    const status = 'status' in refusal ? `: ${refusal.status}` : '';
+    return {
+      summary: `${refusal.code}${status}`,
+      detail: `${refusal.code}: ${message}`,
+      refusal,
+    };
+  }
+  if (thrown instanceof UpstreamFailureError) {
+    return { summary: thrown.summary, detail: thrown.detail, refusal: null };
+  }
+  return {
+    summary: `upstream call failed (${upstreamErrorClassName(thrown)})`,
+    detail: message,
+    refusal: null,
+  };
+}
+
 export interface CallPipelineDeps {
   readonly resources: ResourceStage;
   readonly risks: RiskStage;
@@ -307,9 +400,11 @@ export type CallOutcome =
       readonly audit: CallAuditEntry;
     }
   | {
-      /** Allowed, then the provider failed. `refusal` is set when the failure
-       *  is a structured one the agent must read (`connection-unavailable`
-       *  after a rejected refresh). */
+      /** Allowed, then the provider failed. `error` is the provider's detail,
+       *  for the caller only: the audit entry holds a host-built summary
+       *  (`audit.upstream_error`). `refusal` is set when the failure is a
+       *  structured one the agent must read (`connection-unavailable` after a
+       *  rejected refresh). */
       readonly kind: 'failed';
       readonly error: string;
       readonly refusal: Refusal | null;
@@ -320,6 +415,25 @@ export type CallOutcome =
 // Pipeline
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** A call whose target is resolved and available, with its audit entry so far. */
+interface TargetedCall {
+  readonly target: CallTarget;
+  readonly entry: CallAuditEntry;
+}
+
+/** A call the risk stage allowed, with its audit entry so far. */
+interface ClassifiedCall {
+  readonly risks_touched: readonly RiskId[];
+  readonly entry: CallAuditEntry;
+}
+
+/** A stage result that ends the call. Every `CallOutcome` carries its `audit` entry; no intermediate value does. */
+function isOutcome(
+  x: CallOutcome | TargetedCall | ClassifiedCall | CallAuditEntry,
+): x is CallOutcome {
+  return 'audit' in x;
+}
+
 export class CallPipeline {
   private readonly now: () => Date;
 
@@ -327,6 +441,11 @@ export class CallPipeline {
     this.now = deps.now ?? (() => new Date());
   }
 
+  /**
+   * One `tools/call`, in the order of the header table. Each stage either
+   * ends the call (an audited `CallOutcome`) or hands the next stage the
+   * audit entry enriched with what it learned.
+   */
   async execute(ctx: MissionContext, call: CallRequest): Promise<CallOutcome> {
     const now = this.now();
     const base = this.baseEntry(ctx, call, now);
@@ -334,6 +453,24 @@ export class CallPipeline {
     const inactive = checkMissionActive(ctx, now);
     if (inactive) return this.refused(base, inactive);
 
+    const targeted = await this.resolveTarget(ctx, call, base);
+    if (isOutcome(targeted)) return targeted;
+
+    const classified = await this.decideRisks(ctx, call, targeted);
+    if (isOutcome(classified)) return classified;
+
+    const decided = await this.decideBudget(ctx, call, classified, now);
+    if (isOutcome(decided)) return decided;
+
+    return this.forward(ctx, call, targeted.target, decided);
+  }
+
+  /** Resource resolution, then connection availability. */
+  private async resolveTarget(
+    ctx: MissionContext,
+    call: CallRequest,
+    base: CallAuditEntry,
+  ): Promise<CallOutcome | TargetedCall> {
     const resolved = await this.deps.resources.resolve(ctx, call);
     if (!resolved.ok) {
       return 'refusal' in resolved
@@ -341,28 +478,37 @@ export class CallPipeline {
         : this.rejected(base, resolved.reason);
     }
     const { target } = resolved;
-    const targeted: CallAuditEntry = {
+    const entry: CallAuditEntry = {
       ...base,
       connection_id: target.connection.id,
       resource_ref: target.resource?.ref ?? null,
     };
 
     const unavailable = checkConnectionAvailable(target.connection);
-    if (unavailable) return this.refused(targeted, unavailable);
+    if (unavailable) return this.refused(entry, unavailable);
+    return { target, entry };
+  }
 
+  /** Classification and the risk decision. */
+  private async decideRisks(
+    ctx: MissionContext,
+    call: CallRequest,
+    targeted: TargetedCall,
+  ): Promise<CallOutcome | ClassifiedCall> {
+    const { target, entry } = targeted;
     const verdict = await this.deps.risks.evaluate(ctx, call, target);
     switch (verdict.kind) {
       case 'no-catalog':
         return this.rejected(
-          targeted,
+          entry,
           `risk catalog for '${target.connection.provider}' is not loaded; refusing (fail closed).`,
         );
       case 'classify-denied':
-        return this.rejected(targeted, verdict.reason);
+        return this.rejected(entry, verdict.reason);
       case 'deny':
         return this.refused(
           {
-            ...targeted,
+            ...entry,
             slices_executed: verdict.executed_slices,
             risks_touched: verdict.risks_touched,
           },
@@ -373,47 +519,76 @@ export class CallPipeline {
           }),
         );
       case 'allow':
-        break;
+        return {
+          risks_touched: verdict.risks_touched,
+          entry: {
+            ...entry,
+            slices_executed: verdict.executed_slices,
+            risks_touched: verdict.risks_touched,
+          },
+        };
     }
+  }
 
-    const classified: CallAuditEntry = {
-      ...targeted,
-      slices_executed: verdict.executed_slices,
-      risks_touched: verdict.risks_touched,
-    };
-
+  /** Budget, rate limit and gate. Returns the entry of an allowed call. */
+  private async decideBudget(
+    ctx: MissionContext,
+    call: CallRequest,
+    classified: ClassifiedCall,
+    now: Date,
+  ): Promise<CallOutcome | CallAuditEntry> {
     const budget = await this.deps.budget.decide(ctx, call, {
-      risks_touched: verdict.risks_touched,
+      risks_touched: classified.risks_touched,
       now,
     });
-    if (budget.outcome === 'refused') return this.refused(classified, budget.refusal);
-
-    const decided: CallAuditEntry = {
-      ...classified,
+    if (budget.outcome === 'refused') return this.refused(classified.entry, budget.refusal);
+    return {
+      ...classified.entry,
       session_id: budget.session_id,
       decision: 'allowed',
       approval_id: budget.approval_id,
       remaining_budget: budget.remaining,
     };
+  }
 
+  /**
+   * Upstream mint and forward, then the audit entry of the allowed call.
+   * Only the provider call sits in the `try`: a failure of the audit write
+   * after a successful forward is not an upstream failure — it propagates,
+   * and is never recorded as `upstream_error` on an action that happened.
+   */
+  private async forward(
+    ctx: MissionContext,
+    call: CallRequest,
+    target: CallTarget,
+    decided: CallAuditEntry,
+  ): Promise<CallOutcome> {
     const t0 = this.now().getTime();
+    let result: unknown;
     try {
-      const result = await this.deps.upstream.execute(ctx, call, target);
-      const entry: CallAuditEntry = { ...decided, upstream_latency_ms: this.now().getTime() - t0 };
-      await this.deps.audit.write(entry);
-      return { kind: 'allowed', result, audit: entry };
+      result = await this.deps.upstream.execute(ctx, call, target);
     } catch (e) {
-      const refusal = e instanceof UpstreamRefusalError ? e.refusal : null;
-      const message = e instanceof Error ? e.message : String(e);
-      const error = refusal ? `${refusal.code}: ${message}` : message;
-      const entry: CallAuditEntry = {
-        ...decided,
-        upstream_latency_ms: this.now().getTime() - t0,
-        upstream_error: error,
-      };
-      await this.deps.audit.write(entry);
-      return { kind: 'failed', error, refusal, audit: entry };
+      return this.failed(decided, t0, e);
     }
+    const entry: CallAuditEntry = { ...decided, upstream_latency_ms: this.now().getTime() - t0 };
+    await this.deps.audit.write(entry);
+    return { kind: 'allowed', result, audit: entry };
+  }
+
+  /**
+   * The provider failed after an allowed decision: the entry stays `allowed`
+   * and records the bounded, host-built summary of the failure; the
+   * provider's text leaves on the outcome only.
+   */
+  private async failed(decided: CallAuditEntry, t0: number, e: unknown): Promise<CallOutcome> {
+    const failure = describeUpstreamFailure(e);
+    const entry: CallAuditEntry = {
+      ...decided,
+      upstream_latency_ms: this.now().getTime() - t0,
+      upstream_error: failure.summary.slice(0, UPSTREAM_ERROR_SUMMARY_MAX_LENGTH),
+    };
+    await this.deps.audit.write(entry);
+    return { kind: 'failed', error: failure.detail, refusal: failure.refusal, audit: entry };
   }
 
   private baseEntry(ctx: MissionContext, call: CallRequest, now: Date): CallAuditEntry {

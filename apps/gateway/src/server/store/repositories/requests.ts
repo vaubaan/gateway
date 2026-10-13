@@ -7,11 +7,19 @@ import type {
   NewEvent,
   RequestKind,
   RequestRecord,
-  RequestState,
   RiskId,
   SessionRecord,
 } from '../types.ts';
-import { nowIso, parseJsonObject, requireRow, toJson, type RepoContext } from './context.ts';
+import {
+  nowIso,
+  parseEnum,
+  parseJsonObject,
+  requireRow,
+  toJson,
+  type RepoContext,
+} from './context.ts';
+import { REQUEST_KINDS, REQUEST_STATES } from './enums.ts';
+import { createSessionPrimitives } from './sessions.ts';
 
 /**
  * Approval-request arguments sealed ahead of a transaction. The request id is fixed
@@ -142,8 +150,8 @@ function toRecord(row: RequestRow): RequestRecord {
     id: row.id,
     missionId: row.mission_id,
     sessionId: row.session_id,
-    kind: row.kind as RequestKind,
-    state: row.state as RequestState,
+    kind: parseEnum(REQUEST_KINDS, row.kind, 'requests.kind'),
+    state: parseEnum(REQUEST_STATES, row.state, 'requests.state'),
     riskId: row.risk_id,
     tool: row.tool,
     fingerprint: row.fingerprint,
@@ -186,10 +194,13 @@ export interface OpenRequestLookup {
   readonly fingerprint?: string | null;
 }
 
+// Two statements rather than one with `? IS NULL OR r.fingerprint = ?`: Postgres cannot
+// infer the type of a parameter that is only compared to NULL.
+const OPEN_OF_RISK = `r.mission_id = ? AND r.kind = ? AND r.risk_id = ? AND r.state = 'open' AND r.expires_at > ?`;
 const SELECT_OPEN = `SELECT ${COLUMNS} FROM requests r
-  WHERE r.mission_id = ? AND r.kind = ? AND r.risk_id = ? AND r.state = 'open' AND r.expires_at > ?
-    AND (? IS NULL OR r.fingerprint = ?)
-  ORDER BY r.created_at LIMIT 1`;
+  WHERE ${OPEN_OF_RISK} ORDER BY r.created_at LIMIT 1`;
+const SELECT_OPEN_BY_FINGERPRINT = `SELECT ${COLUMNS} FROM requests r
+  WHERE ${OPEN_OF_RISK} AND r.fingerprint = ? ORDER BY r.created_at LIMIT 1`;
 
 /**
  * Synchronous lookup of a still-open request, meant to run inside an already-open
@@ -203,12 +214,14 @@ export function findOpenRequestSync(
   now: Iso,
 ): RequestRecord | null {
   const fingerprint = lookup.kind === 'approval' ? (lookup.fingerprint ?? null) : null;
-  const row = ctx.db
-    .prepare<
-      [string, string, string, string, string | null, string | null],
-      RequestRow
-    >(SELECT_OPEN)
-    .get(missionId, lookup.kind, lookup.riskId, now, fingerprint, fingerprint);
+  const row =
+    fingerprint === null
+      ? ctx.db
+          .prepare<[string, string, string, string], RequestRow>(SELECT_OPEN)
+          .get(missionId, lookup.kind, lookup.riskId, now)
+      : ctx.db
+          .prepare<[string, string, string, string, string], RequestRow>(SELECT_OPEN_BY_FINGERPRINT)
+          .get(missionId, lookup.kind, lookup.riskId, now, fingerprint);
   return row ? toRecord(row) : null;
 }
 
@@ -283,74 +296,28 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     `UPDATE requests SET state = 'expired', args_blob = NULL, key_version = NULL
      WHERE id = ? AND state = 'open'`,
   );
-  const sessionOfMission = db.prepare<
-    [string],
-    { id: string; mission_id: string; created_at: string }
-  >('SELECT id, mission_id, created_at FROM sessions WHERE mission_id = ?');
-  const countersOfPeriod = db.prepare<[string, string], { risk_id: string; consumed: number }>(
-    `SELECT risk_id, consumed FROM session_counters
-     WHERE session_id = ? AND period_start = ? ORDER BY risk_id`,
-  );
-  const zeroPeriod = db.prepare<[string, string]>(
-    'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ?',
-  );
-  const creditOne = db.prepare<[number, string, string, string, number]>(
-    `UPDATE session_counters SET consumed = consumed - ?
-     WHERE session_id = ? AND period_start = ? AND risk_id = ? AND consumed >= ?`,
-  );
+  // Sessions, counters and events belong to the sessions repository: its primitives run
+  // here, inside this repository's transactions.
+  const sessions = createSessionPrimitives(ctx);
   const extendMission = db.prepare<[string, string, string]>(
     `UPDATE missions SET expires_at = ?, updated_at = ?,
        status = CASE WHEN status = 'expired' THEN 'active' ELSE status END,
        closed_at = CASE WHEN status = 'expired' THEN NULL ELSE closed_at END
      WHERE id = ?`,
   );
-  const insertEvent = db.prepare<
-    [string, string, string, string, string | null, string | null, string | null]
-  >(
-    `INSERT INTO events (id, session_id, ts, kind, risk_id, actor_user_id, details_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  );
-
-  function sessionOf(missionId: string): SessionRecord | null {
-    const row = sessionOfMission.get(missionId);
-    return row ? { id: row.id, missionId: row.mission_id, createdAt: row.created_at } : null;
-  }
-
-  function recordEventSync(sessionId: string, event: NewEvent, now: Iso): EventRecord {
-    const id = ctx.newId();
-    const details = event.details ?? null;
-    insertEvent.run(
-      id,
-      sessionId,
-      now,
-      event.kind,
-      event.riskId ?? null,
-      event.actorUserId ?? null,
-      toJson(details),
-    );
-    return {
-      id,
-      sessionId,
-      ts: now,
-      kind: event.kind,
-      riskId: event.riskId ?? null,
-      actorUserId: event.actorUserId ?? null,
-      details,
-    };
-  }
 
   /** Flips one overdue request and leaves its trace on the session. In-transaction. */
   function expireSync(request: RequestRecord, now: Iso): RequestRecord {
     expireOne.run(request.id);
-    const session = sessionOf(request.missionId);
+    const session = sessions.sessionOfMission(request.missionId);
     if (session) {
-      recordEventSync(
+      sessions.recordEvent(
         session.id,
         {
           kind: 'request',
           riskId: request.riskId,
           details: { request_id: request.id, request_kind: request.kind, state: 'expired' },
-        },
+        } satisfies NewEvent,
         now,
       );
     }
@@ -365,7 +332,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     const read = (periodStart: Iso): Map<RiskId, number> =>
       new Map(
         session
-          ? countersOfPeriod.all(session.id, periodStart).map((r) => [r.risk_id, r.consumed])
+          ? sessions.countersOfPeriod(session.id, periodStart).map((c) => [c.riskId, c.consumed])
           : [],
       );
     return {
@@ -375,18 +342,18 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       counters: read,
       resetCounters(periodStart) {
         const before = read(periodStart);
-        if (session) zeroPeriod.run(session.id, periodStart);
+        if (session) sessions.resetPeriod(session.id, periodStart);
         return before;
       },
       creditCounter(periodStart, riskId, amount) {
         if (!session || !Number.isInteger(amount) || amount < 1) return false;
-        return creditOne.run(amount, session.id, periodStart, riskId, amount).changes === 1;
+        return sessions.creditCounter(session.id, periodStart, riskId, amount);
       },
       setMissionExpiry(expiresAt) {
         extendMission.run(expiresAt, now, request.missionId);
       },
       recordEvent(event) {
-        return session ? recordEventSync(session.id, event, now) : null;
+        return session ? sessions.recordEvent(session.id, event, now) : null;
       },
     };
   }
@@ -445,7 +412,9 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
         if (request.expiresAt <= now) {
           return { status: 'not-open' as const, request: expireSync(request, now) };
         }
-        const outcome = apply(claimContext(request, sessionOf(request.missionId), now));
+        const outcome = apply(
+          claimContext(request, sessions.sessionOfMission(request.missionId), now),
+        );
         decideOpen.run(outcome.state, now, decidedByUserId, toJson(outcome.decision), id);
         return {
           status: 'decided' as const,

@@ -30,7 +30,7 @@ import {
   PROVIDER_APP_FIELDS,
   type ProviderAppConfig as FileProviderAppConfig,
 } from '../config/types';
-import type { ConfigRepo } from '../store/repositories/config';
+import type { ConfigRepo, ConfigWrite } from '../store/repositories/config';
 import {
   APP_FIELD_NAME_PATTERN,
   appConfigFieldsOf,
@@ -244,8 +244,9 @@ export class ProviderAppsService {
       ]);
     }
     const problems: string[] = [];
-    const writes: { field: CredentialField; value: string | null }[] = [];
+    const writes: ConfigWrite[] = [];
     for (const field of fields) {
+      const key = providerAppKey(providerId, field.name);
       if (!APP_FIELD_NAME_PATTERN.test(field.name)) {
         problems.push(`${field.label}: the plugin declares an unusable field name`);
         continue;
@@ -255,23 +256,21 @@ export class ProviderAppsService {
         const stored = await this.readStoredField(providerId, field);
         if (field.secret && stored) continue; // keep the stored secret
         if (isRequired(field)) problems.push(`${field.label} is required`);
-        else writes.push({ field, value: null });
+        else writes.push({ kind: 'delete', key });
         continue;
       }
       if (field.pattern && !new RegExp(field.pattern).test(raw)) {
         problems.push(`${field.label} does not have the expected format`);
         continue;
       }
-      writes.push({ field, value: raw });
+      writes.push(
+        field.secret ? { kind: 'secret', key, plain: raw } : { kind: 'value', key, value: raw },
+      );
     }
     if (problems.length > 0) throw new ProviderAppError(problems);
 
-    for (const { field, value } of writes) {
-      const key = providerAppKey(providerId, field.name);
-      if (value === null) await this.config.delete(key);
-      else if (field.secret) await this.config.setSecret(key, value);
-      else await this.config.set(key, value);
-    }
+    // One transaction: never the client id of one app with the secret of another.
+    await this.config.apply(writes);
     return this.status(providerId);
   }
 
@@ -281,10 +280,10 @@ export class ProviderAppsService {
    */
   async clear(providerId: string): Promise<void> {
     const prefix = providerAppKey(providerId, '');
-    for (const key of await this.config.keys()) {
-      if (key.startsWith(prefix)) await this.config.delete(key);
-    }
-    await this.config.delete(acceptUnverifiedKey(providerId));
+    const stored = (await this.config.keys()).filter((key) => key.startsWith(prefix));
+    await this.config.apply(
+      [...stored, acceptUnverifiedKey(providerId)].map((key) => ({ kind: 'delete', key })),
+    );
   }
 
   private async read(

@@ -20,7 +20,7 @@ import {
   Thead,
   Tr,
 } from '@/components/ui';
-import { currentPrincipal } from '@/lib/auth/session';
+import { requirePrincipal } from '@/lib/auth/session';
 import {
   AUDIT_DECISIONS,
   AUDIT_KINDS,
@@ -41,8 +41,7 @@ interface Props {
 }
 
 export default async function AuditPage({ searchParams }: Props) {
-  const { root, principal } = await currentPrincipal();
-  if (!principal) return null; // the `(app)` layout already sent the visitor to sign in
+  const { root, principal } = await requirePrincipal();
   const query = parseAuditQuery(await searchParams);
   const { raw } = query;
   const [page, options] = await Promise.all([
@@ -250,7 +249,7 @@ function CallRow({ entry }: { entry: AuditCallView }) {
         )}
       </Td>
       <Td>
-        <div className={styles.mono} data-testid="arguments-hash">
+        <div className={`${styles.mono} ${styles.hash}`} data-testid="arguments-hash">
           {entry.arguments_hash}
         </div>
         {entry.upstream_error && <div>upstream failed: {entry.upstream_error}</div>}
@@ -285,7 +284,7 @@ function AdminRow({ entry }: { entry: AuditAdminView }) {
         <Badge>act</Badge>
       </Td>
       <Td>
-        {entry.actor.email ?? entry.actor.id}
+        {entry.actor.label}
         {entry.delegated_client_id && (
           <div className={styles.muted}>through client {entry.delegated_client_id}</div>
         )}

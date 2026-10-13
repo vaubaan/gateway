@@ -1,348 +1,261 @@
 ---
-title: Next.js web app
-status: legacy
-date: 2026-06-16
+title: Web app — route map, layouts, shell, UI primitives
+status: current
+date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
-  - apps/gateway/src/app/
-  - apps/gateway/src/lib/auth/
-  - apps/gateway/next.config.ts
+  - apps/gateway/src/app/layout.tsx
+  - apps/gateway/src/app/globals.css
+  - apps/gateway/src/app/icon.svg
+  - apps/gateway/src/app/apple-icon.png
+  - apps/gateway/src/styles/tokens.css
+  - apps/gateway/src/components/ui/
+  - apps/gateway/src/components/shell/
+  - apps/gateway/src/components/LocalDate.tsx
+  - apps/gateway/src/components/auth/NeedsUser.tsx
+  - apps/gateway/src/lib/auth/session.ts
+  - apps/gateway/src/lib/connections/session.ts
 ---
 
-> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+# Web app — route map, layouts, shell, UI primitives
 
-# Web app — `@vaubaan/gateway-app`
+The frame of the human surface of the instance (spec
+[vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2): which route is served by
+which file, which handbook owns it, and what every page shares — root layout,
+application bar, UI primitives. The behaviour of each page is in the handbook
+of its feature. The v4 text that used to live here (Supabase sign-in,
+organisations, sidebar) is kept in [legacy/web-app.md](legacy/web-app.md); none
+of that code exists any more.
 
-Le control plane UI + le `/mcp` endpoint. Next.js 15 App Router, Supabase
-magic-link auth, server-side rendering, dynamic routes.
+## What the app is
 
-## Layout
+`apps/gateway` is one Next.js application (`next` 16.4.0, `react` 19.3.0, App
+Router) built as a standalone server (`output: 'standalone'`,
+[configuration](configuration.md)). It serves the pages, the JSON and form
+endpoints behind them, and the agent-facing MCP door from the same process.
 
-```
-apps/gateway/
-  src/
-    app/
-      layout.tsx
-      (public)/                                         # Marketing + legal shell
-        layout.tsx
-        page.tsx                                        # Landing
-        login/page.tsx                                  # Magic-link + GitHub SSO
-        {about,pricing,changelog,integrations,contact,support}/page.tsx
-        {privacy,terms,security,dpa,subprocessors,brand}/page.tsx
-      (app)/                                            # Authenticated shell
-        layout.tsx                                      # Sidebar + auth gate
-        dashboard/page.tsx                              # User's organizations
-        docs/page.tsx                                    # In-app reference
-        orgs/
-          new/page.tsx                                  # Create org (creator → owner)
-          [slug]/
-            page.tsx                                    # Org dashboard
-            members/page.tsx                            # Members + owner badge + transfer
-            audit/page.tsx                              # Org audit log
-            providers/page.tsx                          # Org-wide providers catalogue
-            providers/[provider]/page.tsx               # Provider info — data-model mermaid + risk catalog + tools
-            settings/page.tsx                             # Org settings
-            projects/
-              new/page.tsx                              # Create project
-              [project]/
-                page.tsx                                # Project overview (bindings + bash + tokens cards)
-                audit/page.tsx                          # Project audit log
-                tokens/page.tsx                         # Access tokens list
-                tokens/new/*.{ts,tsx}                   # Risk-checklist mint flow (10 files)
-                                                        # page.tsx (server) + mint-form.tsx (orchestrator)
-                                                        # + binding-risks-section / provider-risks-card
-                                                        # + risk-row / vector-row / preview-footer
-                                                        # + mint-result-dialog + mint-types + qualify-helpers
-                bindings/new/{page,binding-form}.tsx    # Generic binding creation (any provider — provider/bash)
-                bindings/[bindingId]/edit/page.tsx      # Edit an existing binding
-                settings/page.tsx                       # Project settings
-                bash/page.tsx                           # Redirect → bindings/new
-                bash-bindings/[bindingId]/page.tsx      # Script + hosts + runner cards
-      api/
-        integrations/{github,vercel,supabase,railway}/{connect,callback}/route.ts
-        v1/
-          tokens/                                       # unified-tokens API
-            {[tokenId]/route, [tokenId]/rotate-key/route}.ts
-            mint/route.ts                               # POST — mint child from any vbn_live_*
-            preview/route.ts                            # POST — preview (acceptable / inherited)
-          orgs/[slug]/{route, transfer-ownership/route}.ts
-          projects/[projectId]/{route}.ts
-          providers/[provider]/route.ts                 # disconnect
-          bindings/[bindingId]/route.ts                 # remove a provider binding
-          bash-bindings/{route, [bindingId]/route}.ts
-          bash-bindings/[bindingId]/hosts/{route, [hostId]/route, [hostId]/test/route}.ts
-          bash-bindings/[bindingId]/run-tool/route.ts
-          members/{route, [userId]/route}.ts
-          catalog/route.ts                              # Risk catalog dump (per-provider)
-      mcp/route.ts                                      # MCP gateway POST
-      auth/callback/route.ts                            # Supabase auth callback
-      agent-bootstrap.md/route.ts                       # served bootstrap doc
-    components/
-      sidebar/Sidebar.tsx                               # Contextual nav (orgs / projects)
-      ui/                                               # Card, Button, Badge, Code, Table…
-      public/                                           # PublicShell, Prose
-      LocalDate.tsx, icons.tsx
-    lib/
-      supabase/{server, client}.ts                      # ssr-typed clients (anon + service)
-      auth/{require-org-member, require-token}.ts       # session + Bearer guards (post-unified-tokens)
-      oauth/{state, railway}.ts                         # nonce + PKCE helpers
-      providers/{state, bytea}.ts                       # provider_admins helpers
-      gateway/build.ts                                  # wire McpGateway with adapters + catalogs
-      risk-catalog/loader.ts                            # boot-time provider catalog index
-      mint/{preview, risk-preview, child-mint, token-name}.ts  # pure preview, child-mint, name regex
-      bash/{parse, exec, args, exec-host}.ts            # annotated-bash provider — cf. bash-provider handbook
-    components/providers/
-      provider-info.ts                                  # static per-provider strings (label, planes, mint mode)
-      MermaidDiagram.tsx                                # client component rendering data-model mermaid
-      data-model-to-mermaid.ts                          # DataModel → mermaid source
-  next.config.ts
-  tsconfig.json
-  .env.local.example
-```
+- **Pages are server components.** They read the session and the data through
+  the composition root (`getRoot()`, reached through a session helper of
+  `lib/auth/session.ts`, see [Session helpers](#session-helpers--libauthsessionts)),
+  are all `dynamic = 'force-dynamic'`, and render HTML. No page loads its data
+  from the browser.
+- **Client components are the exception** (`'use client'`): the mission
+  creation form and its per-risk table, the mission actions, the bootstrap kit
+  view, `RevokeConnection`, `DangerConfirm` and `LocalDate`. The only `fetch`
+  calls from the browser are the mission form (`POST /api/missions`,
+  `POST /api/missions/preview`) and the mission actions
+  (`POST /api/missions/<id>/rotate|revoke`).
+- **Everything that decides lives under `src/server/`**, host-agnostic (it
+  never imports `next`). A `route.ts` is a one-line adapter:
+  `(await getRoot()).<module>.handlers.<name>(request, …)`.
 
-> Le sous-arbre bash provider (`api/v1/bash-bindings/...`, `lib/bash/`,
-> UI `bash-bindings/[bindingId]/`) est documenté en détail dans
-> [`bash-provider.md`](./bash-provider.md).
+## Route map
 
-## Auth
+| Route                                                                                  | File under `apps/gateway/src/app/`                          | Handbook                            |
+| -------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------- |
+| `/`                                                                                    | `page.tsx`                                                  | [authentication](authentication.md) |
+| `/login`                                                                               | `(public)/login/page.tsx`, `(public)/layout.tsx`            | [authentication](authentication.md) |
+| `GET /auth/login`, `GET /auth/callback`                                                | `auth/login/route.ts`, `auth/callback/route.ts`             | [authentication](authentication.md) |
+| `POST /logout`                                                                         | `logout/route.ts`                                           | [authentication](authentication.md) |
+| `/admin/bootstrap`, `POST /api/auth/bootstrap`                                         | `admin/bootstrap/page.tsx`, `api/auth/bootstrap/route.ts`   | [authentication](authentication.md) |
+| `/admin`, `/admin/identity-provider`                                                   | `admin/(guarded)/**`                                        | [authentication](authentication.md) |
+| `POST /api/admin/identity-provider`                                                    | `api/admin/identity-provider/route.ts`                      | [authentication](authentication.md) |
+| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                         | `admin/(guarded)/provider-apps/**`                          | [connections](connections.md)       |
+| `/connections`, `/connections/new`, `/connections/new/<provider>`, `/connections/<id>` | `(app)/connections/**/page.tsx`                             | [connections](connections.md)       |
+| `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`         | `(app)/connections/connect/`, `(app)/connections/callback/` | [connections](connections.md)       |
+| `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                | `(app)/connections/[id]/**/route.ts`                        | [connections](connections.md)       |
+| `/missions`, `/missions/new`, `/missions/<id>`                                         | `(app)/missions/**/page.tsx`                                | [missions](missions.md)             |
+| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`  | `api/missions/**/route.ts`                                  | [missions](missions.md)             |
+| `GET /agent-bootstrap.md`                                                              | `agent-bootstrap.md/route.ts`                               | [missions](missions.md)             |
+| `/missions/<id>/session`                                                               | `(app)/missions/[id]/session/page.tsx`                      | [audit](audit.md)                   |
+| `/audit`                                                                               | `(app)/audit/page.tsx`                                      | [audit](audit.md)                   |
+| `/requests`, `/requests/<id>`                                                          | `(app)/requests/**/page.tsx`                                | [requests](requests.md)             |
+| `GET /r/<id>`                                                                          | `r/[id]/route.ts`                                           | [requests](requests.md)             |
+| `GET /api/requests`, `POST /api/requests/<id>/decide`                                  | `api/requests/**/route.ts`                                  | [requests](requests.md)             |
+| `GET, POST, DELETE /mcp`, `GET /mcp/catalog`                                           | `mcp/route.ts`, `mcp/catalog/route.ts`                      | [execution-door](execution-door.md) |
+| `GET /.well-known/oauth-protected-resource`                                            | `.well-known/oauth-protected-resource/route.ts`             | [execution-door](execution-door.md) |
+| `GET /healthz`                                                                         | `healthz/route.ts`                                          | [configuration](configuration.md)   |
 
-- Supabase magic-link (`auth.signInWithOtp`) + GitHub SSO
-  (cf. [`auth-github-sso.md`](./auth-github-sso.md)).
-- Session cookie via `@supabase/ssr`.
-- `/auth/callback?code=...` exchanges the code for a session.
-- All UI routes check `auth.getUser()` server-side and redirect to `/login`
-  if missing (gated par `(app)/layout.tsx`).
+There is no landing page: `/` redirects a visitor with a session to `/missions`
+and anyone else to `/login`.
 
-## Membership model
+## Layouts
 
-Cf. [[flat-membership-org-owner-access-token]] (ADR).
+- **Root — `app/layout.tsx`.** `<html lang="en" data-theme="light">` with the
+  Geist Sans and Geist Mono font variables (`geist` package), the page
+  `metadata` (title `Vaubaan Gateway` and a one-sentence description of the
+  instance), and `globals.css`. It reads no session.
+- **`globals.css`** imports `src/styles/tokens.css` (the design tokens: colours
+  per theme, spacing, radii, type scale; the root layout pins the light theme),
+  sets the root font size to 125 %, the base element styles (headings, links,
+  focus ring, `code`) and one global class, `.vbn-container` (the page column),
+  which `Container` uses.
+- **Icons.** `app/icon.svg` and `app/apple-icon.png` are picked up by the Next
+  file convention.
+- **`(public)/layout.tsx`** — the pages reachable without a session (`/login`):
+  the page inside a `Container`.
+- **`(app)/layout.tsx`** — the human surface: `currentPrincipal()`; no
+  principal → `redirect('/login')`; otherwise `<AppShell principal>`.
+- **`admin/(guarded)/layout.tsx`** — the Administration bar (Identity provider,
+  Provider apps) and the "Not an operator" explanation; rules in
+  [authentication](authentication.md). `/admin/bootstrap` is outside it.
 
-- **Flat** : appartenir à `org_members` = full RW sur tout le contenu de l'org.
-- **Owner** : `organizations.owner_id` (FK auth.users), 1 par org. Protégé
-  contre la suppression depuis `org_members` (RLS refuse). Pour quitter,
-  l'owner doit transférer via `POST /api/v1/orgs/:slug/transfer-ownership`.
-- Le créateur d'une org devient owner ; un trigger DB l'inscrit
-  automatiquement dans `org_members` (`enforce_owner_is_member`).
+A layout is navigation, never the authorization boundary: the App Router can
+render a page segment without its layout. Every page and every route
+authenticates itself (next section).
 
-Guards REST (`apps/gateway/src/lib/auth/`) :
+## Session helpers — `lib/auth/session.ts`
 
-- `requireOrgMember(orgSlug)` — utilisé par toutes les mutations org-scoped.
-- `requireOrgOwner(orgSlug)` — utilisé uniquement par le transfert d'ownership.
-- `requireToken(authHeader, options?)` — pour les routes
-  `/api/v1/tokens/*` qui consomment un Bearer `vbn_live_*` (cf. ADR
-  [[unified-tokens-delegation-chain-and-escalation-channel]]).
-  Retourne un union discriminé : `mode='bearer'` (child mint, parent
-  token résolu) ou `mode='session'` (root mint, session cookie).
-  Avec `options.allowSessionFallback: { orgId }`, le guard
-  bascule en mode cookie-auth quand le Bearer est absent : il résout
-  la session Supabase et vérifie la membership de l'org cible. Le mint
-  endpoint crée alors un root token directement (`parent_id IS NULL`,
-  `depth=0`, pas de subset check). C'est ce qui permet à la UI mint
-  `/tokens/new` de fonctionner sans Bearer — la session suffit.
+Server components learn who is behind the request through one of these. They
+add `headers()` and Next's navigation to the authenticator of `src/server/auth`;
+authority is recomputed on every request.
 
-## Sidebar contextuelle
+| Helper               | For                                                               | No session                    | Bootstrap operator                        | Signed-in user                              |
+| -------------------- | ----------------------------------------------------------------- | ----------------------------- | ----------------------------------------- | ------------------------------------------- |
+| `currentPrincipal()` | pages open to anyone (`/`, `/login`, `/admin/bootstrap`), layouts | `principal: null`             | the principal                             | the principal                               |
+| `requirePrincipal()` | an `(app)` page open to every session (`/audit`)                  | `redirect('/login')`          | the principal                             | the principal                               |
+| `currentUser()`      | an `(app)` page that needs an identified user                     | `redirect('/login')`          | `null` → the page renders `<NeedsUser />` | `{ root, principal, user }`                 |
+| `requireOperator()`  | every page under `admin/(guarded)`                                | redirect to the admin sign-in | the principal while the token is active   | the principal if operator, else "not found" |
 
-`apps/gateway/src/components/sidebar/Sidebar.tsx` rend une nav qui s'enrichit
-selon l'URL :
+- `currentUser()` is the single answer to "the bootstrap operator opened a page
+  that needs a user": Missions, the mission session, Connections and Requests
+  all render `NeedsUser` (`components/auth/NeedsUser.tsx`), one warning banner
+  that says the bootstrap token owns no mission, connection or request and
+  links to Administration → Identity provider. No page redirects the bootstrap
+  operator elsewhere.
+- `currentActor()` (`lib/connections/session.ts`) is `currentUser()` plus the
+  `Actor` (`{ user, groups }`) the connection service expects; the Connections
+  pages use it. The same file holds `firstParam`, `PageSearchParams` and
+  `takeNotice`.
+- A `route.ts` under `(app)` calls no helper: it delegates to a handler of
+  `src/server/connections/handlers.ts`, which checks the origin, then the
+  session, then that the principal is a user (the provider callback, a
+  top-level GET, checks the session and the single-use `state`).
 
-- **General** : lien Organizations (Dashboard).
-- **Org section** (si `/orgs/:slug` dans l'URL) : `Projects` /
-  `Cloud providers` / `Members` / `Audit log` / `Settings` + dropdown
-  org switcher (`HeadSelect`).
-- **Project section** (si `/orgs/:slug/projects/:project`) : `Overview` /
-  `Audit log` / `Access tokens` + dropdown project switcher.
-- **Resources** : `Documentation` / `Support`.
+## The shell — `components/shell/`
 
-Les sous-pages projet `tokens/new/`, `settings/`,
-`bash-bindings/[bindingId]/` ne figurent **pas** dans la sidebar — elles
-sont atteintes via les cards de l'Overview (`projects/[project]/page.tsx`)
-ou par lien direct. Le modèle Roles + le modèle Capabilities v1 ont
-été remplacés en bloc par le modèle v4 **risk-based** : l'access token
-porte directement `accepted_risks: RiskId[]` (cf. spec
-[`gateway-risk-model.md`](../spec/gateway-risk-model.md)). La page
-`/orgs/[slug]/providers/[provider]/` rend pour chaque provider le
-data-model en mermaid + le risk catalog YAML + la liste des tools MCP,
-en s'appuyant sur `components/providers/` et `lib/risk-catalog/`.
+`AppShell({ principal, children })` (server component) renders one bar, then
+the page in a `Container`:
 
-Les listes orgs + projects sont fetched server-side dans
-`apps/gateway/src/app/(app)/layout.tsx` et passées en prop. La sidebar
-re-fetch côté router quand l'URL pointe vers un projet absent du
-payload (cache stale, projet créé dans un autre onglet — `Sidebar.tsx:101-105`).
+- the brand link (to `/connections`) and one link per entry of `APP_NAV`:
+  **Connections**, **Missions**, **Requests**, **Audit**. Every principal sees
+  these four links;
+- **Administration** (`/admin`), only when the principal is the bootstrap
+  operator or a user with `isOperator`;
+- on the right: the user's email (or `bootstrap token`), `OperatorBadge`
+  (`Operator` / `User` / "Bootstrap operator") and `SignOutButton`, both from
+  `components/auth/PrincipalCard.tsx`.
 
-## OAuth GitHub flow
+`AppNavEntry` is `{ href, label, Count? }`. `Count` is an optional server
+component rendered after the label with the principal. The only one is
+`OpenRequestCount` on "Requests": a warning badge with the number of open
+requests awaiting the signed-in user as creator, nothing at zero and nothing
+for the bootstrap operator ([requests](requests.md)).
 
-Le path est **fixe et slug-agnostique** côté GitHub App (un seul "Setup URL"
-configuré). Le slug est ré-encodé dans le `state` nonce.
+Seeing a link is not the authorisation. Each page decides for its principal
+with a session helper: the Connections, Missions and Requests pages render
+`NeedsUser` for the bootstrap operator (`currentUser()`), `/audit` is open to
+both (`requirePrincipal()`) and widens what it shows for an operator.
 
-1. UI button → `GET /api/integrations/github/connect?org=<slug>`.
-2. Le handler vérifie `requireOrgMember`, génère un `state` qui encode
-   `orgId` (`lib/oauth/state.ts:generateState`), stocke ce state dans le
-   cookie `vbn_oauth_state` (5min, single-use), et redirige vers
-   `https://github.com/apps/<GITHUB_APP_SLUG>/installations/new`.
-3. GitHub callback → `GET /api/integrations/github/callback?installation_id=...&state=...&setup_action=install`.
-4. Le handler vérifie le cookie state, décode `orgId`, puis upserte
-   `provider_admins` via le service_role client (RLS-bypass — le caller
-   est un membre d'org authentifié). GitHub ne stocke pas de token
-   (App Install mode), donc l'upsert est direct.
+## UI primitives — `components/ui/`
 
-Les autres providers OAuth (Vercel, Supabase, Railway) suivent le même
-shape : `/api/integrations/<provider>/{connect,callback}/route.ts`.
-Les callbacks qui stockent des tokens (Vercel, Supabase, Railway)
-chiffrent côté app via `encryptProviderSecret(orgId, token)` puis
-upsertent avec `encodeByteaHexRaw(...)` dans `provider_admins` (cf.
-ADR [[per-org-encryption-app-level]], migration `0037`). Les refresh
-flows (Supabase, Railway) réécrivent via
-`.from('provider_admins').update()` avec le même pattern encrypt. Les
-lectures déchiffrent via `decodeBytea()` → `decryptProviderSecret()`
-(`lib/crypto/provider-secrets.ts`).
+Imported from `@/components/ui` (`index.ts`). Styles are CSS modules next to
+each file and use the tokens only.
 
-## Token creation (api_key visible 1×, unified-tokens + drop-confirm)
+| Export                                        | What it is                                                                                    |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `Button`                                      | `<button>` with `variant` (`primary`, `secondary`, `ghost`, `danger`) and `size` (`sm`, `md`) |
+| `Input`, `Textarea`, `Select`                 | styled form controls, refs forwarded                                                          |
+| `Field`                                       | a labelled field with `label`, `htmlFor`, `hint` and `error` (the error replaces the hint)    |
+| `Card`, `CardHeader`, `CardTitle`, `CardBody` | the bordered panel and its parts                                                              |
+| `Badge`                                       | inline status, `tone`: `neutral`, `info`, `success`, `warning`, `danger` (`BadgeTone`)        |
+| `Banner`                                      | block message with an optional `title`, same tones (default `info`)                           |
+| `Table`, `Thead`, `Tbody`, `Tr`, `Th`, `Td`   | styled table elements                                                                         |
+| `Container`, `Stack`                          | page column (`.vbn-container`), vertical flex with a `gap`                                    |
+| `Code`                                        | inline `<code>`                                                                               |
+| `DangerConfirm`                               | client modal: the user types `phrase` before Confirm enables; Escape or the backdrop cancels  |
 
-> **2026-06-16** : refacto unified-tokens + drop-confirm — un seul endpoint
-> mint consommant n'importe quel `vbn_live_*`, qui répond 201 ou 4xx
-> (plus de 202 mint-pending). Cf. ADR
-> [[unified-tokens-delegation-chain-and-escalation-channel]] +
-> [[unified-gates-drop-confirm]] et handbook [[escalation]] pour le
-> runtime fallback quand un risk manque.
+**Labels are bound to their controls.** A `Field` that holds one control
+takes `htmlFor`, the `id` of that control, and renders a real
+`<label for>`: clicking the label focuses the control and assistive technology
+announces it. A `Field` that holds several controls (the claim mapping of the
+identity provider) takes no `htmlFor`: its wrapper is a `role="group"` named by
+the label, and each control carries its own `aria-label`. Ids must be unique on
+the page: `CredentialFieldInputs` (`components/connections/parts.tsx`) takes an
+`idPrefix` and derives one id per field with `credentialFieldId(idPrefix,
+name)`; Admin → Provider apps passes `provider-app-<provider id>` because it
+renders one list per provider. Controls outside a `Field` are either wrapped in
+their `<label>` (Audit filters, the request decision form, checkboxes) or carry
+an `aria-label` (the mission form, the inline resource cells).
 
-Hot path utilisateur (cf. spec
-[`gateway-risk-model.md`](../spec/gateway-risk-model.md) §9) :
+`components/LocalDate.tsx` (client) renders a timestamp: the ISO form on the
+server, the browser's locale after hydration, without a hydration mismatch.
+`dateOnly` drops the time. The Missions, session, Requests, Audit and
+Administration pages use it; the Connections pages still print the UTC day
+(`iso.slice(0, 10)`).
 
-```
-POST /api/v1/tokens/mint
-  Authorization: Bearer vbn_live_…
-  { scope: 'org' | 'project',
-    projectId? | projectSlug?,
-    bindings[], accepted_risks[], denied_risks?,
-    name?, ttlHours?, ttlSeconds?, singleUse?, context? }
-  │
-  ├─ requireToken           (vbn_live_* → guard.token = MintParent)
-  ├─ computeMintPreview     (catalogs × bindings × parent.accepted_risks)
-  │     → per-risk { acceptable, inherited }
-  │
-  ├─ !preview.ok → 403 { error, not_acceptable, not_inherited, risks }
-  └─ preview.ok  → mintChildToken (subset/depth/expires invariants enforced) :
-        ├─ generateApiKey('live') → {apiKey, apiKeyPrefix}
-        ├─ hashApiKey(apiKey) → apiKeyHash (argon2id)
-        ├─ delegation_chain = parent.delegation_chain + parent
-        ├─ INSERT tokens (parent_id, depth, delegation_chain,
-        │                  accepted_risks, denied_risks, …)
-        └─ → 201 { token, api_key, accepted_risks }  ← visible only here
-```
+## Adding a page
 
-Le wire format est porté par `RiskId[]` plutôt que par des tuples
-capability `(provider, plane, level, action, env?)`. Le catalog
-canonique de chaque provider vit dans
-`plugins/<vendor>/src/risk-catalog.{yaml,ts}` et est chargé
-au boot par `lib/risk-catalog/loader.ts` (cf.
-[`policy-engine.md`](./policy-engine.md) §Wiring côté gateway).
-L'helper `computeMintPreview` (`lib/mint/preview.ts`) wraps le pur
-`computePreview` (`lib/mint/risk-preview.ts`) — pas de DB read
-post-drop-confirm. Les deux sont consommés par le mint endpoint et le
-preview endpoint.
+1. **Place it** under `(app)/` to get the session redirect and the bar, under
+   `admin/(guarded)/` for an operator page, under `(public)/` if it must work
+   without a session. Add one entry to `APP_NAV` if it belongs in the bar.
+2. **Authenticate in the page itself**, as its first statement, with the
+   session helper that fits ([Session helpers](#session-helpers--libauthsessionts)):
+   `currentUser()` then `if (!session) return <NeedsUser />;` for a page that
+   needs a user, `requirePrincipal()` for a page open to the bootstrap operator
+   too, `requireOperator()` under `admin/(guarded)`. Never rely on the layout,
+   and never read the root before the guard. A page under `(app)` that calls
+   none of them fails `tests/unit/app/app-guard.test.ts`.
+3. **Load data in the server component** from the services on `root`, and
+   export `dynamic = 'force-dynamic'`.
+4. **Mutations are POST route handlers** (`runtime = 'nodejs'`,
+   `dynamic = 'force-dynamic'`) that delegate to a handler under
+   `src/server/<module>/handlers.ts`. That handler checks
+   `isSameOrigin(headers, publicUrl)` first (403 `origin-mismatch`), then the
+   session, then calls the service. Plain HTML `method="post"` forms answer
+   with a redirect (a message goes through the `NoticeStore`, never the URL:
+   [connections](connections.md)); the mission endpoints answer JSON to their
+   client components.
+5. **Build with the primitives** above; page-specific styles go in a CSS module
+   next to the page. Give every single-control `Field` an `htmlFor` and its
+   control the matching `id`.
+6. **Document it** in the handbook of its feature and add its route to the map
+   above.
 
-Le mint endpoint accepte `singleUse?: bool` (le gateway consume le
-token sur le premier call — spec §8), `ttlHours?: number` (default
-24h, max 7j) et `ttlSeconds?: number` (capé à 3600s — single-use
-obligatoire, cf. Zod refine). Full details in
-[`escalation.md`](./escalation.md).
+## Tests
 
-L'endpoint preview `POST /api/v1/tokens/preview` calcule la même
-résolution sans persister — utilisé par le composant `mint-form.tsx`
-pour afficher la checklist des risques en temps réel. Chaque row
-porte deux booleans : `acceptable` (catalog `acceptable_in_envs` OK
-pour le binding env) et `inherited` (risk_id présent dans
-`parent.accepted_risks`). Une row est mintable iff les deux sont true ;
-sinon la UI désactive la checkbox avec un tooltip explicatif.
+Three unit files under `apps/gateway/tests/unit/app/` run without a browser
+(`npx vitest run apps/gateway/tests/unit/app`):
 
-UI : après create, un modal affiche la `api_key` complète avec bouton
-Copy et un warning `won't be shown again`. Le modal montre aussi le
-snippet à coller dans `~/.config/claude/mcp.json` :
+- `app-guard.test.ts` discovers every `page.tsx` and `route.ts` under `(app)`.
+  Each page must call a session helper before it reads the root, redirect a
+  visitor with no session (and a bootstrap session whose token was revoked) to
+  `/login`, render only `NeedsUser` for the bootstrap operator (`/audit`
+  excepted), and render or answer "not found" for a signed-in user. Each route
+  must delegate to a handler listed as authenticating, refuse a caller with no
+  session and the bootstrap operator, and let a signed-in user through.
+- `admin-guard.test.ts` does the same for `admin/(guarded)` with
+  `requireOperator()` ([authentication](authentication.md)).
+- `field.test.tsx` renders `Field` and `CredentialFieldInputs` with
+  `renderToStaticMarkup`: label bound by `for`/`id`, group role without
+  `htmlFor`, unique ids when two lists share a page.
 
-```jsonc
-{
-  "mcpServers": {
-    "vauban": {
-      "url": "https://vaubaan.com/mcp",
-      "headers": { "Authorization": "Bearer vbn_live_..." },
-    },
-  },
-}
-```
+`guard-harness.ts` holds what the two guard files share (file discovery, calling
+a page as a function, naming a redirect or a "not found").
 
-The vocabulary is intentionally neutral — an access token can be consumed
-by an LLM agent, a CI job, a script, or a human curl. The UI placeholder
-is `ci-deploy` rather than `claude-dev` to avoid presuming agent usage.
+The other primitives and the shell have no unit test of their own. They are
+exercised by the Playwright suite `apps/gateway/tests/e2e/v5/` (`npm run test:e2e:v5`,
+three specs): navigation through the bar (`navigation` named "Main"), the open
+request count (`data-testid="open-request-count"`), forms, tables and dialogs of
+the Missions, Requests and Audit pages. What a page decides is tested without
+Next, in the unit and integration suites of its `src/server/**` module (`npm
+test`); see each feature handbook.
 
-### Risk checklist picker (mint form)
+## References
 
-`tokens/new/mint-form.tsx` est le composer post drop-confirm :
-
-- Pour chaque provider × binding, le serveur passe le catalog inline
-  (la page `tokens/new/page.tsx` projette les `RiskEntry` du catalog
-  loader vers un shape client-side).
-- Render en **checklist plat** (pas de buckets). Chaque row porte
-  deux flags dérivés de la preview serveur : `acceptable` (catalog
-  `acceptable_in_envs` OK pour le binding env) et `inherited`
-  (`risk_id ∈ parent.accepted_risks`). Une row est disabled iff
-  `!acceptable || !inherited`, avec un tooltip qui dit quel côté
-  bloque.
-- Soumet `accepted_risks: RiskId[]` + `denied_risks?: RiskId[]` à
-  `POST /api/v1/tokens/mint`. Le serveur répond 201 (apparition du
-  modal api_key) ou 4xx (erreur inline avec
-  `{ not_acceptable, not_inherited, risks }`).
-
-`lib/mint/risk-preview.ts` est la **single source of truth** pour la
-résolution (pure compute). `lib/mint/preview.ts` la wrappe avec le
-catalog load (pas de DB read post drop-confirm). Les routes
-`tokens/mint` et `tokens/preview` consomment le wrap.
-
-`lib/mint/token-name.ts` exporte `TOKEN_NAME_REGEX` — la single source
-of truth pour la règle kebab-case des noms de token (`^[a-z0-9](-?[a-z0-9])*$`).
-Consommé par le mint endpoint, le PATCH `/api/v1/tokens/:id`, la UI mint
-(`mint-form.tsx`) et la UI rename (`token-row-controls.tsx`) : rule-of-three
-honoré, pas de drift possible entre validation client et serveur.
-
-La table d'audit (`audit_log`) stocke désormais `slices_executed`,
-`risks_touched`, et `token_accepted_risks_snapshot` (cf.
-[`mcp-gateway.md`](./mcp-gateway.md) §Audit).
-
-## Ownership transfer
-
-```
-POST /api/v1/orgs/:slug/transfer-ownership { newOwnerId }
-  ├─ requireOrgOwner(slug)           # only the current owner
-  ├─ verify newOwnerId is in org_members
-  └─ UPDATE organizations SET owner_id = newOwnerId
-```
-
-UI surface : Members page → if `currentUser === ownerId`, a "Transfer
-ownership" section appears under the members table with a dropdown of
-other members and an explicit confirm dialog.
-
-## /mcp endpoint
-
-`apps/gateway/src/app/mcp/route.ts` is a thin HTTP→McpGateway adapter :
-
-- Parses JSON body, validates JSON-RPC envelope.
-- Builds the gateway via `buildGateway()` (`lib/gateway/build.ts`,
-  loads env vars, wires Supabase service client + provider adapters +
-  cache + audit writer).
-- Calls `gateway.authenticate(authHeader)` → if AuthError, returns 401
-  with `error.code = -32001`.
-- Calls `gateway.handle(ctx, req)` → returns the JSON-RPC response
-  (always 200 for policy denials — the JSON-RPC error envelope encodes
-  them).
-- Misconfiguration (missing GITHUB_APP_PRIVATE_KEY etc) → 503 with
-  explicit message.
-
-Cf. [`mcp-gateway.md`](./mcp-gateway.md) pour le flow interne du gateway.
-
-## RLS — practical notes
-
-Read paths use the user-bound `getSupabaseServer()` client (RLS enforced).
-Writes that need to bypass RLS (`tokens` insert, provider_admins
-upsert, audit_log insert, bash_bindings) use the service_role client
-(`getSupabaseServiceClient()`).
-
-Le service_role client est server-only et n'atteint jamais le bundle
-browser.
+- Spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2.
+- Handbooks: [authentication](authentication.md),
+  [connections](connections.md), [missions](missions.md),
+  [requests](requests.md), [audit](audit.md),
+  [execution-door](execution-door.md), [configuration](configuration.md).
+- v4 text: [legacy/web-app.md](legacy/web-app.md).

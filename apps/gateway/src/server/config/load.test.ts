@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { ConfigError, formatIssue } from './errors';
-import { loadInstanceConfig } from './load';
+import { createRedactor } from '../logging/redact';
+import { loadInstanceConfig, MASTER_KEY_BYTES } from './load';
 import { CONFIG_FILE_ENV } from './sources';
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 import { KEYS, parseProviderEnvName } from './sources';
@@ -9,6 +10,7 @@ import { TEST_BOOTSTRAP_TOKEN, TEST_MASTER_KEY, fakeFiles, validEnv } from './te
 import { secretValues } from './types';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
+import { parse as parseYaml } from 'yaml';
 
 function failure(env: Record<string, string>, files: Record<string, string> = {}): ConfigError {
   try {
@@ -422,6 +424,28 @@ describe('loadInstanceConfig — YAML file and precedence', () => {
     expect(secrets).not.toContain('public-id');
   });
 
+  it('registers a master key with the redactor in the form it was configured in (base64url, unpadded)', () => {
+    // 32 bytes of 0xfb encode with `+` and `/` in base64, `-` and `_` in base64url.
+    const bytes = Buffer.alloc(MASTER_KEY_BYTES, 0xfb);
+    const forms = [
+      bytes.toString('base64'),
+      bytes.toString('base64').replace(/=+$/, ''),
+      bytes.toString('base64url'),
+    ];
+    expect(new Set(forms).size).toBe(3);
+    for (const configured of forms) {
+      const { config } = loadInstanceConfig({
+        env: validEnv({
+          VAUBAAN_MASTER_KEY: configured,
+          VAUBAAN_MASTER_KEY_VERSION: '2',
+          VAUBAAN_MASTER_KEY_PREVIOUS: `1=${configured}`,
+        }),
+      });
+      const redact = createRedactor(secretValues(config));
+      expect(redact(`key=${configured} end`), configured).not.toContain(configured);
+    }
+  });
+
   it('refuses a secret given both directly and by _FILE', () => {
     const err = failure(validEnv({ VAUBAAN_MASTER_KEY_FILE: '/run/secrets/key' }), {
       '/run/secrets/key': TEST_MASTER_KEY,
@@ -471,5 +495,25 @@ describe('KEYS and the example files stay in sync', () => {
       return !new RegExp(`(^|\\n)\\s*#?\\s*${leaf}:`).test(yamlExample);
     });
     expect(missing).toEqual([]);
+  });
+
+  // The example is copied as is by the quick start: a value left active in it
+  // would silently win over `.env` (the file has precedence).
+  it('the example YAML is fully commented out: it parses to an empty document', () => {
+    expect(parseYaml(yamlExample) ?? null).toBeNull();
+  });
+
+  it('the example YAML copied as is overrides nothing: the values come from the environment', () => {
+    const path = '/config/gateway.yaml';
+    const { config, configFile } = loadInstanceConfig({
+      env: validEnv({ [CONFIG_FILE_ENV]: path }),
+      readFile: fakeFiles({ [path]: yamlExample }),
+    });
+    expect(configFile).toBe(path);
+    expect(config.publicUrl.origin).toBe('https://gateway.example.com');
+    expect(config.admin).toEqual({ group: null, emails: ['ops@example.com'] });
+    expect(config.idp).toBeNull();
+    expect(config.providers.size).toBe(0);
+    expect(config.bootstrapToken).toBe(TEST_BOOTSTRAP_TOKEN);
   });
 });

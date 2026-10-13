@@ -10,6 +10,11 @@
  * resource ; the classifier refuses the call otherwise. The argument is
  * consumed by the gateway and never forwarded to Stripe.
  *
+ * The declared properties are the whole argument surface : the classifier
+ * refuses a call carrying any other key and `execute` forwards the declared
+ * ones only (`declaredArgsOf`). Declaring a new property therefore means
+ * deciding, in `classify.ts`, what it costs.
+ *
  * Spec : docs/spec/gateway-risk-model.md §7 ; docs/spec/vaubaan-gateway.md §5.
  */
 
@@ -558,6 +563,16 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
           type: 'string',
           description: 'Proration behavior: "create_prorations", "none", or "always_invoice".',
         },
+        cancel_at_period_end: {
+          type: 'boolean',
+          description:
+            'If true, the subscription is cancelled at the end of the current period — classified as a cancellation. False clears a scheduled cancellation.',
+        },
+        cancel_at: {
+          type: 'number',
+          description:
+            'Unix timestamp at which the subscription is cancelled — classified as a cancellation.',
+        },
         metadata: {
           type: 'object',
           description: 'Arbitrary key-value metadata.',
@@ -635,7 +650,7 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
         auto_advance: {
           type: 'boolean',
           description:
-            'Controls whether Stripe performs automatic collection. Default true for non-draft invoices.',
+            'If true, Stripe finalizes the invoice and attempts collection on its own — classified as a finalization. Default false: the invoice stays a draft.',
         },
         description: {
           type: 'string',
@@ -807,5 +822,16 @@ export const stripeTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRI
   withAccountArg,
 );
 
-/** Tools that write ; everything else reads. */
-export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(WRITE_TOOLS.map((t) => t.name));
+const DECLARED_ARGS: ReadonlyMap<string, ReadonlySet<string>> = new Map(
+  stripeTools.map((tool) => [tool.name, new Set(Object.keys(tool.inputSchema.properties ?? {}))]),
+);
+
+/**
+ * The argument names a tool declares (`account` included), or `undefined` for
+ * a tool the plugin does not ship. The single source for "what may a call
+ * carry" : the classifier refuses anything else, `execute` forwards nothing
+ * else.
+ */
+export function declaredArgsOf(tool: string): ReadonlySet<string> | undefined {
+  return DECLARED_ARGS.get(tool);
+}

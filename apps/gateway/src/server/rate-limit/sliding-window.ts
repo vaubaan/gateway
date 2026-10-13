@@ -46,7 +46,7 @@ export type MillisClock = () => number;
 export interface SlidingWindowOptions {
   readonly now?: MillisClock;
   /** Above this many live keys, keys whose last action is older than their last window
-   *  are dropped on every access. */
+   *  are dropped on push (`peek` never sweeps). */
   readonly pruneThreshold?: number;
 }
 
@@ -71,7 +71,8 @@ function prune(window: Window, nowMs: number): void {
   if (keep > 0) window.hits.splice(0, keep);
 }
 
-// single-process only — see the module comment for the Redis replacement.
+// single-process only — replaced, in a hosted deployment, by a Redis implementation of the
+// same two interfaces, `SlidingWindows` and `RateLimiter` (see the module comment).
 export class SlidingWindowRateLimiter implements SlidingWindows, RateLimiter {
   private readonly windows = new Map<string, Window>();
   private readonly now: MillisClock;

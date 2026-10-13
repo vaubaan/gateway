@@ -68,31 +68,32 @@ type-check` at the root fans out to all of them.
 - `eslint.config.js` (flat config, ESLint 9): `recommendedTypeChecked`,
   `no-floating-promises` and `no-misused-promises` as errors,
   `consistent-type-imports` (inline), `no-console` as a warning outside
-  `scripts/`; `--max-warnings=0` makes warnings fail. Config files, Next
+  `scripts/` (`console.warn` / `console.error` allowed); `--max-warnings=0`
+  makes warnings fail. Config files, Next
   outputs and the agent worktrees under `.claude/worktrees/` are ignored.
 - Prettier formats everything (`npm run format`, `format:check`).
 
 ## Scripts
 
-| Script                            | What it does                                                        |
-| --------------------------------- | ------------------------------------------------------------------- |
-| `npm run ci`                      | type-check, lint, format:check, build, test — the exact CI gate     |
-| `npm run type-check`              | `tsc --noEmit` in every workspace                                   |
-| `npm run lint` / `lint:fix`       | ESLint over the repository                                          |
-| `npm run format` / `format:check` | Prettier write / check                                              |
-| `npm run build`                   | every workspace `build` (today: `next build` of `apps/gateway`)     |
-| `npm run test` / `test:watch`     | Vitest, whole suite                                                 |
-| `npm run test:e2e`                | builds, then Playwright on the ephemeral instance (CI job `e2e`)    |
-| `npm run dev`                     | `next dev` of `apps/gateway`                                        |
-| `npm run gen-master-key`          | prints a fresh 32-byte base64 master key                            |
-| `npm run docker:build`            | builds `deploy/docker/Dockerfile` as `vaubaan-gateway:local`        |
-| `npm run docker:smoke`            | runs `deploy/docker/smoke.sh` against that image                    |
-| `prepare`                         | installs the husky hook (`husky \|\| true`, never fails an install) |
+| Script                             | What it does                                                                    |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `npm run ci`                       | type-check, lint, format:check, build, test — CI's `check` job gate             |
+| `npm run type-check`               | `tsc --noEmit` in every workspace                                               |
+| `npm run lint` / `lint:fix`        | ESLint over the repository                                                      |
+| `npm run format` / `format:check`  | Prettier write / check                                                          |
+| `npm run build`                    | every workspace `build` (today: `next build` of `apps/gateway`)                 |
+| `npm run test` / `test:watch`      | Vitest, whole suite                                                             |
+| `npm run test:e2e` (`test:e2e:v5`) | builds `apps/gateway`, then Playwright on the ephemeral instance (CI job `e2e`) |
+| `npm run dev`                      | `next dev` of `apps/gateway`                                                    |
+| `npm run gen-master-key`           | prints a fresh 32-byte base64 master key                                        |
+| `npm run docker:build`             | builds `deploy/docker/Dockerfile` as `vaubaan-gateway:local`                    |
+| `npm run docker:smoke`             | runs `deploy/docker/smoke.sh` against that image                                |
+| `prepare`                          | installs the husky hook (`husky \|\| true`, never fails an install)             |
 
 Tests: Vitest collects `apps/*/tests/{unit,integration}`,
-`packages/*/tests/{unit,integration}`, `plugins/*/tests/unit` (`.test.ts`
-and `.test.tsx`) and co-located `*.test.ts` under `apps/*/src` and
-`packages/*/src`; `apps/*/tests/e2e/**` is excluded and belongs to
+`packages/*/tests/{unit,integration}`, `plugins/*/tests/unit` (`.test.ts`;
+`.test.tsx` too under the `tests/unit` roots of apps and packages) and
+co-located `*.test.ts` under `apps/*/src` and `packages/*/src`; `apps/*/tests/e2e/**` is excluded and belongs to
 Playwright. No test can reach a real provider. Scenarios: [`docs/tests/`](../tests/).
 
 ## Local gate
@@ -139,7 +140,7 @@ jobs:
 The `docker` job builds the single gateway image and runs the container
 smoke test described in [`docs/tests/e2e-tests.md`](../tests/e2e-tests.md)
 (fail-fast exit naming the key, https rule, `/healthz`, secret redaction,
-native addons, non-root). The image is not published; that is the release
+native addons, non-root, no env file shipped). The image is not published; that is the release
 pipeline's job (P3.2). No Node matrix, no cross-OS.
 
 The `e2e` job (P1.9) runs the browser tests of
@@ -155,12 +156,16 @@ The cutover acceptance scenario itself is manual and is never run by CI
 ## Docker image
 
 `deploy/docker/Dockerfile` is a multi-stage build (`manifests` → `deps` →
-`build` → `runner`) on `node:22-bookworm-slim` (glibc, for the prebuilt
-`argon2` and `better-sqlite3` addons). The runner stage copies the Next.js
+`build` → `runner`) on `node:22.23.3-bookworm-slim`, pinned by digest (glibc,
+for the prebuilt `argon2` and `better-sqlite3` addons). The runner stage copies the Next.js
 standalone output, runs as uid 10001, exposes `PORT` (3000), declares the
 `/data` volume and a `HEALTHCHECK` on `/healthz`. Build arguments:
-`NODE_VERSION`, `GIT_COMMIT_SHA`. `.dockerignore` keeps `.git`, docs, test
-artefacts and every `.env*` file out of the build context. Operator
+`NODE_IMAGE` (base image reference, tag and digest; see `deploy/README.md`),
+`GIT_COMMIT_SHA`. The `deps` stage runs `npm ci` (the
+optional private dependency is skipped without `NPM_READ_TOKEN`), where the
+CI `check` job runs `npm install`. `.dockerignore` keeps `.git`, docs, test
+artefacts, every `.env*` file except `.env.example` and every `*.pem` out of
+the build context. Operator
 documentation: [`deploy/README.md`](../../deploy/README.md).
 
 ## Database migrations
@@ -207,8 +212,11 @@ The package version is `2.0.0-alpha.0` (`package.json`) and follows
 semantic versioning; the public product name is v2 while the repository's
 plan calls the same work v5. `CHANGELOG.md` keeps an `Unreleased` section
 in the Keep a Changelog format; tags are `v2.x.y`. Image publication to a
-registry and the release pipeline are feature P3.2; until then no image is
-published and nothing on `main` or `v5` is deployable.
+registry and the release pipeline are feature P3.2. Until then no image is
+published and no `v2.x.y` release is tagged: the `v5` branch builds a
+runnable image (CI job `docker`) and [`deploy/README.md`](../../deploy/README.md)
+documents running it. The cutover of an existing v4 deployment is a
+separate step.
 
 ## Doc-first discipline
 

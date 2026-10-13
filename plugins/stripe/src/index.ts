@@ -34,6 +34,8 @@ export const stripePlugin = definePlugin({
   description:
     'Billing operations on a Stripe account : catalog, customers, subscriptions, invoices, ' +
     'refunds, payouts, webhooks — test and live modes as separate resources.',
+  docsUrl:
+    'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/stripe.md',
   tools: stripeTools,
   dataModel: stripeDataModel,
   catalog: stripeCatalog.catalog,

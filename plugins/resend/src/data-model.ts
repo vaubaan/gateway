@@ -4,15 +4,14 @@
  * Spec : docs/spec/resend.md §2 ; docs/spec/vaubaan-gateway.md §0
  *        "Resource" (domains and segments are the resources).
  *
- * One plane, `email`. Version 1 of the catalog hung everything under a
- * synthetic `account[<slug>]` root ; slices are now rooted at the **resources**
- * a mission selects, so the default env resolver finds the ref as the first
- * ident of the path :
+ * One plane, `email`. Slices are rooted at the **resources** a mission
+ * selects, so the default env resolver finds the ref as the first ident of
+ * the path :
  *
  *   domain[<name>]         envScopable — sending surface ; carries the recipient
  *     ├─ dns-record[*]       zone configuration in its metadata
  *     ├─ to-zone[Z]        ★ synthetic : internal | allowlist | external-unbounded
- *     └─ recipient-count[C]★ synthetic : single | multi | batch
+ *     └─ recipient-count[C]★ synthetic : batch (emitted by a batch send only)
  *   segment[<id>]          envScopable — a contact list (Resend's former "audience")
  *     ├─ member[<contact>] ★ synthetic : a contact's membership of the segment
  *     └─ broadcast[<id>]     a campaign targeting the segment (draft → sent)
@@ -20,8 +19,7 @@
  *   email[<id>]            a sent transactional email (status read only)
  *
  * ★ Synthetic entities exist for classification only ; Resend exposes no such
- * object. The version 1 `batch` marker is gone : `recipient-count[batch]` carries the
- * bulk-send risk on its own.
+ * object. `recipient-count[batch]` carries the bulk-send risk on its own.
  */
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
@@ -69,8 +67,8 @@ export const resendDataModel: DataModel = {
           parent: 'domain',
           cardinalities: ['bounded'],
           description:
-            'Synthetic marker emitted next to the zone : single (one recipient), multi (several) ' +
-            'or batch (POST /emails/batch). Gates blast-radius amplification independently of the zone.',
+            'Synthetic marker emitted next to the zone by a batch send only (POST /emails/batch) : ' +
+            'its one value is batch. Gates blast-radius amplification independently of the zone.',
         },
         // ─── Segments, membership, broadcasts ───────────────────────────────
         {

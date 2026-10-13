@@ -37,6 +37,22 @@ export function toolDeclaresProperty(name: string, property: string): boolean {
   return typeof props === 'object' && props !== null && property in props;
 }
 
+/** True when the tool's input schema lists the property as required. */
+export function toolRequiresProperty(name: string, property: string): boolean {
+  return byName.get(name)?.inputSchema?.required?.includes(property) === true;
+}
+
+/**
+ * True when an argument of that name may be sent to the tool : the schema
+ * declares it, or the schema is open (no `additionalProperties: false`). A
+ * closed schema without the property would reject the call.
+ */
+export function toolAcceptsArgument(name: string, property: string): boolean {
+  const schema: Readonly<Record<string, unknown>> | undefined = byName.get(name)?.inputSchema;
+  if (schema === undefined) return false;
+  return toolDeclaresProperty(name, property) || schema.additionalProperties !== false;
+}
+
 /** Strip the `vercel__` prefix to get the upstream tool name. */
 export function toUpstreamName(toolName: string): string {
   return toolName.startsWith(VERCEL_TOOL_PREFIX)

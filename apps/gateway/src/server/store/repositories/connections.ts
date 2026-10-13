@@ -1,3 +1,5 @@
+import { isUnavailableConnectionStatus } from '@vaubaan/gateway-core';
+
 import { withImmediateTransaction } from '../db.ts';
 import { openSealedColumn, sealText } from '../encryptor.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
@@ -46,34 +48,39 @@ export interface ConnectionsRepo {
   listOwnedBy(principals: readonly Principal[]): Promise<ConnectionRecord[]>;
   /** Decrypts the credential in memory; the caller releases it after the upstream call. */
   getCredential(id: string): Promise<string | null>;
-  /** Reconnection or refresh: seals the new credential and sets the status back to `active`. */
+  /**
+   * Seals the new credential and sets the status back to `active`. Refused
+   * (`InvariantError`) for a `revoked` connection: revocation is terminal.
+   * @deprecated No production caller. Use `reconnect` (an owner re-authenticates) or
+   * `refreshCredential` (token refresh), which state which transition they perform.
+   */
   setCredential(id: string, credential: string, expiresAt?: Iso | null): Promise<ConnectionRecord>;
+  /**
+   * Sets the status as given. Refused (`InvariantError`) when the connection is `revoked`
+   * and the new status is anything else: revocation is terminal. Setting `revoked` does
+   * not erase the credential; `revoke` does.
+   * @deprecated No production caller; kept for test fixtures and for the `unowned`
+   * transition until P2.2 gives it a named method. Use `markExpired` and `revoke`.
+   */
   setStatus(id: string, status: ConnectionStatus): Promise<ConnectionRecord>;
   transferOwner(id: string, owner: Principal): Promise<ConnectionRecord>;
   setMetadata(id: string, metadata: Record<string, unknown> | null): Promise<ConnectionRecord>;
-  /**
-   * Destructive sync: upserts by ref (keeping ids and owner labels) and **deletes** refs no
-   * longer present, cascading to the mission selections that named them. The connect flows
-   * use `syncDiscoveredResources`, which never deletes.
-   */
-  replaceResources(
-    connectionId: string,
-    resources: readonly DiscoveredResource[],
-  ): Promise<ConnectionResourceRecord[]>;
   listResources(connectionId: string): Promise<ConnectionResourceRecord[]>;
   getResource(id: string): Promise<ConnectionResourceRecord | null>;
   setResourceEnv(resourceId: string, env: string | null): Promise<ConnectionResourceRecord>;
 
   /**
-   * Reconnection by an owner: like `setCredential` (new credential, status `active`) but
-   * refused for a `revoked` connection, whose revocation is terminal. Returns false when
+   * Reconnection by an owner: new credential, status `active`. Only an `active` or an
+   * `expired` connection is reconnected: revocation is terminal, and nobody reconnects an
+   * `unowned` connection until an owner is reassigned (spec §2.3). Returns false when
    * nothing was written.
    */
   reconnect(id: string, credential: string, expiresAt?: Iso | null): Promise<boolean>;
   /**
-   * Token refresh: seals the new credential only while the connection is still `active`
-   * and leaves the status alone, so a refresh racing a revocation never resurrects the
-   * connection. Returns false when nothing was written.
+   * Token refresh: seals the new credential only while the connection still serves calls
+   * (`active` or `unowned`, see `isUnavailableConnectionStatus`) and leaves the status
+   * alone, so a refresh racing a revocation never resurrects the connection. Returns
+   * false when nothing was written.
    */
   refreshCredential(id: string, credential: string, expiresAt?: Iso | null): Promise<boolean>;
   /**
@@ -147,13 +154,29 @@ const COLUMNS = `id, provider, owner_kind, owner_user_id, owner_group_id, displa
 const RESOURCE_COLUMNS = `id, connection_id, ref, env, display_name, discovered_at, metadata_json,
   owner_metadata_json, env_source, display_name_edited, hidden, stale_since`;
 
+/** Every status of the schema's `CHECK`; a status added to the union fails to compile here. */
+const CONNECTION_STATUSES = Object.keys({
+  active: true,
+  expired: true,
+  revoked: true,
+  unowned: true,
+} satisfies Record<ConnectionStatus, true>) as ConnectionStatus[];
+
+/** The statuses whose credential is still used for calls: gateway-core decides, not this file. */
+const SERVING_STATUSES: readonly ConnectionStatus[] = CONNECTION_STATUSES.filter(
+  (status) => !isUnavailableConnectionStatus(status),
+);
+
+/** The statuses an owner may reconnect from (spec §2.3): neither `revoked` nor `unowned`. */
+const RECONNECTABLE_STATUSES: readonly ConnectionStatus[] = ['active', 'expired'];
+
 function toRecord(row: ConnectionRow): ConnectionRecord {
   return {
     id: row.id,
     provider: row.provider,
     owner: principalFromColumns(row.owner_kind, row.owner_user_id, row.owner_group_id),
     displayName: row.display_name,
-    status: row.status as ConnectionStatus,
+    status: parseEnum(CONNECTION_STATUSES, row.status, 'connections.status'),
     keyVersion: row.key_version,
     credentialExpiresAt: row.credential_expires_at,
     metadata: parseJsonObject(row.metadata_json, 'connections.metadata_json'),
@@ -217,10 +240,11 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
   >('SELECT credential_blob, key_version FROM connections WHERE id = ?');
   const setCredentialStmt = db.prepare<[Buffer, number, string | null, string, string]>(
     `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
-       status = 'active', updated_at = ? WHERE id = ?`,
+       status = 'active', updated_at = ? WHERE id = ? AND status <> 'revoked'`,
   );
-  const setStatusStmt = db.prepare<[string, string | null, string, string]>(
-    `UPDATE connections SET status = ?, revoked_at = COALESCE(?, revoked_at), updated_at = ? WHERE id = ?`,
+  const setStatusStmt = db.prepare<[string, string | null, string, string, string]>(
+    `UPDATE connections SET status = ?, revoked_at = COALESCE(revoked_at, ?), updated_at = ?
+     WHERE id = ? AND (status <> 'revoked' OR ? = 'revoked')`,
   );
   const setOwnerStmt = db.prepare<[string, string | null, string | null, string, string]>(
     `UPDATE connections SET owner_kind = ?, owner_user_id = ?, owner_group_id = ?, updated_at = ? WHERE id = ?`,
@@ -228,33 +252,25 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
   const setMetadataStmt = db.prepare<[string | null, string, string]>(
     'UPDATE connections SET metadata_json = ?, updated_at = ? WHERE id = ?',
   );
-  const deleteResources = db.prepare<[string]>(
-    'DELETE FROM connection_resources WHERE connection_id = ?',
-  );
   const resourcesOf = db.prepare<[string], ResourceRow>(
     `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE connection_id = ? ORDER BY ref`,
   );
   const resourceById = db.prepare<[string], ResourceRow>(
     `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE id = ?`,
   );
-  const upsertResource = db.prepare<[string, string, string, string | null, string, string]>(
-    `INSERT INTO connection_resources (id, connection_id, ref, env, display_name, discovered_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT (connection_id, ref) DO UPDATE SET
-       display_name = excluded.display_name,
-       env = COALESCE(excluded.env, connection_resources.env),
-       discovered_at = excluded.discovered_at`,
-  );
   const setEnv = db.prepare<[string | null, string]>(
     "UPDATE connection_resources SET env = ?, env_source = 'owner' WHERE id = ?",
   );
-  const reconnectStmt = db.prepare<[Buffer, number, string | null, string, string]>(
+  const reconnectStmt = db.prepare<[Buffer, number, string | null, string, string, ...string[]]>(
     `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
-       status = 'active', updated_at = ? WHERE id = ? AND status <> 'revoked'`,
+       status = 'active', updated_at = ?
+     WHERE id = ? AND status IN (${placeholders(RECONNECTABLE_STATUSES.length)})`,
   );
-  const refreshCredentialStmt = db.prepare<[Buffer, number, string | null, string, string]>(
+  const refreshCredentialStmt = db.prepare<
+    [Buffer, number, string | null, string, string, ...string[]]
+  >(
     `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
-       updated_at = ? WHERE id = ? AND status = 'active'`,
+       updated_at = ? WHERE id = ? AND status IN (${placeholders(SERVING_STATUSES.length)})`,
   );
   const markExpiredStmt = db.prepare<[string, string]>(
     "UPDATE connections SET status = 'expired', updated_at = ? WHERE id = ? AND status = 'active'",
@@ -373,13 +389,19 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
         nowIso(ctx),
         id,
       );
-      if (result.changes === 0) throw new NotFoundError('connection', id);
+      if (result.changes === 0) {
+        requireConnection(id);
+        throw new InvariantError('a revoked connection cannot receive a credential');
+      }
       return requireConnection(id);
     },
     async setStatus(id, status) {
       const now = nowIso(ctx);
-      const result = setStatusStmt.run(status, status === 'revoked' ? now : null, now, id);
-      if (result.changes === 0) throw new NotFoundError('connection', id);
+      const result = setStatusStmt.run(status, status === 'revoked' ? now : null, now, id, status);
+      if (result.changes === 0) {
+        requireConnection(id);
+        throw new InvariantError(`a revoked connection cannot become '${status}'`);
+      }
       return requireConnection(id);
     },
     async transferOwner(id, owner) {
@@ -400,24 +422,6 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       if (result.changes === 0) throw new NotFoundError('connection', id);
       return requireConnection(id);
     },
-    async replaceResources(connectionId, resources) {
-      requireConnection(connectionId);
-      const now = nowIso(ctx);
-      withImmediateTransaction(db, () => {
-        const refs = resources.map((r) => r.ref);
-        if (refs.length === 0) {
-          deleteResources.run(connectionId);
-        } else {
-          db.prepare<string[]>(
-            `DELETE FROM connection_resources WHERE connection_id = ? AND ref NOT IN (${placeholders(refs.length)})`,
-          ).run(connectionId, ...refs);
-        }
-        for (const r of resources) {
-          upsertResource.run(ctx.newId(), connectionId, r.ref, r.env ?? null, r.displayName, now);
-        }
-      });
-      return resourcesOf.all(connectionId).map(resourceToRecord);
-    },
     async listResources(connectionId) {
       return resourcesOf.all(connectionId).map(resourceToRecord);
     },
@@ -432,7 +436,14 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     },
     async reconnect(id, plain, expiresAt = null) {
       const sealed = await sealText(encryptor, id, plain);
-      const result = reconnectStmt.run(sealed.blob, sealed.keyVersion, expiresAt, nowIso(ctx), id);
+      const result = reconnectStmt.run(
+        sealed.blob,
+        sealed.keyVersion,
+        expiresAt,
+        nowIso(ctx),
+        id,
+        ...RECONNECTABLE_STATUSES,
+      );
       return result.changes > 0;
     },
     async refreshCredential(id, plain, expiresAt = null) {
@@ -443,6 +454,7 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
         expiresAt,
         nowIso(ctx),
         id,
+        ...SERVING_STATUSES,
       );
       return result.changes > 0;
     },

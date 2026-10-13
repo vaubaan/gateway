@@ -24,6 +24,19 @@
  * does not matter for the risk (a schema or table name in a migration), the
  * literal `any` is emitted ; the catalog uses `[*]` there.
  *
+ * A single-user or single-object write emits the marker slice **alone**
+ * (`user[one].W`, `object[one].W`). The user id or object path is validated
+ * but is not a slice segment : no catalog entry names an arbitrary
+ * identifier there, so it would land on the fallback, and an id spelled
+ * `bulk` would be read as the bulk marker.
+ *
+ * ─── One project resolution, shared with execute ────────────────────────
+ *
+ * `resolveProjectRef(args, resources)` decides which project a call targets.
+ * `execute.ts` calls the same function with the same inputs and builds every
+ * URL from its answer, so the project named in the authorised slices is the
+ * project the request reaches. Never read `args.project_ref` anywhere else.
+ *
  * ─── execute_sql is read-only ───────────────────────────────────────────
  *
  * Risk-model spec §7.2 #2 : `supabase__execute_sql` is strictly read-only. The
@@ -31,16 +44,20 @@
  * calling the Management API read-only endpoint, where Postgres refuses any
  * mutation.
  *
- * ─── apply_migration : DDL plus a DML / RLS mini-detector ───────────────
+ * ─── apply_migration : one slice per write class, fail closed ───────────
  *
- * A migration may embed DML (a backfill `UPDATE`) or RLS statements. To
- * protect a creator who accepted `migration-write` only, a minimal keyword
- * regex (no SQL parser) adds `row[bulk].W` when DML is present and
- * `policy[any].W` when a policy is touched. False positives over-protect,
- * which is the safe direction.
+ * A migration is arbitrary SQL. `migration-sql.ts` reads it against an
+ * allow-list of statement shapes : the schema write is always emitted, plus
+ * `row[bulk].W`, `policy[any].W`, `db-role[any].W`, `extension[any].W` for
+ * the classes the recognised statements take. As soon as one statement is
+ * not recognised (dynamic SQL, function body, CTE, unknown command…) every
+ * class is emitted, so the mission needs all of them. A query that is not a
+ * non-empty string is denied.
  */
 
 import type { ClassifyOutcome, Resource, Slice } from '@vaubaan/plugin-sdk';
+
+import { readMigrationSql, type MigrationWriteClass } from './migration-sql.ts';
 
 export type SupabasePlane = 'db' | 'storage' | 'auth' | 'functions';
 
@@ -53,6 +70,13 @@ const PROVIDER = 'supabase';
  * are refused rather than escaped, since they would corrupt the slice.
  */
 const SAFE_IDENT = /^[a-zA-Z0-9_.@+:/~-]+$/;
+
+/**
+ * A project ref becomes a URL path segment and a host label
+ * (`https://<ref>.supabase.co`), so it is held to a narrower alphabet than
+ * a slice identifier : no dot, slash, colon, `@`, `?` or `#`.
+ */
+const PROJECT_REF = /^[a-zA-Z0-9_-]+$/;
 
 type Segment = { kind: 'name'; value: string } | { kind: 'ident'; value: string };
 
@@ -89,17 +113,40 @@ function missing(arg: string): string {
   return `${arg}: missing or malformed.`;
 }
 
-// ─── apply_migration mini-detector ─────────────────────────────────────────
+/** A SQL text the classifier accepts to read : a non-blank string. */
+function sqlText(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value : null;
+}
 
-const DML_REGEX = /\b(?:insert|update|delete|merge|truncate|copy)\b/i;
-const POLICY_REGEX = /\b(?:create|alter|drop)\s+policy\b|\brow\s+level\s+security\b/i;
+// ─── apply_migration : one slice per write class ───────────────────────────
 
+/** The slice of each write class a migration may take on top of the schema write. */
+function migrationClassSlice(cls: MigrationWriteClass, ref: string): Slice {
+  switch (cls) {
+    case 'bulk-row':
+      return slice(
+        [...project(ref), n('schema'), i('any'), n('table'), i('any'), n('row'), i('bulk')],
+        'W',
+      );
+    case 'policy':
+      return slice([...project(ref), n('policy'), i('any')], 'W');
+    case 'db-role':
+      return slice([...project(ref), n('db-role'), i('any')], 'W');
+    case 'extension':
+      return slice([...project(ref), n('extension'), i('any')], 'W');
+  }
+}
+
+/**
+ * The schema write, plus one slice per class the SQL takes — every class
+ * when a statement is not recognised (`readMigrationSql` fails closed).
+ */
 function migrationSlices(query: string, ref: string): Slice[] {
-  const table = [...project(ref), n('schema'), i('any'), n('table'), i('any')];
-  const out: Slice[] = [slice(table, 'W')];
-  if (DML_REGEX.test(query)) out.push(slice([...table, n('row'), i('bulk')], 'W'));
-  if (POLICY_REGEX.test(query)) out.push(slice([...project(ref), n('policy'), i('any')], 'W'));
-  return out;
+  const schemaWrite = slice([...project(ref), n('schema'), i('any'), n('table'), i('any')], 'W');
+  return [
+    schemaWrite,
+    ...readMigrationSql(query).classes.map((cls) => migrationClassSlice(cls, ref)),
+  ];
 }
 
 // ─── per-tool producers ─────────────────────────────────────────────────────
@@ -108,17 +155,14 @@ const settingsRead = (_args: unknown, ref: string): Slice[] => [
   slice([...project(ref), n('project-settings')], 'R'),
 ];
 
-/** Single-user write : `user[<id>].W` plus the `user[one]` cardinality marker. */
-function userWrite(ref: string, id: string): Slice[] {
-  const out = [slice([...project(ref), n('user'), i(id)], 'W')];
-  if (id !== 'one') out.push(slice([...project(ref), n('user'), i('one')], 'W'));
-  return out;
+/** Single-user write : the `user[one]` cardinality marker, the slice the catalog matches. */
+function userWrite(ref: string): Slice[] {
+  return [slice([...project(ref), n('user'), i('one')], 'W')];
 }
 
-/** Single-object write : `object[<path>].W` plus the `object[one]` marker. */
-function objectWrite(ref: string, bucket: string, path: string): Slice[] {
-  const base = [...project(ref), n('bucket'), i(bucket), n('object')];
-  return [slice([...base, i(path)], 'W'), slice([...base, i('one')], 'W')];
+/** Single-object write : the `object[one]` cardinality marker under its bucket. */
+function objectWrite(ref: string, bucket: string): Slice[] {
+  return [slice([...project(ref), n('bucket'), i(bucket), n('object'), i('one')], 'W')];
 }
 
 function secretNames(raw: unknown, key: string): string[] | null {
@@ -150,14 +194,18 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
   },
   supabase__apply_migration: {
     plane: 'db',
-    produce: (args, ref) => migrationSlices(typeof args.query === 'string' ? args.query : '', ref),
+    produce: (args, ref) => {
+      const query = sqlText(args.query);
+      return query === null ? missing('query') : migrationSlices(query, ref);
+    },
   },
   // Always R : the SQL is opaque to the classifier, the read-only endpoint enforces it.
   supabase__execute_sql: {
     plane: 'db',
-    produce: (_a, ref) => [
-      slice([...project(ref), n('schema'), i('any'), n('row'), i('bulk')], 'R'),
-    ],
+    produce: (args, ref) => {
+      if (sqlText(args.query) === null) return missing('query');
+      return [slice([...project(ref), n('schema'), i('any'), n('row'), i('bulk')], 'R')];
+    },
   },
 
   // ─── storage ──────────────────────────────────────────────────────────────
@@ -216,7 +264,7 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
       const path = ident(args.path);
       if (!bucket) return missing('bucket');
       if (!path) return missing('path');
-      return objectWrite(ref, bucket, path);
+      return objectWrite(ref, bucket);
     },
   },
   supabase__delete_object: {
@@ -226,7 +274,7 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
       const path = ident(args.path);
       if (!bucket) return missing('bucket');
       if (!path) return missing('path');
-      return objectWrite(ref, bucket, path);
+      return objectWrite(ref, bucket);
     },
   },
   supabase__create_signed_url: {
@@ -340,16 +388,15 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
   },
   supabase__create_user: {
     plane: 'auth',
-    // The identity does not exist yet : name it by email or phone when given,
-    // and always emit the single-user cardinality marker.
-    produce: (args, ref) => userWrite(ref, ident(args.email) ?? ident(args.phone) ?? 'one'),
+    // The identity does not exist yet : one user is created, whatever names it.
+    produce: (_a, ref) => userWrite(ref),
   },
   supabase__update_user: {
     plane: 'auth',
     produce: (args, ref) => {
       const id = ident(args.user_id);
       if (!id) return missing('user_id');
-      return userWrite(ref, id);
+      return userWrite(ref);
     },
   },
   supabase__delete_user: {
@@ -357,7 +404,7 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
     produce: (args, ref) => {
       const id = ident(args.user_id);
       if (!id) return missing('user_id');
-      return userWrite(ref, id);
+      return userWrite(ref);
     },
   },
   supabase__generate_link: {
@@ -467,27 +514,40 @@ export const SUPABASE_TOOL_PLANES: Readonly<Record<string, SupabasePlane>> = Obj
 /** Every tool the classifier knows ; equal to the declared tool list (asserted in tests). */
 export const SUPABASE_CLASSIFIED_TOOLS: readonly string[] = Object.keys(TOOLS);
 
+/** A non-empty string safe as a URL path segment and host label, else `null`. */
+function projectRefIdent(value: unknown): string | null {
+  return typeof value === 'string' && PROJECT_REF.test(value) ? value : null;
+}
+
 /**
- * Which project the call targets. An explicit `project_ref` (or `projectRef`)
- * must be one of the mission's Supabase resources ; without it, the mission's
- * single Supabase project is used. Anything else is a denial.
+ * Which project the call targets — the **only** place that decides it, for
+ * `classifySupabase` and for `executeSupabase` alike.
+ *
+ *   - `project_ref` present : it must be a string made of ref characters
+ *     (anything else, an array or an object included, is a denial — never
+ *     coerced, never skipped) and one of the mission's Supabase resources ;
+ *   - `project_ref` absent : the mission's single Supabase project ;
+ *   - the camelCase `projectRef` is not an argument of any tool : a call
+ *     carrying it is denied, so no second spelling can name another project.
  */
-function resolveProjectRef(
+export function resolveProjectRef(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): { ref: string } | { denied: string } {
-  const explicit = ident(args.project_ref) ?? ident(args.projectRef);
+  if (args.projectRef !== undefined) {
+    return { denied: 'projectRef: unknown argument, name the project with project_ref.' };
+  }
   const own = resources.filter((r) => r.provider === PROVIDER);
-  if (explicit) {
+  if (args.project_ref !== undefined) {
+    const explicit = projectRefIdent(args.project_ref);
+    if (explicit === null) return { denied: missing('project_ref') };
     return own.some((r) => r.ref === explicit)
       ? { ref: explicit }
       : { denied: `supabase project '${explicit}' is not a resource of this mission.` };
   }
-  if (args.project_ref !== undefined || args.projectRef !== undefined) {
-    return { denied: missing('project_ref') };
-  }
-  if (own.length === 1 && ident(own[0]!.ref)) return { ref: own[0]!.ref };
-  return { denied: 'ambiguous supabase target: specify project_ref.' };
+  if (own.length !== 1) return { denied: 'ambiguous supabase target: specify project_ref.' };
+  const only = projectRefIdent(own[0]!.ref);
+  return only === null ? { denied: missing('project_ref') } : { ref: only };
 }
 
 export function classifySupabase(

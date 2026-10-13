@@ -7,6 +7,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
+import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/connections/connections.module.css';
 import {
   CredentialFieldInputs,
@@ -26,8 +27,8 @@ import {
   Stack,
 } from '@/components/ui';
 import {
+  currentActor,
   firstParam,
-  requireUser,
   takeNotice,
   type PageSearchParams,
 } from '@/lib/connections/session';
@@ -49,9 +50,11 @@ export default async function ConnectOneProviderPage({
   params: Promise<{ provider: string }>;
   searchParams: PageSearchParams;
 }) {
+  const session = await currentActor();
+  if (!session) return <NeedsUser />;
+  const { root, principal, actor } = session;
   const { provider: providerId } = await params;
   const query = await searchParams;
-  const { root, principal, actor } = await requireUser();
   const service = root.connections.service;
   const provider = await service.provider(providerId);
   if (!provider) notFound();
@@ -70,6 +73,8 @@ export default async function ConnectOneProviderPage({
   }
   const returnTo = firstParam(query.return_to);
   const redirectFlow = provider.kind === 'oauth2' || provider.kind === 'app-install';
+  // The server refuses to reconnect an unowned connection (`connection-unowned`).
+  const unowned = reconnect?.connection.status === 'unowned';
 
   return (
     <Stack gap="var(--space-6)">
@@ -94,7 +99,11 @@ export default async function ConnectOneProviderPage({
         </Banner>
       )}
 
-      {!provider.configured ? (
+      {unowned ? (
+        <Banner tone="warning" title="No owner">
+          This connection cannot be reconnected: an operator must reassign an owner first.
+        </Banner>
+      ) : !provider.configured ? (
         <Banner tone="warning" title="Not available yet">
           An operator must register the company app for {provider.displayName} first (Administration
           → Provider apps).
@@ -117,9 +126,11 @@ export default async function ConnectOneProviderPage({
                 {!reconnect && (
                   <Field
                     label="Connection name (optional)"
+                    htmlFor="connection-name"
                     hint="How it appears in your list — useful with two accounts of the same provider."
                   >
                     <Input
+                      id="connection-name"
                       name="name"
                       maxLength={MAX_NAME_LENGTH}
                       placeholder={provider.displayName}
@@ -166,7 +177,11 @@ export default async function ConnectOneProviderPage({
                   </p>
                 )}
 
-                <CredentialFieldInputs fields={provider.fields} values={reconnect?.fields} />
+                <CredentialFieldInputs
+                  idPrefix="credential"
+                  fields={provider.fields}
+                  values={reconnect?.fields}
+                />
 
                 <div className={styles.actions}>
                   <Button type="submit" variant="primary">

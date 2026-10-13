@@ -122,7 +122,30 @@ describe('resolve', () => {
     expect(new URLSearchParams(h.fetch.calls[1]!.body ?? '').get('refresh_token')).toBe('rt-2');
   });
 
-  it('refuses a connection that is not active, without decrypting anything', async () => {
+  it('serves an unowned connection: missions keep running (spec §2.3)', async () => {
+    const h = await configured(oauthHarness([refreshed(2)]));
+    const id = await seed(h, 'oauthco', secret());
+    await h.store.connections.setStatus(id, 'unowned');
+
+    const resolved = await h.broker.resolve(id);
+    expect(resolved.connection.status).toBe('unowned');
+    expect(resolved.credential).toEqual(secret());
+    expect(h.fetch.calls).toHaveLength(0);
+
+    // A token about to expire is refreshed and the rotated pair is persisted,
+    // otherwise the single-use refresh token would be lost with the next call.
+    h.clock.advance(3_600_000 - REFRESH_SKEW_MS);
+    const again = await h.broker.resolve(id);
+    expect(again.credential).toMatchObject({ accessToken: 'at-2', refreshToken: 'rt-2' });
+    expect(parseSecret((await h.store.connections.getCredential(id))!)).toMatchObject({
+      accessToken: 'at-2',
+      refreshToken: 'rt-2',
+    });
+    // Refreshing is not a reconnection: the connection still has no owner.
+    expect((await h.store.connections.getById(id))!.status).toBe('unowned');
+  });
+
+  it('refuses an expired or a revoked connection, without decrypting anything', async () => {
     const h = await configured(oauthHarness([]));
     const id = await seed(h, 'oauthco', secret());
     await h.store.connections.markExpired(id);
@@ -187,6 +210,30 @@ describe('refresh', () => {
     expect((err as Error).message).not.toContain('csecret');
     expect((await h.store.connections.getById(id))!.status).toBe('expired');
     // The stored credential is untouched: a reconnection replaces it.
+    expect(parseSecret((await h.store.connections.getCredential(id))!)).toEqual(secret());
+  });
+
+  it('forces a refresh on an unowned connection and keeps it unowned', async () => {
+    const h = await configured(oauthHarness([refreshed(2)]));
+    const id = await seed(h, 'oauthco', secret());
+    await h.store.connections.setStatus(id, 'unowned');
+    const resolved = await h.broker.refresh(id);
+    expect(resolved.credential).toMatchObject({ accessToken: 'at-2', refreshToken: 'rt-2' });
+    expect(resolved.connection.status).toBe('unowned');
+  });
+
+  it('still throws UpstreamAuthError when the refresh of an unowned connection is rejected', async () => {
+    // Whether a dead credential turns an unowned connection `expired` is not settled by
+    // spec §2.3 (it names `active → expired` only): today the status is left alone.
+    const h = await configured(
+      oauthHarness([
+        { method: 'POST', url: TOKEN_URL, status: 400, body: { error: 'invalid_grant' } },
+      ]),
+    );
+    const id = await seed(h, 'oauthco', secret());
+    await h.store.connections.setStatus(id, 'unowned');
+    await expect(h.broker.refresh(id)).rejects.toBeInstanceOf(UpstreamAuthError);
+    expect((await h.store.connections.getById(id))!.status).toBe('unowned');
     expect(parseSecret((await h.store.connections.getCredential(id))!)).toEqual(secret());
   });
 

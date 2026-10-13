@@ -137,6 +137,7 @@ export {
   VERIFY_ATTEMPTS_PER_WINDOW,
   VERIFY_WINDOW_MS,
   verifiedTokenCacheKey,
+  verifyThrottleKey,
   type VerifyOutcome,
 } from './token-verifier';
 export {

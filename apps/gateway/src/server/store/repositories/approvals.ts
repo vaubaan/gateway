@@ -90,9 +90,8 @@ export function consumeApprovalSync(
   fingerprint: string,
   now: Iso,
 ): ApprovalRecord | null {
-  // better-sqlite3 caches prepared statements per connection, so preparing by SQL text
-  // here (the only way for a helper shared with another repository's transaction) costs
-  // a map lookup, not a parse.
+  // perf: prepared on every call (the driver keeps no statement cache). Cheap in-process;
+  // a hot path would prepare these once in the factory and pass them in.
   const candidate = ctx.db
     .prepare<[string, string, string, string], { id: string }>(SELECT_CANDIDATE)
     .get(missionId, riskId, fingerprint, now);

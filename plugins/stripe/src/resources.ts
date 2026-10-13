@@ -12,6 +12,8 @@
  *     through the default `resourceEnvResolver`) ;
  *   - carried in the ref itself and in `metadata.mode`, so relabelling the
  *     env in the UI can never switch the API key `execute` uses.
+ * The two must agree : a call on a resource whose label is not its mode is
+ * refused by the classifier, so a live call is never judged as a test one.
  */
 
 import type { Resource } from '@vaubaan/plugin-sdk';
@@ -43,15 +45,16 @@ export function stripeResourceRef(accountId: string, mode: StripeMode): string {
 
 /**
  * The mode a resource pins, or `null` when it cannot be determined. Order :
- * the ref suffix (set by `discoverResources`), then `metadata.mode`, then
- * the `env` label the owner put on the resource.
+ * the ref suffix, then `metadata.mode` — both set by `discoverResources`
+ * from the key itself. The `env` label is never a source : it is what the
+ * risk qualifier reads, and the classifier refuses a resource whose label
+ * differs from the mode found here.
  */
 export function modeOf(resource: Resource): StripeMode | null {
   const fromRef = REF_MODE_SUFFIX.exec(resource.ref)?.[1];
   if (isStripeMode(fromRef)) return fromRef;
   const fromMetadata = resource.metadata?.mode;
-  if (isStripeMode(fromMetadata)) return fromMetadata;
-  return isStripeMode(resource.env) ? resource.env : null;
+  return isStripeMode(fromMetadata) ? fromMetadata : null;
 }
 
 /** Does a pasted key belong to the mode its field claims ? (`sk_live_…`, `rk_test_…`) */

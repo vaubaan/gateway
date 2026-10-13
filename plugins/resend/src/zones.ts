@@ -23,7 +23,11 @@ import type { ZoneConfig } from './resources.ts';
 export const TO_ZONES = ['internal', 'allowlist', 'external-unbounded'] as const;
 export type ToZone = (typeof TO_ZONES)[number];
 
-export const RECIPIENT_COUNTS = ['single', 'multi', 'batch'] as const;
+/**
+ * Values of the `recipient-count` marker. Only a batch send emits it : a
+ * marker exists where the catalog names a risk for it (`resend.send-batch`).
+ */
+export const RECIPIENT_COUNTS = ['batch'] as const;
 export type RecipientCount = (typeof RECIPIENT_COUNTS)[number];
 
 /** Worst case wins : the higher the rank, the more permissive the zone. */
@@ -96,8 +100,4 @@ export function worstZone(recipients: readonly EmailAddress[], config: ZoneConfi
     if (worst === 'external-unbounded') break;
   }
   return worst;
-}
-
-export function recipientCountOf(recipients: readonly EmailAddress[]): RecipientCount {
-  return recipients.length === 1 ? 'single' : 'multi';
 }

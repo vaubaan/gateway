@@ -2,7 +2,7 @@
 title: Cloudflare DNS provider — modelling and runtime (v5 plugin)
 status: current
 date: 2026-10-13
-last_reviewed: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/cloudflare-dns/src/index.ts
   - plugins/cloudflare-dns/src/resources.ts
@@ -12,6 +12,7 @@ tracks:
   - plugins/cloudflare-dns/src/data-model.ts
   - plugins/cloudflare-dns/src/risk-catalog.yaml
   - plugins/cloudflare-dns/tests/unit/
+  - plugins/cloudflare-dns/README.md
 ---
 
 # Cloudflare DNS provider — modelling and runtime
@@ -45,9 +46,11 @@ ported to `classifyCloudflareDns` (`tests/unit/classify.test.ts`).
 
 ```
 plugins/cloudflare-dns/src/
-  resources.ts              CLOUDFLARE_DNS_PROVIDER, SAFE_IDENT, resolveZoneResource, accountIdOf,
-                            zoneNameOf, isCriticalRecord, recordSensitivity
-  tools.ts                  15 McpToolDeclaration (update_record requires type + name)
+  resources.ts              CLOUDFLARE_DNS_PROVIDER, SAFE_IDENT, PATH_IDENT, pathIdent,
+                            resolveZoneResource, accountIdOf, zoneNameOf, isCriticalRecord,
+                            recordSensitivity
+  tools.ts                  15 McpToolDeclaration (update_record requires type + name ;
+                            delete_record takes them as optional)
   classify.ts               classifyCloudflareDns — pure, (tool, args, resources) → slices | denied
   execute.ts                executeCloudflareDns, discoverCloudflareDnsResources, CLOUDFLARE_API_BASE,
                             MAX_DISCOVERED_ZONES
@@ -72,7 +75,9 @@ flowchart LR
 
 - `resolveZoneResource` : an explicit `zone_id` must be a ref among the
   mission's Cloudflare DNS resources ; absent, the mission's single zone ;
-  otherwise `denied` (ambiguous, none, unknown, malformed).
+  otherwise `denied` (ambiguous, none, unknown, malformed). The resolved
+  ref is always path-safe (`pathIdent`) : a zone whose ref is not is
+  `denied` too, even as the mission's single zone.
 - The account segment comes from `metadata.account_id` (`*` when absent) ;
   `list_zones` uses the account shared by the mission's zones, else
   `account[*]`.
@@ -81,27 +86,62 @@ flowchart LR
 
 ## Classifier conventions
 
-| Tool                                 | Slice(s)                                                                     |
-| ------------------------------------ | ---------------------------------------------------------------------------- |
-| `list_zones`                         | `account[A].zone[*].R` (denied when the mission has no zone)                 |
-| `get_zone`                           | `zone[Z].R`                                                                  |
-| `list_records` / `get_record`        | `zone[Z].record[*].R` / `zone[Z].record[R].R`                                |
-| `export_records`                     | `zone[Z].zone-export.R`                                                      |
-| `get_zone_settings` / `get_dnssec`   | `zone[Z].zone-settings.R` / `zone[Z].dnssec.R`                               |
-| `create_record`                      | `zone[Z].record.W` **and**, when critical, `zone[Z].record.critical.W`       |
-| `update_record`                      | `zone[Z].record[R].W` **and**, when critical, `zone[Z].record[R].critical.W` |
-| `delete_record`                      | `zone[Z].record[R].delete.W`                                                 |
-| `import_records`                     | `zone[Z].zone-import.W`                                                      |
-| `edit_zone_settings` / `edit_dnssec` | `zone[Z].zone-settings.W` / `zone[Z].dnssec.W`                               |
-| `purge_cache`                        | `zone[Z].cache.W`                                                            |
-| `delete_zone`                        | `zone[Z].W`                                                                  |
+| Tool                                 | Slice(s)                                                                            |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
+| `list_zones`                         | `account[A].zone[*].R` (denied when the mission has no zone)                        |
+| `get_zone`                           | `zone[Z].R`                                                                         |
+| `list_records` / `get_record`        | `zone[Z].record[*].R` / `zone[Z].record[R].R`                                       |
+| `export_records`                     | `zone[Z].zone-export.R`                                                             |
+| `get_zone_settings` / `get_dnssec`   | `zone[Z].zone-settings.R` / `zone[Z].dnssec.R`                                      |
+| `create_record`                      | `zone[Z].record.W` **and**, when critical, `zone[Z].record.critical.W`              |
+| `update_record`                      | `zone[Z].record[R].W` **and**, when critical, `zone[Z].record[R].critical.W`        |
+| `delete_record`                      | `zone[Z].record[R].delete.W` **and**, when critical, `zone[Z].record[R].critical.W` |
+| `import_records`                     | `zone[Z].zone-import.W`                                                             |
+| `edit_zone_settings` / `edit_dnssec` | `zone[Z].zone-settings.W` / `zone[Z].dnssec.W`                                      |
+| `purge_cache`                        | `zone[Z].cache.W`                                                                   |
+| `delete_zone`                        | `zone[Z].W`                                                                         |
 
 **Critical** (`isCriticalRecord`) : type MX or NS whatever the name ; name
 equal to the zone name or `@` ; wildcard at the apex (`*.zone`, `*`) ;
-conservatively, an empty or non-ASCII name, an unknown zone name, or a
-write whose arguments lack `type` or `name` (`recordSensitivity`).
-`record_id` is required and validated (`SAFE_IDENT`) on `get_record`,
-`update_record`, `delete_record`.
+conservatively, an empty or non-ASCII name, an unknown or non-ASCII zone
+name, or a write whose arguments lack `type` or `name`
+(`recordSensitivity`). Trailing dots are ignored (`example.com..` is the
+apex).
+
+**Deleting a record is a record write like the others.** Removing the apex
+`A`, the `MX` set or an `NS` delegation has the effect
+`critical-record-write` describes, so `delete_record` goes through the same
+`recordSensitivity` as `update_record` :
+
+| `delete_record` arguments                                           | Slices                                       | Risks touched                                            |
+| ------------------------------------------------------------------- | -------------------------------------------- | -------------------------------------------------------- |
+| `record_id` + `type` / `name` of an ordinary record                 | `record[R].delete.W`                         | `record-write`, `record-delete`                          |
+| `record_id` + `type` / `name` of an apex, wildcard, MX or NS record | `record[R].delete.W`, `record[R].critical.W` | `record-write`, `record-delete`, `critical-record-write` |
+| `record_id` only (`type` or `name` missing)                         | `record[R].delete.W`, `record[R].critical.W` | `record-write`, `record-delete`, `critical-record-write` |
+
+`type` and `name` stay **optional** in the tool schema : a call that does
+not name the record is not refused, it is classified at the most severe
+applicable risk. This was chosen over the two alternatives because it fails
+closed with the smallest contract change — making the two arguments
+required would break every existing `delete_record` call, and classifying
+every deletion as critical would leave no way to delete an ordinary record
+without holding `critical-record-write`. A declaration is never trusted on
+its own : see the guard under "Execute".
+
+**Identifiers in the request path.** `zone_id` and `record_id` are
+interpolated into the URL, so both go through `pathIdent`
+(`PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`, in `resources.ts`) — one function,
+called by `classify` (`recordIdent`, `resolveZoneResource`) and by
+`execute` (`recordIdArg`, `resolveZoneResource`, and once more when the
+path is built). `record_id` is required on `get_record`, `update_record`
+and `delete_record` ; a missing one is `record_id: missing`, a malformed
+one `record_id: malformed identifier`, a malformed zone
+`zone_id: malformed zone id`. `SAFE_IDENT` (which accepts `.`, `/` and `~`)
+now only validates the account id, which lands in a slice segment and never
+in a URL. Why it matters : `encodeURIComponent('..')` is `..`, and every
+URL parser removes dot segments, so `record_id: '..'` used to be classified
+as a record deletion while the request that left was
+`DELETE /zones/<zone>/` — the zone endpoint.
 
 ## Catalog and presets
 
@@ -135,19 +175,26 @@ the resolved resource's ref ; `zone_id` and `record_id` are removed from
 the forwarded arguments. Bearer auth only. 401/403 → `UpstreamAuthError`.
 Unknown tool → `isError` result.
 
-Two guards beyond routing :
+Three guards beyond routing :
 
 - `list_zones` : the upstream `result` is filtered to the mission's refs.
-- `update_record` declared ordinary (`type` + `name` of a subdomain record)
-  : `GET` the record first ; if it is critical today, throw before the
-  `PATCH`. A call declared critical skips the read.
+- `update_record` and `delete_record` declared ordinary (`type` + `name`
+  of a subdomain record) : `GET` the record first ; if it is critical
+  today, or if the answer carries no type and name to compare, throw before
+  the `PATCH` / `DELETE`. A call classified critical (declared so, or
+  undeclared) skips the read : it already needed `critical-record-write`.
+  `type` and `name` are not forwarded on a deletion (no body).
+- Path identifiers : a `record_id` or a zone ref that fails `pathIdent`
+  throws before any call (`record_id: missing or malformed identifier`,
+  `zone_id: malformed zone id`).
 
 Discovery : `GET /zones` paginated, 50 per page, stops at
-`result_info.total_pages` or at `MAX_DISCOVERED_ZONES` (500).
+`result_info.total_pages` or at `MAX_DISCOVERED_ZONES` (500). An answer
+whose `result` is not a list fails discovery.
 
 ## How to debug
 
-- **`zone_id: argument missing and the mission touches 2 Cloudflare DNS zones`**
+- **`zone_id: argument missing and the mission touches 2 Cloudflare DNS zones — name one`**
   — the agent must pass `zone_id`.
 - **`zone_id: 'z9' is not a Cloudflare DNS zone of this mission`** — the
   zone exists upstream but was not selected for the mission ; the owner
@@ -157,7 +204,16 @@ Discovery : `GET /zones` paginated, 50 per page, stops at
   the mission needs that risk (approval-gated in `zone-admin`).
 - **`the record is a critical record (A example.com) but the call declared an ordinary one`**
   — the agent described the record as a subdomain while it is the apex ;
-  repeat the call with the record's real type and name.
+  repeat the call with the record's real type and name. Raised by
+  `update_record` and `delete_record` ; an empty type and name in the
+  message mean the record could not be read back.
+- **A record deletion is refused with `critical-record-write` missing** —
+  the call carries `record_id` only, or names an apex / wildcard / MX / NS
+  record. For an ordinary record the agent adds its `type` and `name` ;
+  for a critical one the mission needs that risk.
+- **`record_id: malformed identifier`** / **`zone_id: malformed zone id`**
+  — the identifier is not a single path-safe segment (letters, digits, `_`,
+  `-`, at most 64 characters). Cloudflare ids are 32 hex characters.
 - **`list_zones` returns fewer zones than the dashboard** — expected : only
   the mission's zones are returned.
 - **Discovery ends with `UpstreamAuthError 401`** — the token is invalid or
@@ -165,8 +221,10 @@ Discovery : `GET /zones` paginated, 50 per page, stops at
 
 ## Tests
 
-`npx vitest run plugins/cloudflare-dns` — 94 : `plugin.test.ts` (31 : kit,
-classifier zone resolution and record writes, execute, discovery,
-credential, presets), `classify.test.ts` (25 : the per-tool security suite
-of `classifyCloudflareDns`), `risk-catalog.test.ts` (29 : invariants,
-coverage lint, layering), `data-model.test.ts` (9).
+`npx vitest run plugins/cloudflare-dns` — 122 : `plugin.test.ts` (42 : kit,
+classifier zone resolution and record writes, execute including the
+update / delete guard and the path-unsafe identifiers, discovery,
+credential, presets), `classify.test.ts` (33 : the per-tool security suite
+of `classifyCloudflareDns`, the deletion overlay, the identifiers that
+reach the URL path), `risk-catalog.test.ts` (38 : invariants, the exact
+risks every tool touches, layering), `data-model.test.ts` (9).

@@ -3,7 +3,8 @@
  * creator, one connection, one mission with a three-risk policy, and a `SessionService`
  * over an in-memory sliding window.
  */
-import type { MissionPolicyEntry } from '../../../src/server/store/types.ts';
+// The store's camelCase policy entry, not the shared domain type of the same name.
+import type { MissionPolicyEntry as MissionPolicyEntryRecord } from '../../../src/server/store/types.ts';
 import {
   budgetMissionOf,
   SessionService,
@@ -21,7 +22,7 @@ export const ANCHOR = '2026-10-13T00:00:00.000Z';
 export const DAY_SECONDS = 86_400;
 export const REQUEST_EXPIRY_SECONDS = 24 * 3600;
 
-export const DEFAULT_POLICY: readonly MissionPolicyEntry[] = [
+export const DEFAULT_POLICY: readonly MissionPolicyEntryRecord[] = [
   { riskId: READ, quota: 10, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
   { riskId: WRITE, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
   { riskId: MERGE, quota: 2, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' },
@@ -38,13 +39,13 @@ export interface BudgetFixture extends TestStore {
   /** Another mission for the same creator and connection. */
   createMission(input: {
     periodSeconds: number | null;
-    policy?: readonly MissionPolicyEntry[];
+    policy?: readonly MissionPolicyEntryRecord[];
     expiresAt?: string | null;
   }): Promise<BudgetMission>;
 }
 
 export async function openBudgetFixture(
-  options: { periodSeconds?: number | null; policy?: readonly MissionPolicyEntry[] } = {},
+  options: { periodSeconds?: number | null; policy?: readonly MissionPolicyEntryRecord[] } = {},
 ): Promise<BudgetFixture> {
   const t = openTestStore();
   const { store } = t;
@@ -69,7 +70,7 @@ export async function openBudgetFixture(
 
   async function createMission(input: {
     periodSeconds: number | null;
-    policy?: readonly MissionPolicyEntry[];
+    policy?: readonly MissionPolicyEntryRecord[];
     expiresAt?: string | null;
   }): Promise<BudgetMission> {
     const record = await store.missions.create({

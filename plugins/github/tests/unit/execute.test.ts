@@ -253,6 +253,102 @@ describe('execute — rules and release tools', () => {
   });
 });
 
+describe('execute — merge_pull_request is bound to the declared base', () => {
+  const repo = { owner: 'acme', repo: 'app' };
+  const pullUrl = 'https://api.github.com/repos/acme/app/pulls/7';
+  const pullRoute = (baseRef: unknown) => ({
+    method: 'GET',
+    url: pullUrl,
+    body: { number: 7, base: { ref: baseRef } },
+  });
+  const mergeRoute = {
+    method: 'PUT',
+    url: `${pullUrl}/merge`,
+    body: { merged: true, sha: 'abc' },
+  };
+  const merges = (fetch: { calls: readonly { method: string; json: unknown }[] }) =>
+    fetch.calls.filter((c) => c.method === 'PUT');
+
+  test('reads the pull request, then merges when its base is the declared one', async () => {
+    const fetch = mockFetch([mintRoute(), pullRoute('feature/x'), mergeRoute]);
+    const result = await githubPlugin.execute(executeCtx(fetch), 'github__merge_pull_request', {
+      ...repo,
+      pull_number: 7,
+      base: 'feature/x',
+      merge_method: 'squash',
+    });
+    expect(JSON.parse(text(result))).toEqual({ merged: true, sha: 'abc' });
+    expect(fetch.calls.map((c) => `${c.method} ${c.url}`).slice(1)).toEqual([
+      `GET ${pullUrl}`,
+      `PUT ${pullUrl}/merge`,
+    ]);
+    expect(merges(fetch)[0]!.json).toMatchObject({ merge_method: 'squash' });
+  });
+
+  test('refuses, without merging, a pull request whose real base is not the declared one', async () => {
+    // Classified on `feature/x` (no `merge-protected`), while GitHub would merge into `main`.
+    const fetch = mockFetch([mintRoute(), pullRoute('main'), mergeRoute]);
+    await expect(
+      githubPlugin.execute(executeCtx(fetch), 'github__merge_pull_request', {
+        ...repo,
+        pull_number: 7,
+        base: 'feature/x',
+      }),
+    ).rejects.toThrow(
+      "github__merge_pull_request: pull request #7 targets 'main', not the declared base 'feature/x'. Call again with base 'main'.",
+    );
+    expect(merges(fetch)).toEqual([]);
+  });
+
+  test('without a declared base the pull request must target main, the branch the call was classified on', async () => {
+    const refused = mockFetch([mintRoute(), pullRoute('develop'), mergeRoute]);
+    await expect(
+      githubPlugin.execute(executeCtx(refused), 'github__merge_pull_request', {
+        ...repo,
+        pull_number: 7,
+      }),
+    ).rejects.toThrow(/targets 'develop', not the declared base 'main'/);
+    expect(merges(refused)).toEqual([]);
+
+    const merged = mockFetch([mintRoute(), pullRoute('main'), mergeRoute]);
+    await githubPlugin.execute(executeCtx(merged), 'github__merge_pull_request', {
+      ...repo,
+      pull_number: 7,
+    });
+    expect(merges(merged)).toHaveLength(1);
+  });
+
+  test('refuses when GitHub returns no base branch for the pull request', async () => {
+    const fetch = mockFetch([mintRoute(), pullRoute(undefined), mergeRoute]);
+    await expect(
+      githubPlugin.execute(executeCtx(fetch), 'github__merge_pull_request', {
+        ...repo,
+        pull_number: 7,
+        base: 'main',
+      }),
+    ).rejects.toThrow(/could not read the base branch of pull request #7/);
+    expect(merges(fetch)).toEqual([]);
+  });
+});
+
+describe('execute — push_files reads `files` like the classifier', () => {
+  test('refuses a malformed entry before any call to the repository', async () => {
+    const fetch = mockFetch([mintRoute()]);
+    await expect(
+      githubPlugin.execute(executeCtx(fetch), 'github__push_files', {
+        owner: 'acme',
+        repo: 'app',
+        branch: 'feature/x',
+        message: 'm',
+        files: [{ path: 'a.ts', content: '1' }, { path: 5 }],
+      }),
+    ).rejects.toThrow(
+      "github__push_files requires 'files' to be a non-empty array of { path, content } strings",
+    );
+    expect(fetch.calls.map((c) => c.url)).toEqual([MINT_URL]);
+  });
+});
+
 describe('execute — github__mint_install_token', () => {
   test('purpose=clone, no repoFullName → token over every GitHub resource of the mission, contents:read', async () => {
     const fetch = mockFetch([
@@ -313,7 +409,9 @@ describe('execute — github__mint_install_token', () => {
         purpose: 'clone',
         repoFullName: 'other/repo',
       }),
-    ).rejects.toThrow(/not a GitHub resource of this mission/);
+    ).rejects.toThrow(
+      "github__mint_install_token: github repository 'other/repo' is not selected in this mission. Selected: acme/app.",
+    );
     await expect(
       githubPlugin.execute(ctx, 'github__mint_install_token', { purpose: 'merge' }),
     ).rejects.toThrow(/purpose in \['clone','push'\]/);
@@ -321,7 +419,9 @@ describe('execute — github__mint_install_token', () => {
       githubPlugin.execute(executeCtx(fetch, []), 'github__mint_install_token', {
         purpose: 'clone',
       }),
-    ).rejects.toThrow(/touches no GitHub repository/);
+    ).rejects.toThrow(
+      'github__mint_install_token: no GitHub repository is selected in this mission.',
+    );
     expect(fetch.calls).toHaveLength(0);
   });
 });

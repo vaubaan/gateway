@@ -27,6 +27,7 @@ import { createRequestsRepo, type RequestsRepo } from './repositories/requests.t
 import { createSessionsRepo, type SessionsRepo } from './repositories/sessions.ts';
 import { createSharesRepo, type SharesRepo } from './repositories/shares.ts';
 import { createUsersRepo, type UsersRepo } from './repositories/users.ts';
+import { createWebSessionsRepo, type WebSessionsRepo } from './repositories/web-sessions.ts';
 
 export interface StoreOptions {
   /** Database file on the mounted volume (`InstanceConfig.store.path`), or `MEMORY_PATH`. */
@@ -56,6 +57,8 @@ export interface Store {
   readonly delegations: DelegationsRepo;
   readonly audit: AuditRepo;
   readonly config: ConfigRepo;
+  /** Web sessions keyed by the digest of their id; satisfies the root's `SessionStore` port. */
+  readonly webSessions: WebSessionsRepo;
   readonly auditWriter: AuditWriter;
   /** Highest migration version applied. */
   readonly schemaVersion: number;
@@ -104,6 +107,7 @@ export function openStore(options: StoreOptions): Store {
     delegations: createDelegationsRepo(ctx),
     audit,
     config: createConfigRepo(ctx),
+    webSessions: createWebSessionsRepo(ctx),
     auditWriter: new SqliteAuditWriter(audit),
     schemaVersion: currentVersion,
     db,
@@ -206,4 +210,5 @@ export type {
   AuditScope,
   AuditSearch,
 } from './repositories/audit.ts';
-export type { ConfigRepo } from './repositories/config.ts';
+export type { ConfigRepo, ConfigWrite } from './repositories/config.ts';
+export type { WebSessionsRepo } from './repositories/web-sessions.ts';

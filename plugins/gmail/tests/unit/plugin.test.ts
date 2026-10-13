@@ -132,10 +132,12 @@ describe('gmail plugin — SDK kit', () => {
           { args: { q: 'from:random@random.io' } },
           { args: { q: 'is:unread' } },
           { args: { q: 'label:LEGAL' } },
+          { args: { q: 'from:no-reply@github.com OR newer_than:3650d' } },
+          { args: { q: 'from:colleague@myorg.com -label:LEGAL -label:HR' } },
           { args: { q: 'is:unread' }, resources: [], expectDenied: true },
           { args: { q: 'is:unread' }, resources: [mailbox, otherMailbox], expectDenied: true },
         ],
-        gmail__get_thread: [{ args: { id: 't_xyz' } }],
+        gmail__get_thread: [{ args: { id: 't_xyz' } }, { args: {}, expectDenied: true }],
         gmail__list_drafts: [{ args: {} }],
         gmail__create_draft: [
           { args: { to: [MAILBOX], subject: 's', body: 'b' } },
@@ -143,21 +145,48 @@ describe('gmail plugin — SDK kit', () => {
           {
             args: { to: ['partner@vendor.com'], cc: 'Me <me@myorg.com>', subject: 's', body: 'b' },
           },
-          { args: { to: ['stranger@evil.example'], subject: 's', body: 'b' } },
+          // An external recipient, and a recipient that does not parse, refuse the call.
+          { args: { to: ['stranger@evil.example'], subject: 's', body: 'b' }, expectDenied: true },
+          {
+            args: { to: ['evil@evil.example, colleague@myorg.com'], subject: 's', body: 'b' },
+            expectDenied: true,
+          },
         ],
         gmail__list_labels: [{ args: {} }],
         gmail__label_message: [{ args: { thread_id: 't1', message_id: 'm1', label: 'STARRED' } }],
         gmail__unlabel_message: [{ args: { thread_id: 't1', message_id: 'm1', label: 'STARRED' } }],
-        gmail__label_thread: [{ args: { thread_id: 't1', label: 'STARRED' } }],
+        gmail__label_thread: [
+          { args: { thread_id: 't1', label: 'STARRED' } },
+          { args: { label: 'STARRED' }, expectDenied: true },
+          { args: { thread_id: 't1', label: 'TRASH' }, expectDenied: true },
+        ],
         gmail__unlabel_thread: [{ args: { thread_id: 't1', label: 'STARRED' } }],
       },
       { resources: [mailbox] },
     );
     expect(report.toolsChecked).toBe(10);
-    // Untouched on purpose : no modelled tool emits a bulk write. Every write
-    // a tool emits is covered by a specific entry, so the fallback is never
+    // Untouched on purpose : the classifier refuses a draft to an external
+    // recipient, and no modelled tool emits a bulk write. Every write of
+    // these samples is covered by a specific entry, so the fallback is never
     // the only match — a preset can therefore grant drafts and labels.
-    expect(report.risksUntouched).toEqual(['gmail.bulk-label-write']);
+    expect(report.risksUntouched).toEqual([
+      'gmail.draft-to-zone-external-unbounded',
+      'gmail.bulk-label-write',
+    ]);
+    expect(report.fallbackHits).toEqual([]);
+  });
+
+  test('a write on a sensitive label reaches the fallback, which no preset offers', () => {
+    const exposed = definePlugin({
+      ...gmailPlugin,
+      tools: gmailClassifiedToolDeclarations.filter((t) => t.name === 'gmail__unlabel_thread'),
+    });
+    const report = assertCatalogCoverage(
+      exposed,
+      { gmail__unlabel_thread: [{ args: { thread_id: 't1', label: 'LEGAL' } }] },
+      { resources: [mailbox] },
+    );
+    expect(report.fallbackHits).toHaveLength(1);
   });
 });
 
@@ -218,7 +247,7 @@ describe('gmail classify — mailbox selection', () => {
     ).toMatchObject({ account_email: null });
   });
 
-  test('without zoning metadata every sender is unknown and every recipient external', () => {
+  test('without zoning metadata every sender is unknown and every recipient external (refused)', () => {
     const search = gmailPlugin.classify(
       'gmail__search_threads',
       { q: 'from:colleague@myorg.com' },
@@ -232,9 +261,10 @@ describe('gmail classify — mailbox selection', () => {
       { to: ['colleague@myorg.com'], subject: 's', body: 'b' },
       [otherMailbox],
     );
-    expect('slices' in draft && draft.slices.map(serializeSlice)).toContain(
-      'gmail.mailbox.to-zone[external-unbounded].W',
-    );
+    expect(draft).toEqual({
+      denied:
+        'recipients outside the internal domains and the allowlist: not acceptable for a draft.',
+    });
   });
 });
 
@@ -406,7 +436,7 @@ describe('gmail presets', () => {
 
   test('ships read-only and developer', () => {
     expect(gmailPlugin.catalog.presets?.map((p) => p.id)).toEqual(['read-only', 'developer']);
-    expect(gmailPlugin.catalog.catalog_version).toBe(2);
+    expect(gmailPlugin.catalog.catalog_version).toBe(3);
   });
 
   test('read-only : reads only, no bulk read, no sensitive label, every entry auto', () => {
@@ -419,7 +449,7 @@ describe('gmail presets', () => {
     expect(entries.every((e) => e.gate === 'auto')).toBe(true);
   });
 
-  test('developer : drafts to self / internal / allowlist and single labels auto ; bulk under approval', () => {
+  test('developer : drafts to self / internal / allowlist and single labels auto ; bulk read under approval', () => {
     const entries = preset('developer').entries;
     const gate = (id: string) => entries.find((e) => e.risk_id === id)?.gate;
     expect(gate('gmail.draft-to-zone-self')).toBe('auto');
@@ -427,15 +457,15 @@ describe('gmail presets', () => {
     expect(gate('gmail.draft-to-zone-allowlist')).toBe('auto');
     expect(gate('gmail.label-write')).toBe('auto');
     expect(gate('gmail.bulk-read')).toBe('approval');
-    expect(gate('gmail.bulk-label-write')).toBe('approval');
     expect(entries.every((e) => e.risk_id.startsWith('gmail.'))).toBe(true);
   });
 
-  test('no preset carries the fallback, the never-acceptable draft risk, a sensitive read or an env qualifier', () => {
+  test('no preset carries the fallback, the refused draft risk, a risk no tool can touch, a sensitive read or an env qualifier', () => {
     for (const p of gmailPlugin.catalog.presets ?? []) {
       const ids = p.entries.map((e) => e.risk_id);
       expect(ids).not.toContain('gmail.uncategorized-write');
       expect(ids).not.toContain('gmail.draft-to-zone-external-unbounded');
+      expect(ids).not.toContain('gmail.bulk-label-write');
       expect(ids).not.toContain('gmail.read-sensitive-label');
       expect(ids.some((id) => id.includes('['))).toBe(false);
       for (const e of p.entries) {

@@ -15,8 +15,13 @@
  *
  * Rules :
  *   - `fetch` comes from the context, never from the global ;
- *   - 401 / 403 from either surface → `UpstreamAuthError`, so the host marks
- *     the connection `expired` ;
+ *   - 401 / 403 from either surface → `UpstreamAuthError` ; the host treats
+ *     a 401 as a rejected credential (the connection ends up `expired`) and
+ *     a 403 as a failed call ;
+ *   - `execute` sends the command the classifier read (`redisCommandOf`) :
+ *     one flat command of strings and finite numbers. A pipeline-shaped
+ *     `command` is refused here — no pipeline endpoint is wired — whatever
+ *     it was classified as ;
  *   - the database a data tool targets must be a resource of the mission ;
  *     absent, the mission's single database applies ; anything else is
  *     refused before any network call ;
@@ -33,7 +38,7 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { PROVIDER } from './classify.ts';
+import { PROVIDER, redisCommandOf } from './classify.ts';
 import { basicAuthHeader, upstashAuth, type UpstashAuth } from './credential.ts';
 import { MANAGEMENT_TOOL_NAMES } from './tools.ts';
 
@@ -119,10 +124,8 @@ export async function discoverUpstashRedisResources(
     auth: upstashAuth(ctx.credential),
     ...(ctx.signal ? { signal: ctx.signal } : {}),
   };
-  const body = await callManagementApi(call, 'GET', '/redis/databases');
-  const all = (Array.isArray(body) ? (body as DatabaseDto[]) : []).filter(
-    (d) => typeof d.database_id === 'string' && d.database_id.length > 0,
-  );
+  const body: unknown = await callManagementApi(call, 'GET', '/redis/databases');
+  const all = (Array.isArray(body) ? (body as readonly unknown[]) : []).filter(isDatabaseDto);
   if (all.length > MAX_DISCOVERED_DATABASES) {
     ctx.logger?.warn('upstash-redis: more databases than the discovery cap, list truncated', {
       total: all.length,
@@ -157,6 +160,13 @@ interface DatabaseDto {
   readonly rest_token?: string;
   readonly state?: string;
   readonly tls?: boolean;
+}
+
+/** An upstream answer that names a database : an object with a non-empty string `database_id`. */
+function isDatabaseDto(value: unknown): value is DatabaseDto {
+  if (typeof value !== 'object' || value === null) return false;
+  const id = (value as { database_id?: unknown }).database_id;
+  return typeof id === 'string' && id.length > 0;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -255,13 +265,17 @@ async function databaseConnection(
   call: UpstashCall,
   databaseId: string,
 ): Promise<{ endpoint: string; restToken: string }> {
-  const db = (await callManagementApi(
+  const answer: unknown = await callManagementApi(
     call,
     'GET',
     `/redis/database/${encodeURIComponent(databaseId)}`,
-  )) as DatabaseDto;
-  const endpoint = db.rest_url ?? (db.endpoint ? `https://${db.endpoint}` : undefined);
-  const restToken = db.rest_token;
+  );
+  const db: Partial<DatabaseDto> = isDatabaseDto(answer) ? answer : {};
+  const text = (value: unknown): string | undefined =>
+    typeof value === 'string' && value.length > 0 ? value : undefined;
+  const host = text(db.endpoint);
+  const endpoint = text(db.rest_url) ?? (host ? `https://${host}` : undefined);
+  const restToken = text(db.rest_token);
   if (!endpoint || !restToken) {
     throw new Error(
       `Upstash database ${databaseId} does not expose a REST endpoint/token. ` +
@@ -302,8 +316,16 @@ async function executeDataTool(
 /** The Redis command array of a data tool. Throws on a malformed argument set. */
 export function buildCommand(tool: string, args: Readonly<Record<string, unknown>>): string[] {
   switch (tool) {
-    case 'upstash_redis__execute':
-      return stringList(args.command, 'command');
+    case 'upstash_redis__execute': {
+      // The same reading as the classifier : what was classified is what is sent.
+      const command = redisCommandOf(args.command);
+      if (command === null) {
+        throw new Error(
+          'command must be one Redis command: a non-empty array of strings (or finite numbers) starting with the command name. Pipelines and nested arrays are not supported.',
+        );
+      }
+      return command;
+    }
     case 'upstash_redis__get':
       return ['GET', str(args.key, 'key')];
     case 'upstash_redis__set': {

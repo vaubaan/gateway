@@ -26,7 +26,8 @@ import type {
   MissionResource,
 } from '@vaubaan/gateway-core';
 
-import { policyEntryOf } from '../budget';
+import { isStale, periodOf, policyEntryOf } from '../budget';
+import { connectionOwnerOf, connectionSummaryOf } from '../connections/mapping';
 import type { Store } from '../store';
 import type {
   ConnectionRecord,
@@ -59,24 +60,12 @@ async function ownerOf(
   store: Pick<Store, 'users' | 'groups'>,
   connection: ConnectionRecord,
 ): Promise<ConnectionOwner> {
-  const { owner } = connection;
-  if (owner.kind === 'group') {
-    const group = await store.groups.getById(owner.id);
-    return { ...owner, display: group?.name ?? 'a group that no longer exists' };
-  }
-  const user = await store.users.getById(owner.id);
-  return { ...owner, display: user?.email ?? 'a user that no longer exists' };
+  const { kind, id, name } = await connectionOwnerOf(store, connection);
+  return { kind, id, display: name ?? `a ${kind} that no longer exists` };
 }
 
-export function periodOf(mission: MissionRecord): MissionContext['mission']['period'] {
-  return mission.periodSeconds === null
-    ? { kind: 'one-off' }
-    : {
-        kind: 'recurring',
-        length_seconds: mission.periodSeconds,
-        anchor_at: mission.periodAnchor,
-      };
-}
+/** The pipeline's period of a stored mission; the mapping lives in `budget/mapping.ts`. */
+export { periodOf };
 
 export async function loadMissionContext(
   store: MissionContextStore,
@@ -92,16 +81,13 @@ export async function loadMissionContext(
     // simply gives the mission nothing to call.
     if (!connection) continue;
     connections.push({
-      id: connection.id,
-      provider: connection.provider,
-      display_name: connection.displayName,
-      status: connection.status,
+      ...connectionSummaryOf(connection),
       owner: await ownerOf(store, connection),
     });
     const selected = new Set(selection.resourceIds);
     if (selected.size === 0) continue;
     for (const record of await store.connections.listResources(connection.id)) {
-      if (!selected.has(record.id) || record.staleSince !== null) continue;
+      if (!selected.has(record.id) || isStale(record)) continue;
       resources.push(missionResourceOf(connection, record));
     }
   }

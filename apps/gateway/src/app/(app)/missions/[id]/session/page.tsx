@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { LocalDate } from '@/components/LocalDate';
+import { NeedsUser } from '@/components/auth/NeedsUser';
 import {
   Badge,
   Card,
@@ -21,6 +22,7 @@ import {
   Thead,
   Tr,
 } from '@/components/ui';
+import { currentUser } from '@/lib/auth/session';
 import {
   AUDIT_PARAMS,
   decodeCursor,
@@ -30,8 +32,6 @@ import {
 } from '@/server/audit';
 
 import styles from '../../../audit/audit.module.css';
-import { currentUser } from '../../current-user';
-import { NeedsUser } from '../../needs-user';
 import { StateBadge } from '../../state-badge';
 
 export const dynamic = 'force-dynamic';

@@ -19,8 +19,17 @@
 # Environments : a Supabase project is the resource the owner labels (`staging`,
 # `prod`, `preview`), so every write risk is env-scoped : a mission accepts
 # `supabase[staging].migration-write`, never a bare `supabase.migration-write`.
-# Bulk writes are structurally not grantable on prod (`acceptable_in_envs`
-# excludes it). Reads stay account-scoped except `auth.read-users` (PII).
+# Reads stay account-scoped except `auth.read-users` (PII).
+#
+# The runtime REFUSES a call that touches an env-scoped risk on a project
+# whose label is absent or outside `acceptable_in_envs` — the risk is not
+# dropped, and no mission can hold it there. Two consequences :
+#   - on a project the owner has not labelled, every write and every user
+#     read is refused ; only the account-scoped reads go through ;
+#   - the three bulk risks exclude `prod`, so a bulk write is refused on a
+#     prod project whatever the mission accepted : a migration embedding DML
+#     or dropping a table, a migration the classifier cannot read, a bucket
+#     delete.
 #
 # The fallback `supabase.uncategorized-write` counts only when no specific
 # entry matched the write (policy-engine rule, P1.2-SDK) ; presets never
@@ -80,8 +89,8 @@ risks:
     label: Bulk write on a table
     reason: >-
       Mass INSERT, UPDATE/DELETE without or with a wide WHERE, TRUNCATE,
-      COPY. No automatic rollback, high blast. Structurally not grantable
-      on prod.
+      DROP TABLE or COLUMN inside a migration. No automatic rollback, high
+      blast. Not acceptable on prod : a call touching it there is refused.
     matches: supabase.project[**].schema[**].table[**].row[bulk].W
     vector:
       reversibility: costly
@@ -95,10 +104,13 @@ risks:
   - id: supabase.migration-write
     label: Apply a migration (DDL)
     reason: >-
-      CREATE/DROP/ALTER TABLE or INDEX. Costly to revert (manual down
-      migration) and can break the applications that read the schema.
-      Matches the schema/table-level write strictly (no row segment), so a
-      row write never fires it by accident.
+      CREATE/ALTER TABLE or INDEX. Costly to revert (manual down migration)
+      and can break the applications that read the schema. Touched by every
+      migration ; a migration that also writes rows, drops a table or a
+      column, changes RLS, privileges or extensions touches the matching
+      risk too, and one the classifier cannot read (function body, dynamic
+      SQL) touches all of them. Matches the schema/table-level write
+      strictly (no row segment), so a row write never fires it by accident.
     matches: supabase.project[**].schema[*].table[*].W
     vector:
       reversibility: costly
@@ -127,8 +139,8 @@ risks:
   - id: supabase.db-role-write
     label: Create or modify Postgres roles
     reason: >-
-      Credential posture : CREATE ROLE, GRANT, REVOKE. No MCP tool today ;
-      declared ahead so a future tool lands on an existing risk.
+      Credential posture : CREATE / ALTER / DROP ROLE, GRANT, REVOKE,
+      default privileges. Reached through `apply_migration`.
     matches: supabase.project[**].db-role[**].W
     vector:
       reversibility: reversible
@@ -143,7 +155,7 @@ risks:
     label: Enable or disable a Postgres extension
     reason: >-
       Shifts the available SQL surface. Some extensions (`pg_net`, `http`)
-      open outbound exfiltration. No tool today ; declared ahead.
+      open outbound exfiltration. Reached through `apply_migration`.
     matches: supabase.project[**].extension[**].W
     vector:
       reversibility: reversible
@@ -467,7 +479,7 @@ presets:
 
   - id: staging-developer
     label: Staging developer
-    description: One token per code project. Reads everywhere ; every write only on staging-labelled projects, nothing on prod.
+    description: One mission per application. Day-to-day development on staging-labelled projects — migrations of any kind, RLS, buckets and objects, users one by one, edge functions and their secrets. Reads data, schema, objects and functions on every selected project. No auth, storage or SSO configuration, no signed URL, nothing written outside staging.
     entries:
       - risk_id: supabase.read-data
         quota: 10000
@@ -494,6 +506,16 @@ presets:
         rate_limit: { max: 10, window_seconds: 60 }
         gate: auto
       - risk_id: supabase[staging].policy-write
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      # Needed with the three above by any migration the classifier cannot
+      # read (function body, trigger, dynamic SQL) : it touches every class.
+      - risk_id: supabase[staging].db-role-write
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].extension-write
         quota: 100
         rate_limit: { max: 10, window_seconds: 60 }
         gate: auto
@@ -532,7 +554,7 @@ presets:
 
   - id: migration-operator
     label: Migration operator
-    description: Apply schema migrations. Free on staging ; each prod migration or RLS change waits for approval. Bulk row writes stay staging-only.
+    description: Apply migrations. Any migration on staging-labelled projects. On prod, only plain schema changes (create or alter tables and indexes) and RLS changes, each waiting for approval ; a prod migration that writes rows, drops a table or a column, grants privileges, enables an extension or defines a function is refused.
     entries:
       - risk_id: supabase.read-data
         quota: 2000
@@ -547,6 +569,16 @@ presets:
         rate_limit: { max: 10, window_seconds: 60 }
         gate: auto
       - risk_id: supabase[staging].policy-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      # Needed with the three above by any migration the classifier cannot
+      # read (function body, trigger, dynamic SQL) : it touches every class.
+      - risk_id: supabase[staging].db-role-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: supabase[staging].extension-write
         quota: 50
         rate_limit: { max: 10, window_seconds: 60 }
         gate: auto

@@ -3,10 +3,11 @@
 Bash over SSH as a Vaubaan Gateway provider plugin on the plugin SDK
 (`@vaubaan/plugin-sdk`). One tool, `ssh__exec`, runs a shell command line on a
 host the connection reaches with its own ed25519 key pair and a **pinned host
-key**. Inspection commands on a read whitelist are low-risk; everything else
+key**. Inspection commands on a read allow-list are low-risk; everything else
 is a write, and the classes that hurt (recursive deletes, package changes,
 service control, sudo) carry their own risk so a preset can gate them with
-`approval`.
+`approval`. A line the classifier cannot see through carries every class: the
+classifier fails closed.
 
 Contract: [`plugin-contract-and-credential-spec`](../../docs/decisions/plugin-contract-and-credential-spec.md).
 Modelling handbook: [`docs/handbook/providers/ssh.md`](../../docs/handbook/providers/ssh.md).
@@ -14,19 +15,19 @@ Contributor guide: [`plugins/README.md`](../README.md).
 
 ## Layout
 
-| File                            | Role                                                                                                                          |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`                  | `createSshPlugin({ transport })` → `definePlugin({...})`; default export `sshPlugin` over `ssh2`.                             |
-| `src/risk-catalog.yaml`         | 7 risks + fallback, three presets, `catalog_version: 2`. Loaded at boot by the SDK; the only catalog artefact.                |
-| `src/data-model.ts`             | One plane `host`: `host` (the resource, env-scopable) → `command` → classification markers.                                   |
-| `src/tools.ts`                  | `ssh__exec` (`host?`, `cmd`, `timeout_s?`).                                                                                   |
-| `src/policy.ts`                 | The read whitelist (`isReadAllowed`).                                                                                         |
-| `src/command-classes.ts`        | Quote-aware splitter, credential-path heuristic, destructive / package / service / privilege detectors, `profileCommandLine`. |
-| `src/classify.ts`               | `classifySsh(tool, args, resources)` — pure; host resolution against the mission's resources; `resolveExecArgs` shared.       |
-| `src/credential.ts`             | `ssh-key` spec (host, port, user, host key fingerprint); `sshTarget()` narrows the secret; fingerprint helpers.               |
-| `src/transport.ts`              | `SshTransport` interface; `ssh2Transport` with host key verification, timeouts, output caps; `SshHostKeyMismatchError`.       |
-| `src/execute.ts`                | `createSshRuntime({ transport })` → `execute`, `discoverResources`.                                                           |
-| `src/bash/{parse,args,exec}.ts` | Annotated-script parser, argument materialisation, invocation builder (not wired to a tool yet).                              |
+| File                     | Role                                                                                                                                |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `src/index.ts`           | `createSshPlugin({ transport })` → `definePlugin({...})`; default export `sshPlugin` over `ssh2`.                                   |
+| `src/risk-catalog.yaml`  | 7 risks + fallback, three presets, `catalog_version: 2`. Loaded at boot by the SDK; the only catalog artefact.                      |
+| `src/data-model.ts`      | One plane `host`: `host` (the resource, env-scopable) → `command` → classification markers.                                         |
+| `src/tools.ts`           | `ssh__exec` (`host?`, `cmd`, `timeout_s?`).                                                                                         |
+| `src/shell-lex.ts`       | `lexCommandLine`: the line as a POSIX shell tokenises it (words, redirections, simple commands), and what it cannot model, by name. |
+| `src/policy.ts`          | The read allow-list on whole argument vectors (`matchRead`, `isReadAllowed`) and the option parser it shares with the wrappers.     |
+| `src/command-classes.ts` | Credential-path detection, command normalisation and wrappers, opaque commands, the four class detectors, `profileCommandLine`.     |
+| `src/classify.ts`        | `classifySsh(tool, args, resources)` — pure; host resolution against the mission's resources; `resolveExecArgs` shared.             |
+| `src/credential.ts`      | `ssh-key` spec (host, port, user, host key fingerprint); `sshTarget()` narrows the secret; fingerprint helpers.                     |
+| `src/transport.ts`       | `SshTransport` interface; `ssh2Transport` with host key verification, timeouts, output caps; the two host-key errors.               |
+| `src/execute.ts`         | `createSshRuntime({ transport })` → `execute`, `discoverResources`.                                                                 |
 
 `src/index.ts` resolves the YAML path from `import.meta.url` as a **string**
 (`SSH_CATALOG_PATH`), not with `new URL('./risk-catalog.yaml', import.meta.url)`:
@@ -37,12 +38,12 @@ pattern into an asset URL that Node's `fileURLToPath` rejects.
 
 ```
 host[<hostname | ip>]              the resource ; labelled dev / staging / prod by its owner
-  └─ command                       one shell line : R (every simple command whitelisted) or W
-       ├─ secret-file              marker · a credential-bearing path is referenced
+  └─ command                       one shell line : R per whitelisted simple command, W for any other
+       ├─ secret-file              marker · a credential-bearing path is referenced, or a path cannot be seen
        ├─ destructive              marker · rm -r/-f, mkfs, dd, shred, reboot, userdel, iptables -F, docker prune…
        ├─ package                  marker · apt / dnf / apk / pacman / snap / brew… in a mutating mode, npm -g, pipx
        ├─ service                  marker · systemctl verbs, service, docker / compose lifecycle, pm2, kill…
-       └─ privilege                marker · sudo / su / doas / pkexec on a non-whitelisted command
+       └─ privilege                marker · sudo / doas / pkexec on a non-whitelisted command
 ```
 
 The markers are not things that exist on the host; they let the catalog price
@@ -75,9 +76,12 @@ ssh-keyscan -t ed25519 vps-1.example.com 2>/dev/null | ssh-keygen -lf -
 ```
 
 There is no company-registered app for SSH: the key pair _is_ the app. The
-private key is stored encrypted by the host and never leaves the instance. A host that presents another key is refused with
-`SshHostKeyMismatchError` before authentication — if the host was legitimately
-re-keyed, the owner updates the connection. An authentication failure is an
+private key is stored encrypted by the host and never leaves the instance. A
+host that presents another key is refused with `SshHostKeyMismatchError`
+during the key exchange, before the key pair is offered — if the host was
+legitimately re-keyed, the owner updates the connection. A target without a
+well-formed pin never opens a socket (`SshHostKeyNotPinnedError`); `sshTarget()`
+refuses to build one in the first place. An authentication failure is an
 `UpstreamAuthError`: the host marks the connection `expired` and the owner
 reconnects (a new key pair).
 
@@ -120,27 +124,61 @@ references the fallback.
 
 ## Classification rules
 
-1. The line is split into simple commands on `;`, `&&`, `||`, `|`, `&` and
-   newlines, honouring quotes and backslash escapes.
-2. A simple command on the read whitelist (`src/policy.ts`) is a read; the
-   whitelist admits `sudo` only on `journalctl`, `systemctl status`-like verbs
-   and `ss -tlnp`.
-3. Anything else is a write. After stripping `sudo [options]` / `doas` /
-   `pkexec`, the detectors add the `destructive`, `package` and `service`
-   markers; the prefix itself adds `privilege` (`su` too).
-4. A credential-bearing path anywhere on a simple command
-   (`/etc/shadow|sudoers|passwd|gshadow`, `/root/…`, `~/.ssh|.aws|.gnupg|.kube|.docker/…`,
-   `/home/<u>/.ssh/…`) adds `secret-file`.
-5. A command substitution (`$(…)`, backticks, `<(…)`), an output redirection
-   to a file (`>`, `>>`, `&>`; `2>&1` is fine) or an unterminated quote makes
-   the whole line a write, whatever the visible commands.
+The classifier **fails closed**: a line is a read only when every simple
+command on it is recognised in full, and whatever it cannot see through is
+classified as the union of the classes, never as the mildest one.
+
+1. `src/shell-lex.ts` tokenises the line the way `sh` / `bash` do: single and
+   double quotes, backslash escapes, comments, `;` `&&` `||` `|` `&`, newlines
+   and grouping parentheses, plain redirections, `$name` / `${name}`. Each
+   simple command becomes a list of words with quotes removed.
+2. A simple command is a **read** when its whole argument vector is on the
+   allow-list (`src/policy.ts`): a bare command name, known options only,
+   operands of the expected shape. No prefix matching:
+   `journalctl --vacuum-time=1s`, `systemctl status -H host` and `/bin/ls`
+   are not reads. A command is not eligible when it holds an expansion, a
+   glob or a brace, a variable assignment, or a redirection to a file (`2>&1`
+   and `< file` are fine). `sudo`, without options, is admitted on
+   `journalctl`, on the `systemctl` inspection verbs and on `ss -tlnp`.
+3. Anything else is a **write**. Before the detectors run, the command is
+   normalised: the directory of the command word is dropped (`/bin/rm`,
+   `./rm`), keywords and group tokens are stripped (`then`, `do`, `{`), and
+   wrappers are unwrapped with their options (`env`, `command`, `exec`,
+   `nohup`, `nice`, `time`, `timeout`, `stdbuf`, `setsid`, `xargs`, `sudo` /
+   `doas` / `pkexec`). The detectors add `destructive`, `package` and
+   `service`; a privilege wrapper adds `privilege`. When the arguments are not
+   on the line (`rm $FLAGS`, `… | xargs rm`), the command gets the classes it
+   could reach.
+4. A credential-bearing path anywhere on the line adds `secret-file`: a path
+   segment `.ssh`, `.aws`, `.gnupg`, `.kube`, `.docker`; a file `.env*`,
+   `id_rsa*`, `*.pem`, `*.key`, `shadow`, `passwd`, `sudoers`, `.netrc`…;
+   `/root`, `/etc/ssl/private`, `/proc/…/environ`, a raw device under `/dev`.
+   So does a path that cannot be seen: a `..` segment, an expansion, a brace, a
+   glob that can match one of those names, a recursive `grep` outside
+   `/var/log`, `docker inspect`, arguments fed by `xargs`.
+5. A line is **opaque** — never a read, and carrying `secret-file` plus the
+   four write markers — when it holds: a command or process substitution, a
+   here-document, `$'…'` or `$"…"`, a control character, an unterminated
+   quote, a backslash-newline glued to a token, a descriptor redirection other
+   than `>&N` / `>&-`; a command word that is not a literal (`$CMD`, a glob);
+   inline code or an indirect command (`bash -c`, `eval`, `python -c`, `awk`,
+   `find -exec`, `watch`, `strace`…); another user, host or container (`su`,
+   `ssh`, `docker exec` / `run`, `systemctl -H`, `docker -H`); a wrapper with an
+   option the classifier does not know (`sudo -i`, `env -S`).
+   `profileCommandLine(cmd).opaque` names the reason.
 6. A mixed line (`ls; rm -rf old`) emits both sides; the mission needs every
    touched risk.
 
-The detectors are heuristics that err towards flagging; the host-side
-boundary (the login user, its sudoers entry) remains the last word. The
-whitelist and the detectors are tables in `src/policy.ts` and
-`src/command-classes.ts`; widen them with a catalog review.
+What it does not do: follow a script. `./deploy.sh`, `bash deploy.sh`, `make`
+and `npm run build` are plain writes — running a program on the host is what
+`exec-write` means, and the program may do anything its user can. The markers
+price the commands written on the line, and the list of launchers in rule 5
+is a deny-list that cannot be complete; the host-side boundary (the login
+user, its sudoers entry) remains the last word. The allow-list, the wrappers
+and the detectors are tables in `src/policy.ts` and `src/command-classes.ts`;
+widen them with a catalog review. The lexer assumes a POSIX shell on the host
+(`sh`, `bash`, `dash`) and was checked against `bash` with a differential
+fuzzer.
 
 ## Execution
 
@@ -152,28 +190,19 @@ are in `structuredContent`. A non-zero exit is a normal result, not an error.
 Stdout is capped at 1 MiB (`truncated: true`), stderr at 4 KiB. The gateway's
 `AbortSignal` destroys the connection.
 
-### Annotated scripts
-
-An annotated script (`# @vaubaan: ring=… action=…`) declares one tool per
-function. The parser, argument materialisation and invocation builder live
-in `src/bash/` with their tests, but no tool uses them yet: an owner-curated
-script is per-connection configuration the connection model does not carry,
-and a script supplied by the agent could not be trusted for its
-`action=read` annotation. Wiring it is a question for the connections
-feature; until then `ssh__exec` is the whole surface.
-
 ## Tests
 
 ```
 npx vitest run plugins/ssh
 ```
 
-`tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
-`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage`), the
-classifier, the splitter and the class detectors, the credential spec and the
-fingerprint pin, and `execute` / `discoverResources` over a fake
-`SshTransport` injected through `createSshPlugin({ transport })`.
-`classify.test.ts` is the classifier's security suite: one scenario per
-command line, pinning the exact slices or the exact denial.
-`bash-{parse,args,exec}.test.ts` cover the annotated-script modules and
-`data-model.test.ts` the data model's integrity. No test opens a socket.
+| Suite                      | Tests | What it pins                                                                                                                                                                                                                                                                                                                                                          |
+| -------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `plugin.test.ts`           | 299   | The SDK kit (`assertPluginWellFormed`, `assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage`), the classifier, **the three presets evaluated through the policy engine** (what each allows, gates and refuses per host label), the lexer, the allow-list, the detectors, the credential spec, `execute` / `discoverResources` over a fake `SshTransport`. |
+| `adversarial.test.ts`      | 181   | Command lines written to be read as milder than what the shell runs — quoting, comments, redirections, wrappers, interpreters, paths — each with its exact slices.                                                                                                                                                                                                    |
+| `classify.test.ts`         | 90    | One scenario per command line and the credential-path table.                                                                                                                                                                                                                                                                                                          |
+| `host-key-pinning.test.ts` | 37    | The real `ssh2Transport` against an in-process `ssh2.Server` on `127.0.0.1` (ephemeral port, closed after each test): a missing, malformed or mismatched pin is refused before authentication, proven from the server's side.                                                                                                                                         |
+| `data-model.test.ts`       | 2     | The data model's integrity and its markers.                                                                                                                                                                                                                                                                                                                           |
+
+No test reaches an external host or needs an `ssh` binary; only
+`host-key-pinning.test.ts` opens a socket, on loopback.

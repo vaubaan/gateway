@@ -1,1 +1,7 @@
-export { healthHandler, healthResponse, unavailableResponse, type HealthBody } from './healthz';
+export {
+  healthHandler,
+  healthResponse,
+  unavailableResponse,
+  type HealthBody,
+  type HealthDeps,
+} from './healthz';

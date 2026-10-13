@@ -38,6 +38,7 @@ import {
 import {
   AUTH_REQUIRED_HTTP_STATUS,
   AuthError,
+  BOOTSTRAP_ACTOR_ID,
   checkMissionActive,
   DoorAuthenticator,
   isRefusal,
@@ -60,8 +61,9 @@ import { budgetMissionOf, type SessionService } from '../budget';
 import type { BuildInfo } from '../compose/root';
 import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
+import { UNKNOWN_CLIENT } from '../http/client-ip';
 import type { Logger } from '../logging';
-import { maskedToken } from '../missions';
+import { maskedToken, prefixOfBearer } from '../missions';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import type { MissionRecord } from '../store/types';
@@ -116,6 +118,7 @@ interface RequestScope {
 interface Authenticated {
   readonly ctx: MissionContext;
   readonly mission: MissionRecord;
+  readonly client: ClientOrigin;
 }
 
 class VerificationThrottled extends Error {
@@ -126,7 +129,6 @@ class VerificationThrottled extends Error {
 
 export class ExecutionDoor {
   private readonly clock: Clock;
-  private readonly authenticator: DoorAuthenticator;
   private readonly missionsByContext = new WeakMap<MissionContext, MissionRecord>();
   private readonly proxies: ReturnType<typeof trustedProxyList>;
   private readonly modern: McpHttpHandler;
@@ -134,7 +136,6 @@ export class ExecutionDoor {
   constructor(private readonly deps: ExecutionDoorDeps) {
     this.clock = deps.clock ?? systemClock;
     this.proxies = trustedProxyList(deps.config.trustedProxies);
-    this.authenticator = new DoorAuthenticator(this.credentialResolver());
     // 2026-07-28 traffic. The handler holds nothing between requests; the factory
     // builds one server per request around the scope the door authenticated.
     this.modern = createMcpHandler(
@@ -154,10 +155,7 @@ export class ExecutionDoor {
     const scope: RequestScope = {
       ctx: gate.ctx,
       headers: request.headers,
-      client: clientOriginOf(request.headers, {
-        proxies: this.proxies,
-        configured: this.deps.config.trustedProxies.length > 0,
-      }),
+      client: gate.client,
     };
     if (await isLegacyRequest(request)) return this.serveLegacy(request, scope);
     return this.modern.fetch(request, {
@@ -202,9 +200,15 @@ export class ExecutionDoor {
       );
     }
 
+    // Resolved once per request: the audit entry and the verification throttle
+    // must name the same address.
+    const client = clientOriginOf(request.headers, {
+      proxies: this.proxies,
+      configured: this.deps.config.trustedProxies.length > 0,
+    });
     let ctx: MissionContext | Refusal;
     try {
-      ctx = await this.authenticate(request.headers);
+      ctx = await this.authenticate(request.headers, client.ip ?? UNKNOWN_CLIENT);
     } catch (err) {
       if (err instanceof VerificationThrottled) return tooManyRequests(err.retryAfterMs);
       if (err instanceof AuthError) {
@@ -228,10 +232,13 @@ export class ExecutionDoor {
 
     const mission = this.missionsByContext.get(ctx);
     if (!mission) throw new Error('execution door: mission context without its record');
-    return { ctx, mission };
+    return { ctx, mission, client };
   }
 
-  private async authenticate(headers: Headers): Promise<MissionContext | Refusal> {
+  private async authenticate(
+    headers: Headers,
+    clientIp: string,
+  ): Promise<MissionContext | Refusal> {
     const authorization = headers.get('authorization');
     if (!authorization && (await this.deps.webSessions.read(headers))) {
       // A browser session presented where a mission token is expected.
@@ -241,13 +248,16 @@ export class ExecutionDoor {
         expected: 'mission-token',
       });
     }
-    return this.authenticator.authenticateMission(authorization);
+    return new DoorAuthenticator(this.credentialResolver(clientIp)).authenticateMission(
+      authorization,
+    );
   }
 
-  private credentialResolver(): CredentialResolver {
+  /** One resolver per request: the verification throttle is keyed on the caller's address. */
+  private credentialResolver(clientIp: string): CredentialResolver {
     return {
       resolve: async (bearer): Promise<ResolvedCredential | null> => {
-        const verified = await this.deps.tokens.verify(bearer);
+        const verified = await this.deps.tokens.verify(bearer, clientIp);
         if (verified.outcome === 'throttled')
           throw new VerificationThrottled(verified.retryAfterMs);
         if (verified.outcome !== 'unknown') {
@@ -267,14 +277,15 @@ export class ExecutionDoor {
           return { kind: 'mission-token', context };
         }
 
-        if (SESSION_ID_SHAPE.test(bearer)) {
+        // A bearer of mission-token shape is never used as a session-store key.
+        if (!prefixOfBearer(bearer) && SESSION_ID_SHAPE.test(bearer)) {
           const asCookie = new Headers({ cookie: `${SESSION_COOKIE}=${bearer}` });
           const session = await this.deps.webSessions.read(asCookie);
           if (session) {
             const { record } = session;
             return {
               kind: 'human-session',
-              user_id: record.kind === 'user' ? record.userId : record.kind,
+              user_id: record.kind === 'user' ? record.userId : BOOTSTRAP_ACTOR_ID,
             };
           }
         }

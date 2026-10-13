@@ -12,10 +12,11 @@
  * the catalog names entities declared here ; `validateDataModel` runs in
  * `definePlugin`.
  *
- * Some entities are declared *ahead of any tool* (`db-role`, `extension`,
- * `publication`, `bucket-policy`, `mfa-factor`, `identity`,
- * `functions-config`) so the model is a faithful picture of the provider :
- * a future tool drops into an existing risk slot instead of opening a hole.
+ * Some entities are declared *ahead of any tool* (`publication`,
+ * `bucket-policy`, `mfa-factor`, `identity`, `functions-config`) so the
+ * model is a faithful picture of the provider : a future tool drops into an
+ * existing risk slot instead of opening a hole. `db-role` and `extension`
+ * have no tool of their own ; `apply_migration` reaches them.
  */
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
@@ -100,7 +101,9 @@ export const supabaseDataModel: DataModel = {
           name: 'db-role',
           parent: 'project',
           cardinalities: ['bounded'],
-          description: 'Postgres role (`anon`, `authenticated`, custom). No tool today.',
+          description:
+            'Postgres role (`anon`, `authenticated`, custom) and its privileges. ' +
+            'Reached through `apply_migration` (GRANT, REVOKE, CREATE ROLE).',
         },
         {
           name: 'publication',
@@ -114,7 +117,7 @@ export const supabaseDataModel: DataModel = {
           cardinalities: ['bounded'],
           description:
             'Postgres extension (`vector`, `pg_net`, …). Enabling one shifts the ' +
-            'posture (some open egress). No tool today.',
+            'posture (some open egress). Reached through `apply_migration`.',
         },
         {
           name: 'migration',

@@ -15,14 +15,17 @@
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
+import type { IdpConfig } from '../config/types';
+import { resolveReturnTo } from '../http/return-to';
 import type { Logger } from '../logging';
 import type { Clock } from '../store/clock';
 import { toIso } from '../store/clock';
-import type { Authenticator, Principal } from './authenticator';
+import { auditActorId, type Authenticator } from './authenticator';
 import type { BootstrapService } from './bootstrap';
 import { assertEmailDomainAllowed, mapClaims } from './claims';
 import { IdpSettingsError, LoginError, type LoginErrorCode } from './errors';
-import { type IdpSettingsService, splitList } from './idp-settings';
+import { guardMutation, OPERATOR_REFUSALS, refusalResponse } from './guard';
+import { IDP_CONFIG_OBJECT_ID, type IdpSettingsService, splitList } from './idp-settings';
 import { completeLogin, type LoginDeps } from './login';
 import { forbiddenOriginResponse, isSameOrigin } from './origin';
 import { callbackUrl, type RelyingPartyFactory } from './relying-party';
@@ -34,6 +37,7 @@ export const BOOTSTRAP_PAGE = '/admin/bootstrap';
 export const IDP_PAGE = '/admin/identity-provider';
 const RETURN_TO_PARAM = 'return_to';
 const SEE_OTHER = 303;
+const BAD_REQUEST = 400;
 
 export interface AuthHandlerDeps {
   readonly publicUrl: URL;
@@ -73,7 +77,10 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
     async loginStart(request) {
       const current = await deps.idp.current();
       if (!current) return loginError('idp-not-configured');
-      const returnTo = safeReturnTo(new URL(request.url).searchParams.get(RETURN_TO_PARAM));
+      const returnTo = safeReturnTo(
+        new URL(request.url).searchParams.get(RETURN_TO_PARAM),
+        deps.publicUrl,
+      );
       try {
         const started = await deps.relyingParties.for(current.settings).start();
         const pending = await deps.sessions.createPending({
@@ -105,12 +112,17 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
         const identity = mapClaims(finished.claims, current.settings.claims);
         assertEmailDomainAllowed(identity.email, current.settings.allowedEmailDomains);
         const outcome = await completeLogin(deps.login, identity);
+        // A sign-in replaces the session the browser already had, it does not add one.
+        await deps.sessions.destroy(request.headers);
         const session = await deps.sessions.create({
           kind: 'user',
           userId: outcome.user.id,
           login: { email: identity.email, groups: identity.groups },
         });
-        const headers = new Headers({ Location: pending.returnTo, 'Cache-Control': 'no-store' });
+        // Validated again where it becomes a `Location`: a pending sign-in stored by
+        // an older build cannot leave the instance.
+        const location = safeReturnTo(pending.returnTo, deps.publicUrl);
+        const headers = new Headers({ Location: location, 'Cache-Control': 'no-store' });
         headers.append('Set-Cookie', session.setCookie);
         headers.append('Set-Cookie', clearPending);
         return new Response(null, { status: SEE_OTHER, headers });
@@ -131,24 +143,25 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
       if (state.status !== 'active') {
         return redirect(`${BOOTSTRAP_PAGE}?error=bootstrap-unavailable`);
       }
-      const form = await request.formData();
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
       const token = stringField(form, 'token');
       if (!(await deps.bootstrap.verify(token))) {
         logger.warn('bootstrap token refused');
         return redirect(`${BOOTSTRAP_PAGE}?error=bootstrap-refused`);
       }
+      await deps.sessions.destroy(request.headers);
       const session = await deps.sessions.create({ kind: 'bootstrap' });
       logger.info('bootstrap operator signed in');
       return redirect(ADMIN_PAGE, { 'Set-Cookie': session.setCookie });
     },
 
     async saveIdpSettings(request) {
-      if (!isSameOrigin(request.headers, deps.publicUrl)) return forbiddenOriginResponse();
-      const principal = await deps.authenticator.authenticate(request.headers);
-      const decision = await deps.authenticator.authorizeAdmin(principal);
-      if (!decision.ok) return statusResponse(decision.status, decision.reason);
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
 
-      const form = await request.formData();
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
       const before = await deps.idp.stored();
       try {
         const saved = await deps.idp.save({
@@ -162,16 +175,26 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
           },
           allowedEmailDomains: splitList(stringField(form, 'allowed_email_domains')),
         });
-        await deps.audit.write({
-          kind: 'admin',
-          ts: toIso(deps.clock.now()),
-          user_id: actorId(decision.principal),
-          act: 'config-changed',
-          object: { type: 'instance-config', id: 'idp' },
-          before: before ? { issuer: before.issuer.href, client_id: before.clientId } : null,
-          after: { issuer: saved.issuer.href, client_id: saved.clientId, claims: saved.claims },
-          delegated_client_id: null,
-        });
+        const actor = auditActorId(guard.principal);
+        try {
+          await deps.audit.write({
+            kind: 'admin',
+            ts: toIso(deps.clock.now()),
+            user_id: actor,
+            act: 'config-changed',
+            object: { type: 'instance-config', id: IDP_CONFIG_OBJECT_ID },
+            before: before ? idpAuditView(before) : null,
+            after: idpAuditView(saved),
+            delegated_client_id: null,
+          });
+        } catch (err) {
+          // The settings are committed; a missing entry must at least be loud.
+          logger.error('audit entry not written for a saved configuration change', {
+            actor,
+            object: IDP_CONFIG_OBJECT_ID,
+            err,
+          });
+        }
         logger.info('identity provider settings saved', { issuer: saved.issuer.origin });
         return redirect(`${IDP_PAGE}?saved=1`);
       } catch (err) {
@@ -195,20 +218,63 @@ export function createAuthHandlers(deps: AuthHandlerDeps): AuthHandlers {
   }
 }
 
-/** A same-origin absolute path (`/x`), never a URL, never `//host`. */
-export function safeReturnTo(raw: string | null, fallback = LOGIN_PAGE): string {
-  if (!raw || !raw.startsWith('/') || raw.startsWith('//') || raw.startsWith('/\\'))
-    return fallback;
-  return raw;
+/**
+ * The path to land on after sign-in: a path of this instance, else `fallback`.
+ * Stricter than `resolveReturnTo` on one point: only a path is accepted
+ * (`/admin`), not an absolute URL nor a relative reference.
+ */
+export function safeReturnTo(raw: string | null, publicUrl: URL, fallback = LOGIN_PAGE): string {
+  if (!raw || !raw.startsWith('/')) return fallback;
+  return resolveReturnTo(raw, publicUrl) ?? fallback;
+}
+
+/** What an administrative audit entry records of the IdP settings: never the client secret. */
+function idpAuditView(
+  settings: Pick<IdpConfig, 'issuer' | 'clientId' | 'claims' | 'allowedEmailDomains'>,
+): Record<string, unknown> {
+  return {
+    issuer: settings.issuer.href,
+    client_id: settings.clientId,
+    claims: settings.claims,
+    allowed_email_domains: settings.allowedEmailDomains,
+  };
+}
+
+/**
+ * Where the Administration surface sends a visitor with no session: the
+ * bootstrap page while the token is the only way in, the sign-in otherwise.
+ */
+export async function adminSignInPage(auth: {
+  readonly bootstrap: Pick<BootstrapService, 'state'>;
+  readonly idp: Pick<IdpSettingsService, 'current'>;
+}): Promise<string> {
+  const [bootstrap, idp] = await Promise.all([auth.bootstrap.state(), auth.idp.current()]);
+  return bootstrap.status === 'active' && !idp ? BOOTSTRAP_PAGE : LOGIN_PAGE;
+}
+
+/** The form body of a mutation, or `null` when the body is not a form. */
+export async function readForm(request: Request): Promise<FormData | null> {
+  try {
+    return await request.formData();
+  } catch {
+    return null;
+  }
+}
+
+/** 400: a mutation that takes a form received something else. */
+export function notAFormResponse(): Response {
+  return new Response(
+    JSON.stringify({ error: 'invalid-request', reason: 'a form body is required' }),
+    {
+      status: BAD_REQUEST,
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    },
+  );
 }
 
 function stringField(form: FormData, name: string): string {
   const value = form.get(name);
   return typeof value === 'string' ? value.trim() : '';
-}
-
-function actorId(principal: Principal): string {
-  return principal.kind === 'user' ? principal.user.id : 'bootstrap';
 }
 
 export function statusResponse(status: number, reason: string): Response {

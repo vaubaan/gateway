@@ -383,3 +383,19 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
 export const resendTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS];
 
 export const RESEND_WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(WRITE_TOOLS.map((t) => t.name));
+
+/**
+ * The arguments a tool declares, by tool name — the one list `execute`
+ * forwards upstream. An argument absent from the schema was read by no
+ * classifier rule, so it never reaches Resend.
+ */
+const DECLARED_FIELDS: ReadonlyMap<string, readonly string[]> = new Map(
+  resendTools.map((t) => [t.name, Object.keys(t.inputSchema.properties ?? {})]),
+);
+
+export function declaredFieldsOf(tool: string): readonly string[] {
+  return DECLARED_FIELDS.get(tool) ?? [];
+}
+
+/** The fields of one email object — a single send, or an item of a batch. */
+export const EMAIL_FIELDS: readonly string[] = Object.keys(SINGLE_EMAIL_PROPS);

@@ -153,7 +153,13 @@ export async function exchangeCode(
     code: exchange.code,
     redirect_uri: exchange.redirectUri,
   });
-  if (spec.pkce && exchange.codeVerifier) body.set('code_verifier', exchange.codeVerifier);
+  if (spec.pkce) {
+    // The same rule as the authorization request: never rely on the provider to notice.
+    if (!exchange.codeVerifier) {
+      throw new Error('oauth2: PKCE is required but the flow has no verifier');
+    }
+    body.set('code_verifier', exchange.codeVerifier);
+  }
   const token = await tokenRequest(spec, client, body, io);
   return {
     kind: 'oauth2',

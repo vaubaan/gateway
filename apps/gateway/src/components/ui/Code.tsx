@@ -8,7 +8,3 @@ export function Code({ children, className, ...rest }: HTMLAttributes<HTMLElemen
     </code>
   );
 }
-
-export function KeyHint({ children }: { children: React.ReactNode }) {
-  return <kbd className={styles.kbd}>{children}</kbd>;
-}

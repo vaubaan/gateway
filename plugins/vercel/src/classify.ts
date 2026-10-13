@@ -6,26 +6,35 @@
  * Handbook : docs/handbook/providers/vercel.md §2 (mapping), §5 (edge cases).
  *
  * Pure : no IO, no credential, no `Date`. Every known tool maps to at least
- * one slice ; an unknown tool, a project the mission does not hold, or an
- * ambiguous project is `denied` — never mapped to a broad slice.
+ * one slice ; an unknown tool, a project the mission does not hold, an
+ * ambiguous project, an argument the classifier cannot read, or a tool whose
+ * target cannot be tied to a project is `denied` — never mapped to a broad or
+ * a narrower slice.
  *
  * Conventions :
- *   - the project ref comes from `projectId` (or `project_id`) and must be a
- *     resource of the mission ; absent, it falls back to the mission's single
- *     Vercel project, and is refused when the mission holds several ;
+ *   - the project ref comes from `projectId` and must be a resource of the
+ *     mission ; absent, it falls back to the mission's single Vercel project,
+ *     and is refused when the mission holds several. `execute` resolves the
+ *     project with the same function (`resolveProject`) ;
  *   - account-level tools (docs search, teams, projects list, registrar
  *     lookup) need no project ;
- *   - the environment is the closed Vercel triad, derived from `target`
- *     (`production` → `prod`) and emitted as the `env[<label>]` segment ;
- *   - secondary identifiers (deployment, thread, message, domain, rule) are
- *     embedded when slice-safe and replaced by `[*]` otherwise — the catalog
- *     patterns match any ident there, so audit precision is all that is lost.
+ *   - the environment is the closed Vercel triad, emitted as the
+ *     `env[<label>]` segment. It is read from `target` only where the
+ *     provider receives that argument (`upsert_env_var`) ; `deploy_to_vercel`
+ *     has no such argument upstream and is always classified on `prod` ;
+ *   - secondary identifiers (deployment, domain, rule) are embedded when
+ *     slice-safe and replaced by `[*]` otherwise — the catalog patterns match
+ *     any ident there, so audit precision is all that is lost. The deployment
+ *     segment is not proof of ownership : `execute` verifies, before the
+ *     upstream call, that the deployment belongs to the resolved project ;
+ *   - the thread-addressed toolbar tools (`UNBOUND_TOOLS`) are denied : a
+ *     thread id cannot be tied to a project, so the call could act on any
+ *     project of the team.
  *
- * Four v1 bugs stay fixed (research §6.3) : `upsert_env_var` honours the
- * whole `target` array and emits a fan-out marker ; `delete_env_var` touches
- * every env (the API ignores the hint) ; `get_access_to_vercel_url` is a
- * credential mint (`W`) ; `list_env_vars decrypt=true` adds the plaintext
- * slice.
+ * Four classification rules to keep : `upsert_env_var` honours the whole
+ * `target` array and emits a fan-out marker ; `delete_env_var` touches every
+ * env (the API ignores the hint) ; `get_access_to_vercel_url` is a credential
+ * mint (`W`) ; `list_env_vars decrypt=true` adds the plaintext slice.
  */
 
 import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
@@ -66,17 +75,33 @@ export function vercelEnvOf(slice: Slice): VercelEnv | null {
   return null;
 }
 
+/** The `target` literals the Vercel API accepts, mapped to env labels. `execute`
+ *  forwards the array untouched, so no other spelling is read here. */
+const UPSERT_TARGETS: Readonly<Record<string, VercelEnv>> = {
+  production: 'prod',
+  preview: 'preview',
+  development: 'development',
+};
+
+const UPSERT_TARGET_DENIAL =
+  "target: expected an array of 'production', 'preview' or 'development' (omit it for all three)";
+
 /** Normalise an `upsert_env_var` target array to the set of envs it affects.
- *  Absent or empty → all three (Vercel's default). Unknown literals are
- *  ignored ; an array of only unknown literals also means all three. */
-function envsForUpsert(target: unknown): VercelEnv[] {
-  if (!Array.isArray(target) || target.length === 0) return [...VERCEL_ENVS];
+ *  Absent or empty → all three (Vercel's default). `null` when the value is
+ *  not an array or holds a literal the classifier cannot read : the call is
+ *  then refused, never classified on the readable part alone. */
+function envsForUpsert(target: unknown): VercelEnv[] | null {
+  if (target === undefined) return [...VERCEL_ENVS];
+  if (!Array.isArray(target)) return null;
+  if (target.length === 0) return [...VERCEL_ENVS];
   const seen = new Set<VercelEnv>();
   for (const t of target) {
-    const env = toVercelEnv(t);
-    if (env !== null) seen.add(env);
+    const env =
+      typeof t === 'string' && Object.hasOwn(UPSERT_TARGETS, t) ? UPSERT_TARGETS[t] : null;
+    if (env === null || env === undefined) return null;
+    seen.add(env);
   }
-  return seen.size === 0 ? [...VERCEL_ENVS] : [...seen];
+  return [...seen];
 }
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
@@ -113,7 +138,6 @@ const PROJECT_TOOLS = new Set([
   'vercel__get_runtime_logs',
   'vercel__web_fetch_vercel_url',
   'vercel__list_toolbar_threads',
-  'vercel__get_toolbar_thread',
   'vercel__list_env_vars',
   'vercel__deploy_to_vercel',
   'vercel__get_access_to_vercel_url',
@@ -128,11 +152,40 @@ const PROJECT_TOOLS = new Set([
   'vercel__upsert_firewall_rule',
   'vercel__remove_firewall_rule',
   'vercel__manage_ip_blocking',
+]);
+
+/**
+ * Declared tools that are refused : they address a toolbar thread by id, the
+ * upstream schema has no `projectId`, and no lookup ties a thread to a
+ * project. Classified on the mission's project they would run on any thread
+ * of the team. `list_toolbar_threads` takes `projectId` and stays available.
+ */
+export const UNBOUND_TOOLS: ReadonlySet<string> = new Set([
+  'vercel__get_toolbar_thread',
   'vercel__change_toolbar_thread_resolve_status',
   'vercel__reply_to_toolbar_thread',
   'vercel__edit_toolbar_message',
   'vercel__add_toolbar_reaction',
 ]);
+
+/** The refusal an agent reads for a tool of `UNBOUND_TOOLS`. */
+export function unboundToolDenial(tool: string): string {
+  return (
+    `${tool}: a toolbar thread cannot be bound to a project of this mission ` +
+    `(the tool takes a thread id and no project) — the tool is refused. ` +
+    `Use vercel__list_toolbar_threads to read the threads of a mission project.`
+  );
+}
+
+/** True for the account-rooted tools, which need no project. */
+export function isAccountTool(tool: string): boolean {
+  return ACCOUNT_TOOLS.has(tool);
+}
+
+/** True for a tool the classifier maps to slices (account- or project-rooted). */
+export function isClassifiedTool(tool: string): boolean {
+  return ACCOUNT_TOOLS.has(tool) || PROJECT_TOOLS.has(tool);
+}
 
 /**
  * Resolve the project a call touches. The explicit argument wins and must be
@@ -145,7 +198,7 @@ export function resolveProject(
   required: boolean,
 ): { ref: string | null } | { denied: string } {
   const own = resources.filter((r) => r.provider === PROVIDER);
-  const raw = args.projectId ?? args.project_id;
+  const raw = args.projectId;
   if (raw !== undefined) {
     if (typeof raw !== 'string' || raw.length === 0 || !SAFE_IDENT.test(raw)) {
       return { denied: 'projectId: malformed project ref' };
@@ -173,13 +226,14 @@ export function classifyVercel(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ClassifyOutcome {
-  const isAccountTool = ACCOUNT_TOOLS.has(tool);
-  if (!isAccountTool && !PROJECT_TOOLS.has(tool)) {
+  if (UNBOUND_TOOLS.has(tool)) return { denied: unboundToolDenial(tool) };
+  const accountTool = ACCOUNT_TOOLS.has(tool);
+  if (!accountTool && !PROJECT_TOOLS.has(tool)) {
     return { denied: `unknown vercel tool '${tool}'.` };
   }
 
   // Account tools accept a projectId too (it is then checked, not used).
-  const project = resolveProject(args, resources, !isAccountTool);
+  const project = resolveProject(args, resources, !accountTool);
   if ('denied' in project) return project;
   const projectSeg: SliceSegment = project.ref !== null ? ident(project.ref) : ANY_IDENT;
 
@@ -273,20 +327,6 @@ export function classifyVercel(
         ],
       };
 
-    case 'vercel__get_toolbar_thread':
-      return {
-        slices: [
-          slice('R', [
-            name('project'),
-            projectSeg,
-            name('deployment'),
-            deploymentIdentOf(args),
-            name('toolbar-thread'),
-            toolbarThreadIdent(args),
-          ]),
-        ],
-      };
-
     // ─── Reads — env-var (plaintext discriminated) ────────────────────
 
     case 'vercel__list_env_vars': {
@@ -310,15 +350,14 @@ export function classifyVercel(
 
     // ─── Writes — deployment ─────────────────────────────────────────
 
-    case 'vercel__deploy_to_vercel': {
-      // Missing target defaults to prod : the conservative reading.
-      const env = toVercelEnv(args.target) ?? 'prod';
+    // The upstream tool declares no argument : a `target` would be read here
+    // and ignored there, letting the caller pick the cheaper risk. Always prod.
+    case 'vercel__deploy_to_vercel':
       return {
         slices: [
-          slice('W', [name('project'), projectSeg, name('env'), ident(env), name('deployment')]),
+          slice('W', [name('project'), projectSeg, name('env'), ident('prod'), name('deployment')]),
         ],
       };
-    }
 
     // A credential mint, not a deployment read, even though the API is a GET.
     case 'vercel__get_access_to_vercel_url':
@@ -338,6 +377,7 @@ export function classifyVercel(
 
     case 'vercel__upsert_env_var': {
       const envs = envsForUpsert(args.target);
+      if (envs === null) return { denied: UPSERT_TARGET_DENIAL };
       const key = safeIdent(args.key);
       const slices: Slice[] = envs.map((e) =>
         slice('W', [name('project'), projectSeg, name('env'), ident(e), name('env-var'), key]),
@@ -367,11 +407,16 @@ export function classifyVercel(
 
     // ─── Writes — domains ────────────────────────────────────────────
 
+    // Domains contain `.`, which the slice DSL refuses : FQDNs fall back to `[*]`.
     case 'vercel__add_project_domain':
+      return {
+        slices: [slice('W', [name('project'), projectSeg, name('domain'), safeIdent(args.name)])],
+      };
+
     case 'vercel__verify_project_domain':
     case 'vercel__remove_project_domain':
       return {
-        slices: [slice('W', [name('project'), projectSeg, name('domain'), domainIdent(args)])],
+        slices: [slice('W', [name('project'), projectSeg, name('domain'), safeIdent(args.domain)])],
       };
 
     // ─── Reads — firewall ────────────────────────────────────────────
@@ -411,54 +456,6 @@ export function classifyVercel(
         ],
       };
 
-    // ─── Writes — toolbar ────────────────────────────────────────────
-
-    case 'vercel__change_toolbar_thread_resolve_status':
-      return {
-        slices: [
-          slice('W', [
-            name('project'),
-            projectSeg,
-            name('deployment'),
-            deploymentIdentOf(args),
-            name('toolbar-thread'),
-            toolbarThreadIdent(args),
-          ]),
-        ],
-      };
-
-    case 'vercel__reply_to_toolbar_thread':
-      return {
-        slices: [
-          slice('W', [
-            name('project'),
-            projectSeg,
-            name('deployment'),
-            deploymentIdentOf(args),
-            name('toolbar-thread'),
-            toolbarThreadIdent(args),
-            name('toolbar-message'),
-          ]),
-        ],
-      };
-
-    case 'vercel__edit_toolbar_message':
-    case 'vercel__add_toolbar_reaction':
-      return {
-        slices: [
-          slice('W', [
-            name('project'),
-            projectSeg,
-            name('deployment'),
-            deploymentIdentOf(args),
-            name('toolbar-thread'),
-            toolbarThreadIdent(args),
-            name('toolbar-message'),
-            safeIdent(args.messageId ?? args.message_id),
-          ]),
-        ],
-      };
-
     default:
       return { denied: `unknown vercel tool '${tool}'.` };
   }
@@ -472,16 +469,8 @@ function safeIdent(value: unknown): SliceSegment {
 
 /** Deployment id : the upstream surface uses `idOrUrl`, `deploymentId` or
  *  `url` depending on the tool — never `id`, which is the env-var id. Full
- *  URLs are not slice-safe and fall back to `[*]`. */
+ *  URLs are not slice-safe and fall back to `[*]`. Audit precision only :
+ *  ownership of the deployment is verified by `execute`. */
 function deploymentIdentOf(args: Readonly<Record<string, unknown>>): SliceSegment {
   return safeIdent(args.idOrUrl ?? args.deploymentId ?? args.url);
-}
-
-function toolbarThreadIdent(args: Readonly<Record<string, unknown>>): SliceSegment {
-  return safeIdent(args.threadId ?? args.thread_id);
-}
-
-/** Domains contain `.`, which the slice DSL refuses : FQDNs fall back to `[*]`. */
-function domainIdent(args: Readonly<Record<string, unknown>>): SliceSegment {
-  return safeIdent(args.domain ?? args.name);
 }

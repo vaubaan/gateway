@@ -16,7 +16,3 @@ export function CardTitle({ children }: { children: React.ReactNode }) {
 export function CardBody({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
   return <div className={[styles.body, className ?? ''].filter(Boolean).join(' ')} {...rest} />;
 }
-
-export function CardFooter({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={[styles.footer, className ?? ''].filter(Boolean).join(' ')} {...rest} />;
-}

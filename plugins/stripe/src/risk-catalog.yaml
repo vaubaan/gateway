@@ -3,6 +3,7 @@
 # Spec : docs/spec/gateway-risk-model.md §4 + §4bis (scope caps),
 #        docs/spec/vaubaan-gateway.md §3.2 (presets).
 # ADR  : docs/decisions/scope-caps-amplification-axis.md,
+#        docs/decisions/scope-caps-not-enforced-in-v5-0.md,
 #        docs/decisions/unified-gates-drop-confirm.md (no default_gate),
 #        docs/decisions/plugin-contract-and-credential-spec.md (presets, loader).
 #
@@ -16,8 +17,12 @@
 # a write (ADR fallback-risk-only-when-uncategorized) : no preset lists it,
 # and its appearance in an audit log means a catalog entry is missing.
 #
-# Two entries carry `caps` + `infra_limits` : `refund-create` and
-# `payout-create`, the two actions that move real money out of the account.
+# `refund-create` and `payout-create`, the two actions that move real money
+# out of the account, carry `infra_limits.calls_per_minute_max` : the ceiling
+# on the rate limit a mission may be issued with, the one catalog limit the
+# gateway enforces. No entry declares `caps` (ADR
+# scope-caps-not-enforced-in-v5-0) : a mission bounds them with its quota and
+# rate limit.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
@@ -252,10 +257,6 @@ risks:
       cost: unbounded
       visibility: internal
       persistence: posture
-    caps:
-      items_per_call_max: 1
-      calls_per_minute_max: 3
-      calls_per_session_max: 20
     infra_limits:
       calls_per_minute_max: 30
 
@@ -274,10 +275,6 @@ risks:
       cost: unbounded
       visibility: internal
       persistence: posture
-    caps:
-      items_per_call_max: 1
-      calls_per_minute_max: 2
-      calls_per_session_max: 5
     infra_limits:
       calls_per_minute_max: 30
 

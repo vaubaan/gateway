@@ -10,9 +10,13 @@
  *     Global API Key (`email|key`) is never accepted ;
  *   - the zone in the URL is the **resolved mission resource**, never the
  *     raw argument ; `zone_id` / `record_id` are consumed and not forwarded ;
- *   - `update_record` is preceded by a read of the record : when the call
- *     declared an ordinary record (`type` + `name`) but the record is apex,
- *     wildcard, MX or NS, the call is refused before the PATCH ;
+ *   - every identifier interpolated into the path (zone ref, `record_id`)
+ *     passes `pathIdent`, the function the classifier uses : a dot segment
+ *     or a separator is refused before any call ;
+ *   - `update_record` and `delete_record` are preceded by a read of the
+ *     record when the call declared an ordinary one (`type` + `name`) : if
+ *     the record is apex, wildcard, MX or NS, or cannot be read back, the
+ *     call is refused before the PATCH / DELETE ;
  *   - `list_zones` is filtered to the mission's zones ;
  *   - 401 / 403 from Cloudflare → `UpstreamAuthError`.
  */
@@ -28,8 +32,8 @@ import {
 
 import {
   CLOUDFLARE_DNS_PROVIDER,
-  SAFE_IDENT,
   isCriticalRecord,
+  pathIdent,
   recordSensitivity,
   resolveZoneResource,
   zoneNameOf,
@@ -58,8 +62,22 @@ interface Route {
   readonly record?: boolean;
 }
 
-const z = (zone: string) => `/zones/${encodeURIComponent(zone)}`;
-const r = (zone: string, record: string) => `${z(zone)}/dns_records/${encodeURIComponent(record)}`;
+/** One path segment. Refuses anything `pathIdent` refuses : `encodeURIComponent` would let `..` through. */
+function segment(value: string): string {
+  if (pathIdent(value) === null) {
+    throw new Error('cloudflare-dns: refusing to build a request path from an unsafe identifier');
+  }
+  return encodeURIComponent(value);
+}
+
+const z = (zone: string) => `/zones/${segment(zone)}`;
+const r = (zone: string, record: string) => `${z(zone)}/dns_records/${segment(record)}`;
+
+/** Record writes on an existing record : their declared sensitivity is checked against the record. */
+const SENSITIVITY_GUARDED_TOOLS: ReadonlySet<string> = new Set([
+  'cloudflare_dns__update_record',
+  'cloudflare_dns__delete_record',
+]);
 
 /** Tool → Cloudflare endpoint. Every declared tool has a row ; the classifier enforces the inverse. */
 const ROUTES: Readonly<Record<string, Route>> = {
@@ -119,7 +137,7 @@ const ROUTES: Readonly<Record<string, Route>> = {
   cloudflare_dns__delete_zone: { method: 'DELETE', path: z, payload: 'none' },
 };
 
-// ─── v5 entry points ──────────────────────────────────────────────────────────
+// ─── entry points ─────────────────────────────────────────────────────────────
 
 export async function executeCloudflareDns(
   ctx: ExecuteContext,
@@ -142,7 +160,7 @@ export async function executeCloudflareDns(
   const record = route.record ? recordIdArg(record_id) : '';
   const path = route.path(zone.ref, record);
 
-  if (tool === 'cloudflare_dns__update_record') {
+  if (SENSITIVITY_GUARDED_TOOLS.has(tool)) {
     await assertDeclaredSensitivity(ctx, headers, zone, path, args);
   }
 
@@ -182,6 +200,7 @@ export async function discoverCloudflareDnsResources(
       ctx.signal,
     )) as ZoneListDto;
     const zones = dto.result ?? [];
+    if (!isZoneList(zones)) throw new Error("cloudflare-dns: GET /zones: 'result' is not a list");
     for (const zone of zones) {
       if (resources.length >= MAX_DISCOVERED_ZONES) break;
       resources.push(zoneResource(zone));
@@ -213,10 +232,11 @@ function tokenOf(ctx: ConnectionContext): string {
 }
 
 function recordIdArg(value: unknown): string {
-  if (typeof value !== 'string' || !SAFE_IDENT.test(value)) {
+  const recordId = pathIdent(value);
+  if (recordId === null) {
     throw new Error('cloudflare-dns: record_id: missing or malformed identifier');
   }
-  return value;
+  return recordId;
 }
 
 /** Keep only the zones of the mission in a `GET /zones` answer ; `result_info` is left as upstream sent it. */
@@ -241,9 +261,11 @@ interface RecordDto {
 }
 
 /**
- * An update declared as an ordinary record (`type` + `name` of a subdomain
- * record) must target a record that is ordinary today ; otherwise the agent
- * could move an apex record away while accepting only `record-write`.
+ * An update or a deletion declared as an ordinary record (`type` + `name` of
+ * a subdomain record) must target a record that is ordinary today ;
+ * otherwise the agent could move or remove an apex record while accepting
+ * only `record-write` (+ `record-delete`). A record whose type and name
+ * cannot be read back counts as critical : the call is refused.
  */
 async function assertDeclaredSensitivity(
   ctx: ExecuteContext,

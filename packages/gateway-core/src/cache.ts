@@ -68,6 +68,9 @@ export class MemoryCacheClient implements CacheClient {
   async set<T = unknown>(key: string, value: T, ttlSeconds: number): Promise<void> {
     // Delete first so the key moves to the end of the insertion order.
     this.store.delete(key);
+    // A TTL that is not a positive, finite number caches nothing: `NaN`
+    // would yield an entry that never expires.
+    if (!Number.isFinite(ttlSeconds) || ttlSeconds <= 0) return;
     if (this.store.size >= this.maxEntries) {
       this.sweepExpired();
       while (this.store.size >= this.maxEntries) {

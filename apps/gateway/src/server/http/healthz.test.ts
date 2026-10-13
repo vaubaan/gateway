@@ -5,7 +5,7 @@ import { validEnv } from '../config/testing';
 import { buildRoot } from '../compose/root';
 import { memoryStoreDeps } from '../compose/testing';
 import { openMemoryStore } from '../store';
-import { healthHandler, healthResponse } from './healthz';
+import { healthHandler, healthResponse, type HealthDeps } from './healthz';
 
 const deps = {
   loadConfig: () => loadInstanceConfig({ env: validEnv() }),
@@ -47,6 +47,33 @@ describe('/healthz', () => {
       store: { kind: 'memory', status: 'error' },
     });
     await root.close();
+  });
+
+  it('needs only the store liveness, a logger, the build stamps and the start time', async () => {
+    const errors: string[] = [];
+    const health: HealthDeps = {
+      store: { kind: 'postgres', ping: async () => undefined },
+      logger: { error: (message) => errors.push(message) },
+      build: { version: '9.9.9', commit: 'feedbee' },
+      startedAt: new Date('2026-01-01T00:00:00.000Z'),
+      now: () => new Date('2026-01-01T00:01:30.900Z'),
+    };
+    const ok = await healthResponse(health);
+    expect(ok.status).toBe(200);
+    expect(await ok.json()).toEqual({
+      status: 'ok',
+      version: '9.9.9',
+      commit: 'feedbee',
+      uptime_seconds: 90,
+      store: { kind: 'postgres', status: 'ok' },
+    });
+
+    const down = await healthResponse({
+      ...health,
+      store: { kind: 'postgres', ping: () => Promise.reject(new Error('gone')) },
+    });
+    expect(down.status).toBe(503);
+    expect(errors).toEqual(['store ping failed']);
   });
 
   it('answers 503 unavailable when the root cannot be built', async () => {

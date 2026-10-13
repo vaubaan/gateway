@@ -14,7 +14,11 @@
  *     constant of the plugin, not configuration of the instance ;
  *   - `execute_sql`, `list_tables` and `list_migrations` go through the
  *     **read-only** query endpoint : Postgres refuses any mutation there,
- *     which is what lets the classifier emit a read slice for opaque SQL.
+ *     which is what lets the classifier emit a read slice for opaque SQL ;
+ *   - the target project is resolved **once**, by the classifier's own
+ *     `resolveProjectRef(args, ctx.resources)` : every URL is built from its
+ *     answer, never from `args.project_ref`, so a call reaches the project
+ *     its authorised slices name or no project at all.
  *
  * Data plane (GoTrue admin, Storage) : the Management API token cannot call
  * `{ref}.supabase.co/auth/v1/admin` or `/storage/v1`. The plugin fetches the
@@ -31,6 +35,7 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
+import { resolveProjectRef } from './classify.ts';
 import { SUPABASE_TOOL_NAMES } from './tools.ts';
 
 /** Public Management API of Supabase. */
@@ -50,12 +55,27 @@ export async function executeSupabase(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
-  if (!SUPABASE_TOOL_NAMES.has(tool)) {
-    return { content: [{ type: 'text', text: `unknown tool '${tool}'` }], isError: true };
+  if (!SUPABASE_TOOL_NAMES.has(tool)) return errorResult(`unknown tool '${tool}'`);
+  // Same function, same inputs as the classifier : the project the slices
+  // named is the project the request reaches.
+  const target = resolveProjectRef(args, ctx.resources);
+  if ('denied' in target) return errorResult(target.denied);
+  if (SQL_TOOLS.has(tool) && !isSqlText(args.query)) {
+    return errorResult('query: missing or malformed.');
   }
   const token = expectCredentialKind('supabase', ctx.credential, 'oauth2').accessToken;
-  const payload = await callSupabase(ctx.fetch, token, tool, args, ctx.signal);
+  const payload = await callSupabase(ctx.fetch, token, tool, target.ref, args, ctx.signal);
   return text(payload);
+}
+
+/** The tools whose `query` is sent to Postgres : it must be a non-blank string, as classified. */
+const SQL_TOOLS: ReadonlySet<string> = new Set([
+  'supabase__execute_sql',
+  'supabase__apply_migration',
+]);
+
+function isSqlText(value: unknown): value is string {
+  return typeof value === 'string' && value.trim().length > 0;
 }
 
 interface OrganizationDto {
@@ -187,16 +207,19 @@ async function fetchServiceRoleKey(
   return sr;
 }
 
-/** Dispatch one tool call with the bare access token. Throws on unknown tool. */
+/**
+ * Dispatch one tool call on `projectRef`, the project `resolveProjectRef`
+ * answered. Throws on unknown tool.
+ */
 async function callSupabase(
   fetchImpl: FetchImpl,
   token: string,
   tool: string,
+  projectRef: string,
   args: Readonly<Record<string, unknown>>,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const rawRef = String(args.project_ref);
-  const ref = encodeURIComponent(rawRef);
+  const ref = encodeURIComponent(projectRef);
   const mgmt = (path: string, init?: RequestInit) =>
     mgmtFetch(fetchImpl, token, path, init, signal);
   const readOnlyQuery = (query: string) =>
@@ -213,10 +236,13 @@ async function callSupabase(
       const keys = (await mgmt(`/projects/${ref}/api-keys`)) as readonly ApiKeyDto[] | null;
       const anon = keys?.find((k) => k.name === 'anon')?.api_key;
       if (!anon) throw new Error(`Supabase /projects/${ref}/api-keys returned no 'anon' entry`);
-      return { url: projectUrl(rawRef), anon_key: anon };
+      return { url: projectUrl(projectRef), anon_key: anon };
     }
     case 'supabase__list_tables': {
-      const schemas = Array.isArray(args.schemas) ? (args.schemas as string[]) : ['public'];
+      const named = Array.isArray(args.schemas)
+        ? args.schemas.filter((s): s is string => typeof s === 'string')
+        : [];
+      const schemas = named.length > 0 ? named : ['public'];
       const listLiteral = schemas.map((s) => `'${s.replace(/'/g, "''")}'`).join(',');
       return readOnlyQuery(
         `select table_schema, table_name, table_type
@@ -344,7 +370,7 @@ async function callSupabase(
     case 'supabase__upload_object':
     case 'supabase__delete_object':
     case 'supabase__create_signed_url':
-      return executeDataPlane(fetchImpl, token, tool, args, signal);
+      return executeDataPlane(fetchImpl, token, tool, projectRef, args, signal);
 
     default:
       throw new Error(`Unknown Supabase MCP tool: ${tool}`);
@@ -404,10 +430,10 @@ async function executeDataPlane(
   fetchImpl: FetchImpl,
   token: string,
   tool: string,
+  projectRef: string,
   args: Readonly<Record<string, unknown>>,
   signal?: AbortSignal,
 ): Promise<unknown> {
-  const projectRef = String(args.project_ref);
   const serviceRole = await fetchServiceRoleKey(fetchImpl, token, projectRef, signal);
   const data = (path: string, init?: DataApiInit) =>
     dataApiFetch(fetchImpl, serviceRole, projectRef, path, init, signal);
@@ -504,12 +530,16 @@ function bodyOf(
   args: Readonly<Record<string, unknown>>,
   alsoStrip: readonly string[] = [],
 ): Record<string, unknown> {
-  const drop = new Set<string>(['project_ref', 'projectRef', ...alsoStrip]);
+  const drop = new Set<string>(['project_ref', ...alsoStrip]);
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(args)) {
     if (!drop.has(k) && v !== undefined) out[k] = v;
   }
   return out;
+}
+
+function errorResult(message: string): McpToolResult {
+  return { content: [{ type: 'text', text: message }], isError: true };
 }
 
 function text(payload: unknown): McpToolResult {

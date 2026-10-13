@@ -22,6 +22,9 @@ export const IDP_CONFIG_KEYS = {
   allowedEmailDomains: 'idp.allowed_email_domains',
 } as const;
 
+/** The object id of the IdP settings in an administrative audit entry. */
+export const IDP_CONFIG_OBJECT_ID = 'idp';
+
 /** Same defaults as the configuration loader (`config/load.ts`). */
 export const DEFAULT_CLAIM_MAPPING: IdpClaimMapping = {
   sub: 'sub',
@@ -93,13 +96,21 @@ export class IdpSettingsService {
     const allowedEmailDomains = normalizeDomains(input.allowedEmailDomains, problems);
     if (problems.length > 0 || !issuer || !clientSecret) throw new IdpSettingsError(problems);
 
-    await this.config.set(IDP_CONFIG_KEYS.issuer, issuer.href);
-    await this.config.set(IDP_CONFIG_KEYS.clientId, clientId);
-    await this.config.setSecret(IDP_CONFIG_KEYS.clientSecret, clientSecret);
-    await this.config.set(IDP_CONFIG_KEYS.claimSub, claims.sub);
-    await this.config.set(IDP_CONFIG_KEYS.claimEmail, claims.email);
-    await this.config.set(IDP_CONFIG_KEYS.claimGroups, claims.groups);
-    await this.config.set(IDP_CONFIG_KEYS.allowedEmailDomains, JSON.stringify(allowedEmailDomains));
+    // One transaction: never the issuer of one IdP with the secret or the
+    // claim mapping of another.
+    await this.config.apply([
+      { kind: 'value', key: IDP_CONFIG_KEYS.issuer, value: issuer.href },
+      { kind: 'value', key: IDP_CONFIG_KEYS.clientId, value: clientId },
+      { kind: 'secret', key: IDP_CONFIG_KEYS.clientSecret, plain: clientSecret },
+      { kind: 'value', key: IDP_CONFIG_KEYS.claimSub, value: claims.sub },
+      { kind: 'value', key: IDP_CONFIG_KEYS.claimEmail, value: claims.email },
+      { kind: 'value', key: IDP_CONFIG_KEYS.claimGroups, value: claims.groups },
+      {
+        kind: 'value',
+        key: IDP_CONFIG_KEYS.allowedEmailDomains,
+        value: JSON.stringify(allowedEmailDomains),
+      },
+    ]);
     return { issuer, clientId, clientSecret, claims, allowedEmailDomains };
   }
 

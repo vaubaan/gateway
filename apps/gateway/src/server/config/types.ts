@@ -125,9 +125,19 @@ export function secretValues(config: InstanceConfig): string[] {
     if (app.clientSecret) out.push(app.clientSecret);
     if (app.privateKey) out.push(app.privateKey);
   }
-  out.push(Buffer.from(config.encryption.masterKey).toString('base64'));
-  for (const key of config.encryption.previousKeys.values()) {
-    out.push(Buffer.from(key).toString('base64'));
-  }
+  out.push(...keyEncodings(config.encryption.masterKey));
+  for (const key of config.encryption.previousKeys.values()) out.push(...keyEncodings(key));
   return out.filter((s) => s.length > 0);
+}
+
+/**
+ * Every text form the loader accepts for a key (standard base64 with or
+ * without padding, base64url): the redactor must match the form the operator
+ * actually configured, which the decoded bytes no longer tell.
+ */
+function keyEncodings(key: Uint8Array): string[] {
+  const bytes = Buffer.from(key);
+  const standard = bytes.toString('base64');
+  const urlSafe = bytes.toString('base64url');
+  return [...new Set([standard, standard.replace(/=+$/, ''), urlSafe])];
 }

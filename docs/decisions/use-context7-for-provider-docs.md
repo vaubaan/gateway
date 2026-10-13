@@ -4,6 +4,8 @@ status: accepted
 date: 2026-05-31
 ---
 
+> **Pre-v5 document (French).** Not translated; read with the mapping in [[legacy-status-of-v4-adrs-and-handbooks]].
+
 # Context7 MCP comme source canonique de doc des providers tiers
 
 ## Contexte

@@ -32,6 +32,8 @@ export const API_KEY_PATTERN = new RegExp(
   `vbn_(live|test)_([A-Za-z0-9]{${PREFIX_LEN}})_[A-Za-z0-9]{${SECRET_LEN}}`,
 );
 const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+/** A whole string in the token alphabet (no `$` : it would accept a trailing newline). */
+const BASE62_ONLY = /^[A-Za-z0-9]+(?![\s\S])/;
 
 const ARGON2_OPTS = {
   type: argon2.argon2id,
@@ -92,7 +94,9 @@ export function parseApiKey(raw: string): ParsedApiKey | null {
   if (underscore !== PREFIX_LEN) return null;
   const prefix = body.slice(0, PREFIX_LEN);
   const secret = body.slice(PREFIX_LEN + 1);
-  if (!/^[A-Za-z0-9]+$/.test(prefix) || secret.length !== SECRET_LEN) return null;
+  if (!BASE62_ONLY.test(prefix) || secret.length !== SECRET_LEN || !BASE62_ONLY.test(secret)) {
+    return null;
+  }
   return { kind, prefix, full: raw };
 }
 

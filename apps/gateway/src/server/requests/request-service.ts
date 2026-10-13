@@ -26,18 +26,17 @@ import {
   type RequestKind,
   type RequestStatus,
   type RiskId,
-  type SessionEventKind,
 } from '@vaubaan/shared';
 
 import {
   budgetMissionOf,
-  consumedInPeriod,
   currentPeriod,
   deriveMissionState,
-  sessionCounterOf,
+  missionUsageReader,
   type BudgetMission,
   type CurrentPeriod,
   type MissionState,
+  type SessionService,
 } from '../budget';
 import type { Logger } from '../logging';
 import { enumerateCatalog } from '../missions/catalog-view';
@@ -75,6 +74,12 @@ export interface RequestServiceDeps {
   readonly publicUrl: URL;
   readonly clock: Clock;
   readonly logger: Logger;
+  /**
+   * The budget's "load counters, derive state" read (`SessionService.usageOf`).
+   * Defaults to the same read over `store.sessions`, for a module wired before
+   * the `SessionService` exists.
+   */
+  readonly budget?: Pick<SessionService, 'usageOf'>;
 }
 
 export interface RequestSummary {
@@ -164,7 +169,11 @@ interface OwnedRequest {
 export class RequestService {
   private readonly labels = new Map<string, ReadonlyMap<RiskId, string>>();
 
-  constructor(private readonly deps: RequestServiceDeps) {}
+  private readonly budget: Pick<SessionService, 'usageOf'>;
+
+  constructor(private readonly deps: RequestServiceDeps) {
+    this.budget = deps.budget ?? missionUsageReader(deps.store.sessions);
+  }
 
   // ───────────────────────────────────────────────────────────────────────────
   // Reads
@@ -206,15 +215,11 @@ export class RequestService {
       return { outcome: 'ok', view: { kind: 'approval', request: summary } };
 
     const budget = budgetMissionOf(mission);
-    const session = await this.deps.store.sessions.getByMission(mission.id);
-    const counters = session ? await this.deps.store.sessions.counters(session.id) : [];
-    const state = deriveMissionState(budget, counters.map(sessionCounterOf), now);
-    const period = currentPeriod(budget.period, now);
-    const consumed = consumedInPeriod(counters.map(sessionCounterOf), period.start);
+    const { session_id, state, period, consumed } = await this.budget.usageOf(budget, now);
     const lines = budget.policy.map((entry) => this.lineOf(entry, consumed));
     const risk = lines.find((line) => line.risk_id === request.riskId) ?? null;
-    const events = session
-      ? await this.deps.store.sessions.listEvents(session.id, {
+    const events = session_id
+      ? await this.deps.store.sessions.listEvents(session_id, {
           order: 'desc',
           limit: SESSION_EVENTS_SHOWN,
         })
@@ -460,7 +465,7 @@ function applyClaim(ctx: ClaimDecisionContext, input: ApplyInput): AppliedClaim 
       const before = ctx.resetCounters(period.start);
       const credits = Object.fromEntries([...before].filter(([, count]) => count > 0));
       ctx.recordEvent({
-        kind: 'reset' satisfies SessionEventKind,
+        kind: 'reset',
         riskId,
         actorUserId: user.id,
         details: { ...base, ...span, credits },
@@ -482,7 +487,7 @@ function applyClaim(ctx: ClaimDecisionContext, input: ApplyInput): AppliedClaim 
       }
       const credits = { [riskId]: decision.amount };
       ctx.recordEvent({
-        kind: 'extension' satisfies SessionEventKind,
+        kind: 'extension',
         riskId,
         actorUserId: user.id,
         details: { ...base, dimension: 'quota', amount: decision.amount, ...span, credits },
@@ -504,7 +509,7 @@ function applyClaim(ctx: ClaimDecisionContext, input: ApplyInput): AppliedClaim 
       ctx.setMissionExpiry(decision.expires_at);
       const change = { expires_at_before: situation.expires_at, expires_at: decision.expires_at };
       ctx.recordEvent({
-        kind: 'extension' satisfies SessionEventKind,
+        kind: 'extension',
         riskId,
         actorUserId: user.id,
         details: { ...base, dimension: 'expiry', ...change },
@@ -519,7 +524,7 @@ function applyClaim(ctx: ClaimDecisionContext, input: ApplyInput): AppliedClaim 
     }
     case 'refuse': {
       ctx.recordEvent({
-        kind: 'request' satisfies SessionEventKind,
+        kind: 'request',
         riskId,
         actorUserId: user.id,
         details: { ...base, request_kind: ctx.request.kind, state: 'refused' },

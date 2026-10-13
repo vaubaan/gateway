@@ -6,8 +6,9 @@
 import Link from 'next/link';
 
 import { LocalDate } from '@/components/LocalDate';
-import { Badge, Banner, Card, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
-import { currentPrincipal } from '@/lib/auth/session';
+import { NeedsUser } from '@/components/auth/NeedsUser';
+import { Badge, Card, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
+import { currentUser } from '@/lib/auth/session';
 import { inboxRequestPath } from '@/server/requests/url';
 
 import styles from './requests.module.css';
@@ -15,16 +16,9 @@ import styles from './requests.module.css';
 export const dynamic = 'force-dynamic';
 
 export default async function RequestsPage() {
-  const { root, principal } = await currentPrincipal();
-  if (principal?.kind !== 'user') {
-    return (
-      <Banner tone="info" title="No inbox for the bootstrap operator">
-        Requests are addressed to the creator of a mission, and a mission is issued by an identified
-        user. Sign in through the identity provider to see yours.
-      </Banner>
-    );
-  }
-  const requests = await root.requests.service.inbox(principal.user);
+  const session = await currentUser();
+  if (!session) return <NeedsUser />;
+  const requests = await session.root.requests.service.inbox(session.user);
 
   return (
     <>

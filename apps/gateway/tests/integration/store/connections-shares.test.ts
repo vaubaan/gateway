@@ -83,9 +83,11 @@ describe('connections repository', () => {
     expect(c.owner).toEqual({ kind: 'group', id: group });
     const transferred = await store.connections.transferOwner(c.id, { kind: 'user', id: owner });
     expect(transferred.owner).toEqual({ kind: 'user', id: owner });
+    // `setStatus` is deprecated, but nothing else produces `unowned` yet (P2.2 names it).
     const unowned = await store.connections.setStatus(c.id, 'unowned');
     expect(unowned.status).toBe('unowned');
-    const revoked = await store.connections.setStatus(c.id, 'revoked');
+    const revoked = await store.connections.revoke(c.id);
+    expect(revoked.status).toBe('revoked');
     expect(revoked.revokedAt).toBe(t.clock.now().toISOString());
     await expect(
       store.connections.transferOwner(c.id, { kind: 'group', id: group }),
@@ -99,9 +101,10 @@ describe('connections repository', () => {
       displayName: 'x',
       credential: 'old',
     });
-    await store.connections.setStatus(c.id, 'expired');
-    const fresh = await store.connections.setCredential(c.id, 'new', null);
-    expect(fresh.status).toBe('active');
+    expect(await store.connections.markExpired(c.id)).toBe(true);
+    expect((await store.connections.getById(c.id))?.status).toBe('expired');
+    expect(await store.connections.reconnect(c.id, 'new', null)).toBe(true);
+    expect((await store.connections.getById(c.id))?.status).toBe('active');
     expect(await store.connections.getCredential(c.id)).toBe('new');
   });
 
@@ -143,7 +146,7 @@ describe('connections repository', () => {
       displayName: 'x',
       credential: null,
     });
-    const first = await store.connections.replaceResources(c.id, [
+    const first = await store.connections.syncDiscoveredResources(c.id, [
       { ref: 'proj-a', displayName: 'Project A' },
       { ref: 'proj-b', displayName: 'Project B' },
     ]);
@@ -152,13 +155,15 @@ describe('connections repository', () => {
     if (!a) throw new Error('expected a resource');
     await store.connections.setResourceEnv(a.id, 'prod');
 
-    const second = await store.connections.replaceResources(c.id, [
+    const second = await store.connections.syncDiscoveredResources(c.id, [
       { ref: 'proj-a', displayName: 'Project A (renamed)' },
       { ref: 'proj-c', displayName: 'Project C', env: 'staging' },
     ]);
-    expect(second.map((r) => [r.ref, r.env, r.displayName])).toEqual([
-      ['proj-a', 'prod', 'Project A (renamed)'],
-      ['proj-c', 'staging', 'Project C'],
+    // `proj-b` is no longer discovered: it is kept and marked stale, never deleted.
+    expect(second.map((r) => [r.ref, r.env, r.displayName, r.staleSince !== null])).toEqual([
+      ['proj-a', 'prod', 'Project A (renamed)', false],
+      ['proj-b', null, 'Project B', true],
+      ['proj-c', 'staging', 'Project C', false],
     ]);
     expect(second[0]?.id).toBe(a.id);
     expect(await store.connections.listResources(c.id)).toEqual(second);

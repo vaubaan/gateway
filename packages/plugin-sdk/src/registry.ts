@@ -66,7 +66,7 @@ export class PluginRegistry {
       try {
         catalog = prepareCatalog(plugin.catalog, { warn: () => undefined });
       } catch (e) {
-        issues.push(`plugin '${plugin.id}': ${(e as Error).message}`);
+        issues.push(`plugin '${plugin.id}': ${e instanceof Error ? e.message : String(e)}`);
         continue;
       }
       const registered: RegisteredPlugin = {

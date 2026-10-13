@@ -13,29 +13,33 @@
  * Conventions :
  *
  *   1. **Layered record writes.** Every record write emits `record[R].W`
- *      (risk `record-write`). A write on an apex, wildcard, MX or NS record
- *      also emits `record[R].critical.W` (risk `critical-record-write`) ;
- *      a deletion emits `record[R].delete.W` (risk `record-delete`), which
- *      the recursive `record[**].W` pattern co-matches. A mission therefore
- *      needs `record-write` for any record change, and the specific risk on
- *      top for the sensitive ones.
+ *      (risk `record-write`), or for a deletion `record[R].delete.W` (risk
+ *      `record-delete`), which the recursive `record[**].W` pattern
+ *      co-matches. A create, update **or deletion** of an apex, wildcard, MX
+ *      or NS record also emits `record[R].critical.W` (risk
+ *      `critical-record-write`). A mission therefore needs `record-write`
+ *      for any record change, and the specific risks on top for the
+ *      sensitive ones.
  *   2. **Sensitivity from the arguments, conservatively.** `type` and `name`
- *      decide ; when either is missing the write is critical. `execute`
- *      verifies the declared sensitivity against the record's current state
- *      before an update.
+ *      decide ; when either is missing the write is critical — a
+ *      `delete_record` that only carries `record_id` is a critical write.
+ *      `execute` verifies the declared sensitivity against the record's
+ *      current state before an update or a deletion.
  *   3. **`list_zones` is account-wide.** It emits `zone[*].R` on the account
  *      shared by the mission's zones (or `account[*]`) ; `execute` filters
  *      the upstream answer to the mission's zones.
- *   4. Identifiers from the arguments must match `SAFE_IDENT` ; a malformed
- *      one is `denied`, never escaped.
+ *   4. Identifiers that reach the request path (`zone_id`, `record_id`) must
+ *      pass `pathIdent` — one path segment, no dot, no separator — the same
+ *      function `execute` applies ; a malformed one is `denied`, never
+ *      escaped.
  */
 
 import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
 
 import {
   CLOUDFLARE_DNS_PROVIDER,
-  SAFE_IDENT,
   accountIdOf,
+  pathIdent,
   recordSensitivity,
   resolveZoneResource,
   zoneNameOf,
@@ -60,15 +64,14 @@ const ANY_IDENT: SliceSegment = { kind: 'ident', value: '*' };
 
 type RecordIdent = { readonly segment: SliceSegment } | { readonly denied: string };
 
-/** The `record_id` argument as an ident segment ; required and validated. */
+/** The `record_id` argument as an ident segment ; required and path-safe. */
 function recordIdent(args: Readonly<Record<string, unknown>>): RecordIdent {
   const value = args.record_id;
   if (value === undefined || value === null || value === '')
     return { denied: 'record_id: missing' };
-  if (typeof value !== 'string' || !SAFE_IDENT.test(value)) {
-    return { denied: 'record_id: malformed identifier' };
-  }
-  return { segment: ident(value) };
+  const recordId = pathIdent(value);
+  if (recordId === null) return { denied: 'record_id: malformed identifier' };
+  return { segment: ident(recordId) };
 }
 
 function accountSegment(resource: Resource): SliceSegment {
@@ -140,7 +143,13 @@ export function classifyCloudflareDns(
     case 'cloudflare_dns__delete_record': {
       const record = recordIdent(args);
       if ('denied' in record) return record;
-      return { slices: [slice('W', [...root, name('record'), record.segment, name('delete')])] };
+      const slices = [slice('W', [...root, name('record'), record.segment, name('delete')])];
+      // Deleting the apex, the MX set or a delegation has the effect the
+      // critical risk describes ; an undeclared record counts as critical.
+      if (recordSensitivity(args, zoneNameOf(zone)) === 'critical') {
+        slices.push(slice('W', [...root, name('record'), record.segment, name('critical')]));
+      }
+      return { slices };
     }
     case 'cloudflare_dns__import_records':
       return { slices: [slice('W', [...root, name('zone-import')])] };

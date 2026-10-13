@@ -3,11 +3,13 @@
  *
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,
- *   - the four bug-fixes vs v1 (fan-out, delete-all-envs, bypass-token-mint,
- *     plaintext-read),
- *   - the custom REST tools surface (domains, deployment-protection,
- *     project-settings, env-var CRUD),
- *   - resource enforcement (denial for a projectId the mission does not hold).
+ *   - the four classification rules (fan-out, delete-all-envs,
+ *     bypass-token-mint, plaintext-read),
+ *   - the custom REST tools surface (domains, project-settings, env-var CRUD),
+ *   - what is refused : a projectId the mission does not hold, an unreadable
+ *     `target`, the thread-addressed toolbar tools,
+ *   - arguments the provider never sees do not select the risk
+ *     (`deploy_to_vercel` is always on prod).
  *
  * Wherever possible, tests assert the *serialised* form via `serializeSlice`
  * to make the expected wire shape readable.
@@ -93,13 +95,15 @@ describe('classifyVercel — writes (deploy)', () => {
     ).toEqual(['vercel.project[prj_abc].env[prod].deployment.W']);
   });
 
-  test('deploy_to_vercel target=preview → env[preview].deployment.W', () => {
-    expect(
-      classify('vercel__deploy_to_vercel', { projectId: 'prj_abc', target: 'preview' }),
-    ).toEqual(['vercel.project[prj_abc].env[preview].deployment.W']);
+  test('deploy_to_vercel target=preview or development → still env[prod] : the upstream tool has no target', () => {
+    for (const target of ['preview', 'development', 'staging', ['preview'], 42]) {
+      expect(classify('vercel__deploy_to_vercel', { projectId: 'prj_abc', target })).toEqual([
+        'vercel.project[prj_abc].env[prod].deployment.W',
+      ]);
+    }
   });
 
-  test('deploy_to_vercel missing target → defaults to prod (conservative)', () => {
+  test('deploy_to_vercel without target → env[prod]', () => {
     expect(classify('vercel__deploy_to_vercel', { projectId: 'prj_abc' })).toEqual([
       'vercel.project[prj_abc].env[prod].deployment.W',
     ]);
@@ -170,6 +174,32 @@ describe('classifyVercel — bug-fix #1 : upsert_env_var fan-out', () => {
     expect(slices).toContain('vercel.project[prj_abc].env[development].env-var[DB_URL].W');
     expect(slices).toContain('vercel.project[prj_abc].env-var-fan-out.W');
   });
+
+  test('target=[] → all 3 envs + fan-out marker, as when omitted', () => {
+    const slices = classify('vercel__upsert_env_var', { key: 'K', value: 'x', target: [] });
+    expect(slices).toHaveLength(4);
+    expect(slices).toContain('vercel.project[prj_abc].env-var-fan-out.W');
+  });
+
+  test.each([
+    [['preview', 'Production']],
+    [['preview', 'prod']],
+    [['nope']],
+    [['preview', 42]],
+    [['preview', null]],
+    [[['production']]],
+    ['preview'],
+    [null],
+    [{ 0: 'preview' }],
+    [true],
+  ])('target=%j → refused, never classified on the readable part alone', (target) => {
+    expect(
+      classifyVercel('vercel__upsert_env_var', { key: 'K', value: 'x', target }, [resource]),
+    ).toEqual({
+      denied:
+        "target: expected an array of 'production', 'preview' or 'development' (omit it for all three)",
+    });
+  });
 });
 
 describe('classifyVercel — bug-fix #2 : delete_env_var always touches all 3 envs', () => {
@@ -226,37 +256,36 @@ describe('classifyVercel — custom REST tools (project settings, domains, prote
 });
 
 describe('classifyVercel — toolbar surface', () => {
-  test('reply_to_toolbar_thread → toolbar-message.W under the thread', () => {
-    const slices = classify('vercel__reply_to_toolbar_thread', {
-      projectId: 'prj_abc',
-      threadId: 'thr_1',
-      markdown: 'hi',
-    });
-    expect(slices).toEqual([
-      'vercel.project[prj_abc].deployment[*].toolbar-thread[thr_1].toolbar-message.W',
+  test('list_toolbar_threads → toolbar-thread[*].R under the mission project', () => {
+    expect(classify('vercel__list_toolbar_threads', { projectId: 'prj_abc' })).toEqual([
+      'vercel.project[prj_abc].deployment[*].toolbar-thread[*].R',
     ]);
   });
 
-  test('change_toolbar_thread_resolve_status → toolbar-thread[T].W', () => {
+  // The thread-addressed tools are refused : see binding.test.ts.
+});
+
+describe('classifyVercel — one spelling per argument, the one of the schema', () => {
+  test('project_id is not read : the mission project applies, a foreign value changes nothing', () => {
+    expect(classify('vercel__get_project', { project_id: 'prj_other' })).toEqual([
+      'vercel.project[prj_abc].project-settings.R',
+    ]);
     expect(
-      classify('vercel__change_toolbar_thread_resolve_status', {
-        projectId: 'prj_abc',
-        threadId: 'thr_1',
-        resolved: true,
-      }),
-    ).toEqual(['vercel.project[prj_abc].deployment[*].toolbar-thread[thr_1].W']);
+      classifyVercel('vercel__get_project', { project_id: 'prj_abc' }, [
+        resource,
+        { provider: 'vercel', ref: 'prj_site', displayName: 'site' },
+      ]),
+    ).toEqual({
+      denied: 'projectId: argument missing and the mission touches 2 Vercel projects — name one',
+    });
   });
 
-  test('edit_toolbar_message → toolbar-message[M].W', () => {
-    expect(
-      classify('vercel__edit_toolbar_message', {
-        projectId: 'prj_abc',
-        threadId: 'thr_1',
-        messageId: 'msg_2',
-        markdown: 'edited',
-      }),
-    ).toEqual([
-      'vercel.project[prj_abc].deployment[*].toolbar-thread[thr_1].toolbar-message[msg_2].W',
+  test('verify / remove read `domain`, add reads `name`', () => {
+    expect(classify('vercel__verify_project_domain', { name: 'staging' })).toEqual([
+      'vercel.project[prj_abc].domain[*].W',
+    ]);
+    expect(classify('vercel__add_project_domain', { domain: 'staging' })).toEqual([
+      'vercel.project[prj_abc].domain[*].W',
     ]);
   });
 });

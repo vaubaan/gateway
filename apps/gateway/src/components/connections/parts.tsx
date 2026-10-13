@@ -59,13 +59,23 @@ function isMultiline(field: CredentialField): boolean {
  * One input per field, named `field.<name>`. A secret is never pre-filled:
  * `secretsSet` names the ones that already hold a value, which a blank input
  * keeps.
+ *
+ * Each label is bound to its input through `credentialFieldId(idPrefix,
+ * name)`. `idPrefix` must be unique on the page: a page that renders several
+ * lists (Admin → Provider apps, one per provider) gives each its own.
  */
+export function credentialFieldId(idPrefix: string, fieldName: string): string {
+  return `${idPrefix}-${fieldName}`;
+}
+
 export function CredentialFieldInputs({
+  idPrefix,
   fields,
   values = {},
   secretsSet = [],
   disabled = false,
 }: {
+  idPrefix: string;
   fields: readonly CredentialField[];
   values?: Readonly<Record<string, string>>;
   secretsSet?: readonly string[];
@@ -79,7 +89,9 @@ export function CredentialFieldInputs({
         const hint = [field.help, stored ? 'A value is stored; leave blank to keep it.' : null]
           .filter(Boolean)
           .join(' ');
+        const id = credentialFieldId(idPrefix, field.name);
         const common = {
+          id,
           name: `${FIELD_PREFIX}${field.name}`,
           required,
           disabled,
@@ -90,6 +102,7 @@ export function CredentialFieldInputs({
         return (
           <Field
             key={field.name}
+            htmlFor={id}
             label={field.required === false ? `${field.label} (optional)` : field.label}
             hint={hint || undefined}
           >

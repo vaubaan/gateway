@@ -196,6 +196,28 @@ describe('assertNoWildcard / assertPresetsValid / assertPluginWellFormed', () =>
       /presets\[0\]\.entries\[0\]\.risk_id 'acme.thing-\*'/,
     );
     expect(() => assertPresetsValid(bad)).toThrow(PluginAssertionError);
+    // The preset half of the wildcard rule, by function — not by the first
+    // word of a message : the finding is there, the risk-id half is not.
+    const wildRisk: ProviderPlugin = {
+      ...acmePlugin,
+      catalog: {
+        ...bad.catalog,
+        risks: [...acmePlugin.catalog.risks, { ...acmePlugin.catalog.risks[0]!, id: 'acme.x-*' }],
+      },
+    };
+    const findings = (() => {
+      try {
+        assertPresetsValid(wildRisk);
+      } catch (e) {
+        if (e instanceof PluginAssertionError) return e.findings;
+        throw e;
+      }
+      return [];
+    })();
+    expect(findings).toContain(
+      "presets[0].entries[0].risk_id 'acme.thing-*' is not an explicit RiskId (no wildcard, no sentinel)",
+    );
+    expect(findings.filter((m) => m.includes('contains a wildcard'))).toEqual([]);
   });
 
   test('presets and well-formedness on the fixture', () => {

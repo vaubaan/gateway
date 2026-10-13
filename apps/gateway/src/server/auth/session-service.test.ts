@@ -8,8 +8,12 @@ import { LOGIN_TTL_MS, SESSION_TTL_MS, SessionService } from './session-service'
 function service() {
   const clock = new ManualClock();
   const store = new MemorySessionStore(() => clock.now().getTime());
-  return { clock, service: new SessionService(store, clock) };
+  return { clock, store, service: new SessionService(store, clock) };
 }
+
+const SESSION_ID = 'A'.repeat(43);
+const sessionCookie = (): Headers => new Headers({ cookie: `vbn_session=${SESSION_ID}` });
+const loginCookie = (): Headers => new Headers({ cookie: `vbn_login=${SESSION_ID}` });
 
 describe('cookies', () => {
   it('serializes HttpOnly, Secure, SameSite=Lax cookies and reads them back', () => {
@@ -83,5 +87,42 @@ describe('SessionService', () => {
     expect(
       await s.takePending(new Headers({ cookie: again.setCookie.split(';')[0] ?? '' })),
     ).toBeNull();
+  });
+
+  it('reads a stored record of another shape as no session, and deletes it', async () => {
+    const malformed: unknown[] = [
+      'a string',
+      42,
+      [],
+      {},
+      { kind: 'operator', createdAt: '2026-01-01T00:00:00.000Z' },
+      { kind: 'bootstrap' },
+      { kind: 'user', createdAt: '2026-01-01T00:00:00.000Z', login: { email: 'a@b', groups: [] } },
+      { kind: 'user', userId: 7, createdAt: 'x', login: { email: 'a@b', groups: [] } },
+      { kind: 'user', userId: 'u1', createdAt: 'x', login: { email: 'a@b', groups: [1] } },
+      { kind: 'user', userId: 'u1', createdAt: 'x' },
+    ];
+    for (const value of malformed) {
+      const { store, service: s } = service();
+      await store.set(`session:${SESSION_ID}`, value, 60_000);
+      expect(await s.read(sessionCookie()), JSON.stringify(value)).toBeNull();
+      expect(await store.get(`session:${SESSION_ID}`), JSON.stringify(value)).toBeNull();
+    }
+  });
+
+  it('reads a stored pending sign-in of another shape as none, and deletes it', async () => {
+    const malformed: unknown[] = [
+      null,
+      'x',
+      { state: 's', nonce: 'n', codeVerifier: 'v', createdAt: 'x' },
+      { state: 's', nonce: 'n', codeVerifier: 7, returnTo: '/', createdAt: 'x' },
+      { kind: 'bootstrap', createdAt: 'x' },
+    ];
+    for (const value of malformed) {
+      const { store, service: s } = service();
+      await store.set(`login:${SESSION_ID}`, value, 60_000);
+      expect(await s.takePending(loginCookie()), JSON.stringify(value)).toBeNull();
+      expect(await store.get(`login:${SESSION_ID}`), JSON.stringify(value)).toBeNull();
+    }
   });
 });

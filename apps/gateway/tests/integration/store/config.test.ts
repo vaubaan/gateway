@@ -52,4 +52,41 @@ describe('config repository', () => {
     expect(await store.config.delete('k')).toBe(false);
     expect(await store.config.keys()).toEqual([]);
   });
+
+  it('apply writes values, secrets and deletions together', async () => {
+    await store.config.set('old', 'gone');
+    await store.config.apply([
+      { kind: 'value', key: 'idp.issuer', value: 'https://idp.example/' },
+      { kind: 'secret', key: 'idp.client_secret', plain: 'shh' },
+      { kind: 'delete', key: 'old' },
+    ]);
+    expect(await store.config.get('idp.issuer')).toBe('https://idp.example/');
+    expect(await store.config.getSecret('idp.client_secret')).toBe('shh');
+    expect(await store.config.keys()).toEqual(['idp.client_secret', 'idp.issuer']);
+  });
+
+  it('apply is all or nothing: a write that fails leaves every key as it was', async () => {
+    await store.config.set('idp.issuer', 'https://old.example/');
+    await store.config.set('doomed', 'still here');
+    store.db.exec(
+      `CREATE TRIGGER refuse_marked_key BEFORE INSERT ON instance_config
+       WHEN NEW.key = 'refused' BEGIN SELECT RAISE(ABORT, 'refused key'); END`,
+    );
+    await expect(
+      store.config.apply([
+        { kind: 'value', key: 'idp.issuer', value: 'https://new.example/' },
+        { kind: 'delete', key: 'doomed' },
+        { kind: 'secret', key: 'idp.client_secret', plain: 'shh' },
+        { kind: 'value', key: 'refused', value: 'x' },
+      ]),
+    ).rejects.toThrow(/refused key/);
+    expect(await store.config.get('idp.issuer')).toBe('https://old.example/');
+    expect(await store.config.get('doomed')).toBe('still here');
+    expect(await store.config.getSecret('idp.client_secret')).toBeNull();
+  });
+
+  it('apply with no write is a no-op', async () => {
+    await store.config.apply([]);
+    expect(await store.config.keys()).toEqual([]);
+  });
 });

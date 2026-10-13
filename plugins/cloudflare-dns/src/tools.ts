@@ -8,7 +8,9 @@
  * Every zone-scoped tool takes `zone_id` : the ref of one of the mission's
  * Cloudflare DNS zones. `update_record` requires `type` and `name` so the
  * gateway can tell an apex / MX / NS change from an ordinary record update
- * before the call (see `classify.ts`).
+ * before the call ; `delete_record` takes them as optional arguments and a
+ * deletion that omits them is classified as a critical record write (see
+ * `classify.ts`).
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
@@ -139,10 +141,23 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
   },
   {
     name: 'cloudflare_dns__delete_record',
-    description: 'Delete a DNS record. Backed by DELETE /zones/:zone_id/dns_records/:record_id.',
+    description:
+      'Delete a DNS record. Backed by DELETE /zones/:zone_id/dns_records/:record_id. Pass the `type` and `name` of the record : without them the deletion counts as a critical change (apex, wildcard, MX, NS) ; with them the call is refused when they do not describe the current record.',
     inputSchema: {
       type: 'object',
-      properties: { zone_id: ZONE_ID, record_id: RECORD_ID },
+      properties: {
+        zone_id: ZONE_ID,
+        record_id: RECORD_ID,
+        type: {
+          type: 'string',
+          description: 'Type of the record being deleted (A, AAAA, CNAME, MX, TXT, SRV…).',
+        },
+        name: {
+          type: 'string',
+          description:
+            'Complete name of the record being deleted, including the zone ; the zone name or "@" for the apex.',
+        },
+      },
       required: ['zone_id', 'record_id'],
     },
   },

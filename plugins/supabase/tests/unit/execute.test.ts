@@ -330,3 +330,107 @@ describe('executeSupabase — data plane through service_role', () => {
     expect(fetch.calls).toHaveLength(1);
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Target project — the one the classifier resolved, or no call at all
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('executeSupabase — the target project is resolved like the classifier resolves it', () => {
+  const OTHER_REF = 'victimprojectrefxxxx';
+  const other: Resource = { ...project, ref: OTHER_REF, displayName: 'Acme / other' };
+
+  const errorText = (result: { content: readonly unknown[] }) =>
+    (result.content[0] as { text: string }).text;
+
+  test('without project_ref, the single project of the mission is called (Management API)', async () => {
+    const fetch = mockFetch([{ method: 'GET', url: MGMT, body: { name: 'app' }, times: 1 }]);
+    const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__get_project', {});
+    expect(fetch.calls.map((c) => c.url)).toEqual([`${SUPABASE_API_BASE}/projects/${REF}`]);
+    expect(textOf(result)).toEqual({ name: 'app' });
+  });
+
+  test('without project_ref, the single project of the mission is called (data plane)', async () => {
+    const fetch = mockFetch([
+      apiKeysRoute,
+      { method: 'DELETE', url: `${DATA}/auth/v1/admin/users/u1`, status: 204, times: 1 },
+    ]);
+    await supabasePlugin.execute(execCtx(fetch), 'supabase__delete_user', { user_id: 'u1' });
+    expect(fetch.calls.map((c) => c.url)).toEqual([
+      `${MGMT}/api-keys`,
+      `${DATA}/auth/v1/admin/users/u1`,
+    ]);
+  });
+
+  test.each<[string, Record<string, unknown>]>([
+    ['a project outside the mission', { project_ref: OTHER_REF }],
+    [
+      'an array project_ref next to the projectRef alias',
+      { project_ref: [OTHER_REF], projectRef: REF },
+    ],
+    ['an object project_ref', { project_ref: { toString: () => OTHER_REF } }],
+    ['the projectRef alias alone', { projectRef: REF }],
+    ['a path-unsafe project_ref', { project_ref: `${REF}/../${OTHER_REF}` }],
+  ])('%s is an error result and no request leaves', async (_label, target) => {
+    for (const [tool, args] of [
+      ['supabase__apply_migration', { name: 'm', query: 'create table t (id int);' }],
+      ['supabase__get_project', {}],
+      ['supabase__delete_user', { user_id: 'u1' }],
+      ['supabase__upload_object', { bucket: 'b', path: 'p.txt', content_base64: 'AA' }],
+    ] as const) {
+      const fetch = mockFetch([]);
+      const result = await supabasePlugin.execute(execCtx(fetch), tool, { ...args, ...target });
+      expect(result.isError, `${tool} should be refused`).toBe(true);
+      expect(fetch.calls).toHaveLength(0);
+    }
+  });
+
+  test('several projects and no project_ref is an error result, not a guess', async () => {
+    const fetch = mockFetch([]);
+    const ctx: ExecuteContext = { ...execCtx(fetch), resources: [project, other] };
+    const result = await supabasePlugin.execute(ctx, 'supabase__get_project', {});
+    expect(result.isError).toBe(true);
+    expect(errorText(result)).toBe('ambiguous supabase target: specify project_ref.');
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('with several projects, the named one is called', async () => {
+    const fetch = mockFetch([
+      { method: 'GET', url: `${SUPABASE_API_BASE}/projects/${OTHER_REF}`, body: {}, times: 1 },
+    ]);
+    const ctx: ExecuteContext = { ...execCtx(fetch), resources: [project, other] };
+    await supabasePlugin.execute(ctx, 'supabase__get_project', { project_ref: OTHER_REF });
+    expect(fetch.pending()).toEqual([]);
+  });
+
+  test('the refusal names the same reason the classifier gives', async () => {
+    const fetch = mockFetch([]);
+    const result = await supabasePlugin.execute(execCtx(fetch), 'supabase__get_project', {
+      project_ref: OTHER_REF,
+    });
+    expect(errorText(result)).toBe(
+      `supabase project '${OTHER_REF}' is not a resource of this mission.`,
+    );
+  });
+
+  test('a non-string query never reaches the SQL endpoints', async () => {
+    for (const tool of ['supabase__execute_sql', 'supabase__apply_migration']) {
+      const fetch = mockFetch([]);
+      const result = await supabasePlugin.execute(execCtx(fetch), tool, {
+        project_ref: REF,
+        name: 'm',
+        query: ['select 1'],
+      });
+      expect(result.isError).toBe(true);
+      expect(fetch.calls).toHaveLength(0);
+    }
+  });
+
+  test('list_tables ignores schema names that are not strings', async () => {
+    const { call } = await runMgmt(
+      { method: 'POST', url: `${MGMT}/database/query/read-only`, body: [] },
+      'supabase__list_tables',
+      { schemas: ['app', 7, null, { a: 1 }] },
+    );
+    expect((call.json as { query: string }).query).toContain("in ('app')");
+  });
+});

@@ -9,7 +9,7 @@ ships at least one **preset**.
 
 Current plugins: `cloudflare-dns`, `github`, `gmail` (experimental),
 `railway`, `resend`, `ssh`, `stripe`, `supabase`, `upstash-redis`, `vercel`
-— all ten on the SDK, on one surface ; the v4 adapters and `classifyXxxV4`
+— all ten on the SDK, on one surface; the v4 adapters and `classifyXxxV4`
 wrappers are gone. `_template` is the
 scaffold. The per-provider index is
 [`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md).
@@ -28,11 +28,14 @@ only — never the gateway application.
    tool → slice mapping, catalog, coverage matrix, edge cases) is the one
    the existing per-provider handbooks follow:
    [`docs/handbook/providers/`](../docs/handbook/providers/README.md).
-2. **Copy `_template`** to `plugins/<provider>` and rename `template` to
-   your provider id everywhere: folder, `package.json` name, `id` in
-   `src/index.ts`, `provider:` in the YAML, tool prefix, data-model
-   provider. The id is a lowercase slug (`cloudflare-dns`); the tool prefix
-   turns `-` into `_` (`cloudflare_dns__`).
+2. **Copy `_template`** to `plugins/<provider>` and give it its identity in
+   two places: `PROVIDER_ID` in `src/identity.ts` and `provider:` (with the
+   risk and preset ids) in the YAML. The plugin `id`, the data-model
+   provider, the tool names (`TOOL`) and the credential field name are
+   derived from `src/identity.ts` — never repeat the id or a tool name as a
+   literal. Rename the folder and the `package.json` name. The id is a
+   lowercase slug (`cloudflare-dns`); the tool prefix turns `-` into `_`
+   (`cloudflare_dns__`, built by `toolPrefixFor`).
 3. **Model** — `src/data-model.ts`: the entities a slice path can name,
    per plane, with containment and cardinalities. Mark the entity that
    carries the environment (`envScopable`).
@@ -73,20 +76,36 @@ only — never the gateway application.
    [`fallback-risk-only-when-uncategorized`](../docs/decisions/fallback-risk-only-when-uncategorized.md)).
    The fallback entry carries `fallback: true`; an entry recognised by its
    pattern or id alone only warns at boot (third-party catalogs) but fails
-   `assertPluginWellFormed`.
+   `assertPluginWellFormed`. Optional per risk: `vector_overrides.<env>`,
+   `deprecated: true` with `replaced_by`, and
+   `infra_limits.calls_per_minute_max` — the ceiling on the rate limit a
+   mission may be issued with, the one catalog limit the gateway enforces.
+   Do not declare `caps` or any other `infra_limits` key: the loader accepts
+   them, but the v5.0 door applies none of them and a structural test
+   refuses them in the shipped catalogs
+   ([`scope-caps-not-enforced-in-v5-0`](../docs/decisions/scope-caps-not-enforced-in-v5-0.md)).
+   A limit the provider imposes is refused by your classifier.
 
 5. **Tools** — `src/tools.ts`: `McpToolDeclaration[]`, names
-   `<prefix>__<verb>_<noun>`, JSON input schemas. Take the resource ref as an
-   explicit argument.
+   `<prefix>__<verb>_<noun>` taken from `TOOL` in `src/identity.ts`, JSON
+   input schemas. Take the resource ref as an explicit argument.
 6. **Classify** — `src/classify.ts`: `(tool, args, resources) → { slices }
 | { denied }`. Pure. Every tool maps to at least one slice; a call you
    cannot place on the data model is `denied`, never mapped to a broad slice.
-   Validate identifiers before embedding them in a slice. This is the
-   security-critical file; test every branch.
+   Validate identifiers before embedding them in a slice. An explicit
+   resource ref must be one of `resources` (the mission's resources on this
+   connection): refuse the call otherwise, never substitute the single
+   resource — the gateway's resource stage only recognises refs the
+   connection has discovered, so the classifier is the check
+   (`resolveWorkspace` in the template). This is the security-critical file;
+   test every branch.
 7. **Execute and discover** — `src/execute.ts`: use `ctx.fetch` (never the
    global), the secret from `expectCredentialKind(...)`, throw
-   `UpstreamAuthError` on 401/403, return an `McpToolResult`.
-   `discoverResources` lists the refs the owner will label.
+   `UpstreamAuthError` on 401/403, return an `McpToolResult`. Resolve the
+   target resource with the same function as the classifier
+   (`resolveWorkspace`), so the call runs on the resource the slice named.
+   `discoverResources` lists the refs the owner will label; check the
+   provider's answer with a type guard, never a cast.
 8. **Credential** — in `src/index.ts`, the `credential: CredentialSpec`:
    `api-key` (form fields), `oauth2` (authorize/token URLs, scopes, PKCE,
    client-auth method, resource indicator, `refreshable` — the gateway runs
@@ -96,7 +115,7 @@ only — never the gateway application.
    flow; you declare it. Set `experimental: true` on a plugin the gateway
    should register but keep out of the default connect and issuance flows.
 9. **Environment** — if the environment lives in the call rather than on
-   the resource (Vercel's `env[prod]` segment, GitHub's branch), declare
+   the resource (Vercel's `env[prod]` segment), declare
    `envOf` in `src/index.ts`: `envOf: envFromSliceSegment('env')` for a
    segment, a custom pure function otherwise. Leave it out when the owner's
    label on the resource is the environment.
@@ -132,7 +151,8 @@ assertCatalogCoverage(plugin, { '<prefix>__list_x': [{ args: {…} }], … }, { 
   an unmatched request fails the test. **No test ever calls a real
   provider.**
 
-`npm run ci` (type-check, lint, format, tests, build) must be green.
+Run one plugin with `npx vitest run plugins/<provider>`. `npm run ci`
+(type-check, lint, format, build, tests) must be green.
 
 ## Shipping a plugin
 

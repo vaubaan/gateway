@@ -1,6 +1,6 @@
 import { NotFoundError } from '../errors.ts';
-import type { UserRecord, UserStatus } from '../types.ts';
-import { nowIso, requireRow, type RepoContext } from './context.ts';
+import { USER_STATUSES, type UserRecord } from '../types.ts';
+import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
 
 export interface UpsertUserInput {
   readonly subject: string;
@@ -38,7 +38,7 @@ function toRecord(row: UserRow): UserRecord {
     subject: row.subject,
     email: row.email,
     displayName: row.display_name,
-    status: row.status as UserStatus,
+    status: parseEnum(USER_STATUSES, row.status, 'users.status'),
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
     removedAt: row.removed_at,

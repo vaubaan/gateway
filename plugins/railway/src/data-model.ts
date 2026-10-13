@@ -9,6 +9,7 @@
  *
  *   account → project → environment → service → deployment → {logs, status}
  *                                            └→ service-var
+ *                                            └→ service-var-replace (virtual marker)
  *                          └────────────────→ service-var (project-shared)
  *   account → agent-session (opaque meta-tool — no containment)
  *
@@ -22,17 +23,24 @@
  *  - `service-var` covers both service-scoped variables (Railway `serviceId`
  *    set) and project-shared ones (`serviceId` null). Qualification is by
  *    environment, not by service-vs-project.
+ *  - `service-var-replace` is not a Railway object : it is the marker the
+ *    classifier emits when a call replaces every variable of its scope
+ *    (`upsert-variables` with `replace`, an unbounded payload, the agent),
+ *    so the destructive case has a slice of its own instead of hiding in
+ *    the shape of a `service-var[...]` leaf.
  *  - `agent-session` is one invocation of `railway__railway-agent`.
  *    Deliberately opaque (no containment) : the upstream agent may mutate
  *    anything in the graph, so it hangs off `account` to signal the
  *    account-wide blast radius, and the classifier emits pessimistic
- *    deployment and variable write slices next to it.
+ *    deployment, variable write and variable replace slices next to it.
  *
  * Entity slugs are kebab-case and stable : changing one is a breaking change
  * for the catalog patterns.
  */
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
+
+import { REPLACE_ALL_VARIABLES_ENTITY } from './classify.ts';
 
 export const railwayDataModel: DataModel = {
   provider: 'railway',
@@ -105,7 +113,17 @@ export const railwayDataModel: DataModel = {
           description:
             'An environment variable, service-scoped or shared at the project level (Railway ' +
             'distinguishes the two by `serviceId` null / non-null ; one entity here). ' +
-            '`unbounded` appears on `upsert-variables replace=true` (destructive wildcard).',
+            '`unbounded` appears when the written names are unknown (`upsert-variables` ' +
+            'with `replace` or an empty payload, the agent).',
+        },
+        {
+          name: REPLACE_ALL_VARIABLES_ENTITY,
+          parent: 'service',
+          cardinalities: ['unbounded'],
+          description:
+            'Virtual marker, not a Railway object : written when a call replaces every ' +
+            'variable of its scope, deleting those absent from the payload. Only the ' +
+            'destructive `bulk-variables-replace` risk matches it.',
         },
         {
           name: 'agent-session',

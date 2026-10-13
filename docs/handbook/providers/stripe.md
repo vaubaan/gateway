@@ -2,7 +2,7 @@
 title: Stripe provider — modelling and runtime (v5 plugin)
 status: current
 date: 2026-10-13
-last_reviewed: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - plugins/stripe/src/index.ts
   - plugins/stripe/src/resources.ts
@@ -46,10 +46,10 @@ suites were ported to `classifyStripe` and `stripePlugin.execute`
 ```
 plugins/stripe/src/
   resources.ts        STRIPE_MODES, stripeResourceRef, modeOf, resolveStripeResource, keyMatchesMode
-  tools.ts            27 McpToolDeclaration (+ `account` arg)
+  tools.ts            27 McpToolDeclaration (+ `account` arg), declaredArgsOf
   classify.ts         classifyStripe — pure, (tool, args, resources) → slices | denied
   execute.ts          executeStripe, discoverStripeResources, STRIPE_API_BASE
-  data-model.ts       plane `billing`, 23 entities, `mode` envScopable
+  data-model.ts       plane `billing`, 22 entities, `mode` envScopable
   risk-catalog.yaml   16 risks + fallback, 3 presets, catalog_version 3
   index.ts            definePlugin(...) → stripePlugin (default export)
 ```
@@ -63,6 +63,7 @@ flowchart LR
   disc --> l["Resource acct_1/live<br/>env: live"]
   t & l --> mission["mission selects one or both"]
   mission -->|"args.account or single resource"| cls["classifyStripe"]
+  cls -->|"mode unreadable, or label ≠ mode"| refused["denied"]
   cls --> slice["stripe.account[acct_1/live].mode[live].…"]
   slice -->|"resourceEnvResolver: first ident = ref"| env["env = live → stripe[live].refund-create"]
   mission --> exe["executeStripe"]
@@ -70,44 +71,103 @@ flowchart LR
 ```
 
 - `modeOf(resource)` reads, in order : the ref suffix (`/test`, `/live`),
-  `metadata.mode`, then the `env` label (the only source a v4 binding has).
-  `execute` refuses a resource whose mode cannot be determined ; the
-  classifier emits `mode[*]` for it (harmless : patterns use `mode[**]`,
-  env resolution comes from the ref).
+  then `metadata.mode` — both written by discovery from the key itself. The
+  `env` label is never a source of the mode. The classifier and `execute`
+  both refuse a resource whose mode cannot be determined
+  (`account: cannot determine the test/live mode of '<ref>'`).
+- **The label must equal the mode.** Every Stripe risk is env-scoped on
+  `[test, live]` and the engine qualifies it from the resource's `env`
+  label, while `execute` picks the key from the mode. The classifier
+  refuses a resource whose label is not its mode (absent, `production`, or
+  the other mode), so a live call can never be judged as
+  `stripe[test].refund-create`. The plugin declares no `envOf` hook : the
+  label discovery wrote is the environment, and this check keeps it honest.
+  Should a slice reach the engine on an unlabelled resource anyway, the
+  engine refuses it (an env-scoped risk touched outside its
+  `acceptable_in_envs` refuses the call — `policy.test.ts` pins both
+  layers).
 - `resolveStripeResource` : explicit `account` ref must be one of the
   mission's Stripe resources ; absent, the mission's single Stripe resource
   ; otherwise `denied` (ambiguous, none, unknown, malformed).
-- Relabelling `env` in the UI does not change the key `execute` uses, but it
-  breaks `stripe[live].*` qualification (the catalog accepts `test` and
-  `live` only). The mode is a fact of the key, not an owner's label.
+- The host keeps a plugin-set label read-only. If the label of a Stripe
+  resource were changed anyway, the key `execute` uses would not move and
+  every call on that resource would be refused. The mode is a fact of the
+  key, not an owner's label.
 
 ## Classifier conventions
 
 All slices are rooted at `account[<ref>].mode[<mode>]`. Identifiers from the
-arguments must match `SAFE_IDENT` (`[a-zA-Z0-9_./~-]+`) ; a malformed one
-is `denied`, an absent optional one is the glob `*`.
+arguments must match `SAFE_IDENT` (`[a-zA-Z0-9_./~-]+`) and not be made of
+dots only (`.` and `..` would collapse the URL path onto another endpoint) ;
+a malformed one is `denied`, an absent optional one is the glob `*`.
 
-| Tool                                  | Slice(s)                                                    |
-| ------------------------------------- | ----------------------------------------------------------- |
-| `list_customers`, `retrieve_customer` | `customer[C].R` **and** `customer[C].pii.R`                 |
-| `list_events`                         | `event[*].R` and `balance-transaction[*].R`                 |
-| `create_subscription`                 | `customer[C].subscription.W` **and** `payment-intent.W`     |
-| `pause_subscription`                  | `customer[*].subscription[S].W` (same risk as update)       |
-| `cancel_subscription`                 | `customer[*].subscription[S].cancel.W`                      |
-| `finalize_invoice` / `void_invoice`   | `customer[*].invoice[I].finalize.W` / `….void.W`            |
-| `create_refund`                       | `payment-intent[PI\|*].charge[CH\|*].refund.W`              |
-| `create_payout`                       | `payout.W`                                                  |
-| `delete_customer`                     | `customer[C].delete.W` (`id` required)                      |
-| `create_webhook_endpoint`             | `webhook-endpoint.W` **and** `webhook-endpoint[*].secret.W` |
+**Only declared arguments.** The properties of a tool's `inputSchema` are
+its whole argument surface (`declaredArgsOf` in `tools.ts`). The classifier
+refuses a call carrying any other key
+(`expand: not an argument of 'stripe__list_invoices' — nothing classifies it`)
+and `execute` forwards the declared ones only, so a Stripe parameter nobody
+classified — `expand`, `collection_method`, an undeclared filter — neither
+passes nor is silently dropped. Declaring a new property means deciding, in
+`classify.ts`, what it costs.
+
+| Tool                                  | Slice(s)                                                                                                        |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `list_customers`, `retrieve_customer` | `customer[C].R` **and** `customer[C].pii.R`                                                                     |
+| `list_invoices`                       | `customer[C\|*].invoice[*].R` **and** `customer[C\|*].pii.R`                                                    |
+| `list_charges`                        | `payment-intent[PI\|*].charge[*].R` **and** `customer[C\|*].pii.R`                                              |
+| `list_payment_intents`                | `payment-intent[*].R` **and** `customer[C\|*].pii.R`                                                            |
+| `list_subscriptions`                  | `customer[C\|*].subscription[*].R` (a subscription names its customer by id only)                               |
+| `list_events`                         | `event[*].R`, `balance-transaction[*].R` **and** `customer[*].pii.R` unless `type` is a family without customer |
+| `create_subscription`                 | `customer[C].subscription.W` **and** `payment-intent.W`                                                         |
+| `update_subscription`                 | `customer[*].subscription[S].W` ; with `cancel_at_period_end` or `cancel_at` set, **also** `….cancel.W`         |
+| `pause_subscription`                  | `customer[*].subscription[S].W` (same risk as update ; declares no cancellation field)                          |
+| `cancel_subscription`                 | `customer[*].subscription[S].cancel.W`                                                                          |
+| `create_invoice`                      | `customer[C].invoice.W` ; with `auto_advance` set, **also** `customer[C].invoice[*].finalize.W`                 |
+| `finalize_invoice` / `void_invoice`   | `customer[*].invoice[I].finalize.W` / `….void.W`                                                                |
+| `create_refund`                       | `payment-intent[PI\|*].charge[CH\|*].refund.W`                                                                  |
+| `create_payout`                       | `payout.W`                                                                                                      |
+| `delete_customer`                     | `customer[C].delete.W` (`id` required)                                                                          |
+| `create_webhook_endpoint`             | `webhook-endpoint.W` **and** `webhook-endpoint[*].secret.W`                                                     |
 
 The other tools map one-to-one on their entity (see `classify.ts`).
+
+**Customer PII overlay.** `read-billing-history` is meant to be acceptable
+without identities, so every read whose answer carries customer fields also
+emits `customer[C].pii.R` : invoices (`customer_email`, `customer_name`,
+`customer_address`), charges (`billing_details`, `receipt_email`), payment
+intents (`receipt_email`, `shipping`) and events, which embed the whole
+object they are about. `list_events` drops the overlay only when `type` is a
+string naming a family without customer payload (`balance.`, `payout.`,
+`product.`, `price.`, `plan.`, `coupon.`, `promotion_code.`) ; any other
+value, a wildcard or no filter keeps it. The answer of a write (an invoice
+returned by `create_invoice`) is not modelled as a read.
+
+**Arguments that change the nature of a call.** "Absent or an explicit no"
+is the only reading that does not add the stronger slice :
+`cancel_at_period_end` other than `false`, or a non-empty `cancel_at`, makes
+`update_subscription` a cancellation ; `auto_advance` other than `false`
+makes `create_invoice` a finalization (Stripe finalizes and collects on its
+own). `execute` sends `auto_advance=false` when the call does not set it, so
+a draft is a draft whatever default the account's API version applies.
+
+A slice may touch more than the entry named after it : a trailing `[**]`
+matches zero identifiers and deeper paths alike, so `subscription.W`
+(creation) touches `subscription-create` **and** `subscription-update`,
+`subscription[S].cancel.W` touches `subscription-update` **and**
+`subscription-cancel`, `customer[C].pii.R` touches `read-billing-history`
+**and** `read-customer-pii`, and `webhook-endpoint[*].secret.W` touches
+`webhook-endpoint-write` **and** `mint-webhook-secret`
+(`risk-catalog.test.ts` pins the exact sets).
 
 ## Catalog and presets
 
 16 named risks + `stripe.uncategorized-write`, all with
 `acceptable_in_envs: [test, live]` (the fallback too, so a test-mode preset
-never accepts a live write). `refund-create` and `payout-create` carry
-`caps` + `infra_limits` (the two money-out actions). `subscription-create`
+never accepts a live write). `refund-create` and `payout-create` (the two
+money-out actions) carry the rate ceiling `infra_limits.calls_per_minute_max: 30`, the one
+catalog limit the gateway enforces; no entry declares `caps` (the door has no cap stage,
+see [the ADR](../../decisions/scope-caps-not-enforced-in-v5-0.md)): a mission bounds them
+with its quota and rate limit. `subscription-create`
 matches both slices of `create_subscription` (`customer[C].subscription.W`
 and the bare `payment-intent.W` of the immediate charge) since catalog v3 :
 the second used to reach only the fallback. The fallback pattern
@@ -117,39 +177,61 @@ includes it (P1.2-align removed `stripe[<mode>].uncategorized-write` from
 `test-mode-developer` and `finance-operator`), and its appearance in an audit
 log means a catalog entry is missing.
 
-Presets : `read-only` (no PII, hence no customer reads), `test-mode-developer`
-(everything on `[test]`, `auto`), `finance-operator` (`[live]` ; `approval`
-on refund, payout, customer deletion, subscription cancel, invoice void).
-Values are a starting point — ADR `mission-presets-default-values` is
-deferred.
+Presets : `read-only` (no PII : catalog, subscriptions, balance and the
+events of a family without customer payload — no customer, invoice, charge
+or payment-intent read, since their answers carry customer fields),
+`test-mode-developer` (everything on `[test]`, `auto`), `finance-operator`
+(`[live]` ; `approval` on refund, payout, customer deletion, subscription
+cancel, invoice void ; no catalog or webhook write). Values are a starting
+point — ADR `mission-presets-default-values` is deferred.
+
+`policy.test.ts` runs every tool through the classifier, the YAML catalog
+and the engine's `evaluateCall` for each preset : what the preset describes
+is allowed on the mode it names and refused on the other, and no allowed
+call touches the fallback.
 
 ## Execute
 
 Stripe takes form-urlencoded bodies with bracket notation
 (`items[0][price]=…`) and query parameters on GET ; `ROUTES` in
 `execute.ts` maps each tool to method + path, with the id in the path and
-removed from the body. 401/403 → `UpstreamAuthError`. The `account`
-argument is stripped before the call. Unknown tool → `isError` result.
+removed from the body. 401/403 → `UpstreamAuthError`. Only the arguments
+the tool declares are forwarded ; `account` is consumed by the gateway.
+A path id that is missing, not a string or made of dots throws before any
+request. Unknown tool → `isError` result. Discovery refuses a
+`GET /v1/account` answer without an account id.
 
 ## How to debug
 
-- **`account: argument missing and the mission touches 2 Stripe resources`**
+- **`account: argument missing and the mission touches 2 Stripe resources — name one`**
   — the mission holds test and live ; the agent must pass `account`.
 - **`this connection has no live-mode key`** — the mission selected the live
   resource of a connection whose credential has only `test_key` ; that
   resource should not exist (discovery creates one per key) : re-run
   discovery.
-- **`test_key must be a test-mode key`** — the owner pasted a live key in
+- **`stripe: test_key must be a test-mode key (sk_test_… or rk_test_…)`** — the owner pasted a live key in
   the test field.
+- **`<arg>: not an argument of '<tool>' — nothing classifies it`** — the
+  agent passed a Stripe parameter the tool does not declare (`expand`, an
+  extra filter). Declare it in `tools.ts` and classify it, or drop it.
+- **`account: '<ref>' is a live-mode resource but its environment label is not 'live'`**
+  — the stored label of the resource no longer matches the mode of its key ;
+  re-run discovery on the connection.
+- **`list_invoices` refused with `stripe[live].read-customer-pii` missing**
+  — invoices, charges, payment intents and unfiltered events carry customer
+  fields ; the mission needs the PII risk, which `read-only` leaves out.
 - **A write is refused with `stripe[test].uncategorized-write` missing** —
   the tool classifies to a slice no dedicated entry covers : add the catalog
   entry (the fallback is never part of a preset).
 
 ## Tests
 
-`npx vitest run plugins/stripe` — 110 : `plugin.test.ts` (28 : kit,
+`npx vitest run plugins/stripe` — 160 : `plugin.test.ts` (31 : kit,
 resource resolution, execute, discovery, credential, presets),
-`classify.test.ts` (41 : the security suite of `classifyStripe`),
-`execute.test.ts` (17 : REST routing and form-encoding through
-`stripePlugin.execute`), `risk-catalog.test.ts` (16 : invariants, catalog v3,
-no preset on the fallback), `data-model.test.ts` (8).
+`classify.test.ts` (48 : the security suite of `classifyStripe`),
+`policy.test.ts` (30 : classifier + catalog + `evaluateCall` — stronger
+risk on `cancel_at*` / `auto_advance`, PII overlay, mode resolution, the
+three presets on test and live), `execute.test.ts` (23 : REST routing,
+form-encoding and declared-only forwarding through `stripePlugin.execute`),
+`risk-catalog.test.ts` (20 : invariants, catalog v3, exact risk sets, no
+preset on the fallback), `data-model.test.ts` (8).

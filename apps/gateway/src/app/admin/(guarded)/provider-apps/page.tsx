@@ -27,7 +27,7 @@ import {
   CardTitle,
   Stack,
 } from '@/components/ui';
-import { adminDecision } from '@/lib/auth/session';
+import { requireOperator } from '@/lib/auth/session';
 import { firstParam, type PageSearchParams } from '@/lib/connections/session';
 import {
   ACCEPT_UNVERIFIED_ACTION,
@@ -44,14 +44,12 @@ export default async function ProviderAppsPage({
 }: {
   searchParams: PageSearchParams;
 }) {
+  const { root, principal } = await requireOperator();
   const params = await searchParams;
-  const { root, decision } = await adminDecision();
-  const notice = decision.ok
-    ? await root.connections.notices.take(
-        decision.principal.sessionId,
-        firstParam(params[NOTICE_PARAM]),
-      )
-    : null;
+  const notice = await root.connections.notices.take(
+    principal.sessionId,
+    firstParam(params[NOTICE_PARAM]),
+  );
   const apps = await root.providerApps.list();
   const withApp = apps.filter((a) => a.needsApp);
   const withoutApp = apps.filter((a) => !a.needsApp);
@@ -179,6 +177,7 @@ function ProviderAppCard({ app, callbackUrl }: { app: ProviderAppStatus; callbac
             <fieldset disabled={readOnly} style={{ border: 0, padding: 0, margin: 0 }}>
               <Stack gap="var(--space-4)">
                 <CredentialFieldInputs
+                  idPrefix={`provider-app-${app.providerId}`}
                   fields={app.fields}
                   values={app.values}
                   secretsSet={app.secretsSet}

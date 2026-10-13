@@ -7,6 +7,15 @@
  * counters, deciding, consuming an approval, dropping a request, writing the event and
  * decrementing happen in one `BEGIN IMMEDIATE` transaction: two concurrent calls on the
  * last credit yield exactly one allow.
+ *
+ * An event is stored as given (`UntypedNewEvent`: any kind, any JSON details). The
+ * gateway's writers build a typed `NewEvent` and readers go through `parseEventDetails`
+ * (`@vaubaan/shared`); this module does not interpret details.
+ *
+ * This file is the only writer of `sessions`, `session_counters` and `events`. The
+ * requests repository reaches them through `createSessionPrimitives` (a granted claim
+ * credits counters and leaves events inside its own transaction). The two files import
+ * each other; each only calls the other's functions once the store is being built.
  */
 
 import { withImmediateTransaction } from '../db.ts';
@@ -15,7 +24,7 @@ import type {
   ApprovalRecord,
   EventRecord,
   Iso,
-  NewEvent,
+  UntypedNewEvent,
   RequestRecord,
   RiskId,
   SessionCounterRecord,
@@ -65,14 +74,14 @@ export interface DecideContext {
    */
   createRequest(input: Omit<InsertRequestInput, 'missionId' | 'sessionId'>): RequestRecord;
   /** Records an extra event beyond the one returned in the outcome. */
-  recordEvent(event: NewEvent): EventRecord;
+  recordEvent(event: UntypedNewEvent): EventRecord;
 }
 
 export interface DecisionOutcome {
   /** True increments every requested counter by one; false leaves them untouched. */
   readonly allow: boolean;
-  /** Event written in the same transaction (e.g. `allowed-call`, `refused-call`). */
-  readonly event?: NewEvent | null;
+  /** Event written in the same transaction (e.g. `call-allowed`, `call-refused`). */
+  readonly event?: UntypedNewEvent | null;
 }
 
 export interface DecideResult<R extends DecisionOutcome> {
@@ -99,7 +108,7 @@ export interface SessionsRepo {
   counters(sessionId: string, periodStart?: Iso): Promise<SessionCounterRecord[]>;
   /** A granted claim "reset": the counters of the period go back to zero. */
   resetCounters(sessionId: string, periodStart: Iso, riskId?: RiskId): Promise<number>;
-  recordEvent(sessionId: string, event: NewEvent): Promise<EventRecord>;
+  recordEvent(sessionId: string, event: UntypedNewEvent): Promise<EventRecord>;
   listEvents(sessionId: string, options?: ListEventsOptions): Promise<EventRecord[]>;
   /**
    * The session timeline, newest first (`ts DESC, id DESC`), paged by keyset: `before`
@@ -144,8 +153,21 @@ interface EventRow {
   details_json: string | null;
 }
 
+const SESSION_COLUMNS = 'id, mission_id, created_at';
+const COUNTER_COLUMNS = 'session_id, risk_id, period_start, consumed';
+const EVENT_COLUMNS = 'id, session_id, ts, kind, risk_id, actor_user_id, details_json';
+
 function sessionToRecord(row: SessionRow): SessionRecord {
   return { id: row.id, missionId: row.mission_id, createdAt: row.created_at };
+}
+
+function counterToRecord(row: CounterRow): SessionCounterRecord {
+  return {
+    sessionId: row.session_id,
+    riskId: row.risk_id,
+    periodStart: row.period_start,
+    consumed: row.consumed,
+  };
 }
 
 function eventToRecord(row: EventRow): EventRecord {
@@ -160,13 +182,82 @@ function eventToRecord(row: EventRow): EventRecord {
   };
 }
 
+/**
+ * The session-side reads and writes that also run inside another repository's
+ * transaction (a claim decision, the request sweeper). All synchronous and without a
+ * transaction of their own: the caller holds it, so each stays atomic with the rest of
+ * the caller's work.
+ */
+export interface SessionPrimitives {
+  sessionOfMission(missionId: string): SessionRecord | null;
+  /** Appends one event at `now` and returns the stored row. */
+  recordEvent(sessionId: string, event: UntypedNewEvent, now: Iso): EventRecord;
+  /** Every counter of the session in the period starting at `periodStart`, by risk id. */
+  countersOfPeriod(sessionId: string, periodStart: Iso): SessionCounterRecord[];
+  /** Sets every counter of the period to zero; returns how many rows it touched. */
+  resetPeriod(sessionId: string, periodStart: Iso): number;
+  /** Gives `amount` actions back on one risk; false (nothing written) when fewer were consumed. */
+  creditCounter(sessionId: string, periodStart: Iso, riskId: RiskId, amount: number): boolean;
+}
+
+export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
+  const { db } = ctx;
+  const byMission = db.prepare<[string], SessionRow>(
+    `SELECT ${SESSION_COLUMNS} FROM sessions WHERE mission_id = ?`,
+  );
+  const insertEvent = db.prepare<
+    [string, string, string, string, string | null, string | null, string | null]
+  >(`INSERT INTO events (${EVENT_COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  const eventById = db.prepare<[string], EventRow>(
+    `SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`,
+  );
+  const countersOfPeriod = db.prepare<[string, string], CounterRow>(
+    `SELECT ${COUNTER_COLUMNS} FROM session_counters
+     WHERE session_id = ? AND period_start = ? ORDER BY risk_id`,
+  );
+  const resetPeriod = db.prepare<[string, string]>(
+    'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ?',
+  );
+  const creditOne = db.prepare<[number, string, string, string, number]>(
+    `UPDATE session_counters SET consumed = consumed - ?
+     WHERE session_id = ? AND period_start = ? AND risk_id = ? AND consumed >= ?`,
+  );
+
+  return {
+    sessionOfMission(missionId) {
+      const row = byMission.get(missionId);
+      return row ? sessionToRecord(row) : null;
+    },
+    recordEvent(sessionId, event, now) {
+      const id = ctx.newId();
+      insertEvent.run(
+        id,
+        sessionId,
+        now,
+        event.kind,
+        event.riskId ?? null,
+        event.actorUserId ?? null,
+        toJson(event.details),
+      );
+      return eventToRecord(requireRow(eventById.get(id), 'event', id));
+    },
+    countersOfPeriod(sessionId, periodStart) {
+      return countersOfPeriod.all(sessionId, periodStart).map(counterToRecord);
+    },
+    resetPeriod(sessionId, periodStart) {
+      return resetPeriod.run(sessionId, periodStart).changes;
+    },
+    creditCounter(sessionId, periodStart, riskId, amount) {
+      return creditOne.run(amount, sessionId, periodStart, riskId, amount).changes === 1;
+    },
+  };
+}
+
 export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
   const { db } = ctx;
+  const primitives = createSessionPrimitives(ctx);
   const byId = db.prepare<[string], SessionRow>(
-    'SELECT id, mission_id, created_at FROM sessions WHERE id = ?',
-  );
-  const byMission = db.prepare<[string], SessionRow>(
-    'SELECT id, mission_id, created_at FROM sessions WHERE mission_id = ?',
+    `SELECT ${SESSION_COLUMNS} FROM sessions WHERE id = ?`,
   );
   const insertSession = db.prepare<[string, string, string]>(
     `INSERT INTO sessions (id, mission_id, created_at) VALUES (?, ?, ?)
@@ -176,22 +267,9 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     `INSERT INTO session_counters (session_id, risk_id, period_start, consumed) VALUES (?, ?, ?, 1)
      ON CONFLICT (session_id, risk_id, period_start) DO UPDATE SET consumed = session_counters.consumed + 1`,
   );
-  const countersOfPeriod = db.prepare<[string, string], CounterRow>(
-    `SELECT session_id, risk_id, period_start, consumed FROM session_counters
-     WHERE session_id = ? AND period_start = ? ORDER BY risk_id`,
-  );
   const countersAll = db.prepare<[string], CounterRow>(
-    `SELECT session_id, risk_id, period_start, consumed FROM session_counters
+    `SELECT ${COUNTER_COLUMNS} FROM session_counters
      WHERE session_id = ? ORDER BY period_start, risk_id`,
-  );
-  const insertEvent = db.prepare<
-    [string, string, string, string, string | null, string | null, string | null]
-  >(
-    `INSERT INTO events (id, session_id, ts, kind, risk_id, actor_user_id, details_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
-  );
-  const eventById = db.prepare<[string], EventRow>(
-    'SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events WHERE id = ?',
   );
   const missionExists = db.prepare<[string], { one: number }>(
     'SELECT 1 AS one FROM missions WHERE id = ?',
@@ -199,18 +277,12 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
   const resetCounter = db.prepare<[string, string, string]>(
     'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ? AND risk_id = ?',
   );
-  const resetPeriod = db.prepare<[string, string]>(
-    'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ?',
-  );
   const eventsSince = db.prepare<[string, string, number], EventRow>(
-    `SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events
-     WHERE session_id = ? AND ts >= ? ORDER BY ts, id LIMIT ?`,
+    `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? AND ts >= ? ORDER BY ts, id LIMIT ?`,
   );
   const eventsAll = db.prepare<[string, number], EventRow>(
-    `SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events
-     WHERE session_id = ? ORDER BY ts, id LIMIT ?`,
+    `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? ORDER BY ts, id LIMIT ?`,
   );
-  const EVENT_COLUMNS = 'id, session_id, ts, kind, risk_id, actor_user_id, details_json';
   const eventsRecent = db.prepare<[string, number], EventRow>(
     `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? ORDER BY ts DESC, id DESC LIMIT ?`,
   );
@@ -224,7 +296,7 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     // error instead of the store's NotFoundError.
     if (!missionExists.get(missionId)) throw new NotFoundError('mission', missionId);
     insertSession.run(ctx.newId(), missionId, now);
-    return sessionToRecord(requireRow(byMission.get(missionId), 'session', missionId));
+    return requireRow(primitives.sessionOfMission(missionId) ?? undefined, 'session', missionId);
   }
 
   function readCounters(
@@ -236,26 +308,12 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     if (riskIds.length === 0) return result;
     const rows = db
       .prepare<string[], CounterRow>(
-        `SELECT session_id, risk_id, period_start, consumed FROM session_counters
+        `SELECT ${COUNTER_COLUMNS} FROM session_counters
          WHERE session_id = ? AND period_start = ? AND risk_id IN (${placeholders(riskIds.length)})`,
       )
       .all(sessionId, periodStart, ...riskIds);
     for (const row of rows) result.set(row.risk_id, row.consumed);
     return result;
-  }
-
-  function recordEventSync(sessionId: string, event: NewEvent, now: Iso): EventRecord {
-    const id = ctx.newId();
-    insertEvent.run(
-      id,
-      sessionId,
-      now,
-      event.kind,
-      event.riskId ?? null,
-      event.actorUserId ?? null,
-      toJson(event.details),
-    );
-    return eventToRecord(requireRow(eventById.get(id), 'event', id));
   }
 
   return {
@@ -264,8 +322,7 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       return row ? sessionToRecord(row) : null;
     },
     async getByMission(missionId) {
-      const row = byMission.get(missionId);
-      return row ? sessionToRecord(row) : null;
+      return primitives.sessionOfMission(missionId);
     },
     async getOrCreate(missionId) {
       const now = nowIso(ctx);
@@ -292,13 +349,13 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
               { ...request, missionId: input.missionId, sessionId: session.id },
               now,
             ),
-          recordEvent: (event) => recordEventSync(session.id, event, now),
+          recordEvent: (event) => primitives.recordEvent(session.id, event, now),
         };
         const outcome = decide(context);
         if (outcome.allow) {
           for (const riskId of riskIds) increment.run(session.id, riskId, input.periodStart);
         }
-        if (outcome.event) recordEventSync(session.id, outcome.event, now);
+        if (outcome.event) primitives.recordEvent(session.id, outcome.event, now);
         return {
           outcome,
           session,
@@ -307,23 +364,17 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       });
     },
     async counters(sessionId, periodStart) {
-      const rows = periodStart
-        ? countersOfPeriod.all(sessionId, periodStart)
-        : countersAll.all(sessionId);
-      return rows.map((r) => ({
-        sessionId: r.session_id,
-        riskId: r.risk_id,
-        periodStart: r.period_start,
-        consumed: r.consumed,
-      }));
+      return periodStart
+        ? primitives.countersOfPeriod(sessionId, periodStart)
+        : countersAll.all(sessionId).map(counterToRecord);
     },
     async resetCounters(sessionId, periodStart, riskId) {
       return riskId
         ? resetCounter.run(sessionId, periodStart, riskId).changes
-        : resetPeriod.run(sessionId, periodStart).changes;
+        : primitives.resetPeriod(sessionId, periodStart);
     },
     async recordEvent(sessionId, event) {
-      return recordEventSync(sessionId, event, nowIso(ctx));
+      return primitives.recordEvent(sessionId, event, nowIso(ctx));
     },
     async listEvents(sessionId, options = {}) {
       const limit = options.limit ?? DEFAULT_LIST_LIMIT;
@@ -349,7 +400,7 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       params.push(limit);
       return db
         .prepare<(string | number)[], EventRow>(
-          `SELECT id, session_id, ts, kind, risk_id, actor_user_id, details_json FROM events
+          `SELECT ${EVENT_COLUMNS} FROM events
            WHERE ${where.join(' AND ')} ORDER BY ts ${direction}, id ${direction} LIMIT ?`,
         )
         .all(...params)

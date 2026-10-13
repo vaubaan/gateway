@@ -12,6 +12,8 @@
 
 import type { Octokit as OctokitType } from '@octokit/rest';
 
+import { FILES_SHAPE, declaredMergeBase, readFileEntries } from './classify.ts';
+
 export type OctokitLike = Pick<OctokitType, 'rest' | 'request'>;
 
 const repoArgs = (a: Readonly<Record<string, unknown>>) =>
@@ -117,7 +119,9 @@ export async function dispatchGithubTool(
       return data;
     }
     case 'github__push_files': {
-      const files = args.files as Array<{ path: string; content: string }>;
+      // Same reader as the classifier : what was classified is what is pushed.
+      const files = readFileEntries(args);
+      if (!files) throw new Error(`github__push_files requires ${FILES_SHAPE}`);
       const branch = args.branch as string;
       const message = args.message as string;
       const ref = await octokit.rest.git.getRef({ ...repoArgs(args), ref: `heads/${branch}` });
@@ -178,9 +182,11 @@ export async function dispatchGithubTool(
       return data;
     }
     case 'github__merge_pull_request': {
+      const pullNumber = args.pull_number as number;
+      await assertPullRequestTargetsDeclaredBase(octokit, args, pullNumber);
       const { data } = await octokit.rest.pulls.merge({
         ...repoArgs(args),
-        pull_number: args.pull_number as number,
+        pull_number: pullNumber,
         merge_method: (args.merge_method as 'merge' | 'squash' | 'rebase' | undefined) ?? 'merge',
       });
       return data;
@@ -280,4 +286,40 @@ export async function dispatchGithubTool(
     default:
       throw new Error(`Unknown GitHub MCP tool: ${tool}`);
   }
+}
+
+/**
+ * `merge_pull_request` is classified on the base branch the caller declares
+ * (`declaredMergeBase`), and GitHub's merge endpoint takes no base : it
+ * merges into the pull request's own. Read the pull request first and refuse
+ * the merge unless the two agree, so a declared `feature/x` can never merge
+ * into `main` under the risks of a feature branch.
+ */
+async function assertPullRequestTargetsDeclaredBase(
+  octokit: OctokitLike,
+  args: Readonly<Record<string, unknown>>,
+  pullNumber: number,
+): Promise<void> {
+  const declared = declaredMergeBase(args);
+  const pull = await octokit.rest.pulls.get({ ...repoArgs(args), pull_number: pullNumber });
+  const actual = baseRefOf(pull.data);
+  if (actual === undefined) {
+    throw new Error(
+      `github__merge_pull_request: could not read the base branch of pull request #${pullNumber}; not merged.`,
+    );
+  }
+  if (actual !== declared) {
+    throw new Error(
+      `github__merge_pull_request: pull request #${pullNumber} targets '${actual}', not the declared base '${declared}'. Call again with base '${actual}'.`,
+    );
+  }
+}
+
+/** `base.ref` of a pull-request payload, when it is there as a non-empty string. */
+function baseRefOf(pull: unknown): string | undefined {
+  if (pull === null || typeof pull !== 'object' || !('base' in pull)) return undefined;
+  const base: unknown = pull.base;
+  if (base === null || typeof base !== 'object' || !('ref' in base)) return undefined;
+  const ref: unknown = base.ref;
+  return typeof ref === 'string' && ref.length > 0 ? ref : undefined;
 }

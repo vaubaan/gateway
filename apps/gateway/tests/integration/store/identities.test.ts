@@ -97,6 +97,43 @@ describe('groups repository', () => {
     await expect(store.groups.addMember('missing', alice)).rejects.toThrow(/not found/);
   });
 
+  it('syncIdpMemberships replaces the IdP memberships of a user and leaves local groups alone', async () => {
+    const local = await store.groups.getOrCreate('reviewers', 'local');
+    await store.groups.addMember(local.id, alice);
+    expect(await store.groups.syncIdpMemberships(alice, ['dev', 'ops'])).toEqual({ skipped: [] });
+    expect((await store.groups.groupsOf(alice)).map((g) => [g.name, g.source])).toEqual([
+      ['dev', 'idp'],
+      ['ops', 'idp'],
+      ['reviewers', 'local'],
+    ]);
+    await store.groups.syncIdpMemberships(alice, ['ops']);
+    expect((await store.groups.groupsOf(alice)).map((g) => g.name)).toEqual(['ops', 'reviewers']);
+    await store.groups.syncIdpMemberships(alice, []);
+    expect((await store.groups.groupsOf(alice)).map((g) => g.name)).toEqual(['reviewers']);
+  });
+
+  it('syncIdpMemberships skips a name held by a local group and reports it', async () => {
+    await store.groups.getOrCreate('finance', 'local');
+    expect(await store.groups.syncIdpMemberships(bob, ['finance', 'dev'])).toEqual({
+      skipped: ['finance'],
+    });
+    expect((await store.groups.groupsOf(bob)).map((g) => g.name)).toEqual(['dev']);
+  });
+
+  it('syncIdpMemberships is one transaction: a failure keeps the previous memberships and creates no group', async () => {
+    await store.groups.syncIdpMemberships(alice, ['dev']);
+    store.db.exec(
+      `CREATE TRIGGER refuse_marked_group BEFORE INSERT ON group_members
+       WHEN NEW.group_id IN (SELECT id FROM groups WHERE name = 'refused')
+       BEGIN SELECT RAISE(ABORT, 'refused group'); END`,
+    );
+    await expect(store.groups.syncIdpMemberships(alice, ['ops', 'refused'])).rejects.toThrow(
+      /refused group/,
+    );
+    expect((await store.groups.groupsOf(alice)).map((g) => g.name)).toEqual(['dev']);
+    expect((await store.groups.list()).map((g) => g.name)).toEqual(['dev']);
+  });
+
   it('refuses a member that is not a user (foreign key)', async () => {
     const g = await store.groups.getOrCreate('ops', 'local');
     await expect(store.groups.addMember(g.id, 'ghost')).rejects.toThrow(/FOREIGN KEY/);

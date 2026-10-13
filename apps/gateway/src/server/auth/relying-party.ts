@@ -15,6 +15,7 @@
  */
 import * as oidc from 'openid-client';
 
+import { errorMessage } from '../config/errors';
 import type { IdpConfig } from '../config/types';
 import type { RawClaims } from './claims';
 import { LoginError } from './errors';
@@ -220,8 +221,4 @@ function* causeChain(err: unknown): Generator<Error> {
     yield current;
     current = current.cause;
   }
-}
-
-function errorMessage(err: unknown): string {
-  return err instanceof Error ? err.message : String(err);
 }

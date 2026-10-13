@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import type { DraftConnection, IssuanceConnection, MissionDraft, PreviewIssueCode } from './model';
-import { budgetProblem, previewConnection, previewDraft, uncoveredOf } from './preview';
+import { budgetProblem, envNotices, previewConnection, previewDraft, uncoveredOf } from './preview';
 import { ACME_HIDDEN, ACME_RESOURCES, ACME_STALE, acmeConnection } from './testing';
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
@@ -663,5 +663,73 @@ describe('previewConnection', () => {
     const single = previewConnection(acmeConnection(), draft);
     expect(single.issues).toEqual([]);
     expect(single.preview).toEqual(preview([draft]).connections[0]);
+  });
+});
+
+describe('previewDraft — notices (never blocking)', () => {
+  const all = [{ connection_id: 'conn-acme', preset: 'developer' }] as const;
+
+  it('names the selected resources that carry no environment label and what it costs', () => {
+    const p = preview(all);
+    expect(p.ok).toBe(true);
+    expect(p.issues).toEqual([]);
+    expect(p.notices).toHaveLength(1);
+    expect(p.notices).toMatchObject([
+      {
+        code: 'resource-without-env',
+        resource_refs: ['scratch'],
+        risk_ids: ['acme[staging].write', 'acme[staging].bulk-delete'],
+        connection_index: 0,
+        connection_id: 'conn-acme',
+      },
+    ]);
+    expect(p.notices[0]?.message).toContain('No environment label on scratch ("Acme main").');
+    expect(p.notices[0]?.message).toContain('refused (risk-not-accepted)');
+    expect(p.notices[0]?.message).toContain('(staging, prod)');
+  });
+
+  it('says nothing when every selected resource is labelled with an environment of the catalog', () => {
+    const p = preview([
+      {
+        connection_id: 'conn-acme',
+        preset: 'developer',
+        resources: { scope: 'selected', resource_ids: ['res-app-staging', 'res-app-prod'] },
+      },
+    ]);
+    expect(p.notices).toEqual([]);
+  });
+
+  it('names a resource labelled with an environment no risk of the catalog is acceptable in', () => {
+    const dev = { ...ACME_RESOURCES[0]!, id: 'res-dev', ref: 'app-dev', env: 'dev' };
+    const p = preview(
+      [
+        {
+          connection_id: 'conn-acme',
+          policy: [{ risk_id: 'acme.read', ...BUDGET }],
+          resources: { scope: 'selected', resource_ids: ['res-dev'] },
+        },
+      ],
+      [acmeConnection({ resources: [dev] })],
+    );
+    expect(p.ok).toBe(true);
+    expect(p.notices.map((n) => [n.code, n.resource_refs, n.risk_ids])).toEqual([
+      ['resource-env-not-in-catalog', ['app-dev'], []],
+    ]);
+  });
+
+  it('says nothing when the plugin derives the environment, or the catalog has no env-scoped risk', () => {
+    const where = { connection_index: 0, connection_id: 'conn-acme' };
+    const unlabelled = [{ ref: 'scratch', env: null }];
+    const acme = acmeConnection();
+    expect(envNotices({ ...acme, derives_env: true }, unlabelled, [], where)).toEqual([]);
+    const accountOnly = acme.risks.filter((r) => r.env === null);
+    expect(envNotices({ ...acme, risks: accountOnly }, unlabelled, [], where)).toEqual([]);
+    expect(envNotices(acme, unlabelled, [], where)).toHaveLength(1);
+  });
+
+  it('keeps a notice out of `ok`: a draft with a notice and no issue is issuable', () => {
+    const p = preview(all);
+    expect(p.notices.length).toBeGreaterThan(0);
+    expect(p.ok).toBe(true);
   });
 });

@@ -14,8 +14,9 @@
  * (`account.database[*]`, `database[D].stats`, `database[D].credentials`)
  * and the per-database Data API (`database[D].key-space[K]`). The classifier
  * adds three literal markers under `key-space` — `delete`, `flush`,
- * `execute` — so the catalog can grade DEL, FLUSHDB/FLUSHALL and unknown
- * Redis verbs separately from an ordinary key write.
+ * `execute` — so the catalog can grade deletions, FLUSHDB/FLUSHALL and
+ * arbitrary commands (scripts, administration, unknown verbs) separately
+ * from an ordinary key write.
  */
 
 import type { DataModel } from '@vaubaan/plugin-sdk';
@@ -52,7 +53,8 @@ export const upstashRedisDataModel: DataModel = {
           description:
             'The key-value data stored in a database. Covers all Redis data structures ' +
             '(strings, hashes, lists, sets, sorted sets). The classifier appends the literal ' +
-            'markers `delete`, `flush` and `execute` for DEL, FLUSHDB/FLUSHALL and unknown verbs.',
+            'markers `delete`, `flush` and `execute` for deletions, FLUSHDB/FLUSHALL and ' +
+            'arbitrary commands (scripts, administration, unknown verbs).',
         },
         {
           name: 'credentials',

@@ -21,6 +21,16 @@
   color: var(--text-subtle);
   overflow-wrap: break-word;
 }
+/* The argument fingerprint is 64 hex characters with no break opportunity. In
+   an auto-layout table `overflow-wrap: break-word` does not shrink the cell's
+   minimum width, so the column pushed the table wider than the window;
+   `anywhere` does, and the value wraps on about two lines, whole and
+   selectable. */
+.hash {
+  overflow-wrap: anywhere;
+  min-width: 16ch;
+  max-width: 34ch;
+}
 
 /* One row: four flexible filters, two short selects, two dates, the buttons. */
 .filters {

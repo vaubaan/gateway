@@ -5,6 +5,7 @@
 # Spec     : docs/spec/gateway-risk-model.md §4 + §4bis (scope caps) ;
 #            docs/spec/vaubaan-gateway.md §3.2 (presets).
 # ADR      : docs/decisions/scope-caps-amplification-axis.md ;
+#            docs/decisions/scope-caps-not-enforced-in-v5-0.md ;
 #            docs/decisions/plugin-contract-and-credential-spec.md.
 # Handbook : docs/handbook/providers/gmail.md.
 #
@@ -13,13 +14,20 @@
 # entity is `envScopable` so an owner may still label a mailbox resource, but
 # no risk is env-scoped today.
 #
-# Two entries carry `caps` (soft defaults) and `infra_limits` (hard ceilings)
-# per the scope-caps ADR : `gmail.bulk-read` (volume is the cardinal risk)
-# and `gmail.read-from-zone-unknown` (OWASP LLM01 : prompt injection through
-# a message body — keep the blast small).
+# Three guarantees live in the classifier (`classify.ts`), not here : a draft
+# to a recipient outside the internal domains and the allowlists is refused
+# (`gmail.draft-to-zone-external-unbounded` is kept, deprecated, and can no
+# longer be touched) ; a label write naming `TRASH` or `SPAM` is refused ; a
+# recipient or an id the classifier cannot read refuses the call.
+#
+# No entry declares `caps` or `infra_limits` : the v5.0 door enforces none of
+# the stateless caps, and a catalog only states what the gateway applies
+# (ADR scope-caps-not-enforced-in-v5-0, which records the values modelled for
+# `gmail.bulk-read` and `gmail.read-from-zone-unknown`). The amplitude of a
+# mission on these two risks is bounded by its quota and rate limit.
 
 provider: gmail
-catalog_version: 2
+catalog_version: 3
 catalog_date: 2026-10-13
 
 risks:
@@ -94,7 +102,7 @@ risks:
     reason: >-
       Messages whose sender is neither internal nor allowlisted. The cardinal
       OWASP LLM01 vector — prompt injection through the message body. Strong
-      posture recommended, tight caps.
+      posture recommended, tight quota and rate limit.
     matches: 'gmail.mailbox.from-zone[unknown].R'
     vector:
       reversibility: reversible
@@ -103,12 +111,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    caps:
-      items_per_call_max: 10
-      calls_per_minute_max: 20
-      temporal_window_days: 7
-    infra_limits:
-      bytes_per_call_max: 1048576
 
   - id: gmail.read-drafts
     label: 'Read existing drafts'
@@ -129,7 +131,10 @@ risks:
     reason: >-
       Zone override : whoever the sender is, a thread carrying a label the
       owner declared sensitive is escalated. Guard rail for structurally
-      private correspondence (payroll, legal, HR, invoices).
+      private correspondence (payroll, legal, HR, invoices). The labels of a
+      thread are unknown before the fetch, so on a mailbox that declares
+      sensitive labels every thread fetch touches this risk, and so does
+      every search that does not exclude each of them with `-label:<name>`.
     matches: 'gmail.mailbox.sensitive-label[**].R'
     vector:
       reversibility: reversible
@@ -142,9 +147,10 @@ risks:
   - id: gmail.bulk-read
     label: 'Bulk read across the mailbox (non-discriminating query)'
     reason: >-
-      `search_threads(q="is:unread")`, or any query without a `from:` / `to:`
-      / `label:` discriminator, may return hundreds of threads at once and
-      bypass per-message zoning. A distinct marker forces an explicit
+      `search_threads(q="is:unread")`, or any query that is not a plain
+      conjunction bounded by a `from:<address>` clause (a union, a grouping,
+      a negated or missing sender), may return hundreds of threads at once
+      and bypass per-message zoning. A distinct marker forces an explicit
       acceptance.
     matches: 'gmail.mailbox.bulk-marker.R'
     vector:
@@ -154,13 +160,6 @@ risks:
       cost: free
       visibility: internal
       persistence: stateless
-    caps:
-      items_per_call_max: 50
-      calls_per_minute_max: 5
-      temporal_window_days: 90
-    infra_limits:
-      items_per_call_max: 500
-      bytes_per_call_max: 10485760
 
   # ─── WRITES — DRAFTS ───────────────────────────────────────────────────
   # Every draft write emits two slices : the containment slice `draft.W`
@@ -234,10 +233,12 @@ risks:
     reason: >-
       A draft to an arbitrary external address : the cardinal exfiltration
       vector once sent, and even unsent its existence can leak intentions.
-      Offered by no preset ; a mission accepts it only by explicit, conscious
-      enumeration (the v4 `acceptable_in_envs: []` "never acceptable" marker
-      is not expressible in a v5 catalog).
+      Never acceptable : the classifier refuses such a draft before any risk
+      is evaluated, so accepting this risk grants nothing. The id is kept
+      (ids are never deleted) and marked deprecated so no new mission is
+      offered it.
     matches: 'gmail.mailbox.to-zone[external-unbounded].W'
+    deprecated: true
     vector:
       reversibility: reversible
       blast: account
@@ -251,8 +252,10 @@ risks:
   - id: gmail.label-write
     label: 'Apply / remove labels on a thread or message (single)'
     reason: >-
-      Mailbox organisation. UI-level and reversible (re-label). No direct
-      security impact unless the label is `SPAM` / `TRASH` / `IMPORTANT`.
+      Mailbox organisation on one identified thread or message. UI-level and
+      reversible (re-label). `TRASH` and `SPAM` are refused by the classifier
+      (a deletion is not a label write) ; a label that is, or may be, one the
+      owner declared sensitive also touches the fallback write risk.
     matches: 'gmail.mailbox.thread[**].label.W'
     vector:
       reversibility: reversible
@@ -265,9 +268,10 @@ risks:
   - id: gmail.bulk-label-write
     label: 'Bulk apply / remove labels across many threads'
     reason: >-
-      `label_thread` over N threads found by a wide `search_threads`. A silent
-      risk : one MCP call can affect hundreds of threads. Distinct from the
-      single label write.
+      One call labelling many threads at once. Distinct from the single
+      label write. No modelled tool can touch it today : `label_thread` takes
+      exactly one thread id and a call without one is refused. Kept for a
+      future batch tool ; in no preset until then.
     matches: 'gmail.mailbox.bulk-marker.W'
     vector:
       reversibility: reversible
@@ -282,10 +286,12 @@ risks:
   - id: gmail.uncategorized-write
     label: 'Uncategorized Gmail write'
     reason: >-
-      Catch-all for writes no entry above covers. If the plugin ever surfaces
-      `send_message`, `delete_message` or `create_filter`, they land here
-      until a dedicated risk is added — fail-loud by design. Never offered in
-      a preset.
+      Catch-all for writes no entry above covers. Today : applying or
+      removing a label the owner declared sensitive, or a user label the
+      classifier cannot tell apart from one (`sensitive-label[..].W`). If the
+      plugin ever surfaces `send_message`, `delete_message` or
+      `create_filter`, they land here until a dedicated risk is added —
+      fail-loud by design. Never offered in a preset.
     matches: 'gmail.[**].W'
     fallback: true
     vector:
@@ -300,8 +306,9 @@ risks:
 # (spec §3.2). Gmail has no environment, so no entry is env-qualified.
 # Values are provisional until ADR `mission-presets-default-values`.
 # Deliberately in no preset : `gmail.read-sensitive-label` (PII, explicit
-# acceptance), `gmail.draft-to-zone-external-unbounded` (never acceptable)
-# and the fallback.
+# acceptance), `gmail.draft-to-zone-external-unbounded` (deprecated : the
+# classifier refuses the draft), `gmail.bulk-label-write` (no tool can touch
+# it) and the fallback.
 presets:
   - id: read-only
     label: Read-only triage
@@ -334,7 +341,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: Experimental — read-only triage plus drafts to self, colleagues and allowlisted contacts and single-thread labelling ; bulk reads and bulk label writes need approval.
+    description: Experimental — read-only triage plus drafts to self, colleagues and allowlisted contacts and single-thread labelling ; bulk reads need approval.
     entries:
       - risk_id: gmail.read-mailbox
         quota: 5000
@@ -381,10 +388,6 @@ presets:
         rate_limit: { max: 60, window_seconds: 60 }
         gate: auto
       - risk_id: gmail.bulk-read
-        quota: 20
-        rate_limit: { max: 5, window_seconds: 60 }
-        gate: approval
-      - risk_id: gmail.bulk-label-write
         quota: 20
         rate_limit: { max: 5, window_seconds: 60 }
         gate: approval

@@ -52,7 +52,15 @@ describe('resolveReturnTo — return URL limited to public_url', () => {
     'https://gateway.example.com@evil.example.net/',
     'javascript:alert(1)',
     'data:text/html,x',
-  ])('refuses %s', (raw) => {
+    // normalise to a path starting with `//`: another origin once used as a Location
+    '/.//a//evil.example.net/x',
+    '/x/..//a//evil.example.net',
+    'https://gateway.example.com//a//evil.example.net',
+    // a browser strips tab / LF / CR before parsing
+    '/\t/evil.example.net/x',
+    '/\n/evil.example.net/x',
+    '/\r\\evil.example.net/x',
+  ])('refuses %j', (raw) => {
     expect(resolveReturnTo(raw, PUBLIC_URL)).toBeNull();
   });
 

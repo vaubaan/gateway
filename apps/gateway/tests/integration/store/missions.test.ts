@@ -43,7 +43,7 @@ describe('missions repository', () => {
         credential: null,
       })
     ).id;
-    const resources = await store.connections.replaceResources(connection, [
+    const resources = await store.connections.syncDiscoveredResources(connection, [
       { ref: 'acme/a', displayName: 'A' },
       { ref: 'acme/b', displayName: 'B' },
     ]);

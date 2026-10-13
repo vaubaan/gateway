@@ -45,6 +45,36 @@ describe('mapClaims', () => {
   });
 });
 
+describe('mapClaims and email_verified', () => {
+  const claims = { sub: 'idp|1', email: 'ops@example.com' };
+
+  it('refuses an email the IdP marks as unverified, with its own closed code', () => {
+    for (const unverified of [false, 'false', 'False', 0]) {
+      let thrown: unknown = null;
+      try {
+        mapClaims({ ...claims, email_verified: unverified }, MAPPING);
+      } catch (err) {
+        thrown = err;
+      }
+      expect(thrown, `email_verified=${String(unverified)}`).toBeInstanceOf(LoginError);
+      expect(thrown instanceof LoginError && thrown.code).toBe('email-not-verified');
+    }
+  });
+
+  it('accepts a verified email, and an IdP that does not send the claim at all', () => {
+    expect(mapClaims({ ...claims, email_verified: true }, MAPPING).email).toBe('ops@example.com');
+    expect(mapClaims({ ...claims, email_verified: 'true' }, MAPPING).email).toBe('ops@example.com');
+    expect(mapClaims(claims, MAPPING).email).toBe('ops@example.com');
+  });
+
+  it('refuses the unverified flag whatever claim the email is mapped from', () => {
+    const mapping = { sub: 'oid', email: 'preferred_username', groups: 'roles' };
+    expect(() =>
+      mapClaims({ oid: 'o-1', preferred_username: 'x@y.z', email_verified: false }, mapping),
+    ).toThrowError(/email-not-verified/);
+  });
+});
+
 describe('assertEmailDomainAllowed', () => {
   it('allows every domain when the list is empty', () => {
     expect(() => assertEmailDomainAllowed('a@anything.test', [])).not.toThrow();

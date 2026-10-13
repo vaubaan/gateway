@@ -1,7 +1,8 @@
 import { withImmediateTransaction } from '../db.ts';
 import { NotFoundError } from '../errors.ts';
 import type { GroupRecord, GroupSource, UserRecord } from '../types.ts';
-import { nowIso, placeholders, type RepoContext } from './context.ts';
+import { nowIso, parseEnum, placeholders, requireRow, type RepoContext } from './context.ts';
+import { GROUP_SOURCES } from './enums.ts';
 import { userColumns, userRowToRecord, type UserRow } from './users.ts';
 
 export interface GroupsRepo {
@@ -11,6 +12,14 @@ export interface GroupsRepo {
   list(): Promise<GroupRecord[]>;
   /** Replaces the membership atomically (IdP claim sync at login, or operator edit). */
   setMembers(groupId: string, userIds: readonly string[]): Promise<void>;
+  /**
+   * Replaces the user's memberships of IdP-sourced groups with `names`, in one
+   * transaction: groups that do not exist yet are created (source `idp`), the
+   * memberships the list no longer names are removed, and a failure leaves
+   * everything as it was. Local groups are never touched: a name held by a
+   * local group is skipped and returned in `skipped`.
+   */
+  syncIdpMemberships(userId: string, names: readonly string[]): Promise<{ skipped: string[] }>;
   addMember(groupId: string, userId: string): Promise<void>;
   removeMember(groupId: string, userId: string): Promise<boolean>;
   listMembers(groupId: string): Promise<UserRecord[]>;
@@ -33,7 +42,7 @@ function toRecord(row: GroupRow): GroupRecord {
   return {
     id: row.id,
     name: row.name,
-    source: row.source as GroupSource,
+    source: parseEnum(GROUP_SOURCES, row.source, 'groups.source'),
     createdAt: row.created_at,
   };
 }
@@ -43,8 +52,10 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
   const byId = db.prepare<[string], GroupRow>(`SELECT ${COLUMNS} FROM groups WHERE id = ?`);
   const byName = db.prepare<[string], GroupRow>(`SELECT ${COLUMNS} FROM groups WHERE name = ?`);
   const all = db.prepare<[], GroupRow>(`SELECT ${COLUMNS} FROM groups ORDER BY name`);
-  const insert = db.prepare<[string, string, string, string]>(
-    'INSERT INTO groups (id, name, source, created_at) VALUES (?, ?, ?, ?)',
+  // Creation is one statement, so two sign-ins claiming the same new group cannot collide.
+  const insertIfAbsent = db.prepare<[string, string, string, string]>(
+    `INSERT INTO groups (id, name, source, created_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT (name) DO NOTHING`,
   );
   const addMemberStmt = db.prepare<[string, string, string]>(
     `INSERT INTO group_members (group_id, user_id, added_at) VALUES (?, ?, ?)
@@ -71,13 +82,37 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
     return toRecord(row);
   }
 
+  function getOrCreateSync(name: string, source: GroupSource, now: string): GroupRecord {
+    insertIfAbsent.run(ctx.newId(), name, source, now);
+    return toRecord(requireRow(byName.get(name), 'group', name));
+  }
+
   return {
     async getOrCreate(name, source) {
-      const existing = byName.get(name);
-      if (existing) return toRecord(existing);
-      const id = ctx.newId();
-      insert.run(id, name, source, nowIso(ctx));
-      return requireGroup(id);
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => getOrCreateSync(name, source, now));
+    },
+    async syncIdpMemberships(userId, names) {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        const skipped: string[] = [];
+        const kept: string[] = [];
+        for (const name of new Set(names)) {
+          const group = getOrCreateSync(name, 'idp', now);
+          if (group.source !== 'idp') {
+            skipped.push(name);
+            continue;
+          }
+          addMemberStmt.run(group.id, userId, now);
+          kept.push(group.id);
+        }
+        const stale = kept.length > 0 ? ` AND group_id NOT IN (${placeholders(kept.length)})` : '';
+        db.prepare<string[]>(
+          `DELETE FROM group_members WHERE user_id = ?
+             AND group_id IN (SELECT id FROM groups WHERE source = 'idp')${stale}`,
+        ).run(userId, ...kept);
+        return { skipped };
+      });
     },
     async getById(id) {
       const row = byId.get(id);
