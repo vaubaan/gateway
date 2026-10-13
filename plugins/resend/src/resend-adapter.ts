@@ -1,4 +1,11 @@
 /**
+ * LEGACY v4 adapter — paste-token mode, one raw API key per binding.
+ *
+ * Kept so `apps/gateway/src/lib/gateway/build.ts` compiles until P1.6 rewrites
+ * the execution door on `resendPlugin`. Nothing here is reached by the v5 gateway.
+ *
+ * @deprecated legacy v4, deleted in P1.6 — use `resendPlugin` from `./index.ts`.
+ *
  * ResendAdapter — paste-token mode, all custom REST tools.
  *
  * Auth model : the user pastes a Resend API key (`re_*`). This is stored
@@ -13,8 +20,8 @@
  */
 
 import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
-import { availableTools } from './tools.ts';
-import { executeCall, type FetchImpl } from './execute.ts';
+import { availableTools } from './legacy-tools.ts';
+import { executeCall, type FetchImpl } from './legacy-execute.ts';
 import { classifyResendV4, type ClassifyResult } from './risk-classifier.ts';
 
 export interface ResendAdapterConfig {
@@ -28,6 +35,7 @@ export interface ValidateResult {
   error?: string;
 }
 
+/** @deprecated legacy v4, deleted in P1.6 — use `resendPlugin`. */
 export class ResendAdapter {
   readonly provider = 'resend' as const;
   readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;

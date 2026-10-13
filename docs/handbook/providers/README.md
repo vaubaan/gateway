@@ -1,54 +1,63 @@
 ---
-title: Provider risk-model handbooks — index
+title: Provider plugin handbooks — index
 status: current
-date: 2026-06-19
+date: 2026-10-13
 ---
 
-> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+# Provider plugin handbooks
 
-# Provider risk-model handbooks
+One handbook per provider plugin (`plugins/<id>`). All ten plugins are on
+the v5 plugin SDK since P1.2 (2026-10-13) and were brought to one consistent
+surface by P1.2-align: catalog loaded with `catalogPathNextTo`, fallback
+entry flagged `fallback: true`, no preset on the fallback, standard `oauth2`
+refresh performed by the host. Each handbook follows the same structure
+(spec [`gateway-risk-model.md`](../../spec/gateway-risk-model.md),
+[`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §5):
 
-Huit documents de modélisation v4 risk-based — un par provider Vaubaan
-(Upstash Redis et Cloudflare DNS handbooks restent à rédiger). Chacun couvre la même
-structure (cf. spec
-[`gateway-risk-model.md`](../../spec/gateway-risk-model.md)) :
+1. **Data model** — the entities of each plane, cardinalities, the
+   `envScopable` entity.
+2. **Tool → slice mapping** — the slice(s) each MCP tool emits.
+3. **Catalog and presets** — the YAML risks (6-axis vector,
+   `acceptable_in_envs` where relevant) and the shipped presets.
+4. **Coverage** — every tool covered by at least one non-fallback risk.
+5. **Edge cases** — the non-obvious classification decisions, argued.
+6. **Credential, discovery, execution, tests, legacy** — how the plugin runs
+   today and what P1.6 deletes.
 
-1. **Data-model** — entités du plane + cardinalités + diagram mermaid
-2. **Mapping tool → slice** — pour chaque tool MCP, quelle slice est émise au call
-3. **Risk catalog** — YAML/TS canonique avec 6D vector + `acceptable_in_envs` quand pertinent
-4. **Lint coverage** — matrice tool × risk (chaque tool couvert par ≥1 risk)
-5. **Edge cases** — décisions de classification non-évidentes argumentées
-6. **Trous identifiés** — choses à creuser avant de scaler le périmètre
+These handbooks are the human source of truth for a provider's model. The
+code under `plugins/<id>/src/` materialises them; the `tracks:` frontmatter
+lets the drift detector compare the two.
 
-Ces handbooks sont la **source de vérité humaine** pour comprendre la
-modélisation d'un provider. Le code (`plugins/<vendor>/src/`)
-matérialise ce qui est ici. Le diff entre handbook et code est tracé via
-le frontmatter `tracks:` (cf. skill `drift-detector`).
+## Index
 
-## Liste
+| Plugin         | Handbook                                   | Plane(s)                             | Risks                     | Presets                                                        | Credential    | Notes                                               |
+| -------------- | ------------------------------------------ | ------------------------------------ | ------------------------- | -------------------------------------------------------------- | ------------- | --------------------------------------------------- |
+| Cloudflare DNS | [`cloudflare-dns.md`](./cloudflare-dns.md) | `dns`                                | 11 + fallback             | `read-only`, `dns-operator`, `zone-admin`                      | `api-key`     | Zone-scoped token; record-write overlays.           |
+| GitHub         | [`github.md`](./github.md)                 | `repo`                               | 14 + fallback             | `read-only`, `developer`, `release-manager`                    | `app-install` | Per-call installation token. No env-scoped risk.    |
+| Gmail          | [`gmail.md`](./gmail.md)                   | `mailbox`                            | 15 + fallback             | `read-only`, `developer`                                       | `oauth2`      | **Experimental**: classifier-only, no tool exposed. |
+| Railway        | [`railway.md`](./railway.md)               | `runtime`                            | 9 + fallback              | `read-only`, `developer`, `operator`                           | `oauth2`      | Resource indicator on every token request.          |
+| Resend         | [`resend.md`](./resend.md)                 | `email`                              | 17 + fallback (2 deprec.) | `read-only`, `developer`, `marketing-operator`, `domain-admin` | `api-key`     | Recipient zones from the domain resource metadata.  |
+| SSH            | [`ssh.md`](./ssh.md)                       | `host`                               | 7 + fallback              | `read-only`, `developer`, `operator`                           | `ssh-key`     | Pinned host key; command classes.                   |
+| Stripe         | [`stripe.md`](./stripe.md)                 | `billing`                            | 16 + fallback             | `read-only`, `test-mode-developer`, `finance-operator`         | `api-key`     | One resource per mode (test / live); catalog v3.    |
+| Supabase       | [`supabase.md`](./supabase.md)             | `db`, `storage`, `auth`, `functions` | 24 + fallback             | `read-only-analyst`, `staging-developer`, `migration-operator` | `oauth2`      | Management API; `execute_sql` read-only.            |
+| Upstash Redis  | [`upstash-redis.md`](./upstash-redis.md)   | `cache`                              | 10 + fallback             | `read-only`, `developer`, `operator`                           | `api-key`     | Env from the owner's database label.                |
+| Vercel         | [`vercel.md`](./vercel.md)                 | `runtime`                            | 16 + fallback             | `read-only`, `developer`, `operator`                           | `api-key`     | Declares `envOf` (the `env[<label>]` segment).      |
 
-| Provider       | Handbook                                | Plane(s)                             | Risks         |
-| -------------- | --------------------------------------- | ------------------------------------ | ------------- |
-| GitHub         | [`github.md`](./github.md)              | `repo`                               | 14 + fallback |
-| Vercel         | [`vercel.md`](./vercel.md)              | `runtime`                            | 15 + fallback |
-| Supabase       | [`supabase.md`](./supabase.md)          | `db`, `storage`, `auth`, `functions` | 23 + fallback |
-| Railway        | [`railway.md`](./railway.md) (v5 SDK)   | `runtime`                            | 9 + fallback  |
-| SSH (bash)     | [`railway-ssh.md`](./railway-ssh.md) §2 | `host`                               | 5 + fallback  |
-| Gmail          | [`gmail.md`](./gmail.md) (v5 SDK, exp.) | `mailbox`                            | 15 + fallback |
-| Upstash Redis  | _handbook à rédiger_                    | `cache`                              | _à rédiger_   |
-| Stripe         | [`stripe.md`](./stripe.md)              | `billing`                            | 14 + fallback |
-| Resend         | [`resend.md`](./resend.md)              | `email`                              | 15 + fallback |
-| Cloudflare DNS | _handbook à rédiger_                    | `dns`                                | _à rédiger_   |
+Risk counts are the named entries of each `risk-catalog.yaml`; every catalog
+adds exactly one `<id>.uncategorized-write` fallback. Preset values are a
+starting point — ADR `mission-presets-default-values` is deferred.
 
-> Railway et SSH cohabitent dans un seul handbook car les deux providers
-> ont émergé du même round d'analyse (.vaubaan/research/). À splitter
-> en deux fichiers si la doc grossit.
+[`railway-ssh.md`](./railway-ssh.md) keeps the v4 modelling notes of Railway
+and SSH (French, legacy); both plugins have their own handbook above.
 
-## Mise à jour
+## Updating
 
-Quand un risk catalog YAML / TS change, mettre à jour le handbook
-correspondant dans la même PR. Le frontmatter `tracks:` liste les
-fichiers code à surveiller.
+When a `risk-catalog.yaml`, a classifier or a preset changes, update the
+corresponding handbook in the same pull request and bump `catalog_version`
+(and the plugin `version` per the semver rule of ADR
+[[plugin-contract-and-credential-spec]] D9). The `tracks:` frontmatter lists
+the files to watch.
 
-Pour drafter un nouveau provider, copier la structure d'un handbook
-existant et reproduire les 6 sections.
+To draft a new provider, start from
+[`plugins/README.md`](../../../plugins/README.md) and copy the structure of an
+existing handbook.

@@ -321,6 +321,7 @@ risks:
       creator opts in explicitly (no implicit accept).
     matches:
       - 'github.**.W'
+    fallback: true
     vector:
       reversibility: costly
       blast: env

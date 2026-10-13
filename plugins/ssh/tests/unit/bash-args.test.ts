@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
-import { materializeArgs } from './args';
-import type { ParsedTool } from './parse';
+import { materializeArgs } from '../../src/bash/args.ts';
+import type { ParsedTool } from '../../src/bash/parse.ts';
 
 function tool(args: ParsedTool['args']): ParsedTool {
   return { functionName: 'f', ring: 'r', action: 'read', args };

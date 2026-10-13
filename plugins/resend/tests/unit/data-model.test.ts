@@ -1,73 +1,54 @@
 import { describe, expect, test } from 'vitest';
-import { validateDataModel } from '@vaubaan/shared';
+import { validateDataModel } from '@vaubaan/plugin-sdk';
 
 import { resendDataModel } from '../../src/index.ts';
 
-describe('resendDataModel — referential integrity', () => {
-  test('every entity.parent references an existing entity in the same plane', () => {
+const entities = resendDataModel.planes[0]!.entities;
+const entity = (name: string) => entities.find((e) => e.name === name)!;
+
+describe('resendDataModel', () => {
+  test('referential integrity, one plane (email), nine entities', () => {
     expect(validateDataModel(resendDataModel)).toEqual([]);
+    expect(resendDataModel.provider).toBe('resend');
+    expect(resendDataModel.planes.map((p) => p.slug)).toEqual(['email']);
+    expect(entities).toHaveLength(9);
   });
 
-  test('declares exactly one plane (email)', () => {
-    expect(resendDataModel.planes).toHaveLength(1);
-    expect(resendDataModel.planes[0]!.slug).toBe('email');
+  test('the roots are the two resource kinds plus the account-level contact and email', () => {
+    expect(
+      entities
+        .filter((e) => e.parent === null)
+        .map((e) => e.name)
+        .sort(),
+    ).toEqual(['contact', 'domain', 'email', 'segment']);
   });
 
-  test('account is the envScopable entity', () => {
-    const account = resendDataModel.planes[0]!.entities.find((e) => e.name === 'account');
-    expect(account).toBeDefined();
-    expect(account!.envScopable).toBe(true);
-    expect(account!.parent).toBeNull();
-    expect(account!.cardinalities).toContain('one');
+  test('domain and segment are the env-scopable entities — the resources the owner labels', () => {
+    expect(entities.filter((e) => e.envScopable).map((e) => e.name)).toEqual(['domain', 'segment']);
   });
 
-  test('account is the plane root (parent === null)', () => {
-    const account = resendDataModel.planes[0]!.entities.find((e) => e.name === 'account');
-    expect(account).toBeDefined();
-    expect(account!.parent).toBeNull();
-    expect(account!.cardinalities).toContain('one');
-  });
-
-  test('domain hierarchy is preserved (dns-record < domain < account)', () => {
-    const entities = resendDataModel.planes[0]!.entities;
-    const dnsRecord = entities.find((e) => e.name === 'dns-record');
-    const domain = entities.find((e) => e.name === 'domain');
-    expect(dnsRecord!.parent).toBe('domain');
-    expect(domain!.parent).toBe('account');
-  });
-
-  test('audience/contact/broadcast hierarchy is preserved', () => {
-    const entities = resendDataModel.planes[0]!.entities;
-    const contact = entities.find((e) => e.name === 'contact');
-    const broadcast = entities.find((e) => e.name === 'broadcast');
-    const audience = entities.find((e) => e.name === 'audience');
-    expect(contact!.parent).toBe('audience');
-    expect(broadcast!.parent).toBe('audience');
-    expect(audience!.parent).toBe('account');
-  });
-
-  test('synthetic markers (to-zone, recipient-count) are children of account', () => {
-    const entities = resendDataModel.planes[0]!.entities;
-    const toZone = entities.find((e) => e.name === 'to-zone');
-    const recipientCount = entities.find((e) => e.name === 'recipient-count');
-    expect(toZone).toBeDefined();
-    expect(toZone!.parent).toBe('account');
-    expect(toZone!.cardinalities).toContain('bounded');
-    expect(recipientCount).toBeDefined();
-    expect(recipientCount!.parent).toBe('account');
-    expect(recipientCount!.cardinalities).toContain('bounded');
-  });
-
-  test('unbounded entities are declared correctly (email, batch, contact, broadcast)', () => {
-    const entities = resendDataModel.planes[0]!.entities;
-    for (const slug of ['email', 'batch', 'contact', 'broadcast']) {
-      const e = entities.find((x) => x.name === slug);
-      expect(e, `entity '${slug}' must be declared`).toBeDefined();
-      expect(e!.cardinalities).toContain('unbounded');
+  test('the sending markers hang under the domain, membership and broadcasts under the segment', () => {
+    for (const name of ['dns-record', 'to-zone', 'recipient-count']) {
+      expect(entity(name).parent, name).toBe('domain');
+    }
+    for (const name of ['member', 'broadcast']) {
+      expect(entity(name).parent, name).toBe('segment');
     }
   });
 
-  test('declares exactly 10 entities', () => {
-    expect(resendDataModel.planes[0]!.entities).toHaveLength(10);
+  test('cardinalities : resources bounded, history unbounded, markers bounded', () => {
+    expect(entity('domain').cardinalities).toEqual(['bounded']);
+    expect(entity('segment').cardinalities).toEqual(['bounded']);
+    for (const name of ['email', 'contact', 'broadcast', 'member']) {
+      expect(entity(name).cardinalities, name).toEqual(['unbounded']);
+    }
+    for (const name of ['to-zone', 'recipient-count', 'dns-record']) {
+      expect(entity(name).cardinalities, name).toEqual(['bounded']);
+    }
+  });
+
+  test('the v4 account root and batch marker are gone', () => {
+    expect(entities.find((e) => e.name === 'account')).toBeUndefined();
+    expect(entities.find((e) => e.name === 'batch')).toBeUndefined();
   });
 });

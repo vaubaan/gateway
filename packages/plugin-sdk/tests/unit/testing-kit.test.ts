@@ -31,11 +31,12 @@ describe('assertCatalogCoverage', () => {
     const report = assertCatalogCoverage(acmePlugin, samples, { resources: [staging] });
     expect(report.toolsChecked).toBe(2);
     expect(report.samplesChecked).toBe(3);
-    // The fallback is no longer co-touched by a categorized write (ADR
-    // fallback-risk-only-when-uncategorized) : a complete catalog leaves it
-    // untouched and `fallbackHits` empty.
+    // The fallback is not co-touched by a categorized write (ADR
+    // fallback-risk-only-when-uncategorized) and is reachable by design only
+    // through uncategorized writes : it is left out of `risksUntouched`, and a
+    // complete catalog leaves `fallbackHits` empty.
     expect(report.risksTouched).toEqual(['acme.read-things', 'acme.thing-write']);
-    expect(report.risksUntouched).toEqual(['acme.legacy-export', 'acme.uncategorized-write']);
+    expect(report.risksUntouched).toEqual(['acme.legacy-export']);
     expect(report.fallbackHits).toEqual([]);
   });
 
@@ -117,7 +118,8 @@ describe('assertCatalogCoverage', () => {
         risks: acmePlugin.catalog.risks.filter((r) => r.id !== 'acme.read-things'),
       },
     };
-    // The reader preset now references a missing risk ; drop it so only coverage fails.
+    // The reader preset now references a missing risk ; replace it so only
+    // coverage fails (a preset on the fallback would be a definition error).
     const plugin: ProviderPlugin = {
       ...noReadRisk,
       catalog: {
@@ -129,7 +131,7 @@ describe('assertCatalogCoverage', () => {
             description: 'w',
             entries: [
               {
-                risk_id: 'acme.uncategorized-write',
+                risk_id: 'acme.thing-write',
                 quota: 1,
                 rate_limit: { max: 1, window_seconds: 1 },
                 gate: 'auto',
@@ -204,6 +206,19 @@ describe('assertNoWildcard / assertPresetsValid / assertPluginWellFormed', () =>
     );
     expect(() => assertPluginWellFormed({ ...acmePlugin, version: 'x' })).toThrow(
       /version: expected semver/,
+    );
+    // The kit holds a plugin to the explicit flag the loader only warns about.
+    const unflagged: ProviderPlugin = {
+      ...acmePlugin,
+      catalog: {
+        ...acmePlugin.catalog,
+        risks: acmePlugin.catalog.risks.map((r) =>
+          r.id === 'acme.uncategorized-write' ? { ...r, fallback: undefined } : r,
+        ),
+      },
+    };
+    expect(() => assertPluginWellFormed(unflagged)).toThrow(
+      /is the fallback by convention only — set fallback: true/,
     );
   });
 });

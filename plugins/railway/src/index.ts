@@ -14,10 +14,7 @@
  * P1.6 replaces its last consumers with the registry.
  */
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
+import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifyRailway, environmentsOf, isProjectScopedTool } from './classify.ts';
 import {
@@ -28,8 +25,6 @@ import {
   RAILWAY_SCOPES,
   RAILWAY_TOKEN_URL,
   railwayCredentialSpec,
-  railwayNeedsRefresh,
-  refreshRailwayCredential,
 } from './credential.ts';
 import { railwayDataModel } from './data-model.ts';
 import {
@@ -41,13 +36,9 @@ import {
 } from './execute.ts';
 import { RAILWAY_TOOL_PREFIX, railwayTools, toUpstreamName } from './tools.ts';
 
-// The path is built with `node:path` from `import.meta.url`, not with
-// `new URL('./risk-catalog.yaml', import.meta.url)` : Turbopack (apps/gateway)
-// rewrites that literal into a static asset URL and the YAML can no longer be
-// read at boot. An SDK helper replaces this in P1.2-SDK.
-export const railwayCatalog = loadCatalogFile(
-  join(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml'),
-);
+// The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
+// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+export const railwayCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const railwayPlugin = definePlugin({
   id: 'railway',
@@ -64,7 +55,6 @@ export const railwayPlugin = definePlugin({
   classify: classifyRailway,
   execute: executeRailway,
   discoverResources: discoverRailwayResources,
-  refresh: (ctx) => refreshRailwayCredential(ctx),
 });
 
 export default railwayPlugin;
@@ -87,9 +77,7 @@ export {
   isProjectScopedTool,
   railwayCredentialSpec,
   railwayDataModel,
-  railwayNeedsRefresh,
   railwayTools,
-  refreshRailwayCredential,
   toUpstreamName,
 };
 export type { RailwayEnvironmentRef } from './classify.ts';

@@ -1,6 +1,6 @@
 /**
  * Mandatory test suite of the Railway plugin : the SDK kit, the v5
- * classifier on `Resource[]`, the credential spec and refresh, `execute`
+ * classifier on `Resource[]`, the credential spec, `execute`
  * and `discoverResources` against `mockFetch`. No network, ever.
  *
  * The v4 classifier behaviour is covered unchanged by
@@ -29,13 +29,10 @@ import {
   RAILWAY_GRAPHQL_URL,
   RAILWAY_MCP_RESOURCE,
   RAILWAY_MCP_URL,
-  RAILWAY_REFRESH_THRESHOLD_MS,
   RAILWAY_TOKEN_URL,
   classifyRailway,
   environmentsOf,
-  railwayNeedsRefresh,
   railwayPlugin,
-  refreshRailwayCredential,
 } from '../../src/index.ts';
 
 // ─── Fixtures ────────────────────────────────────────────────────────────────
@@ -169,10 +166,9 @@ describe('railway plugin — structural kit', () => {
       { resources: [staging] },
     );
     expect(report.toolsChecked).toBe(14);
-    // Whether the fallback co-touches every write is the policy engine's
-    // business (changing in P1.2-SDK) : assert the nine specific risks only.
-    const FALLBACK = 'railway.uncategorized-write';
-    expect(report.risksTouched.filter((r) => r !== FALLBACK)).toEqual([
+    // A categorized write touches its entry alone (ADR
+    // fallback-risk-only-when-uncategorized) : the nine specific risks, no fallback.
+    expect(report.risksTouched).toEqual([
       'railway.read-account',
       'railway.read-runtime',
       'railway.read-logs',
@@ -183,7 +179,8 @@ describe('railway plugin — structural kit', () => {
       'railway.create-project',
       'railway.agent-action',
     ]);
-    expect(report.risksUntouched.filter((r) => r !== FALLBACK)).toEqual([]);
+    expect(report.risksUntouched).toEqual([]);
+    expect(report.fallbackHits).toEqual([]);
   });
 });
 
@@ -294,7 +291,7 @@ describe('classifyRailway', () => {
   });
 });
 
-// ─── Credential spec and refresh ─────────────────────────────────────────────
+// ─── Credential spec ─────────────────────────────────────────────────────────
 
 describe('railway credential', () => {
   test('declares the OAuth2 flow of the rewrap ADR', () => {
@@ -309,102 +306,9 @@ describe('railway credential', () => {
       refreshable: true,
       extraAuthorizationParams: { prompt: 'consent' },
     });
-    expect(typeof railwayPlugin.refresh).toBe('function');
-  });
-
-  test('refresh threshold : within 60 s of expiry, expired, unparsable ; never without expiresAt', () => {
-    const now = Date.parse('2026-10-13T10:00:00Z');
-    const at = (ms: number) => new Date(now + ms).toISOString();
-    expect(railwayNeedsRefresh(secret({ expiresAt: at(3_600_000) }), now)).toBe(false);
-    expect(railwayNeedsRefresh(secret({ expiresAt: at(RAILWAY_REFRESH_THRESHOLD_MS) }), now)).toBe(
-      false,
-    );
-    expect(
-      railwayNeedsRefresh(secret({ expiresAt: at(RAILWAY_REFRESH_THRESHOLD_MS - 1) }), now),
-    ).toBe(true);
-    expect(railwayNeedsRefresh(secret({ expiresAt: at(-1) }), now)).toBe(true);
-    expect(railwayNeedsRefresh(secret({ expiresAt: 'garbage' }), now)).toBe(true);
-    expect(railwayNeedsRefresh(secret({ expiresAt: null }), now)).toBe(false);
-    expect(railwayNeedsRefresh(secret({ expiresAt: at(5_000) }), now, 1_000)).toBe(false);
-  });
-
-  test('refresh posts the grant with Basic client auth and the MCP resource indicator', async () => {
-    const fetch = mockFetch([
-      {
-        method: 'POST',
-        url: RAILWAY_TOKEN_URL,
-        body: {
-          access_token: 'rlwy_at2',
-          refresh_token: 'rlwy_rt2',
-          expires_in: 3600,
-          scope: 'openid offline_access',
-        },
-        times: 1,
-      },
-    ]);
-    const now = Date.parse('2026-10-13T10:00:00Z');
-    const before = secret();
-    const after = await refreshRailwayCredential(connCtx(fetch), () => now);
-
-    const call = fetch.calls[0]!;
-    expect(call.headers.authorization).toBe(
-      `Basic ${Buffer.from('cid:csecret').toString('base64')}`,
-    );
-    expect(call.headers['content-type']).toBe('application/x-www-form-urlencoded');
-    expect(new URLSearchParams(call.body ?? '')).toEqual(
-      new URLSearchParams({
-        grant_type: 'refresh_token',
-        refresh_token: 'rlwy_rt',
-        resource: RAILWAY_MCP_RESOURCE,
-      }),
-    );
-    expect(after).toEqual({
-      kind: 'oauth2',
-      accessToken: 'rlwy_at2',
-      refreshToken: 'rlwy_rt2',
-      expiresAt: new Date(now + 3_600_000).toISOString(),
-      scopes: ['openid', 'offline_access'],
-      metadata: {},
-    });
-    expect(before.accessToken).toBe('rlwy_at'); // input not mutated
-    expect(fetch.pending()).toEqual([]);
-  });
-
-  test('refresh keeps the old refresh token and scopes when the provider omits them', async () => {
-    const fetch = mockFetch([
-      { url: RAILWAY_TOKEN_URL, body: { access_token: 'n', expires_in: 60 } },
-    ]);
-    const after = await refreshRailwayCredential(connCtx(fetch));
-    expect(after.refreshToken).toBe('rlwy_rt');
-    expect(after.scopes).toEqual(['openid', 'offline_access', 'workspace:member']);
-  });
-
-  test('refresh refused by Railway → UpstreamAuthError ; missing app config → names the key', async () => {
-    const refused = mockFetch([
-      { url: RAILWAY_TOKEN_URL, status: 400, body: { error: 'invalid_grant' } },
-    ]);
-    await expect(refreshRailwayCredential(connCtx(refused))).rejects.toMatchObject({
-      name: 'UpstreamAuthError',
-      upstreamStatus: 400,
-    });
-
-    const never = mockFetch([]);
-    await expect(
-      refreshRailwayCredential(connCtx(never, { appConfig: { client_id: 'cid' } })),
-    ).rejects.toThrow(/appConfig\.client_secret is missing/);
-    await expect(
-      refreshRailwayCredential(connCtx(never, { credential: secret({ refreshToken: null }) })),
-    ).rejects.toMatchObject({ name: 'UpstreamAuthError' });
-    expect(never.calls).toHaveLength(0);
-  });
-
-  test('refresh rejects a secret of another kind', async () => {
-    const never = mockFetch([]);
-    await expect(
-      railwayPlugin.refresh(
-        connCtx(never, { credential: { kind: 'api-key', fields: { api_key: 'k' }, metadata: {} } }),
-      ),
-    ).rejects.toMatchObject({ name: 'CredentialKindMismatch' });
+    // The refresh is the standard refresh_token grant (Basic client auth,
+    // `resource` indicator) the host performs from the spec : no override.
+    expect('refresh' in railwayPlugin).toBe(false);
   });
 });
 

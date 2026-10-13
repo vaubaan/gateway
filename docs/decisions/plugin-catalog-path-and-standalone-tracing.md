@@ -112,9 +112,9 @@ list in the build config.
   image and would catch a regression once plugins are registered.
 - `next.config.ts` reads the filesystem at config time (plugins folder).
   It already did for `package.json` ; the cost is a directory listing.
-- The stripe plugin's local `join(dirname(fileURLToPath(...)))` keeps
-  working and is replaced by the helper in P1.2-align, with the other
-  plugins.
+- The stripe plugin's local `join(dirname(fileURLToPath(...)))` kept
+  working and was replaced by the helper in P1.2-align (2026-10-13), with
+  the other nine plugins ; no plugin computes the path by hand any more.
 - Negative : the helper hides a bundler-specific pitfall behind a name,
   so a reader must follow the reference to understand why the obvious
   pattern is forbidden. Accepted : the comment in the template and this

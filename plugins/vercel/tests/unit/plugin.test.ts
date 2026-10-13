@@ -13,6 +13,7 @@ import {
   CredentialKindMismatch,
   parseSlice,
   serializeSlice,
+  type EnvOf,
   type ExecuteContext,
   type Resource,
 } from '@vaubaan/plugin-sdk';
@@ -24,6 +25,7 @@ import {
   mockFetch,
   type RecordedCall,
 } from '@vaubaan/plugin-sdk/testing';
+import { envResolverFor } from '@vaubaan/policy-engine';
 
 import {
   classifyVercel,
@@ -165,14 +167,14 @@ describe('vercel plugin — structural kit', () => {
       { resources: [app, foreign] },
     );
     expect(report.toolsChecked).toBe(31);
-    // Every named risk is reached by at least one tool. The fallback is left
-    // out on purpose : whether it co-fires with a specific write is the
-    // policy engine's rule (P1.2-SDK changes it), not this plugin's.
+    // Every named risk is reached by at least one tool ; no sample lands on
+    // the fallback (ADR fallback-risk-only-when-uncategorized).
     const named = vercelPlugin.catalog.risks
       .map((r) => r.id)
       .filter((id) => id !== 'vercel.uncategorized-write');
-    expect(report.risksTouched).toEqual(expect.arrayContaining(named));
-    expect(report.risksUntouched.filter((id) => id !== 'vercel.uncategorized-write')).toEqual([]);
+    expect(report.risksTouched).toEqual(named);
+    expect(report.risksUntouched).toEqual([]);
+    expect(report.fallbackHits).toEqual([]);
   });
 });
 
@@ -255,6 +257,23 @@ describe('vercelEnvOf — the environment a slice touches', () => {
     expect(vercelEnvOf(parseSlice('vercel.project[prj_abc].project-settings.W'))).toBeNull();
     expect(vercelEnvOf(parseSlice('vercel.account.team[*].R'))).toBeNull();
     expect(vercelEnvOf(parseSlice('github.repo[a/b].branch[main].W'))).toBeNull();
+  });
+
+  test('the plugin declares it as envOf ; the host composes it before the resource label', () => {
+    const envOf: EnvOf = vercelPlugin.envOf;
+    expect(envOf(parseSlice('vercel.project[prj_abc].env[prod].env-var[K].W'), [app])).toBe('prod');
+    expect(envOf(parseSlice('vercel.project[prj_abc].domain[x].W'), [app])).toBeUndefined();
+
+    // `envResolverFor` : the slice's own env wins over an owner label that
+    // disagrees ; an env-less slice falls back to that label.
+    const labelledStaging: Resource = { ...app, env: 'staging' };
+    const resolver = envResolverFor([labelledStaging], envOf);
+    expect(resolver.resolveEnv(parseSlice('vercel.project[prj_abc].env[prod].env-var[K].W'))).toBe(
+      'prod',
+    );
+    expect(resolver.resolveEnv(parseSlice('vercel.project[prj_abc].project-settings.W'))).toBe(
+      'staging',
+    );
   });
 });
 

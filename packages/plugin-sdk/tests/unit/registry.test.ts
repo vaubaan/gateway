@@ -68,12 +68,19 @@ describe('PluginRegistry — derivations', () => {
 
   test('labels for the UI', () => {
     expect(registry.labels()).toEqual([
-      { id: 'acme', displayName: 'Acme', version: '1.2.3', description: 'Fixture provider.' },
+      {
+        id: 'acme',
+        displayName: 'Acme',
+        version: '1.2.3',
+        description: 'Fixture provider.',
+        experimental: false,
+      },
       {
         id: 'beta-cloud',
         displayName: 'BETA-CLOUD',
         version: '1.2.3',
         description: 'Fixture provider.',
+        experimental: false,
       },
     ]);
   });

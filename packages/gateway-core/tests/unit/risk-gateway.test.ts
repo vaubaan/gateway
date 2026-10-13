@@ -1,10 +1,11 @@
 /**
  * Unit tests for the decision core.
  *
- * Stubs the `Classifier` (the `classify` half of the plugin contract) so we
- * can drive specific slice outputs without a real provider plugin. The
- * catalog is built in memory from a minimal `RiskCatalog`; environments are
- * resolved from the mission's resources.
+ * Stubs the `Classifier` (the `classify` half of the plugin contract, plus
+ * the optional `envOf`) so we can drive specific slice outputs without a
+ * real provider plugin. The catalog is built in memory from a minimal
+ * `RiskCatalog`; environments are resolved from the plugin's `envOf` first,
+ * then from the mission's resources.
  */
 import { describe, expect, test } from 'vitest';
 import type { Resource, RiskCatalog, Slice } from '@vaubaan/shared';
@@ -200,6 +201,42 @@ describe('evaluateCallForToken', () => {
     if (verdict.kind === 'allow') {
       expect(verdict.risks_touched).toEqual(['supabase[staging].bulk-row-write']);
     }
+
+    // The adapter's `envOf` wins over the resource label (plugin-first,
+    // ADR fallback-risk-only-when-uncategorized D4) : the slice says prod,
+    // the owner labelled the resource staging, the call is a prod write.
+    const prodToken: AcceptedRisksSnapshot = {
+      id: 'tok4',
+      accepted_risks: ['supabase[prod].bulk-row-write'],
+      denied_risks: [],
+    };
+    const envOfAdapter: Classifier = {
+      ...makeAdapter('bulk'),
+      envOf: (slice) => (slice.action === 'W' ? 'prod' : undefined),
+    };
+    const derived = evaluateCallForToken({
+      tool: 'supabase__bulk_update',
+      args: {},
+      resources: [staging],
+      token: prodToken,
+      adapter: envOfAdapter,
+      catalog: envCatalog,
+    });
+    expect(derived.kind).toBe('allow');
+    if (derived.kind === 'allow') {
+      expect(derived.risks_touched).toEqual(['supabase[prod].bulk-row-write']);
+    }
+    // ...and an `envOf` that abstains falls back to the label.
+    const abstaining: Classifier = { ...makeAdapter('bulk'), envOf: () => undefined };
+    const labelled = evaluateCallForToken({
+      tool: 'supabase__bulk_update',
+      args: {},
+      resources: [staging],
+      token: qualifiedToken,
+      adapter: abstaining,
+      catalog: envCatalog,
+    });
+    expect(labelled.kind).toBe('allow');
 
     // An explicit resolver replaces the default one.
     const unqualified = evaluateCallForToken({

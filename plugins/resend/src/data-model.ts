@@ -1,142 +1,119 @@
 /**
- * Resend data-model — declarative entity graph for the v4 risk-based engine.
+ * Resend data model — the entities a slice path can name (risk-model spec §2).
  *
- * Spec : docs/spec/resend.md §2.
+ * Spec : docs/spec/resend.md §2 (v4 shape) ; docs/spec/vaubaan-gateway.md §0
+ *        "Resource" (v5 : domains and segments are the resources).
  *
- * Resend exposes a single plane (`email`). There is no parallel split —
- * domains, transactional emails, audiences/contacts, and broadcasts all
- * live under one account namespace.
+ * One plane, `email`. The v4 model hung everything under a synthetic
+ * `account[<binding slug>]` root ; v5 roots the slices at the **resources**
+ * a mission selects, so the default env resolver finds the ref as the first
+ * ident of the path :
  *
- * The `envScopable` axis is carried at the `account` level via the
- * binding's `environment` field — an organisation may create separate
- * Resend accounts (and API keys) for staging vs production, each with
- * its own verified domain. This mirrors the Supabase pattern (one
- * project_ref per env) rather than the Stripe pattern (one key = one mode).
+ *   domain[<name>]         envScopable — sending surface ; carries the recipient
+ *     ├─ dns-record[*]       zone configuration in its metadata
+ *     ├─ to-zone[Z]        ★ synthetic : internal | allowlist | external-unbounded
+ *     └─ recipient-count[C]★ synthetic : single | multi | batch
+ *   segment[<id>]          envScopable — a contact list (Resend's former "audience")
+ *     ├─ member[<contact>] ★ synthetic : a contact's membership of the segment
+ *     └─ broadcast[<id>]     a campaign targeting the segment (draft → sent)
+ *   contact[<id>]          account-level, PII ; belongs to zero or more segments
+ *   email[<id>]            a sent transactional email (status read only)
  *
- * Two synthetic entities encode features that Resend's REST surface does
- * NOT expose as queryable resources but that the catalog needs to gate
- * distinctly :
- *
- *   - `to-zone` : recipient identity zone — `internal` / `allowlist` /
- *     `external-unbounded`. Computed from the union of to+cc+bcc
- *     recipients vs the binding metadata (`internal_domains`,
- *     `allowlist_addresses`, `allowlist_domains`). Borrowed from Gmail's
- *     identity-zoning pattern.
- *
- *   - `recipient-count` : blast-radius marker — `single` / `multi` /
- *     `batch`. Distinct from to-zone so the operator can gate bulk sending
- *     independently.
+ * ★ Synthetic entities exist for classification only ; Resend exposes no such
+ * object. The v4 `batch` marker is gone : `recipient-count[batch]` carries the
+ * bulk-send risk on its own.
  */
 
-import type { DataModel } from '@vaubaan/shared';
+import type { DataModel } from '@vaubaan/plugin-sdk';
 
-export const dataModel: DataModel = {
-  provider: 'resend',
+import { RESEND_PROVIDER } from './resources.ts';
+
+export const resendDataModel: DataModel = {
+  provider: RESEND_PROVIDER,
   planes: [
     {
       slug: 'email',
       description:
-        'The only Resend plane Vaubaan exposes — the authenticated Resend ' +
-        'account and the transactional emails, audiences, contacts, broadcasts, ' +
-        'and domains contained within.',
+        'The only Resend plane Vaubaan exposes : the sending domains, the segments ' +
+        'with their broadcasts, the account-level contacts and the sent emails.',
       entities: [
-        {
-          name: 'account',
-          parent: null,
-          cardinalities: ['one'],
-          envScopable: true,
-          description:
-            'The Resend account backing the API key. Singleton per binding. ' +
-            'Carries the envScopable axis — an org may have separate bindings ' +
-            'for staging (test account) vs prod (live account).',
-        },
-        // ─── Domains cluster ─────────────────────────────────────────────────
+        // ─── Sending domains ────────────────────────────────────────────────
         {
           name: 'domain',
-          parent: 'account',
+          parent: null,
           cardinalities: ['bounded'],
+          envScopable: true,
           description:
-            'A verified sending domain. Bounded — an account typically has a ' +
-            'handful of domains (1-5). Cardinal posture-shift surface : adding ' +
-            'a domain and verifying it changes what the account can send from.',
+            'A verified sending domain — a mission resource, labelled with an environment by ' +
+            'the owner. Every send is rooted at the domain of its from address. The recipient ' +
+            'zone lists (internal_domains, allowlist_domains, allowlist_addresses) are its metadata.',
         },
         {
           name: 'dns-record',
           parent: 'domain',
           cardinalities: ['bounded'],
           description:
-            'Synthetic read-only child of domain — the DKIM/SPF/DMARC DNS ' +
-            'records Resend requires the operator to set. Bounded per domain ' +
-            '(3-5 records). Read-only from Resend API — the human configures ' +
-            'them in their DNS provider.',
+            'The DKIM / SPF / DMARC records Resend asks the operator to publish. Read from the ' +
+            'API ; the only write is the verification trigger.',
         },
-        // ─── Transactional email cluster ─────────────────────────────────────
-        {
-          name: 'email',
-          parent: 'account',
-          cardinalities: ['unbounded'],
-          description:
-            'A single transactional email (confirmation, reset, notification). ' +
-            'Unbounded history — a busy SaaS can send millions over time. ' +
-            'Carries from, to, subject, html/text, status, tags.',
-        },
-        {
-          name: 'batch',
-          parent: 'account',
-          cardinalities: ['unbounded'],
-          description:
-            'Synthetic marker for a batch-send call (POST /emails/batch). ' +
-            'A batch can contain up to 100 emails. Distinct from single-email ' +
-            'to gate bulk-send risk explicitly.',
-        },
-        // ─── Audience / contact / broadcast cluster ──────────────────────────
-        {
-          name: 'audience',
-          parent: 'account',
-          cardinalities: ['bounded'],
-          description:
-            'A named contact list (newsletter subscribers, beta users, etc.). ' +
-            'Bounded — dozens at most in practice.',
-        },
-        {
-          name: 'contact',
-          parent: 'audience',
-          cardinalities: ['unbounded'],
-          description:
-            'A subscriber in an audience. Unbounded — a large newsletter can ' +
-            'have millions of contacts. Carries PII : email, first_name, ' +
-            'last_name, custom properties. RGPD-relevant.',
-        },
-        {
-          name: 'broadcast',
-          parent: 'audience',
-          cardinalities: ['unbounded'],
-          description:
-            'A campaign email created for an audience. Can be draft, scheduled, ' +
-            'or sent. Unbounded over time — an active marketing team sends ' +
-            'weekly or daily.',
-        },
-        // ─── Synthetic risk-zone markers ─────────────────────────────────────
         {
           name: 'to-zone',
-          parent: 'account',
+          parent: 'domain',
           cardinalities: ['bounded'],
           description:
-            'Synthetic marker emitted by the classifier on send calls. The ' +
-            'bracketed identifier carries the zone name : `internal` / ' +
-            '`allowlist` / `external-unbounded`. Computed from the union of ' +
-            'to+cc+bcc recipients vs the binding metadata ' +
-            '(`internal_domains`, `allowlist_addresses`, `allowlist_domains`).',
+            'Synthetic marker emitted on every send : the worst recipient zone across to + cc + bcc ' +
+            '(internal | allowlist | external-unbounded), computed from the domain resource metadata.',
         },
         {
           name: 'recipient-count',
-          parent: 'account',
+          parent: 'domain',
           cardinalities: ['bounded'],
           description:
-            'Synthetic marker emitted by the classifier to distinguish ' +
-            'single-recipient sends from multi-recipient or batch sends. ' +
-            'Brackets carry `single` / `multi` / `batch`. Gates blast-radius ' +
-            'amplification distinctly from the to-zone.',
+            'Synthetic marker emitted next to the zone : single (one recipient), multi (several) ' +
+            'or batch (POST /emails/batch). Gates blast-radius amplification independently of the zone.',
+        },
+        // ─── Segments, membership, broadcasts ───────────────────────────────
+        {
+          name: 'segment',
+          parent: null,
+          cardinalities: ['bounded'],
+          envScopable: true,
+          description:
+            'A named contact list broadcasts target (Resend renamed audiences to segments in ' +
+            'November 2025). A mission resource ; the owner may label it with an environment.',
+        },
+        {
+          name: 'member',
+          parent: 'segment',
+          cardinalities: ['unbounded'],
+          description:
+            'Synthetic : a contact as a member of a segment — listing the contacts of a segment, ' +
+            'adding one, removing one. The contact itself is the account-level `contact` entity.',
+        },
+        {
+          name: 'broadcast',
+          parent: 'segment',
+          cardinalities: ['unbounded'],
+          description:
+            'A campaign email targeting a segment : draft, scheduled or sent. Verb leaves `send` ' +
+            'and `delete` separate the irreversible send from drafting.',
+        },
+        // ─── Account-level entities ─────────────────────────────────────────
+        {
+          name: 'contact',
+          parent: null,
+          cardinalities: ['unbounded'],
+          description:
+            'A subscriber of the account, independent of segments since the 2025 migration. ' +
+            'Carries PII : email, first name, last name, custom properties.',
+        },
+        {
+          name: 'email',
+          parent: null,
+          cardinalities: ['unbounded'],
+          description:
+            'A sent transactional email : from, to, subject, status, tags. Unbounded history ; ' +
+            'its sending domain is not known at classification time, hence account-level.',
         },
       ],
     },

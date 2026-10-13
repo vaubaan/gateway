@@ -1,31 +1,19 @@
 /**
- * SSH provider data-model — plane `host`.
+ * Data model of the `ssh` provider — plane `host`.
  *
- * Spec : docs/spec/gateway-risk-model.md §2 + .vaubaan/research/providers/
- * railway-ssh.md §2.
+ * Spec     : docs/spec/gateway-risk-model.md §2.
+ * Handbook : docs/handbook/providers/ssh.md §1.
  *
- * SSH is intentionally the simplest provider in the gateway : one plane
- * (`host`), one entity below the host (`command`). A host is a black box
- * registered as an `ssh_binding` (host_slug → SSH key + address). Every
- * tool call is a `command` executed on that host ; the read/write nature
- * is decided by a regex whitelist (`policy.ts:isReadAllowed`) on the
- * command string.
- *
- * Note : there is *no* containment hierarchy below `command`. All
- * granularity (which files are touched, which package is installed, etc.)
- * lives inside the *content* of the command string, not in the structure.
- * The risk catalog uses that fact : a `cat /etc/...` command is detected
- * by the classifier via heuristics on the cmd string and emits an extra
- * slice that co-touches the `ssh.exec-read-secret-files` risk.
- *
- * The data-model is consumed by :
- *  - the handbook : auto-rendered as mermaid for the SSH provider page.
- *  - lint coverage : every tool MCP must classify to a slice rooted at a
- *    declared entity. With a single tool (`ssh__exec`) and a single entity
- *    (`command`) the coverage matrix is trivial.
+ * SSH stays the simplest provider of the gateway : one plane, one resource
+ * (the host), one operation (a shell command). All the granularity lives in
+ * the *content* of the command string, not in the structure of the host —
+ * so the entities below `command` are **classification markers**, not things
+ * that exist on the host : the classifier emits `command.destructive.W`
+ * next to `command.W` when the line contains a recursive delete, so the
+ * catalog can price that class apart and a preset can gate it.
  */
 
-import type { DataModel } from '@vaubaan/shared';
+import type { DataModel } from '@vaubaan/plugin-sdk';
 
 export const sshDataModel: DataModel = {
   provider: 'ssh',
@@ -33,7 +21,7 @@ export const sshDataModel: DataModel = {
     {
       slug: 'host',
       description:
-        'One registered remote host (one SSH binding = one host = one env). All operations are shell commands executed via `ssh__exec`. The host is a black box from the gateway perspective; security boundaries live host-side (sudoers, file ACLs).',
+        'One remote host reached over SSH with the key pair of the connection. The host is a black box : every operation is a shell command, and the security boundary on the host side (sudoers, file ACLs, the login user) still applies.',
       entities: [
         {
           name: 'host',
@@ -41,14 +29,49 @@ export const sshDataModel: DataModel = {
           cardinalities: ['one'],
           envScopable: true,
           description:
-            'A registered SSH endpoint identified by `host_slug`. One host per binding; the slug carries the env semantics (e.g. `staging-vps`, `prod-host`).',
+            'The resource : the host of the connection, referenced by its hostname or IP (`host[vps-1.example.com]`). Labelled dev / staging / prod by its owner ; the label qualifies the write risks.',
         },
         {
           name: 'command',
           parent: 'host',
           cardinalities: ['one'],
           description:
-            'A single shell command invocation. R or W is decided by the read-whitelist regex; the gateway does not parse the shell AST. Always cardinality `one` at the call site.',
+            'One shell command line. `R` when every simple command of the line is on the read whitelist, `W` otherwise. Always cardinality one at the call site.',
+        },
+        {
+          name: 'secret-file',
+          parent: 'command',
+          cardinalities: ['one'],
+          description:
+            'Marker : the line reads a credential-bearing path (`/etc/shadow`, `/root/…`, `~/.ssh/…`, `~/.aws/…`). Emitted as an extra `R` slice.',
+        },
+        {
+          name: 'destructive',
+          parent: 'command',
+          cardinalities: ['one'],
+          description:
+            'Marker : recursive or forced delete, disk-level tool, reboot or shutdown, account deletion, firewall flush, Docker prune.',
+        },
+        {
+          name: 'package',
+          parent: 'command',
+          cardinalities: ['one'],
+          description:
+            'Marker : a system package manager in a mutating mode, or a global npm / pnpm / yarn / pipx install.',
+        },
+        {
+          name: 'service',
+          parent: 'command',
+          cardinalities: ['one'],
+          description:
+            'Marker : service or process lifecycle — systemctl verbs, service, Docker / Compose lifecycle, pm2, supervisorctl, nginx -s, kill.',
+        },
+        {
+          name: 'privilege',
+          parent: 'command',
+          cardinalities: ['one'],
+          description:
+            'Marker : the simple command runs through sudo, su, doas or pkexec and is not a whitelisted inspection verb.',
         },
       ],
     },

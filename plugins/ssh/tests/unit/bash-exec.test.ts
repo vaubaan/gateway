@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { buildToolInvocation } from './exec';
+import { buildToolInvocation } from '../../src/bash/exec.ts';
 
 describe('buildToolInvocation', () => {
   test('builds a base64-piped bash invocation with no args', () => {

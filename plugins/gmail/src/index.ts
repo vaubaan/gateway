@@ -16,10 +16,12 @@
  * P1.6 replaces its last consumers with the registry.
  */
 
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { definePlugin, loadCatalogFile, type ProviderPlugin } from '@vaubaan/plugin-sdk';
+import {
+  catalogPathNextTo,
+  definePlugin,
+  loadCatalogFile,
+  type ProviderPlugin,
+} from '@vaubaan/plugin-sdk';
 
 import {
   GMAIL_METADATA_KEYS,
@@ -38,7 +40,6 @@ import {
   GMAIL_SCOPES,
   GMAIL_TOKEN_URL,
   gmailCredentialSpec,
-  refreshGmailCredential,
 } from './credential.ts';
 import { gmailDataModel } from './data-model.ts';
 import {
@@ -54,27 +55,11 @@ import {
   gmailTools,
 } from './tools.ts';
 
-// The path is built with `node:path` from `import.meta.url`, not with
-// `new URL('./risk-catalog.yaml', import.meta.url)` : Turbopack (apps/gateway)
-// rewrites that literal into a static asset URL and the YAML can no longer be
-// read at boot. An SDK helper replaces this in P1.2-SDK.
-export const gmailCatalog = loadCatalogFile(
-  join(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml'),
-);
+// The YAML sits next to this module ; `catalogPathNextTo` keeps the path a
+// filesystem path the bundler leaves alone (ADR plugin-catalog-path-and-standalone-tracing).
+export const gmailCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
-/**
- * Marks a plugin the host must treat as experimental : hidden from the
- * default connect / issuance flows, tools not listed. The SDK contract has no
- * such flag yet ; this plugin carries it as an extra, typed member until
- * `ProviderPlugin` gains one (reported to P1.2-SDK).
- */
-export interface ExperimentalPluginFlag {
-  readonly experimental: true;
-}
-
-export type GmailPlugin = ProviderPlugin & ExperimentalPluginFlag;
-
-export const gmailPlugin: GmailPlugin = definePlugin<GmailPlugin>({
+export const gmailPlugin: ProviderPlugin = definePlugin({
   id: GMAIL_PLUGIN_ID,
   displayName: 'Gmail',
   version: '0.1.0',
@@ -90,7 +75,6 @@ export const gmailPlugin: GmailPlugin = definePlugin<GmailPlugin>({
   classify: classifyGmail,
   execute: executeGmail,
   discoverResources: discoverGmailResources,
-  refresh: refreshGmailCredential,
 });
 
 export default gmailPlugin;
@@ -118,7 +102,6 @@ export {
   gmailDataModel,
   gmailTools,
   readMailboxMetadata,
-  refreshGmailCredential,
   selectMailbox,
 };
 export type { FromZone, GmailMailboxMetadata, ToZone } from './classify.ts';

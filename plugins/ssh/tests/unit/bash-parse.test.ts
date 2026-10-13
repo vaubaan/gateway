@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { parseAnnotatedBash } from './parse';
+import { parseAnnotatedBash } from '../../src/bash/parse.ts';
 
 const RUNNER_SH = `#!/usr/bin/env bash
 # @vaubaan-plane: host

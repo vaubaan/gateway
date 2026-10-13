@@ -184,6 +184,7 @@ risks:
       means a tool classifies to a slice no fine-grained entry covers : add
       the entry.
     matches: 'railway.**.W'
+    fallback: true
     vector:
       reversibility: costly
       blast: env
