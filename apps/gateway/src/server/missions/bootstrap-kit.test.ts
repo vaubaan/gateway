@@ -81,15 +81,17 @@ describe('buildBootstrapKit', () => {
     const text = kit.agent_instructions;
     expect(text).toContain('## Vaubaan mission "Ship the billing page"');
     expect(text).toContain('- GitHub "acme-org" — `acme/app` (prod), `acme/web`');
-    expect(text).toContain('- Gmail "ops mailbox" — no resource (account-level tools only)');
     expect(text).toContain(
-      '- `github.code-read` — Read code: 5000 per day, at most 120 per 60s, auto',
+      '- Gmail "ops mailbox" — no resource (tools of the account itself only)',
     );
     expect(text).toContain(
-      '- `github.merge-protected` — Merge into a protected branch: 3 per day, at most 1 per 60s, each action needs approval',
+      '- `github.code-read` — Read code: 5000 per day, at most 120 per 60s, runs freely',
     );
-    expect(text).toContain('quotas reload every day; the mission never expires');
-    expect(text).toContain('the budget below is shared, it is not multiplied');
+    expect(text).toContain(
+      '- `github.merge-protected` — Merge into a protected branch: 3 per day, at most 1 per 60s, asks the mission creator first, each time',
+    );
+    expect(text).toContain('limits reset every day; the mission never expires');
+    expect(text).toContain('the limits below are shared, they are not multiplied');
   });
 
   it('3 — tells an orchestrator how to hand the mission to sub-agents and how each labels itself', () => {
@@ -98,8 +100,8 @@ describe('buildBootstrapKit', () => {
     // The same configuration and the same token, never one per agent.
     expect(text).toContain('hands its sub-agents this MCP configuration as is');
     // A token belongs to a holder, not to an agent.
-    expect(text).toContain('there is no token per agent');
-    expect(text).toContain('A token belongs to its holder');
+    expect(text).toContain('there is no key per agent');
+    expect(text).toContain('A key belongs to its holder');
     // Both carriers of the agent label the execution door reads, and which one wins.
     expect(text).toContain('`X-Vaubaan-Agent: <label>`');
     expect(text).toContain('`_meta.agent` wins');
@@ -118,7 +120,7 @@ describe('buildBootstrapKit', () => {
     expect(REFUSAL_GUIDANCE['budget-exhausted']).toContain('hand `claim_url` to the human');
     expect(REFUSAL_GUIDANCE['approval-required']).toContain('Hand `approval_url` to the human');
     expect(REFUSAL_GUIDANCE['mission-inactive']).toContain(
-      'A request opened before the mission was orphaned can be granted only until it expires; after that, your next refused call opens a new one.',
+      'A request opened before the mission lost its owner can be answered only until it expires; after that, your next refused call opens a new one.',
     );
     expect(kit.agent_instructions).toContain('Never work around a refusal');
     expect(kit.agent_instructions).toContain('give that URL to the human as is');
@@ -126,12 +128,12 @@ describe('buildBootstrapKit', () => {
 
   it('3 — says whose token it is, that the budget is one for every holder, and who answers requests', () => {
     const text = kit.agent_instructions;
-    expect(text).toContain('### Whose token this is');
-    expect(text).toContain('This token belongs to one holder');
+    expect(text).toContain('### Whose key this is');
+    expect(text).toContain('This key belongs to one holder');
     expect(text).toContain('`GET https://gateway.acme.example/mcp/catalog`');
     expect(text).toContain('`token.holder`');
     expect(text).toContain('`mission.creator`');
-    expect(text).toContain('The budget is one for all of them');
+    expect(text).toContain('The limits are one for all of them');
     expect(text).toContain('answered by the mission creator alone');
     // Read before the labels: the identity first, the declared refinement second.
     expect(text.indexOf('### Whose token this is')).toBeLessThan(
@@ -141,7 +143,7 @@ describe('buildBootstrapKit', () => {
 
   it('3 — says what to do when the token itself stops working, for every reason the door states', () => {
     const text = kit.agent_instructions;
-    expect(text).toContain('### When the token itself stops working');
+    expect(text).toContain('### When the key itself stops working');
     expect(text).toContain('`error.data.reason`');
     for (const reason of AUTH_FAILURE_REASONS) {
       expect(text).toContain(`- \`${reason}\` — ${TOKEN_STOPPED_GUIDANCE[reason]}`);
@@ -158,7 +160,7 @@ describe('buildBootstrapKit', () => {
     const text = kit.agent_instructions;
     expect(text).toContain('### The management door');
     expect(text).toContain(`${INPUT.instanceUrl.replace(/\/+$/, '')}/mcp/manage`);
-    expect(text).toContain('never by this mission token');
+    expect(text).toContain('never by this mission key');
     expect(text).toContain('`wrong-credential-kind`');
     expect(text).toContain('It does not lift a refusal');
     // The section comes last: the refusal guidance is read first.

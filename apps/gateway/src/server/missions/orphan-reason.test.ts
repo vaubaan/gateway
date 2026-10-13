@@ -12,7 +12,7 @@ describe('explainOrphan', () => {
         { cause, connection_id: 'c1', uncovered: ['acme.read-things'] },
         CONNECTIONS,
       );
-      expect(explanation.title).toMatch(/^Orphaned: /);
+      expect(explanation.title).toMatch(/^Needs an owner: /);
       expect(explanation.lines.length).toBeGreaterThan(0);
     }
   });
@@ -28,10 +28,10 @@ describe('explainOrphan', () => {
     );
     expect(explanation.reversible).toBe(true);
     const text = explanation.lines.join(' ');
-    expect(text).toContain('connection “Depot”');
+    expect(text).toContain('the account “Depot”');
     expect(text).toContain('acme.read-things, acme[staging].thing-write');
     expect(text).toContain('serves calls again');
-    expect(text).toContain('its session and its counters are kept');
+    expect(text).toContain('its activity and what it counted are kept');
   });
 
   it('says a revoked connection never comes back', () => {
@@ -50,7 +50,7 @@ describe('explainOrphan', () => {
       { cause: 'authority-lost', connection_id: 'gone', uncovered },
       CONNECTIONS,
     );
-    expect(explanation.lines[0]).toContain('one of its connections');
+    expect(explanation.lines[0]).toContain('one of its accounts');
     expect(explanation.lines[0]).toContain('acme.risk-5 and 3 more');
     expect(explanation.lines[0]).not.toContain('acme.risk-6');
   });

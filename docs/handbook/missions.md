@@ -19,13 +19,14 @@ tracks:
   - apps/gateway/tests/integration/missions/
   - apps/gateway/tests/e2e/v5/issue-mission.spec.ts
   - apps/gateway/tests/e2e/v5/team-mission.spec.ts
+  - apps/gateway/tests/e2e/v5/mission-pages.ts
   - apps/gateway/migrations/0010_mission_members_and_token_holders.sql
   - apps/gateway/tests/e2e/v5/browser.ts
   - apps/gateway/tests/e2e/v5/instance.ts
   - apps/gateway/tests/e2e/v5/ephemeral-instance.ts
 ---
 
-# Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
+# Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit, the mission pages
 
 How a connection owner issues a mission — a per-`RiskId` `(budget, gate)`
 policy on selected resources — and receives its token once. Spec:
@@ -45,7 +46,9 @@ Budget, Gate, Preset, Resource), §3.1, §3.2, §4.2 "Missions", §4.4, §7.4,
 [one-membership-rule-checked-in-the-token-insert](../decisions/one-membership-rule-checked-in-the-token-insert.md)
 (who is on a mission, the token insert, the gates of an expired mission),
 [decision-stages-fail-closed-and-audited](../decisions/decision-stages-fail-closed-and-audited.md)
-(a call whose resources disagree on the environment).
+(a call whose resources disagree on the environment),
+[mission-pages-confirm-the-explicit-list-and-ask-before-a-key-stops](../decisions/mission-pages-confirm-the-explicit-list-and-ask-before-a-key-stops.md)
+(the confirmation before a mission is created, what replacing a key asks).
 Built on the [store](store.md) repositories, the
 [plugin SDK](plugin-sdk.md) registry (catalogs, presets, `experimental`,
 `envOf`), [connections](connections.md) (resources, their `env` labels, hidden
@@ -92,25 +95,7 @@ apps/gateway/src/app/(app)/missions/
   page.tsx               /missions — list
                          (the user comes from `currentUser()` in `@/lib/auth/session`; the bootstrap
                          operator sees `NeedsUser` from `@/components/auth/NeedsUser`)
-  new/page.tsx           /missions/new — loads the issuance context (and ?from=<id>)
-  new/mission-form.tsx   the one-page creation screen (client)
-  new/form-state.ts      state and transitions of the form, Preset | Custom, explainPreset(),
-                         editorRows() / filterRows() (pure, unit-tested)
-  new/preset-panel.tsx   Preset mode of one connection: the choice, and what the chosen preset means (client)
-  new/custom-editor.tsx  Custom mode of one connection: the granular editor (client)
-  new/policy-lines.tsx   PolicyLines, FamilyList, SkippedList — the compact reading of a policy
-  [id]/page.tsx          /missions/<id> — detail (links to its session page)
-  [id]/session/page.tsx  /missions/<id>/session — counters, requests, timeline (handbook audit)
-  [id]/mission-actions.tsx  Duplicate / Rotate / Revoke (client)
-  [id]/gate-control.tsx  one button per policy row: Require approval / Set to auto (client)
-  [id]/team-section.tsx  "Members and tokens": the reader's own token, members, tokens, the creator's two forms (client)
-  [id]/team.module.css   styles of that section
-  bootstrap-kit-view.tsx BootstrapKitView, RevealDialog (client)
-  state-badge.tsx        StateBadge — the derived mission state (list and detail)
-  message-of.ts          messageOf(), statedMessageOf() — the sentence a mission page shows for a refusal
-                         of the mission API (pure, unit-tested)
-  new/labels.ts          GATE_LABELS
-  missions.module.css    styles of the Missions pages
+  …                      the four pages and their parts: see "The mission pages" below
 apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [id]/revoke, [id]/gate,
                                      [id]/members, [id]/members/[userId]/remove, [id]/tokens, [id]/tokens/mine,
                                      [id]/tokens/[tokenId]/revoke — one-line adapters
@@ -176,10 +161,11 @@ about this instant:
 `MissionOverview.orphan` (`MissionOrphanReason`: `cause`, `connection_id`,
 `uncovered`) is `null` unless the mission is orphaned. `/missions/<id>` renders
 it with `explainOrphan(orphan, connections)` (`orphan-reason.ts`, pure): a
-banner that names the connection and the uncovered risks, says whether the
-authority can come back (`reversible` is false for a revoked or missing
-connection) and that the token, session and counters are kept. The page shows
-"Revoke mission" on every mission that is not revoked yet, an orphaned or
+callout titled "Needs an owner: …" that names the account and the permissions
+no longer covered (their ids), says whether the mission can serve again
+(`reversible` is false for a disconnected or missing account) and that its
+keys, its activity and what it counted are kept. The page offers
+"Stop the mission" on every mission that is not revoked yet, an orphaned or
 expired one included; "Rotate token" only on an active one.
 
 ## The draft
@@ -844,192 +830,320 @@ route answers `{ mission: { id }, risk_id, gate, previous, opening_closed }`.
 creator opened the gate for, or `null` (always `null` on a mission that is not active);
 the page shows it next to the gate.
 
-## The creation screen (`/missions/new`)
+## The mission pages — `app/(app)/missions/`
 
-One page, one column, in the order of spec §4.2:
+Four pages, redesigned on the design system
+([web-app](web-app.md), spec [style-guide](../spec/style-guide.md)): the list,
+"New mission", one mission, its activity. They speak the interface's words —
+account, permission, limit, key, "ask me first", teammate — and print the
+protocol's names (a risk id, a tool, a refusal code, a key prefix) in mono,
+as the protocol spells them. Nothing below changes what a service decides: the
+pages read the views of `MissionService`, `MissionTeamService`,
+`MissionSessionService` and `RequestService`, and post to the same routes as
+before.
 
-1. **Name** — with, on the same row, "Duplicate from…" (a select of the
-   creator's missions → `/missions/new?from=<id>`) and "Paste an agent's
-   proposal" (a JSON draft, or only its `connections`, sent to
+| File                                      | What it is                                                                                                                                             |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `page.tsx`                                | `/missions`: the two lists                                                                                                                             |
+| `mission-view.ts`                         | pure: the state of a mission in words (`missionMark`), Can / Asks first / Cannot (`allowLines`, `briefLabel`), the limit that is near (`nearestLimit`) |
+| `bootstrap-kit-view.tsx`                  | client: `KitSteps`, `KeyReveal`, `RevealDialog`, `revealedOf(body)`                                                                                    |
+| `message-of.ts`                           | `messageOf(body, status)`: the sentence of a refused request                                                                                           |
+| `new/page.tsx`, `new/mission-form.tsx`    | "New mission": the server page loads the context, the client form holds everything a person sees, the header and the key shown after creation included |
+| `new/form-state.ts`                       | pure: the state of the form and its transitions, `issueSentence`                                                                                       |
+| `new/preset-panel.tsx`                    | client: the presets of one account, what the chosen one means, the counts                                                                              |
+| `new/custom-editor.tsx`                   | client: the permissions one by one (`PermissionTable` `editor`)                                                                                        |
+| `new/policy-lines.tsx`                    | client: `RailSummary` (the rail), `ExplicitList` (what is confirmed), `accountLines` (pure)                                                            |
+| `[id]/page.tsx`                           | `/missions/<id>`                                                                                                                                       |
+| `[id]/mission-actions.tsx`                | client: `MissionActsProvider` (every act of the page and its dialog), `ActButton`, `GenerateKeyButton`, `MissionMenu`                                  |
+| `[id]/team-section.tsx`                   | client: "People and keys"                                                                                                                              |
+| `[id]/permissions-usage.tsx`              | "Permissions and usage" (`PermissionTable` `usage`), shared with the activity page                                                                     |
+| `[id]/gate-control.tsx`                   | client: the "ask me first" switch of one permission                                                                                                    |
+| `[id]/activity-table.tsx`                 | the events of a mission as rows, shared by the mission page and its activity page                                                                      |
+| `[id]/session/page.tsx`, `event-words.ts` | `/missions/<id>/session`: the activity of one mission; pure: what a row says of an event                                                               |
+| `missions.module.css`                     | placement only (the rows of the form, the blocks of the rail, the kit), tokens only                                                                    |
+
+### The list (`/missions`)
+
+Two sections, "Yours" and "Shared with you", each a `DataTable` of four
+columns: the mission (its name; under it, who created it for a shared one, and
+"prepared by `<app>` for you" for one an app created through the management
+door), its **state**, what it **allows** ("26 permissions · 2 accounts") and
+when it **ends**. "Your key" (masked, or "no key yet") and the day of creation
+are detail columns, behind the page's "Show details" (`DetailScope`
+`missions:list`).
+
+The state is `missionMark(state, waiting)`:
+
+| The mission                                        | Reads           | Tone  |
+| -------------------------------------------------- | --------------- | ----- |
+| serves calls                                       | running         | none  |
+| has a request waiting for its creator (the reader) | Waiting for you | amber |
+| has a permission at its limit                      | Limit reached   | red   |
+| is `orphaned`                                      | Needs an owner  | red   |
+| is `expired`                                       | expired         | none  |
+| is `revoked`                                       | stopped         | none  |
+
+A waiting request wins over a reached limit: it is what the person can act on.
+The count of waiting requests per mission comes from `RequestService.inbox`
+(the creator's own). A row with a tone is tinted; an expired or stopped one is
+drawn quiet. An empty list is one sentence and the one action
+(`EmptyState`, `data-testid="missions-empty"`).
+
+### New mission (`/missions/new`)
+
+`FormWithRail`: three numbered steps on the left, a rail on the right that
+stays in view while the steps scroll.
+
+1. **Name** — and, on the same row, "Start from a mission…" (a select of the
+   reader's own missions; a full navigation to `/missions/new?from=<id>`, and
+   the form is keyed on `from` so that its state starts again) and "Paste an
+   agent's proposal" (a JSON draft, or only its `connections`, sent to
    `/api/missions/preview`; what passes is loaded with `loadResolved`, the
-   issues are listed, nothing is issued).
-2. **Connections, resources, policy** — one block per connection: include
-   checkbox, provider and name, "N of M resources" (a link that unfolds the
-   resource checkboxes: all ticked by default except the hidden ones, the stale
-   ones disabled), and the mode switch **Preset | Custom** (two native radios
-   in a group named "Policy for `<provider>` `<name>`"). "Show experimental
-   providers" appears only when the creator holds a connection (owned or shared) of an
-   `experimental` plugin; those rows are hidden until ticked. A creator with a
-   single non-experimental connection finds it included. The two modes are
-   described below.
-3. **Summary** — three lines, `summarize()`: _Can_ (per connection: accepted
-   risks, resources, most severe accepted risk), _Cannot_ (withheld risks and
-   the most severe one, resources left out), _Quantities_ (largest quota per
-   period, fastest rate, risks under approval, reload, expiry).
-4. **Period and expiry**, and **Issue mission**, in a bar that stays at the
-   bottom of the viewport. Under it, what still blocks issuance, then the
-   preview's `notices` (`data-testid="notices"`): one warning-coloured line
-   each — a folded `<details>` whose summary names the code's meaning and the
-   resources, and which unfolds to the full message. A notice never disables
-   the button, and the list is absent when there is none.
+   rest is listed in a callout, nothing is created).
+2. **Accounts and permissions** — one block per account the reader can use:
+   the include checkbox, "`<service>` · `<name>`", on what ground they hold it
+   ("you own it", or "access given to you · may allow 12 of 17"), and at the
+   right the resources selected with their environment labels and "N of M".
+   **Change** unfolds the resource checkboxes (all ticked by default except
+   the ones hidden by the owner; the ones discovery no longer returns are
+   disabled). "Show experimental services" appears only when the reader holds
+   an account of an `experimental` plugin. A reader with a single usable
+   account finds it included. Then the presets, below.
+3. **Limits and lifetime** — "Limits reset" (every hour, day, week, or never),
+   "Expires" (never, in 24 hours, 7, 30, 90 days — each with its date — or on
+   a date), and "People": a sentence, teammates and machine keys are added
+   once the mission exists (a draft carries no teammate).
 
-### Preset mode (`preset-panel.tsx`)
+**The rail** (`Card`) is "What this mission will be able to do": per included
+account, `accountLines()` — Can / Asks you / Cannot, two permissions named and
+the rest counted, the resources left out said in "Cannot" — then **Carries**:
+"26 explicit permissions, limits reset every day, expires 12 Nov." Under it,
+what still stands in the way (`data-testid="issues"`), each reason worded by
+`issueSentence(issue, context)`: the code and the fields are the protocol's
+`PreviewIssue`, the sentence is the interface's ("GitHub · acme allows nothing
+yet: pick a preset or a permission, or leave the account out."); an issue it
+has no sentence for is printed as the server worded it. The rail's foot holds
+the one primary action, **Create mission**, Cancel, and "Key shown once."
+The foot stays in view: when the summary is taller than the window it scrolls
+between the head and the foot of the rail.
 
-The default. The plugin's presets are an explicit choice: one radio each (group
-"Preset for `<provider>` `<name>`"), labelled with the preset's name and its
-width on this connection (`presetChoiceLabel`: "10 risks · 2 need approval").
-For the preset picked, the block shows, without leaving the page:
+**Presets** (`preset-panel.tsx`). One `ChoiceRow` per account (group "Preset
+for `<service>` `<name>`"): a `ChoiceChip` per preset of the plugin, then
+**Custom**.
 
-- its description, in full;
-- its counts in one sentence (`presetDigest`: "8 allowed without asking · 2
-  need your approval · 5 not included", plus "N entries of the preset left out
-  here" when some cannot apply), a button that spreads the lists out or hides
-  them, and a link to the preset's entry in the provider reference
-  (`/reference/<id>#preset-<preset>`, new tab);
-- spread out: **Allowed without asking** and **Needs your approval, action by
-  action** — each risk by its human label, its environment, its quota and its
-  rate limit (`formatRate`: `240/min`) —, **Not included** (a count; the names
-  unfold in place) and **In the preset, left out here** (each entry with the
-  reason: outside the authority, or the label a selected resource would need).
+- A preset says beside its name how many permissions it yields here
+  (`presetWidth`), with the resources selected and what the reader may allow.
+- **A preset that would yield nothing is not offered silently**: its chip is
+  dashed, disabled, and its hint is the reason (`presetUnavailable`): "needs a
+  selected resource labelled "prod": none selected", "outside what you may
+  allow". The chosen preset stays a choice whatever it yields; if it yields
+  nothing, a line under the counts says why and what to do.
+- "Custom" starts from an empty list (`startEmpty`) and opens the editor.
+- Under the row: the preset's description (one sentence, the plugin's) with a
+  link to its entry in the reference (new tab); then the policy **as it stands
+  in the form**, counted (`policyCounts`): "8 run freely · 2 ask you first ·
+  5 not included"; then what the untouched preset could not bring here
+  (`describeSkipped`: "2 permissions of the preset left out here: 2 need a
+  selected resource labelled "staging"."); and the link **Edit the permissions
+  one by one**.
 
-All of it is `explainPreset(connection, state, presetId)`: the same
-`previewConnection` call as `applyPreset`, read instead of applied, so what the
-block says and what the policy holds cannot differ (a unit test compares them
-for every preset).
+`explainPreset(connection, state, presetId)` is the same `previewConnection`
+call as `applyPreset`, read instead of applied: what a chip says and what the
+policy holds cannot differ (a unit test compares them for every preset).
 
-**One reading is spread out at a time by default**: picking a preset spreads
-its own lists out and reduces the other connections to their description and
-counts; "Show what it allows, with quotas" spreads any of them out again, and
-the creator may keep several open. This is what keeps a mission on three
-connections at about two viewports (2.1 at 1280×800 in the browser test) while
-every preset still says what it is; with every list spread out the same page is
-a little over three viewports.
+**The editor** (`custom-editor.tsx`) opens in place under the presets, on the
+values that are there (`enterCustom`: nothing is lost, nothing counts as
+edited yet). It is a `PermissionTable` `editor`, its limit column headed by
+the period ("Per day", "Per week", "In total"):
 
-### Custom mode (`custom-editor.tsx`)
+- a filter (`Segmented`): **Available to you** (the default: what the reader
+  may tick, and what is ticked), Chosen, Not available, All (`filterRows`);
+  a search field when the catalog has more than `SEARCH_THRESHOLD` (8) ids or
+  several planes (every word must appear in the label, the id, the reason,
+  the environment, the kind or the severity); a **plane** select when the
+  service's data model has several ([web-app](web-app.md), "Planes");
+- "N chosen of M you may allow here", "Select all", "Clear", "Remove the N
+  that would be refused", and "Reset to the preset" once something was edited;
+- **every explicit id of the catalog** is a row (`editorRows`), grouped by
+  `groupByKind`: Reads, Writes, Irreversible writes. A row: the tick
+  (`aria-label` "Allow `<id>`"), what it allows in words, its environment as
+  a tag, its id in mono, one severity word, the limit per period and per
+  minute (inputs), the "ask me first" switch, and "why?" — the reason, the six
+  words of the risk model, the entry in the reference (new tab: leaving the
+  page would lose the form), and "Count it over another window than a
+  minute", which shows the window of the rate limit as a second input. A
+  limit loaded with another window than sixty seconds shows both at once;
+- a permission the reader may not allow, or that no selected resource can
+  carry, **stays listed** under "Not available" or "All", with "Not available:
+  `<reason>`" and a disabled tick; one ticked earlier that stopped resolving
+  stays ticked, marked "Would be refused".
 
-One click on **Custom** opens the granular editor in place, on the values the
-preset filled (`enterCustom`: nothing is lost, nothing counts as edited yet):
+A change that would throw edits away — another preset, "Custom", "Reset to
+the preset", once `discardsEdits(state)` — does not act at once: a
+`ConfirmDialog` states what is dropped ("Discard my changes" / Cancel). Without
+an edit it is immediate. The preset a list was adjusted from keeps its chip
+checked, with "N · adjusted".
 
-- a toolbar: "Start from preset…" (`startFromPreset`), "Select all", "Clear",
-  "Remove the N refused", and "N accepted of M you can accept here"; under it
-  one line of help, the rest behind "More" (`Help`, id `custom-editor`);
-- when the catalog has more than `SEARCH_THRESHOLD` (8) explicit ids, or the
-  provider's data model has several planes, a search box (every word must
-  appear in the label, the id, the reason, the environment, the kind or the
-  severity level) and a filter (all, accepted, not accepted yet, unavailable
-  to you): `filterRows`;
-- when the provider's data model has several planes (`riskPlanesOf`, computed
-  by `new/page.tsx` from the registry and passed down as `planes`), a **plane
-  filter** beside them: all planes, one plane, or `other`
-  ([web-app](web-app.md), "Planes"). It narrows what is listed, never what is
-  accepted;
-- **every explicit id of the catalog** (`editorRows`), grouped by `groupByKind`:
-  Reads, Writes, Irreversible writes. An account-scoped entry is one row; an
-  env-scoped entry states its label and reason once, then one row per
-  environment. A row is the shared `RiskExplain` in three lines (label,
-  environment, severity and markers; the id linked to the reference and one
-  line of reason that unfolds; the six-cell vector strip), a checkbox
-  (`aria-label` "Accept risk `<id>`") and, once ticked, quota, rate limit
-  (`max` per `window` s) and gate, aligned in three columns whose captions
-  are written once per group;
-- a risk the creator does not hold, or that no selected resource can resolve,
-  **stays listed**, greyed, with "Not available: `<reason>`" and a disabled
-  checkbox; an entry ticked earlier that stopped resolving stays ticked,
-  marked "Refused at issuance".
+A list loaded from another mission or from a proposal (`loadResolved`) is the
+person's own: its counts are shown, the editor is closed until asked for.
 
-Going back to **Preset**, or choosing another preset in "Start from preset…",
-after an edit (`discardsEdits`) does not act at once: an inline warning asks
-"Discard my changes" / "Keep editing". Without an edit the switch is immediate
-(`backToPreset` re-applies the preset).
+**Confirming.** "Create mission" opens a dialog, "Create “`<name>`”?", whose
+body is `ExplicitList`: **every permission, by account, with its limit** —
+"10,000 a week", "240 a minute" — its id, and whether it asks first (a list
+of rows carrying `data-permission`, not a table: a dialog is 640 px wide).
+That list is what is sent (`draftOf`: explicit `RiskId → (quota, rate limit,
+gate)` lines, `preset: null`) and what `issue()` checks again; a 422 closes
+the dialog and replaces the reasons in the rail with the server's.
 
-A policy loaded from a duplicated mission or from an agent's proposal
-(`loadResolved`) is a custom one: the connection opens in Custom mode, first as
-the compact reading of its explicit lines ("Custom policy, as loaded", allowed /
-needs approval), with "Edit risk by risk" to open the editor.
-
-The mode is a property of the screen. `draftOf` sends the same explicit
-`RiskId → (quota, rate limit, gate)` lines in both modes and never the preset
-(`preset: null`); `issue()` re-checks them server-side as before.
+**The key, once.** After a 201 the screen becomes `CreatedView`: the mission's
+name as the title, "Created just now · 26 permissions on GitHub and Supabase ·
+limits reset every day · expires 12 Nov", then the key in a `SecretBox`
+(`data-testid="revealed-key"`), the kit (`KitSteps`), and "Working with
+others?" with links to the mission page. The key lives in the state of that
+view only; "Open the mission" leaves it for good, and the mission page only
+ever shows `vbn_live_<prefix>_…`.
 
 Behaviour worth knowing (`form-state.ts`):
 
 - picking a preset fills the policy (`applyPreset` = `previewConnection` in
-  preset-only mode) and the form is issuable;
+  preset-only mode) and the form can be created;
 - while the policy is the untouched preset it follows the resource selection;
   once edited, entries are kept and the preview flags the unresolvable ones;
-- a hand-ticked risk starts with the chosen preset's budget for it, else the
-  first other preset's that carries it, else **blank** — and a blank budget
-  blocks issuance (`missing-budget`);
-- "Select all" ticks every held, resolvable risk as an enumerated list, without
-  deprecated entries and without the `uncategorized-write` fallback (the creator
-  ticks it knowingly);
-- the browser's preview decides nothing: `issue()` recomputes it, and a 422
-  replaces the list of blockers with the server's.
+- a hand-ticked permission starts with the chosen preset's limits for it, else
+  the first other preset's that carries it, else **blank** — and a blank limit
+  blocks creation (`missing-budget`);
+- "Select all" ticks every permission the reader holds and the selection can
+  carry, as an enumerated list, without deprecated entries and without the
+  `uncategorized-write` fallback (the person ticks it knowingly);
+- `mode` (`preset` / `custom`) is a property of the screen, never of the
+  mission: the same explicit lines are sent in both.
 
-With three connections and their presets the page stays compact at 1280×800.
-The Playwright spec asserts it: no editor open (no `[data-risk]` row), a page of
-at most 2.25 viewports, at most six visible checkboxes, and the Issue button in
-view. The same spec then walks the other paths: a preset shows its content,
-Custom lists the fifteen GitHub risks with their labels, the discard warning,
-the search box on Supabase, and the link from a risk id of the mission page to
-its entry in the reference.
+With three accounts and their presets the page stays under two viewports at
+1280×800, with no editor open and at most six visible checkboxes, and the
+button is in view before and after scrolling (the rail is sticky). The
+Playwright spec asserts it.
 
-### How a risk is explained (`components/risk/RiskExplain.tsx`)
+### One mission (`/missions/<id>`)
 
-One component, used by the Custom editor, the Share dialog's checklist, the
-policy table of `/missions/<id>` and the provider reference:
+Read by the creator and by the teammates. In the order a person needs it:
 
-| Export                           | Renders                                                                                                                                                                                                                                                                                          |
-| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `RiskExplain({ risk })`          | a compact row: label, environment, class, severity, markers; then the id and one line of reason; then the vector strip. `kindTag={false}` in a list already grouped by class                                                                                                                     |
-| `VectorStrip({ vector })`        | six cells, the axis in a few letters over its value (`vectorBadges`): neutral at the mildest value, a status tone above it; the value is always written, each cell names its axis in full (`aria-label`, `title`), and the whole profile shows on hover and, with `focusable`, on keyboard focus |
-| `VectorLegend()`                 | each axis with its short name, the question it answers, its scale (`VECTOR_AXES`)                                                                                                                                                                                                                |
-| `RiskIdLink({ riskId })`         | the id as a `Slug` of kind `risk`, linked to `/reference/<provider>#risk-<base id>` (`riskReferencePath`); `newTab` on pages holding unsaved input                                                                                                                                               |
-| `RiskClassTag({ kind })`         | `read`, `write` or `irreversible` as an outlined word: the class of a risk where the list is not grouped by it (mission page, Share dialog)                                                                                                                                                      |
-| `RiskReason`                     | the reason on one line that unfolds in place (a native `<details>`: a button to the keyboard, no script)                                                                                                                                                                                         |
-| `RiskMarkers`, `RiskMarkerNotes` | the `fallback` and `deprecated` badges, and the sentence that explains each                                                                                                                                                                                                                      |
+1. **The header** — crumbs, the name, beside it the exception the mission is
+   in (`missionMark`: nothing for a running mission), and one line: who
+   created it and when, each service with its resources and their environment
+   labels, how often the limits reset, when it ends. Under it, for a teammate,
+   one sentence (`data-testid="shared-with-me"`): they work on it as it is,
+   with their own key, and its creator alone answers; for a mission an app
+   created, who prepared it, its client id, and that the name is not verified
+   (`data-testid="issued-via"`).
+2. **What waits** (`data-testid="mission-waiting"`) — the one filled box of
+   the page (`AnswerRow` `boxed`): what is asked, by whose key and which
+   agent, how long ago. The creator gets **Review and answer**, a link to
+   `/waiting/<id>` (the page that shows the exact arguments and takes the
+   answer); a teammate reads "waiting for `<creator>`’s yes" and no button.
+   More than one: the first is shown, the others are counted, with a link to
+   "Waiting for you". On an orphaned mission the reason it is stopped takes
+   the box (`Callout`, `explainOrphan`) and what waits is listed plainly.
+3. **Can / Asks first / Cannot** (`AllowSummary`, `allowLines`) — three
+   permissions named per line (`briefLabel`: without their parenthesis), the
+   rest counted, and how many permissions each line stands for. "Cannot" is
+   what the catalogs of its services hold and the mission does not, the most
+   severe first. A teammate reads "Asks `<creator>` first". **Limits today**:
+   the permission closest to its limit once one is at 60 % (`nearestLimit`,
+   a `Meter`), else "Nothing is near its limit".
+4. **People and keys** (`TeamSection`) — one row per holder: the creator, the
+   teammates, the machine keys; who, and what their key did in the current
+   period ("284 calls today · last call 2 min ago", "no key yet", "key never
+   used"). The role and the masked key are details (`DetailScope`
+   `mission:<id>:people`). The acts of a row show on hover and on focus.
+5. **Permissions and usage** — the count, then, one click away and remembered
+   per mission (`Disclosure` `mission:<id>:permissions`), `PermissionsUsage`:
+   every permission grouped by account, what was used against its limit (the
+   figure; a bar only once it is near), per minute, "runs freely" / "ask me
+   first" — a switch for the creator while `MissionDetail.gates_editable`
+   (`GateControl`: it posts to `/api/missions/<id>/gate`, and a toast says
+   what changed and that it applies from the next call) — "runs freely until
+   `<date>`" while the creator opened it for the period, and "why?".
+6. **Activity** — a line of counts for the period, a link to the activity
+   page, and the last eight events one click away (`ActivityTable`).
 
-The short names of the axes are `abbr` in `VECTOR_AXES` (Undo, Blast, Data,
-Cost, Seen, Lasts); `noteBody(note)` gives a marker's sentence without its lead
-word, for a callout that already has it as its title.
+**Who sees which act.** Every act and its dialog live in
+`MissionActsProvider`; the header, "···" and the rows open the same ones. An
+act is shown when the server would take it, read from `MissionTeam`
+(`role`, `issuable`, `my_token`, `candidates`, `revocable`) and from the
+mission's state — never spelled again as a condition of the page.
 
-`CatalogRisk` carries what they need: `vector` (resolved for the id's
+| Act                            | Where                            | Who, when                                  | Asks first                                                              |
+| ------------------------------ | -------------------------------- | ------------------------------------------ | ----------------------------------------------------------------------- |
+| Setup kit (the masked key)     | header, own row                  | whoever holds a working key                | —                                                                       |
+| Generate my key                | header (primary), own row, "···" | whoever has none, while the mission serves | no: nothing stops                                                       |
+| Replace my key                 | own row, "···"                   | whoever has one, while the mission serves  | `ConfirmDialog`: the current key stops at once, the others keep working |
+| Revoke my key                  | "···"                            | whoever has one                            | `DangerConfirm`, typing one's address                                   |
+| Add people                     | header                           | the creator, until the mission is stopped  | a dialog: pick a person, the rule in one sentence                       |
+| Remove (a teammate)            | their row                        | the creator                                | `DangerConfirm`, typing their address                                   |
+| Revoke key (a teammate's)      | their row                        | the creator                                | `DangerConfirm`, typing their address                                   |
+| New machine key                | "···"                            | the creator, while the mission serves      | a dialog: its name                                                      |
+| Replace key (a machine's)      | its row                          | the creator, while the mission serves      | `ConfirmDialog`: the current key stops at once                          |
+| Revoke (a machine key)         | its row                          | the creator                                | `DangerConfirm`, typing its name                                        |
+| "Ask me first" on a permission | its row                          | the creator, while `gates_editable`        | no: a switch; a toast confirms                                          |
+| Duplicate                      | "···"                            | the creator                                | — (opens "New mission" on a copy)                                       |
+| Stop the mission               | "···"                            | the creator, until it is stopped           | `DangerConfirm`, typing the mission's name; says for how many holders   |
+
+"Replace my key" and "Generate my key" both post to
+`/api/missions/<id>/tokens/mine`, for the creator too. Replacing a machine key
+is two requests — revoke it, then create one of the same name — because the
+gateway has no single act for it; if the second fails the dialog says so and
+the name is free. A teammate has no "leave": they revoke their own key, and
+the creator removes them. An owner of an account closes an orphaned mission
+from the account's page ([connections](connections.md)), not from here: they
+cannot read a mission they neither created nor work on.
+
+A key is shown once, in `RevealDialog`: `SecretBox` and the kit, in a dialog
+that Escape and the backdrop do not close ("I saved the key").
+
+The teammates' select lists every active person's address on purpose (product
+owner, 2026-10-13; threat model, A25): the gateway is one company's, and a
+free-text field would confirm or deny any address typed.
+
+### The activity of a mission (`/missions/<id>/session`)
+
+The operator's view of one mission, on the wide measure:
+
+- what waits (`AnswerList`), with "Review and answer" for the creator;
+- **Who called** in the period, per key holder, and **Agents**, per label —
+  allowed, refused, last call, and links that filter the timeline
+  (`?holder=`, `?agent=`, `?unlabelled=1`) or open the full record
+  (`/activity?mission=…`). Counts, not limits; a label is what a caller said
+  about itself;
+- the **timeline** (`ActivityTable`, five columns: when, who, action,
+  permission, outcome), newest first, paged by `?before=`;
+- one click away: **Permissions and usage** (read-only here) and **Earlier
+  periods** (what each period counted).
+
+`eventWords(event, { requestOpen })` words an event: "allowed", "refused"
+(red), "asked first" (amber; `approval-required`), "limit reached"
+(`budget-exhausted`), "asked for a yes" / "asked for more room" (amber while
+it waits), "approved", "runs freely", "set to “ask me first”", "limits reset",
+"limit raised", "given more time", "key generated", "key replaced", "key
+revoked", "mission stopped" — with its detail lines (the refusal code in
+mono, an instant the page prints in the reader's time zone, a masked key). A
+kind a later version wrote is printed as it is stored. `eventDetailLines`
+(`server/audit`) is the earlier wording of the same events and is no longer
+read by a page.
+
+### How a risk is explained elsewhere (`components/risk/RiskExplain.tsx`)
+
+The mission pages no longer use it: a permission is a `PermissionRow` there.
+No page uses it any more (the "Give access" dialog and the reference were
+redesigned too); the file still exports `RiskExplain`, `VectorStrip`, `VectorLegend`, `RiskIdLink`,
+`RiskClassTag`, `RiskReason`, `RiskMarkers`, `RiskMarkerNotes`.
+
+`CatalogRisk` carries what both need: `vector` (resolved for the id's
 environment) and `kind` (`read` when every pattern of the entry ends in `.R`,
 `destructive` when the vector says `irreversible`, else `write`). `kind` only
-groups a list; like the severity, nothing is decided from it.
-
-On `/missions/<id>` the policy table looks each persisted id up with
-`riskExplainer(registry)` (`server/providers/reference.ts`); an id no shipped
-catalog declares any more is shown as its stored label and its bare id.
-
-After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
-"I copied the token" goes to `/missions/<id>`, which only ever shows
-`vbn_live_<prefix>_…`. Rotation opens the same dialog.
-
-## The pages for a team
-
-- **`/missions`** — two lists: "Created by me" and "Shared with me" (the
-  creator's email, and "not generated yet" while the member has no token).
-  "Duplicate from…" on the creation screen offers the created ones only.
-- **`/missions/<id>`** — read by the creator and by members. A member gets a
-  "Shared with you" callout (`Callout`, the member glyph) naming the creator and none of the creator's
-  controls (Duplicate, Rotate token, Revoke mission, the gate buttons). The
-  page was otherwise left as it is; the team lives in one self-contained
-  section, `TeamSection` (`team-section.tsx`), fed by
-  `root.missions.team.team()`:
-  - **Your token** — its masked prefix, when it was generated and last used;
-    "Generate my token" / "Rotate my token" (the reveal-once dialog with the
-    kit, as at issuance) and "Revoke my token";
-  - **Members** — email, role, added, whether they generated a token; for the
-    creator, "Remove" and a select of the active users not on the mission yet
-    ("Add member"). The select lists every active user's email on purpose
-    (product owner, 2026-10-13; threat model, A25): the instance is one
-    company's, and a free-text field would confirm or deny any address typed;
-  - **Tokens that work now** — holder, kind, masked prefix, created (and by
-    whom, for a named token), last used; for the creator, "Revoke" on each and
-    a name field ("Create named token").
-
-  No list of this section carries more than a prefix.
+groups a list; like the severity, nothing is decided from it. The mission
+pages look each persisted id up with `riskExplainer(registry)`
+(`server/providers/reference.ts`); an id no shipped catalog declares any more
+is shown as its stored label and its bare id, without "why?".
 
 ## Bootstrap kit (`bootstrap-kit.ts`)
 
@@ -1041,31 +1155,37 @@ After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
 '<public_url>/mcp', headers: { Authorization: 'Bearer
 ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    secret;
-3. `agent_instructions` — a Markdown block: a section "Whose token this is"
-   (one holder per token, every call recorded under that holder, `GET
-/mcp/catalog` says who; the budget is one for every holder; requests are
-   the creator's), then a section "Sub-agents and agent
+3. `agent_instructions` — a Markdown block, written in the interface's words
+   (key, permission, limit, account, "asks the mission creator first", "runs
+   freely") around the protocol's names, which do not move (the refusal codes,
+   `missing_risks`, `claim_url`, `approval_url`, `token.holder`, the variable):
+   a section "Whose key this is"
+   (one holder per key, every call recorded under that holder, `GET
+/mcp/catalog` says who; the limits are one for every holder; what an agent
+   asks is the creator's to answer), then a section "Sub-agents and agent
    labels" (`agentLabelGuidance`, spec §7.9) — an orchestrator hands its
-   sub-agents this MCP configuration as is, same endpoint and same token,
-   never a token per agent; each agent names itself with the header
+   sub-agents this MCP configuration as is, same endpoint and same key,
+   never a key per agent; each agent names itself with the header
    `X-Vaubaan-Agent: <label>` in its own copy of the configuration, or with
    `_meta.agent` on each `tools/call` when one process sends the calls of
    several agents (the per-call value wins); the shape of a label, printed
    from `AGENT_LABEL_MAX_LENGTH` and `AGENT_LABEL_PUNCTUATION`, the constants
    the execution door builds its check from; "attribution only … not an
    identity" (handbook [execution-door](execution-door.md), "Agent label") —
-   then connections and resource refs (with
-   env labels), accepted risks with quota per period, rate limit and gate,
-   reload and expiry, then one line per
+   then "Accounts and resources you may touch" (the refs, with their
+   env labels), "Permissions and limits" (each id with its label, its limit
+   per period, its rate limit and "runs freely" or "asks the mission creator
+   first, each time"; how often the limits reset and when the mission ends),
+   then one line per
    refusal code from `REFUSAL_GUIDANCE` (a `Record<RefusalCode, string>`, so a
    new code fails to compile until it has its line), "Never work around a
-   refusal… give that URL to the human as is", a section "When the token
+   refusal… give that URL to the human as is", a section "When the key
    itself stops working" with one line per `AUTH_FAILURE_REASONS` entry from
    `TOKEN_STOPPED_GUIDANCE` (keyed the same way), and a closing section "The
    management door" (`managementDoorSection`): the URL of `/mcp/manage`, that
-   the mission token does not open it, and that nothing behind it lifts a
-   refusal. "The budget is shared, it is not multiplied" is said once, in the
-   opening paragraph;
+   the mission key does not open it, and that nothing behind it lifts a
+   refusal. "The limits below are shared, they are not multiplied" is said
+   once, in the opening paragraph;
 4. `verify` — `curl -sS '<endpoint>' … -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`.
 
 The kit also carries `endpoint` (`<public_url>/mcp`) and `reveals_secret`.
@@ -1078,6 +1198,14 @@ cached five minutes) serves `content.md`, the generic companion of the kit
 (no instance URL in it); five tests check that it documents every refusal
 code, the management door, sub-agents and the agent label, that a token has
 one holder and what a stopped token means, and that it names no instance.
+That page still uses the earlier words (token, risk, budget): it was not part
+of the redesign of the mission pages.
+
+On the pages the kit is `KitSteps` (`bootstrap-kit-view.tsx`): four numbered
+steps — "Put the key in the agent's environment", "Point the agent at the
+gateway", "Tell the agent what it has", "Check it works" — each a `CodeBlock`
+with its Copy button (`data-testid` `kit-env`, `kit-mcp`, `kit-instructions`,
+`kit-verify`).
 
 ## Wiring
 
@@ -1097,10 +1225,10 @@ and resources are read through the store repositories only
 
 ## Tests
 
-Unit, beside the code (159): `authority/authority-service.test.ts` (20),
+Unit, beside the code (186): `authority/authority-service.test.ts` (20),
 `missions/preview.test.ts` (44), `catalog-view.test.ts` (21), `summary.test.ts`
 (8), `bootstrap-kit.test.ts` (16), `orphan-reason.test.ts` (4), `token.test.ts`
-(8, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (36),
+(8, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (40),
 `app/(app)/missions/message-of.test.ts` (2: the sentence a mission page shows
 for a refusal of the mission API).
 
@@ -1132,12 +1260,24 @@ detail and the kit list what the door reaches (no resource at issuance then a
 discovery; every resource hidden; a resource turned stale).
 Scenarios in [integration-tests](../tests/integration-tests.md).
 
-Browser, `tests/e2e/v5/team-mission.spec.ts` (1: a member added, a named
-token, the member's own token in her browser only, three holders attributed in
-the session and the audit, each token stopping on its own),
-`tests/e2e/v5/issue-mission.spec.ts` (3) and the gate edit at the end of
-`approve-action.spec.ts`, `npm run test:e2e:v5`: see [e2e-tests](../tests/e2e-tests.md)
-for the ephemeral instance.
+The mission pages add two pure suites beside the code:
+`app/(app)/missions/mission-view.test.ts` (15: the state of a mission in
+words, Can / Asks first / Cannot, the limit that is near) and
+`app/(app)/missions/[id]/session/event-words.test.ts` (8: what a row of the
+activity says of each kind of event). The components they are built from are
+in `tests/unit/app/design-system.test.tsx` ([web-app](web-app.md)).
+
+Browser, `tests/e2e/v5/team-mission.spec.ts` (1: a teammate added, a machine
+key, the teammate's own key in her browser only, none of the creator's acts
+offered to her, three holders attributed in the activity and the record, each
+key stopping on its own after a question), `tests/e2e/v5/issue-mission.spec.ts`
+(3: the form, the rail, the editor, the confirmation that lists every
+permission, the key shown once, "Replace key" stating its consequence, the
+mission stopped by typing its name), the waiting request on the mission page
+at the start of `audit-session.spec.ts`, and the "ask me first" switch at the
+end of `approve-action.spec.ts`, `npm run test:e2e:v5`: see
+[e2e-tests](../tests/e2e-tests.md) for the ephemeral instance. The steps the
+specs share are in `tests/e2e/v5/mission-pages.ts`.
 
 ## How to debug
 

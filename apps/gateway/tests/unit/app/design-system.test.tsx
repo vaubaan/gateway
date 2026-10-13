@@ -15,6 +15,8 @@ import {
   ButtonLink,
   Callout,
   checkColumnBudget,
+  ChoiceChip,
+  ChoiceRow,
   CodeBlock,
   DataTable,
   DialogPanel,
@@ -22,13 +24,17 @@ import {
   EmptyState,
   EnvTag,
   Field,
+  FormStep,
+  FormWithRail,
   GateMark,
   hueOf,
   initialsOf,
   Input,
   KeyHolder,
+  MenuItem,
   Meter,
   meterState,
+  MoreMenu,
   Mono,
   PageHeader,
   PermissionGroup,
@@ -36,6 +42,7 @@ import {
   PermissionTable,
   Row,
   Rows,
+  SecretBox,
   Section,
   serviceLetters,
   SeverityChip,
@@ -513,5 +520,80 @@ describe('the rest', () => {
   it('announces a skeleton once', () => {
     expect(renderToStaticMarkup(<Skeleton />)).toContain('role="status"');
     expect(renderToStaticMarkup(<Skeleton label="" />)).toContain('aria-hidden="true"');
+  });
+});
+
+describe('the components added with the mission pages', () => {
+  it('keeps the rest behind a named button, closed, and writes a stopping act in words', () => {
+    const html = renderToStaticMarkup(
+      <MoreMenu label="More actions">
+        <MenuItem href="/missions/m1/session">Activity</MenuItem>
+        <MenuItem danger>Stop the mission</MenuItem>
+        <MenuItem disabled note="Its creator alone can copy it">
+          Duplicate
+        </MenuItem>
+      </MoreMenu>,
+    );
+    expect(html).toContain('aria-haspopup="menu"');
+    expect(html).toContain('aria-expanded="false"');
+    expect(html).toContain('aria-label="More actions"');
+    expect(html).toMatch(/role="menu"[^>]* hidden=""/);
+    expect(html).toMatch(/<a [^>]*role="menuitem"[^>]*href="\/missions\/m1\/session"/);
+    expect(html.match(/role="menuitem"/g)).toHaveLength(3);
+    expect(html).toContain('Its creator alone can copy it');
+  });
+
+  it('draws a choice that would yield nothing as unavailable, with its reason in words', () => {
+    const html = renderToStaticMarkup(
+      <ChoiceRow legend="Preset for GitHub · acme">
+        <ChoiceChip
+          name="p"
+          value="developer"
+          checked
+          onChange={() => {}}
+          label="Developer"
+          hint="10"
+        />
+        <ChoiceChip
+          name="p"
+          value="operator"
+          checked={false}
+          onChange={() => {}}
+          label="Migration operator"
+          hint="8"
+          unavailable="needs a prod project: none selected"
+        />
+      </ChoiceRow>,
+    );
+    expect(html).toMatch(/<fieldset[^>]*><legend[^>]*>Preset for GitHub · acme<\/legend>/);
+    expect(html).toMatch(/data-choice="developer"[^>]*>.*?<input[^>]*checked=""/);
+    const operator = html.slice(html.indexOf('data-choice="operator"'));
+    expect(operator).toContain('data-unavailable="true"');
+    expect(operator).toMatch(/<input[^>]*disabled=""/);
+    // The reason replaces the count: nobody reads "8" on a choice that yields nothing.
+    expect(text(`<label ${operator}`)).toBe(
+      'Migration operatorneeds a prod project: none selected',
+    );
+  });
+
+  it('shows a key whole in a named box, with a button that copies it', () => {
+    const html = renderToStaticMarkup(<SecretBox label="Your key" value="vbn_live_abc_def" />);
+    expect(html).toMatch(/role="group"[^>]*aria-label="Your key"/);
+    expect(html).toContain('<code');
+    expect(text(html)).toBe('vbn_live_abc_defCopy');
+  });
+
+  it('numbers the steps of a form and puts the rail in a complementary landmark', () => {
+    const html = renderToStaticMarkup(
+      <FormWithRail rail={<p>What it will be able to do</p>}>
+        <FormStep n={1} title="Name" hint="How you will find it again." id="step-name">
+          <input aria-label="Mission name" />
+        </FormStep>
+      </FormWithRail>,
+    );
+    expect(html).toMatch(/<section[^>]*aria-labelledby="step-name-title"/);
+    expect(html).toMatch(/<h2[^>]*id="step-name-title"[^>]*>Name<\/h2>/);
+    expect(html).toContain('<aside');
+    expect(text(html)).toContain('1NameHow you will find it again.');
   });
 });

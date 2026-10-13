@@ -90,8 +90,10 @@ this table says where each requirement lives, and what is not written yet.
 
 | Suite                                                                                                     |    Tests |
 | --------------------------------------------------------------------------------------------------------- | -------: |
+| `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                    |        8 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                  |        2 |
-| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                              |       36 |
+| `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                |       15 |
+| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                              |       40 |
 | `apps/gateway/src/components/auth/principal.test.ts`                                                      |        2 |
 | `apps/gateway/src/components/connections/shape.test.ts`                                                   |        5 |
 | `apps/gateway/src/server/audit/filters.test.ts`                                                           |       24 |
@@ -241,7 +243,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                         |       63 |
 | `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      136 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                       |        3 |
-| `apps/gateway/tests/unit/app/design-system.test.tsx`                                                      |       29 |
+| `apps/gateway/tests/unit/app/design-system.test.tsx`                                                      |       33 |
 | `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                       |       62 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        6 |
 | `apps/gateway/tests/unit/app/now-and-waiting.test.tsx`                                                    |       28 |
@@ -1336,14 +1338,19 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   page path redirects to a page or a route that exists, and the provider
   callback is never redirected**; the three states of the theme and its
   cookie; the words and sentence patterns of the vocabulary.
-- **`tests/unit/app/design-system.test.tsx`** (29) — the components rendered
+- **`tests/unit/app/design-system.test.tsx`** (33) — the components rendered
   to static markup: one `h1` per page header and the order of its actions; a
   meter drawn only near its limit, with its figure in words; **a table over
   its column budget throws** (five by default, seven with details), its
   caption, its detail columns and its row tones; marks that carry their word;
   the columns of each permission table and the closed "why?"; Can / Asks you
   first / Cannot; a field that says its expected shape and ties its error to
-  its control; a dialog that states its consequence before its button.
+  its control; a dialog that states its consequence before its button; **the
+  components added with the mission pages**: the rest behind a named, closed
+  menu button; a choice that would yield nothing drawn unavailable with its
+  reason in place of its count; a key whole in a named box with its copy
+  button; the numbered steps of a form and its rail as a complementary
+  landmark.
 - **`tests/unit/app/risk-explain.test.tsx`** (9) — static markup of the
   shared risk components: a `Slug` carries its kind as an attribute, a glyph
   and a word for assistive technology, is a link when given a target, prints
@@ -2052,13 +2059,15 @@ included` equals the catalog; where the environment comes from (Vercel: the
   expiry phrases.
 - **`bootstrap-kit.test.ts`** (16) — the secret only in the env snippet; MCP
   configuration with the instance URL and `${VAUBAAN_MISSION_TOKEN}`; the agent
-  block (connections, refs, risks, budget); **sub-agents and agent labels**
-  (the same configuration and token, never one per agent; both carriers and
+  block, in the interface's words around the protocol's names (accounts,
+  refs, permissions with their limits, "runs freely" / "asks the mission
+  creator first"); **sub-agents and agent labels**
+  (the same configuration and key, never one per agent; both carriers and
   which one wins; the shape printed from the constants the door checks;
   "attribution only", "not an identity"), in the kit and in
   `/agent-bootstrap.md`; one line per refusal code and "never
   work around" (`mission-inactive` says that a request opened before the
-  mission was orphaned can be granted only until it expires); the
+  mission lost its owner can be answered only until it expires); the
   `curl … tools/list` check; masked prefix on a revisited
   page; sub-path of the public URL; `/agent-bootstrap.md` documents every
   refusal code and names no instance.
@@ -2068,7 +2077,7 @@ included` equals the catalog; where the environment comes from (Vercel: the
   under the wrong algorithm nor under an unknown one; uniqueness; prefix of
   a live token only; the draft schema
   (unknown keys refused, every malformed field named).
-- **`src/app/(app)/missions/new/form-state.test.ts`** (36) — initial state
+- **`src/app/(app)/missions/new/form-state.test.ts`** (40) — initial state
   (nothing included, hidden and stale resources unticked, daily period, no
   expiry); a preset fills the policy and the draft sent is the explicit
   enumeration; the untouched preset follows the resource selection and says
@@ -2080,14 +2089,39 @@ included` equals the catalog; where the environment comes from (Vercel: the
   explains itself** (`explainPreset`): what passes, what waits for an approval
   and what is left out with each budget; equal to the entries `applyPreset`
   fills, for every preset; entries a selection cannot resolve named with the
-  label a resource would need; entries outside the authority; `presetDigest`
-  and `presetChoiceLabel`. **Preset or Custom**: `enterCustom` keeps the
+  label a resource would need; entries outside the authority; `presetWidth`
+  and `policyCounts` (the fallback and a deprecated entry are never counted as
+  "not included"). **A preset that would allow nothing says why**
+  (`presetUnavailable`: the label a resource would need and "none selected",
+  or "outside what you may allow"). **Custom, start empty** (`startEmpty`).
+  **What stands in the way, in the interface's words** (`issueSentence`: the
+  account named, no protocol word in a sentence; the server's message when
+  the page has no sentence of its own). **Preset or Custom**: `enterCustom` keeps the
   preset's values and loses nothing; `discardsEdits` only after an edit, and
   `backToPreset` restores the preset; `startFromPreset`; **the draft sent is the
   same in both modes and names neither the preset nor the mode**; a loaded
   draft is a custom policy. **The Custom editor**: `editorRows` lists every
   explicit id with why one cannot be ticked; `filterRows` by words and by
-  status.
+  status ("Available to you" is what may be ticked and what is ticked).
+- **`src/app/(app)/missions/mission-view.test.ts`** (15) — what the mission
+  pages say: **the state of a mission in words** (a running mission is
+  written plainly; a waiting request wins over a reached limit and is amber,
+  with whose answer it waits for on a teammate's page; "Needs an owner" and
+  "Limit reached" are red; expired and stopped carry no colour and are "over");
+  **Can / Asks first / Cannot** from the explicit list (how many permissions
+  each line stands for, the rest counted, the asking line left out when nothing
+  asks, a label named without its parenthesis); **the one limit that matters**
+  (the closest once one is at 60 %, nothing otherwise or without a period);
+  per-minute from any stored window; who created it and whose yes it waits for.
+- **`src/app/(app)/missions/[id]/session/event-words.test.ts`** (8) — what a
+  row of a mission's activity says of an event: allowed, and "after the
+  creator's yes"; a refusal is red with its code in mono, except
+  `approval-required`, which is amber ("asked first"), and `budget-exhausted`
+  ("limit reached"); a request is amber only while it waits; a gate in the
+  interface's words, never `auto` or `approval`; what an answer gave (a yes, a
+  reset, a raised limit, more time); a key by its masked form, replaced or
+  first; one key revoked or the mission stopped; a later version's kind
+  printed as stored.
 - **`src/app/(app)/missions/message-of.test.ts`** (2) — `messageOf`, what
   the client components of the mission pages show when the mission API
   refuses: the message of a JSON refusal, and a sentence naming the status
@@ -2479,10 +2513,11 @@ Unit, beside the code (102):
   does not hold a new change back; and the mirror case writes nothing — a
   change undone before the settlement leaves no entry of this act.
 - **`src/server/missions/orphan-reason.test.ts`** (4) — what the mission page
-  says for each cause: a lost authority names the connection and the risks,
-  says it can come back and that session and counters are kept; a revoked
-  connection "never comes back"; a long list of risks is cut; an unknown
-  connection does not break the sentence.
+  says for each cause, under "Needs an owner: …": a lost authority names the
+  account and the permissions (their ids), says it can serve again and that
+  its activity and what it counted are kept; a disconnected account "never
+  comes back"; a long list of ids is cut; an unknown account does not break
+  the sentence.
 - **`src/server/shares/restriction.test.ts`** (8) — groups by severity, most
   severe first, every row in one group; **"select all" is an enumerated
   list** (explicit ids, no wildcard, no fallback, no deprecated entry); the
@@ -3659,9 +3694,9 @@ and `rotateSuccessorOf`; the refresh reuse window is in
   with the named token the tour prints answers `kind: named`, `holder: CI
 runner` and Alice as creator, and with Alice's own token `kind: member`;
   the Audit page filtered on each holder lists its calls; **Bob signs in**,
-  finds "Ship the billing page" under "Shared with me" with Alice's email,
-  and its page has "Shared with you", "Rotate my token" and the named token,
-  none of the creator's controls and no secret; `/mcp` without a token is 401;
+  finds "Ship the billing page" under "Shared with you" with Alice's email,
+  and its page has the teammate's sentence, "Replace my key" and the machine
+  key, none of the creator's acts and no secret; `/mcp` without a token is 401;
   `SIGTERM` ends the process with code 0, deletes the data directory and
   closes the listener.
 - **`demo-safety.test.ts`** (13) — **the guards**: `assertDemoAllowed` passes

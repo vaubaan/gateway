@@ -576,30 +576,6 @@ export const ORPHAN_WORDS = {
   'authority-lost': 'its creator no longer holds the permissions it uses',
 } as const;
 
-const SHORT_MONTHS = [
-  'Jan',
-  'Feb',
-  'Mar',
-  'Apr',
-  'May',
-  'Jun',
-  'Jul',
-  'Aug',
-  'Sep',
-  'Oct',
-  'Nov',
-  'Dec',
-] as const;
-
-/** A short date, without the year when it is this year: "14 Sep", "2 Sep 2025". UTC. */
-export function shortDate(iso: string, now: Date = new Date()): string {
-  const date = new Date(iso);
-  const day = date.getUTCDate();
-  const month = SHORT_MONTHS[date.getUTCMonth()] ?? '';
-  const year = date.getUTCFullYear();
-  return year === now.getUTCFullYear() ? `${day} ${month}` : `${day} ${month} ${year}`;
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Reference (the pages under `/reference`). Protocol names: provider, plugin,
 // risk, preset, tool, plane, slice pattern.
@@ -1093,3 +1069,118 @@ export const REQUEST_WORDS = {
     return `${formatNumber(n)} open · only you can answer: you created these missions`;
   },
 } as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Missions: the list, the mission page, "New mission", the key and its kit.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** The acts of the mission pages that `ACTIONS` does not name. */
+export const MISSION_ACTIONS = {
+  stop: 'Stop the mission',
+  duplicate: 'Duplicate',
+  activity: 'Activity',
+  generateKey: 'Generate my key',
+  revokeMyKey: 'Revoke my key',
+  removeTeammate: 'Remove',
+  openMission: 'Open the mission',
+  savedKey: 'I saved the key',
+  startFrom: 'Start from a mission…',
+  pasteProposal: 'Paste an agent’s proposal',
+  editOneByOne: 'Edit the permissions one by one',
+  hideEditor: 'Hide the permissions',
+  change: 'Change',
+} as const;
+
+/** Sentences the mission pages share. */
+export const MISSION_WORDS = {
+  yours: 'Created by you',
+  sharedWithYou: 'Shared with you',
+  noneYet: 'No mission yet.',
+  noneShared: 'No mission is shared with you.',
+  noneSharedHow:
+    'The creator of a mission adds teammates on its page; a teammate works on it with their own key.',
+  teammateRule:
+    'You work on it as it is, with your own key: same permissions and limits as everyone on it.',
+  sameForEveryone: 'One key each, same permissions and limits; every call is signed by its key.',
+  keyShownOnce:
+    'Shown once. Lost it? Replace it from the mission page; the mission does not change.',
+  kitWithoutKey: 'Three snippets and a check. The key itself was shown once.',
+  noKeyWorks: 'No key works on this mission now.',
+  notServing: 'No key can be made now: the mission does not serve calls.',
+  explicitList: 'Only the accounts you can use. A preset fills an explicit list.',
+  peopleLater: 'Just you for now; teammates and machine keys are added after creating.',
+  keyAtTheEnd: 'Key shown once.',
+  railTitle: 'What this mission will be able to do',
+} as const;
+
+/** How often the limits of a mission start again, keyed by the period in seconds (`null`: never). */
+export function limitsResetEvery(lengthSeconds: number | null): string {
+  if (lengthSeconds === null) return 'limits do not reset';
+  if (lengthSeconds === 3600) return 'limits reset every hour';
+  if (lengthSeconds === 86_400) return limitsReset('day');
+  if (lengthSeconds === 604_800) return limitsReset('week');
+  if (lengthSeconds % 86_400 === 0) return `limits reset every ${lengthSeconds / 86_400} days`;
+  if (lengthSeconds % 3600 === 0) return `limits reset every ${lengthSeconds / 3600} hours`;
+  return `limits reset every ${Math.round(lengthSeconds / 60)} minutes`;
+}
+
+/** The head of the limit column for a period: "Per day", "Per hour", "In total". */
+export function limitColumn(lengthSeconds: number | null): string {
+  if (lengthSeconds === null) return 'In total';
+  if (lengthSeconds === 3600) return 'Per hour';
+  if (lengthSeconds === 86_400) return LIMIT_WORDS.perDay;
+  if (lengthSeconds === 604_800) return 'Per week';
+  return 'Per period';
+}
+
+/** The head of the usage column for a period: "Used today", "Used this week". */
+export function usedColumn(lengthSeconds: number | null): string {
+  if (lengthSeconds === null) return 'Used';
+  if (lengthSeconds === 3600) return 'Used this hour';
+  if (lengthSeconds === 86_400) return LIMIT_WORDS.usedToday;
+  if (lengthSeconds === 604_800) return 'Used this week';
+  return 'Used this period';
+}
+
+/** "today", "this week": the period a count belongs to, said after it. */
+export function periodWord(lengthSeconds: number | null): string {
+  if (lengthSeconds === null) return 'in total';
+  if (lengthSeconds === 3600) return 'this hour';
+  if (lengthSeconds === 86_400) return 'today';
+  if (lengthSeconds === 604_800) return 'this week';
+  return 'this period';
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * A day in the fewest characters: "12 Nov", with the year when it is not this
+ * one. Read in UTC so that the server and the browser print the same text;
+ * the full date belongs to a `title`.
+ */
+export function shortDate(at: Date | string, now: Date = new Date()): string {
+  const date = new Date(at);
+  if (Number.isNaN(date.getTime())) return '';
+  const day = `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()] ?? ''}`;
+  return date.getUTCFullYear() === now.getUTCFullYear() ? day : `${day} ${date.getUTCFullYear()}`;
+}
+
+/** "expires 12 Nov", "expired 12 Nov", "never expires". */
+export function expiresOn(at: string | null, now: Date = new Date()): string {
+  if (at === null) return 'never expires';
+  const past = new Date(at).getTime() <= now.getTime();
+  return `${past ? 'expired' : 'expires'} ${shortDate(at, now)}`;
+}
+
+/** A list in a sentence, cut after `max` items: "a, b, c and 4 more". */
+export function listed(items: readonly string[], max = 4): string {
+  if (items.length <= max) return items.join(', ');
+  return `${items.slice(0, max).join(', ')} and ${formatNumber(items.length - max)} more`;
+}
+
+/** How long ago, inside a sentence: "just now", "4 min ago", "yesterday", "4 d ago". */
+export function agoSentence(from: Date | string, now: Date = new Date()): string {
+  const short = ago(from, now);
+  if (short === 'now') return 'just now';
+  return short === 'yesterday' ? short : `${short} ago`;
+}

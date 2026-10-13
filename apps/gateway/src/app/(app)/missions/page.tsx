@@ -1,126 +1,218 @@
 /**
- * `/missions` — the missions I created and the ones shared with me as a member
- * (spec §4.2), their state, the prefix of my own token on each. A mission an
- * agent issued on my behalf through the management door is marked with the
- * application that issued it (spec §2.4, §7.10).
+ * `/missions` — the missions I created and the ones shared with me as a
+ * teammate (spec §4.2): what each one is for, its state in words, what it
+ * allows, when it ends. A mission that waits for my answer says so on its
+ * row. A mission an app prepared for me through the management door names the
+ * app (spec §2.4, §7.10).
+ *
+ * Four columns by default; my key and the day of creation are details, behind
+ * the page's "Show details".
  */
 import Link from 'next/link';
 
-import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import { Badge, Card, Table, Tbody, Td, Th, Thead, Tr, Slug } from '@/components/ui';
+import {
+  ButtonLink,
+  DataTable,
+  DetailScope,
+  DetailToggle,
+  EmptyState,
+  KeyMark,
+  PageHeader,
+  Section,
+  StatusMark,
+  type Column,
+} from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
+import {
+  ACTIONS,
+  count,
+  expiresOn,
+  KEY_WORDS,
+  MISSION_WORDS,
+  PAGES,
+  ROUTES,
+  SECTIONS,
+  shortDate,
+  TERMS,
+} from '@/lib/vocabulary';
 import { maskedToken, type MissionOverview } from '@/server/missions';
 
+import { missionMark, type MissionMark } from './mission-view';
 import styles from './missions.module.css';
-import { StateBadge } from './state-badge';
 
 export const dynamic = 'force-dynamic';
 
-export default async function MissionsPage() {
-  const session = await currentUser();
-  if (!session) return <NeedsUser />;
-  const missions = await session.root.missions.service.list(session.user);
-  const created = missions.filter((m) => m.role === 'creator');
-  const shared = missions.filter((m) => m.role === 'member');
+interface ListedMission extends MissionOverview {
+  readonly mark: MissionMark;
+}
 
-  return (
-    <>
-      <div className={styles.pageHead}>
-        <div>
-          <h1>Missions</h1>
-          <p className={styles.muted}>
-            A mission is a named objective with a token: selected resources, accepted risks, a
-            budget.
-          </p>
-        </div>
-        <Link href="/missions/new" className={styles.primaryLink}>
-          New mission
-        </Link>
-      </div>
-      <h2 className={styles.listTitle}>Created by me</h2>
-      <Card data-testid="missions-created">
-        {created.length === 0 ? (
-          <div className={styles.empty}>
-            No mission yet. <Link href="/missions/new">Issue the first one</Link>.
-          </div>
-        ) : (
-          <MissionTable missions={created} shared={false} />
-        )}
-      </Card>
-
-      <h2 className={styles.listTitle}>Shared with me</h2>
-      <Card data-testid="missions-shared">
-        {shared.length === 0 ? (
-          <div className={styles.empty}>
-            No mission is shared with you. The creator of a mission adds members on its page; a
-            member works on it with their own token.
-          </div>
-        ) : (
-          <MissionTable missions={shared} shared />
-        )}
-      </Card>
-    </>
-  );
+function columnsFor(shared: boolean, now: Date): Column<ListedMission>[] {
+  return [
+    {
+      id: 'mission',
+      header: 'Mission',
+      cell: ({ mission, issuedVia, creator }) => (
+        <>
+          <Link href={`${ROUTES.missions}/${mission.id}`} className={styles.name}>
+            {mission.name}
+          </Link>
+          {shared && <span className={styles.sub}>by {creator.email ?? 'someone who left'}</span>}
+          {issuedVia && (
+            <span className={styles.sub} data-testid={`issued-via-${mission.id}`}>
+              prepared by {issuedVia.client_name} for you
+            </span>
+          )}
+        </>
+      ),
+    },
+    {
+      id: 'state',
+      header: 'State',
+      nowrap: true,
+      cell: ({ mark }) =>
+        mark.tone ? <StatusMark tone={mark.tone}>{mark.label}</StatusMark> : mark.label,
+    },
+    {
+      id: 'allows',
+      header: 'Allows',
+      nowrap: true,
+      cell: ({ mission }) =>
+        `${count(mission.policy.length, TERMS.risk)} · ${count(mission.connections.length, TERMS.connection)}`,
+    },
+    {
+      id: 'expires',
+      header: 'Ends',
+      nowrap: true,
+      cell: ({ mission }) => (
+        <span title={mission.expiresAt ?? undefined}>{expiresOn(mission.expiresAt, now)}</span>
+      ),
+    },
+    {
+      id: 'key',
+      header: 'Your key',
+      detail: true,
+      nowrap: true,
+      cell: ({ token }) =>
+        token ? <KeyMark>{maskedToken(token.prefix)}</KeyMark> : KEY_WORDS.notGenerated,
+    },
+    {
+      id: 'created',
+      header: 'Created',
+      detail: true,
+      nowrap: true,
+      cell: ({ mission }) => (
+        <span title={mission.createdAt}>{shortDate(mission.createdAt, now)}</span>
+      ),
+    },
+  ];
 }
 
 function MissionTable({
   missions,
   shared,
+  now,
+  caption,
+  testId,
 }: {
-  missions: readonly MissionOverview[];
-  /** Missions of other creators: the creator is named, and the token is "my token". */
+  missions: readonly ListedMission[];
+  /** Missions of other creators: the creator is named under the mission. */
   shared: boolean;
+  now: Date;
+  caption: string;
+  testId: string;
 }) {
   return (
-    <Table>
-      <Thead>
-        <Tr>
-          <Th>Name</Th>
-          {shared && <Th>Creator</Th>}
-          <Th>State</Th>
-          <Th>Connections</Th>
-          <Th>Risks</Th>
-          <Th>My token</Th>
-          <Th>Created</Th>
-          <Th>Expires</Th>
-        </Tr>
-      </Thead>
-      <Tbody>
-        {missions.map(({ mission, state, token, issuedVia, creator }) => (
-          <Tr key={mission.id}>
-            <Td>
-              <Link href={`/missions/${mission.id}`} className={styles.rowLink}>
-                {mission.name}
-              </Link>
-              {issuedVia && (
-                <div className={styles.muted} data-testid={`issued-via-${mission.id}`}>
-                  <Badge tone="info">delegated</Badge> issued by {issuedVia.client_name}
-                </div>
-              )}
-            </Td>
-            {shared && <Td>{creator.email ?? 'unknown'}</Td>}
-            <Td>
-              <StateBadge state={state} />
-            </Td>
-            <Td>{mission.connections.length}</Td>
-            <Td>{mission.policy.length}</Td>
-            <Td>
-              {token ? (
-                <Slug kind="token">{maskedToken(token.prefix)}</Slug>
-              ) : shared ? (
-                <span className={styles.muted}>not generated yet</span>
-              ) : (
-                '—'
-              )}
-            </Td>
-            <Td>
-              <LocalDate ts={mission.createdAt} dateOnly />
-            </Td>
-            <Td>{mission.expiresAt ? <LocalDate ts={mission.expiresAt} /> : 'never'}</Td>
-          </Tr>
-        ))}
-      </Tbody>
-    </Table>
+    <DataTable
+      caption={caption}
+      columns={columnsFor(shared, now)}
+      rows={missions}
+      rowKey={({ mission }) => mission.id}
+      rowTone={({ mark }) => (mark.over ? 'quiet' : (mark.tone ?? undefined))}
+      testId={testId}
+    />
+  );
+}
+
+export default async function MissionsPage() {
+  const session = await currentUser();
+  if (!session) return <NeedsUser />;
+  const now = new Date();
+  const [missions, inbox] = await Promise.all([
+    session.root.missions.service.list(session.user),
+    session.root.requests.service.inbox(session.user),
+  ]);
+  // What waits for me, per mission: the row says it, the mission page answers it.
+  const waiting = new Map<string, number>();
+  for (const request of inbox) {
+    waiting.set(request.mission.id, (waiting.get(request.mission.id) ?? 0) + 1);
+  }
+  const listed: ListedMission[] = missions.map((overview) => ({
+    ...overview,
+    mark: missionMark(
+      overview.state,
+      overview.role === 'creator' ? (waiting.get(overview.mission.id) ?? 0) : 0,
+    ),
+  }));
+  const created = listed.filter((m) => m.role === 'creator');
+  const shared = listed.filter((m) => m.role === 'member');
+  const newMission = (
+    <ButtonLink href={ROUTES.newMission} variant="primary">
+      {ACTIONS.newMission}
+    </ButtonLink>
+  );
+
+  if (listed.length === 0) {
+    return (
+      <>
+        <PageHeader title={PAGES.missions.title} lede={PAGES.missions.lede} />
+        <EmptyState title={MISSION_WORDS.noneYet} action={newMission} testId="missions-empty">
+          Create one to give an agent a key: it says which accounts the agent may touch, what it may
+          do there and how much.
+        </EmptyState>
+      </>
+    );
+  }
+
+  return (
+    <DetailScope id="missions:list">
+      <PageHeader title={PAGES.missions.title} lede={PAGES.missions.lede} primary={newMission} />
+      <Section
+        first
+        title={SECTIONS.yours}
+        count={created.length}
+        note={<DetailToggle />}
+        testId="missions-created"
+      >
+        {created.length === 0 ? (
+          <p className={styles.quiet}>
+            {MISSION_WORDS.noneYet} <Link href={ROUTES.newMission}>Create the first one</Link>.
+          </p>
+        ) : (
+          <MissionTable
+            missions={created}
+            shared={false}
+            now={now}
+            caption="Missions you created"
+            testId="missions-created-table"
+          />
+        )}
+      </Section>
+      <Section title={SECTIONS.sharedWithYou} count={shared.length} testId="missions-shared">
+        {shared.length === 0 ? (
+          <p className={styles.quiet}>
+            {MISSION_WORDS.noneShared} {MISSION_WORDS.noneSharedHow}
+          </p>
+        ) : (
+          <MissionTable
+            missions={shared}
+            shared
+            now={now}
+            caption="Missions shared with you"
+            testId="missions-shared-table"
+          />
+        )}
+      </Section>
+    </DetailScope>
   );
 }

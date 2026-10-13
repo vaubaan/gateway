@@ -1,19 +1,21 @@
 /**
- * `/missions/<id>/session` — the mission's session (spec §4.2, §3.3): counters
- * per risk and per period with what is left, gate per risk (and until when
- * the creator opened it), open requests (by link), the calls of the current
- * period per token holder and per agent label, and the event timeline — whole,
- * the calls of one holder (`?holder=member:<user id>`, `?holder=named:<name>`)
- * or the calls of one label (`?agent=<label>`, `?unlabelled=1`). What the Detail
- * column says of an event is `eventDetailLines` (`@/server/audit`).
+ * `/missions/<id>/session` — the activity of one mission (spec §4.2, §3.3):
+ * what waits for an answer, who called in the current period — per key holder
+ * and per agent label —, the timeline of its events, then, one click away,
+ * what each permission used and the counters of the earlier periods.
  *
- * A token holder is authenticated: it is whose token the call presented (spec
- * §8). An agent label is what a caller declared about itself (spec §0, §7.9):
- * the page says so wherever it shows one. Both tables are counts of calls, not
- * budgets: a mission has one budget, however many tokens or agents.
+ * The timeline is whole, or the calls of one holder
+ * (`?holder=member:<user id>`, `?holder=named:<name>`), or the calls of one
+ * label (`?agent=<label>`, `?unlabelled=1`). What a row says of an event is
+ * `eventWords` (`event-words.ts`).
  *
- * The creator and the members of the mission read this page (spec §11.2 "What
- * a member sees"); only the creator is given the links that answer a request.
+ * A key holder is authenticated: it is whose key the call presented (spec
+ * §8). An agent label is what a caller said about itself (spec §0, §7.9): the
+ * page says so where it lists them. Both tables count calls; neither is a
+ * limit: a mission has one set of limits, however many keys or agents.
+ *
+ * The creator and the teammates of the mission read this page (spec §11.2
+ * "What a member sees"); only the creator is given the links that answer.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -21,42 +23,51 @@ import { notFound } from 'next/navigation';
 import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import {
-  Badge,
-  type BadgeTone,
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
-  Stack,
-  Table,
-  Tbody,
-  Td,
-  Th,
-  Thead,
-  Tr,
-  Slug,
+  AgentLabel,
+  AnswerList,
+  AnswerRow,
+  Avatar,
+  ButtonLink,
+  DataTable,
+  Disclosure,
+  Hint,
+  KeyHolder,
+  Mono,
+  PageHeader,
+  Section,
+  StatusMark,
+  type Column,
 } from '@/components/ui';
-import { GateBadge } from '@/components/risk/RiskBadges';
-import { RiskIdLink } from '@/components/risk/RiskExplain';
 import { currentUser } from '@/lib/auth/session';
-import type { SessionEventKind } from '@vaubaan/shared';
+import {
+  agoSentence,
+  count,
+  KEY_WORDS,
+  limitsResetEvery,
+  periodWord,
+  ROUTES,
+  SECTIONS,
+  TERMS,
+  usage,
+  waitingFor,
+} from '@/lib/vocabulary';
 import {
   ALL_EVENTS,
   AUDIT_PARAMS,
   decodeCursor,
   encodeCursor,
-  eventDetailLines,
   holderParam,
-  isSessionEventKind,
   parseHolderParam,
   type MissionSessionView,
-  type SessionEventView,
   type SessionHolderView,
   type SessionTimelineFilter,
 } from '@/server/audit';
+import { riskExplainer } from '@/server/providers/reference';
 
-import styles from '../../../activity/activity.module.css';
-import { StateBadge } from '../../state-badge';
+import styles from '../../missions.module.css';
+import { missionMark } from '../../mission-view';
+import { ActivityTable } from '../activity-table';
+import { PermissionsUsage } from '../permissions-usage';
 
 export const dynamic = 'force-dynamic';
 
@@ -65,7 +76,7 @@ const EVENTS_CURSOR_PARAM = 'before';
 const AGENT_PARAM = 'agent';
 /** Timeline filter: the calls that carried no label. */
 const UNLABELLED_PARAM = 'unlabelled';
-/** Timeline filter: the calls made with a token of one holder. */
+/** Timeline filter: the calls made with a key of one holder. */
 const HOLDER_PARAM = 'holder';
 const MAX_LABEL_PARAM_LENGTH = 200;
 
@@ -85,7 +96,7 @@ function timelineFilterOf(params: SearchParams): SessionTimelineFilter {
   return params[UNLABELLED_PARAM] === '1' ? { kind: 'unlabelled' } : ALL_EVENTS;
 }
 
-/** The session page's own query string for a timeline filter and a position. */
+/** The page's own query string for a timeline filter and a position. */
 function sessionQuery(filter: SessionTimelineFilter, cursor: string | null): string {
   const params = new URLSearchParams();
   if (filter.kind === 'label') params.set(AGENT_PARAM, filter.label);
@@ -101,6 +112,22 @@ interface Props {
   searchParams: Promise<SearchParams>;
 }
 
+type HolderActivity = MissionSessionView['holder_activity'][number];
+type LabelActivity = MissionSessionView['label_activity'][number];
+type PeriodRow = MissionSessionView['periods'][number];
+
+/** A person by their email, a machine key by its name; `null`: not attributed. */
+function HolderName({ holder }: { holder: SessionHolderView | null }) {
+  if (!holder) return <span className={styles.quietText}>not attributed (an earlier version)</span>;
+  return (
+    <KeyHolder
+      name={holder.label}
+      kind={holder.kind === 'member' ? 'person' : 'machine'}
+      qualifier={holder.kind === 'named' ? `· ${KEY_WORDS.machineKey}` : undefined}
+    />
+  );
+}
+
 export default async function MissionSessionPage({ params, searchParams }: Props) {
   const session = await currentUser();
   if (!session) return <NeedsUser />;
@@ -109,17 +136,23 @@ export default async function MissionSessionPage({ params, searchParams }: Props
   const cursorRaw = query[EVENTS_CURSOR_PARAM];
   const cursor = typeof cursorRaw === 'string' ? decodeCursor(cursorRaw) : null;
   const filter = timelineFilterOf(query);
-  const view = await session.root.audit.sessions.get(session.user, id, {
-    eventsBefore: cursor,
-    timeline: filter,
-  });
-  if (!view) notFound();
+  const { root, user } = session;
+  const [view, detail] = await Promise.all([
+    root.audit.sessions.get(user, id, { eventsBefore: cursor, timeline: filter }),
+    root.missions.service.get(user, id),
+  ]);
+  if (!view || !detail) notFound();
   const { mission, state } = view;
-  const base = `/missions/${encodeURIComponent(mission.id)}`;
+  const now = new Date();
+  const base = `${ROUTES.missions}/${encodeURIComponent(mission.id)}`;
   const sessionPath = `${base}/session`;
-  const auditOfMission = `/activity?${AUDIT_PARAMS.mission}=${encodeURIComponent(mission.id)}`;
-  // The Audit page lists the entries of the missions one created: a member reads the session.
+  const recordOfMission = `${ROUTES.activity}?${AUDIT_PARAMS.mission}=${encodeURIComponent(mission.id)}`;
   const isCreator = view.viewer_role === 'creator';
+  const creatorName = isCreator ? null : (detail.creator.email ?? 'the creator');
+  const mark = missionMark(state, view.open_requests.length, creatorName);
+  const periodSeconds = detail.period.kind === 'recurring' ? detail.period.length_seconds : null;
+  const period = periodWord(periodSeconds);
+  const labels = new Map(view.risks.map((risk) => [risk.risk_id, risk.label]));
   const filteredHolder =
     filter.kind === 'holder'
       ? (view.holder_activity.find(
@@ -127,539 +160,312 @@ export default async function MissionSessionPage({ params, searchParams }: Props
         )?.holder ?? { ...filter.holder, label: filter.holder.key })
       : null;
 
+  const showLinks = (own: SessionTimelineFilter, recordParam: string | null) => (
+    <span className={styles.rowLinks}>
+      <Link href={`${sessionPath}${sessionQuery(own, null)}`}>in the timeline</Link>
+      {recordParam && <Link href={`${recordOfMission}&${recordParam}`}>in the full record</Link>}
+    </span>
+  );
+
+  const holderColumns: Column<HolderActivity>[] = [
+    { id: 'holder', header: 'Key holder', cell: (a) => <HolderName holder={a.holder} /> },
+    { id: 'allowed', header: 'Allowed', align: 'right', cell: (a) => a.allowed },
+    { id: 'refused', header: 'Refused', align: 'right', cell: (a) => a.refused },
+    {
+      id: 'last',
+      header: 'Last call',
+      nowrap: true,
+      cell: (a) => <span title={a.last_seen_at}>{agoSentence(a.last_seen_at, now)}</span>,
+    },
+    {
+      id: 'show',
+      header: 'Show',
+      cell: (a) =>
+        a.holder
+          ? showLinks(
+              { kind: 'holder', holder: a.holder },
+              `${AUDIT_PARAMS.holder}=${encodeURIComponent(holderParam(a.holder))}`,
+            )
+          : '—',
+    },
+  ];
+  const labelColumns: Column<LabelActivity>[] = [
+    {
+      id: 'label',
+      header: 'Agent',
+      cell: (a) =>
+        a.label === null ? (
+          <span className={styles.quietText}>no label</span>
+        ) : (
+          <AgentLabel>{a.label}</AgentLabel>
+        ),
+    },
+    { id: 'allowed', header: 'Allowed', align: 'right', cell: (a) => a.allowed },
+    { id: 'refused', header: 'Refused', align: 'right', cell: (a) => a.refused },
+    {
+      id: 'last',
+      header: 'Last call',
+      nowrap: true,
+      cell: (a) => <span title={a.last_seen_at}>{agoSentence(a.last_seen_at, now)}</span>,
+    },
+    {
+      id: 'show',
+      header: 'Show',
+      cell: (a) =>
+        showLinks(
+          a.label === null ? { kind: 'unlabelled' } : { kind: 'label', label: a.label },
+          a.label === null ? null : `${AUDIT_PARAMS.agent}=${encodeURIComponent(a.label)}`,
+        ),
+    },
+  ];
+  const periodColumns: Column<PeriodRow>[] = [
+    {
+      id: 'period',
+      header: 'Period',
+      nowrap: true,
+      cell: (row) => (
+        <>
+          <LocalDate ts={row.start} />
+          {row.end ? (
+            <>
+              {' → '}
+              <LocalDate ts={row.end} />
+            </>
+          ) : (
+            ' → no reset'
+          )}
+          {row.current && <span className={styles.quietText}> · current</span>}
+        </>
+      ),
+    },
+    {
+      id: 'counted',
+      header: 'Counted',
+      cell: (row) => {
+        const counted = view.risks.filter((risk) => (row.consumed[risk.risk_id] ?? 0) > 0);
+        if (counted.length === 0) return <span className={styles.quietText}>nothing</span>;
+        return counted.map((risk) => (
+          <span key={risk.risk_id} className={styles.permissionLine}>
+            {risk.label} · {usage(row.consumed[risk.risk_id] ?? 0, risk.quota)}
+            <span className={styles.sub}>
+              <Mono quiet>{risk.risk_id}</Mono>
+            </span>
+          </span>
+        ));
+      },
+    },
+  ];
+
+  const noPeriod = (
+    <p className={styles.quiet}>No current period: the mission is {mark.label.toLowerCase()}.</p>
+  );
+  const noCall = <p className={styles.quiet}>No call {period} yet.</p>;
+
   return (
-    <Stack gap="var(--space-5)">
-      <div className={styles.pageHead}>
-        <div>
-          <p className={styles.muted}>
-            <Link href="/missions">Missions</Link> / <Link href={base}>{mission.name}</Link> /
-          </p>
-          <h1>
-            Session <StateBadge state={state} />
-          </h1>
-        </div>
-        {/* The creator and the members both read it (spec §4.2); a member is shown no fingerprint. */}
-        <Link href={auditOfMission}>Audit of this mission</Link>
-      </div>
+    <>
+      <PageHeader
+        width="wide"
+        crumbs={[
+          { label: 'Missions', href: ROUTES.missions },
+          { label: mission.name, href: base },
+          { label: 'Activity' },
+        ]}
+        title={`Activity of ${mission.name}`}
+        status={
+          mark.tone || mark.over ? (
+            <StatusMark tone={mark.tone ?? 'neutral'} testId="mission-state">
+              {mark.label}
+            </StatusMark>
+          ) : undefined
+        }
+        lede={
+          <span data-testid="timeline-retention">
+            Every call made with a key of this mission and every change to it, kept{' '}
+            {root.config.retentionDays} days.
+          </span>
+        }
+        secondary={[
+          <ButtonLink key="record" href={recordOfMission}>
+            Full record of this mission
+          </ButtonLink>,
+        ]}
+      />
 
-      <Card>
-        <CardBody>
-          <dl className={styles.facts}>
-            <dt>Session</dt>
-            <dd>
-              {view.session ? (
-                <>
-                  opened by the first call, <LocalDate ts={view.session.created_at} />
-                </>
-              ) : (
-                'not opened yet: no call was made with this mission'
-              )}
-            </dd>
-            <dt>Current period</dt>
-            <dd>
-              <PeriodLine state={state} />
-            </dd>
-            <dt>Agent labels seen</dt>
-            <dd>
-              {view.agent_labels.length === 0 ? (
-                'none'
-              ) : (
-                <div className={styles.labels}>
-                  {view.agent_labels.map((seen) => (
-                    <span key={seen.label}>
-                      <Badge mono>{seen.label}</Badge> {seen.calls}{' '}
-                      {seen.calls === 1 ? 'call' : 'calls'}, last <LocalDate ts={seen.lastSeenAt} />
-                    </span>
-                  ))}
-                </div>
-              )}
-            </dd>
-          </dl>
-        </CardBody>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Budget this period — per risk</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <p className={styles.muted}>
-            “Counted” is the counter as it stands: a claim you granted (period reset, actions given
-            back) lowers it, and shows in the timeline.
-          </p>
-        </CardBody>
-        <Table>
-          <Thead>
-            <Tr>
-              <Th>Risk</Th>
-              <Th>Quota</Th>
-              <Th>Counted</Th>
-              <Th>Left</Th>
-              <Th>Rate limit</Th>
-              <Th>Gate</Th>
-            </Tr>
-          </Thead>
-          <Tbody>
-            {view.risks.map((risk) => (
-              <Tr key={risk.risk_id}>
-                <Td>
-                  {risk.label}
-                  <div>
-                    <RiskIdLink riskId={risk.risk_id} />
-                  </div>
-                </Td>
-                <Td>{risk.quota}</Td>
-                <Td>{risk.consumed ?? '—'}</Td>
-                <Td>
-                  {risk.remaining ?? '—'}{' '}
-                  {risk.exhausted && <Badge tone="warning">exhausted</Badge>}
-                </Td>
-                <Td>
-                  {risk.rate_limit.max} per {risk.rate_limit.window_seconds}s
-                </Td>
-                <Td data-testid={`gate-${risk.risk_id}`}>
-                  <GateBadge gate={risk.gate} />
-                  {risk.gate_open_until && (
-                    <div className={styles.muted}>
-                      open until <LocalDate ts={risk.gate_open_until} />
-                    </div>
-                  )}
-                </Td>
-              </Tr>
-            ))}
-          </Tbody>
-        </Table>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Counters per period</CardTitle>
-        </CardHeader>
-        {view.periods.length === 0 ? (
-          <div className={styles.empty}>Nothing counted yet.</div>
-        ) : (
-          <div className={styles.scroll}>
-            <Table>
-              <Thead>
-                <Tr>
-                  <Th>Period</Th>
-                  {view.risks.map((risk) => (
-                    <Th key={risk.risk_id} className={`${styles.mono} ${styles.nowrap}`}>
-                      <RiskIdLink riskId={risk.risk_id} />
-                    </Th>
-                  ))}
-                </Tr>
-              </Thead>
-              <Tbody>
-                {view.periods.map((period) => (
-                  <Tr key={period.start}>
-                    <Td className={styles.nowrap}>
-                      <LocalDate ts={period.start} />
-                      {period.end ? (
-                        <>
-                          {' → '}
-                          <LocalDate ts={period.end} />
-                        </>
-                      ) : (
-                        ' → no reload'
-                      )}{' '}
-                      {period.current && <Badge tone="info">current</Badge>}
-                    </Td>
-                    {view.risks.map((risk) => (
-                      <Td key={risk.risk_id}>
-                        {period.consumed[risk.risk_id] ?? 0} / {risk.quota}
-                      </Td>
-                    ))}
-                  </Tr>
-                ))}
-              </Tbody>
-            </Table>
-          </div>
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Open requests</CardTitle>
-        </CardHeader>
-        {!isCreator && view.open_requests.length > 0 && (
-          <CardBody>
-            <p className={styles.muted} data-testid="requests-are-the-creators">
-              Requests are answered by the creator of the mission alone. You see that they are
-              waiting; you cannot answer them.
+      {view.open_requests.length > 0 && (
+        <Section
+          first
+          title={isCreator ? SECTIONS.waiting : `Waiting for ${creatorName}`}
+          count={view.open_requests.length}
+          testId="open-requests"
+        >
+          {!isCreator && (
+            <p className={styles.quiet} data-testid="requests-are-the-creators">
+              What the agents of this mission ask is answered by its creator alone. You see that it
+              waits; you cannot answer it.
             </p>
-          </CardBody>
-        )}
-        {view.open_requests.length === 0 ? (
-          <div className={styles.empty}>
-            {isCreator
-              ? 'No request is waiting for you on this mission.'
-              : 'No request is waiting for the creator on this mission.'}
-          </div>
-        ) : (
-          <Table>
-            <Thead>
-              <Tr>
-                <Th>Request</Th>
-                <Th>Risk</Th>
-                <Th>Opened</Th>
-                <Th>Expires</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {view.open_requests.map((request) => (
-                <Tr key={request.id}>
-                  <Td>
-                    {request.path ? (
-                      <Link href={request.path}>
-                        {request.kind === 'claim' ? 'Claim' : 'Approval request'}
-                      </Link>
-                    ) : request.kind === 'claim' ? (
-                      'Claim'
-                    ) : (
-                      'Approval request'
-                    )}
-                  </Td>
-                  <Td className={styles.mono}>
-                    <RiskIdLink riskId={request.risk_id} />
-                  </Td>
-                  <Td>
-                    <LocalDate ts={request.created_at} />
-                  </Td>
-                  <Td>
+          )}
+          <AnswerList label="Requests of this mission">
+            {view.open_requests.map((request) => (
+              <AnswerRow
+                key={request.id}
+                who={<Avatar name="agent" kind="machine" size="md" />}
+                title={
+                  <>
+                    {labels.get(request.risk_id) ?? request.risk_id} ·{' '}
+                    {request.kind === 'claim' ? 'asks for more room' : waitingFor(creatorName)}
+                  </>
+                }
+                description={
+                  <>
+                    <Mono quiet>{request.risk_id}</Mono> · asked{' '}
+                    {agoSentence(request.created_at, now)} · expires{' '}
                     <LocalDate ts={request.expires_at} />
-                  </Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
-        )}
-      </Card>
+                  </>
+                }
+                answers={
+                  request.path ? (
+                    <ButtonLink href={request.path} variant="primary" data-request={request.kind}>
+                      Review and answer
+                    </ButtonLink>
+                  ) : undefined
+                }
+              />
+            ))}
+          </AnswerList>
+        </Section>
+      )}
 
-      <Card data-testid="holder-activity">
-        <CardHeader>
-          <CardTitle>Calls per token holder — current period</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <p className={styles.muted}>
-            For information only: this is not a budget. A holder is whose token the call presented —
-            a member of the mission, or a named token — and is authenticated by that token. Every
-            token of the mission draws from the same budget per risk, above.
-          </p>
-        </CardBody>
+      <Section
+        first={view.open_requests.length === 0}
+        title={`Who called ${period}`}
+        note="Whose key each call presented. Counts, not limits: every key draws on the same limits."
+        testId="holder-activity"
+      >
         {state.kind !== 'active' ? (
-          <div className={styles.empty}>No current period: the mission is {state.kind}.</div>
-        ) : view.holder_activity.length === 0 ? (
-          <div className={styles.empty}>No call in this period yet.</div>
+          noPeriod
         ) : (
-          <Table>
-            <Thead>
-              <Tr>
-                <Th>Token holder</Th>
-                <Th>Calls allowed</Th>
-                <Th>Calls refused</Th>
-                <Th>Last call</Th>
-                <Th>Show</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {view.holder_activity.map((activity) => {
-                const { holder } = activity;
-                return (
-                  <Tr key={holder ? holderParam(holder) : ''} data-holder={holder?.label ?? ''}>
-                    <Td>
-                      <HolderName holder={holder} />
-                    </Td>
-                    <Td>{activity.allowed}</Td>
-                    <Td>{activity.refused}</Td>
-                    <Td>
-                      <LocalDate ts={activity.last_seen_at} />
-                    </Td>
-                    <Td className={styles.nowrap}>
-                      {holder ? (
-                        <>
-                          <Link
-                            href={`${sessionPath}${sessionQuery({ kind: 'holder', holder }, null)}`}
-                          >
-                            in the timeline
-                          </Link>
-                          {isCreator && (
-                            <>
-                              {' · '}
-                              <Link
-                                href={`${auditOfMission}&${AUDIT_PARAMS.holder}=${encodeURIComponent(holderParam(holder))}`}
-                              >
-                                in the audit
-                              </Link>
-                            </>
-                          )}
-                        </>
-                      ) : (
-                        '—'
-                      )}
-                    </Td>
-                  </Tr>
-                );
-              })}
-            </Tbody>
-          </Table>
+          <DataTable
+            caption={`Calls ${period} per key holder`}
+            columns={holderColumns}
+            rows={view.holder_activity}
+            rowKey={(a) => (a.holder ? holderParam(a.holder) : 'unattributed')}
+            empty={noCall}
+          />
         )}
-      </Card>
+      </Section>
 
-      <Card data-testid="label-activity">
-        <CardHeader>
-          <CardTitle>Calls per agent label — current period</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <p className={styles.muted}>
-            For information only: this is not a budget. A label is what a caller said about itself;
-            the gateway does not verify it and decides nothing on it. Every agent of the mission
-            draws from the same budget per risk, above.
-          </p>
-        </CardBody>
+      <Section
+        title={`Agents ${period}`}
+        note="A label is what a caller said about itself: not verified, and it decides nothing."
+        testId="label-activity"
+      >
         {state.kind !== 'active' ? (
-          <div className={styles.empty}>No current period: the mission is {state.kind}.</div>
-        ) : view.label_activity.length === 0 ? (
-          <div className={styles.empty}>No call in this period yet.</div>
+          noPeriod
         ) : (
-          <Table>
-            <Thead>
-              <Tr>
-                <Th>Agent label</Th>
-                <Th>Calls allowed</Th>
-                <Th>Calls refused</Th>
-                <Th>Last call</Th>
-                <Th>Show</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {view.label_activity.map((activity) => {
-                const own: SessionTimelineFilter =
-                  activity.label === null
-                    ? { kind: 'unlabelled' }
-                    : { kind: 'label', label: activity.label };
-                return (
-                  <Tr key={activity.label ?? ''} data-label={activity.label ?? ''}>
-                    <Td>
-                      {activity.label === null ? (
-                        <span className={styles.muted}>no label</span>
-                      ) : (
-                        <Badge mono>{activity.label}</Badge>
-                      )}
-                    </Td>
-                    <Td>{activity.allowed}</Td>
-                    <Td>{activity.refused}</Td>
-                    <Td>
-                      <LocalDate ts={activity.last_seen_at} />
-                    </Td>
-                    <Td className={styles.nowrap}>
-                      <Link href={`${sessionPath}${sessionQuery(own, null)}`}>in the timeline</Link>
-                      {activity.label !== null && isCreator && (
-                        <>
-                          {' · '}
-                          <Link
-                            href={`${auditOfMission}&${AUDIT_PARAMS.agent}=${encodeURIComponent(activity.label)}`}
-                          >
-                            in the audit
-                          </Link>
-                        </>
-                      )}
-                    </Td>
-                  </Tr>
-                );
-              })}
-            </Tbody>
-          </Table>
+          <DataTable
+            caption={`Calls ${period} per agent label`}
+            columns={labelColumns}
+            rows={view.label_activity}
+            rowKey={(a) => a.label ?? 'unlabelled'}
+            empty={noCall}
+          />
         )}
-      </Card>
+        {view.agent_labels.length > 0 && (
+          <Hint>
+            Seen since the record began:{' '}
+            {view.agent_labels.map((seen, index) => (
+              <span key={seen.label} data-testid="label-seen">
+                {index > 0 && ', '}
+                <AgentLabel>{seen.label}</AgentLabel> {count(seen.calls, TERMS.call)}
+              </span>
+            ))}
+            .
+          </Hint>
+        )}
+      </Section>
 
-      <Card data-testid="timeline" className={styles.wide}>
-        <CardHeader>
-          <CardTitle>Timeline</CardTitle>
-        </CardHeader>
-        <CardBody>
-          <p className={styles.muted} data-testid="timeline-retention">
-            Kept {session.root.config.retentionDays} days, like the audit: older events are deleted,
-            and so are the counters of periods that ended longer ago.
-          </p>
-        </CardBody>
-        {filter.kind !== 'all' && (
-          <CardBody>
-            <p className={styles.muted} data-testid="timeline-filter">
+      <Section
+        title="Timeline"
+        note={
+          filter.kind === 'all' ? (
+            'Newest first.'
+          ) : (
+            <span data-testid="timeline-filter">
               {filter.kind === 'holder' ? (
-                <>
-                  Calls made with a token of <HolderName holder={filteredHolder} /> only
-                </>
+                <>Calls made with a key of {filteredHolder?.label} only.</>
               ) : filter.kind === 'label' ? (
                 <>
-                  Calls labelled <Badge mono>{filter.label}</Badge> only
+                  Calls labelled <AgentLabel>{filter.label}</AgentLabel> only.
                 </>
               ) : (
-                'Calls without an agent label only'
-              )}
-              ; requests, resets and other events are not calls and are not listed.{' '}
+                'Calls without an agent label only.'
+              )}{' '}
               <Link href={sessionPath}>Show the whole timeline</Link>
-            </p>
-          </CardBody>
-        )}
-        {view.events.length === 0 ? (
-          <div className={styles.empty}>
-            {filter.kind === 'all' ? 'No event yet.' : 'No call matches on this page.'}
-          </div>
-        ) : (
-          <div className={styles.scroll} data-testid="timeline-table">
-            <Table>
-              <Thead>
-                <Tr>
-                  <Th>When</Th>
-                  <Th>Event</Th>
-                  <Th>Tool</Th>
-                  <Th>Risks → left</Th>
-                  <Th>Token holder</Th>
-                  <Th>Agent label / actor</Th>
-                  <Th>Detail</Th>
-                </Tr>
-              </Thead>
-              <Tbody>
-                {view.events.map((event) => (
-                  <EventRow key={event.id} event={event} openRequests={view.open_requests} />
-                ))}
-              </Tbody>
-            </Table>
-          </div>
-        )}
-      </Card>
-
-      <div className={styles.pager}>
-        <span>
-          {view.events.length} {view.events.length === 1 ? 'event' : 'events'}, newest first
-        </span>
-        <span>
+            </span>
+          )
+        }
+        testId="timeline"
+      >
+        <div data-testid="timeline-table">
+          <ActivityTable
+            events={view.events}
+            openRequests={view.open_requests}
+            labels={labels}
+            creator={creatorName}
+            caption={`Events of ${mission.name}`}
+            empty={
+              <p className={styles.quiet}>
+                {filter.kind === 'all' ? 'No event yet.' : 'No call matches on this page.'}
+              </p>
+            }
+          />
+        </div>
+        <p className={styles.pager}>
+          <span>{count(view.events.length, { one: 'event', many: 'events' })} on this page</span>
           {cursor && <Link href={`${sessionPath}${sessionQuery(filter, null)}`}>Newest</Link>}
-          {cursor && view.next_events && ' · '}
           {view.next_events && (
             <Link href={`${sessionPath}${sessionQuery(filter, encodeCursor(view.next_events))}`}>
               Older
             </Link>
           )}
-        </span>
-      </div>
-    </Stack>
-  );
-}
+        </p>
+      </Section>
 
-/** A member by their email, a named token by its name with its kind; `null`: not attributed. */
-function HolderName({ holder }: { holder: SessionHolderView | null }) {
-  if (!holder) {
-    return <span className={styles.muted}>not attributed (before tokens had a holder)</span>;
-  }
-  return holder.kind === 'member' ? (
-    <Slug kind="member" mono={false}>
-      {holder.label}
-    </Slug>
-  ) : (
-    <>
-      <Slug kind="token" mono={false}>
-        {holder.label}
-      </Slug>{' '}
-      <Badge>named token</Badge>
+      <Section
+        title={SECTIONS.permissionsAndUsage}
+        count={view.risks.length}
+        note={`${limitsResetEvery(periodSeconds)}; a limit you raised or reset shows in the timeline.`}
+        testId="session-permissions"
+      >
+        <Disclosure
+          id={`mission:${mission.id}:session-permissions`}
+          show={`All ${count(view.risks.length, TERMS.risk)}, with what was used`}
+          hide="Hide the permissions"
+        >
+          <PermissionsUsage
+            detail={detail}
+            explain={riskExplainer(root.registry)}
+            periodSeconds={periodSeconds}
+            editable={false}
+          />
+        </Disclosure>
+      </Section>
+
+      <Section title="Earlier periods" count={view.periods.length} testId="session-periods">
+        <Disclosure
+          id={`mission:${mission.id}:session-periods`}
+          show="Show what each period counted"
+          hide="Hide the periods"
+        >
+          <DataTable
+            caption="What was counted, per period"
+            columns={periodColumns}
+            rows={view.periods}
+            rowKey={(row) => row.start}
+            empty={<p className={styles.quiet}>Nothing counted yet.</p>}
+          />
+        </Disclosure>
+      </Section>
     </>
-  );
-}
-
-function PeriodLine({ state }: { state: MissionSessionView['state'] }) {
-  if (state.kind !== 'active') return <>none: the mission is {state.kind}</>;
-  return (
-    <>
-      since <LocalDate ts={state.period.start} />
-      {state.period.end ? (
-        <>
-          , reloads <LocalDate ts={state.period.end} />
-        </>
-      ) : (
-        ', never reloads (one-off mission)'
-      )}
-    </>
-  );
-}
-
-const EVENT_TONE: Readonly<Record<SessionEventKind, BadgeTone>> = {
-  'call-allowed': 'success',
-  'call-refused': 'danger',
-  request: 'warning',
-  reset: 'info',
-  extension: 'info',
-  approval: 'info',
-  'gate-opened': 'info',
-  'gate-changed': 'neutral',
-  rotation: 'neutral',
-  revocation: 'danger',
-};
-
-/** A kind written by a later version has no tone of its own. */
-function toneOf(kind: string): BadgeTone {
-  return isSessionEventKind(kind) ? EVENT_TONE[kind] : 'neutral';
-}
-
-function EventRow({
-  event,
-  openRequests,
-}: {
-  event: SessionEventView;
-  openRequests: MissionSessionView['open_requests'];
-}) {
-  const request = openRequests.find((r) => r.id === event.request_id);
-  return (
-    <Tr>
-      <Td className={styles.nowrap}>
-        <LocalDate ts={event.ts} />
-      </Td>
-      <Td>
-        <span className={styles.nowrap}>
-          <Badge tone={toneOf(event.kind)}>{event.kind}</Badge>
-        </span>
-        {event.refusal_code && <div className={styles.mono}>{event.refusal_code}</div>}
-      </Td>
-      <Td className={`${styles.mono} ${styles.tool}`}>
-        {event.tool ? <Slug kind="tool">{event.tool}</Slug> : '—'}
-      </Td>
-      <Td>
-        {event.risk_ids.length === 0 ? (
-          '—'
-        ) : (
-          <div className={styles.risks}>
-            {event.risk_ids.map((risk) => (
-              <span key={risk} className={`${styles.mono} ${styles.wraps}`}>
-                <RiskIdLink riskId={risk} />
-                {event.remaining?.[risk] !== undefined && ` → ${event.remaining[risk]}`}
-              </span>
-            ))}
-          </div>
-        )}
-      </Td>
-      <Td className={styles.holder} data-testid="event-holder">
-        {event.holder ? <HolderName holder={event.holder} /> : '—'}
-      </Td>
-      <Td>{event.agent_label ?? event.actor_email ?? '—'}</Td>
-      <Td className={styles.detail} data-testid="event-detail">
-        {eventDetailLines(event, { requestOpen: request !== undefined }).map((line) => (
-          <div key={line.text} className={line.mono ? styles.mono : styles.muted}>
-            {line.text}
-            {line.at && (
-              <>
-                {' '}
-                <LocalDate ts={line.at} />
-              </>
-            )}
-          </div>
-        ))}
-        {request &&
-          (request.path ? (
-            <Link href={request.path}>open {request.kind}</Link>
-          ) : (
-            <span className={styles.muted}>{request.kind} waiting for the creator</span>
-          ))}
-      </Td>
-    </Tr>
   );
 }

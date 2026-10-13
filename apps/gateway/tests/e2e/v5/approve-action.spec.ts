@@ -19,6 +19,7 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { connectAgent, type Agent, type CallOutcome, type Refusal } from './agent';
 import { issueDeveloperMission, routeToInstance, signInAs, upstreamLog } from './browser';
 import { E2E_APPROVER_USER, E2E_OTHER_USER, MOCK_GITHUB, PUBLIC_URL } from './instance';
+import { permissionRow, showPermissions } from './mission-pages';
 
 const MISSION = 'Develop the app repository';
 const TOOL = 'github__create_or_update_file';
@@ -276,30 +277,39 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await expect(hedy.getByTestId('approval-outcome')).toContainText('Nothing ran');
   await expect(hedy.getByTestId('open-request-count')).toHaveCount(0);
 
-  // ── While the gate is open, the session page says so too ────────────────
+  // ── While it runs freely for the period, the mission's activity says so too ──
   await hedy.goto(`/missions/${issued.mission_id}/session`);
-  const sessionGate = hedy.getByTestId(`gate-${GATED}`);
-  await expect(sessionGate).toContainText('approval');
-  await expect(sessionGate).toContainText('open until');
-  await snap(hedy, 'session-gate-open');
+  const sessionPermissions = hedy.getByTestId('session-permissions');
+  await sessionPermissions.getByRole('button', { name: /^All \d+ permissions?/ }).click();
+  const sessionGate = permissionRow(sessionPermissions, GATED);
+  await expect(sessionGate).toContainText('ask me first');
+  await expect(sessionGate).toContainText('runs freely until');
+  // Nobody changes "ask me first" from the activity: it is read there.
+  await expect(sessionPermissions.getByRole('switch')).toHaveCount(0);
+  await snap(hedy, 'activity-runs-freely');
 
-  // ── The gate, edited on the mission page after issuance ─────────────────
+  // ── "Ask me first", changed on the mission page after creation ──────────
   await hedy.goto(`/missions/${issued.mission_id}`);
-  const gateCell = hedy.getByTestId(`gate-${GATED}`);
-  await expect(gateCell).toContainText('approval');
-  await expect(gateCell).toContainText('open until');
-  await snap(hedy, 'mission-gate-open');
-  // To `auto`: the opening is over, the policy itself lets the calls through.
-  await gateCell.getByRole('button', { name: `Set to auto for ${GATED}` }).click();
-  await expect(
-    gateCell.getByRole('button', { name: `Require approval for ${GATED}` }),
-  ).toBeVisible();
-  await expect(gateCell).not.toContainText('open until');
+  const gateCell = permissionRow(await showPermissions(hedy), GATED);
+  const askFirst = hedy.getByLabel(`ask me first: ${GATED}`);
+  await expect(gateCell).toContainText('ask me first');
+  await expect(gateCell).toContainText('runs freely until');
+  await expect(askFirst).toBeChecked();
+  await snap(hedy, 'mission-runs-freely');
+  // Off: the opening is over, the permission itself lets the calls through.
+  await askFirst.uncheck();
+  await expect(askFirst).not.toBeChecked();
+  await expect(gateCell).not.toContainText('runs freely until');
+  await expect(gateCell).not.toContainText('ask me first');
+  // The change is confirmed where the person looks, and says when it applies.
+  await expect(hedy.getByTestId('toasts')).toContainText('runs freely');
+  await expect(hedy.getByTestId('toasts')).toContainText('From the next call.');
   expect(await write({ ...WORKFLOW, message: 'ci: tune' })).toMatchObject({ outcome: 'allowed' });
-  // Back to `approval`: the next call asks again, although the period has not ended.
-  await gateCell.getByRole('button', { name: `Require approval for ${GATED}` }).click();
-  await expect(gateCell.getByRole('button', { name: `Set to auto for ${GATED}` })).toBeVisible();
-  await expect(gateCell).not.toContainText('open until');
+  // On again: the next call asks again, although the period has not ended.
+  await askFirst.check();
+  await expect(askFirst).toBeChecked();
+  await expect(gateCell).toContainText('ask me first');
+  await expect(gateCell).not.toContainText('runs freely until');
   approvalRequired(await write({ ...WORKFLOW, message: 'ci: tune again' }));
   expect(await workflowWrites()).toHaveLength(writesBefore + 4);
   await snap(hedy, 'mission-gate-edited');
@@ -325,32 +335,34 @@ test('a gated action of the developer preset: refused, approved by its creator o
   expect(await hedy.content()).not.toContain(MARKER);
   await snap(hedy, 'approval-audit');
 
-  // …and the session: the decisions are on the timeline, without the arguments.
+  // …and the activity of the mission: the decisions are on the timeline, without the arguments.
   await hedy.goto(`/missions/${issued.mission_id}/session`);
-  // The gate was set back to `approval` on the mission: the opening is over.
-  await expect(hedy.getByTestId(`gate-${GATED}`)).toHaveText('approval');
+  // "Ask me first" was set again on the mission: the opening is over. The page remembered
+  // that the permissions were open.
+  const gateNow = permissionRow(hedy.getByTestId('session-permissions'), GATED);
+  await expect(gateNow).toContainText('ask me first');
+  await expect(gateNow).not.toContainText('runs freely until');
   const timeline = hedy.getByTestId('timeline');
-  const events = (kind: string) =>
-    timeline.locator('tbody tr').filter({ has: hedy.getByText(kind, { exact: true }) });
-  await expect(events('gate-opened')).toHaveCount(1);
-  await expect(events('gate-changed')).toHaveCount(2);
-  await expect(events('call-allowed')).toHaveCount(4);
-  // …and each says what it did, not only its kind.
-  await expect(events('gate-opened')).toContainText('gate open until');
-  await expect(events('gate-changed').first()).toContainText('gate set to approval (was auto)');
-  await expect(events('gate-changed').last()).toContainText('gate set to auto (was approval)');
-  await expect(events('approval')).toContainText('one call approved, usable until');
-  await expect(events('call-allowed').filter({ hasText: 'approval consumed' })).toHaveCount(1);
-  await expect(
-    events('request').filter({ hasText: 'approval request refused by the creator' }),
-  ).toHaveCount(1);
-  // The widest details of a timeline are on this one: the Detail column is on screen.
+  const events = (outcome: string) =>
+    timeline.locator('tbody tr').filter({ has: hedy.getByText(outcome, { exact: true }) });
+  // Each event says what it did, in the words of the interface.
+  await expect(events('runs freely')).toHaveCount(1);
+  await expect(events('runs freely')).toContainText('without asking until');
+  await expect(events('set to “ask me first”')).toHaveCount(1);
+  await expect(events('set to “ask me first”')).toContainText('was “runs freely”');
+  await expect(events('set to “runs freely”')).toHaveCount(1);
+  await expect(events('set to “runs freely”')).toContainText('was “ask me first”');
+  await expect(events('allowed')).toHaveCount(4);
+  await expect(events('approved')).toContainText('one call, usable until');
+  await expect(events('allowed').filter({ hasText: 'after the creator’s yes' })).toHaveCount(1);
+  await expect(events('refused by the creator')).toHaveCount(1);
+  // The widest details of a timeline are on this one: the last column is on screen.
   const table = await hedy
     .getByTestId('timeline-table')
     .evaluate((el) => ({ content: el.scrollWidth, box: el.clientWidth }));
   expect(table.content).toBeLessThanOrEqual(table.box);
   expect(await hedy.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
-  await snap(hedy, 'session-timeline-details');
+  await snap(hedy, 'activity-timeline-details');
   expect(await hedy.content()).not.toContain(MARKER);
   await hedy.context().close();
 });
@@ -370,11 +382,10 @@ test('a call that touches two gated risks asks once: one request, one approval, 
   await signInAs(request, E2E_APPROVER_USER);
   const hedy = await freshPage(browser);
   await hedy.goto(`/auth/login?return_to=/missions/${issued.mission_id}`);
-  const branchGate = hedy.getByTestId(`gate-${UNGATED}`);
-  await branchGate.getByRole('button', { name: `Require approval for ${UNGATED}` }).click();
-  await expect(
-    branchGate.getByRole('button', { name: `Set to auto for ${UNGATED}` }),
-  ).toBeVisible();
+  await showPermissions(hedy);
+  await hedy.getByLabel(`ask me first: ${UNGATED}`).check();
+  await expect(hedy.getByLabel(`ask me first: ${UNGATED}`)).toBeChecked();
+  await expect(hedy.getByTestId('toasts')).toContainText('asks you first');
 
   // ── One refusal, naming both risks, with one URL ────────────────────────
   const refusal = approvalRequired(await executor.call(TOOL, WORKFLOW));

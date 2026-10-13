@@ -292,8 +292,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   // ── The user sees the mission under their name, marked as delegated ────────
   await page.goto(`${PUBLIC_URL}/missions`);
   const row = page.getByRole('row').filter({ hasText: MISSION_NAME });
-  await expect(row).toContainText('delegated');
-  await expect(row).toContainText(`issued by ${CLIENT_NAME}`);
+  await expect(row).toContainText(`prepared by ${CLIENT_NAME} for you`);
   await snap(page, 'missions-delegated');
   await row.getByRole('link', { name: MISSION_NAME }).click();
   await expect(page.getByTestId('issued-via')).toContainText(CLIENT_NAME);
@@ -349,7 +348,9 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   expect((await kitToolsList(issued.token.secret)).status).toBe(200);
   await page.goto(`${PUBLIC_URL}/missions/${issued.mission.mission_id}`);
   await expect(page.getByRole('heading', { level: 1 })).toContainText(MISSION_NAME);
-  await expect(page.getByRole('heading', { level: 1 })).toContainText('active');
+  // Still running: a mission that serves calls carries no mark beside its title.
+  await expect(page.getByTestId('mission-state')).toHaveCount(0);
+  await expect(page.getByTestId('mission-allows')).toBeVisible();
 
   await context.close();
 });

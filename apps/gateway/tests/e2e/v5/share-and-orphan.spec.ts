@@ -22,8 +22,8 @@ import { expect, test, type Browser, type Page } from '@playwright/test';
 import { connectAgent, type Agent } from './agent';
 import { routeToInstance, seedShareScenario, signInAs } from './browser';
 import { E2E_OPERATOR, E2E_SHARE_OWNER, E2E_SHARE_TARGET } from './instance';
+import { createMission, permissionRow, pickPreset } from './mission-pages';
 
-const TOKEN = /vbn_live_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}/;
 const READ_CODE = 'github.read-code';
 const READ_META = 'github.read-meta';
 type User = typeof E2E_SHARE_OWNER | typeof E2E_SHARE_TARGET | typeof E2E_OPERATOR;
@@ -182,21 +182,23 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // ── …and issues a mission within it ─────────────────────────────────────
   await joan.goto('/missions/new');
   await joan.getByLabel('Mission name').fill('Read ines-org');
-  await joan
-    .getByRole('group', { name: /^Policy for GitHub / })
-    .getByRole('radio', { name: 'Custom' })
-    .check();
-  // The editor lists the whole catalog; what she does not hold is shown and cannot be ticked.
-  await expect(joan.getByLabel('Accept risk github.merge-protected')).toBeDisabled();
-  await expect(
-    joan.locator('[data-risk="github.merge-protected"]').getByText('outside your authority'),
-  ).toBeVisible();
-  await joan.getByLabel(`Accept risk ${READ_CODE}`).check();
-  await joan.getByRole('button', { name: 'Issue mission' }).click();
-  const kit = joan.getByRole('dialog');
-  await expect(kit).toContainText('Mission “Read ines-org” issued');
-  const token = TOKEN.exec(await kit.getByTestId('kit-env').innerText())?.[0];
-  if (!token) throw new Error('no token in the bootstrap kit');
+  // The account says on what ground she may use it, and how much of it she may allow.
+  await expect(joan.getByTestId('connection-github')).toContainText(
+    /access given to you · may allow \d+ of \d+/,
+  );
+  await pickPreset(joan, `GitHub ${connectionName}`, 'Custom');
+  // The editor shows what she may allow; what she may not is one filter away, listed with
+  // the reason and without a usable tick.
+  const editor = joan.getByTestId('risks-github');
+  await expect(permissionRow(editor, 'github.merge-protected')).toHaveCount(0);
+  await editor.getByRole('button', { name: 'Not available', exact: true }).click();
+  await expect(joan.getByLabel('Allow github.merge-protected')).toBeDisabled();
+  await expect(permissionRow(editor, 'github.merge-protected')).toContainText(
+    'Not available: outside what you may allow',
+  );
+  await editor.getByRole('button', { name: 'Available to you', exact: true }).click();
+  await joan.getByLabel(`Allow ${READ_CODE}`).check();
+  const token = await createMission(joan);
 
   const executor = (agent = await connectAgent(token));
   const read = () =>
@@ -229,7 +231,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // ── The beneficiary sees it ─────────────────────────────────────────────
   await joan.goto('/missions');
   await expect(joan.getByRole('row').filter({ hasText: 'Read ines-org' })).toContainText(
-    'orphaned',
+    'Needs an owner',
   );
   await joan.goto('/accounts');
   await expect(joan.getByTestId('shared-with-you')).toHaveCount(0);
@@ -237,17 +239,21 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // Her mission page says why, that it can come back, and still lets her close it.
   await joan.goto('/missions');
   await joan.getByRole('link', { name: 'Read ines-org' }).click();
-  await expect(
-    joan.getByText('Orphaned: you no longer hold the authority this mission was issued under'),
-  ).toBeVisible();
-  await expect(
-    joan.getByText(/you no longer cover this accepted risk: github\.read-code/),
-  ).toBeVisible();
-  await expect(
-    joan.getByText(/serves calls again as soon as that authority is back/),
-  ).toBeVisible();
-  await expect(joan.getByRole('button', { name: 'Revoke mission' })).toBeVisible();
-  await expect(joan.getByRole('button', { name: 'Rotate token' })).toHaveCount(0);
+  await expect(joan.getByTestId('mission-state')).toHaveText('Needs an owner');
+  const orphaned = joan.getByTestId('orphan-callout');
+  await expect(orphaned).toContainText(
+    'Needs an owner: you may no longer allow what this mission allows',
+  );
+  await expect(orphaned).toContainText(
+    /you may no longer allow this permission: github\.read-code/,
+  );
+  await expect(orphaned).toContainText(/serves calls again as soon as you may allow them again/);
+  // She can still stop it; nothing that would be refused is offered (no key can be made now).
+  await joan.getByTestId('mission-menu').click();
+  await expect(joan.getByRole('menuitem', { name: 'Stop the mission' })).toBeVisible();
+  await expect(joan.getByRole('menuitem', { name: 'Replace my key' })).toHaveCount(0);
+  await expect(joan.getByRole('menuitem', { name: 'New machine key' })).toHaveCount(0);
+  await joan.keyboard.press('Escape');
   await snap(joan, 'mission-orphaned');
   const missionUrl = joan.url();
 
@@ -285,17 +291,22 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
 
   await joan.goto('/missions');
   const restored = joan.getByRole('row').filter({ hasText: 'Read ines-org' });
-  await expect(restored).toContainText('active');
-  await expect(restored).not.toContainText('orphaned');
+  await expect(restored).toContainText('running');
+  await expect(restored).not.toContainText('Needs an owner');
   await joan.goto(missionUrl);
-  await expect(joan.getByText(/^Orphaned:/)).toHaveCount(0);
-  await expect(joan.getByRole('button', { name: 'Rotate token' })).toBeVisible();
-  // The session kept its history across the gap: two calls served, one refused.
-  await joan.getByRole('link', { name: 'Session', exact: true }).click();
-  await expect(joan.getByRole('heading', { name: /Session/ })).toContainText('active');
-  await snap(joan, 'mission-restored-session');
-  // Both acts of the owner are in the creator's audit.
-  await joan.getByRole('link', { name: 'Audit of this mission' }).click();
+  await expect(joan.getByTestId('orphan-callout')).toHaveCount(0);
+  await expect(joan.getByTestId('mission-state')).toHaveCount(0);
+  await joan.getByTestId('mission-menu').click();
+  await expect(joan.getByRole('menuitem', { name: 'Replace my key' })).toBeVisible();
+  await joan.keyboard.press('Escape');
+  // The activity kept its history across the gap: the two calls served are still there.
+  await joan.getByRole('link', { name: 'Everything this mission did' }).click();
+  await expect(joan.getByRole('heading', { name: /^Activity of /, level: 1 })).toBeVisible();
+  const timeline = joan.getByTestId('timeline');
+  await expect(timeline.locator('tbody tr').filter({ hasText: 'allowed' })).toHaveCount(2);
+  await snap(joan, 'mission-restored-activity');
+  // Both acts of the owner are in the creator's record.
+  await joan.getByRole('link', { name: 'Full record of this mission' }).click();
   await expect(joan.getByText('left a mission without an owner').first()).toBeVisible();
   await expect(joan.getByText('brought a mission back').first()).toBeVisible();
 
@@ -321,7 +332,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   // Revoked for good: the client is refused, and sharing again brings nothing back.
   expect(await read()).toMatchObject({ outcome: 'refused' });
   await joan.goto(missionUrl);
-  await expect(joan.getByText('revoked', { exact: true }).first()).toBeVisible();
+  await expect(joan.getByTestId('mission-state')).toHaveText('stopped');
   await ines.getByRole('link', { name: 'Give access', exact: true }).click();
   await dialog.getByLabel('Email').fill(E2E_SHARE_TARGET.email);
   await dialog.getByLabel(`Give ${READ_CODE}`).check();
