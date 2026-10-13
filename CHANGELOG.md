@@ -342,6 +342,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Changed
 
+- **The documentation is in English and describes what the code does.** The risk-model
+  specification, the per-environment vector note, the style guide and the Resend provider
+  specification are rewritten against the implementation (the French and v4 texts are kept
+  under `docs/spec/legacy/`); the README is written for a first visitor (what it is, a
+  quick look with `npm run demo`, an install path, an architecture diagram, an honest
+  status); `docs/handbook/README.md` indexes the handbooks; `docs/AGENTS-guide.md` gives
+  coding agents the method and the map of the repository.
 - **Agent labels are checked, not repaired.** A label is 1 to 64 characters: letters,
   digits and `. _ - : / @ +`, starting with a letter or a digit. Anything else is ignored
   — the call is served without a label and the gateway logs why — where it used to be
