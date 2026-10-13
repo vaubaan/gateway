@@ -1,7 +1,7 @@
 /**
  * Resend MCP tools — thin wrappers over the Resend REST API (api.resend.com).
  *
- * 27 tools : 9 reads and 18 writes (one of them, `describe_zones`, synthetic).
+ * 27 tools : 10 reads (one of them, `describe_zones`, synthetic) and 17 writes.
  * Names follow the SDK convention `<provider>__<verb>_<noun>` (prefix `resend__`).
  *
  * Resource arguments are explicit, as the contributor guide asks :
@@ -12,8 +12,10 @@
  *                     call can be scoped and env-qualified ; `execute` checks
  *                     upstream that the broadcast really belongs to it.
  *
- * Out of scope in v1 (spec §10) and refused by the classifier when present :
- * `attachments`, `scheduled_at`, `send` on broadcast creation.
+ * Out of scope in v1 (spec §10) and refused by the classifier when present,
+ * whatever their value : `attachments`, `scheduled_at`, and `send` on a
+ * broadcast creation or update (`send: false` included — a broadcast is sent
+ * with `send_broadcast`, and an argument that does nothing is not accepted).
  *
  * Spec : docs/spec/resend.md §6 ; docs/spec/gateway-risk-model.md §7.
  */
@@ -156,6 +158,14 @@ const READ_TOOLS: readonly McpToolDeclaration[] = [
       required: ['segment_id', 'id'],
     },
   },
+  // A read : it returns configuration and is classified `domain[*].R`.
+  {
+    name: 'resend__describe_zones',
+    description:
+      'Return the recipient-zone configuration (internal_domains, allowlist_domains, allowlist_addresses) ' +
+      'of every sending domain of the mission. Synthetic : no upstream call.',
+    inputSchema: { type: 'object', properties: {} },
+  },
 ];
 
 // ─── Write tools ────────────────────────────────────────────────────────────
@@ -165,8 +175,8 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
     name: 'resend__send_email',
     description:
       'Send a transactional email from a sending domain of the mission. Classified by recipient zone ' +
-      '(internal / allowlist / external-unbounded) and recipient count. Attachments and scheduling are ' +
-      'refused. Backed by POST /emails.',
+      '(internal / allowlist / external-unbounded) : the worst zone among to, cc and bcc. Attachments ' +
+      'and scheduling are refused. Backed by POST /emails.',
     inputSchema: {
       type: 'object',
       properties: { ...SINGLE_EMAIL_PROPS },
@@ -371,16 +381,12 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
       required: ['segment_id', 'id'],
     },
   },
-  {
-    name: 'resend__describe_zones',
-    description:
-      'Return the recipient-zone configuration (internal_domains, allowlist_domains, allowlist_addresses) ' +
-      'of every sending domain of the mission. Synthetic : no upstream call.',
-    inputSchema: { type: 'object', properties: {} },
-  },
 ];
 
 export const resendTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS];
+
+/** The names of the declared tools. */
+export const RESEND_TOOL_NAMES: ReadonlySet<string> = new Set(resendTools.map((t) => t.name));
 
 export const RESEND_WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(WRITE_TOOLS.map((t) => t.name));
 

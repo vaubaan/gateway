@@ -230,7 +230,12 @@ export const AMBIGUOUS_RAILWAY_TARGET = 'ambiguous railway target: specify proje
 /**
  * What a project-scoped call runs on, as `classify` and `execute` both read
  * it. Every id went through `railwayId` ; `project` is a resource of the
- * mission and `environmentId`, when given, one of its discovered environments.
+ * mission, and `environmentId` and `serviceId`, when given, are one of its
+ * discovered environments and one of its discovered services.
+ *
+ * `deploymentId` is the exception : a deployment cannot be listed ahead of the
+ * call, so it is held to the id grammar only and Railway decides what the
+ * token may read of it (threat model, accepted risk A18).
  */
 export interface RailwayTarget {
   readonly project: Resource;
@@ -260,8 +265,9 @@ export function resolveTarget(
   const environment = readEnvironment(tool, args, project);
   if ('denied' in environment) return environment;
 
-  const serviceId = optionalId(args.serviceId, 'serviceId');
-  if (typeof serviceId === 'object' && serviceId !== null) return serviceId;
+  const service = readService(args, project);
+  if ('denied' in service) return service;
+  const serviceId = service.id;
   const deploymentId = optionalId(args.deploymentId, 'deploymentId');
   if (typeof deploymentId === 'object' && deploymentId !== null) return deploymentId;
 
@@ -296,6 +302,67 @@ export function environmentsOf(resource: Resource): readonly RailwayEnvironmentR
     }
   }
   return out;
+}
+
+/** `{ id, name }` pairs the discovery stores under `metadata.services`. */
+export interface RailwayServiceRef {
+  readonly id: string;
+  readonly name: string;
+}
+
+/**
+ * The discovered services of a project resource ; `null` when the resource carries no
+ * list at all (it was discovered before services were recorded), which is not the same
+ * as a project with no service.
+ */
+export function servicesOf(resource: Resource): readonly RailwayServiceRef[] | null {
+  const raw = resource.metadata?.services;
+  if (!Array.isArray(raw)) return null;
+  const out: RailwayServiceRef[] = [];
+  for (const item of raw) {
+    if (
+      typeof item === 'object' &&
+      item !== null &&
+      typeof (item as { id?: unknown }).id === 'string' &&
+      typeof (item as { name?: unknown }).name === 'string'
+    ) {
+      out.push({ id: (item as { id: string }).id, name: (item as { name: string }).name });
+    }
+  }
+  return out;
+}
+
+/**
+ * Read `serviceId` and bind it to the located project, as `readEnvironment` binds the
+ * environment. The id is sent upstream and the OAuth token reaches every project of
+ * the workspace : a service the project does not own would scope the call — a
+ * redeploy, a variable write, the upstream agent's context — outside the mission
+ * while the slice names the mission's project. `id` is `null` when the call names
+ * no service.
+ */
+function readService(
+  args: Readonly<Record<string, unknown>>,
+  project: Resource,
+): { readonly id: string | null } | Denial {
+  if (args.serviceId === undefined) return { id: null };
+  const serviceId = railwayId(args.serviceId);
+  if (serviceId === null) return { denied: 'serviceId: malformed ref.' };
+  const known = servicesOf(project);
+  if (known === null) {
+    return {
+      denied:
+        `serviceId: the services of railway project '${project.ref}' are unknown ; ` +
+        `ask the connection owner to refresh the resources of the connection.`,
+    };
+  }
+  if (!known.some((service) => service.id === serviceId)) {
+    return {
+      denied:
+        `serviceId: not a service of railway project '${project.ref}' as last discovered ; ` +
+        `a service created since then appears once the connection owner refreshes the resources.`,
+    };
+  }
+  return { id: serviceId };
 }
 
 /** The mission's Railway project the call targets : explicit, single, or found by environment. */

@@ -8,7 +8,12 @@
 import { describe, expect, test } from 'vitest';
 
 import { UpstreamAuthError, type ExecuteContext, type Resource } from '@vaubaan/plugin-sdk';
-import { mockFetch, type MockFetch, type RecordedCall } from '@vaubaan/plugin-sdk/testing';
+import {
+  mockFetch,
+  type MockFetch,
+  type RecordedCall,
+  refusalText,
+} from '@vaubaan/plugin-sdk/testing';
 
 import { stripePlugin } from '../../src/index.ts';
 
@@ -243,9 +248,9 @@ describe('execute — only declared arguments reach Stripe', () => {
   test('a path id that is missing or made of dots never becomes a collection endpoint', async () => {
     for (const id of [undefined, '', '.', '..', 42]) {
       const fetch = mockFetch([]);
-      await expect(
-        stripePlugin.execute(ctx(fetch), 'stripe__update_subscription', { id }),
-      ).rejects.toThrow('stripe: id: missing or malformed');
+      expect(
+        await refusalText(stripePlugin.execute(ctx(fetch), 'stripe__update_subscription', { id })),
+      ).toMatch('stripe: id: missing or malformed');
       expect(fetch.calls).toHaveLength(0);
     }
   });

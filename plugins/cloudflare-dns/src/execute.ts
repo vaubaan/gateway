@@ -28,6 +28,7 @@
  */
 
 import {
+  ExecutorRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
   expectCredentialKind,
@@ -56,18 +57,6 @@ const DISCOVERY_PAGE_SIZE = 50;
 
 /** Credential field holding the API token. */
 export const API_TOKEN_FIELD = 'api_token';
-
-/**
- * A call this executor declines itself : nothing failed at the provider. The
- * only error `executeCloudflareDns` turns into an `isError` result ; everything
- * else it lets through, so the host records a provider failure as one.
- */
-class ExecutorRefusal extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ExecutorRefusal';
-  }
-}
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type Args = Readonly<Record<string, unknown>>;

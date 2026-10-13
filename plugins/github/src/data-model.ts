@@ -48,7 +48,7 @@ export const githubDataModel: DataModel = {
           envScopable: true,
           description:
             'A named ref (branch). Acts as the *env* for files and commits ' +
-            '(spec §2.1) : `branch[main]` ≠ `branch[feature/x]`. Cardinality ' +
+            '(risk-model spec §2.3) : `branch[main]` ≠ `branch[feature/x]`. Cardinality ' +
             'emerges from the selector — `[main]` is `one`, `[feature/*]` is ' +
             '`unbounded`.',
         },

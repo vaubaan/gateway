@@ -43,6 +43,7 @@
  */
 
 import {
+  ExecutorRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
   type ConnectionContext,
@@ -67,18 +68,6 @@ export const REDACTED_DATABASE_FIELDS: readonly string[] = [
   'read_only_rest_token',
   'password',
 ];
-
-/**
- * A call this executor declines itself : nothing failed at the provider. The
- * only error `executeUpstashRedis` turns into an `isError` result ; everything
- * else it lets through, so the host records a provider failure as one.
- */
-class ExecutorRefusal extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'ExecutorRefusal';
-  }
-}
 
 /** What one upstream call needs, built from the context. */
 interface UpstashCall {

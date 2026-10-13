@@ -401,6 +401,11 @@ export async function discoverRailwayResources(
             id: e.node.id,
             name: e.node.name,
           })),
+          // What a `serviceId` is bound to (`readService`) : always a list, empty included.
+          services: (node.services?.edges ?? []).map((e) => ({
+            id: e.node.id,
+            name: e.node.name,
+          })),
         },
       });
     }
@@ -418,6 +423,14 @@ const PROJECTS_QUERY = /* GraphQL */ `
           id
           name
           environments {
+            edges {
+              node {
+                id
+                name
+              }
+            }
+          }
+          services {
             edges {
               node {
                 id
@@ -444,6 +457,9 @@ interface ProjectsPage {
         readonly environments?: {
           readonly edges: ReadonlyArray<{ readonly node: { id: string; name: string } }>;
         } | null;
+        readonly services?: {
+          readonly edges: ReadonlyArray<{ readonly node: { id: string; name: string } }>;
+        } | null;
       };
     }>;
     readonly pageInfo?: { readonly hasNextPage: boolean; readonly endCursor: string | null } | null;
@@ -457,8 +473,8 @@ interface ProjectsPage {
  * call they deny is refused. Account-level tools name no resource of the
  * mission and are forwarded as received.
  *
- * A call that names no project the mission can resolve is thrown, as it
- * always was ; every other denial is a refusal the agent reads.
+ * Every denial is a refusal the agent reads, a call that names no project the
+ * mission can resolve included : nothing was sent, so nothing failed upstream.
  */
 function pinTarget(
   tool: string,
@@ -473,7 +489,7 @@ function pinTarget(
   const target = resolveTarget(tool, args, resources);
   if ('denied' in target) {
     if (target.denied === NO_RAILWAY_PROJECT || target.denied === AMBIGUOUS_RAILWAY_TARGET) {
-      throw new Error(`projectId: argument required (${target.denied})`);
+      return { refused: `projectId: argument required (${target.denied})` };
     }
     return { refused: target.denied };
   }

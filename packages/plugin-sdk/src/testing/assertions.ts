@@ -17,6 +17,7 @@ import {
 } from '@vaubaan/policy-engine';
 import {
   isExplicitRiskId,
+  type McpToolResult,
   type Resource,
   type RiskCatalog,
   type RiskId,
@@ -270,4 +271,20 @@ export function declaredOnly(
   if (!declaration) throw new Error(`declaredOnly: '${tool}' is not a tool of this plugin`);
   const names = new Set(Object.keys(declaration.inputSchema.properties ?? {}));
   return Object.fromEntries(Object.entries(args).filter(([key]) => names.has(key)));
+}
+
+/**
+ * The reason of a call the executor declined : awaits `execute`, requires an
+ * `isError` result (a throw would be a provider failure, and fails the test as
+ * one) and returns its text.
+ */
+export async function refusalText(run: Promise<McpToolResult>): Promise<string> {
+  const result = await run;
+  if (result.isError !== true) {
+    throw new PluginAssertionError('expected the executor to decline the call', [
+      `got a result without isError: ${JSON.stringify(result.content).slice(0, 200)}`,
+    ]);
+  }
+  const [first] = result.content;
+  return first?.type === 'text' ? first.text : '';
 }

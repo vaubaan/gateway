@@ -17,7 +17,7 @@ const { catalog, indexed } = resendCatalog;
 const touched = (raw: string) => risksTouchedBy(parseSlice(raw), indexed);
 
 describe('resend risk-catalog — shape', () => {
-  test('18 entries : 15 live named risks + 1 fallback + 2 deprecated ids, version 2', () => {
+  test('18 entries : 15 live named risks + 1 fallback + 2 deprecated ids, version 3', () => {
     expect(catalog.provider).toBe('resend');
     expect(catalog.catalog_version).toBe(3);
     expect(catalog.risks).toHaveLength(18);

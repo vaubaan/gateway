@@ -16,7 +16,7 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
+import { mockFetch, type MockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyGithub } from '../../src/classify.ts';
 import { installationTokenFor } from '../../src/credential.ts';
@@ -374,8 +374,9 @@ async function run(
 ): Promise<{ fetch: MockFetch; failed: boolean }> {
   const fetch = openFetch();
   try {
-    await githubPlugin.execute(executeCtx(fetch), tool, args);
-    return { fetch, failed: false };
+    // Declined by the executor (an `isError` result) or failed at the provider (a throw).
+    const result = await githubPlugin.execute(executeCtx(fetch), tool, args);
+    return { fetch, failed: result.isError === true };
   } catch {
     return { fetch, failed: true };
   }
@@ -604,9 +605,9 @@ describe('identifier positions — more refusals, by classify and by execute ali
     ]) {
       expect(classifyGithub('github__list_branches', args, odd)).toHaveProperty('denied');
       const fetch = openFetch();
-      await expect(
+      await refusalText(
         githubPlugin.execute(executeCtx(fetch, odd), 'github__list_branches', args),
-      ).rejects.toThrow();
+      );
       expect(fetch.calls).toHaveLength(0);
     }
   });

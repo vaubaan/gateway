@@ -19,6 +19,7 @@ export * from './catalog-loader.ts';
 export * from './catalog-path.ts';
 export * from './arguments.ts';
 export * from './slices.ts';
+export * from './refusal.ts';
 export * from './env-of.ts';
 export * from './define-plugin.ts';
 export * from './registry.ts';

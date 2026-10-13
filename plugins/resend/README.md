@@ -71,16 +71,16 @@ each resource. A host that re-runs discovery must preserve those edits.
 e.g. `notifications.acme.com`); segment, membership and broadcast tools take
 `segment_id`. Sends take the domain from `from`.
 
-Reads (9): `get_email`, `list_domains`, `get_domain`, `list_segments`,
+Reads (10): `get_email`, `list_domains`, `get_domain`, `list_segments`,
 `get_segment`, `list_contacts`, `get_contact`, `list_broadcasts`,
-`get_broadcast`.
+`get_broadcast`, `describe_zones` (synthetic: returns the zone configuration
+of the mission's domains, without calling Resend).
 
-Writes (18): `send_email`, `send_batch_emails`, `create_domain`,
+Writes (17): `send_email`, `send_batch_emails`, `create_domain`,
 `update_domain`, `delete_domain`, `verify_domain`, `create_segment`,
 `delete_segment`, `create_contact`, `update_contact`, `delete_contact`,
 `add_contact_to_segment`, `remove_contact_from_segment`, `create_broadcast`,
-`update_broadcast`, `send_broadcast`, `delete_broadcast`, `describe_zones`
-(synthetic: returns the zone configuration of the mission's domains).
+`update_broadcast`, `send_broadcast`, `delete_broadcast`.
 
 Rules the classifier enforces, all `denied` (audited, never executed):
 

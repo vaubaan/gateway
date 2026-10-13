@@ -22,11 +22,11 @@ status: legacy
 
 ## 0. Vocabulaire
 
-| Terme              | Définition                                                          |
-|--------------------|---------------------------------------------------------------------|
-| venv               | Store de variables d'environnement par projet, persisté dans la table `project_env_vars` du Supabase Core. |
-| `project_env_vars` | Table Supabase : `{ project_id, key, encrypted_value, source, created_at, updated_at }`. |
-| `_to_venv`         | Suffixe de convention pour un tool qui **écrit** dans le store. Le tool retourne le nom de la clé, jamais la valeur. |
+| Terme              | Définition                                                                                                                                                     |
+| ------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| venv               | Store de variables d'environnement par projet, persisté dans la table `project_env_vars` du Supabase Core.                                                     |
+| `project_env_vars` | Table Supabase : `{ project_id, key, encrypted_value, source, created_at, updated_at }`.                                                                       |
+| `_to_venv`         | Suffixe de convention pour un tool qui **écrit** dans le store. Le tool retourne le nom de la clé, jamais la valeur.                                           |
 | `_from_venv`       | Suffixe de convention pour un tool qui **lit** depuis le store et pousse la valeur vers une destination externe. Le tool retourne un statut, jamais la valeur. |
 
 ## 1. Vision
@@ -133,11 +133,11 @@ service_role (déjà disponible dans le backend web) qui query
 
 ### 5.1 Producteurs (`_to_venv`)
 
-| Tool                                | Source                                    | Clé venv écrite                 |
-|-------------------------------------|-------------------------------------------|---------------------------------|
-| `supabase__service_role_to_venv`    | `GET /v1/projects/{ref}/api-keys` (PAT)   | `SUPABASE_SERVICE_ROLE_KEY`     |
-| `supabase__anon_key_to_venv`        | idem, filtre `name=anon`                  | `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
-| `railway__token_to_venv`            | API Railway (token projet)                | `RAILWAY_API_TOKEN`             |
+| Tool                             | Source                                  | Clé venv écrite                 |
+| -------------------------------- | --------------------------------------- | ------------------------------- |
+| `supabase__service_role_to_venv` | `GET /v1/projects/{ref}/api-keys` (PAT) | `SUPABASE_SERVICE_ROLE_KEY`     |
+| `supabase__anon_key_to_venv`     | idem, filtre `name=anon`                | `NEXT_PUBLIC_SUPABASE_ANON_KEY` |
+| `railway__token_to_venv`         | API Railway (token projet)              | `RAILWAY_API_TOKEN`             |
 
 **Réponse type :**
 
@@ -151,11 +151,11 @@ service_role (déjà disponible dans le backend web) qui query
 
 ### 5.2 Consommateurs (`_from_venv`)
 
-| Tool                              | Destination                                  | Paramètre                       |
-|-----------------------------------|----------------------------------------------|---------------------------------|
-| `vercel__upsert_env_from_venv`    | `POST api.vercel.com/v10/projects/{id}/env`  | `venv_key`, `project_id`, `target[]`, `type` |
-| `railway__set_variable_from_venv` | mutation `variableUpsert`                    | `venv_key`, `service_id`, `environment_id`   |
-| `supabase__set_secret_from_venv`  | `POST /v1/projects/{ref}/secrets`            | `venv_key`, `project_ref`       |
+| Tool                              | Destination                                 | Paramètre                                    |
+| --------------------------------- | ------------------------------------------- | -------------------------------------------- |
+| `vercel__upsert_env_from_venv`    | `POST api.vercel.com/v10/projects/{id}/env` | `venv_key`, `project_id`, `target[]`, `type` |
+| `railway__set_variable_from_venv` | mutation `variableUpsert`                   | `venv_key`, `service_id`, `environment_id`   |
+| `supabase__set_secret_from_venv`  | `POST /v1/projects/{ref}/secrets`           | `venv_key`, `project_ref`                    |
 
 **Réponse type :**
 
@@ -169,19 +169,19 @@ service_role (déjà disponible dans le backend web) qui query
 
 ### 5.3 Introspection & gestion
 
-| Tool              | Description                                                    |
-|-------------------|----------------------------------------------------------------|
-| `venv__list`      | Liste les clés du projet (noms + sources + dates, pas les valeurs). |
-| `venv__delete`    | Supprime une clé du store.                                     |
+| Tool           | Description                                                         |
+| -------------- | ------------------------------------------------------------------- |
+| `venv__list`   | Liste les clés du projet (noms + sources + dates, pas les valeurs). |
+| `venv__delete` | Supprime une clé du store.                                          |
 
 ### 5.4 Description MCP pour le LLM
 
 Chaque tool `_to_venv` et `_from_venv` porte dans sa `description`
 MCP une mention explicite :
 
-> *"The secret value is stored/read server-side in the project's
+> _"The secret value is stored/read server-side in the project's
 > venv store. It is NEVER returned in the tool response — only the
-> key name and status are surfaced."*
+> key name and status are surfaced."_
 
 Ceci garantit que le LLM ne tente pas de demander la valeur ou de
 la reconstruire.

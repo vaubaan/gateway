@@ -26,8 +26,10 @@
  */
 
 import {
+  ExecutorRefusal,
   UpstreamAuthError,
   UpstreamHttpError,
+  declining,
   expectCredentialKind,
   type ConnectionContext,
   type ExecuteContext,
@@ -49,7 +51,7 @@ import {
   segmentResources,
   zoneConfigOf,
 } from './resources.ts';
-import { EMAIL_FIELDS, declaredFieldsOf } from './tools.ts';
+import { EMAIL_FIELDS, RESEND_TOOL_NAMES, declaredFieldsOf } from './tools.ts';
 import { parseAddress } from './zones.ts';
 
 /** Public API of the provider — a fact about Resend, not instance configuration. */
@@ -84,19 +86,25 @@ interface BroadcastDto {
 }
 // ─── v5 entry points ──────────────────────────────────────────────────────────
 
-export async function executeResend(
+/**
+ * Everything the classifier denies, and every guard below that does not hold (a
+ * broadcast of another segment), is declined : an `isError` result, no request
+ * beyond the reads the guard itself needed, nothing failed at Resend.
+ */
+export function executeResend(
   ctx: ExecuteContext,
   tool: string,
   args: Args,
 ): Promise<McpToolResult> {
-  const outcome = classifyResend(tool, args, ctx.resources);
-  if ('denied' in outcome) {
-    if (outcome.denied.startsWith('unknown resend tool')) {
-      return { content: [{ type: 'text', text: outcome.denied }], isError: true };
+  return declining(async () => {
+    const outcome = classifyResend(tool, args, ctx.resources);
+    if ('denied' in outcome) {
+      throw new ExecutorRefusal(
+        RESEND_TOOL_NAMES.has(tool) ? `resend: ${outcome.denied}` : outcome.denied,
+      );
     }
-    throw new Error(`resend: ${outcome.denied}`);
-  }
-  return text(await dispatch(ctx, tool, args));
+    return text(await dispatch(ctx, tool, args));
+  });
 }
 
 async function dispatch(ctx: ExecuteContext, tool: string, args: Args): Promise<unknown> {
@@ -309,7 +317,8 @@ function forwarded(
 
 /** The bare array `POST /emails/batch` takes, each email reduced to its declared fields. */
 function batchBody(emails: unknown): Record<string, unknown>[] {
-  if (!Array.isArray(emails)) throw new Error('resend: emails: expected a list of emails');
+  if (!Array.isArray(emails))
+    throw new ExecutorRefusal('resend: emails: expected a list of emails');
   return emails.map((email: unknown) => pick(isRecord(email) ? email : {}, EMAIL_FIELDS));
 }
 
@@ -318,30 +327,30 @@ function batchBody(emails: unknown): Record<string, unknown>[] {
 /** The Resend id of a mission domain (one path segment), from the resource metadata discovery wrote. */
 function domainId(value: unknown, resources: readonly Resource[]): string {
   const target = resolveDomainArg(value, resources);
-  if ('denied' in target) throw new Error(`resend: ${target.denied}`);
+  if ('denied' in target) throw new ExecutorRefusal(`resend: ${target.denied}`);
   const id = domainIdOf(target.resource);
-  if ('denied' in id) throw new Error(`resend: ${id.denied}`);
+  if ('denied' in id) throw new ExecutorRefusal(`resend: ${id.denied}`);
   return id.id;
 }
 
 /** The ref of a mission segment : one path segment (`resolveSegmentArg` returns nothing else). */
 function segmentRef(value: unknown, resources: readonly Resource[]): string {
   const seg = resolveSegmentArg(value, resources);
-  if ('denied' in seg) throw new Error(`resend: ${seg.denied}`);
+  if ('denied' in seg) throw new ExecutorRefusal(`resend: ${seg.denied}`);
   return seg.resource.ref;
 }
 
 /** The `id` of an email or a broadcast as a path segment, read as the classifier read it. */
 function idSegment(value: unknown): string {
   const id = pathIdent(value);
-  if (id === null) throw new Error(`resend: ${MALFORMED_ID}`);
+  if (id === null) throw new ExecutorRefusal(`resend: ${MALFORMED_ID}`);
   return id;
 }
 
 /** A contact id or address as a path segment, read as the classifier read it. */
 function contactSegment(value: unknown): string {
   const contact = contactSelector(value);
-  if (contact === null) throw new Error(`resend: ${MALFORMED_CONTACT}`);
+  if (contact === null) throw new ExecutorRefusal(`resend: ${MALFORMED_CONTACT}`);
   return contact.segment;
 }
 
@@ -359,7 +368,7 @@ async function broadcastInSegment(ctx: ExecuteContext, args: Args): Promise<Broa
   )) as BroadcastDto;
   const actual = segmentOf(broadcast);
   if (actual !== seg) {
-    throw new Error(
+    throw new ExecutorRefusal(
       `resend: broadcast '${String(args.id)}' targets segment '${actual ?? 'unknown'}', not '${seg}'`,
     );
   }

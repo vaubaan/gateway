@@ -124,6 +124,7 @@ Twenty-eight terms, distinct and not interchangeable.
   optional, free-form **agent label**, copied into the audit to tell
   sub-agents apart. The label is declared by the caller and has no
   effect on authorization; the token holder is authenticated.
+
 - **Mission policy** — the table `RiskId → (budget, gate)` carried by
   the mission. The keys say **which actions** are authorized, the budget
   says **in what quantity**, the gate says **whether a human must
@@ -274,25 +275,25 @@ Instance                          (one company, one trust domain)
 
 ### 2.2 Definitions
 
-| Entity            | Short definition                                                                                                                                                                                  |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Instance**      | One deployment, one company. No internal tenant.                                                                                                                                                  |
-| **User**          | Human authenticated by the IdP. May own connections, belong to owner groups, receive shares, create missions.                                                                                     |
-| **Delegation**    | Authorization given by a user to an agent to act on their behalf on the management surface. Produces short-lived delegated tokens. Revocable by the user. Never executes, never answers requests. |
-| **Group**         | Owner of connections or target of shares. Never a mission creator. Membership resolved at each login from the IdP, or kept locally.                                                                |
-| **Connection**    | Provider authenticated by a user through the provider's flow. Holds the credentials. 1 owner, user or group. Several connections possible for one provider (two GitHub accounts).                 |
-| **Resource**      | A thing reachable through a connection, with a ref and an optional environment label. Discovered by the plugin, labelled by the owner.                                                             |
-| **Share**         | `(connection, target, restriction)`. Gives the target the right to accept, in their missions, a subset of the restriction. Revocable by the owner.                                                 |
-| **Restriction**   | Enumeration of `RiskId` from the catalog of the connection's provider. Upper bound, never a wildcard.                                                                                              |
-| **Mission**       | Named objective. Carries resources (a subset per connection), `accepted_risks`, budget, period, optional expiry, creator. Leaf of the authority chain: no parent or child mission.                 |
+| Entity             | Short definition                                                                                                                                                                                  |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Instance**       | One deployment, one company. No internal tenant.                                                                                                                                                  |
+| **User**           | Human authenticated by the IdP. May own connections, belong to owner groups, receive shares, create missions.                                                                                     |
+| **Delegation**     | Authorization given by a user to an agent to act on their behalf on the management surface. Produces short-lived delegated tokens. Revocable by the user. Never executes, never answers requests. |
+| **Group**          | Owner of connections or target of shares. Never a mission creator. Membership resolved at each login from the IdP, or kept locally.                                                               |
+| **Connection**     | Provider authenticated by a user through the provider's flow. Holds the credentials. 1 owner, user or group. Several connections possible for one provider (two GitHub accounts).                 |
+| **Resource**       | A thing reachable through a connection, with a ref and an optional environment label. Discovered by the plugin, labelled by the owner.                                                            |
+| **Share**          | `(connection, target, restriction)`. Gives the target the right to accept, in their missions, a subset of the restriction. Revocable by the owner.                                                |
+| **Restriction**    | Enumeration of `RiskId` from the catalog of the connection's provider. Upper bound, never a wildcard.                                                                                             |
+| **Mission**        | Named objective. Carries resources (a subset per connection), `accepted_risks`, budget, period, optional expiry, creator. Leaf of the authority chain: no parent or child mission.                |
 | **Mission member** | User given access to a mission by its creator. Uses it as it is; manages only their own token.                                                                                                    |
-| **Mission token** | Bearer presented to the gateway. Identifies one mission and one holder (a member, or a name given by the creator). Revealed once when generated. Rotated or revoked on its own.                    |
-| **Budget**        | Per accepted `RiskId`: quota per period, rate limit per sliding window. Mandatory for every accepted risk.                                                                                         |
-| **Session**       | History of the mission. Counters per `RiskId` and per period. Created on the first call, never recreated.                                                                                          |
-| **Event**         | Session entry: allowed call, refused call, request, extension, reset, approval, rotation, revocation.                                                                                              |
-| **Request**       | Claim (reset or extension) or approval request (one precise action), addressed to the creator. States: open, granted, refused, expired.                                                            |
-| **Approval**      | Creator's grant for one action: `(mission, RiskId, tool, argument fingerprint)`. Single-use, short-lived.                                                                                               |
-| **Audit**         | One entry per call and per administrative act. Append-only.                                                                                                                                       |
+| **Mission token**  | Bearer presented to the gateway. Identifies one mission and one holder (a member, or a name given by the creator). Revealed once when generated. Rotated or revoked on its own.                   |
+| **Budget**         | Per accepted `RiskId`: quota per period, rate limit per sliding window. Mandatory for every accepted risk.                                                                                        |
+| **Session**        | History of the mission. Counters per `RiskId` and per period. Created on the first call, never recreated.                                                                                         |
+| **Event**          | Session entry: allowed call, refused call, request, extension, reset, approval, rotation, revocation.                                                                                             |
+| **Request**        | Claim (reset or extension) or approval request (one precise action), addressed to the creator. States: open, granted, refused, expired.                                                           |
+| **Approval**       | Creator's grant for one action: `(mission, RiskId, tool, argument fingerprint)`. Single-use, short-lived.                                                                                         |
+| **Audit**          | One entry per call and per administrative act. Append-only.                                                                                                                                       |
 
 ### 2.3 States
 

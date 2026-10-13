@@ -1,5 +1,5 @@
 ---
-title: "[LEGACY v4] MCP Proxy — spec SaaS multi-tenant"
+title: '[LEGACY v4] MCP Proxy — spec SaaS multi-tenant'
 status: legacy
 superseded_by: vaubaan-gateway
 ---
@@ -27,8 +27,9 @@ superseded_by: vaubaan-gateway
 > bouton "Select all" qui énumère tous les risks applicables aux
 > bindings du projet. Un nouvel onglet **"Bootstrap"** sur la Project
 > page sert les 3 snippets (`.env.local`, `.mcp.json`, bloc `CLAUDE.md`)
-> + un curl de vérif. Cf. §12.4 "Bootstrap kit après mint" + amendement
-> ADR [[unified-tokens-delegation-chain-and-escalation-channel]] §2026-06-19.
+>
+> - un curl de vérif. Cf. §12.4 "Bootstrap kit après mint" + amendement
+>   ADR [[unified-tokens-delegation-chain-and-escalation-channel]] §2026-06-19.
 >
 > **⚠️ Note 2026-06-16 — Unified tokens (4ème évolution) :**
 > Le couple `org_management_keys` (`vbn_mgmt_*`) + `access_tokens`
@@ -48,7 +49,7 @@ superseded_by: vaubaan-gateway
 >
 > **⚠️ Note 2026-06-15 — Capabilities → Risk-based (3ème évolution) :**
 > Le modèle **capabilities** introduit en 2026-06-08 (tuple `(provider,
-> plane, level, action, env?)`) est **remplacé** par le **modèle
+plane, level, action, env?)`) est **remplacé** par le **modèle
 > risk-based**. Le token ne porte plus une liste de capabilities ; il
 > porte une liste de **risques acceptés** (`accepted_risks: RiskId[]`)
 > qualifiée par binding. Chaque provider déclare désormais : (a) un
@@ -137,7 +138,7 @@ Le MCP Gateway raisonne sur ces termes (modèle risk-based — cf.
   le classifieur au call (`github.repo[acme/app].branch[main].W`). Jamais
   dans le wire utilisateur — purement plomberie entre plugin et runtime.
 - **RiskCatalog** — fichier YAML par provider (`packages/providers/<vendor>/
-  src/risk-catalog.yaml`) listant les `RiskEntry` avec leur `matches` (slice
+src/risk-catalog.yaml`) listant les `RiskEntry` avec leur `matches` (slice
   pattern), `vector` (6D), `acceptable_in_envs` (optionnel, garde-fou
   structurel). Décision binaire `risk ∈ accepted_risks` au runtime (cf.
   ADR [[unified-gates-drop-confirm]]).
@@ -147,8 +148,8 @@ Le MCP Gateway raisonne sur ces termes (modèle risk-based — cf.
   args_hash, slices_executed, risks_touched, token_accepted_risks_snapshot,
   decision, upstream_latency).
 
-**Distinction clé :** Vaubaan ne *distribue* plus de credentials cloud. Vaubaan
-*intermédie* des calls MCP. L'agent ne reçoit jamais de token provider ;
+**Distinction clé :** Vaubaan ne _distribue_ plus de credentials cloud. Vaubaan
+_intermédie_ des calls MCP. L'agent ne reçoit jamais de token provider ;
 il ne reçoit que la réponse à un call autorisé.
 
 ## 1. Vision
@@ -163,21 +164,21 @@ Le **MCP Proxy** est le sous-système de Vaubaan Core qui :
 3. **Émet des Bots** — identités agent project-scoped, porteuses d'une
    `api_key` Vaubaan et de N Roles.
 4. **Filtre** chaque MCP call d'un agent : `auth(api_key) → load(roles,
-   bindings, provider_admin) → policy(tool, args) → mint(ephemeral_upstream_token)
-   → forward(upstream_mcp_server)`.
+bindings, provider_admin) → policy(tool, args) → mint(ephemeral_upstream_token)
+→ forward(upstream_mcp_server)`.
 5. **Audit** chaque call (allow ou deny) avec qui/quoi/décision/latence.
 
 Le MCP Proxy vit dans le cloud public (Vaubaan Core, Next.js + Supabase +
 Vercel) et est multi-tenant.
 
-**Positionnement** : *"policy-enforcing MCP gateway pour Coding Agents"*.
+**Positionnement** : _"policy-enforcing MCP gateway pour Coding Agents"_.
 Pas de concurrent direct (Composio / Arcade.dev s'en approchent, Cloudflare
 AI Gateway le fait pour LLM APIs).
 
 **Pas un secret manager.** Si une équipe a besoin d'un SM séparé pour ses
 devs humains, elle utilise Infisical / Vault / 1Password à côté. Vaubaan
-détient *uniquement* les creds provider que l'org admin lui confie via
-OAuth, et *uniquement* pour le router des calls MCP.
+détient _uniquement_ les creds provider que l'org admin lui confie via
+OAuth, et _uniquement_ pour le router des calls MCP.
 
 ### 1.1 Hors-scope explicite
 
@@ -225,19 +226,19 @@ AuditLog (transversal)     one row per MCP call : (access_token, tool, args_hash
 
 ### 2.2 Définitions
 
-| Entité              | Définition courte                                                                                                                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| **User**            | Compte humain Vaubaan. Auth Supabase (magic-link + Google OAuth). Peut appartenir à plusieurs Organizations.                                |
-| **Organization**    | Tenant racine. Isolation RLS stricte.                                                                                                      |
-| **Project**         | Sous-unité d'une Org. Porte ses ProviderBindings et ses AccessTokens.                                                                      |
-| **CloudProvider**   | SaaS supporté. Statique. Identifié par string (`github`, `vercel`, `supabase`).                                                            |
-| **ProviderAdmin**   | Bundle de credentials que Vaubaan détient au niveau Org pour un Provider, issu d'un flow OAuth/App install. 1 par (org, provider).          |
-| **ProviderBinding** | Référence concrète d'un Project vers une ressource côté Provider. 1 par (project, provider).                                               |
-| **Role**            | Bundle nommé de permissions, **provider-scoped**, naming `<provider>:<role-name>`. Builtin v1 = `github:reader`, `github:developer`.       |
+| Entité              | Définition courte                                                                                                                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **User**            | Compte humain Vaubaan. Auth Supabase (magic-link + Google OAuth). Peut appartenir à plusieurs Organizations.                                                                                                                                                              |
+| **Organization**    | Tenant racine. Isolation RLS stricte.                                                                                                                                                                                                                                     |
+| **Project**         | Sous-unité d'une Org. Porte ses ProviderBindings et ses AccessTokens.                                                                                                                                                                                                     |
+| **CloudProvider**   | SaaS supporté. Statique. Identifié par string (`github`, `vercel`, `supabase`).                                                                                                                                                                                           |
+| **ProviderAdmin**   | Bundle de credentials que Vaubaan détient au niveau Org pour un Provider, issu d'un flow OAuth/App install. 1 par (org, provider).                                                                                                                                        |
+| **ProviderBinding** | Référence concrète d'un Project vers une ressource côté Provider. 1 par (project, provider).                                                                                                                                                                              |
+| **Role**            | Bundle nommé de permissions, **provider-scoped**, naming `<provider>:<role-name>`. Builtin v1 = `github:reader`, `github:developer`.                                                                                                                                      |
 | **AccessToken**     | Identité project-scoped, porteur de N Roles, identifiée par une `api_key` Vaubaan (`vbn_live_xxxx…`). Usager agnostique (agent/script/humain). Optionnellement TTL via `expires_at`. N'importe quel `vbn_live_*` peut mint un child token via `POST /api/v1/tokens/mint`. |
-| **Policy**          | Règle dans `Role.permissions.rules[]` : `{effect, tool/tool_matches, target?, constraints?, priority?}`.                                   |
-| **MCPGateway**      | Endpoint Vaubaan `/mcp` en JSON-RPC. Auth via `Authorization: Bearer <api_key>`. C'est le hot-path produit.                                  |
-| **AuditLog**        | Une row par MCP call : qui/quoi/décision/latence. Append-only via app, rétention 90j.                                                       |
+| **Policy**          | Règle dans `Role.permissions.rules[]` : `{effect, tool/tool_matches, target?, constraints?, priority?}`.                                                                                                                                                                  |
+| **MCPGateway**      | Endpoint Vaubaan `/mcp` en JSON-RPC. Auth via `Authorization: Bearer <api_key>`. C'est le hot-path produit.                                                                                                                                                               |
+| **AuditLog**        | Une row par MCP call : qui/quoi/décision/latence. Append-only via app, rétention 90j.                                                                                                                                                                                     |
 
 ### 2.3 L'invariant transverse — "l'agent ne voit jamais de cred provider"
 
@@ -257,7 +258,7 @@ AuditLog (transversal)     one row per MCP call : (access_token, tool, args_hash
 - L'agent reçoit la réponse MCP du provider (qui peut contenir des données :
   contenu de fichier, status de PR…) mais **jamais** un token utilisable
   hors du gateway.
-- Si un Bot exfiltre son `api_key`, l'attaquant n'obtient *que* les droits
+- Si un Bot exfiltre son `api_key`, l'attaquant n'obtient _que_ les droits
   de ce Bot (révocable instantanément). Aucun cred long-lived côté Provider
   n'est compromis.
 
@@ -416,7 +417,7 @@ suppression depuis `org_members` (transfert préalable via
 | `provider_admins`    |   RW   |  RW   |
 | `projects`           |   RW   |  RW   |
 | `provider_bindings`  |   RW   |  RW   |
-| `roles`              |   RW²  |  RW²  |
+| `roles`              |  RW²   |  RW²  |
 | `access_tokens`      |   RW   |  RW   |
 | `access_token_roles` |   RW   |  RW   |
 | `audit_log`          |   R    |   R   |
@@ -439,10 +440,10 @@ gateway le lit, avec un service_role key séparé.
 Pour qu'un porteur d'AccessToken exécute un appel upstream, **deux gates
 indépendantes** doivent être franchies :
 
-| Plan              | Mécanisme                                       | Tenu par           | Bloque…                              |
-| ----------------- | ----------------------------------------------- | ------------------ | ------------------------------------ |
-| **Plan Auth**     | Auth `api_key` de l'AccessToken                 | Gateway Vaubaan    | l'authentification du porteur        |
-| **Plan Policy**   | Évaluation des Roles attachés à l'AccessToken   | Policy engine      | l'autorisation de l'appel            |
+| Plan            | Mécanisme                                     | Tenu par        | Bloque…                       |
+| --------------- | --------------------------------------------- | --------------- | ----------------------------- |
+| **Plan Auth**   | Auth `api_key` de l'AccessToken               | Gateway Vaubaan | l'authentification du porteur |
+| **Plan Policy** | Évaluation des Roles attachés à l'AccessToken | Policy engine   | l'autorisation de l'appel     |
 
 Si l'`api_key` est invalide → 401. Si les Roles n'autorisent pas
 le `(tool, args)` → JSON-RPC error avec `denial_reason` actionable.
@@ -504,11 +505,11 @@ passent par lui.
 
 À chaque call autorisé, le gateway génère un token éphémère côté Provider :
 
-| Provider  | Mint                                                                 | Cache Redis  |
-| --------- | -------------------------------------------------------------------- | ------------ |
-| GitHub    | `POST /app/installations/{id}/access_tokens` signé JWT (privkey App) | 50min        |
-| Vercel    | use `access_token_encrypted` direct                                  | 60s          |
-| Supabase  | si `expires_at - now < 5min` → refresh dance ; sinon use access      | jusqu'à exp  |
+| Provider | Mint                                                                 | Cache Redis |
+| -------- | -------------------------------------------------------------------- | ----------- |
+| GitHub   | `POST /app/installations/{id}/access_tokens` signé JWT (privkey App) | 50min       |
+| Vercel   | use `access_token_encrypted` direct                                  | 60s         |
+| Supabase | si `expires_at - now < 5min` → refresh dance ; sinon use access      | jusqu'à exp |
 
 Le token est utilisé pour le call upstream et **libéré immédiatement** de
 mémoire après la réponse (pas de cache en clair persistant).
@@ -550,7 +551,10 @@ interface ProviderAdapter {
   mintUpstreamToken(admin: ProviderAdmin): Promise<{ token: string; expiresAt: Date }>;
 
   /** Valide qu'un resource_ref est accessible avec l'admin de l'org. */
-  validateBinding(admin: ProviderAdmin, resourceRef: string): Promise<{ ok: boolean; displayName?: string; error?: string }>;
+  validateBinding(
+    admin: ProviderAdmin,
+    resourceRef: string,
+  ): Promise<{ ok: boolean; displayName?: string; error?: string }>;
 
   /** Liste des tools MCP exposés par ce provider (pour `tools/list`). */
   readonly availableTools: readonly McpToolDeclaration[];
@@ -606,13 +610,9 @@ Read-only.
     {
       "effect": "allow",
       "target": "project.repos",
-      "tool_matches": [
-        "github__list_*",
-        "github__get_*",
-        "github__search_*"
-      ]
-    }
-  ]
+      "tool_matches": ["github__list_*", "github__get_*", "github__search_*"],
+    },
+  ],
 }
 ```
 
@@ -628,23 +628,23 @@ vers `main` depuis ces branches. Pas de merge, pas de delete.
     {
       "effect": "allow",
       "target": "project.repos",
-      "tool_matches": ["github__list_*", "github__get_*", "github__search_*"]
+      "tool_matches": ["github__list_*", "github__get_*", "github__search_*"],
     },
     {
       "effect": "allow",
       "target": "project.repos",
       "tool_matches": ["github__create_or_update_file", "github__push_files"],
       "constraints": {
-        "arguments.branch": { "match": ["feature/*", "fix/*", "claude/*"] }
-      }
+        "arguments.branch": { "match": ["feature/*", "fix/*", "claude/*"] },
+      },
     },
     {
       "effect": "allow",
       "target": "project.repos",
       "tool": "github__create_branch",
       "constraints": {
-        "arguments.branch": { "match": ["feature/*", "fix/*", "claude/*"] }
-      }
+        "arguments.branch": { "match": ["feature/*", "fix/*", "claude/*"] },
+      },
     },
     {
       "effect": "allow",
@@ -652,10 +652,10 @@ vers `main` depuis ces branches. Pas de merge, pas de delete.
       "tool": "github__create_pull_request",
       "constraints": {
         "arguments.head": { "match": ["feature/*", "fix/*", "claude/*"] },
-        "arguments.base": { "equals": "main" }
-      }
-    }
-  ]
+        "arguments.base": { "equals": "main" },
+      },
+    },
+  ],
 }
 ```
 
@@ -684,9 +684,9 @@ du member — multi-role = union d'allows).
     {
       "effect": "allow",
       "target": "*",
-      "tool_matches": ["railway__whoami", "railway__list-*", "railway__get-*"]
-    }
-  ]
+      "tool_matches": ["railway__whoami", "railway__list-*", "railway__get-*"],
+    },
+  ],
 }
 ```
 
@@ -701,14 +701,14 @@ depuis 0009).
     {
       "effect": "allow",
       "target": "*",
-      "tool_matches": ["railway__whoami", "railway__list-*", "railway__get-*"]
+      "tool_matches": ["railway__whoami", "railway__list-*", "railway__get-*"],
     },
     {
       "effect": "allow",
       "target": "*",
-      "tool_matches": ["railway__create-project", "railway__redeploy", "railway__railway-agent"]
-    }
-  ]
+      "tool_matches": ["railway__create-project", "railway__redeploy", "railway__railway-agent"],
+    },
+  ],
 }
 ```
 
@@ -728,10 +728,10 @@ depuis 0009).
         "railway__whoami",
         "railway__list-*",
         "railway__get-*",
-        "railway__accept-deploy"
-      ]
-    }
-  ]
+        "railway__accept-deploy",
+      ],
+    },
+  ],
 }
 ```
 
@@ -750,10 +750,10 @@ sur les repos du Project. **Ne pas assigner à des humains.** Cf. ADR
       "effect": "allow",
       "tool": "github__mint_install_token",
       "constraints": {
-        "arguments.purpose": { "equals": "clone" }
-      }
-    }
-  ]
+        "arguments.purpose": { "equals": "clone" },
+      },
+    },
+  ],
 }
 ```
 
@@ -801,8 +801,8 @@ type Constraint =
   | { equals: string | number | boolean }
   | { in: (string | number)[] }
   | { not_in: (string | number)[] }
-  | { match: string[] }              // glob (minimatch)
-  | { regex: string }                // RegExp
+  | { match: string[] } // glob (minimatch)
+  | { regex: string } // RegExp
   | { starts_with: string | string[] }
   | { not_starts_with: string | string[] };
 ```
@@ -858,7 +858,7 @@ type Constraint =
 
 Le message doit être **actionable** pour que l'agent (Claude Code, Cursor,
 etc.) puisse se corriger seul. C'est un signal différenciant fort — le
-proxy devient un *trainer*, pas juste un mur.
+proxy devient un _trainer_, pas juste un mur.
 
 ```json
 {
@@ -878,12 +878,12 @@ Forme générique : `{policy_origin}: {what_failed}. {allowed_or_constraint}. {s
 Les rules peuvent référencer des targets abstraits qui résolvent via les
 `provider_bindings` du Project du Bot :
 
-| Target              | Résolution                                                |
-| ------------------- | --------------------------------------------------------- |
-| `project.repos`     | `[binding.resource_ref]` du provider_binding 'github'     |
-| `project.vercel`    | `[binding.resource_ref]` du provider_binding 'vercel'     |
-| `project.supabase`  | `[binding.resource_ref]` du provider_binding 'supabase'   |
-| `*`                 | wildcard, matche n'importe quel target                     |
+| Target             | Résolution                                              |
+| ------------------ | ------------------------------------------------------- |
+| `project.repos`    | `[binding.resource_ref]` du provider_binding 'github'   |
+| `project.vercel`   | `[binding.resource_ref]` du provider_binding 'vercel'   |
+| `project.supabase` | `[binding.resource_ref]` du provider_binding 'supabase' |
+| `*`                | wildcard, matche n'importe quel target                  |
 
 Le check target se fait sur les arguments du call. Pour GitHub : on construit
 `<arguments.owner>/<arguments.repo>` et on vérifie qu'il est dans la liste
@@ -894,15 +894,15 @@ Un call dont les arguments ne correspondent à aucun binding résolu → **deny 
 
 ### 6.5 Opérateurs
 
-| Op                  | Sémantique                                                   |
-| ------------------- | ------------------------------------------------------------ |
-| `equals: x`         | `String(value) === String(x)`                                |
-| `in: [...]`         | `[...].map(String).includes(String(value))`                  |
-| `not_in: [...]`     | `!in([...])`                                                 |
-| `match: [...]`      | OR sur `minimatch(value, pattern)` pour chaque pattern       |
-| `regex: '...'`      | `new RegExp(pattern).test(value)`                            |
-| `starts_with: x`    | `value.startsWith(x)` ; si array, OR                         |
-| `not_starts_with`   | l'opposé                                                     |
+| Op                | Sémantique                                             |
+| ----------------- | ------------------------------------------------------ |
+| `equals: x`       | `String(value) === String(x)`                          |
+| `in: [...]`       | `[...].map(String).includes(String(value))`            |
+| `not_in: [...]`   | `!in([...])`                                           |
+| `match: [...]`    | OR sur `minimatch(value, pattern)` pour chaque pattern |
+| `regex: '...'`    | `new RegExp(pattern).test(value)`                      |
+| `starts_with: x`  | `value.startsWith(x)` ; si array, OR                   |
+| `not_starts_with` | l'opposé                                               |
 
 Tous les checks string-coerce les valeurs avant comparaison. Les valeurs
 manquantes (`undefined` dans `arguments`) matchent à `false` sur tous les
@@ -964,7 +964,7 @@ Cette dichotomie garantit que `callable: true` dans le catalog
 
 MCP supporte des responses streamées (Server-Sent Events) pour les outputs
 longs (logs de deploy, listings volumineux). Le gateway forwarde le stream
-upstream sans modification — la policy a déjà été évaluée *avant* le
+upstream sans modification — la policy a déjà été évaluée _avant_ le
 start du stream.
 
 ### 7.4 Dispatch upstream (Option A — synthèse)
@@ -984,7 +984,7 @@ mapping et les error cases.
 
 Si l'appel upstream échoue (rate limit, network, 5xx provider), le gateway :
 
-- Audit la row avec `decision: 'allowed'` (le call a été *autorisé*, juste
+- Audit la row avec `decision: 'allowed'` (le call a été _autorisé_, juste
   pas exécuté avec succès) + `denial_reason: null` + `upstream_latency_ms`
 - Renvoie une JSON-RPC error -32603 avec le message du provider passé
   intact (sauf si secret leakage suspect → strip)
@@ -1044,7 +1044,7 @@ Forme de la réponse (mode `live`) :
   l'`environment` du binding (null si la ressource n'est pas calquée par
   env, cf. capability-model §4). C'est l'**unique** source de discovery
   des refs amont — sans ce champ, l'agent n'a aucun moyen d'apprendre le
-  ref qu'il doit citer (chicken-and-egg : le gateway *valide* le ref mais
+  ref qu'il doit citer (chicken-and-egg : le gateway _valide_ le ref mais
   ne le divulguait pas).
 - `callable` matche **exactement** ce que `tools/list` retourne — même
   prédicat `isToolPotentiallyCallable` (§7.2). Un tool listé `callable: true`
@@ -1321,20 +1321,20 @@ amendement 2026-06-19) — un root token est minté via l'UI Project page
 
 **2 rôles au niveau Organization** : `member`, `admin`.
 
-| Action                                           | member | admin |
-| ------------------------------------------------ | :----: | :---: |
-| Read Org / Members / Projects / Bots / Audit     |   ✅   |  ✅   |
-| Create Project                                   |   ✅   |  ✅   |
-| Edit/Delete own Project                          |   ✅   |  ✅   |
-| Edit/Delete any Project                          |   ❌   |  ✅   |
-| Connect/Revoke ProviderAdmin                     |   ❌   |  ✅   |
-| Create/Edit/Delete ProviderBinding               |   ❌   |  ✅   |
-| Create Custom Role (v2)                          |   ❌   |  ✅   |
-| Create/Edit Bot, toggle Bot roles                |   ❌   |  ✅   |
-| Rotate Bot api_key                               |   ❌   |  ✅   |
-| Invite/Remove Member                             |   ❌   |  ✅   |
-| Read Audit Log (own bots only)                   |   ✅   |  -    |
-| Read Audit Log (all bots of org)                 |   ❌   |  ✅   |
+| Action                                       | member | admin |
+| -------------------------------------------- | :----: | :---: |
+| Read Org / Members / Projects / Bots / Audit |   ✅   |  ✅   |
+| Create Project                               |   ✅   |  ✅   |
+| Edit/Delete own Project                      |   ✅   |  ✅   |
+| Edit/Delete any Project                      |   ❌   |  ✅   |
+| Connect/Revoke ProviderAdmin                 |   ❌   |  ✅   |
+| Create/Edit/Delete ProviderBinding           |   ❌   |  ✅   |
+| Create Custom Role (v2)                      |   ❌   |  ✅   |
+| Create/Edit Bot, toggle Bot roles            |   ❌   |  ✅   |
+| Rotate Bot api_key                           |   ❌   |  ✅   |
+| Invite/Remove Member                         |   ❌   |  ✅   |
+| Read Audit Log (own bots only)               |   ✅   |   -   |
+| Read Audit Log (all bots of org)             |   ❌   |  ✅   |
 
 Pas de granularité fine par-resource. La granularité fine vit dans la
 **composition Roles × Bots** (qui est elle-même un objet d'admin).
@@ -1467,9 +1467,9 @@ Config MCP que Claude Code lit automatiquement à l'ouverture du projet :
     "vaubaan": {
       "type": "http",
       "url": "https://gateway.vaubaan.com/mcp",
-      "headers": { "Authorization": "Bearer ${VAUBAAN_TOKEN}" }
-    }
-  }
+      "headers": { "Authorization": "Bearer ${VAUBAAN_TOKEN}" },
+    },
+  },
 }
 ```
 
@@ -1483,12 +1483,14 @@ Ce projet utilise [Vaubaan](https://vaubaan.com) comme MCP gateway pour
 accéder aux providers externes avec gates de risque explicites.
 
 **Providers connectés :**
+
 - GitHub : `<owner/repo>` (cf. binding github)
 - Vercel : `<prj_xxx>` (preview + prod si bindings différents)
 - Supabase : projet `<ref>`
 
 **Risks acceptés par `$VAUBAAN_TOKEN` :**
-- `github.feature-branch-write` — push sur branches feature/*
+
+- `github.feature-branch-write` — push sur branches feature/\*
 - `github.create-pr` — ouvrir des PRs
 - … (liste complète énumérée — output du mint, jamais agrégée)
 
@@ -1553,7 +1555,7 @@ Toute mutation REST + tout MCP call produit une row.
   "decision": "allowed",
   "upstream_latency_ms": 247,
   "client_ip": "1.2.3.4",
-  "client_user_agent": "claude-code/1.0.0"
+  "client_user_agent": "claude-code/1.0.0",
 }
 ```
 
@@ -1563,7 +1565,7 @@ Pour les denied :
 {
   "decision": "denied",
   "role_matched": null,
-  "denial_reason": "branch 'main' is not allowed by any role (allowed patterns: feature/*, fix/*, claude/*)"
+  "denial_reason": "branch 'main' is not allowed by any role (allowed patterns: feature/*, fix/*, claude/*)",
 }
 ```
 
@@ -1714,7 +1716,7 @@ mort dans ce repo.
 - **Modèle RBAC** : Org → Roles → Bots → Project. Naming `<provider>:<role-name>`.
 - **Connect providers** : OAuth/App install. Pas de paste-token jamais.
 - **Roles** : org-level catalog, builtin v1, custom v2.
-- **Bots** : project-scoped, N roles, identifiés par api_key (`vbn_live_…`).
+- **Bots** : project-scoped, N roles, identifiés par api*key (`vbn_live*…`).
 - **Mint API unifié** : `POST /api/v1/tokens/mint` accepte n'importe quel
   `vbn_live_*` (Bearer ou session UI). Le child a `parent_id = caller.id`
   et un `accepted_risks[]` strictement subset du parent. Root tokens

@@ -37,7 +37,10 @@ function project(env?: string): Resource {
     ref: PROJECT,
     displayName: 'api',
     ...(env === undefined ? {} : { env }),
-    metadata: { environments: [{ id: ENV_ID, name: 'main' }] },
+    metadata: {
+      services: [{ id: SERVICE, name: 'api' }],
+      environments: [{ id: ENV_ID, name: 'main' }],
+    },
   };
 }
 
@@ -323,7 +326,10 @@ describe('railway environmentId — must belong to the resolved project', () => 
     ref: OTHER_PROJECT,
     env: 'prod',
     displayName: 'billing',
-    metadata: { environments: [{ id: OTHER_ENV_ID, name: 'production' }] },
+    metadata: {
+      services: [{ id: SERVICE, name: 'api' }],
+      environments: [{ id: OTHER_ENV_ID, name: 'production' }],
+    },
   };
   const foreignEnvironment = `classify-denied: environmentId: not an environment of railway project '${PROJECT}'.`;
 

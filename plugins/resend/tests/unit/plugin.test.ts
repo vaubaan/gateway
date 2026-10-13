@@ -20,6 +20,7 @@ import {
   assertPluginWellFormed,
   assertPresetsValid,
   mockFetch,
+  refusalText,
 } from '@vaubaan/plugin-sdk/testing';
 import { resourceEnvResolver } from '@vaubaan/policy-engine';
 
@@ -625,17 +626,26 @@ describe('executeResend with mockFetch', () => {
     const fetch = mockFetch([]);
     const ctx = ctxOf(fetch);
     const base = { from: FROM, to: ['alice@acme.com'], subject: 's' };
-    await expect(
-      resendPlugin.execute(ctx, 'resend__send_email', { ...base, headers: { Bcc: 'x@evil.com' } }),
-    ).rejects.toThrow(/^resend: headers: 'Bcc' is an envelope header/);
-    await expect(
-      resendPlugin.execute(ctx, 'resend__send_email', { ...base, attachments: { path: 'x' } }),
-    ).rejects.toThrow(/^resend: attachments: not supported in v1/);
-    await expect(
-      resendPlugin.execute(ctx, 'resend__send_batch_emails', {
-        emails: [{ ...base, headers: { 'Reply-To': 'x@evil.com' } }],
-      }),
-    ).rejects.toThrow(/^resend: emails\[0\]\.headers: 'Reply-To' is an envelope header/);
+    expect(
+      await refusalText(
+        resendPlugin.execute(ctx, 'resend__send_email', {
+          ...base,
+          headers: { Bcc: 'x@evil.com' },
+        }),
+      ),
+    ).toMatch(/^resend: headers: 'Bcc' is an envelope header/);
+    expect(
+      await refusalText(
+        resendPlugin.execute(ctx, 'resend__send_email', { ...base, attachments: { path: 'x' } }),
+      ),
+    ).toMatch(/^resend: attachments: not supported in v1/);
+    expect(
+      await refusalText(
+        resendPlugin.execute(ctx, 'resend__send_batch_emails', {
+          emails: [{ ...base, headers: { 'Reply-To': 'x@evil.com' } }],
+        }),
+      ),
+    ).toMatch(/^resend: emails\[0\]\.headers: 'Reply-To' is an envelope header/);
     expect(fetch.calls).toHaveLength(0);
   });
 
@@ -654,21 +664,25 @@ describe('executeResend with mockFetch', () => {
 
   test('a call the classifier refuses is never executed', async () => {
     const fetch = mockFetch([]);
-    await expect(
-      resendPlugin.execute(ctxOf(fetch), 'resend__send_email', {
-        from: 'x@other.com',
-        to: ['a@acme.com'],
-        subject: 's',
-      }),
-    ).rejects.toThrow(/not a sending domain of this mission/);
-    await expect(
-      resendPlugin.execute(ctxOf(fetch), 'resend__create_broadcast', {
-        segment_id: 'seg_news',
-        from: FROM,
-        subject: 's',
-        send: true,
-      }),
-    ).rejects.toThrow(/^resend: send:/);
+    expect(
+      await refusalText(
+        resendPlugin.execute(ctxOf(fetch), 'resend__send_email', {
+          from: 'x@other.com',
+          to: ['a@acme.com'],
+          subject: 's',
+        }),
+      ),
+    ).toMatch(/not a sending domain of this mission/);
+    expect(
+      await refusalText(
+        resendPlugin.execute(ctxOf(fetch), 'resend__create_broadcast', {
+          segment_id: 'seg_news',
+          from: FROM,
+          subject: 's',
+          send: true,
+        }),
+      ),
+    ).toMatch(/^resend: send:/);
     expect(fetch.calls).toHaveLength(0);
   });
 
@@ -706,11 +720,13 @@ describe('executeResend with mockFetch', () => {
   test('a domain resource without domain_id asks for a resource refresh', async () => {
     const fetch = mockFetch([]);
     const stale: Resource = { ...prodDomain, metadata: { kind: 'domain' } };
-    await expect(
-      resendPlugin.execute(ctxOf(fetch, [stale]), 'resend__get_domain', {
-        domain: 'notifications.acme.com',
-      }),
-    ).rejects.toThrow(/carries no domain_id/);
+    expect(
+      await refusalText(
+        resendPlugin.execute(ctxOf(fetch, [stale]), 'resend__get_domain', {
+          domain: 'notifications.acme.com',
+        }),
+      ),
+    ).toMatch(/carries no domain_id/);
   });
 
   test('list_domains, list_segments and list_broadcasts return only the mission resources', async () => {
@@ -780,9 +796,14 @@ describe('executeResend with mockFetch', () => {
     });
     expect(jsonOf(sent)).toEqual({ id: 'brd_1' });
     expect(fetch.calls[1]!.body).toBe('{}');
-    await expect(
-      resendPlugin.execute(ctx, 'resend__send_broadcast', { segment_id: 'seg_news', id: 'brd_9' }),
-    ).rejects.toThrow("broadcast 'brd_9' targets segment 'seg_vip', not 'seg_news'");
+    expect(
+      await refusalText(
+        resendPlugin.execute(ctx, 'resend__send_broadcast', {
+          segment_id: 'seg_news',
+          id: 'brd_9',
+        }),
+      ),
+    ).toMatch("broadcast 'brd_9' targets segment 'seg_vip', not 'seg_news'");
     expect(fetch.calls).toHaveLength(3);
   });
 
