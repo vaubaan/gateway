@@ -16,7 +16,7 @@
  */
 import type { Gate, Iso8601, RiskId } from '@vaubaan/shared';
 
-import { formatUtc, ORPHANED_PROBLEM, type ClaimMissionState } from './claim';
+import { formatUtc, orphanedProblem, type ClaimMissionState } from './claim';
 
 export const APPROVAL_RESOLUTIONS = ['grant', 'open-gate', 'refuse'] as const;
 export type ApprovalResolution = (typeof APPROVAL_RESOLUTIONS)[number];
@@ -38,6 +38,8 @@ export interface ApprovalSituation {
   readonly gate_open: boolean;
   /** How long a granted approval stays usable (`approvals.expiry`). */
   readonly approval_valid_seconds: number;
+  /** When the request itself expires (`requests.expiry` after it was dropped). */
+  readonly request_expires_at: Iso8601;
 }
 
 export const APPROVAL_PROBLEM_CODES = [
@@ -96,7 +98,7 @@ function missionProblem(situation: ApprovalSituation): ApprovalProblem | null {
       code: 'mission-closed',
       message:
         state === 'orphaned'
-          ? ORPHANED_PROBLEM
+          ? orphanedProblem(situation.request_expires_at)
           : `The mission is ${state}: every call is refused whatever you approve.`,
     };
   }

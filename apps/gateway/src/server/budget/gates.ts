@@ -34,6 +34,18 @@ export const GATE_EVENT_KINDS = [
   'gate-changed',
 ] as const satisfies readonly SessionEventKind[];
 
+/**
+ * The gate that applies to a risk now: `approval` unless the policy says `auto` or the
+ * creator opened it for the period (`openedGatesOf`). The one spelling of that rule:
+ * the budget decides a call with it and the request page shows each touched risk with it.
+ */
+export function effectiveGate(
+  entry: { readonly risk_id: RiskId; readonly gate: 'auto' | 'approval' },
+  openedGates: ReadonlySet<RiskId>,
+): 'auto' | 'approval' {
+  return entry.gate === 'approval' && !openedGates.has(entry.risk_id) ? 'approval' : 'auto';
+}
+
 /** What `openedGatesOf` reads of a stored session event. */
 export interface GateEventLike {
   readonly ts: Iso8601;

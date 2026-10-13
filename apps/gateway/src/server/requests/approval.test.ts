@@ -20,6 +20,7 @@ function situation(overrides: Partial<ApprovalSituation> = {}): ApprovalSituatio
     gate: 'approval',
     gate_open: false,
     approval_valid_seconds: 600,
+    request_expires_at: '2026-10-14T09:00:00.000Z',
     ...overrides,
   };
 }
@@ -90,6 +91,14 @@ describe('checkApprovalDecision', () => {
     expect(checkApprovalDecision(s, { resolution: 'open-gate' })?.code).toBe(code);
     expect(optionOf(s, 'grant').unavailable?.code).toBe(code);
     expect(optionOf(s, 'refuse').unavailable).toBeNull();
+  });
+
+  it('an orphaned mission: the sentence states until when the request can still be granted', () => {
+    const s = situation({ mission_state: 'orphaned' });
+    const message = checkApprovalDecision(s, { resolution: 'grant' })?.message;
+    expect(message).toContain('until it expires (2026-10-14 09:00 UTC)');
+    expect(message).toContain('next refused call opens a new one');
+    expect(optionOf(s, 'open-gate').unavailable?.message).toBe(message);
   });
 
   it('a risk that left the policy takes neither', () => {

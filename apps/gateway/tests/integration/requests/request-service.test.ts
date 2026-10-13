@@ -7,7 +7,7 @@
  * The claim itself is dropped by the budget's `SessionService.recordCall`
  * (handbook budget-and-sessions); these tests start from its refusal.
  */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import type {
   BudgetMission,
@@ -506,6 +506,114 @@ describe('RequestService', () => {
         status: 'active',
         expiresAt: '2026-10-20T00:00:00.000Z',
         closedAt: null,
+      });
+    });
+  });
+
+  describe('the mission is checked as the store holds it at the decision', () => {
+    /** Two risks with one action each: two open claims on one mission. */
+    const TWO_CLAIMS = [
+      { riskId: WRITE, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
+      { riskId: READ, quota: 1, rateLimit: 5, rateWindowSeconds: 60, gate: 'auto' },
+    ] as const;
+
+    async function twoClaims(expiresAt: string | null) {
+      const mission = await f.createMission({
+        periodSeconds: DAY_SECONDS,
+        policy: TWO_CLAIMS,
+        expiresAt,
+      });
+      const first = await exhaust(mission);
+      expect((await call([READ], mission)).outcome).toBe('allowed');
+      const second = refused(await call([READ], mission)).request_id;
+      return { mission, first, second };
+    }
+
+    /** Every later read of the mission returns it as it was before the other write landed. */
+    async function freezeMissionRead(missionId: string): Promise<void> {
+      const stale = await f.store.missions.getById(missionId);
+      vi.spyOn(f.store.missions, 'getById').mockResolvedValue(stale);
+    }
+
+    it('two extensions of the expiry: the second cannot move it backwards on a stale read', async () => {
+      const { mission, first, second } = await twoClaims('2026-10-20T00:00:00.000Z');
+      await freezeMissionRead(mission.id);
+      granted(
+        await requests.decide(creator(), first, {
+          resolution: 'extend-expiry',
+          expires_at: '2026-12-01T00:00:00.000Z',
+        }),
+      );
+      // Later than the expiry this decision read (20 October), earlier than the stored one.
+      expect(
+        await requests.decide(creator(), second, {
+          resolution: 'extend-expiry',
+          expires_at: '2026-11-01T00:00:00.000Z',
+        }),
+      ).toMatchObject({ ok: false, reason: 'invalid', problem: { code: 'invalid-expiry' } });
+      vi.restoreAllMocks();
+      expect((await f.store.missions.getById(mission.id))?.expiresAt).toBe(
+        '2026-12-01T00:00:00.000Z',
+      );
+      expect((await f.store.requests.getById(second))?.state).toBe('open');
+      expect(
+        (await f.store.audit.list({ kind: 'admin' })).filter((e) => e.kind === 'admin'),
+      ).toHaveLength(1);
+    });
+
+    it('a mission revoked since it was read takes no reset and no extension', async () => {
+      const { mission, first, second } = await twoClaims('2026-10-20T00:00:00.000Z');
+      await freezeMissionRead(mission.id);
+      await f.store.missions.setStatus(mission.id, 'revoked');
+      expect(await requests.decide(creator(), first, { resolution: 'reset-period' })).toMatchObject(
+        { ok: false, reason: 'invalid', problem: { code: 'mission-closed' } },
+      );
+      expect(
+        await requests.decide(creator(), second, {
+          resolution: 'extend-expiry',
+          expires_at: '2026-12-01T00:00:00.000Z',
+        }),
+      ).toMatchObject({ ok: false, reason: 'invalid', problem: { code: 'mission-closed' } });
+      // Only the refusal passes, as on a mission read revoked.
+      granted(await requests.decide(creator(), first, { resolution: 'refuse' }));
+      vi.restoreAllMocks();
+      expect(await f.store.audit.list({ kind: 'admin' })).toHaveLength(1);
+    });
+
+    it('an approval is not granted on a mission revoked since it was read', async () => {
+      const approval = await f.store.requests.create({
+        missionId: f.mission.id,
+        sessionId: null,
+        kind: 'approval',
+        riskId: MERGE,
+        tool: 'github__merge',
+        fingerprint: 'f'.repeat(64),
+        arguments: { pr: 1 },
+        expiresAt: '2026-10-14T09:00:00.000Z',
+      });
+      await freezeMissionRead(f.mission.id);
+      await f.store.missions.setStatus(f.mission.id, 'revoked');
+      expect(await requests.decide(creator(), approval.id, { resolution: 'grant' })).toMatchObject({
+        ok: false,
+        reason: 'invalid',
+        problem: { code: 'mission-closed' },
+      });
+      vi.restoreAllMocks();
+      expect(await f.store.approvals.getByRequest(approval.id)).toBeNull();
+      expect((await f.store.requests.getById(approval.id))?.state).toBe('open');
+    });
+
+    it('the decision context carries the mission row of its own transaction', async () => {
+      const { mission, first, second } = await twoClaims('2026-10-20T00:00:00.000Z');
+      await f.store.requests.decideClaim(first, f.creatorId, (ctx) => {
+        expect(ctx.mission).toEqual({ status: 'active', expiresAt: '2026-10-20T00:00:00.000Z' });
+        ctx.setMissionExpiry('2026-12-01T00:00:00.000Z');
+        return { state: 'granted', decision: { resolution: 'extend-expiry' } };
+      });
+      await f.store.missions.setStatus(mission.id, 'expired');
+      await f.store.requests.decideClaim(second, f.creatorId, (ctx) => {
+        expect(ctx.mission).toEqual({ status: 'expired', expiresAt: '2026-12-01T00:00:00.000Z' });
+        return { state: 'refused', decision: { resolution: 'refuse' } };
       });
     });
   });

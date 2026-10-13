@@ -36,6 +36,7 @@ import {
   budgetMissionOf,
   currentPeriod,
   deriveMissionState,
+  effectiveGate,
   GATE_EVENT_KINDS,
   missionUsageReader,
   openedGatesOf,
@@ -55,6 +56,7 @@ import type {
   ClaimDecisionContext,
   ClaimDecisionOutcome,
   RequestDecisionOutcome,
+  StoredMissionFacts,
 } from '../store/repositories/requests';
 import type { EventRecord, MissionRecord, RequestRecord } from '../store/types';
 import {
@@ -264,6 +266,9 @@ interface OwnedRequest {
 }
 
 export class RequestService {
+  // single-process only by nature: catalog labels derived from the plugin registry,
+  // which is immutable after boot, so replicas cannot disagree; no shared replacement
+  // is needed (a per-process memo of a pure function of the build).
   private readonly labels = new Map<string, ReadonlyMap<RiskId, string>>();
 
   private readonly budget: Pick<SessionService, 'usageOf'>;
@@ -335,7 +340,7 @@ export class RequestService {
         events: events.map(eventLineOf),
         options:
           summary.state === 'open'
-            ? claimOptions(situationOf(budget, state.kind, period, request.riskId, consumed, now))
+            ? claimOptions(situationOf(budget, state.kind, period, request, consumed, now))
             : [],
       },
     };
@@ -385,31 +390,32 @@ export class RequestService {
       return { ok: false, reason: 'unsupported-kind', kind: owned.request.kind };
     }
     const now = this.deps.clock.now();
-    const budget = budgetMissionOf(mission);
-    const period = currentPeriod(budget.period, now);
-    const missionState = deriveMissionState(budget, [], now).kind;
+    const period = currentPeriod(budgetMissionOf(mission).period, now);
     const validitySeconds = this.deps.approvalValiditySeconds;
 
     let result;
     try {
-      result = await this.deps.store.requests.decideApproval(requestId, user.id, (ctx) =>
-        applyApproval(ctx, {
+      result = await this.deps.store.requests.decideApproval(requestId, user.id, (ctx) => {
+        // The mission's status and expiry and the gate events are read inside the
+        // transaction: the check and the write see the same rows.
+        const budget = decidedMissionOf(mission, ctx.mission);
+        const { tool } = ctx.request;
+        if (!tool) throw new InvariantError(`approval request ${ctx.request.id} has no tool`);
+        return applyApproval(ctx, {
           decision,
           user,
           period,
           expiresAt: toIso(new Date(now.getTime() + validitySeconds * MS_PER_SECOND)),
-          // The gate events are read inside the transaction: the check and the
-          // write see the same session.
           situation: approvalSituationOf(
             budget,
-            missionState,
+            deriveMissionState(budget, [], now).kind,
             period,
-            ctx.request,
+            { ...ctx.request, tool },
             gateEventsOf(ctx, ctx.request.riskId, period),
             validitySeconds,
           ),
-        }),
-      );
+        });
+      });
     } catch (err) {
       if (err instanceof ApprovalProblemError) {
         return { ok: false, reason: 'invalid', problem: err.problem };
@@ -467,29 +473,29 @@ export class RequestService {
       return { ok: false, reason: 'unsupported-kind', kind: owned.request.kind };
     }
     const now = this.deps.clock.now();
-    const budget = budgetMissionOf(mission);
-    const period = currentPeriod(budget.period, now);
-    const missionState = deriveMissionState(budget, [], now).kind;
+    const period = currentPeriod(budgetMissionOf(mission).period, now);
 
     let result;
     try {
-      result = await this.deps.store.requests.decideClaim(requestId, user.id, (ctx) =>
-        applyClaim(ctx, {
+      result = await this.deps.store.requests.decideClaim(requestId, user.id, (ctx) => {
+        // The mission's status and expiry and the counters are read inside the
+        // transaction: the check and the write see the same rows and numbers. Two
+        // `extend-expiry` decisions cannot each be checked against the old expiry.
+        const budget = decidedMissionOf(mission, ctx.mission);
+        return applyClaim(ctx, {
           decision,
           user,
           period,
-          // The counters are read inside the transaction: the check and the
-          // write see the same numbers.
           situation: situationOf(
             budget,
-            missionState,
+            deriveMissionState(budget, [], now).kind,
             period,
-            ctx.request.riskId,
+            ctx.request,
             ctx.counters(period.start),
             now,
           ),
-        }),
-      );
+        });
+      });
     } catch (err) {
       if (err instanceof ClaimProblemError) {
         return { ok: false, reason: 'invalid', problem: err.problem };
@@ -584,10 +590,7 @@ export class RequestService {
     const touched = new Set<RiskId>(audited?.risks_touched ?? []).add(request.riskId);
     const risks: TouchedRiskLine[] = budget.policy
       .filter((entry) => touched.has(entry.risk_id))
-      .map((entry) => ({
-        ...this.lineOf(entry, consumed),
-        gate: entry.gate === 'approval' && !opened.has(entry.risk_id) ? 'approval' : 'auto',
-      }));
+      .map((entry) => ({ ...this.lineOf(entry, consumed), gate: effectiveGate(entry, opened) }));
 
     const approval =
       request.state === 'granted' ? await store.approvals.getByRequest(request.id) : null;
@@ -636,7 +639,7 @@ export class RequestService {
               budget,
               state.kind,
               period,
-              request,
+              { ...request, tool },
               gateEvents,
               this.deps.approvalValiditySeconds,
             ),
@@ -718,14 +721,31 @@ function providerOf(riskId: RiskId): string | null {
   return parseRiskId(riskId)?.provider ?? null;
 }
 
+/**
+ * The mission a decision is checked against: the status and the expiry the store
+ * holds inside the decision's transaction, under the `orphaned` verdict `own()`
+ * derived just before it. The derivation reads the creator's authority through
+ * asynchronous repositories and cannot run in the synchronous callback, so the verdict
+ * stays a read of that instant; the policy (quota, gate) is the one `own()` read too.
+ */
+function decidedMissionOf(derived: MissionRecord, stored: StoredMissionFacts): BudgetMission {
+  const orphaned = derived.status === 'orphaned' && stored.status === 'active';
+  return {
+    ...budgetMissionOf(derived),
+    status: orphaned ? 'orphaned' : stored.status,
+    expires_at: stored.expiresAt,
+  };
+}
+
 function situationOf(
   mission: BudgetMission,
   missionState: MissionState['kind'],
   period: CurrentPeriod,
-  riskId: RiskId,
+  request: Pick<RequestRecord, 'riskId' | 'expiresAt'>,
   consumed: ReadonlyMap<RiskId, number>,
   now: Date,
 ): ClaimSituation {
+  const { riskId } = request;
   return {
     now,
     mission_state: missionState,
@@ -734,6 +754,7 @@ function situationOf(
     risk_id: riskId,
     quota: mission.policy.find((entry) => entry.risk_id === riskId)?.quota ?? null,
     consumed: consumed.get(riskId) ?? 0,
+    request_expires_at: request.expiresAt,
   };
 }
 
@@ -749,7 +770,8 @@ function approvalSituationOf(
   mission: BudgetMission,
   missionState: MissionState['kind'],
   period: CurrentPeriod,
-  request: RequestRecord,
+  /** The request with the tool its callers already checked is there. */
+  request: Pick<RequestRecord, 'riskId' | 'expiresAt'> & { readonly tool: string },
   gateEvents: readonly EventRecord[],
   approvalValiditySeconds: number,
 ): ApprovalSituation {
@@ -757,10 +779,11 @@ function approvalSituationOf(
     mission_state: missionState,
     period_end: period.end,
     risk_id: request.riskId,
-    tool: request.tool ?? '',
+    tool: request.tool,
     gate: mission.policy.find((entry) => entry.risk_id === request.riskId)?.gate ?? null,
     gate_open: openedGatesOf(gateEvents, period).has(request.riskId),
     approval_valid_seconds: approvalValiditySeconds,
+    request_expires_at: request.expiresAt,
   };
 }
 

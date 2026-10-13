@@ -45,6 +45,8 @@ export interface ClaimSituation {
   readonly quota: number | null;
   /** Actions consumed on the claimed risk in the current period. */
   readonly consumed: number;
+  /** When the request itself expires (`requests.expiry` after it was dropped). */
+  readonly request_expires_at: Iso8601;
 }
 
 export const CLAIM_PROBLEM_CODES = [
@@ -97,18 +99,22 @@ function untilPeriodEnd(periodEnd: Iso8601 | null): string {
 
 /**
  * `orphaned` is derived from the creator's authority at the instant of the decision
- * (spec §2.3): the same request can be decided once that authority is back.
+ * (spec §2.3): the same request can be decided once that authority is back. The
+ * request's own clock does not stop meanwhile (handbook requests, "A request on an
+ * orphaned mission still expires"), so the sentence states the limit.
  */
-export const ORPHANED_PROBLEM =
-  'The mission is orphaned: the authority behind it is missing, so every call is refused whatever you decide. The request can be granted once that authority is back.';
+export function orphanedProblem(requestExpiresAt: Iso8601): string {
+  return `The mission is orphaned: the authority behind it is missing, so every call is refused whatever you decide. The request can be granted once that authority is back, until it expires (${formatUtc(requestExpiresAt)}); after that, the executor's next refused call opens a new one.`;
+}
 
-function closedProblem(state: ClaimMissionState): ClaimProblem | null {
+function closedProblem(situation: ClaimSituation): ClaimProblem | null {
+  const state = situation.mission_state;
   if (state === 'revoked' || state === 'orphaned') {
     return {
       code: 'mission-closed',
       message:
         state === 'orphaned'
-          ? ORPHANED_PROBLEM
+          ? orphanedProblem(situation.request_expires_at)
           : `The mission is ${state}: every call is refused whatever its budget.`,
     };
   }
@@ -117,7 +123,7 @@ function closedProblem(state: ClaimMissionState): ClaimProblem | null {
 
 /** Why a budget resolution (reset, quota) cannot apply; `null` when it can. */
 function budgetProblem(situation: ClaimSituation): ClaimProblem | null {
-  const closed = closedProblem(situation.mission_state);
+  const closed = closedProblem(situation);
   if (closed) return closed;
   if (situation.mission_state === 'expired') {
     return {
@@ -147,7 +153,7 @@ function quotaProblem(situation: ClaimSituation): ClaimProblem | null {
 }
 
 function expiryProblem(situation: ClaimSituation): ClaimProblem | null {
-  const closed = closedProblem(situation.mission_state);
+  const closed = closedProblem(situation);
   if (closed) return closed;
   if (situation.expires_at === null) {
     return { code: 'no-expiry', message: 'The mission never expires; there is nothing to extend.' };

@@ -39,7 +39,8 @@ apps/gateway/src/server/budget/
   period.ts           PeriodSpec, CurrentPeriod, periodIndex(), currentPeriod(), periodSpecOf()
   fingerprint.ts      re-exports canonicalJson(), fingerprintArguments() from @vaubaan/gateway-core
   decide.ts           decide(input) → Allow | Refuse   (pure, no IO)
-  gates.ts            GATE_EVENT_KINDS, openedGatesOf(events, period) — the gates opened for the period (pure)
+  gates.ts            GATE_EVENT_KINDS, openedGatesOf(events, period) — the gates opened for the period;
+                      effectiveGate(entry, openedGates) — the gate that applies to a risk now          (pure)
   mission-state.ts    deriveMissionState(), consumedInPeriod()  — active | exhausted | expired | …
   mapping.ts          store records ⇄ domain: BudgetMission, budgetMissionOf(), policyEntryOf() /
                       policyEntryRecordOf(), periodOf() / statedPeriodOf() / budgetPeriodOf(),
@@ -162,6 +163,11 @@ risk switches to `auto` until the next reload, then returns to `approval`. This 
 session event" (spec §3.5). The event is `gate-opened`, written by the request service
 ([requests](requests.md), "Approvals") with the period it was granted in:
 `{ request_id, period_start, period_end }`, the risk in the event's own `risk_id` column.
+
+`effectiveGate(entry, openedGates)` is the one spelling of "the gate that applies to this
+risk now" (`approval` unless the policy says `auto` or the creator opened it for the
+period): `decide()` gates a call with it and the creator's view of an approval request
+shows each touched risk with it ([requests](requests.md)).
 
 `openedGatesOf(events, period)` is pure and returns the `Set<RiskId>` `decide()` takes as
 `opened_gates`. It is fed the session's events of `GATE_EVENT_KINDS` (`gate-opened`,
@@ -350,8 +356,10 @@ set per key (`ZREMRANGEBYSCORE`, `ZCARD`, `ZADD`, `PEXPIRE` in a Lua script); th
 before its SQLite transaction and record after commit (ADR). The composition root builds one
 `SlidingWindowRateLimiter`: it is the budget's `rateWindows` and, unless a test injects
 another `RateLimiter`, the surface limiter of the execution door (`mcp:mission:<id>`,
-`mcp-verify:<prefix>`), of the connect flows (`connect:<user>`) and of the request page
-(`request-page:ip:<ip>`), on disjoint keys. The root also builds the `SessionService` (`root.budget`) and hands it to
+`mcp-verify:<prefix>:<client ip>`), of the connect flows (`connect:<user>`), of the request page
+(`request-page:ip:<ip>`), of the authorization server (`oauth:register…`,
+`oauth:token:…`, `oauth:client-document:<requester>`) and of the management door
+(every key prefixed `mgmt:`, `compose/management.ts`), on disjoint keys. The root also builds the `SessionService` (`root.budget`) and hands it to
 the execution door, which wraps it with `createBudgetStage`
 ([execution-door](execution-door.md)).
 
@@ -417,10 +425,11 @@ as `findApproval`.
   invariant abort leaves no session; `stateOf`; `usageOf` and
   `missionUsageReader` read the current period's counters only (three periods recorded,
   one read, keyed by the current `period_start`).
-- `tests/integration/budget/pipeline-consistency.test.ts` (5) — the stage inside the real
+- `tests/integration/budget/pipeline-consistency.test.ts` (6) — the stage inside the real
   `CallPipeline` with the store's `SqliteAuditWriter`: **`SUM(session_counters) ==
-COUNT(audit allowed)` per risk after a mixed run**, upstream failure keeps the credit, a
-  one-off mission's open-ended period, a mission with no session, granted claims
+COUNT(audit allowed)` per risk after a mixed run**, a credit event with malformed details
+  skipped without throwing, upstream failure keeps the credit, a one-off mission's
+  open-ended period, a mission with no session, granted claims
   (`counted + credited == audited`).
 
 ## References

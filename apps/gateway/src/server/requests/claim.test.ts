@@ -5,6 +5,7 @@ import {
   CLAIM_RESOLUTIONS,
   claimOptions,
   formatUtc,
+  orphanedProblem,
   parseClaimDecision,
   type ClaimSituation,
 } from './claim';
@@ -21,6 +22,7 @@ function situation(overrides: Partial<ClaimSituation> = {}): ClaimSituation {
     risk_id: RISK,
     quota: 5,
     consumed: 5,
+    request_expires_at: '2026-10-14T09:00:00.000Z',
     ...overrides,
   };
 }
@@ -84,6 +86,18 @@ describe('claimOptions', () => {
       'refuse',
     ]);
     expect(options[0]?.unavailable?.code).toBe('mission-closed');
+  });
+
+  it('an orphaned mission: the sentence states until when the request can still be granted', () => {
+    const [reset] = claimOptions(situation({ mission_state: 'orphaned' }));
+    expect(reset?.unavailable?.message).toBe(orphanedProblem('2026-10-14T09:00:00.000Z'));
+    expect(reset?.unavailable?.message).toContain(
+      'can be granted once that authority is back, until it expires (2026-10-14 09:00 UTC)',
+    );
+    expect(reset?.unavailable?.message).toContain('next refused call opens a new one');
+    // A revoked mission never comes back: nothing is promised.
+    const [revoked] = claimOptions(situation({ mission_state: 'revoked' }));
+    expect(revoked?.unavailable?.message).not.toContain('until it expires');
   });
 
   it('an expired mission can only be extended or refused', () => {

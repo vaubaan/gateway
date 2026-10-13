@@ -26,7 +26,7 @@ export {
   type RateProbe,
   type Refuse,
 } from './decide.ts';
-export { GATE_EVENT_KINDS, openedGatesOf, type GateEventLike } from './gates.ts';
+export { effectiveGate, GATE_EVENT_KINDS, openedGatesOf, type GateEventLike } from './gates.ts';
 export {
   consumedInPeriod,
   deriveMissionState,

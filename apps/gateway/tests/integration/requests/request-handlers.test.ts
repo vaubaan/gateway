@@ -14,6 +14,7 @@ import {
   type RecordCallResult,
 } from '../../../src/server/budget';
 import type { GatewayRoot } from '../../../src/server/compose/root';
+import { mintAccessToken } from '../../../src/server/oauth-as/secrets';
 import { SlidingWindowRateLimiter } from '../../../src/server/rate-limit';
 import {
   ADDRESSED_TO_CREATOR,
@@ -236,17 +237,28 @@ describe('requests: exhaust and claim over HTTP', () => {
       expect((await call()).outcome).toBe('refused');
     });
 
-    it('any other bearer (a delegated token) is refused the same way', async () => {
+    it('a delegated token is refused the same way, and named for what it is', async () => {
       const claim = await exhaust();
-      const headers = new Headers({ authorization: 'Bearer some-delegated-access-token' });
+      const headers = new Headers({ authorization: `Bearer ${mintAccessToken()}` });
       const opened = await root.requests.handlers.open(get(claim.url, headers), claim.id);
       expect(opened.status).toBe(403);
       expect(await opened.json()).toMatchObject({
         error: 'wrong-credential-kind',
-        presented: 'bearer',
+        presented: 'delegated-token',
+        expected: 'human-session',
       });
       const inbox = await root.requests.handlers.inbox(get(`${PUBLIC_URL}/api/requests`, headers));
       expect(inbox.status).toBe(403);
+    });
+
+    it('a bearer of no known shape is refused too, and no kind is invented for it', async () => {
+      const claim = await exhaust();
+      const headers = new Headers({ authorization: 'Bearer some-unrecognisable-value' });
+      const opened = await root.requests.handlers.open(get(claim.url, headers), claim.id);
+      expect(opened.status).toBe(403);
+      const body = (await opened.json()) as Record<string, unknown>;
+      expect(body).toMatchObject({ error: 'wrong-credential-kind', expected: 'human-session' });
+      expect(body).not.toHaveProperty('presented');
     });
   });
 

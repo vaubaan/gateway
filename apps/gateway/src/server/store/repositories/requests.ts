@@ -5,6 +5,7 @@ import type {
   ApprovalRecord,
   EventRecord,
   Iso,
+  MissionStatus,
   NewEvent,
   RequestKind,
   RequestRecord,
@@ -20,7 +21,7 @@ import {
   toJson,
   type RepoContext,
 } from './context.ts';
-import { REQUEST_KINDS, REQUEST_STATES } from './enums.ts';
+import { REQUEST_KINDS, REQUEST_STATES, STORED_MISSION_STATUSES } from './enums.ts';
 import { createSessionPrimitives, type RiskEventQuery } from './sessions.ts';
 
 /**
@@ -56,6 +57,17 @@ export interface InsertRequestInput extends RequestInput {
 }
 
 /**
+ * The fields of the request's mission a decision is checked against, as the store
+ * holds them inside the decision's transaction: a rule checked on them and the write
+ * that follows see the same row. `status` is the stored one, never `orphaned` (that
+ * verdict is derived by the caller, before the transaction).
+ */
+export interface StoredMissionFacts {
+  readonly status: Exclude<MissionStatus, 'orphaned'>;
+  readonly expiresAt: Iso | null;
+}
+
+/**
  * What the `apply` callback of `decideClaim` sees and may do, all inside the open
  * transaction. The rules (which resolution, which amount, which date) belong to the
  * `RequestService`; this context only makes their effects atomic with the decision.
@@ -63,6 +75,8 @@ export interface InsertRequestInput extends RequestInput {
 export interface ClaimDecisionContext {
   /** The claim, still `open` and unexpired at `now`. */
   readonly request: RequestRecord;
+  /** The claim's mission as stored, read inside this transaction. */
+  readonly mission: StoredMissionFacts;
   /** The mission's session; null only when the session row was deleted since. */
   readonly session: SessionRecord | null;
   readonly now: Iso;
@@ -101,6 +115,8 @@ export type ClaimDecisionResult<R extends ClaimDecisionOutcome> = RequestDecisio
 export interface ApprovalDecisionContext {
   /** The approval request, still `open` and unexpired at `now`. */
   readonly request: RequestRecord;
+  /** The request's mission as stored, read inside this transaction. */
+  readonly mission: StoredMissionFacts;
   /** The mission's session; null only when the session row was deleted since. */
   readonly session: SessionRecord | null;
   readonly now: Iso;
@@ -358,6 +374,19 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
      WHERE id = ?`,
   );
 
+  const missionFacts = db.prepare<[string], { status: string; expires_at: string | null }>(
+    'SELECT status, expires_at FROM missions WHERE id = ?',
+  );
+
+  /** The mission of a request as the store holds it now. In-transaction. */
+  function missionFactsSync(missionId: string): StoredMissionFacts {
+    const row = requireRow(missionFacts.get(missionId), 'mission', missionId);
+    return {
+      status: parseEnum(STORED_MISSION_STATUSES, row.status, 'missions.status'),
+      expiresAt: row.expires_at,
+    };
+  }
+
   /** Flips one overdue request and leaves its trace on the session. In-transaction. */
   function expireSync(request: RequestRecord, now: Iso): RequestRecord {
     expireOne.run(request.id);
@@ -389,6 +418,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       );
     return {
       request,
+      mission: missionFactsSync(request.missionId),
       session,
       now,
       counters: read,
@@ -421,6 +451,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     }
     return {
       request,
+      mission: missionFactsSync(request.missionId),
       session,
       now,
       createApproval(expiresAt) {
