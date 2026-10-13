@@ -435,6 +435,7 @@ const RULES: Readonly<Record<string, Rule>> = {
   },
   'ConnectionService.transferTargets': READ,
   'ConnectionService.listOwnerless': READ,
+  'ConnectionService.reassignTargets': READ,
   'ConnectionService.transfer': {
     kind: 'mutation',
     target: connections,
