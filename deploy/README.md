@@ -1,3 +1,17 @@
+---
+title: Deploying Vaubaan Gateway
+status: current
+date: 2026-10-13
+last_synced: 2026-10-13
+tracks:
+  - deploy/docker/
+  - deploy/compose.yaml
+  - deploy/caddy/
+  - deploy/config/
+  - .github/workflows/ci.yml
+  - scripts/gen-master-key.mjs
+---
+
 # Deploying Vaubaan Gateway
 
 One image, one process, one SQLite file on a volume, behind your TLS
@@ -25,14 +39,15 @@ ports 80 and 443 reachable (Caddy obtains the certificate).
 git clone <this repository> && cd vaubaan-gateway
 cp deploy/config/.env.example deploy/config/.env
 cp deploy/config/gateway.example.yaml deploy/config/gateway.yaml
-node scripts/gen-master-key.mjs            # paste into VAUBAAN_MASTER_KEY (or a secret file)
+npm run gen-master-key                     # paste into VAUBAAN_MASTER_KEY (or a secret file)
 openssl rand -hex 24                       # paste into VAUBAAN_BOOTSTRAP_TOKEN
 $EDITOR deploy/config/.env deploy/config/gateway.yaml
 docker compose -f deploy/compose.yaml up -d --build
 curl -s https://<your domain>/healthz
 ```
 
-Both files are gitignored. The YAML wins over the environment key by key;
+Both files are gitignored (`deploy/config/.env`, `deploy/config/gateway.yaml`;
+the `*.example*` files are tracked). The YAML wins over the environment key by key;
 you may use either alone. Secrets go in through `${NAME}` /
 `${file:/path}` references in the YAML or `*_FILE` variables.
 
@@ -68,21 +83,25 @@ not buffer responses (the MCP doors stream), and list its address in
 
 ## Operations
 
-- **Health**: `GET /healthz` → 200 `{"status":"ok",...}`; 503 when the
-  store does not answer. The image's `HEALTHCHECK` and `compose.yaml` use
-  it.
+- **Health**: `GET /healthz` → 200 `{"status":"ok",...}`; 503 `degraded`
+  when the store does not answer, 503 `unavailable` when the process could
+  not build its composition root. The image's `HEALTHCHECK` and
+  `compose.yaml` use it.
 - **Logs**: JSON lines on stdout/stderr; mission tokens appear by prefix
   only, configured secrets are redacted. `VAUBAAN_LOG_LEVEL=debug` for more.
 - **Data**: everything is in `/data` (`gateway.db` and its WAL files). Back
-  it up with a volume snapshot or SQLite's `VACUUM INTO` (store feature
-  P0.3 documents the exact command).
+  it up with a volume snapshot or SQLite's `VACUUM INTO` (`store.backupTo()`
+  in the [store handbook](../docs/handbook/store.md#backup); there is no
+  operator CLI yet).
 - **Key rotation**: generate a new key, set `encryption.key_version` to
   `n+1`, move the old key under `encryption.previous_keys.<n>`, restart.
   Old credentials still open; new ones use the new key.
 - **Upgrade**: pull the new image and restart; schema migrations run at
-  boot (P0.3).
-- **Smoke test an image**: `deploy/docker/smoke.sh vaubaan-gateway:local`
-  (needs Docker and curl) checks the fail-fast exit, the https rule,
+  boot (forward-only, checksummed; see the
+  [store handbook](../docs/handbook/store.md)).
+- **Smoke test an image**: `npm run docker:build && npm run docker:smoke`
+  (`deploy/docker/smoke.sh vaubaan-gateway:local`; needs Docker and curl)
+  checks the fail-fast exit, the https rule,
   `/healthz`, secret redaction, native addons and the non-root user.
 
 ## What the image contains

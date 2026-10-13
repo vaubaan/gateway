@@ -2,6 +2,7 @@
 title: Plugin SDK
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - packages/plugin-sdk/src/
   - packages/plugin-sdk/tests/
@@ -11,6 +12,7 @@ tracks:
   - packages/shared/src/refusal.ts
   - packages/shared/src/mcp.ts
   - packages/shared/src/legacy-v4.ts
+  - packages/shared/src/data-model.ts
   - plugins/_template/
 ---
 
@@ -29,14 +31,17 @@ gateway learns which providers exist. ADR :
 packages/plugin-sdk/
   src/
     plugin.ts           ProviderPlugin, ClassifyOutcome, ConnectionContext, ExecuteContext, PluginLogger
-    credential.ts       CredentialSpec (4 kinds), CredentialSecret, CredentialField, ProviderAppConfig,
+    credential.ts       CredentialSpec (4 kinds) and the per-kind Spec/Secret interfaces, CredentialSecret,
+                        CredentialField, ProviderAppConfig, OAuth2ClientAuthMethod,
                         expectCredentialKind, CredentialKindMismatch
     catalog-loader.ts   loadCatalogFile / parseCatalogYaml / validateCatalog, CatalogError,
+                        PluginCatalog / LoadedCatalog / LoadCatalogOptions,
                         semanticIssues / presetIssues / wildcardIssues / structuralIssues
     define-plugin.ts    definePlugin, pluginIssues, PluginDefinitionError, PLUGIN_VERSION_PATTERN
     registry.ts         PluginRegistry, createRegistry, RegisteredPlugin, ProviderLabel
     flags.ts            PluginHostFlags, DEFAULT_HOST_FLAGS, normalizeArgsIfEnabled
     index.ts            barrel + re-exports of the shared vocabulary a plugin needs
+                        (+ parseSlice / serializeSlice from @vaubaan/policy-engine)
     testing/
       mock-fetch.ts     mockFetch, MockRoute, RecordedCall
       assertions.ts     assertPluginWellFormed, assertCatalogCoverage, assertNoWildcard,
@@ -183,7 +188,7 @@ const report = assertCatalogCoverage(plugin, {
   github__list_branches: [{ args: { owner: 'acme', repo: 'app' } }],
   …one entry per declared tool…
 }, { resources: [stagingRepo] });
-// report.risksTouched / report.risksUntouched
+// report.risksTouched / report.risksUntouched / report.toolsChecked / report.samplesChecked
 ```
 
 `assertCatalogCoverage` fails when a declared tool has no sample, a sample
@@ -215,9 +220,11 @@ metadata? }`, `ConnectionResource`, `Credential` (encrypted envelope),
   are `BearerKind` in `@vaubaan/gateway-core`), `Connection`, `Share`,
   `Restriction`, `Mission`, `MissionPolicyEntry` (`risk_id`, `quota`,
   `rate_limit`, `gate`), `MissionPolicy` (the explicit entry list),
-  `Budget`, `RateLimit`, `Gate`, `Period`, `MissionToken`, `Session`,
+  `Budget`, `RateLimit`, `Gate` + `GATES`, `Period`, `MissionResourceSelection`,
+  `MissionToken`, `Session`,
   `SessionEvent`, `SessionCounter`, `Request`, `Approval`, `Delegation`,
-  `User`, `Group`, `Principal`, `acceptedRisksOf(mission)`, `AuditDecision`
+  `User`, `Group`, `Principal`, `CREDENTIAL_KINDS`, `acceptedRisksOf(mission)`,
+  `AuditDecision`
   (`allowed` | `refused`). These are the only definitions : `gateway-core`
   re-exports them and builds its `MissionContext` from projections of
   `Mission`, `Connection`, `ConnectionResource` and `Session`.
@@ -226,10 +233,10 @@ metadata? }`, `ConnectionResource`, `Credential` (encrypted envelope),
   (`presets?`, `catalog_version?`, `catalog_date?`), `RiskDecision` — the
   `denied` branch carries `code: RefusalCode` next to the free-text `hint`,
   so the audit entry and the refusal body never guess the code.
-- `risk-id.ts` — `parseRiskId` → `{ provider, env | null, name }`,
+- `risk-id.ts` — `parseRiskId` → `ParsedRiskId { provider, env | null, name }`,
   `formatRiskId`, `baseRiskId`, `isRiskId`, `isProviderId`,
-  `isExplicitRiskId` (no `*`/`?`), `RISK_ID_PATTERN`, `PROVIDER_ID_PATTERN`,
-  `ENV_LABEL_PATTERN`.
+  `isExplicitRiskId` (no `*`/`?`), `WILDCARD_CHARS`, `RISK_ID_PATTERN`,
+  `PROVIDER_ID_PATTERN`, `ENV_LABEL_PATTERN`.
 - `refusal.ts` — `REFUSAL_CODES` (8), `RefusalCode`, `isRefusalCode`.
 - `mcp.ts` — `toolPrefixFor`, `splitToolName`, `McpToolDeclaration`,
   `McpToolResult`, `McpToolContent`, `UpstreamAuthError`, JSON-RPC types.
@@ -256,8 +263,8 @@ injected `fetch`, the bearer from the `api-key` secret and the
 - **Boot fails with `Invalid risk catalog`** — read every bullet ; paths
   are exact (`presets[1].entries[2].risk_id`). A legacy YAML with a
   top-level `railway:` key fails with `provider: expected a lowercase
-slug` + `risks: expected a non-empty list` : convert it to `provider:` /
-  `risks:` (P1.2).
+slug` + `risks: expected a non-empty list` + `railway: unknown key` :
+  convert it to `provider:` / `risks:` (P1.2).
 - **`PluginDefinitionError … must start with '<prefix>'`** — the tool name
   uses `-` or a different id ; the prefix maps `-` → `_` and ends with `__`.
 - **`assertCatalogCoverage` says `no catalog risk matches it`** — the

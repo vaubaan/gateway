@@ -4,6 +4,8 @@
 .env.test
 .env*.local
 *.pem
+deploy/config/*.yaml
+!deploy/config/*.example.yaml
 
 # Node
 node_modules/

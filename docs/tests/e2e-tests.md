@@ -1,7 +1,8 @@
 ---
 title: E2E tests
-status: planned
+status: current
 date: 2026-05-22
+last_synced: 2026-10-13
 tracks:
   - playwright.config.ts
   - apps/gateway/tests/e2e/
@@ -9,141 +10,103 @@ tracks:
   - .github/workflows/ci.yml
 ---
 
-# E2E tests — Playwright contre vrais clouds
+# E2E tests
 
-Posture "no-mock" héritée de v3 (cf. spec §14.3).
+Two kinds of end-to-end check exist today:
 
-## Statut MVP
+1. the **container smoke test** (`deploy/docker/smoke.sh`), automated in CI
+   since P0.4 — the only E2E check of the v5 build so far;
+2. the **Playwright harness** (`playwright.config.ts`), wired but holding
+   only legacy v4 specs that target the retired SaaS; nothing in CI runs
+   it.
 
-Le harness Playwright est wired (`playwright.config.ts`) avec deux projets :
+The v5 browser scenarios (sign-in through the IdP, connection creation,
+mission issuance, inbox approval, the agent's structured refusal) are
+written when the corresponding features land (Phase 1 and 2); each feature
+adds its scenario here.
 
-- `smoke` — checks Playwright is alive, no creds needed.
-- `e2e-real-clouds` — scénarios contre `sbw-vauban-test` (org GitHub dédiée).
-
-Aucun scénario n'est implémenté en MVP. Les scénarios listés ci-dessous sont
-le **plan de test** validé en spec ; ils seront codés en Phase 5
-(post-déploiement staging).
-
-## Setup pré-requis (manuel, opérateur Vaubaan)
-
-- Org GitHub dédié `sbw-vauban-test` avec un repo `playground` créé à la main.
-- GitHub App "Vaubaan Gateway (test)" installée sur l'org.
-- `.env.test` (gitignored) :
-  ```bash
-  GH_TEST_APP_ID=...
-  GH_TEST_APP_PRIVATE_KEY=...
-  GH_TEST_INSTALLATION_ID=...
-  E2E_BASE_URL=https://staging.vaubaan.com     # ou http://localhost:3000
-  E2E_USER_EMAIL=...                           # un compte test signup
-  E2E_SUPABASE_URL=...
-  E2E_SUPABASE_SERVICE_ROLE_KEY=...
-  # Railway (Auth app "Vaubaan Gateway (test)") :
-  RAILWAY_CLIENT_ID=...
-  RAILWAY_CLIENT_SECRET=...
-  RAILWAY_REDIRECT_URI=https://127.0.0.1:3000/api/integrations/railway/callback
-  ```
-
-## Scénarios planifiés
-
-### Scenario 1 — Onboarding GitHub
-
-```
-1. User signup via magic-link Supabase (capture le link en SMTP test inbox)
-2. Crée org 'sbw-vauban-test'
-3. Clic Connect GitHub → simule callback OAuth en injectant
-   installation_id directement (test mode)
-4. Assert provider_admins row created with status='connected'
-```
-
-### Scenario 2 — Project + binding
-
-```
-1. Crée project 'playground'
-2. POST binding github 'sbw-vauban-test/playground'
-3. Assert validateBinding live returns ok=true
-4. Assert provider_bindings row created
-```
-
-### Scenario 3 — Bot creation
-
-```
-1. POST /api/v1/bots {name: 'claude-dev', roleIds: [github:developer]}
-2. Assert api_key visible 1× in response body
-3. Assert api_key_prefix correct, api_key_hash non-null in DB
-```
-
-### Scenario 4 — Allow flow
-
-```
-1. Use api_key in real MCP client (or curl simulation)
-2. Send tools/call github__create_pull_request {head:'feature/test-X', base:'main'}
-3. Assert PR créée côté GitHub avec actor='Vaubaan Gateway[bot]'
-4. Assert audit_log row decision='allowed', role_matched='github:developer'
-```
-
-### Scenario 5 — Deny flow
-
-```
-1. Same bot, tools/call github__push_files {branch:'main', ...}
-2. Assert JSON-RPC error with denial_reason mentioning 'feature/*'
-3. Assert audit_log row decision='denied'
-```
-
-### Scenario 6 — Revocation
-
-```
-1. POST /bots/:id/rotate-key → new api_key
-2. Old api_key → 401
-3. New api_key → 200
-4. PATCH bot status='revoked' → new api_key also → 401
-```
-
-### Scenario 7 — Railway OAuth + rewrap (Phase 5+)
-
-```
-1. Clic Connect Railway → authorize backboard.railway.com (PKCE + resource binding)
-2. Callback échange le code → provider_admins row railway, access+refresh+expires_at set
-3. tools/list → 10 railway__ tools visibles selon le role
-4. Bind project.railway (UUID), token railway:viewer → tools/call railway__list-projects
-   → assert allowed + audit row
-5. railway:viewer → tools/call railway__redeploy → assert denied (read-only)
-6. railway:member → tools/call railway__accept-deploy → assert denied (default-deny, member ne grant pas ce tool)
-7. railway:deployer → tools/call railway__accept-deploy sur project bindé → assert allowed
-   (et railway:member + railway:deployer combinés → also allowed, par union d'allows)
-8. Force expires_at dans le passé → next call déclenche un refresh (provider_admins
-   access_token muté) → call OK
-```
-
-## v5 — Container smoke (P0.4, automated in CI)
+## Container smoke (v5, P0.4, automated in CI)
 
 > Covers: plan P0.4 DoD ("`docker compose up` serves the UI stub on the
 > configured port; container exits with a named variable when config is
-> incomplete"), spec §4.3, §6. Script `deploy/docker/smoke.sh <image>`, run
-> by the `docker` job of `.github/workflows/ci.yml` after the image build
-> and locally with `npm run docker:build && npm run docker:smoke`.
+> incomplete"), spec §4.3, §6. Script `deploy/docker/smoke.sh <image>`
+> (`SMOKE_PORT`, default 3999), run by the `docker` job of
+> `.github/workflows/ci.yml` after the image build (tag
+> `vaubaan-gateway:ci`) and locally with
+> `npm run docker:build && npm run docker:smoke` (tag
+> `vaubaan-gateway:local`).
 
 1. **Incomplete configuration** — `docker run` with only `VAUBAAN_PUBLIC_URL`
-   exits non-zero (78) and stderr names `encryption.master_key` with
+   exits 78 (`EX_CONFIG`) and stderr names `encryption.master_key` with
    `VAUBAAN_MASTER_KEY or VAUBAAN_MASTER_KEY_FILE`, `store.path` and
    `bootstrap_token`.
-2. **http public URL** — a complete configuration with `http://` exits
-   non-zero; stderr contains `public_url: must use https`.
+2. **http public URL** — a complete configuration with `http://` exits 78;
+   stderr contains `public_url: must use https`.
 3. **Complete configuration** — the container stays up and
    `GET /healthz` answers 200 `{"status":"ok",...}` within 30 s; the logs
    contain neither the master key nor the bootstrap token.
-4. **Native addons** — `argon2` hashes, `better-sqlite3` opens an in-memory
-   database and runs a query, and `libsodium-wrappers` loads inside the image
-   (file tracing of prebuilt binaries and runtime files; P0.6 added the
-   `better-sqlite3` check).
+4. **Native addons** — `argon2` hashes and `better-sqlite3` opens an
+   in-memory database and runs a query inside the image (file tracing of
+   prebuilt binaries and runtime files; P0.6 added the `better-sqlite3`
+   check). `libsodium-wrappers` is exercised indirectly: the encryptor runs
+   during boot, so a container that answers `/healthz` has loaded it.
 5. **Non-root** — the process runs as uid 10001.
+6. **No env file shipped** — the image contains no `apps/gateway/.env*`
+   file (the build context excludes every `.env*`).
 
-## Sweeper
+## Playwright harness
 
-Cron nightly qui ratisse les PRs/branches `vauban-e2e-*` >24h sur GitHub.
-Exit code 0/1/2/3 selon nb orphelins (CI alerting).
+`playwright.config.ts` defines two projects over `apps/gateway/tests/e2e/`:
 
-Pas implémenté en MVP — voir `scripts/e2e-sweeper.ts` (vide).
+- `smoke` — `smoke.spec.ts`;
+- `e2e-real-clouds` — every spec under `real-clouds/`.
+
+`npm run test:e2e` runs both, `npm run test:e2e:real-clouds` the second
+only. Without `E2E_BASE_URL` the config starts `npm run dev` on
+`localhost:3000`; with it, the specs target that URL. Credentials come from
+`.env.test` (gitignored) or the environment: `E2E_USER_EMAIL`,
+`E2E_USER_PASSWORD`, `E2E_ORG_SLUG`, `E2E_PROJECT_SLUG`. Playwright is not
+part of `npm run ci` and no workflow runs it.
+
+### Implemented specs (legacy v4, deleted with the v4 UI in Phase 1)
+
+The four specs predate the pivot and exercise the v4 SaaS (Supabase
+sign-in, organisations, bindings, `/api/v1/*` routes). They are kept only
+until P1.6 replaces the UI; none of them passes against a v5 instance.
+
+| Spec                                 | What it did                                                                                                                                                    |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `smoke.spec.ts`                      | the landing page of the deployed SaaS renders a "Sign in" call to action                                                                                       |
+| `golden-path.spec.ts`                | password sign-in → dashboard → organisation → project → roles catalogue (skipped without credentials)                                                          |
+| `mint-flow.spec.ts`                  | authenticated `/tokens/new`: binding cards, risk rows, "Mint token" disabled until a risk is accepted (skipped without credentials)                            |
+| `real-clouds/stripe-connect.spec.ts` | `POST /api/v1/stripe-bindings` validation (account id prefix, missing keys) and the Stripe binding UI; credentials from `E2E_USER_EMAIL` / `E2E_USER_PASSWORD` |
+
+### Planned v5 scenarios (written with the features)
+
+Each scenario is added to this file, with its spec file, by the feature
+that makes it possible. Target list (spec §4, §5, §7):
+
+1. **Bootstrap and first sign-in** — operator signs in with the bootstrap
+   token, configures the IdP, a user signs in through OIDC (P1.1).
+2. **Connection and share** — a user connects a provider, shares the
+   connection with a group under a restriction (P1.2, P1.4).
+3. **Mission issuance** — a mission over two connections with a budget per
+   risk; the token is shown once (P1.3, P1.5).
+4. **Agent call through the execution door** — an MCP client calls a tool
+   within budget (allowed, audited), then beyond it (`budget-exhausted`
+   with a claim URL) (P1.6).
+5. **Approval from the inbox** — a gated call produces an approval request;
+   the human grants it from the inbox and the agent's retry passes (P2.1).
+6. **Refusal surfaces** — `risk-not-accepted`, `resource-not-in-mission`,
+   `connection-unavailable`, `mission-inactive` each reach the agent with
+   its hint (P1.6).
 
 ## Conventions
 
-Ressources transitoires nommées `vauban-e2e-<testfile-hash6>-<run-uuid8>`.
+- Playwright specs never create state in a real cloud; the "no mock"
+  posture of v4 (`e2e-real-clouds` against a dedicated GitHub organisation)
+  is retired with the SaaS. Provider calls in v5 E2E run against the mock
+  upstream of the plugin test kit (`mockFetch`).
+- Transient resources, when a scenario must create one, are named
+  `vaubaan-e2e-<spec-hash6>-<run-uuid8>` and removed by the scenario's
+  teardown; there is no sweeper job.

@@ -2,6 +2,7 @@
 title: Gateway core
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - packages/gateway-core/src/
   - packages/gateway-core/tests/unit/
@@ -9,6 +10,8 @@ tracks:
   - packages/shared/src/domain.ts
   - packages/shared/src/refusal.ts
   - packages/shared/src/risk.ts
+  - packages/shared/src/mcp.ts
+  - apps/gateway/src/lib/gateway/legacy-v4-gateway.ts
 ---
 
 # Gateway core — `@vaubaan/gateway-core`
@@ -94,12 +97,14 @@ codes, one builder each under `refuse.*`, every refusal carrying its
 | `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                             | credentials never cross over                               |
 
 `isRefusal(value)` is the type guard (`isRefusalCode(code)` and a non-empty
-hint). The unit test asserts exactly eight codes in `REFUSAL_CODES` and one
+hint); `RefusalOf<C>` narrows a `Refusal` to one code. The unit test asserts exactly eight codes in `REFUSAL_CODES` and one
 sample per code.
 
 **JSON-RPC mapping** — unchanged since v4: `refusalToRpcError(id, refusal)`
 yields `{ code: -32603, message: 'Vaubaan refused the call: <code>', data: <refusal> }`.
-`REFUSAL_RPC_CODE` exports the constant. The whole refusal, hint
+`REFUSAL_RPC_CODE` exports the constant. `rpcError(id, code, message, data?)`
+and `rpcSuccess(id, result)` are the generic builders the door uses for the
+rest of the envelope. The whole refusal, hint
 included, travels in `data`; the door must forward `data` to the MCP
 client (the v4 `/mcp` route only forwarded `message`, which lost the
 fields — a point for P1.6).
@@ -136,7 +141,9 @@ upstream_error IS NOT NULL`.
 connection created/reconnected/transferred/revoked, share created/revoked,
 mission issued/rotated/revoked/closed, budget extended, period reset,
 expiry extended, gate opened, approval granted, request refused,
-delegation granted/revoked, config changed), `object {type, id}`,
+delegation granted/revoked, config changed), `object {type, id}` with
+`type: AdminObjectType` (`connection | share | mission | request |
+delegation | instance-config`),
 `before`, `after`, `delegated_client_id` (set when the act came through
 the management door).
 
@@ -150,7 +157,8 @@ lets a rejected `write` propagate, so no call completes without its entry
 {}))` truncated to 16 hex characters. It is not canonical (key order
 matters); the canonical fingerprint that binds approvals is P1.3's.
 
-`MemoryAuditWriter` keeps entries in memory for tests (`.calls`, `.admin`).
+`MemoryAuditWriter` keeps entries in memory for tests (`.entries`, `.calls`,
+`.admin`).
 
 ## Mission context (`types.ts`)
 
@@ -216,7 +224,10 @@ upstream.execute(ctx, call, target) mint + forward           (UpstreamStage — 
 audit.write(entry)                  always, exactly once     (AuditWriter — P0.3)
 ```
 
-`CallPipeline.execute(ctx, call)` returns a `CallOutcome`:
+`CallPipeline` is built from `CallPipelineDeps` (`resources`, `risks`,
+`budget`, `upstream`, `audit`, optional `now` clock; the budget stage
+returns a `BudgetDecision`). `CallPipeline.execute(ctx, call)` returns a
+`CallOutcome`:
 
 - `allowed` — provider result + audit entry;
 - `refused` — a typed `Refusal` + audit entry (`refusal_code` set,
@@ -283,7 +294,8 @@ P1.6 deletes it.
 the door uses to keep a verified mission context for a few seconds.
 `MemoryCacheClient` is bounded (`maxEntries`, default 10 000; the oldest
 entry is evicted after a sweep of expired ones; re-setting a key makes it
-the newest) and takes an injectable clock.
+the newest), exposes `size` and takes an injectable clock
+(`MemoryCacheOptions`).
 
 `// single-process only` — a multi-replica deployment swaps in a shared
 implementation of `CacheClient`; nothing else changes. The v4
@@ -303,7 +315,8 @@ pivot D1; the Upstash ADR is superseded).
   files are deleted with the rest of the v4 app code.
 - `venv-store.ts` — project-scoped secret transfer; no v5 counterpart
   (plan §8-Q5). The Vercel and Supabase adapters keep their own
-  structural `VenvStoreReader` until P1.2 migrates them.
+  structural reader interface (`VenvStoreReader` in Vercel, `VenvStoreLike`
+  in Supabase) until P1.2 migrates them.
 - `SupabaseAuditWriter`, `RedisCacheClient`, `buildCacheClient`, and the
   `@supabase/supabase-js`, `@upstash/redis`, `@vaubaan/plugin-github`
   dependencies (declared, never imported).

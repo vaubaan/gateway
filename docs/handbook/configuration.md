@@ -2,6 +2,7 @@
 title: Instance configuration, crypto and composition root
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - apps/gateway/src/server/config/
   - apps/gateway/src/server/crypto/
@@ -15,6 +16,7 @@ tracks:
   - apps/gateway/next.config.ts
   - apps/gateway/tsconfig.json
   - apps/gateway/tests/integration/standalone-native-addons.test.ts
+  - apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts
   - deploy/config/gateway.example.yaml
   - deploy/config/.env.example
   - scripts/gen-master-key.mjs
@@ -89,13 +91,15 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      plugins are registered it is a `ConfigError` naming
      `providers.<id>` and `VAUBAAN_PROVIDER_<ID>_*` (exit 78);
    - the embedded store from `RootDeps.openStore`, by default
-     `openEmbeddedStore`: `openStore()` of [[store]] on `config.store.path`
+     `openEmbeddedStore`: `openStore()` of [store](store.md) on `config.store.path`
      with the encryptor just built and a `RegistryCatalogIndex` (the store
      checks every persisted `RiskId` against the loaded catalogs,
      env-qualified ids included). Migrations run here; the boot line
      `store opened` carries `kind`, `path` and `schema_version`. A store
      that cannot open fails the boot with a message naming `store.path` and
      `VAUBAAN_STORE_PATH` (exit 1);
+   - the boot line `composition root ready` (`store`, `schema_version`,
+     `plugins`, `build`) closes the sequence;
    - in-memory rate limiter, cache and session store unless injected.
 5. On `ConfigError`, `bootOrExit()` prints the error to stderr with a
    pointer to `deploy/config/` and exits with code **78** (`EX_CONFIG`);
@@ -104,8 +108,8 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
 
 `/healthz` (`http/healthz.ts`) pings the store and answers 200
 `{status:"ok", version, commit, uptime_seconds, store:{kind,status}}`, 503
-`degraded` when the ping fails, 503 `unavailable` when the root cannot be
-built. `version` and `commit` are frozen into the bundle by `next.config.ts`
+`degraded` when the ping fails, 503 `unavailable` (with `reason`) when the
+root cannot be built. `version` and `commit` are frozen into the bundle by `next.config.ts`
 (`NEXT_PUBLIC_GATEWAY_VERSION`, `NEXT_PUBLIC_COMMIT_SHA`; `dev` outside a
 build).
 
@@ -123,9 +127,11 @@ build).
   default external list, `ssh2` is added. `outputFileTracingIncludes` lists
   the `argon2` prebuilds (nft does not follow `node-gyp-build`) and the
   runtime files of `better-sqlite3` (`package.json`, `lib/`, the `.node`
-  binary, `bindings`, `file-uri-to-path`): nothing in the route graph
-  imports the store yet, so nft never reaches the package on its own. The
-  globs stay correct, and become redundant, once the store is wired.
+  binary, `bindings`, `file-uri-to-path`) and `./migrations/*.sql`, which
+  the store reads from disk at boot. Since P0.R the `/healthz` route graph
+  reaches `better-sqlite3` through the root, so nft traces the package on
+  its own; the explicit globs remain as the guarantee for the prebuilt
+  binary and the SQL files.
 - `instrumentation.ts`, the `globalThis` root and `/healthz` behave the same
   in `next dev` and in the standalone `server.js` (checked by hand and by
   the container smoke test); `register()` still runs on the Node runtime
@@ -177,6 +183,10 @@ Not in the tree: `VAUBAAN_CONFIG_FILE` (path of the YAML; unset means
 environment only; set but unreadable is an error), and the listener
 variables `PORT` / `HOSTNAME` read by Next's standalone `server.js`.
 
+Booleans accept `true`/`false`, `1`/`0`, `yes`/`no`, `on`/`off`. A secret
+given both directly and through its `*_FILE` variable is an error ("set
+either X or X_FILE, not both").
+
 Secret references in YAML: `${NAME}` is replaced by the environment
 variable (unset → error naming the key), `${file:/run/secrets/x}` by the
 trimmed file content. Both may appear inside a longer string.
@@ -214,35 +224,39 @@ naming `encryption.previous_keys`.
 
 `lib/crypto/index.ts` keeps the v4 `encryptProviderSecret` /
 `decryptProviderSecret` signature for the UI and `/mcp` route that still
-exist, reading `ENCRYPTION_MASTER_KEY` lazily. It is the only
-`process.env` secret read outside `server/config` and disappears with the
-v4 code in Phase 1.
+exist, reading `ENCRYPTION_MASTER_KEY` lazily. It is the only v5-era shim
+reading a secret from `process.env` outside `server/config`; the v4 UI and
+`lib/` code (`lib/providers/state.ts`, `lib/gateway/build.ts`,
+`lib/supabase/`, the `api/integrations/*` routes) still read their own
+`*_SECRET` / `*_KEY` variables until Phase 1 deletes them, and the
+structural test scopes itself to the v5 perimeter for that reason.
 
 ## Logging
 
 `createLogger({ level, redact })` writes one JSON object per line
 (`time`, `level`, `msg`, bindings, fields) to stdout, errors to stderr. The
-whole line goes through the redactor: `vbn_live_<prefix8>_<secret32>`
+whole line goes through the redactor: `vbn_(live|test)_<prefix8>_<secret32>`
 becomes `vbn_live_<prefix8>_[redacted]`, every configured secret (also in
 its JSON-escaped form, for PEM keys) becomes `[redacted]`. `child()` adds
 bindings. `silentLogger` is for tests.
 
 ## Ports and their single-process implementations
 
-| Port             | Today                                                          | Hosted replacement                    |
-| ---------------- | -------------------------------------------------------------- | ------------------------------------- |
-| `Store`          | the embedded SQLite store of [[store]] (`openEmbeddedStore`)   | Postgres behind the same repositories |
-| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2             | same (static)                         |
-| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`) | Redis `INCR` + `PEXPIRE`              |
-| `CacheClient`    | `MemoryCache`, TTL, bounded (oldest evicted)                   | Redis                                 |
-| `SessionStore`   | `MemorySessionStore`                                           | store-backed rows or Redis            |
+| Port             | Today                                                                | Hosted replacement                    |
+| ---------------- | -------------------------------------------------------------------- | ------------------------------------- |
+| `Store`          | the embedded SQLite store of [store](store.md) (`openEmbeddedStore`) | Postgres behind the same repositories |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2                   | same (static)                         |
+| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`)       | Redis `INCR` + `PEXPIRE`              |
+| `CacheClient`    | `MemoryCache`, TTL, bounded (oldest evicted)                         | Redis                                 |
+| `SessionStore`   | `MemorySessionStore`                                                 | store-backed rows or Redis            |
 
 `GatewayRoot.store` is the full store with its repositories (the `Store`
 of `ports.ts` is only the liveness slice `/healthz` and `close()` need);
 `GatewayRoot.registry` is the SDK registry itself, so every provider list
 derives from one object. Features plug their factories through `RootDeps`
 (`openStore(ctx: { config, logger, encryptor, catalog })`,
-`buildRegistry(config, logger)`, `rateLimiter`, `cache`, `sessions`);
+`buildRegistry(config, logger)`, `rateLimiter`, `cache`, `sessions`, plus
+`loadConfig`, `logWrite` and `build` that tests override);
 tests use `memoryStoreDeps` (the `:memory:` store) and `fakePlugin()` from
 `compose/testing.ts`, and call `resetRoot()` between cases.
 

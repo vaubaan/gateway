@@ -2,11 +2,14 @@
 title: Store — embedded SQLite, schema v1, repositories
 status: current
 date: 2026-10-13
+last_synced: 2026-10-13
 tracks:
   - apps/gateway/migrations/
   - apps/gateway/src/server/store/
   - apps/gateway/tests/unit/server/store/
   - apps/gateway/tests/integration/store/
+  - apps/gateway/src/server/compose/store.ts
+  - apps/gateway/src/server/compose/registry.ts
 ---
 
 # Store — embedded SQLite, schema v1, repositories
@@ -21,7 +24,7 @@ requests, approvals), §6 (encryption at rest, immutable audit), §8 (audit). De
 
 ```
 apps/gateway/migrations/
-  0001_schema.sql                 schema v1 (28 tables, 4 triggers)
+  0001_schema.sql                 schema v1 (27 tables + schema_migrations from the runner, 4 triggers)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           better-sqlite3 handle, pragmas, withImmediateTransaction, backupTo
@@ -42,11 +45,16 @@ apps/gateway/src/server/store/
 
 ## Opening the store
 
-The composition root does it at boot (`apps/gateway/src/server/compose/store.ts`,
-handbook [[configuration]]):
+The composition root does it at boot: `openEmbeddedStore(ctx)` in
+`apps/gateway/src/server/compose/store.ts` wraps `openStore()` and is injected
+through `RootDeps.openStore` (handbook [configuration](configuration.md)); a
+failure becomes a boot error naming `store.path` and its variable, a success
+logs `store opened` with `kind` and `schema_version`. Root tests swap in
+`openMemoryStore` through `memoryStoreDeps()` (`compose/testing.ts`).
+Illustrative call:
 
 ```ts
-import { openStore } from '@/server/store/index.ts';
+import { openStore } from '../store';
 
 const store = openStore({
   path: config.store.path, // InstanceConfig.store.path, or MEMORY_PATH
@@ -57,6 +65,7 @@ const store = openStore({
 // store.sessions, store.requests, store.approvals, store.delegations, store.audit,
 // store.config, store.auditWriter, store.schemaVersion, store.backupTo(),
 // store.kind ('sqlite' | 'memory'), store.ping(), store.close()  <- compose/ports.ts Store port
+// store.db: raw handle, for structural tests and diagnostics only
 ```
 
 `RegistryCatalogIndex` (`compose/registry.ts`) answers `has(riskId)` from
@@ -70,7 +79,8 @@ mission. `SetCatalogIndex` remains for tests. `root.store` is this object;
 
 `openStore()`:
 
-1. opens the file (created if absent) with `busy_timeout` 5 s and refuses SQLite older
+1. opens the file (created if absent; the directory must exist, a missing one
+   fails the boot naming `store.path`) with `busy_timeout` 5 s and refuses SQLite older
    than 3.37 (no `STRICT`);
 2. sets `journal_mode = WAL` (file databases), `synchronous = NORMAL`,
    `foreign_keys = ON`, `temp_store = MEMORY`;
@@ -103,7 +113,8 @@ five-id catalog).
 - **Encrypted columns** (`connections.credential_blob`, `requests.args_blob`,
   `instance_config.secret_blob`) are sealed by the injected `Encryptor` (the crypto
   module's port: `encrypt(id, text)` / `decrypt(id, { keyVersion, blob })`) with the
-  row id as associated data and stamped with `key_version`. The port is async and
+  owning row's identifier as associated data (the connection id, `request:<id>`,
+  `instance_config:<key>`) and stamped with `key_version`. The port is async and
   transactions are sync, so a repository seals before `BEGIN IMMEDIATE` and opens
   after `COMMIT`. Records never expose the ciphertext; `getCredential()`,
   `getArguments()`, `getSecret()` open it on demand and return clear text.
@@ -144,10 +155,16 @@ the shape, `packages/gateway-core/src/audit.ts`):
 - `AdminAuditEntry` — `user_id`, `act`, `object: { type, id }`, `before`/`after`
   (JSON), `delegated_client_id`.
 
+Reads: `getById(id)` and `list(filter)` with `AuditFilter { missionId?, kind?,
+since?, until?, limit? }` (default limit 1000, ordered by `ts, id`).
+
 Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks` aborts;
-a `DELETE` aborts unless `audit_purge_guard` holds a cutoff newer than the row.
-`store.audit.purgeOlderThan(cutoff)` is the only path that opens that window, inside
-its own transaction; `purgeByRetention(days = 90)` computes the cutoff from the clock.
+a `DELETE` on `audit` aborts unless `audit_purge_guard` holds a cutoff newer than the
+row; `audit_risks` rows go only while that window is open, and the repository scopes
+the delete to the purged entries. `store.audit.purgeOlderThan(cutoff)` is the only
+path that opens the window, inside its own transaction;
+`purgeByRetention(days = DEFAULT_AUDIT_RETENTION_DAYS)` (90, exported) computes the
+cutoff from the clock.
 `countAllowedTouches(mission, risk, since, until)` serves the structural check
 "session counters agree with the audit" (spec §10).
 
@@ -174,7 +191,8 @@ const result = await store.sessions.decideAndDecrement(
 
 Everything inside runs in one `BEGIN IMMEDIATE` transaction: session get-or-create
 ("born on the first call"), counter read, the callback, the per-risk increment when
-`allow` is true, the outcome's event. A thrown callback rolls everything back,
+`allow` is true (`riskIds` are deduplicated: one credit per distinct risk per
+call), the outcome's event. A thrown callback rolls everything back,
 including the session creation. The accounting rules (period arithmetic, quota and
 rate comparison, gate) are feature P1.3's callback; this module only guarantees the
 atomicity. Rate-limit sliding windows are not stored here (in-memory, P1.3).
@@ -206,6 +224,6 @@ capture both files atomically are also fine.
   schema-level wildcard `CHECK`, the N=50 concurrent `decideAndDecrement` on quota 1
   (exactly one allow), in-transaction approval consumption and request drop, the
   counters-vs-audit structural check, argument erasure on decision and expiry.
-- `tests/integration/compose/boot.test.ts` (handbook [[configuration]]) — the
+- `tests/integration/compose/boot.test.ts` (handbook [configuration](configuration.md)) — the
   composition root opening this store on a temporary file with the real encryptor
   and the registry-backed catalog index.
