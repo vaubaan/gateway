@@ -347,21 +347,21 @@ npx vitest run packages/policy-engine     # one package
 
 `packages/policy-engine/tests/unit/`.
 
-- **`slice-dsl.test.ts`** — `parseSlice` happy path and every error branch
+- **`slice-dsl.test.ts`** (23) — `parseSlice` happy path and every error branch
   (missing provider/action, invalid action, unterminated bracket, empty
   bracket, double dot, list with empty entry); `serializeSlice` round trip
   (simple, glob, list, wild-rec, the canonical examples of the spec).
-- **`slice-matcher.test.ts`** — `matches` simple/wild/list/glob, `covers`
+- **`slice-matcher.test.ts`** (29) — `matches` simple/wild/list/glob, `covers`
   (`**` vs `*` partial order), symmetric `intersects` with glob × glob,
   asymmetric cases on `wild-rec`; glob charset regression (`release-*`
   matches `release-1.2`: the parser and the glob share one identifier
   charset).
-- **`risk-evaluator.test.ts`** — `risksTouchedBy` (code read, feature
+- **`risk-evaluator.test.ts`** (20) — `risksTouchedBy` (code read, feature
   branch, merge-protected + fallback, branch protection, provider mismatch
   → empty), `risksTouchedByAll` (deduplicated union, stable order),
   `indexCatalog` (rejects a pattern of the wrong provider and an
   unparseable one), `findRiskEntry`.
-- **`risk-policy.test.ts`** — `checkAcceptableInEnv` (no env, env not in
+- **`risk-policy.test.ts`** (9) — `checkAcceptableInEnv` (no env, env not in
   the list, ok) + `prepareCatalog` (duplicate id, regex failure, fallback
   warning through the injectable `warn`, `hasFallbackRisk`).
 - **`risk-runtime.test.ts`** (25) — `evaluateCall` allow (feature branch
@@ -404,7 +404,7 @@ npx vitest run packages/policy-engine     # one package
 `packages/plugin-sdk/tests/unit/`. The template plugin's own suite is under
 "Scenarios — Provider plugins".
 
-- **`catalog-loader.test.ts`** — loads the `acme` fixture YAML (provider,
+- **`catalog-loader.test.ts`** (31) — loads the `acme` fixture YAML (provider,
   `catalog_version`, date scalar kept as a string, optional fields,
   presets with default gate); collected, path-qualified errors: duplicate
   id, malformed id, id of another provider, malformed slice pattern,
@@ -427,12 +427,12 @@ npx vitest run packages/policy-engine     # one package
   entry on the fallback is an error; an entry recognised by convention
   without `fallback: true` loads with a warning through `warn` and is
   still indexed as the fallback).
-- **`registry.test.ts`** — ids in registration order, `has/get/require`,
+- **`registry.test.ts`** (10) — ids in registration order, `has/get/require`,
   `providerForTool` (exact name, prefix rule for unlisted tools, null),
   `toolDeclarations`, `labels` (with `experimental`), `idEnum` (non-empty tuple, throws when
   empty), `catalogOf` indexed, `presetsOf`; conflicts: same id twice, tool
   outside the plugin prefix, ill-formed plugin reported with its id.
-- **`define-plugin.test.ts`** — fixture well-formed and frozen; every issue
+- **`define-plugin.test.ts`** (24) — fixture well-formed and frozen; every issue
   collected (id grammar, semver, tool prefix and duplicates, data-model
   and catalog provider mismatch); catalog rules through the definition;
   data-model referential integrity; credential spec rules per kind
@@ -446,7 +446,7 @@ npx vitest run packages/policy-engine     # one package
   a TypeScript catalog**: a preset entry with an infinite quota, a negative
   rate or an unknown gate is refused like its YAML twin, every illegal value
   of one entry listed.
-- **`testing-kit.test.ts`** — `assertCatalogCoverage` on the fixture
+- **`testing-kit.test.ts`** (14) — `assertCatalogCoverage` on the fixture
   (touched risks in catalog order; `risksUntouched` leaves the fallback
   out — reachable by design only; `fallbackHits` names the samples only
   the fallback covered), every failure branch (tool without sample, sample
@@ -465,10 +465,10 @@ npx vitest run packages/policy-engine     # one package
   provider is released); `textParts` yields one part per chunk, decodes a
   character split across two chunks, cancels the body on an early exit and
   throws when the body errors midway.
-- **`catalog-path.test.ts`** — `catalogPathNextTo`: default file name,
+- **`catalog-path.test.ts`** (4) — `catalogPathNextTo`: default file name,
   `URL` input, the fixture resolving to a readable file, the two Turbopack
   rewrite shapes raising the named error.
-- **`env-of.test.ts`** — `envFromSliceSegment`: the identifier after the
+- **`env-of.test.ts`** (3) — `envFromSliceSegment`: the identifier after the
   named entity, `undefined` on wildcards, lists, absent or terminal
   segment, no confusion with an identifier equal to the entity name.
 
