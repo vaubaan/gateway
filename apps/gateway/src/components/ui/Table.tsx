@@ -13,7 +13,8 @@ export function Thead(props: HTMLAttributes<HTMLTableSectionElement>) {
   return <thead {...props} className={[styles.thead, props.className ?? ''].join(' ')} />;
 }
 export function Tbody(props: HTMLAttributes<HTMLTableSectionElement>) {
-  return <tbody {...props} />;
+  // The class the hover rule of a row is written under (`.tbody .tr:hover`).
+  return <tbody {...props} className={[styles.tbody, props.className ?? ''].join(' ')} />;
 }
 export function Tr(props: HTMLAttributes<HTMLTableRowElement>) {
   return <tr {...props} className={[styles.tr, props.className ?? ''].join(' ')} />;

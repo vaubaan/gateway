@@ -6,7 +6,7 @@
  * rotation (reveal-once dialog) and with the masked prefix on the mission
  * page.
  */
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
@@ -93,9 +93,15 @@ export function RevealDialog({
   kit: BootstrapKit;
   onDone: () => void;
 }) {
+  // Focus moves into the dialog when it opens. Escape does not close it, on purpose:
+  // the token it shows cannot be shown again, and one stray key would lose it.
+  const dialog = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    dialog.current?.focus();
+  }, []);
   return (
     <div className={styles.overlay} role="dialog" aria-modal="true" aria-labelledby="reveal-title">
-      <div className={styles.dialog}>
+      <div className={styles.dialog} ref={dialog} tabIndex={-1}>
         <div>
           <h2 id="reveal-title">{title}</h2>
           <p className={styles.muted}>

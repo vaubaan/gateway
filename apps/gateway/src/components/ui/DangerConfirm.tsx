@@ -10,6 +10,27 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from './Button';
 
+/**
+ * Tab and Shift+Tab stay inside the panel (style guide §5): from its last
+ * control Tab goes to the first, from the first Shift+Tab goes to the last,
+ * and a focus that got outside is brought back in.
+ */
+function keepFocusInside(event: KeyboardEvent, panel: HTMLElement | null): void {
+  if (!panel) return;
+  const controls = [
+    ...panel.querySelectorAll<HTMLElement>('input, button, a[href], [tabindex]'),
+  ].filter((el) => !el.hasAttribute('disabled') && el.tabIndex >= 0);
+  const first = controls[0];
+  const last = controls[controls.length - 1];
+  if (!first || !last) return;
+  const active = document.activeElement;
+  const outside = !(active instanceof Node) || !panel.contains(active);
+  if (event.shiftKey ? active === first || outside : active === last || outside) {
+    event.preventDefault();
+    (event.shiftKey ? last : first).focus();
+  }
+}
+
 export function DangerConfirm({
   title,
   body,
@@ -31,6 +52,7 @@ export function DangerConfirm({
 }) {
   const [value, setValue] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -38,6 +60,7 @@ export function DangerConfirm({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape' && !busy) onCancel();
+      if (e.key === 'Tab') keepFocusInside(e, panelRef.current);
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
@@ -64,6 +87,7 @@ export function DangerConfirm({
       }}
     >
       <div
+        ref={panelRef}
         style={{
           width: '100%',
           maxWidth: 480,

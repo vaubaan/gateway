@@ -732,6 +732,10 @@
   display: grid;
   gap: var(--space-4);
 }
+/* Focused by script when it opens, so that the keyboard starts inside it: no ring on the panel. */
+.dialog:focus {
+  outline: none;
+}
 .dialog h2 {
   margin: 0;
   font-size: var(--text-lg);
