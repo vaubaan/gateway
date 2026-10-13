@@ -1,30 +1,33 @@
 /**
- * SupabaseAdapter — ProviderAdapter for Supabase, paste-token (Mgmt API PAT) mode.
+ * Legacy v4 adapter shim — `SupabaseAdapter`.
  *
- * Spec : docs/spec/vaubaan-gateway.md §5.1.
- * Note : OAuth Mgmt API flow is Phase 5+ once we register a Vaubaan Gateway
- *        Supabase OAuth app. v0 uses paste-token (`sbp_...`) directly.
+ * @deprecated legacy v4, deleted in P1.6. Kept so `apps/gateway`
+ * (`lib/gateway/build.ts`) compiles until the execution door consumes
+ * `supabasePlugin` through the registry. Tool dispatch delegates to the v5
+ * `callSupabase` ; the v4 `*_to_venv` tools are gone (plan §8-Q5) and
+ * `venvStore` is accepted and ignored.
  */
 
 import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
-import { availableTools } from './tools.ts';
-import { executeCall, executeVenvTool, type FetchImpl, type VenvStoreLike } from './execute.ts';
+
 import { classifySupabaseV4, type ClassifyV4Result } from './risk-classifier.ts';
+import { callSupabase, SUPABASE_API_BASE, type FetchImpl } from './execute.ts';
+import { REFRESH_THRESHOLD_MS } from './credential.ts';
+import { supabaseTools } from './tools.ts';
 
-const REFRESH_THRESHOLD_MS = 60_000;
-
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface SupabaseRefreshedTokens {
   accessToken: string;
   refreshToken: string;
   expiresAt: Date;
 }
 
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface SupabaseAdapterConfig {
   /** Override fetch in tests. */
   fetchImpl?: FetchImpl;
-  /** Project env var store for _to_venv tools. When absent, venv tools
-   *  are still listed but throw at execution time. */
-  venvStore?: VenvStoreLike | null;
+  /** Ignored : the v4 project env-var store has no v5 counterpart. */
+  venvStore?: unknown;
   /** OAuth client credentials for token refresh. */
   clientId?: string;
   clientSecret?: string;
@@ -32,30 +35,24 @@ export interface SupabaseAdapterConfig {
   persistRefresh?: (admin: ProviderAdmin, tokens: SupabaseRefreshedTokens) => Promise<void>;
 }
 
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface ValidateResult {
   ok: boolean;
   displayName?: string;
   error?: string;
 }
 
-const VENV_TOOLS = new Set([
-  'supabase__service_role_to_venv',
-  'supabase__anon_key_to_venv',
-  'supabase__url_to_venv',
-]);
-
+/** @deprecated legacy v4, deleted in P1.6 — use `supabasePlugin`. */
 export class SupabaseAdapter {
   readonly provider = 'supabase' as const;
-  readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
+  readonly availableTools: ReadonlyArray<McpToolDeclaration> = supabaseTools;
   private readonly fetchImpl: FetchImpl;
-  private readonly venvStore: VenvStoreLike | null;
   private readonly clientId?: string;
   private readonly clientSecret?: string;
   private readonly persistRefresh?: SupabaseAdapterConfig['persistRefresh'];
 
   constructor(config: SupabaseAdapterConfig = {}) {
     this.fetchImpl = config.fetchImpl ?? fetch;
-    this.venvStore = config.venvStore ?? null;
     this.clientId = config.clientId;
     this.clientSecret = config.clientSecret;
     this.persistRefresh = config.persistRefresh;
@@ -63,12 +60,14 @@ export class SupabaseAdapter {
 
   authorizationUrl(_orgId: string, _returnUrl: string, _state: string): string {
     throw new Error(
-      'SupabaseAdapter: OAuth Mgmt flow not implemented yet — use paste-token mode by inserting provider_admins directly.',
+      'SupabaseAdapter: the OAuth flow is driven by the host from supabasePlugin.credential.',
     );
   }
 
-  async handleCallback(_orgId: string, _params: URLSearchParams) {
-    throw new Error('SupabaseAdapter: OAuth callback not implemented in v0.');
+  async handleCallback(_orgId: string, _params: URLSearchParams): Promise<never> {
+    throw new Error(
+      'SupabaseAdapter: the OAuth callback is driven by the host from supabasePlugin.credential.',
+    );
   }
 
   async mintUpstreamToken(admin: ProviderAdmin): Promise<{ token: string; expiresAt: Date }> {
@@ -94,7 +93,7 @@ export class SupabaseAdapter {
     if (!admin.refresh_token_encrypted) return null;
     const refreshToken = new TextDecoder().decode(admin.refresh_token_encrypted);
     const basicAuth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
-    const res = await this.fetchImpl('https://api.supabase.com/v1/oauth/token', {
+    const res = await this.fetchImpl(`${SUPABASE_API_BASE}/oauth/token`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -125,18 +124,13 @@ export class SupabaseAdapter {
 
   async retryAfterAuthFailure(
     admin: ProviderAdmin,
-    binding: ProviderBinding,
+    _binding: ProviderBinding,
     tool: string,
     args: Record<string, unknown>,
   ): Promise<unknown> {
     const refreshed = await this.refresh(admin);
     if (!refreshed) throw new Error('Supabase token refresh not available.');
-    const token = refreshed.accessToken;
-    if (VENV_TOOLS.has(tool)) {
-      if (!this.venvStore) throw new Error('venv store is not configured on this gateway.');
-      return executeVenvTool(this.fetchImpl, token, tool, args, this.venvStore, binding.project_id);
-    }
-    return executeCall(this.fetchImpl, token, tool, args);
+    return callSupabase(this.fetchImpl, refreshed.accessToken, tool, args);
   }
 
   async validateBinding(admin: ProviderAdmin, resourceRef: string): Promise<ValidateResult> {
@@ -145,7 +139,7 @@ export class SupabaseAdapter {
     }
     try {
       const { token } = await this.mintUpstreamToken(admin);
-      const data = (await executeCall(this.fetchImpl, token, 'supabase__get_project', {
+      const data = (await callSupabase(this.fetchImpl, token, 'supabase__get_project', {
         project_ref: resourceRef,
       })) as { name?: string };
       return { ok: true, displayName: data.name ?? resourceRef };
@@ -157,22 +151,14 @@ export class SupabaseAdapter {
 
   async executeCall(
     admin: ProviderAdmin,
-    binding: ProviderBinding,
+    _binding: ProviderBinding,
     tool: string,
     args: Record<string, unknown>,
   ): Promise<unknown> {
     const { token } = await this.mintUpstreamToken(admin);
-    if (VENV_TOOLS.has(tool)) {
-      if (!this.venvStore) throw new Error('venv store is not configured on this gateway.');
-      return executeVenvTool(this.fetchImpl, token, tool, args, this.venvStore, binding.project_id);
-    }
-    return executeCall(this.fetchImpl, token, tool, args);
+    return callSupabase(this.fetchImpl, token, tool, args);
   }
 
-  /**
-   * v4 classifier — emit the slice(s) the call touches. The provider plugin's
-   * sole authorization responsibility.
-   */
   classifyV4(
     tool: string,
     args: Record<string, unknown>,

@@ -1,13 +1,94 @@
-export { SupabaseAdapter } from './supabase-adapter.ts';
-export type { SupabaseRefreshedTokens } from './supabase-adapter.ts';
-export { availableTools as supabaseAvailableTools } from './tools.ts';
+/**
+ * `@vaubaan/plugin-supabase` — the Supabase provider plugin.
+ *
+ * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
+ * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
+ * Handbook : docs/handbook/providers/supabase.md ; guide : plugins/README.md.
+ *
+ * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates the
+ * definition at import time and the YAML catalog is loaded here, once, when
+ * the module is first imported (that is, at gateway boot).
+ */
 
-// v4 risk-based exports
-export { supabaseDataModel } from './data-model.ts';
-export { supabaseRiskCatalog } from './risk-catalog.ts';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import { definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
+
+import { classifySupabase, SUPABASE_CLASSIFIED_TOOLS, SUPABASE_TOOL_PLANES } from './classify.ts';
+import {
+  refreshSupabaseCredential,
+  shouldRefreshSupabaseCredential,
+  supabaseCredential,
+} from './credential.ts';
+import { supabaseDataModel } from './data-model.ts';
+import { discoverSupabaseResources, executeSupabase } from './execute.ts';
+import { supabaseTools } from './tools.ts';
+
+// Resolved from the bare `import.meta.url`, not with the
+// `new URL('./risk-catalog.yaml', import.meta.url)` idiom : the v4 Next.js
+// app (Turbopack) rewrites that idiom into a `/_next/static/media/...` asset
+// path, which `readFileSync` cannot open. Removed with the v4 app in P1.6.
+export const supabaseCatalog = loadCatalogFile(
+  resolve(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml'),
+);
+
+export const supabasePlugin = definePlugin({
+  id: 'supabase',
+  displayName: 'Supabase',
+  version: '1.0.0',
+  description:
+    'Postgres, storage, auth and edge functions of Supabase projects, through the Management API.',
+  docsUrl:
+    'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/supabase.md',
+  tools: supabaseTools,
+  dataModel: supabaseDataModel,
+  catalog: supabaseCatalog.catalog,
+  credential: supabaseCredential,
+  classify: classifySupabase,
+  execute: executeSupabase,
+  discoverResources: discoverSupabaseResources,
+  refresh: refreshSupabaseCredential,
+});
+
+export default supabasePlugin;
+
+export {
+  classifySupabase,
+  supabaseCredential,
+  supabaseDataModel,
+  supabaseTools,
+  refreshSupabaseCredential,
+  shouldRefreshSupabaseCredential,
+  SUPABASE_CLASSIFIED_TOOLS,
+  SUPABASE_TOOL_PLANES,
+};
+export type { SupabasePlane } from './classify.ts';
+export {
+  REFRESH_THRESHOLD_MS,
+  SUPABASE_APP_CONFIG_KEYS,
+  SUPABASE_OAUTH_AUTHORIZE_URL,
+  SUPABASE_OAUTH_TOKEN_URL,
+} from './credential.ts';
+export { MAX_DISCOVERED_PROJECTS, SUPABASE_API_BASE, projectUrl } from './execute.ts';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Legacy v4 exports — consumed by apps/gateway until P1.6 ; deleted with it.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** @deprecated legacy v4, deleted in P1.6 — use `supabasePlugin`. */
+export { SupabaseAdapter } from './supabase-adapter.ts';
+/** @deprecated legacy v4, deleted in P1.6. */
+export type { SupabaseRefreshedTokens } from './supabase-adapter.ts';
+/** @deprecated legacy v4, deleted in P1.6 — use `supabasePlugin.tools`. */
+export { supabaseTools as supabaseAvailableTools } from './tools.ts';
+/** @deprecated legacy v4, deleted in P1.6 — use `supabasePlugin.catalog`. */
+export const supabaseRiskCatalog = supabaseCatalog.catalog;
+/** @deprecated legacy v4, deleted in P1.6 — use `supabasePlugin.classify`. */
 export {
   classifySupabaseV4,
   SUPPORTED_TOOLS as supabaseSupportedTools,
   TOOL_PLANES as supabaseToolPlanes,
 } from './risk-classifier.ts';
+/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome` from the SDK. */
 export type { ClassifyV4Result as SupabaseClassifyV4Result } from './risk-classifier.ts';
