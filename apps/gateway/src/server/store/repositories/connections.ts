@@ -40,6 +40,19 @@ export interface ConnectionFilter {
   readonly status?: ConnectionStatus;
 }
 
+/**
+ * What the operator's reassignment did. `not-ownerless` and `owner-group-empty` are
+ * decided inside the write transaction: nothing was written.
+ */
+export type AssignOwnerlessResult =
+  | {
+      readonly outcome: 'assigned';
+      /** The connection as it was read inside the transaction, before the write. */
+      readonly previous: ConnectionRecord;
+      readonly connection: ConnectionRecord;
+    }
+  | { readonly outcome: 'not-ownerless' | 'owner-group-empty' };
+
 export interface ConnectionsRepo {
   create(input: CreateConnectionInput): Promise<ConnectionRecord>;
   getById(id: string): Promise<ConnectionRecord | null>;
@@ -69,8 +82,19 @@ export interface ConnectionsRepo {
    * was `unowned`, makes it `active` again, in one transaction. An `expired` connection
    * stays `expired` (its new owner reconnects it). Refused (`InvariantError`) for a
    * `revoked` connection.
+   * @deprecated No production caller: it does not check that the connection is ownerless.
+   * Use `assignOwnerlessTo`.
    */
   assignOwner(id: string, owner: Principal): Promise<ConnectionRecord>;
+  /**
+   * The operator's reassignment (spec §2.3), with its rule inside the write: in one
+   * transaction, the connection must be ownerless at that instant (`unowned`, or not
+   * revoked with an owner group that has no member — the predicate of `listOwnerless`)
+   * and a new owner group must have a member; then the owner is written and an
+   * `unowned` connection is `active` again (an `expired` one stays `expired`).
+   * `NotFoundError` when the connection does not exist.
+   */
+  assignOwnerlessTo(id: string, owner: Principal): Promise<AssignOwnerlessResult>;
   /**
    * `active` → `unowned` for every connection whose owner group has no member left
    * (spec §2.3), in one statement. Returns the connections that changed. Called after
@@ -314,6 +338,13 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     `SELECT ${COLUMNS} FROM connections
      WHERE status = 'unowned' OR (status <> 'revoked' AND ${NO_MEMBER}) ORDER BY created_at`,
   );
+  const isOwnerless = db.prepare<[string], { found: number }>(
+    `SELECT 1 AS found FROM connections
+     WHERE id = ? AND (status = 'unowned' OR (status <> 'revoked' AND ${NO_MEMBER}))`,
+  );
+  const groupHasMember = db.prepare<[string], { found: number }>(
+    'SELECT 1 AS found FROM group_members WHERE group_id = ? LIMIT 1',
+  );
   const revokeStmt = db.prepare<[string, string, string]>(
     `UPDATE connections SET status = 'revoked', revoked_at = COALESCE(revoked_at, ?),
        credential_blob = NULL, key_version = NULL, credential_expires_at = NULL, updated_at = ?
@@ -510,6 +541,21 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
         }
         assignOwnerStmt.run(cols.kind, cols.userId, cols.groupId, now, id);
         return requireConnection(id);
+      });
+    },
+    async assignOwnerlessTo(id, owner) {
+      const cols = principalColumns(owner);
+      const now = nowIso(ctx);
+      // The rule and the write in one transaction: no member can join the owner group,
+      // and none can leave the new one, between the check and the write.
+      return withImmediateTransaction(db, (): AssignOwnerlessResult => {
+        const previous = requireConnection(id);
+        if (!isOwnerless.get(id)) return { outcome: 'not-ownerless' };
+        if (owner.kind === 'group' && !groupHasMember.get(owner.id)) {
+          return { outcome: 'owner-group-empty' };
+        }
+        assignOwnerStmt.run(cols.kind, cols.userId, cols.groupId, now, id);
+        return { outcome: 'assigned', previous, connection: requireConnection(id) };
       });
     },
     async markOwnerlessUnowned() {
