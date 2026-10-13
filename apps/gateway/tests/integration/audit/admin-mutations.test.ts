@@ -21,6 +21,7 @@ import ts from 'typescript';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { SESSION_COOKIE } from '../../../src/server/auth';
+import { budgetMissionOf } from '../../../src/server/budget';
 import { completeLogin } from '../../../src/server/auth/login';
 import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { memoryStoreDeps } from '../../../src/server/compose/testing';
@@ -99,6 +100,8 @@ interface Rig {
   issue(): Promise<MissionRecord>;
   /** An open claim on a mission of Alice whose risk has consumed one action. */
   claim(): Promise<string>;
+  /** An open approval request on a mission of Alice: a call refused on a risk she gated. */
+  approvalRequest(): Promise<string>;
 }
 
 async function openRig(): Promise<Rig> {
@@ -198,6 +201,26 @@ async function openRig(): Promise<Rig> {
         expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
       });
       return request.id;
+    },
+    async approvalRequest() {
+      const mission = await rig.issue();
+      const riskId = mission.policy[0]?.riskId;
+      if (!riskId) throw new Error('expected a policy');
+      await root.missions.service.setGate(alice.user, mission.id, riskId, 'approval');
+      const gated = await root.store.missions.getById(mission.id);
+      if (!gated) throw new Error('the mission vanished');
+      // The refusal the execution door would answer: it drops the request.
+      const refused = await root.budget.recordCall({
+        mission: budgetMissionOf(gated),
+        tool: 'keyco__read_things',
+        args: { account: 'acct-a' },
+        risks_touched: [riskId],
+        now: new Date(),
+      });
+      if (refused.outcome !== 'refused' || !refused.request_id) {
+        throw new Error('expected an approval request');
+      }
+      return refused.request_id;
     },
   };
   return rig;
@@ -412,6 +435,20 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'mission-revoked', object: 'mission', actor: 'alice' },
   },
 
+  'MissionService.setGate': {
+    kind: 'mutation',
+    target: missions,
+    prepare: (rig) => rig.issue(),
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.missions.service.setGate(
+        rig.alice.user,
+        mission.id,
+        mission.policy[0]?.riskId ?? '',
+        'approval',
+      ),
+    writes: { act: 'gate-changed', object: 'mission', actor: 'alice' },
+  },
+
   // ── requests ──────────────────────────────────────────────────────────────
   'RequestService.inbox': READ,
   'RequestService.openCount': READ,
@@ -433,6 +470,16 @@ const RULES: Readonly<Record<string, Rule>> = {
         resolution: 'reset-period',
       }),
     writes: { act: 'period-reset', object: 'request', actor: 'alice' },
+  },
+  'RequestService.decideApproval': {
+    kind: 'mutation',
+    target: (root) => root.requests.service,
+    prepare: (rig) => rig.approvalRequest(),
+    drive: (rig, requestId: string) =>
+      rig.root.requests.service.decideApproval(rig.alice.user, requestId, {
+        resolution: 'grant',
+      }),
+    writes: { act: 'approval-granted', object: 'request', actor: 'alice' },
   },
   'RequestService.sweep': exempt(
     'expiry of unanswered requests by the instance timer, with no human actor: an administrative entry always names a user (spec §8)',
@@ -546,6 +593,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
 
   it('covers every mutating act the services can perform', () => {
     expect(MUTATIONS.map((m) => m.rule.writes.act).sort()).toEqual([
+      'approval-granted',
       'config-changed',
       'config-changed',
       'config-changed',
@@ -555,6 +603,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'connection-created',
       'connection-created',
       'connection-revoked',
+      'gate-changed',
       'mission-issued',
       'mission-issued',
       'mission-revoked',
@@ -599,6 +648,37 @@ describe('every administrative mutation writes an admin audit entry', () => {
     expect(entry?.object.id.length).toBeGreaterThan(0);
     expect(Number.isNaN(Date.parse(entry?.ts ?? ''))).toBe(false);
   });
+
+  it.each([
+    ['grant', 'approval-granted'],
+    ['open-gate', 'gate-opened'],
+    ['refuse', 'request-refused'],
+  ] as const)(
+    'an approval request decided "%s" writes %s, through either entry point',
+    async (resolution, act) => {
+      rig = await openRig();
+      const { root, alice } = rig;
+      for (const decide of [
+        (id: string) => root.requests.service.decide(alice.user, id, { resolution }),
+        (id: string) => root.requests.service.decideApproval(alice.user, id, { resolution }),
+      ]) {
+        const requestId = await rig.approvalRequest();
+        const before = new Set((await root.store.audit.list({ kind: 'admin' })).map((e) => e.id));
+        expect(await decide(requestId)).toMatchObject({ ok: true });
+        const written = (await root.store.audit.list({ kind: 'admin' })).filter(
+          (e) => !before.has(e.id),
+        );
+        expect(written).toMatchObject([
+          {
+            kind: 'admin',
+            act,
+            user_id: alice.user.id,
+            object: { type: 'request', id: requestId },
+          },
+        ]);
+      }
+    },
+  );
 
   it('a resource edit records the fields before and after, and a save that changes nothing records none', async () => {
     rig = await openRig();

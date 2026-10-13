@@ -1,10 +1,10 @@
 /**
- * Requests to the creator (feature P1.7): the inbox, the creator's view of a
- * claim, its decision and events, the expiry sweeper, and the one builder of
- * the request URL a refusal carries.
+ * Requests to the creator (features P1.7 and P2.1): the inbox, the creator's
+ * view of a claim or of an approval request, its decision and events, the
+ * expiry sweeper, and the one builder of the request URL a refusal carries.
  *
  * Server-only barrel. Client components import the pure files directly
- * (`claim`, `state`, `url`), never this index.
+ * (`claim`, `approval`, `state`, `url`), never this index.
  * Handbook: docs/handbook/requests.md.
  */
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
@@ -34,7 +34,7 @@ export interface RequestsModule {
 }
 
 export interface RequestsModuleDeps {
-  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies'>;
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'approvals'>;
   readonly store: Store;
   readonly registry: PluginRegistry;
   readonly authenticator: Authenticator;
@@ -51,6 +51,7 @@ export function createRequestsModule(deps: RequestsModuleDeps): RequestsModule {
     store: deps.store,
     registry: deps.registry,
     publicUrl: deps.config.publicUrl,
+    approvalValiditySeconds: deps.config.approvals.expirySeconds,
     clock: deps.clock ?? systemClock,
     logger,
   });
@@ -69,6 +70,21 @@ export function createRequestsModule(deps: RequestsModuleDeps): RequestsModule {
   return { service, handlers, sweeper, requestUrl: requestUrlBuilder(deps.config.publicUrl) };
 }
 
+export {
+  APPROVAL_PROBLEM_CODES,
+  APPROVAL_RESOLUTIONS,
+  approvalOptions,
+  checkApprovalDecision,
+  formatDelay,
+  parseApprovalDecision,
+  type ApprovalDecision,
+  type ApprovalOption,
+  type ApprovalProblem,
+  type ApprovalProblemCode,
+  type ApprovalResolution,
+  type ApprovalSituation,
+  type ParsedApprovalDecision,
+} from './approval';
 export {
   checkClaimDecision,
   CLAIM_PROBLEM_CODES,
@@ -98,14 +114,17 @@ export {
 export {
   RequestService,
   SESSION_EVENTS_SHOWN,
+  type ApprovalCall,
   type ApprovalView,
   type ClaimView,
   type DecideResult,
+  type GrantedApproval,
   type RequestActor,
   type RequestServiceDeps,
   type RequestSummary,
   type RequestView,
   type RiskBudgetLine,
+  type TouchedRiskLine,
   type ViewResult,
 } from './request-service';
 export {

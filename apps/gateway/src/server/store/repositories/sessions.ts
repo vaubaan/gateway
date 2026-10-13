@@ -30,7 +30,7 @@ import type {
   SessionCounterRecord,
   SessionRecord,
 } from '../types.ts';
-import { consumeApprovalSync, findApprovalSync } from './approvals.ts';
+import { consumeApprovalSync, findApprovalSync, type ApprovalKey } from './approvals.ts';
 import {
   DEFAULT_LIST_LIMIT,
   nowIso,
@@ -61,10 +61,16 @@ export interface DecideContext {
   /** Consumed count per requested risk in this period (0 when no row exists yet). */
   readonly counters: ReadonlyMap<RiskId, number>;
   readonly now: Iso;
-  /** Non-consuming lookup of a valid approval bound to `(mission, risk, fingerprint)`. */
-  findApproval(riskId: RiskId, fingerprint: string): ApprovalRecord | null;
-  /** Single-use approval consumption bound to `(mission, risk, fingerprint)`. */
-  consumeApproval(riskId: RiskId, fingerprint: string): ApprovalRecord | null;
+  /** Non-consuming lookup of a valid approval bound to `(mission, risk, tool, fingerprint)`. */
+  findApproval(key: ApprovalKey): ApprovalRecord | null;
+  /** Single-use approval consumption bound to `(mission, risk, tool, fingerprint)`. */
+  consumeApproval(key: ApprovalKey): ApprovalRecord | null;
+  /**
+   * Events of this session about some risks, oldest first — how the decision learns
+   * that the creator opened a gate for the period (spec §3.5). Details are returned as
+   * stored; the caller reads them through `parseEventDetails`.
+   */
+  riskEvents(query: RiskEventQuery): EventRecord[];
   /** A request of the mission still open in the creator's inbox, to reuse on a replay. */
   findOpenRequest(lookup: OpenRequestLookup): RequestRecord | null;
   /**
@@ -75,6 +81,15 @@ export interface DecideContext {
   createRequest(input: Omit<InsertRequestInput, 'missionId' | 'sessionId'>): RequestRecord;
   /** Records an extra event beyond the one returned in the outcome. */
   recordEvent(event: UntypedNewEvent): EventRecord;
+}
+
+/** Which events of a session `riskEvents` returns. */
+export interface RiskEventQuery {
+  readonly kinds: readonly string[];
+  /** The `risk_id` column of the events. */
+  readonly riskIds: readonly RiskId[];
+  /** `ts >= since`. */
+  readonly since: Iso;
 }
 
 export interface DecisionOutcome {
@@ -198,6 +213,8 @@ export interface SessionPrimitives {
   resetPeriod(sessionId: string, periodStart: Iso): number;
   /** Gives `amount` actions back on one risk; false (nothing written) when fewer were consumed. */
   creditCounter(sessionId: string, periodStart: Iso, riskId: RiskId, amount: number): boolean;
+  /** Events of the session of some kinds about some risks since an instant, oldest first. */
+  riskEvents(sessionId: string, query: RiskEventQuery): EventRecord[];
 }
 
 export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
@@ -249,6 +266,19 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     },
     creditCounter(sessionId, periodStart, riskId, amount) {
       return creditOne.run(amount, sessionId, periodStart, riskId, amount).changes === 1;
+    },
+    riskEvents(sessionId, query) {
+      if (query.kinds.length === 0 || query.riskIds.length === 0) return [];
+      return db
+        .prepare<string[], EventRow>(
+          `SELECT ${EVENT_COLUMNS} FROM events
+           WHERE session_id = ? AND ts >= ?
+             AND kind IN (${placeholders(query.kinds.length)})
+             AND risk_id IN (${placeholders(query.riskIds.length)})
+           ORDER BY ts, id`,
+        )
+        .all(sessionId, query.since, ...query.kinds, ...query.riskIds)
+        .map(eventToRecord);
     },
   };
 }
@@ -338,10 +368,9 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
           session,
           counters,
           now,
-          findApproval: (riskId, fingerprint) =>
-            findApprovalSync(ctx, input.missionId, riskId, fingerprint, now),
-          consumeApproval: (riskId, fingerprint) =>
-            consumeApprovalSync(ctx, input.missionId, riskId, fingerprint, now),
+          findApproval: (key) => findApprovalSync(ctx, input.missionId, key, now),
+          consumeApproval: (key) => consumeApprovalSync(ctx, input.missionId, key, now),
+          riskEvents: (query) => primitives.riskEvents(session.id, query),
           findOpenRequest: (lookup) => findOpenRequestSync(ctx, input.missionId, lookup, now),
           createRequest: (request) =>
             insertRequestSync(

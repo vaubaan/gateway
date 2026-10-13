@@ -141,14 +141,17 @@ What Phase 1 ships differs from v4 and from the full spec in ways that will
 show during the day. None of these is an unexpected refusal; all of them are
 listed again, as questions, in the [appendix](#appendix--decisions-to-confirm).
 
-- **An approval cannot be granted yet.** A risk gated `approval` answers
-  `approval-required` with a URL; the page says approvals are handled in a
-  later version, and nothing grants it until Phase 2 (P2.1). In the
-  `developer` presets the gated entries are `github.workflow-write-via-file`,
+- **Some entries of the `developer` presets ask you each time.** They are
+  gated `approval`: `github.workflow-write-via-file`,
   `github.mint-install-token-push`, `railway[prod].deploy` and
-  `railway[prod].upsert-variable`. If the day needs one of them — pushing
-  with a minted token is the likely one — set its gate to `auto` in the
-  per-risk detail when issuing the mission, and write that down.
+  `railway[prod].upsert-variable`. A call touching one is refused
+  `approval-required` with a URL; you open it (or find it in **Requests**),
+  read the tool and the arguments, and approve — the agent then replays the
+  same call within ten minutes (`approvals.expiry`). If one of them comes up
+  all day — pushing with a minted token is the likely one — choose "Open the
+  gate for the rest of the period" on the request, or set the gate to `auto`
+  on the mission page; either is a decision to write down in the log
+  ([requests](requests.md), "Approvals").
 - **Supabase has no `developer` preset.** Its presets are
   `read-only-analyst`, `staging-developer` and `migration-operator`.
   `staging-developer` writes on resources labelled `staging` only: label your
@@ -266,8 +269,8 @@ Only after B. Each line is irreversible.
 ### D. After the cutover (no deadline)
 
 - [ ] **D1** — Tighten the missions one by one: narrow the risks, add
-      `approval` on the protected-merge and prod-destructive entries once
-      approvals can be granted, move from "one mission per code project" to "one
+      `approval` on the protected-merge and prod-destructive entries (the gate
+      of an accepted risk is edited on the mission page), move from "one mission per code project" to "one
       mission per objective". Feed the values that worked into the
       `mission-presets-default-values` ADR.
 
@@ -364,18 +367,18 @@ outcome and its evidence stay in one place. Its columns:
 Where to read each field: the agent's error (`code`, `hint`, and the fields
 below), or the Audit page filtered by mission and decision `refused`.
 
-| Code                               | Field to copy                    | Expected when…                                                               | Unexpected when…                                                                 |
-| ---------------------------------- | -------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| `budget-exhausted`                 | `risk_id`, `claim_url`           | the day really spent the quota; you answered the claim and the replay passed | a preset quota is too small for an ordinary day (→ preset value)                 |
-| `rate-limited`                     | `risk_id`, `retry_after_seconds` | a burst; the retry passed                                                    | ordinary work trips it repeatedly (→ preset rate)                                |
-| `approval-required`                | `risk_id`, `approval_url`        | the risk is gated in the preset (cannot be granted before P2.1, see §2)      | the day cannot proceed without it and you had not set the gate to `auto`         |
-| `risk-not-accepted`                | `missing_risks`                  | an action a developer mission should not do unattended                       | an ordinary action (→ preset), or `…uncategorized-write` (→ catalog hole)        |
-| `resource-not-in-mission`          | `cited_ref`                      | a resource you left out on purpose                                           | a resource the project needs, or one that went `stale` after a discovery refresh |
-| `connection-unavailable`           | `owner`                          | you revoked the connection or the grant at the provider                      | a healthy connection (→ credential refresh; read the server log)                 |
-| `mission-inactive`                 | the reason                       | you revoked the mission                                                      | anything else                                                                    |
-| `wrong-credential-kind`            | `presented`                      | never during normal work                                                     | always: the token went to the wrong place, or a browser cookie rode along        |
-| none — `Vaubaan rejected the call` | the sentence                     | the agent omitted a required ref and corrected itself                        | the classifier cannot place a legitimate call (→ plugin bug)                     |
-| none — `Upstream error`            | the provider's status            | the provider itself refuses the action (permissions of the app)              | the gateway built a wrong request (→ plugin bug)                                 |
+| Code                               | Field to copy                    | Expected when…                                                                | Unexpected when…                                                                                           |
+| ---------------------------------- | -------------------------------- | ----------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `budget-exhausted`                 | `risk_id`, `claim_url`           | the day really spent the quota; you answered the claim and the replay passed  | a preset quota is too small for an ordinary day (→ preset value)                                           |
+| `rate-limited`                     | `risk_id`, `retry_after_seconds` | a burst; the retry passed                                                     | ordinary work trips it repeatedly (→ preset rate)                                                          |
+| `approval-required`                | `risk_id`, `approval_url`        | the risk is gated in the preset; you approved and the identical replay passed | the replay asked again with the same arguments (→ bug), or an ordinary action asks all day (→ preset gate) |
+| `risk-not-accepted`                | `missing_risks`                  | an action a developer mission should not do unattended                        | an ordinary action (→ preset), or `…uncategorized-write` (→ catalog hole)                                  |
+| `resource-not-in-mission`          | `cited_ref`                      | a resource you left out on purpose                                            | a resource the project needs, or one that went `stale` after a discovery refresh                           |
+| `connection-unavailable`           | `owner`                          | you revoked the connection or the grant at the provider                       | a healthy connection (→ credential refresh; read the server log)                                           |
+| `mission-inactive`                 | the reason                       | you revoked the mission                                                       | anything else                                                                                              |
+| `wrong-credential-kind`            | `presented`                      | never during normal work                                                      | always: the token went to the wrong place, or a browser cookie rode along                                  |
+| none — `Vaubaan rejected the call` | the sentence                     | the agent omitted a required ref and corrected itself                         | the classifier cannot place a legitimate call (→ plugin bug)                                               |
+| none — `Upstream error`            | the provider's status            | the provider itself refuses the action (permissions of the app)               | the gateway built a wrong request (→ plugin bug)                                                           |
 
 ## Appendix — Decisions to confirm
 
@@ -405,7 +408,9 @@ cutover; each is a default that can be changed, most in one place.
 | The audit's argument hash as the approval fingerprint                   | Done: one canonical SHA-256 of the key-sorted JSON (64 hex).                                                   |
 | Session events and past-period counters under the audit's retention?    | No: `retention_days` purges the audit only; events and counters grow.                                          |
 | Should a one-off mission's period carry an anchor date?                 | No anchor for one-off periods.                                                                                 |
-| Granting an approval                                                    | Not possible before P2.1; the request is listed, the page shows a notice, the sweeper expires it.              |
+| Granting an approval                                                    | Done (P2.1): grant, open the gate for the rest of the period, or refuse; the gate is editable after issuance.  |
+| A call touching two gated risks                                         | Asks once per gated risk, in turn (one request each); both approvals are consumed by the one replay.           |
+| "Open the gate for the rest of the period" on a one-off mission         | Unavailable: there is no period end to bound it. The creator sets the gate to `auto` on the mission instead.   |
 
 ### Missions and presets
 

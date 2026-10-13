@@ -262,6 +262,8 @@ export interface ApprovalRecord {
   readonly missionId: string;
   readonly requestId: string;
   readonly riskId: RiskId;
+  /** The tool of the approved call; empty only on a row older than migration 0005. */
+  readonly tool: string;
   readonly fingerprint: string;
   readonly createdAt: Iso;
   readonly expiresAt: Iso;

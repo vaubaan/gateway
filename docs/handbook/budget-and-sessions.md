@@ -39,6 +39,7 @@ apps/gateway/src/server/budget/
   period.ts           PeriodSpec, CurrentPeriod, periodIndex(), currentPeriod(), periodSpecOf()
   fingerprint.ts      re-exports canonicalJson(), fingerprintArguments() from @vaubaan/gateway-core
   decide.ts           decide(input) → Allow | Refuse   (pure, no IO)
+  gates.ts            GATE_EVENT_KINDS, openedGatesOf(events, period) — the gates opened for the period (pure)
   mission-state.ts    deriveMissionState(), consumedInPeriod()  — active | exhausted | expired | …
   mapping.ts          store records ⇄ domain: BudgetMission, budgetMissionOf(), policyEntryOf() /
                       policyEntryRecordOf(), periodOf() / statedPeriodOf() / budgetPeriodOf(),
@@ -91,11 +92,11 @@ Still outside it: `budget-stage.ts` rebuilds a `PeriodSpec` from the pipeline's 
 `MissionPolicyEntry` like the shared type; the store's name is its contract, so this
 module aliases it (`MissionPolicyEntryRecord`) instead of renaming it.
 
-| Dimension | Where its state lives                                                       | Refusal             |
-| --------- | --------------------------------------------------------------------------- | ------------------- |
-| quota     | `session_counters(session_id, risk_id, period_start, consumed)` — durable   | `budget-exhausted`  |
-| rate      | in-memory sliding window keyed `mission:<id>:risk:<risk_id>`                | `rate-limited`      |
-| gate      | the policy entry (`approval`), the `approvals` table, `opened_gates` (P2.1) | `approval-required` |
+| Dimension | Where its state lives                                                           | Refusal             |
+| --------- | ------------------------------------------------------------------------------- | ------------------- |
+| quota     | `session_counters(session_id, risk_id, period_start, consumed)` — durable       | `budget-exhausted`  |
+| rate      | in-memory sliding window keyed `mission:<id>:risk:<risk_id>`                    | `rate-limited`      |
+| gate      | the policy entry (`approval`), the `approvals` table, the session's gate events | `approval-required` |
 
 **One action** = one allowed call touching the risk: `risks_touched` is de-duplicated
 (`distinctRisks`), every distinct risk's counter gains one, a refused call changes nothing
@@ -137,8 +138,8 @@ decide({
   rate_windows,      // Map<RiskId, { count, retry_after_seconds }>  (peeked, not recorded)
   period,            // CurrentPeriod
   fingerprint,
-  approvals?,        // Map<RiskId, approval id> valid for this fingerprint (looked up in the transaction)
-  opened_gates?,     // Set<RiskId> opened for the period (spec §3.5 gate-opened event; P2.1)
+  approvals?,        // Map<RiskId, approval id> valid for this tool and fingerprint (looked up in the transaction)
+  opened_gates?,     // Set<RiskId> opened for the period (spec §3.5; `openedGatesOf`, below)
 })
 // → { kind: 'allow', decrements, remaining, approvals_to_consume }
 // → { kind: 'refuse', code: 'budget-exhausted', risk_id, details: { quota, consumed, period_end } }
@@ -154,6 +155,35 @@ first ("the gate does not replace the budget"). A touched risk absent from the p
 throws `BudgetInvariantError`: the risk stage guarantees `risks_touched ⊆ accepted`, so
 this is a bug, not a refusal, and it rolls the transaction back.
 
+## Gates opened for the period (`gates.ts`)
+
+"On a request, the creator may choose to open the gate for the rest of the period: the
+risk switches to `auto` until the next reload, then returns to `approval`. This is a
+session event" (spec §3.5). The event is `gate-opened`, written by the request service
+([requests](requests.md), "Approvals") with the period it was granted in:
+`{ request_id, period_start, period_end }`, the risk in the event's own `risk_id` column.
+
+`openedGatesOf(events, period)` is pure and returns the `Set<RiskId>` `decide()` takes as
+`opened_gates`. It is fed the session's events of `GATE_EVENT_KINDS` (`gate-opened`,
+`gate-changed`) about the gated risks of the call, since the period started
+(`DecideContext.riskEvents`, read inside the decision transaction). Two rules bound an
+opening:
+
+- **the period** — an opening counts only when its `period_start` is the current period's
+  start. After the rollover nothing matches: the gate reads `approval` again and nothing
+  runs to close it. A one-off mission has no period end, so the request service refuses
+  to open a gate on it (`no-period-end`) and no such event exists;
+- **a later edit** — `gate-changed` is recorded when the creator sets the risk's gate on
+  the mission page ([missions](missions.md), "Editing a gate"). An opening is in force
+  only if no `gate-changed` of that risk has a timestamp greater than **or equal to** its
+  own: on a tie the edit wins and the gate stays closed.
+
+An event whose details do not have the shape of its kind opens nothing
+(`parseEventDetails`). The request page and the mission page show "open until …" from the
+same function, so they cannot disagree with the decision. An opened gate skips the gate
+dimension only: quota and rate are checked first, as for every call, and an approval that
+happens to exist for the call is left unconsumed.
+
 ## The service (`session-service.ts`)
 
 ```ts
@@ -163,6 +193,7 @@ const service = new SessionService({
   rateWindows: new SlidingWindowRateLimiter(), // the budget's SlidingWindows
   requestUrl: root.requests.requestUrl, // `<public_url>/r/<id>`, the one builder (handbook requests)
   requestExpirySeconds: config.requests.expirySeconds,
+  approvalValiditySeconds: config.approvals.expirySeconds, // told to the executor in the refusal
 });
 
 const result = await service.recordCall({
@@ -181,18 +212,28 @@ const result = await service.recordCall({
    touched risk is gated `approval`, seals the arguments with
    `requests.prepareArguments` (the encryptor is asynchronous, the transaction is not);
 2. runs `sessions.decideAndDecrement({ missionId, riskIds, periodStart })`; inside the
-   transaction: peeks the rate windows of the touched risks, looks up a valid approval per
-   gated risk (`ctx.findApproval`), calls `decide()`;
+   transaction: peeks the rate windows of the touched risks, derives the gates opened for
+   the period (`ctx.riskEvents` → `openedGatesOf`), looks up a valid approval per gated
+   risk (`ctx.findApproval({ riskId, tool, fingerprint })`), calls `decide()`;
 3. on **allow**: consumes each approval (`ctx.consumeApproval`; a vanished one is an
    `InvariantError` that rolls back), pushes `now` into the windows of the decremented
    risks, returns `allow: true` (the primitive increments the counters) and the
    `call-allowed` event;
 4. on **refuse**: for `budget-exhausted` / `approval-required` reuses the open, unexpired
-   request of the same `(kind, risk[, fingerprint])` (`ctx.findOpenRequest`) or drops a new
-   one (`ctx.createRequest`, expiry `now + requestExpirySeconds`) with a `request` event;
-   `rate-limited` opens nothing; returns `allow: false` and the `call-refused` event;
+   request of the same `(kind, risk[, tool, fingerprint])` (`ctx.findOpenRequest`) or
+   drops a new one (`ctx.createRequest`, expiry `now + requestExpirySeconds`) with a
+   `request` event; `rate-limited` opens nothing; returns `allow: false` and the
+   `call-refused` event;
 5. after commit, builds the typed `Refusal` with `refuse.*` (`claim_url` /
-   `approval_url` from `requestUrl(request.id)`, `expires_at` from the request).
+   `approval_url` from `requestUrl(request.id)`, `expires_at` from the request,
+   `approval_valid_seconds` from the configuration).
+
+**The approval key.** An approval and an approval request are bound to the call:
+mission, risk, **tool**, fingerprint (`ApprovalKey`, store migration 0005). The same
+arguments sent to another tool that touches the same risk find neither the request nor
+the approval of the first: they ask on their own. A call touching two gated risks is
+refused on the first one that has no approval; the approval of the other, if any, is
+found but not consumed, and is still there when the creator has granted both.
 
 Result: `{ outcome: 'allowed', session_id, period, fingerprint, decrements, remaining,
 approval_ids }` (remaining computed from the committed counters) or `{ outcome: 'refused',
@@ -210,8 +251,11 @@ request service, the requests repository's expiry, the mission service's rotatio
 revocation) build a `NewEvent` (`store/types.ts`) on that union, so a renamed key does not
 compile. Readers (the request timeline, the session view, the structural check below) call
 `parseEventDetails(kind, details)`, the only code that reads stored details: it answers
-`null` for a kind without a details shape (`approval` and `gate-opened` have no writer
-yet) and for an object that does not have the shape of its kind. A `null` event is shown
+`null` for a kind it does not know and for an object that does not have the shape of its
+kind. Since P2.1 every kind has a shape: `approval` `{ request_id, approval_id, tool,
+fingerprint, expires_at }` and `gate-opened` `{ request_id, period_start, period_end }`
+(written by the request service), `gate-changed` `{ gate, gate_before }` (written by the
+missions repository in the transaction that edits the gate). A `null` event is shown
 with its kind and no detail, and gives back no credit; nothing throws. Stored keys are
 part of the data: renaming one needs a migration of the `events` rows.
 
@@ -309,11 +353,14 @@ approval-required, concurrent burst); an operator diagnostic may run it on a liv
 
 ## What the store gained
 
-`DecideContext` (`store/repositories/sessions.ts`) has two additive, non-consuming,
-in-transaction lookups: `findApproval(riskId, fingerprint)` (`findApprovalSync`,
-`approvals.ts`) and `findOpenRequest({ kind, riskId, fingerprint? })`
-(`findOpenRequestSync`, `requests.ts`; `state = 'open' AND expires_at > now`, the
-fingerprint applies to approval requests only). Nothing was renamed.
+`DecideContext` (`store/repositories/sessions.ts`) has three non-consuming,
+in-transaction lookups: `findApproval({ riskId, tool, fingerprint })`
+(`findApprovalSync`, `approvals.ts`), `findOpenRequest({ kind, riskId, tool?,
+fingerprint? })` (`findOpenRequestSync`, `requests.ts`; `state = 'open' AND expires_at >
+now`; the tool and the fingerprint are mandatory for an approval request and ignored for
+a claim) and `riskEvents({ kinds, riskIds, since })` (the session's events about some
+risks, oldest first, details as stored). `consumeApproval` takes the same `ApprovalKey`
+as `findApproval`.
 
 ## Tests
 
@@ -327,6 +374,11 @@ fingerprint applies to approval requests only). Nothing was renamed.
   whole-call refusal, `rate-limited` (≥ 1 s), `approval-required`, multi-risk gate
   refusal, dimension order, approval does not bypass quota or rate; invariant on an
   unknown risk, inputs not mutated.
+- `tests/unit/server/budget/gates.test.ts` (9) — nothing opens without an event; the
+  risk the event names, for the period it carries; closed again at the reload instant; an
+  opening of the next period; a later edit ends it, a tie closes, a later opening opens
+  again; unreadable events open nothing; `decide()` fed with the result (no approval
+  consumed, budget still applies).
 - `tests/unit/server/budget/mission-state.test.ts` (7) — stored statuses, expiry,
   exhausted per risk, rollover on read, one-off never reloads, clamped remaining,
   `consumedInPeriod`.
@@ -342,7 +394,9 @@ fingerprint applies to approval requests only). Nothing was renamed.
   after the window); refusals record nothing in the windows; approval gate: sealed
   arguments and fingerprint on the request, consumption by an identical replay in another
   key order, single use, exact fingerprint, expiry, whole-call refusal, approved actions
-  count against the quota; invariant abort leaves no session; `stateOf`; `usageOf` and
+  count against the quota (the creator's decision, the gate opening and the erasure are
+  `tests/integration/requests/approval.test.ts`, handbook [requests](requests.md));
+  invariant abort leaves no session; `stateOf`; `usageOf` and
   `missionUsageReader` read the current period's counters only (three periods recorded,
   one read, keyed by the current `period_start`).
 - `tests/integration/budget/pipeline-consistency.test.ts` (5) — the stage inside the real

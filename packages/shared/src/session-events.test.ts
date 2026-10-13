@@ -37,6 +37,28 @@ const SAMPLES: Record<string, Sample> = {
     valid: { request_id: 'r1', request_kind: 'approval', state: 'expired' },
     malformed: { request_id: 'r1', request_kind: 'approval', state: 'granted' },
   },
+  'a granted approval': {
+    kind: 'approval',
+    valid: {
+      request_id: 'r1',
+      approval_id: 'a1',
+      tool: 'github__merge_pull_request',
+      fingerprint: 'f',
+      expires_at: '2026-10-13T09:10:00.000Z',
+    },
+    malformed: { request_id: 'r1', approval_id: 'a1', tool: 'github__merge_pull_request' },
+  },
+  'a gate opened for the period': {
+    kind: 'gate-opened',
+    valid: { request_id: 'r1', ...SPAN, period_end: '2026-10-14T00:00:00.000Z' },
+    // A period that never ends cannot bound an opening.
+    malformed: { request_id: 'r1', ...SPAN },
+  },
+  'a gate edited on the mission': {
+    kind: 'gate-changed',
+    valid: { gate: 'approval', gate_before: 'auto' },
+    malformed: { gate: 'sometimes', gate_before: 'auto' },
+  },
   'a period reset': {
     kind: 'reset',
     valid: { request_id: 'r1', ...SPAN, credits: { 'github.write-code': 3 } },
@@ -91,10 +113,9 @@ describe('parseEventDetails', () => {
     },
   );
 
-  test('answers null for a kind without a details shape', () => {
-    expect(parseEventDetails('gate-opened', { risk_id: 'github.write-code' })).toBeNull();
-    expect(parseEventDetails('approval', {})).toBeNull();
+  test('answers null for a kind it does not know', () => {
     expect(parseEventDetails('refused-call', CALL)).toBeNull();
+    expect(parseEventDetails('gate-closed', { gate: 'approval', gate_before: 'auto' })).toBeNull();
   });
 
   test('answers null when the stored details are not an object', () => {

@@ -331,6 +331,13 @@
   color: var(--accent-danger-fg);
   font-size: var(--text-xs);
 }
+/* The gate of a risk on the mission page: its value, an opening, the edit. */
+.gateCell {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
 .unavailable {
   margin-top: var(--space-2);
   font-size: var(--text-xs);

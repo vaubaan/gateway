@@ -1,6 +1,6 @@
 /* Request inbox and the creator's view of one request. Reading order of the
-   view: what is asked, the four actions with their consequence, the other
-   risks of the period, the last session events. */
+   view: what is asked, the actions with their consequence, the risks of the
+   period, the last session events. */
 
 .pageHead {
   display: flex;
@@ -45,7 +45,24 @@
   margin: 0;
 }
 
-/* ── The four actions ──────────────────────────────────────────────────── */
+/* The arguments of the call an approval request asks about, as sent. */
+.arguments {
+  margin: 0;
+  padding: var(--space-3);
+  max-height: 24rem;
+  overflow: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunken);
+  color: var(--text-foreground);
+  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ── The actions (four for a claim, three for an approval request) ─────── */
 
 .actions {
   display: grid;
@@ -60,6 +77,10 @@
 }
 .action:last-child {
   border-bottom: 0;
+}
+/* An approval's longest label ("Open the gate for the rest of the period"). */
+.actionsWide .action {
+  grid-template-columns: 320px minmax(0, 1fr);
 }
 .action form {
   display: contents;
@@ -87,7 +108,12 @@
   width: auto;
 }
 @media (max-width: 640px) {
-  .action {
+  .action,
+  .actionsWide .action {
     grid-template-columns: minmax(0, 1fr);
+  }
+  .action button {
+    white-space: normal;
+    height: auto;
   }
 }

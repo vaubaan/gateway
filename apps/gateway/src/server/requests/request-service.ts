@@ -1,26 +1,30 @@
 /**
  * `RequestService` — what happens to a request after the refusal dropped it
- * (spec §2.3 Request, §3.4, §4.2 "Request inbox", §6 "requests are granted
- * only in a human session", §7.6).
+ * (spec §2.3 Request, §3.4, §3.5, §4.2 "Request inbox", §6 "requests are
+ * granted only in a human session", §7.6, §7.7).
  *
- * The budget's `SessionService.recordCall` inserts the `claim` row inside the
- * refusal transaction and puts `<public_url>/r/<id>` in the refusal; this
- * service owns the rest: the inbox, the creator's view, the decision and its
- * events, the expiry sweep.
+ * The budget's `SessionService.recordCall` inserts the row — a `claim`, or an
+ * `approval` request with the call's arguments sealed — inside the refusal
+ * transaction and puts `<public_url>/r/<id>` in the refusal; this service
+ * owns the rest: the inbox, the creator's view, the decision and its events,
+ * the expiry sweep.
  *
  * Access rule, the same everywhere: a request is addressed to the creator of
  * its mission. Any other identity — another user, an owner of the same
  * connection, an operator — gets `forbidden`, and so does an unknown id, so
- * the answer says nothing about what exists.
+ * the answer says nothing about what exists. The arguments of an approval
+ * request are opened in one place, `view()`, after that check and only while
+ * the request is open: the creator is the only reader they ever have.
  *
- * One decide entry point per request kind: `decideClaim` here, the approval
- * decision arrives with P2.1 (`decide()` dispatches and answers
- * `unsupported-kind` meanwhile).
+ * One decide entry point per request kind: `decideClaim` and
+ * `decideApproval`; `decide()` dispatches on the kind of the request.
  */
 import type { AdminAct } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
+import { serializeSlice } from '@vaubaan/policy-engine';
 import {
   parseRiskId,
+  type Gate,
   type Iso8601,
   type MissionPolicyEntry,
   type RequestKind,
@@ -32,7 +36,9 @@ import {
   budgetMissionOf,
   currentPeriod,
   deriveMissionState,
+  GATE_EVENT_KINDS,
   missionUsageReader,
+  openedGatesOf,
   type BudgetMission,
   type CurrentPeriod,
   type MissionState,
@@ -42,9 +48,23 @@ import type { Logger } from '../logging';
 import { enumerateCatalog } from '../missions/catalog-view';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
-import { NotFoundError } from '../store/errors';
-import type { ClaimDecisionContext, ClaimDecisionOutcome } from '../store/repositories/requests';
-import type { MissionRecord, RequestRecord } from '../store/types';
+import { InvariantError, NotFoundError } from '../store/errors';
+import type {
+  ApprovalDecisionContext,
+  ClaimDecisionContext,
+  ClaimDecisionOutcome,
+  RequestDecisionOutcome,
+} from '../store/repositories/requests';
+import type { EventRecord, MissionRecord, RequestRecord } from '../store/types';
+import {
+  approvalOptions,
+  checkApprovalDecision,
+  parseApprovalDecision,
+  type ApprovalDecision,
+  type ApprovalOption,
+  type ApprovalProblem,
+  type ApprovalSituation,
+} from './approval';
 import {
   checkClaimDecision,
   claimOptions,
@@ -66,8 +86,15 @@ export interface RequestActor {
   readonly id: string;
 }
 
+const MS_PER_SECOND = 1000;
+
 export interface RequestServiceDeps {
-  readonly store: Pick<Store, 'requests' | 'missions' | 'sessions' | 'auditWriter'>;
+  readonly store: Pick<
+    Store,
+    'requests' | 'missions' | 'sessions' | 'approvals' | 'audit' | 'auditWriter'
+  >;
+  /** `approvals.expiry` of the configuration: how long a granted approval stays usable. */
+  readonly approvalValiditySeconds: number;
   /** Risk labels come from the plugins' catalogs, the single provider list. */
   readonly registry: Pick<PluginRegistry, 'get'>;
   /** `InstanceConfig.publicUrl` — the origin of every request URL. */
@@ -97,6 +124,8 @@ export interface RequestSummary {
   /** `<public_url>/r/<id>` — the URL the refusal carried. */
   readonly url: string;
   readonly mission: { readonly id: string; readonly name: string };
+  /** Approval requests: the tool of the call. Never its arguments. */
+  readonly tool: string | null;
 }
 
 export interface RiskBudgetLine {
@@ -127,10 +156,57 @@ export interface ClaimView {
   readonly options: readonly ClaimOption[];
 }
 
-/** Approval requests are decided in a later version (P2.1): the view says so, no more. */
+/** A risk the call of an approval request touches, with its budget and its gate now. */
+export interface TouchedRiskLine extends RiskBudgetLine {
+  /** `approval` when a call touching the risk asks the creator now; `auto` otherwise. */
+  readonly gate: Gate;
+}
+
+/** The precise action an approval request asks about (spec §3.5). */
+export interface ApprovalCall {
+  readonly tool: string;
+  /** Canonical fingerprint of the arguments: what the approval is bound to. */
+  readonly fingerprint: string;
+  /**
+   * The arguments in clear, for the creator, while the request is open. `null` once
+   * the request is decided or expired: the sealed copy is erased then and only the
+   * fingerprint remains.
+   */
+  readonly arguments: unknown;
+  readonly arguments_erased: boolean;
+  /** The slices the call touches, in their wire form; `null` when the audit holds no entry. */
+  readonly slices: readonly string[] | null;
+  /** Every risk the call counts against, the gated one included. */
+  readonly risks: readonly TouchedRiskLine[];
+}
+
+/** The approval a grant produced, as the creator follows it. */
+export interface GrantedApproval {
+  readonly id: string;
+  readonly expires_at: Iso8601;
+  readonly consumed_at: Iso8601 | null;
+  readonly state: 'usable' | 'consumed' | 'expired';
+}
+
 export interface ApprovalView {
   readonly kind: 'approval';
   readonly request: RequestSummary;
+  readonly mission: {
+    readonly id: string;
+    readonly name: string;
+    readonly state: MissionState['kind'];
+    readonly expires_at: Iso8601 | null;
+  };
+  readonly period: CurrentPeriod;
+  readonly call: ApprovalCall;
+  /** The gate of the request's risk now: the policy's, and whether it is open for the period. */
+  readonly gate: { readonly policy: Gate | null; readonly open_until: Iso8601 | null };
+  /** Set once the request was granted with an approval. */
+  readonly approval: GrantedApproval | null;
+  /** Last events of the mission's session, most recent first. */
+  readonly events: readonly SessionEventLine[];
+  /** The three actions with their consequence; empty once the request is not open. */
+  readonly options: readonly ApprovalOption[];
 }
 
 export type RequestView = ClaimView | ApprovalView;
@@ -145,7 +221,11 @@ export type DecideResult =
   | { readonly ok: false; readonly reason: 'forbidden' }
   | { readonly ok: false; readonly reason: 'not-open'; readonly state: RequestStatus }
   | { readonly ok: false; readonly reason: 'unsupported-kind'; readonly kind: RequestKind }
-  | { readonly ok: false; readonly reason: 'invalid'; readonly problem: ClaimProblem };
+  | {
+      readonly ok: false;
+      readonly reason: 'invalid';
+      readonly problem: ClaimProblem | ApprovalProblem;
+    };
 
 /** Thrown inside the decision transaction to roll it back with a reason. */
 class ClaimProblemError extends Error {
@@ -153,6 +233,20 @@ class ClaimProblemError extends Error {
     super(problem.message);
     this.name = 'ClaimProblemError';
   }
+}
+
+/** The same, for an approval request: nothing is written, the arguments stay sealed. */
+class ApprovalProblemError extends Error {
+  constructor(readonly problem: ApprovalProblem) {
+    super(problem.message);
+    this.name = 'ApprovalProblemError';
+  }
+}
+
+interface AppliedApproval extends RequestDecisionOutcome {
+  readonly act: AdminAct;
+  readonly before: Record<string, unknown> | null;
+  readonly after: Record<string, unknown>;
 }
 
 interface AppliedClaim extends ClaimDecisionOutcome {
@@ -211,19 +305,15 @@ export class RequestService {
     const { request, mission } = owned;
     const now = this.deps.clock.now();
     const summary = this.summaryOf(request, mission, now);
-    if (request.kind !== 'claim')
-      return { outcome: 'ok', view: { kind: 'approval', request: summary } };
+    if (request.kind !== 'claim') {
+      return { outcome: 'ok', view: await this.approvalView(request, mission, summary, now) };
+    }
 
     const budget = budgetMissionOf(mission);
     const { session_id, state, period, consumed } = await this.budget.usageOf(budget, now);
     const lines = budget.policy.map((entry) => this.lineOf(entry, consumed));
     const risk = lines.find((line) => line.risk_id === request.riskId) ?? null;
-    const events = session_id
-      ? await this.deps.store.sessions.listEvents(session_id, {
-          order: 'desc',
-          limit: SESSION_EVENTS_SHOWN,
-        })
-      : [];
+    const events = await this.lastEvents(session_id);
 
     return {
       outcome: 'ok',
@@ -265,10 +355,96 @@ export class RequestService {
         if (!parsed.ok) return { ok: false, reason: 'invalid', problem: parsed.problem };
         return this.decideClaim(user, requestId, parsed.decision);
       }
-      case 'approval':
-        // P2.1 adds `decideApproval` here.
-        return { ok: false, reason: 'unsupported-kind', kind: owned.request.kind };
+      case 'approval': {
+        const parsed = parseApprovalDecision(raw);
+        if (!parsed.ok) return { ok: false, reason: 'invalid', problem: parsed.problem };
+        return this.decideApproval(user, requestId, parsed.decision);
+      }
     }
+  }
+
+  /**
+   * The creator's answer to an approval request (spec §3.5). One transaction of
+   * the store holds the state change, the erasure of the sealed arguments and
+   * the effect: an approval bound to the call (`grant`), a `gate-opened` event
+   * for the current period (`open-gate`), or nothing (`refuse`). The executor
+   * replays its call; the budget decides it again, quota and rate included.
+   */
+  async decideApproval(
+    user: RequestActor,
+    requestId: string,
+    decision: ApprovalDecision,
+  ): Promise<DecideResult> {
+    const owned = await this.own(user, requestId);
+    if (!owned) return { ok: false, reason: 'forbidden' };
+    const { mission } = owned;
+    if (owned.request.kind !== 'approval') {
+      return { ok: false, reason: 'unsupported-kind', kind: owned.request.kind };
+    }
+    const now = this.deps.clock.now();
+    const budget = budgetMissionOf(mission);
+    const period = currentPeriod(budget.period, now);
+    const missionState = deriveMissionState(budget, [], now).kind;
+    const validitySeconds = this.deps.approvalValiditySeconds;
+
+    let result;
+    try {
+      result = await this.deps.store.requests.decideApproval(requestId, user.id, (ctx) =>
+        applyApproval(ctx, {
+          decision,
+          user,
+          period,
+          expiresAt: toIso(new Date(now.getTime() + validitySeconds * MS_PER_SECOND)),
+          // The gate events are read inside the transaction: the check and the
+          // write see the same session.
+          situation: approvalSituationOf(
+            budget,
+            missionState,
+            period,
+            ctx.request,
+            gateEventsOf(ctx, ctx.request.riskId, period),
+            validitySeconds,
+          ),
+        }),
+      );
+    } catch (err) {
+      if (err instanceof ApprovalProblemError) {
+        return { ok: false, reason: 'invalid', problem: err.problem };
+      }
+      if (err instanceof NotFoundError) return { ok: false, reason: 'forbidden' };
+      throw err;
+    }
+    if (result.status === 'not-open') {
+      return { ok: false, reason: 'not-open', state: effectiveState(result.request, now) };
+    }
+
+    const { outcome, request } = result;
+    await this.deps.store.auditWriter.write({
+      kind: 'admin',
+      ts: toIso(now),
+      user_id: user.id,
+      act: outcome.act,
+      object: { type: 'request', id: request.id },
+      before: outcome.before,
+      // The tool and the fingerprint, never the arguments (spec §3.5, §6).
+      after: {
+        mission_id: mission.id,
+        risk_id: request.riskId,
+        tool: request.tool,
+        fingerprint: request.fingerprint,
+        ...outcome.after,
+      },
+      delegated_client_id: null,
+    });
+    this.deps.logger.info('approval request decided', {
+      request_id: request.id,
+      mission_id: mission.id,
+      risk_id: request.riskId,
+      tool: request.tool,
+      resolution: decision.resolution,
+      user_id: user.id,
+    });
+    return { ok: true, request: this.summaryOf(request, mission, now) };
   }
 
   /**
@@ -363,6 +539,117 @@ export class RequestService {
   // Internals
   // ───────────────────────────────────────────────────────────────────────────
 
+  /**
+   * The creator's view of an approval request: the tool, the arguments in clear
+   * while the request is open, the slices and the risks the call touches with
+   * what is left of each, the gate, and the three actions. Called after `own()`
+   * only — this is the one place the sealed arguments are opened.
+   */
+  private async approvalView(
+    request: RequestRecord,
+    mission: MissionRecord,
+    summary: RequestSummary,
+    now: Date,
+  ): Promise<ApprovalView> {
+    const { store } = this.deps;
+    const { tool, fingerprint } = request;
+    if (!tool || !fingerprint) {
+      throw new InvariantError(`approval request ${request.id} has no tool or fingerprint`);
+    }
+    const budget = budgetMissionOf(mission);
+    const { session_id, state, period, consumed } = await this.budget.usageOf(budget, now);
+    const open = summary.state === 'open';
+
+    const gateEvents = session_id
+      ? await store.sessions.listEvents(session_id, {
+          kinds: GATE_EVENT_KINDS,
+          since: period.start,
+        })
+      : [];
+    const opened = openedGatesOf(gateEvents, period);
+    const policyGate =
+      budget.policy.find((entry) => entry.risk_id === request.riskId)?.gate ?? null;
+
+    // What the call touches is the audit's to say: the pipeline wrote the entry of
+    // the refused call with its slices and risks, keyed by the same fingerprint.
+    const audited = await store.audit.latestCall({
+      missionId: mission.id,
+      tool,
+      argumentsHash: fingerprint,
+      refusalCode: 'approval-required',
+    });
+    const touched = new Set<RiskId>(audited?.risks_touched ?? []).add(request.riskId);
+    const risks: TouchedRiskLine[] = budget.policy
+      .filter((entry) => touched.has(entry.risk_id))
+      .map((entry) => ({
+        ...this.lineOf(entry, consumed),
+        gate: entry.gate === 'approval' && !opened.has(entry.risk_id) ? 'approval' : 'auto',
+      }));
+
+    const approval =
+      request.state === 'granted' ? await store.approvals.getByRequest(request.id) : null;
+    const events = await this.lastEvents(session_id);
+
+    return {
+      kind: 'approval',
+      request: summary,
+      mission: {
+        id: mission.id,
+        name: mission.name,
+        state: state.kind,
+        expires_at: mission.expiresAt,
+      },
+      period,
+      call: {
+        tool,
+        fingerprint,
+        // An overdue request reads `expired` before the sweeper erases its blob:
+        // nothing is opened for it either.
+        arguments: open ? await store.requests.getArguments(request.id) : null,
+        arguments_erased: !open,
+        slices: audited ? audited.slices_executed.map(serializeSlice) : null,
+        risks,
+      },
+      gate: {
+        policy: policyGate,
+        open_until: opened.has(request.riskId) ? period.end : null,
+      },
+      approval: approval
+        ? {
+            id: approval.id,
+            expires_at: approval.expiresAt,
+            consumed_at: approval.consumedAt,
+            state: approval.consumedAt
+              ? 'consumed'
+              : Date.parse(approval.expiresAt) <= now.getTime()
+                ? 'expired'
+                : 'usable',
+          }
+        : null,
+      events: events.map(eventLineOf),
+      options: open
+        ? approvalOptions(
+            approvalSituationOf(
+              budget,
+              state.kind,
+              period,
+              request,
+              gateEvents,
+              this.deps.approvalValiditySeconds,
+            ),
+          )
+        : [],
+    };
+  }
+
+  private async lastEvents(sessionId: string | null): Promise<EventRecord[]> {
+    if (!sessionId) return [];
+    return this.deps.store.sessions.listEvents(sessionId, {
+      order: 'desc',
+      limit: SESSION_EVENTS_SHOWN,
+    });
+  }
+
   /** The request and its mission when `user` is the mission's creator; otherwise `null`. */
   private async own(user: RequestActor, requestId: string): Promise<OwnedRequest | null> {
     const request = await this.deps.store.requests.getById(requestId);
@@ -389,6 +676,7 @@ export class RequestService {
       decision: request.decision,
       url: requestUrl(this.deps.publicUrl, request.id),
       mission: { id: mission.id, name: mission.name },
+      tool: request.tool,
     };
   }
 
@@ -442,6 +730,115 @@ function situationOf(
     quota: mission.policy.find((entry) => entry.risk_id === riskId)?.quota ?? null,
     consumed: consumed.get(riskId) ?? 0,
   };
+}
+
+function gateEventsOf(
+  ctx: ApprovalDecisionContext,
+  riskId: RiskId,
+  period: CurrentPeriod,
+): EventRecord[] {
+  return ctx.riskEvents({ kinds: GATE_EVENT_KINDS, riskIds: [riskId], since: period.start });
+}
+
+function approvalSituationOf(
+  mission: BudgetMission,
+  missionState: MissionState['kind'],
+  period: CurrentPeriod,
+  request: RequestRecord,
+  gateEvents: readonly EventRecord[],
+  approvalValiditySeconds: number,
+): ApprovalSituation {
+  return {
+    mission_state: missionState,
+    period_end: period.end,
+    risk_id: request.riskId,
+    tool: request.tool ?? '',
+    gate: mission.policy.find((entry) => entry.risk_id === request.riskId)?.gate ?? null,
+    gate_open: openedGatesOf(gateEvents, period).has(request.riskId),
+    approval_valid_seconds: approvalValiditySeconds,
+  };
+}
+
+interface ApplyApprovalInput {
+  readonly decision: ApprovalDecision;
+  readonly user: RequestActor;
+  readonly period: CurrentPeriod;
+  /** When the approval of a grant stops being usable. */
+  readonly expiresAt: Iso8601;
+  readonly situation: ApprovalSituation;
+}
+
+/** Runs inside the store's transaction: check, effect, event. Synchronous. */
+function applyApproval(ctx: ApprovalDecisionContext, input: ApplyApprovalInput): AppliedApproval {
+  const { decision, user, period, situation } = input;
+  const problem = checkApprovalDecision(situation, decision);
+  if (problem) throw new ApprovalProblemError(problem);
+  const { request } = ctx;
+  const { riskId, tool, fingerprint } = request;
+  if (!tool || !fingerprint) {
+    throw new InvariantError(`approval request ${request.id} has no tool or fingerprint`);
+  }
+
+  switch (decision.resolution) {
+    case 'grant': {
+      const approval = ctx.createApproval(input.expiresAt);
+      const granted = { approval_id: approval.id, approval_expires_at: approval.expiresAt };
+      ctx.recordEvent({
+        kind: 'approval',
+        riskId,
+        actorUserId: user.id,
+        details: {
+          request_id: request.id,
+          approval_id: approval.id,
+          tool,
+          fingerprint,
+          expires_at: approval.expiresAt,
+        },
+      });
+      return {
+        state: 'granted',
+        decision: { resolution: decision.resolution, ...granted },
+        act: 'approval-granted',
+        before: null,
+        after: { resolution: decision.resolution, ...granted },
+      };
+    }
+    case 'open-gate': {
+      // `checkApprovalDecision` refused a mission whose period never ends.
+      if (period.end === null) throw new InvariantError('a gate is opened until a period end');
+      const span = { period_start: period.start, period_end: period.end };
+      const recorded = ctx.recordEvent({
+        kind: 'gate-opened',
+        riskId,
+        actorUserId: user.id,
+        details: { request_id: request.id, ...span },
+      });
+      // The event is the opening: without a session to carry it nothing was opened.
+      if (!recorded) throw new InvariantError(`request ${request.id} has no session`);
+      return {
+        state: 'granted',
+        decision: { resolution: decision.resolution, ...span },
+        act: 'gate-opened',
+        before: { gate: 'approval' },
+        after: { resolution: decision.resolution, gate: 'auto', ...span },
+      };
+    }
+    case 'refuse': {
+      ctx.recordEvent({
+        kind: 'request',
+        riskId,
+        actorUserId: user.id,
+        details: { request_id: request.id, request_kind: request.kind, state: 'refused' },
+      });
+      return {
+        state: 'refused',
+        decision: { resolution: decision.resolution },
+        act: 'request-refused',
+        before: null,
+        after: { resolution: decision.resolution },
+      };
+    }
+  }
 }
 
 interface ApplyInput {

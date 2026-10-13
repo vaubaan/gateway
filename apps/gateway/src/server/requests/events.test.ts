@@ -58,9 +58,14 @@ describe('describeEvent', () => {
     expect(describeEvent(event('request', { ...DROPPED, request_kind: 'claim' }))).toContain(
       'claim was dropped',
     );
-    expect(describeEvent(event('request', { ...DROPPED, request_kind: 'approval' }))).toContain(
-      'approval request was dropped',
+    expect(describeEvent(event('request', { ...DROPPED, request_kind: 'approval' }))).toBe(
+      `An approval request for ${DROPPED.tool} was dropped in the creator’s inbox`,
     );
+    expect(
+      describeEvent(
+        event('request', { request_id: 'r1', request_kind: 'approval', state: 'refused' }),
+      ),
+    ).toBe('The creator refused the approval request');
     expect(
       describeEvent(
         event('request', { request_id: 'r1', request_kind: 'claim', state: 'refused' }),
@@ -96,7 +101,10 @@ describe('describeEvent', () => {
   it('is total: details missing, or a kind a later feature adds', () => {
     expect(describeEvent(event('call-allowed'))).toBe('Allowed a tool');
     expect(describeEvent(event('extension'))).toBe('The creator extended the mission');
-    expect(describeEvent(event('gate-opened'))).toBe('gate-opened');
+    expect(describeEvent(event('approval'))).toBe('The creator approved an action');
+    expect(describeEvent(event('gate-opened'))).toBe('The creator opened a gate for the period');
+    expect(describeEvent(event('gate-changed'))).toBe('The creator edited a gate');
+    expect(describeEvent(event('a-later-kind'))).toBe('a-later-kind');
     expect(describeEvent(event('rotation'))).toContain('rotated');
     expect(describeEvent(event('revocation'))).toContain('revoked');
   });

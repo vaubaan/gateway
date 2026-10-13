@@ -191,53 +191,72 @@ describe('approvals repository', () => {
   });
   afterEach(() => store.close());
 
-  it('is single-use and bound to the exact fingerprint', async () => {
-    const approval = await store.approvals.create({
+  const KEY = { riskId: MERGE, tool: 't', fingerprint: 'fp' };
+  const grant = () =>
+    store.approvals.create({
       missionId,
       requestId,
-      riskId: MERGE,
-      fingerprint: 'fp',
+      ...KEY,
       expiresAt: '2026-10-13T09:10:00.000Z',
     });
+
+  it('is single-use and bound to the exact risk, tool and fingerprint', async () => {
+    const approval = await grant();
+    expect(approval).toMatchObject({ ...KEY, missionId, requestId, consumedAt: null });
     expect((await store.approvals.listActive(missionId)).map((a) => a.id)).toEqual([approval.id]);
-    expect(await store.approvals.consume(missionId, MERGE, 'fp-different')).toBeNull();
-    expect(await store.approvals.consume(missionId, 'github.code-read', 'fp')).toBeNull();
-    const consumed = await store.approvals.consume(missionId, MERGE, 'fp');
+    expect(await store.approvals.getByRequest(requestId)).toEqual(approval);
+    expect(await store.approvals.consume(missionId, { ...KEY, fingerprint: 'fp-different' })).toBe(
+      null,
+    );
+    expect(await store.approvals.consume(missionId, { ...KEY, riskId: 'github.code-read' })).toBe(
+      null,
+    );
+    const consumed = await store.approvals.consume(missionId, KEY);
     expect(consumed?.id).toBe(approval.id);
     expect(consumed?.consumedAt).toBe(t.clock.now().toISOString());
-    expect(await store.approvals.consume(missionId, MERGE, 'fp')).toBeNull();
+    expect(await store.approvals.consume(missionId, KEY)).toBeNull();
     expect(await store.approvals.listActive(missionId)).toEqual([]);
   });
 
+  it('the same arguments on another tool touching the same risk do not consume it', async () => {
+    // The Phase 1 security finding: the key had no tool.
+    const approval = await grant();
+    expect(await store.approvals.consume(missionId, { ...KEY, tool: 'other_tool' })).toBeNull();
+    expect((await store.approvals.getById(approval.id))?.consumedAt).toBeNull();
+    expect((await store.approvals.consume(missionId, KEY))?.id).toBe(approval.id);
+  });
+
+  it('an approval without a tool is never written, and never matched', async () => {
+    await expect(
+      store.approvals.create({
+        ...KEY,
+        missionId,
+        requestId,
+        tool: '',
+        expiresAt: '2026-10-13T09:10:00.000Z',
+      }),
+    ).rejects.toBeInstanceOf(InvariantError);
+    // A row older than migration 0005 carries the column default: no call consumes it.
+    t.store.db
+      .prepare(
+        `INSERT INTO approvals (id, mission_id, request_id, risk_id, fingerprint, created_at, expires_at)
+         VALUES ('legacy', ?, ?, ?, 'fp', '2026-10-13T09:00:00.000Z', '2026-10-13T09:10:00.000Z')`,
+      )
+      .run(missionId, requestId, MERGE);
+    expect((await store.approvals.getById('legacy'))?.tool).toBe('');
+    expect(await store.approvals.consume(missionId, { ...KEY, tool: '' })).toBeNull();
+    expect(await store.approvals.consume(missionId, KEY)).toBeNull();
+  });
+
   it('expires', async () => {
-    await store.approvals.create({
-      missionId,
-      requestId,
-      riskId: MERGE,
-      fingerprint: 'fp',
-      expiresAt: '2026-10-13T09:10:00.000Z',
-    });
+    await grant();
     t.clock.set('2026-10-13T09:10:00.000Z');
-    expect(await store.approvals.consume(missionId, MERGE, 'fp')).toBeNull();
+    expect(await store.approvals.consume(missionId, KEY)).toBeNull();
     expect(await store.approvals.listActive(missionId)).toEqual([]);
   });
 
   it('one approval per request', async () => {
-    await store.approvals.create({
-      missionId,
-      requestId,
-      riskId: MERGE,
-      fingerprint: 'fp',
-      expiresAt: '2026-10-13T09:10:00.000Z',
-    });
-    await expect(
-      store.approvals.create({
-        missionId,
-        requestId,
-        riskId: MERGE,
-        fingerprint: 'fp',
-        expiresAt: '2026-10-13T09:10:00.000Z',
-      }),
-    ).rejects.toThrow(/UNIQUE/);
+    await grant();
+    await expect(grant()).rejects.toThrow(/UNIQUE/);
   });
 });

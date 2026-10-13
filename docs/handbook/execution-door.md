@@ -338,7 +338,21 @@ Written by the pipeline, once per call. Fields filled by the door:
 `agent_label` (below), `client_ip` / `client_user_agent` (`clientOriginOf`),
 `arguments_hash` = `fingerprintArguments(args)` — the canonical SHA-256 (64 hex)
 that also binds approvals, so an `approval-required` refusal's `fingerprint`
-equals the entry's hash.
+equals the entry's hash. The creator's view of an approval request reads the
+slices and the touched risks of the call from this entry, found by mission,
+tool and that hash; the entry of the approved replay carries `approval_id`.
+
+### `approval-required`
+
+A call touching a risk gated `approval` is refused whole: `risk_id`,
+`fingerprint`, `approval_url` (`<public_url>/r/<id>`), `expires_at` (the
+request's), `approval_valid_seconds` (`approvals.expiry`) and a hint that
+tells the agent to hand the URL to its human and to replay the same tool with
+exactly the same arguments within that delay of the grant. The door does
+nothing more: the creator answers on the human surface
+([requests](requests.md), "Approvals"), the agent replays, and the budget
+stage finds the approval. `tests/integration/execution/approval-door.test.ts`
+runs it with the GitHub plugin's `developer` preset as shipped.
 
 ### Agent label (`request-meta.ts`)
 

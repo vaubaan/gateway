@@ -13,8 +13,8 @@
  *
  *   1. quota    — any risk whose consumed count reached its quota: `budget-exhausted`;
  *   2. rate     — any risk whose sliding window is full: `rate-limited`;
- *   3. gate     — any risk gated `approval` (and not opened for the period) without a
- *                 matching approval: `approval-required`.
+ *   3. gate     — any risk gated `approval` (and not opened for the period, `gates.ts`)
+ *                 without a matching approval: `approval-required`.
  *
  * Dimension-major order means a human is never asked to approve an action the budget
  * would refuse anyway. A refusal on one risk refuses the whole call (§3.5): nothing is

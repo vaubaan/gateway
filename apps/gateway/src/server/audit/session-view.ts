@@ -294,6 +294,16 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
             dimension: parsed.details.dimension,
             expires_at: parsed.details.expires_at,
           };
+    case 'approval':
+      return {
+        ...NO_DETAIL,
+        request_id: parsed.details.request_id,
+        tool: parsed.details.tool || null,
+      };
+    case 'gate-opened':
+      return { ...NO_DETAIL, request_id: parsed.details.request_id };
+    case 'gate-changed':
+      return NO_DETAIL;
     case 'rotation':
       return { ...NO_DETAIL, token_prefix: parsed.details.token_prefix };
     case 'revocation':

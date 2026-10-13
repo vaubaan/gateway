@@ -1,6 +1,7 @@
 /**
  * `/missions/<id>` — one mission: state, connections and resources, policy
- * per risk with what is left this period, token prefix with Rotate, the
+ * per risk with what is left this period and its gate — which the creator
+ * edits here after issuance (spec §3.5) —, token prefix with Rotate, the
  * bootstrap kit with the secret masked (spec §4.2, §4.4), and the link to the
  * mission's session page.
  */
@@ -31,6 +32,7 @@ import { reloadPhrase } from '@/server/missions/summary';
 import { BootstrapKitView } from '../bootstrap-kit-view';
 import styles from '../missions.module.css';
 import { StateBadge } from '../state-badge';
+import { GateControl } from './gate-control';
 import { MissionActions } from './mission-actions';
 
 export const dynamic = 'force-dynamic';
@@ -46,6 +48,8 @@ export default async function MissionPage({ params }: Props) {
   const detail = await session.root.missions.service.get(session.user, id);
   if (!detail) notFound();
   const { mission, state, token } = detail;
+  // A revoked or orphaned mission refuses every call: its gates no longer matter.
+  const gatesEditable = mission.status !== 'revoked' && mission.status !== 'orphaned';
 
   return (
     <Stack gap="var(--space-5)">
@@ -152,7 +156,21 @@ export default async function MissionPage({ params }: Props) {
                   {entry.rate_limit.max} per {entry.rate_limit.window_seconds}s
                 </Td>
                 <Td>
-                  {entry.gate === 'approval' ? <Badge tone="warning">approval</Badge> : 'auto'}
+                  <div className={styles.gateCell} data-testid={`gate-${entry.risk_id}`}>
+                    {entry.gate === 'approval' ? <Badge tone="warning">approval</Badge> : 'auto'}
+                    {entry.gate_open_until && (
+                      <span className={styles.muted}>
+                        open until <LocalDate ts={entry.gate_open_until} />
+                      </span>
+                    )}
+                    {gatesEditable && (
+                      <GateControl
+                        missionId={mission.id}
+                        riskId={entry.risk_id}
+                        gate={entry.gate}
+                      />
+                    )}
+                  </div>
                 </Td>
               </Tr>
             ))}

@@ -29,6 +29,7 @@ import {
 } from '../auth';
 import type { RateLimiter } from '../compose/ports';
 import { prefixOfBearer } from '../missions/token';
+import type { ApprovalProblemCode } from './approval';
 import type { ClaimProblemCode } from './claim';
 import type { DecideResult, RequestService } from './request-service';
 import { inboxRequestPath, requestPath } from './url';
@@ -51,7 +52,11 @@ const LOGIN_ROUTE = '/auth/login';
 const MS_PER_SECOND = 1000;
 
 /** Codes the creator's page shows after a refused form post (`?problem=`). */
-export type DecideProblemCode = ClaimProblemCode | 'request-not-open' | 'unsupported-kind';
+export type DecideProblemCode =
+  | ClaimProblemCode
+  | ApprovalProblemCode
+  | 'request-not-open'
+  | 'unsupported-kind';
 
 export interface RequestHandlerDeps {
   readonly publicUrl: URL;
@@ -183,7 +188,7 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
         });
       case 'unsupported-kind':
         return problem('unsupported-kind', 409, {
-          message: 'Approval requests are handled in a later version.',
+          message: `This decision does not apply to a request of kind '${result.kind}'.`,
         });
       case 'invalid':
         return problem(result.problem.code, 422, { message: result.problem.message });

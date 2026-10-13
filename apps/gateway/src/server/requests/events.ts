@@ -12,9 +12,12 @@
  */
 import {
   parseEventDetails,
+  type ApprovalEventDetails,
   type CallAllowedEventDetails,
   type CallRefusedEventDetails,
   type ExtensionEventDetails,
+  type GateChangedEventDetails,
+  type GateOpenedEventDetails,
   type Iso8601,
   type RequestEventDetails,
   type RiskId,
@@ -53,16 +56,33 @@ function describeCall(
     .join(' ');
 }
 
+/** `claim`, `approval request`: the kind as a sentence names it. */
+function nameOf(kind: RequestEventDetails['request_kind']): string {
+  return kind === 'approval' ? 'approval request' : kind;
+}
+
 function describeRequest(details: RequestEventDetails): string {
-  const kind = details.request_kind;
+  const kind = nameOf(details.request_kind);
   if ('state' in details) {
     return details.state === 'expired'
       ? `The ${kind} expired unanswered`
       : `The creator refused the ${kind}`;
   }
-  return kind === 'approval'
-    ? 'An approval request was dropped in the creator’s inbox'
+  return details.request_kind === 'approval'
+    ? `An approval request for ${details.tool || 'a tool'} was dropped in the creator’s inbox`
     : 'A claim was dropped in the creator’s inbox';
+}
+
+function describeApproval(details: ApprovalEventDetails): string {
+  return `The creator approved one ${details.tool || 'call'}, usable until ${details.expires_at}`;
+}
+
+function describeGateOpened(details: GateOpenedEventDetails): string {
+  return `The creator opened the gate until the period ends (${details.period_end})`;
+}
+
+function describeGateChanged(details: GateChangedEventDetails): string {
+  return `The creator set the gate to ${details.gate} (was ${details.gate_before})`;
 }
 
 function describeExtension(details: ExtensionEventDetails): string {
@@ -86,6 +106,12 @@ function describeWithoutDetails(kind: string): string {
       return RESET_LINE;
     case 'extension':
       return 'The creator extended the mission';
+    case 'approval':
+      return 'The creator approved an action';
+    case 'gate-opened':
+      return 'The creator opened a gate for the period';
+    case 'gate-changed':
+      return 'The creator edited a gate';
     case 'rotation':
       return ROTATION_LINE;
     case 'revocation':
@@ -109,6 +135,12 @@ export function describeEvent(event: SessionEventLike): string {
       return RESET_LINE;
     case 'extension':
       return describeExtension(parsed.details);
+    case 'approval':
+      return describeApproval(parsed.details);
+    case 'gate-opened':
+      return describeGateOpened(parsed.details);
+    case 'gate-changed':
+      return describeGateChanged(parsed.details);
     case 'rotation':
       return ROTATION_LINE;
     case 'revocation':

@@ -153,7 +153,9 @@ recomputed from the audit: a granted claim (period reset, quota extension —
 [requests](requests.md)) lowers the counter, so "counted" can go down within a period.
 The `reset` and `extension` events of the timeline carry what was given back per risk
 (`credits`), which the page shows as "+N given back"; an expiry extension shows the new
-date. `countersAgreeWithAudit` is the check `counted + credited == audited`.
+date. `countersAgreeWithAudit` is the check `counted + credited == audited`. The
+`approval`, `gate-opened` and `gate-changed` events (P2.1) are listed with their kind,
+risk, actor and, for the first two, their request; an approval also names its tool.
 
 For a mission that is not active, `consumed` / `remaining` are `null` and the stored
 periods are listed as past (the 8 most recent). The mission detail page links to the session page; the session
@@ -186,7 +188,9 @@ Only `audit` and `audit_risks` are purged. Session events and counters are not c
 | `resources-discovered`                                                  | `ConnectionService.discover` — outcome, count, error; success and failure                                                                                               | the connection                                             |
 | `resource-edited`                                                       | `ConnectionService.updateResource` — `before` / `after`: `resource_id`, `ref`, `display_name`, `env`, `hidden`, `owner_metadata`; nothing when the save changed nothing | the connection                                             |
 | `mission-issued`, `mission-rotated`, `mission-revoked`                  | `MissionService` (`issue` / `duplicate`, `rotate`, `revoke`)                                                                                                            | the mission                                                |
+| `gate-changed`                                                          | `MissionService.setGate` — `before` / `after`: `risk_id`, `gate`; nothing when the gate did not change (P2.1, [missions](missions.md))                                  | the mission                                                |
 | `period-reset`, `budget-extended`, `expiry-extended`, `request-refused` | `RequestService.decideClaim` (P1.7, [requests](requests.md))                                                                                                            | the request                                                |
+| `approval-granted`, `gate-opened`, `request-refused`                    | `RequestService.decideApproval` — `after`: `mission_id`, `risk_id`, `tool`, `fingerprint`, the resolution and its approval or period; never the arguments (P2.1)        | the request                                                |
 | `config-changed`                                                        | the Administration handlers (`saveProviderApp`, `saveIdpSettings`) and `completeLogin` when the first operator sign-in revokes the bootstrap token                      | `instance-config`: `provider-app:<id>`, `idp`, `bootstrap` |
 
 A resource edit and a discovery name the **connection** as their object so that the

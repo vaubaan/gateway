@@ -26,7 +26,8 @@ export default async function RequestsPage() {
         <div>
           <h1>Requests</h1>
           <p className={styles.muted}>
-            What your missions ask of you: a claim when a budget is exhausted. Only you can answer.
+            What your missions ask of you: a claim when a budget is exhausted, an approval when an
+            action touches a risk you gated. Only you can answer.
           </p>
         </div>
       </div>
@@ -52,6 +53,7 @@ export default async function RequestsPage() {
                       {request.kind === 'claim' ? 'Claim' : 'Approval request'}
                     </Link>{' '}
                     <Badge tone="warning">{request.state}</Badge>
+                    {request.tool && <div className={styles.mono}>{request.tool}</div>}
                   </Td>
                   <Td>
                     <Link href={`/missions/${request.mission.id}`}>{request.mission.name}</Link>

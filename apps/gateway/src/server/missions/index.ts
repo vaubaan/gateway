@@ -101,6 +101,7 @@ export {
   type RevealedToken,
   type RevokeResult,
   type RotateResult,
+  type SetGateResult,
   type TokenVerification,
   type VerifiedToken,
 } from './mission-service';

@@ -21,7 +21,15 @@ import {
 } from '../../../src/server/budget/index.ts';
 import { createLogger } from '../../../src/server/logging/index.ts';
 import { RequestService } from '../../../src/server/requests/index.ts';
-import { at, MERGE, openBudgetFixture, READ, WRITE, type BudgetFixture } from './fixture.ts';
+import {
+  APPROVAL_VALIDITY_SECONDS,
+  at,
+  MERGE,
+  openBudgetFixture,
+  READ,
+  WRITE,
+  type BudgetFixture,
+} from './fixture.ts';
 
 /** Stages that let the test drive the risks touched and the upstream outcome through
  *  the call arguments: `args.risks` and `args.fail`. */
@@ -216,6 +224,7 @@ describe('budget stage in the pipeline — counters vs audit', () => {
       store: f.store,
       registry: { get: () => undefined },
       publicUrl: new URL('https://gateway.example.com'),
+      approvalValiditySeconds: APPROVAL_VALIDITY_SECONDS,
       clock: f.clock,
       logger: createLogger({ level: 'error', redact: (text) => text, write: () => undefined }),
     });

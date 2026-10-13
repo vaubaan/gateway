@@ -1,6 +1,7 @@
 /**
- * `MissionService` — preview, issue, duplicate, rotate, revoke (spec §3.1,
- * §3.2, §7.4, §7.8; pivot ADR D4).
+ * `MissionService` — preview, issue, duplicate, rotate, revoke, and the gate
+ * of a risk edited after issuance (spec §3.1, §3.2, §3.5, §7.4, §7.8; pivot
+ * ADR D4).
  *
  * Reads connections and resources through the store repositories only, asks
  * the `AuthorityService` what the creator may accept, and leaves the decision
@@ -19,13 +20,23 @@
  * `connections/mapping.ts` only; no record is written into an audit payload.
  */
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
-import { parseRiskId, type MissionPolicyEntry, type SessionEventDetails } from '@vaubaan/shared';
+import {
+  isGate,
+  parseRiskId,
+  type Gate,
+  type Iso8601,
+  type MissionPolicyEntry,
+  type RiskId,
+  type SessionEventDetails,
+} from '@vaubaan/shared';
 
 import type { AuthorityService, AuthoritySubject } from '../authority';
 import {
   budgetMissionOf,
+  GATE_EVENT_KINDS,
   isStale,
   missionUsageReader,
+  openedGatesOf,
   policyEntryOf,
   policyEntryRecordOf,
   statedPeriodOf,
@@ -116,6 +127,24 @@ export type RevokeResult =
   | { readonly ok: true; readonly mission: MissionRecord; readonly tokensRevoked: number }
   | { readonly ok: false; readonly reason: 'not-found' };
 
+export type SetGateResult =
+  | {
+      readonly ok: true;
+      readonly mission: MissionRecord;
+      readonly risk_id: RiskId;
+      readonly gate: Gate;
+      /** The gate before the edit; equal to `gate` when nothing changed. */
+      readonly previous: Gate;
+    }
+  | { readonly ok: false; readonly reason: 'not-found' }
+  | { readonly ok: false; readonly reason: 'invalid-gate' }
+  | { readonly ok: false; readonly reason: 'risk-not-in-policy' }
+  | {
+      readonly ok: false;
+      readonly reason: 'inactive';
+      readonly state: 'revoked' | 'orphaned';
+    };
+
 /** The public part of a verified token: what the execution door needs, never the hash. */
 export type VerifiedToken = Pick<MissionTokenRecord, 'id' | 'prefix'>;
 
@@ -159,6 +188,11 @@ export interface MissionDetailRisk extends MissionPolicyEntry {
   readonly level: SeverityLevel | null;
   /** Remaining actions this period; `null` when the mission is not active. */
   readonly remaining: number | null;
+  /**
+   * End of the period the creator opened this risk's gate for (spec §3.5): until then
+   * calls pass without asking, although `gate` reads `approval`. `null` otherwise.
+   */
+  readonly gate_open_until: Iso8601 | null;
 }
 
 export interface MissionDetail extends MissionOverview {
@@ -486,6 +520,49 @@ export class MissionService {
     return { ok: true, mission: revoked, tokensRevoked };
   }
 
+  /**
+   * The creator edits the gate of one accepted risk after issuance (spec §3.5 "at
+   * issuance, or later"): `auto` ⇄ `approval`. Only the gate moves — the accepted
+   * risks, quotas and rate limits are the mission's as issued, and a gate is not part
+   * of what a share restricts, so no authority is re-checked. The edit applies to the
+   * next call, ends an opening "for the rest of the period" granted earlier on that
+   * risk, and leaves the open requests where they are.
+   */
+  async setGate(
+    user: AuthoritySubject,
+    missionId: string,
+    riskId: RiskId,
+    gate: string,
+  ): Promise<SetGateResult> {
+    const mission = await this.ownMission(user, missionId);
+    if (!mission) return { ok: false, reason: 'not-found' };
+    if (!isGate(gate)) return { ok: false, reason: 'invalid-gate' };
+    if (mission.status === 'revoked' || mission.status === 'orphaned') {
+      return { ok: false, reason: 'inactive', state: mission.status };
+    }
+    const changed = await this.deps.store.missions.setGate(mission.id, riskId, gate, user.id);
+    if (!changed) return { ok: false, reason: 'risk-not-in-policy' };
+    const { previous } = changed;
+    if (previous !== gate) {
+      await this.deps.store.auditWriter.write({
+        kind: 'admin',
+        ts: toIso(this.deps.clock.now()),
+        user_id: user.id,
+        act: 'gate-changed',
+        object: { type: 'mission', id: mission.id },
+        before: { risk_id: riskId, gate: previous },
+        after: { risk_id: riskId, gate },
+        delegated_client_id: null,
+      });
+      this.deps.logger.info('mission gate changed', {
+        mission_id: mission.id,
+        risk_id: riskId,
+        gate,
+      });
+    }
+    return { ok: true, mission: changed.mission, risk_id: riskId, gate, previous };
+  }
+
   /** Session events exist only once the session does (born on the first call). */
   private async recordEvent(
     missionId: string,
@@ -534,6 +611,7 @@ export class MissionService {
     const connections = await this.detailConnections(mission);
     const remaining = overview.state.kind === 'active' ? overview.state.remaining : null;
     const rows = this.catalogRowsOf(connections);
+    const openUntil = await this.openGatesOf(mission, overview.state);
     const policy: MissionDetailRisk[] = mission.policy.map(policyEntryOf).map((entry) => {
       const row = rows.get(entry.risk_id);
       return {
@@ -541,6 +619,7 @@ export class MissionService {
         label: row?.label ?? entry.risk_id,
         level: row?.level ?? null,
         remaining: remaining ? (remaining[entry.risk_id] ?? null) : null,
+        gate_open_until: openUntil.get(entry.risk_id) ?? null,
       };
     });
     return {
@@ -552,6 +631,28 @@ export class MissionService {
         ? await this.kitFor(mission, { prefix: overview.token.prefix }, connections)
         : null,
     };
+  }
+
+  /**
+   * The gated risks the creator opened for the current period, with the instant the
+   * gate closes again — the budget's own derivation (`openedGatesOf`) over the session's
+   * gate events, so this page and `decide()` cannot disagree.
+   */
+  private async openGatesOf(
+    mission: MissionRecord,
+    state: MissionState,
+  ): Promise<Map<RiskId, Iso8601>> {
+    const open = new Map<RiskId, Iso8601>();
+    if (state.kind !== 'active' || state.period.end === null) return open;
+    if (!mission.policy.some((entry) => entry.gate === 'approval')) return open;
+    const session = await this.deps.store.sessions.getByMission(mission.id);
+    if (!session) return open;
+    const events = await this.deps.store.sessions.listEvents(session.id, {
+      kinds: GATE_EVENT_KINDS,
+      since: state.period.start,
+    });
+    for (const riskId of openedGatesOf(events, state.period)) open.set(riskId, state.period.end);
+    return open;
   }
 
   private async overviewOf(mission: MissionRecord): Promise<MissionOverview> {

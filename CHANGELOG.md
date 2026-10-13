@@ -11,6 +11,20 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Approval gate.** A call touching a risk gated `approval` is refused `approval-required`
+  with the URL of an approval request, how long a granted approval stays usable and the
+  instruction to replay identically. The mission's creator — and nobody else, operators
+  included — reads the tool, the arguments in clear, the slices touched and what is left of
+  every risk the call counts against, then approves that one action, opens the gate for the
+  rest of the period, or refuses. An approval is bound to the mission, the risk, the tool and
+  the fingerprint of the arguments, is used once and expires after `approvals.expiry`
+  (`VAUBAAN_APPROVAL_EXPIRY`, default 10 minutes); an approved action still counts against the
+  quota and the rate limit. The arguments are kept encrypted while the request is open and
+  erased when it is decided or expires. Every decision is audited.
+- **Gates are editable after issuance.** On the mission page the creator switches the gate of
+  an accepted risk between `auto` and `approval`; the edit applies to the next call, is
+  audited (`gate-changed`) and ends an opening granted earlier in the period.
+
 - **Execution MCP door.** `POST /mcp` takes a mission token: `tools/list` shows the tools of
   the providers the mission holds a connection and an accepted risk for; `tools/call` checks
   mission state, resources, `risks_touched ⊆ accepted_risks`, budget, rate and gate, calls the
@@ -289,6 +303,10 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Security
 
+- **An approval is bound to the tool it was read for.** Approvals were keyed by mission, risk
+  and argument fingerprint: the same arguments sent to another tool touching the same risk
+  would have consumed an approval granted for the first. The key now includes the tool
+  (store migration `0005`); no approval could be granted before this release.
 - **App installations are bound to the person who performs them.** Connecting GitHub accepted
   the callback's `installation_id` once the `state` was valid, so a signed-in user who knew
   another installation's id could connect it and issue missions on repositories they had no

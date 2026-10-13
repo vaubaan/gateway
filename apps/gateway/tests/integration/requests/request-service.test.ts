@@ -27,6 +27,7 @@ import {
   MERGE,
   openBudgetFixture,
   READ,
+  APPROVAL_VALIDITY_SECONDS,
   REQUEST_EXPIRY_SECONDS,
   WRITE,
   type BudgetFixture,
@@ -48,6 +49,7 @@ describe('RequestService', () => {
       // No plugin registered: labels fall back to the risk ids.
       registry: { get: () => undefined },
       publicUrl: PUBLIC_URL,
+      approvalValiditySeconds: APPROVAL_VALIDITY_SECONDS,
       clock: f.clock,
       logger: createLogger({ level: 'error', redact: (text) => text, write: () => undefined }),
     });
@@ -251,7 +253,7 @@ describe('RequestService', () => {
       );
     });
 
-    it('an approval request gets a neutral view and no decision in this version', async () => {
+    it('one decide entry point per kind: a decision of the other kind decides nothing', async () => {
       const approval = await f.store.requests.create({
         missionId: f.mission.id,
         kind: 'approval',
@@ -261,20 +263,16 @@ describe('RequestService', () => {
         arguments: { pr: 1 },
         expiresAt: '2026-10-14T09:00:00.000Z',
       });
-      const result = await requests.view(creator(), approval.id);
-      expect(result).toMatchObject({
-        outcome: 'ok',
-        view: { kind: 'approval', request: { id: approval.id, state: 'open', risk_id: MERGE } },
-      });
-      expect(await requests.decide(creator(), approval.id, { resolution: 'reset-period' })).toEqual(
-        { ok: false, reason: 'unsupported-kind', kind: 'approval' },
-      );
+      // A claim resolution is not an approval resolution…
+      expect(
+        await requests.decide(creator(), approval.id, { resolution: 'reset-period' }),
+      ).toMatchObject({ ok: false, reason: 'invalid', problem: { code: 'invalid-decision' } });
+      // …and the claim entry point refuses an approval request, as the store's primitive does.
       expect(await requests.decideClaim(creator(), approval.id, { resolution: 'refuse' })).toEqual({
         ok: false,
         reason: 'unsupported-kind',
         kind: 'approval',
       });
-      // The store's claim primitive refuses it too; the approval is left intact.
       await expect(
         f.store.requests.decideClaim(approval.id, f.creatorId, () => ({
           state: 'granted',
@@ -285,8 +283,33 @@ describe('RequestService', () => {
         state: 'open',
         hasArguments: true,
       });
-      // It is in the inbox all the same.
-      expect((await requests.inbox(creator())).map((r) => r.kind)).toEqual(['approval']);
+
+      // The reverse: an approval decision on a claim.
+      const claim = await exhaust();
+      expect(await requests.decide(creator(), claim, { resolution: 'grant' })).toMatchObject({
+        ok: false,
+        reason: 'invalid',
+        problem: { code: 'invalid-decision' },
+      });
+      expect(await requests.decideApproval(creator(), claim, { resolution: 'grant' })).toEqual({
+        ok: false,
+        reason: 'unsupported-kind',
+        kind: 'claim',
+      });
+      await expect(
+        f.store.requests.decideApproval(claim, f.creatorId, () => ({
+          state: 'granted',
+          decision: {},
+        })),
+      ).rejects.toBeInstanceOf(InvariantError);
+      expect((await f.store.requests.getById(claim))?.state).toBe('open');
+
+      // Both are in the inbox; the summary of the approval request names its tool.
+      const inbox = await requests.inbox(creator());
+      expect(inbox.map((r) => [r.kind, r.tool]).sort()).toEqual([
+        ['approval', 'github__merge'],
+        ['claim', null],
+      ]);
     });
   });
 

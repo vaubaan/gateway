@@ -19,10 +19,12 @@
  *     consent screens the browser cannot reach (the simulated IdP's, the
  *     mocked GitHub's installation page), who signs in next, a token check
  *     through `MissionService.verifyToken`, `small-mission` (a mission of Ada
- *     with a two-action quota and its token), `upstream` (what the mocked
- *     provider received) and `seed-day` — the one fixture written below the
- *     door: a day of calls recorded through `root.budget` and the audit
- *     writer, with gated and exhausted risks, for the audit pages.
+ *     with a two-action quota and its token), `developer-mission` (a mission
+ *     issued from the GitHub plugin's `developer` preset as shipped, for a
+ *     user of their own, and its token), `upstream` (what the mocked provider
+ *     received) and `seed-day` — the one fixture written below the door: a
+ *     day of calls recorded through `root.budget` and the audit writer, with
+ *     gated and exhausted risks, for the audit pages.
  *
  * Run by Playwright's `webServer` (see `playwright.config.ts` next to this
  * file) after `next build`. Never part of the image.
@@ -46,6 +48,7 @@ import { FakeIdp } from '../../integration/auth/fake-idp';
 import { seedInstance, testRootDeps } from '../../integration/missions/support';
 import {
   CONTROL_PREFIX,
+  E2E_APPROVER_USER,
   E2E_AUDIT_USER,
   IDP_ISSUER,
   instancePort,
@@ -119,9 +122,9 @@ const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/
 /**
  * GitHub's side of the connect flow and of the calls: the token endpoint of
  * the user authorization, the installations that user can reach, the
- * installation token, the repositories of the installation, and two read
- * endpoints. Any other request rejects (`mockFetch`): nothing reaches a
- * network.
+ * installation token, the repositories of the installation, two read
+ * endpoints and the file write. Any other request rejects (`mockFetch`):
+ * nothing reaches a network.
  */
 function mockedGithub(): MockFetch {
   const api = escapeRegExp(GITHUB_API);
@@ -183,6 +186,18 @@ function mockedGithub(): MockFetch {
         };
       },
     },
+    {
+      // A file created or updated on a branch (`github__create_or_update_file`).
+      method: 'PUT',
+      url: new RegExp(`^${api}/repos/[^/]+/[^/]+/contents/`),
+      status: 201,
+      respond: (call) => ({
+        content: {
+          path: decodeURIComponent(new URL(call.url).pathname.split('/contents/')[1] ?? ''),
+        },
+        commit: { sha: 'c0ffee0000000000000000000000000000000000' },
+      }),
+    },
   ]);
 }
 
@@ -242,6 +257,46 @@ async function issueSmallMission(
     expires_at: null,
   });
   if (!issued.ok) throw new Error(`mission "${name}" was not issued`);
+  return { mission_id: issued.mission.id, token: issued.token.secret };
+}
+
+/**
+ * A mission of the approver on a GitHub connection of their own, issued from the
+ * plugin's `developer` preset exactly as shipped: its gated entries are what the
+ * "approve an action" scenario is about. The connection is an installation of the
+ * mocked GitHub, so an approved call goes all the way to the provider.
+ */
+async function issueDeveloperMission(
+  root: GatewayRoot,
+  name: string,
+): Promise<{ mission_id: string; token: string }> {
+  const user = await root.store.users.upsertFromIdp({
+    subject: E2E_APPROVER_USER.sub,
+    email: E2E_APPROVER_USER.email,
+    displayName: E2E_APPROVER_USER.name,
+  });
+  const [repository] = MOCK_GITHUB.repositories;
+  const seeded = await seedConnection(root.store, {
+    provider: 'github',
+    owner: { kind: 'user', id: user.id },
+    displayName: 'hedy-org',
+    resources: [{ ref: repository }],
+  });
+  await root.store.connections.reconnect(
+    seeded.connection.id,
+    serializeSecret({
+      kind: 'app-install',
+      installationId: MOCK_GITHUB.installationId,
+      metadata: {},
+    }),
+  );
+  const issued = await root.missions.service.issue(user, {
+    name,
+    connections: [{ connection_id: seeded.connection.id, preset: 'developer' }],
+    period: { kind: 'recurring', length_seconds: 86_400 },
+    expires_at: null,
+  });
+  if (!issued.ok) throw new Error(`mission "${name}" was not issued from the developer preset`);
   return { mission_id: issued.mission.id, token: issued.token.secret };
 }
 
@@ -349,6 +404,11 @@ async function main(): Promise<void> {
           200,
           await issueSmallMission(root, seeded.ada, seeded.github.connection.id, name),
         );
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/developer-mission` && req.method === 'POST') {
+        const { name } = JSON.parse(await readBody(req)) as { name: string };
+        sendJson(res, 200, await issueDeveloperMission(root, name));
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/verify-token` && req.method === 'POST') {

@@ -88,16 +88,16 @@ A refusal is **data returned by the pipeline**, not an exception. Eight
 codes, one builder each under `refuse.*`, every refusal carrying its
 `code`, the fields the spec lists, and an agent-readable `hint`:
 
-| Code                      | Fields                                                                             | Hint says                                                   |
-| ------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------- |
-| `risk-not-accepted`       | `missing_risks`, `executed_slices`                                                 | the policy engine's hint (required input), naming the risks |
-| `budget-exhausted`        | `risk_id`, `quota`, `consumed`, `period_end` (null = one-off), `claim_url`         | hand the claim URL to the human, do not loop                |
-| `approval-required`       | `risk_id`, `fingerprint`, `approval_url`, `expires_at`                             | nothing executed; replay identically once approved          |
-| `resource-not-in-mission` | `cited_ref`, `connection {id,name}`, `allowed_resources[]`                         | which refs the mission may touch                            |
-| `rate-limited`            | `risk_id`, `limit: RateLimit`, `retry_after_seconds`                               | wait N seconds; quota not consumed                          |
-| `connection-unavailable`  | `connection {id,name}`, `status` (`expired` \| `revoked`), `owner {kind, display}` | who can reconnect                                           |
-| `mission-inactive`        | `status` (expired/orphaned/revoked), `reason`                                      | stop calling, report to the human                           |
-| `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                                     | where the presented kind IS accepted (`ACCEPTED_AT`)        |
+| Code                      | Fields                                                                             | Hint says                                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `risk-not-accepted`       | `missing_risks`, `executed_slices`                                                 | the policy engine's hint (required input), naming the risks                         |
+| `budget-exhausted`        | `risk_id`, `quota`, `consumed`, `period_end` (null = one-off), `claim_url`         | hand the claim URL to the human, do not loop                                        |
+| `approval-required`       | `risk_id`, `fingerprint`, `approval_url`, `expires_at`, `approval_valid_seconds`   | nothing executed, nothing held; replay the same tool and arguments within the delay |
+| `resource-not-in-mission` | `cited_ref`, `connection {id,name}`, `allowed_resources[]`                         | which refs the mission may touch                                                    |
+| `rate-limited`            | `risk_id`, `limit: RateLimit`, `retry_after_seconds`                               | wait N seconds; quota not consumed                                                  |
+| `connection-unavailable`  | `connection {id,name}`, `status` (`expired` \| `revoked`), `owner {kind, display}` | who can reconnect                                                                   |
+| `mission-inactive`        | `status` (expired/orphaned/revoked), `reason`                                      | stop calling, report to the human                                                   |
+| `wrong-credential-kind`   | `door`, `presented`, `expected` (`BearerKind`)                                     | where the presented kind IS accepted (`ACCEPTED_AT`)                                |
 
 `isRefusal(value)` is the type guard (`isRefusalCode(code)` and a non-empty
 hint); `RefusalOf<C>` narrows a `Refusal` to one code.

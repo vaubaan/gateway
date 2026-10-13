@@ -70,6 +70,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'period-reset': true,
   'expiry-extended': true,
   'gate-opened': true,
+  'gate-changed': true,
   'approval-granted': true,
   'request-refused': true,
   'delegation-granted': true,

@@ -155,14 +155,81 @@ integration test checks that three labels consume one budget.
   the risk stage just checked) and reads the mission row only for a one-off mission's
   anchor, because the shared `Period` carries no anchor for `one-off`. Making the shared
   `Period` carry `anchor_at` in both variants would remove that read (question for Renaud).
-- The audit's `arguments_hash` and the approval fingerprint are two different hashes of
-  the same arguments until P1.6 decides whether `CallPipeline` should record the canonical
-  fingerprint (spec §3.5 "only their fingerprint remains in the audit" suggests it should).
+- The audit's `arguments_hash` and the approval fingerprint were two different hashes of
+  the same arguments until P1.6 made `CallPipeline` record the canonical fingerprint
+  (see the amendment below).
 - The gate-opened-for-the-period event (spec §3.5) is an input of `decide()`
-  (`opened_gates`); the service passes none until P2.1 records and reads the event.
+  (`opened_gates`); since P2.1 the service derives it from the session's events (see the
+  amendment below).
 - A hosted deployment changes the rate-limit implementation and the transaction
   boundary of the rate record (see above); counters, events, requests and approvals
   move with the store.
+
+## Amendment (2026-10-13, feature P2.1) — the approval gate
+
+The approval gate amendment of the pivot ADR decided _that_ a risk can be gated
+`approval`; this section records _how_ the budget honours it, now that the creator's
+decision exists. It adds to the decisions above and changes one of them (the key).
+
+### The fingerprint is unchanged, and is the audit's
+
+`sha256(canonicalJson(args ?? {}))`, 64 hex, as decided above. The open point of the
+consequences is closed: since P1.6 the pipeline records that same value as the audit's
+`arguments_hash`, so "only their fingerprint remains in the audit" (spec §3.5) is one
+hash, and the creator's view finds the entry of a refused call by it.
+
+### An approval is bound to `(mission, risk, tool, fingerprint)`
+
+The spec says `(mission, RiskId, argument fingerprint)`. The tool is added to the key of
+the approval and of the open approval request (store migration 0005). Two tools can touch
+the same risk with byte-identical arguments — a file write and a file delete on the same
+path —, and the creator approves while reading one tool's name: without the tool in the
+key, the other call would consume the approval (Phase 1 security review). The binding is
+strictly narrower than the spec's, never wider.
+
+### One request and one approval per gated risk
+
+A call touching several risks of which one is gated is refused whole, and its one approval
+lets the whole call through (spec §3.5). A call touching **two** gated risks is refused on
+the first without an approval; granting it leaves the second to ask in its turn. The
+lookups stay non-consuming, so the first approval survives the second refusal and the
+replay consumes both. One request covering every gated risk of the call would need the
+request to carry a list of risks and the approval a set — a schema change for a case the
+shipped presets do not produce.
+
+### "Open the gate for the rest of the period" is read from the session's events
+
+The opening is a `gate-opened` event carrying the period it was granted in; `decide()`
+receives the set derived from the session's `gate-opened` and `gate-changed` events of
+the current period (`budget/gates.ts`), read inside the decision transaction. The bound
+is the period's start carried by the event: after the rollover nothing matches, with no
+job to close anything — the same "arithmetic on read" as the counters. A gate edited on
+the mission ends the opening (the latest of the two events decides; a tie closes). A
+one-off mission has no period end, so nothing can be opened on it: the creator edits the
+gate itself.
+
+### The arguments are erased in the transaction that decides
+
+`decideApproval` stores the decision and sets `args_blob` to NULL in one statement, in
+the transaction that writes the approval or the opening; the sweeper does the same on
+expiry. Between an expiry and the sweeper's pass the blob is still in the row and no code
+path opens it (the store's `getArguments` checks state and expiry).
+
+### Rejected
+
+- **An approval covering every gated risk of the call.** One click for the creator, but
+  the set of risks a call touches can change between the grant and the replay (a resource
+  relabelled `prod`): an approval bound to the call alone would cover a gated risk the
+  creator never saw.
+- **Storing the opened gate as a column of `mission_policy`** (`gate_open_until`). A
+  second source of truth for the gate, to be expired by someone; the spec calls the
+  opening a session event and the event is enough.
+- **Keeping the arguments until the approval is consumed**, to show the creator what ran.
+  The spec erases them on decision; the fingerprint, the tool and the audit entry of the
+  replay say what ran.
+- **Passing the slices to the budget stage to store them on the request.** The audit
+  already holds them for the same call; reading them there keeps the pipeline's contract
+  unchanged.
 
 ## Rejected alternatives
 

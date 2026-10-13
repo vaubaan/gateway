@@ -163,6 +163,22 @@ export async function issueSmallMission(
   return (await response.json()) as SmallMission;
 }
 
+/**
+ * Issues a mission of the approver (`E2E_APPROVER_USER`) from the GitHub plugin's
+ * `developer` preset as shipped, on a connection of their own, and hands back its
+ * token. Some of the preset's risks are gated `approval`.
+ */
+export async function issueDeveloperMission(
+  request: APIRequestContext,
+  name: string,
+): Promise<SmallMission> {
+  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/developer-mission`, {
+    data: { name },
+  });
+  if (!response.ok()) throw new Error(`developer-mission answered ${response.status()}`);
+  return (await response.json()) as SmallMission;
+}
+
 export interface UpstreamLog {
   /** The installation token the mocked GitHub minted for the gateway. */
   readonly installation_token: string;

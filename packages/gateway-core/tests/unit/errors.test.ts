@@ -54,6 +54,7 @@ const SAMPLES: Record<RefusalCode, () => Refusal> = {
       fingerprint: 'sha256:0123456789abcdef',
       approval_url: 'https://gateway.example.test/r/req_appr_1',
       expires_at: '2026-10-13T12:30:00.000Z',
+      approval_valid_seconds: 600,
     }),
   'resource-not-in-mission': () =>
     refuse.resourceNotInMission({
@@ -151,16 +152,20 @@ describe('refusal fields', () => {
     expect(r.hint).toMatch(/no next period/);
   });
 
-  test('approval-required: risk, fingerprint, approval URL, expiry; hint says replay identically', () => {
+  test('approval-required: risk, fingerprint, approval URL, expiry, validity; hint says replay identically', () => {
     const r = SAMPLES['approval-required']();
     if (r.code !== 'approval-required') throw new Error('wrong code');
     expect(r.risk_id).toBe('github.merge-protected');
     expect(r.fingerprint).toBe('sha256:0123456789abcdef');
     expect(r.approval_url).toBe('https://gateway.example.test/r/req_appr_1');
     expect(r.expires_at).toBe('2026-10-13T12:30:00.000Z');
+    expect(r.approval_valid_seconds).toBe(600);
     expect(r.hint).toContain(r.approval_url);
-    expect(r.hint).toMatch(/replay this call with exactly the same arguments/);
-    expect(r.hint).toMatch(/Nothing was executed/);
+    expect(r.hint).toContain(r.expires_at);
+    expect(r.hint).toMatch(/replay this call with the same tool and exactly the same arguments/);
+    expect(r.hint).toMatch(/within 600s of the grant/);
+    expect(r.hint).toMatch(/used once/);
+    expect(r.hint).toMatch(/Nothing was executed and nothing is held/);
   });
 
   test('resource-not-in-mission: cited ref, connection, allowed resources listed in the hint', () => {
