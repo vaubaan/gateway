@@ -30,7 +30,7 @@
     "gen-master-key": "node scripts/gen-master-key.mjs",
     "docker:build": "docker build -f deploy/docker/Dockerfile -t vaubaan-gateway:local .",
     "docker:smoke": "deploy/docker/smoke.sh vaubaan-gateway:local",
-    "ci": "npm run type-check && npm run lint && npm run format:check && npm run test && npm run build"
+    "ci": "npm run type-check && npm run lint && npm run format:check && npm run build && npm run test"
   },
   "devDependencies": {
     "@eslint/js": "9.39.4",
