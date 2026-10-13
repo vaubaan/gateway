@@ -35,7 +35,7 @@ risks:
     reason: >-
       Inventory of teams, projects, deployments, build/runtime logs, env-var
       keys (encrypted), domains, toolbar threads. Surface of attack is
-      negligible : metadata only, no plaintext secret leaks. This risk is
+      negligible : metadata only, no plaintext secret leaks. This permission is
       the always-on baseline that every other read assumes.
     matches: 'vercel.[**].R'
     vector:
@@ -98,7 +98,7 @@ risks:
     reason: >-
       `web_fetch_vercel_url` makes an outbound HTTP request against a
       deployment URL. Logs an access on the target side, may consume
-      bandwidth. Not a major security risk but worth a dedicated risk for
+      bandwidth. Not a major security risk but worth a dedicated permission for
       audit-log granularity.
     matches: 'vercel.project[**].deployment[**].fetch.R'
     vector:
@@ -201,8 +201,8 @@ risks:
       target omitted = all 3 by Vercel default), and `delete_env_var`
       (whose upstream API removes the var from every env it lives in
       regardless of the Vaubaan hint), touch all 3 envs in a single tool
-      call. Treated as its own risk so the agent who only has
-      `env-var-write` accepted on preview does NOT silently escalate to prod.
+      call. Treated as its own permission so the agent who only holds
+      `env-var-write` on preview does NOT silently escalate to prod.
     matches: 'vercel.project[**].env-var-fan-out.W'
     vector:
       reversibility: costly
@@ -322,7 +322,7 @@ risks:
     reason: >-
       Catch-all for writes that have not been explicitly categorised. If
       observed in production, signals that a tool was added without a
-      matching catalog entry — operators must opt in explicitly (no
+      matching catalog entry — the mission creator must opt in explicitly (no
       implicit accept).
     matches: 'vercel.[**].W'
     fallback: true
@@ -371,7 +371,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One token per code project — preview and development deploys, logs, preview env vars, toolbar comments ; nothing that touches production configuration.
+    description: One mission per code project — preview and development deploys, logs, preview env vars, toolbar comments ; nothing that touches production configuration.
     entries:
       - risk_id: vercel.read-account
         quota: 5000
@@ -416,7 +416,7 @@ presets:
 
   - id: operator
     label: Operator
-    description: Everything a developer can do, plus production deploys, production env vars, project settings, domains and firewall — production-affecting changes behind approval.
+    description: Everything a developer can do, plus production deploys, production env vars, project settings, domains and firewall — production-affecting changes asking first.
     entries:
       - risk_id: vercel.read-account
         quota: 5000

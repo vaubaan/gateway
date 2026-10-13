@@ -65,7 +65,7 @@ function json(status: number, body: unknown): Response {
 const REFUSALS = {
   field: 'message',
   noSession: 'Sign in first.',
-  forbidden: 'A mission is issued by an identified user; sign in through the identity provider.',
+  forbidden: 'A mission is created by an identified person; sign in through the identity provider.',
 } as const;
 
 const NOT_FOUND = { error: 'not-found', message: 'No such mission among yours.' };
@@ -131,7 +131,7 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
       if (result.reason !== 'inactive') return json(404, NOT_FOUND);
       return json(409, {
         error: 'mission-inactive',
-        message: `The mission is ${result.state}; its token cannot be rotated.`,
+        message: `The mission is ${result.state}; its key cannot be replaced.`,
       });
     },
 
@@ -166,12 +166,12 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
         case 'risk-not-in-policy':
           return json(422, {
             error: 'risk-not-in-policy',
-            message: `The mission does not accept '${edit.riskId}': a gate is set on an accepted risk.`,
+            message: `The mission does not hold the permission '${edit.riskId}': “ask me first” is set on a permission the mission holds.`,
           });
         case 'inactive':
           return json(409, {
             error: 'mission-inactive',
-            message: `The mission is ${result.state}; every call is refused whatever its gates.`,
+            message: `The mission is ${result.state}; every call is refused, whether or not a permission asks first.`,
           });
       }
     },

@@ -59,7 +59,7 @@ risks:
       SELECT and schema inspection, including `execute_sql`, which runs on
       the Management API read-only endpoint. Can leak PII held in
       application tables. Deliberately broad : every Supabase read fires it,
-      and the more specific read risks (`read-managed-schemas`,
+      and the more specific read permissions (`read-managed-schemas`,
       `auth.read-users`, `storage.signed-url-read`, `functions.read`)
       co-fire to harden the policy. Alone, it lets `execute_sql` run only a
       plain query that names no schema Supabase manages.
@@ -99,8 +99,8 @@ risks:
     reason: >-
       Deprecated : matches no call. No tool of this plugin writes rows one
       by one (`execute_sql` runs on the read-only endpoint, and a migration
-      that writes rows is a bulk write). Accepting it grants nothing ; it
-      has no successor. Kept so the id stays resolvable in the shares and
+      that writes rows is a bulk write). Holding it grants nothing ; it
+      has no successor. Kept so the id stays resolvable in the accesses and
       missions that name it.
     matches: supabase.project[**].schema[**].table[**].row[one].W
     deprecated: true
@@ -135,8 +135,8 @@ risks:
       CREATE/ALTER TABLE or INDEX. Costly to revert (manual down migration)
       and can break the applications that read the schema. Touched by every
       migration ; a migration that also writes rows, drops a table or a
-      column, changes RLS, privileges or extensions touches the matching
-      risk too, and one the classifier cannot read (function body, dynamic
+      column, changes RLS, privileges or extensions needs the matching
+      permission too, and one the classifier cannot read (function body, dynamic
       SQL) touches all of them. Matches the schema/table-level write
       strictly (no row segment), so a row write never fires it by accident.
     matches: supabase.project[**].schema[*].table[*].W
@@ -470,10 +470,8 @@ risks:
   - id: supabase.uncategorized-write
     label: Uncategorized Supabase write
     reason: >-
-      Catch-all for writes without a dedicated entry. A mission accepting it
-      for an environment accepts every uncategorized write of the provider
-      there ; the budget and the gate bound it. A tool firing only this risk
-      is a catalog bug.
+      Catch-all for writes without a dedicated entry. A mission holding it
+      for an environment allows every uncategorized write of the service there ; its limits and “ask me first” bound it. A tool needing only this permission is a catalog bug.
     matches: supabase.**.W
     fallback: true
     vector:
@@ -589,7 +587,7 @@ presets:
 
   - id: migration-operator
     label: Migration operator
-    description: Apply migrations. Any migration on staging-labelled projects. On prod, only plain schema changes (create or alter tables and indexes) and RLS changes, each waiting for approval ; a prod migration that writes rows, drops a table or a column, grants privileges, enables an extension or defines a function is refused.
+    description: Apply migrations. Any migration on staging-labelled projects. On prod, only plain schema changes (create or alter tables and indexes) and RLS changes, each asking first ; a prod migration that writes rows, drops a table or a column, grants privileges, enables an extension or defines a function is refused.
     entries:
       - risk_id: supabase.read-data
         quota: 2000

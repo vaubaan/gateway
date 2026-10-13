@@ -50,8 +50,8 @@ risks:
       Inventory of databases, their configuration, endpoints, and usage
       statistics. Surface of attack is negligible : metadata only, no
       data or credential leaks (`execute` strips the REST tokens from the
-      Management API answers). This risk is the always-on baseline ; every
-      read of the provider fires it.
+      Management API answers). This permission is the always-on baseline ; every
+      read of the service needs it.
     matches: 'upstash-redis.[**].R'
     vector:
       reversibility: reversible
@@ -89,8 +89,8 @@ risks:
       reads from Redis at runtime. The deletion commands (DEL, UNLINK, the
       POP and REM families), every command that sets a time to live
       (EXPIRE, SETEX, SET … EX) or moves data out of a key (RENAME, LMOVE,
-      SMOVE), FLUSH and arbitrary commands fire it next to their own, more
-      severe risk, so a mission accepting `write-data` alone cannot run
+      SMOVE), FLUSH and arbitrary commands need it next to their own, more
+      severe permission, so a mission holding `write-data` alone cannot run
       them : it can write and overwrite values that stay, nothing else.
     matches: 'upstash-redis.database[**].key-space[**].W'
     vector:
@@ -114,7 +114,7 @@ risks:
       Through the dedicated `del`, `expire` and `set` tools or the generic
       `execute` tool. Costly to reverse if the data is not backed up
       elsewhere. May break application state. A cache write with a time to
-      live therefore needs this risk next to `write-data`.
+      live therefore needs this permission next to `write-data`.
     matches: 'upstash-redis.database[**].key-space[**].delete.W'
     vector:
       reversibility: costly
@@ -130,7 +130,7 @@ risks:
     reason: >-
       FLUSHDB / FLUSHALL wipes all keys in the database. Irreversible
       without a backup. Only reachable via the generic `execute` tool
-      (not exposed as a dedicated tool). Presets suggest `approval` outside
+      (not exposed as a dedicated tool). Presets ask first outside
       development.
     matches: 'upstash-redis.database[**].key-space.flush.W'
     vector:
@@ -150,8 +150,8 @@ risks:
       scripts and functions (EVAL, FCALL), server administration (CONFIG,
       ACL), transaction control, and any command the gateway does not know
       or cannot read. A script can delete or flush the database, so
-      accepting this risk accepts everything a Redis command can do.
-      Presets suggest `approval` outside development.
+      holding this permission allows everything a Redis command can do.
+      Presets ask first outside development.
     matches: 'upstash-redis.database[**].key-space[**].execute.W'
     vector:
       reversibility: costly
@@ -184,7 +184,7 @@ risks:
     reason: >-
       Permanently deletes a Redis database and all its data. Irreversible
       without a backup. Equivalent to dropping a production data store.
-      Presets suggest `approval` in every environment.
+      Presets ask first in every environment.
     matches: 'upstash-redis.account.database[**].delete.W'
     vector:
       reversibility: irreversible
@@ -201,7 +201,7 @@ risks:
       Modifies database metadata (currently: rename). Rename can break
       any downstream reference that uses the old name. Classified as
       credentials touch because it affects the database identity. Presets
-      suggest `approval` in every environment (configuration change).
+      ask first in every environment (configuration change).
     matches: 'upstash-redis.database[**].credentials.W'
     vector:
       reversibility: costly
@@ -233,7 +233,7 @@ risks:
     reason: >-
       Catch-all for writes that have not been explicitly categorised. If
       observed in production, signals that a tool was added without a
-      matching catalog entry — operators must opt in explicitly (no
+      matching catalog entry — the mission creator must opt in explicitly (no
       implicit accept). Never carried by a preset.
     matches: 'upstash-redis.[**].W'
     fallback: true
@@ -306,7 +306,7 @@ presets:
 
   - id: operator
     label: Operator
-    description: Everything a developer can do plus production key writes, FLUSH, arbitrary commands and database management — production deletions, FLUSH and arbitrary commands outside development, every database deletion and every configuration change behind approval.
+    description: Everything a developer can do plus production key writes, FLUSH, arbitrary commands and database management — production deletions, FLUSH and arbitrary commands outside development, every database deletion and every configuration change asking first.
     entries:
       - risk_id: upstash-redis.read-database-metadata
         quota: 5000

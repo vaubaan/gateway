@@ -47,7 +47,7 @@ risks:
     reason: >-
       Runtime metadata of a project (services, deployments, status). No
       secret payload. Broad by design : it co-matches every project-scoped
-      read, so a more specific read risk (logs, variables) is required on
+      read, so a more specific read permission (logs, variables) is required on
       top of it.
     matches: 'railway.project[**].R'
     vector:
@@ -77,7 +77,7 @@ risks:
     label: 'Read environment variables (including secrets)'
     reason: >-
       Returns variable values in clear by default. The main exfiltration
-      surface for production credentials, hence env-scoped : accepting it on
+      surface for production credentials, hence env-scoped : holding it on
       staging says nothing about prod.
     matches: 'railway.project[**].environment[**].service-var[**].R'
     acceptable_in_envs: [staging, preview, dev, prod]
@@ -170,7 +170,7 @@ risks:
       The upstream agent decides alone what to mutate ; no fine
       classification is possible. Catch-all by construction : the classifier
       also emits the deployment, variable write and variable replace slices,
-      so a mission must accept those risks too. Explicit opt-in only ; absent from every preset.
+      so a mission must hold those permissions too. Explicit opt-in only ; absent from every preset.
     matches: 'railway.account[**].agent-session.W'
     vector:
       reversibility: costly
@@ -222,7 +222,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One token per code project — deploy, redeploy and manage variables on non-production environments freely ; read logs ; production deploys and variable writes need approval.
+    description: One mission per code project — deploy, redeploy and manage variables on non-production environments freely ; read logs ; production deploys and variable writes ask first.
     entries:
       - risk_id: railway.read-account
         quota: 1000
@@ -283,7 +283,7 @@ presets:
 
   - id: operator
     label: Operator
-    description: Run production — every read including production variables, deploys everywhere, destructive variable replacement and project creation under approval.
+    description: Run production — every read including production variables, deploys everywhere, destructive variable replacement and project creation asking first.
     entries:
       - risk_id: railway.read-account
         quota: 2000

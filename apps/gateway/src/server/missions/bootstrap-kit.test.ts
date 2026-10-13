@@ -217,7 +217,7 @@ describe('/agent-bootstrap.md', () => {
     ]) {
       expect(page).toContain(`\`${tool}\``);
     }
-    expect(page).toContain('never by a mission token');
+    expect(page).toContain('never by a mission key');
     expect(page).toContain('**never** answer a request');
   });
 
@@ -228,19 +228,19 @@ describe('/agent-bootstrap.md', () => {
     expect(page).toContain(`1 to ${AGENT_LABEL_MAX_LENGTH} characters`);
     for (const character of AGENT_LABEL_PUNCTUATION) expect(page).toContain(`\`${character}\``);
     expect(page).toContain('attribution only');
-    expect(page).toContain('reserves no share of the budget');
+    expect(page).toContain('reserves no share of the limits');
   });
 
-  it('says that a token has one holder, that the budget is one, and what a stopped token means', () => {
+  it('says that a key has one holder, that the limits are one set, and what a stopped key means', () => {
     expect(page).toContain('exactly one **holder**');
-    expect(page).toContain('## 4. One budget, however many agents or tokens');
+    expect(page).toContain('## 4. One set of limits, however many agents or keys');
     expect(page).toContain('`token.holder`');
     expect(page).toContain('`mission.creator`');
     for (const reason of AUTH_FAILURE_REASONS) expect(page).toContain(`\`${reason}\``);
-    expect(page).toContain('Never look for another token to continue.');
+    expect(page).toContain('Never look for another key to continue.');
   });
 
-  it('refers to the token by its variable and names no instance', () => {
+  it('refers to the key by its variable and names no instance', () => {
     expect(page).toContain(`Bearer \${${MISSION_TOKEN_ENV}}`);
     expect(page).not.toMatch(/https?:\/\/[a-z0-9.-]+\.[a-z]{2,}/);
     expect(page).not.toMatch(/vbn_live_[A-Za-z0-9]{8}_/);

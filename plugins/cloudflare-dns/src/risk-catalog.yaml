@@ -34,8 +34,8 @@ risks:
     reason: >-
       Inventory of zones, status, nameservers, plan, zone settings and
       DNSSEC posture. Metadata only, no secrets, no record values. Note
-      that `zone[**].R` is recursive : reading records touches this risk
-      too, so a mission that reads records accepts both.
+      that `zone[**].R` is recursive : reading records needs this permission
+      too, so a mission that reads records holds both.
     matches:
       - 'cloudflare-dns.account[**].zone[**].R'
       - 'cloudflare-dns.account[**].zone[**].zone-settings.R'
@@ -87,7 +87,7 @@ risks:
       a changed TXT invalidates SPF/DKIM (mail) or ACME (TLS). Costly to
       revert because the previous value must be known (no DNS versioning).
       Public by nature. Touched by every record write, including the
-      critical ones and the deletions, which also touch their own risk.
+      critical ones and the deletions, which also need their own permission.
     matches: 'cloudflare-dns.account[**].zone[**].record[**].W'
     vector:
       reversibility: costly
@@ -104,7 +104,7 @@ risks:
       (`example.com`, `@`) or the wildcard at the apex redirects the main
       site and every undefined subdomain ; MX reroutes all incoming mail ;
       NS delegates a subtree to another nameserver. Emitted next to the
-      ordinary record write, so a mission accepts it distinctly. When the
+      ordinary record write, so a mission holds it distinctly. When the
       arguments do not name the record's type and name, the write counts
       as critical.
     matches: 'cloudflare-dns.account[**].zone[**].record[**].critical.W'
@@ -202,8 +202,8 @@ risks:
       practice — the zone must be recreated and every record reimported.
       Listed in no preset : a mission that needs it enumerates it explicitly.
       The pattern ends on the zone ident (`zone[*]`, not `zone[**]`) : a
-      recursive wildcard would make every record or settings write touch
-      this irreversible risk.
+      recursive wildcard would make every record or settings write need
+      this irreversible permission.
     matches: 'cloudflare-dns.account[**].zone[*].W'
     vector:
       reversibility: irreversible
@@ -272,7 +272,7 @@ presets:
 
   - id: zone-admin
     label: Zone admin
-    description: Everything on the selected zones except deleting them ; record deletion, apex / MX / NS changes, imports, zone settings and DNSSEC need approval.
+    description: Everything on the selected zones except deleting them ; record deletion, apex / MX / NS changes, imports, zone settings and DNSSEC ask first.
     entries:
       - risk_id: cloudflare-dns.read-zone-metadata
         quota: 5000

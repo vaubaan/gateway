@@ -82,9 +82,9 @@ risks:
       they are spelled (`.ssh/…`, `.env`, private keys, `/etc/shadow`, `/root`,
       raw devices), and paths it cannot see (an expansion, `..`, a recursive
       `grep`, `docker inspect`, a line it cannot classify), and emits an extra
-      slice, so a mission must accept this risk on top of `exec-read` to read
+      slice, so a mission must hold this permission on top of `exec-read` to read
       them. Exfiltration of host credentials ; refused by every preset but
-      `operator`, under approval.
+      `operator`, where it asks first.
     matches: 'ssh.host[**].command.secret-file.R'
     vector:
       reversibility: reversible
@@ -103,7 +103,7 @@ risks:
       redirection. File edits, builds, git operations, process launches,
       scripts : the program may do whatever its user can. A line the
       classifier cannot see through (command substitution, inline code,
-      another host or container) touches this risk and every class risk
+      another host or container) needs this permission and every class permission
       below. On a `dev` or `staging` host the blast radius is the host ; on
       `prod` a write can shift the security posture or cause downtime, hence
       the override.
@@ -128,7 +128,7 @@ risks:
       `rm` with `-r` or `-f`, `mkfs`, `dd`, `shred`, `wipefs`, partitioning
       tools, `reboot` / `shutdown`, `userdel`, firewall flushes, Docker
       prunes. Irreversible at the host level ; emitted together with
-      `exec-write`. Presets gate it with `approval` outside `dev`.
+      `exec-write`. Presets make it ask first outside `dev`.
     matches: 'ssh.host[**].command.destructive.W'
     vector:
       reversibility: irreversible
@@ -167,8 +167,8 @@ risks:
       `systemctl` lifecycle verbs, `service <x> restart`, Docker and Compose
       lifecycle, `pm2`, `supervisorctl`, `nginx -s`, `kill` / `pkill`.
       Availability impact, reversible by starting again. Emitted together
-      with `exec-write`. A developer preset allows it on `dev` and asks for
-      approval on `staging`.
+      with `exec-write`. A developer preset allows it on `dev` and asks first
+      on `staging`.
     matches: 'ssh.host[**].command.service.W'
     vector:
       reversibility: reversible
@@ -231,7 +231,7 @@ presets:
 
   - id: developer
     label: Developer
-    description: One token per code project — reads everywhere, file and process operations on dev and staging hosts, service restarts on dev ; nothing destructive, no packages, no sudo, no prod.
+    description: One mission per code project — reads everywhere, file and process operations on dev and staging hosts, service restarts on dev ; nothing destructive, no packages, no sudo, no prod.
     entries:
       - risk_id: ssh.exec-read
         quota: 5000
@@ -256,7 +256,7 @@ presets:
 
   - id: operator
     label: Operator
-    description: Everything on every labelled host ; credential-file reads, destructive commands, package changes, service control and sudo under approval outside dev ; every prod write under approval.
+    description: Everything on every labelled host ; credential-file reads, destructive commands, package changes, service control and sudo asking first outside dev ; every prod write asking first.
     entries:
       - risk_id: ssh.exec-read
         quota: 10000

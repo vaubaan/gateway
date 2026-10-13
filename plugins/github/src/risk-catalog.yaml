@@ -393,7 +393,7 @@ presets:
 
   - id: release-manager
     label: Release manager
-    description: Ship a release — merge into protected branches, create and delete releases, each under the creator's approval ; read everything.
+    description: Ship a release — merge into protected branches, create and delete releases, each asking the creator first ; read everything.
     entries:
       - risk_id: github.read-code
         quota: 5000
