@@ -89,14 +89,15 @@ export function missionsToReview(
  * delegating user finds it in their audit either way (the store's scope reads
  * the delegation's owner). After a replay it also names the missions to review
  * (`after.missions_to_review`: id and name of each mission the delegation
- * issued that still runs), passed as `review`.
+ * issued that still runs), passed as `review`; `null` when they could not be
+ * read, and the key is then left out.
  */
 export async function recordDelegationEnded(
   deps: Pick<EndDelegationDeps, 'audit' | 'clock' | 'logger'>,
   delegation: DelegationRecord,
   client: OAuthClientRecord | null,
   by: DelegationEnding,
-  review: readonly MissionRecord[] = [],
+  review: readonly MissionRecord[] | null = null,
 ): Promise<void> {
   const { audit, clock, logger } = deps;
   const replay = endedByReplay(by.reason);
@@ -106,7 +107,7 @@ export async function recordDelegationEnded(
     user_id: delegation.userId,
     client_id: client?.clientId ?? null,
     reason: by.reason,
-    ...(replay ? { missions_to_review: review.map((mission) => mission.id) } : {}),
+    ...(replay && review ? { missions_to_review: review.map((mission) => mission.id) } : {}),
   });
   await audit.write({
     kind: 'admin',
@@ -121,7 +122,7 @@ export async function recordDelegationEnded(
       ...(by.actorId === delegation.userId ? {} : { delegating_user_id: delegation.userId }),
       client_id: client?.clientId ?? null,
       client_name: client?.name ?? null,
-      ...(replay
+      ...(replay && review
         ? {
             missions_to_review: review.map((mission) => ({
               mission_id: mission.id,
@@ -147,14 +148,7 @@ export async function endDelegation(
 ): Promise<DelegationRecord | null> {
   const revoked = await deps.repo.revokeIfActive(delegationId, by.reason);
   if (!revoked) return null;
-  // Read after the revocation: nothing more can be issued through it.
-  const review = endedByReplay(by.reason)
-    ? missionsToReview(
-        revoked,
-        await deps.missions.listForCreator(revoked.userId),
-        deps.clock.now(),
-      )
-    : [];
+  const review = endedByReplay(by.reason) ? await missionsToReviewOf(deps, revoked) : null;
   await recordDelegationEnded(
     deps,
     revoked,
@@ -163,6 +157,32 @@ export async function endDelegation(
     review,
   );
   return revoked;
+}
+
+/**
+ * The missions to name after a replay, read once the delegation is revoked (nothing
+ * more can be issued through it). A failure of this read must not cost the entry of
+ * the revocation itself: it is logged, and the entry is written without the list —
+ * absent, which is not the same as empty.
+ */
+async function missionsToReviewOf(
+  deps: Pick<EndDelegationDeps, 'missions' | 'clock' | 'logger'>,
+  revoked: DelegationRecord,
+): Promise<MissionRecord[] | null> {
+  try {
+    return missionsToReview(
+      revoked,
+      await deps.missions.listForCreator(revoked.userId),
+      deps.clock.now(),
+    );
+  } catch (err) {
+    deps.logger.error('could not list the missions of a delegation revoked for a replay', {
+      delegation_id: revoked.id,
+      user_id: revoked.userId,
+      err,
+    });
+    return null;
+  }
 }
 
 /**

@@ -36,7 +36,14 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
-import { resolveProjectRef } from './classify.ts';
+import {
+  classifySupabase,
+  projectRefIdent,
+  readIdentifiers,
+  resolveProjectRef,
+  tableSchemas,
+  type ToolIdentifiers,
+} from './classify.ts';
 import { SUPABASE_TOOL_NAMES } from './tools.ts';
 
 /** Public Management API of Supabase. */
@@ -57,26 +64,31 @@ export async function executeSupabase(
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
   if (!SUPABASE_TOOL_NAMES.has(tool)) return errorResult(`unknown tool '${tool}'`);
-  // Same function, same inputs as the classifier : the project the slices
-  // named is the project the request reaches.
+  // What the classifier denies is refused here for the same reason, before
+  // any request : a missing SQL text, an identifier outside its grammar, a
+  // project outside the mission.
+  const classified = classifySupabase(tool, args, ctx.resources);
+  if ('denied' in classified) return errorResult(classified.denied);
+  // Same functions, same inputs as the classifier : the project and the
+  // identifiers the slices named are the ones the request carries.
   const target = resolveProjectRef(args, ctx.resources);
   if ('denied' in target) return errorResult(target.denied);
-  if (SQL_TOOLS.has(tool) && !isSqlText(args.query)) {
-    return errorResult('query: missing or malformed.');
-  }
+  const read = readIdentifiers(tool, args);
+  if ('denied' in read) return errorResult(read.denied);
   const token = expectCredentialKind('supabase', ctx.credential, 'oauth2').accessToken;
-  const payload = await callSupabase(ctx.fetch, token, tool, target.ref, args, ctx.signal);
+  const call: SupabaseCall = { fetchImpl: ctx.fetch, token, projectRef: target.ref, id: read.id };
+  const payload = await callSupabase(call, tool, args, ctx.signal);
   return text(payload);
 }
 
-/** The tools whose `query` is sent to Postgres : it must be a non-blank string, as classified. */
-const SQL_TOOLS: ReadonlySet<string> = new Set([
-  'supabase__execute_sql',
-  'supabase__apply_migration',
-]);
-
-function isSqlText(value: unknown): value is string {
-  return typeof value === 'string' && value.trim().length > 0;
+/** One call, resolved : where it goes and the identifiers it carries. */
+interface SupabaseCall {
+  readonly fetchImpl: FetchImpl;
+  readonly token: string;
+  /** The project `resolveProjectRef` answered. */
+  readonly projectRef: string;
+  /** The identifiers `readIdentifiers` answered, each within the grammar of its kind. */
+  readonly id: ToolIdentifiers;
 }
 
 interface OrganizationDto {

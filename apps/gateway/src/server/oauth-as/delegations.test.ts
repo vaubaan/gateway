@@ -281,6 +281,31 @@ describe('a delegation revoked for a replay: the missions it issued are surfaced
     expect(view).toMatchObject({ state: 'revoked', replayed: false, toReview: [] });
   });
 
+  it('still revokes and still writes the entry when the missions cannot be read: the list is absent, not empty', async () => {
+    const { delegationId } = await rig.issue(rig.ada, client);
+    const errors: string[] = [];
+    const revoked = await endDelegation(
+      {
+        repo: rig.store.delegations,
+        missions: {
+          listForCreator: async () => {
+            throw new Error('store unavailable');
+          },
+        },
+        audit: rig.audit,
+        clock: rig.clock,
+        logger: { ...silentLogger, error: (message: string) => errors.push(message) },
+      },
+      delegationId,
+      { reason: 'refresh-token-replay', actorId: rig.ada.id, viaClient: true },
+    );
+    expect(revoked).toMatchObject({ status: 'revoked', revokeReason: 'refresh-token-replay' });
+    const entry = rig.audit.admin.find((e) => e.act === 'delegation-revoked');
+    expect(entry?.after).toMatchObject({ status: 'revoked', reason: 'refresh-token-replay' });
+    expect(entry?.after).not.toHaveProperty('missions_to_review');
+    expect(errors).toEqual(['could not list the missions of a delegation revoked for a replay']);
+  });
+
   it('an authorization code presented twice is surfaced the same way', async () => {
     const granted = await rig.grant(rig.ada, client);
     const form = () =>
