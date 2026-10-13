@@ -36,12 +36,10 @@ Contributor-facing details (fields, tools list, preset table) :
 | `risk-catalog.ts` twin + sync test                                       | YAML loaded by `loadCatalogFile` at boot ; twin and sync test deleted                                   |
 | No presets                                                               | `read-only`, `dns-operator`, `zone-admin`                                                               |
 
-The v4 surface (`CloudflareDnsAdapter`, `cloudflareDnsAvailableTools`,
-`cloudflareDnsExecuteCall`, `cloudflareDnsRiskCatalog`,
-`classifyCloudflareDnsV4`) stays exported, `@deprecated`, until P1.6. The v4
-classifier is **frozen** rather than delegated : an account-level binding
-cannot resolve a zone against mission resources, and its 25 tests pin the
-old slices.
+The v4 surface (the adapter, the binding-based classifier and the
+deprecated aliases of `index.ts`) is deleted ; the plugin exports only the
+v5 surface below. The per-tool security suite of the v4 classifier was
+ported to `classifyCloudflareDns` (`tests/unit/classify.test.ts`).
 
 ## Layout
 
@@ -52,12 +50,10 @@ plugins/cloudflare-dns/src/
   tools.ts                  15 McpToolDeclaration (update_record requires type + name)
   classify.ts               classifyCloudflareDns — pure, (tool, args, resources) → slices | denied
   execute.ts                executeCloudflareDns, discoverCloudflareDnsResources, CLOUDFLARE_API_BASE,
-                            MAX_DISCOVERED_ZONES ; legacy executeCall
+                            MAX_DISCOVERED_ZONES
   data-model.ts             plane `dns`, 10 entities (critical + delete overlays under record)
   risk-catalog.yaml         11 risks + fallback, 3 presets, catalog_version 2
-  index.ts                  definePlugin(...) → cloudflareDnsPlugin (default export) + legacy exports
-  risk-classifier.ts        legacy classifyCloudflareDnsV4 (frozen)
-  cloudflare-dns-adapter.ts legacy CloudflareDnsAdapter
+  index.ts                  definePlugin(...) → cloudflareDnsPlugin (default export)
 ```
 
 ## Resources and zone resolution
@@ -169,10 +165,8 @@ Discovery : `GET /zones` paginated, 50 per page, stops at
 
 ## Tests
 
-`npx vitest run plugins/cloudflare-dns` — 95 : `plugin.test.ts` (31 : kit,
-v5 classifier, execute, discovery, credential, presets),
-`risk-catalog.test.ts` (30 : invariants, coverage lint, layering),
-`data-model.test.ts` (9), and the unchanged v4 suite
-`risk-classifier.test.ts` (25) on the legacy export. The v4 suite stays
-at 25 ; the overall count moved from 94 to 95 with the deletion of the 13
-sync tests and the addition of the kit suite.
+`npx vitest run plugins/cloudflare-dns` — 94 : `plugin.test.ts` (31 : kit,
+classifier zone resolution and record writes, execute, discovery,
+credential, presets), `classify.test.ts` (25 : the per-tool security suite
+of `classifyCloudflareDns`), `risk-catalog.test.ts` (29 : invariants,
+coverage lint, layering), `data-model.test.ts` (9).

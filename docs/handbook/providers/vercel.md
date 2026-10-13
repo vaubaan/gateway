@@ -150,11 +150,12 @@ environment from the **owner's label on the project resource**, which for a
 Vercel project (spanning all three environments) is meaningless: a project
 labelled `prod` would qualify a preview deploy as `vercel[prod].deploy`, and
 an unlabelled project would never qualify anything, so the env-qualified
-preset entries above would not match `risks_touched`. The plugin exports
-`vercelEnvOf(slice)` (reads the `env[<label>]` segment; `null` when
-env-less) for the host to use as the Vercel `EnvResolver`. Wiring it is a
-host decision (P0.5 / P1.6), recorded as an open question in the P1.2b
-report. `discoverResources` notes the axis in `metadata.environments`.
+preset entries above would not match `risks_touched`. The plugin therefore
+declares `envOf` (`vercelEnvOf(slice)`: reads the `env[<label>]` segment;
+`null` when env-less), which the host's default resolver
+(`envResolverFor(resources, plugin.envOf)`) asks before the resource label
+([[plugin-sdk]], "Environment resolution"). `discoverResources` notes the
+axis in `metadata.environments`.
 
 ## 4. Credential
 
@@ -190,16 +191,8 @@ forwarded it).
 2. `list_env_vars decrypt=true` adds the plaintext slice → distinct risk.
 3. `upsert_env_var` fans out; `delete_env_var` always touches the three environments.
 4. One `domain-write` risk for add / verify / remove (option A of the research).
-5. Deployment Protection (SSO / password) cannot be changed by API tokens; no tool. The legacy adapter's `validateBinding` still warns about it.
+5. Deployment Protection (SSO / password) cannot be changed by API tokens; no tool.
 6. `deploy_to_vercel` upstream declares no argument (it deploys "the current project" from CLI context); it is classified on `target` and the mission project, and its usefulness through a remote rewrap is doubtful — kept for parity, to be re-evaluated when the upstream tool list is refreshed.
-
-## 6. Legacy v4 shells (deleted in P1.6)
-
-`src/vercel-adapter.ts` (`VercelAdapter`), `src/risk-classifier.ts`
-(`classifyVercelV4`), the `availableTools` alias and the `vercelRiskCatalog`
-export keep `apps/gateway` compiling. They delegate to the v5 modules; the
-venv secret transfer (`upsert_env_from_venv`) is removed, the `venvStore`
-option is accepted and ignored.
 
 ## How to debug
 
@@ -211,8 +204,8 @@ option is accepted and ignored.
 - **`teamId '…' is not the team of this connection`** — the agent copied a
   team id from elsewhere; omit it, the connection's team applies.
 - **Every preview deploy refused as `vercel[prod].deploy` (or never qualified)** —
-  the host resolves the environment from the resource label; wire
-  `vercelEnvOf` (see §3).
+  a host that builds its own `EnvResolver` from the resource label alone;
+  compose it with the plugin's `envOf` (see §3).
 - **`next build` fails with `The "path" argument must be of type string or an instance of URL. Received an instance of URL`** —
   a plugin imported by `apps/gateway` used `new URL('./risk-catalog.yaml', import.meta.url)`;
   Turbopack rewrites that pattern into an asset URL of another realm. The
@@ -223,6 +216,7 @@ option is accepted and ignored.
 
 ## References
 
-- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (137 tests:
-  22 kit/v5, 31 v4 classifier, 60 v4 catalog lint, 23 v4 adapter, 1 data model).
+- Code: `plugins/vercel/src/`, tests `plugins/vercel/tests/unit/` (125 tests:
+  33 `plugin.test.ts`, 31 `classify.test.ts`, 60 `risk-catalog.test.ts`,
+  1 `data-model.test.ts`).
 - Neighbours: [[plugin-sdk]], [[policy-engine]], [`providers/README.md`](./README.md).

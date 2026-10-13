@@ -203,25 +203,26 @@ Le test doit vérifier :
 - `risksTouchedBy` sur 3-5 slices représentatifs retourne les RiskIds
   attendus (sanity check matching).
 
-**Synchro TS ↔ YAML** : la plupart des providers shippent aussi un
-`risk-catalog.ts` qui ré-exporte le YAML en const typée. Si tu en
-écris un, ajoute un test `risk-catalog-sync.test.ts` qui asserte
-l'équivalence (cf. `plugins/vercel/tests/unit/risk-catalog-sync.test.ts`).
+**No TypeScript twin**: the YAML is the only catalog artefact. Every
+plugin loads it at import with
+`loadCatalogFile(catalogPathNextTo(import.meta.url))`; do not write a
+`risk-catalog.ts` or a sync test.
 
-### Phase D — Classifier (`plugins/<vendor>/src/risk-classifier.ts`)
+### Phase D — Classifier (`plugins/<vendor>/src/classify.ts`)
 
 **But** : pour chaque tool MCP exposé par le provider, retourner les
 slices que le call touche. C'est la pièce qui rend la Phase C
 opérationnelle.
 
-Référence : `plugins/vercel/src/risk-classifier.ts` (le
-plus pédagogique : ~300 lignes, helpers `slice/name/ident`, fonction
-unique `classifyVercelV4`).
+Reference: `plugins/vercel/src/classify.ts` (the most didactic one:
+helpers `slice` / `name` / `ident`, one entry point `classifyVercel`).
 
 Règles :
 
-- Export d'une fonction `classify<Vendor>V4(tool, args, bindings):
-ClassifyResult` où `ClassifyResult = { slices: Slice[] } | { denied: string }`.
+- Export a function `classify<Vendor>(tool, args, resources):
+ClassifyOutcome`, where `ClassifyOutcome` (from `@vaubaan/plugin-sdk`) is
+  `{ slices: Slice[] } | { denied: string }` and `resources` are the
+  mission's resources on the connection.
 - Un call peut émettre **plusieurs slices** (multi-entity touch — cf.
   spec §7.1). Le moteur intersect chacune avec le catalogue.
 - Un tool inconnu OU une ressource hors-binding → `{ denied: ... }`.
@@ -231,10 +232,9 @@ ClassifyResult` où `ClassifyResult = { slices: Slice[] } | { denied: string }`.
   `get_access_to_vercel_url`), classifier comme `W` — la sémantique
   prime sur le verbe HTTP.
 
-**Test obligatoire** : `plugins/<vendor>/tests/unit/risk-classifier.test.ts`.
-Copie le pattern de `plugins/vercel/tests/unit/` — un test
-par tool MCP, vérifiant la / les slice(s) émises sur des args
-représentatifs.
+**Mandatory test**: `plugins/<vendor>/tests/unit/classify.test.ts`. Copy
+the pattern of `plugins/vercel/tests/unit/classify.test.ts`: one test per
+MCP tool, checking the slice(s) emitted for representative arguments.
 
 ### Phase E — Handbook (`docs/handbook/providers/<vendor>.md`)
 
@@ -260,8 +260,7 @@ date: <YYYY-MM-DD>
 tracks:
   - plugins/<vendor>/src/data-model.ts
   - plugins/<vendor>/src/risk-catalog.yaml
-  - plugins/<vendor>/src/risk-catalog.ts # si présent
-  - plugins/<vendor>/src/risk-classifier.ts
+  - plugins/<vendor>/src/classify.ts
 ---
 ```
 
@@ -336,11 +335,10 @@ Fichiers créés :
   - .vaubaan/research/providers/<vendor>.md   (Phase A, validé <date>)
   - plugins/<vendor>/src/data-model.ts
   - plugins/<vendor>/src/risk-catalog.yaml
-  - plugins/<vendor>/src/risk-catalog.ts    (optionnel)
-  - plugins/<vendor>/src/risk-classifier.ts
+  - plugins/<vendor>/src/classify.ts
   - plugins/<vendor>/tests/unit/data-model.test.ts
   - plugins/<vendor>/tests/unit/risk-catalog.test.ts
-  - plugins/<vendor>/tests/unit/risk-classifier.test.ts
+  - plugins/<vendor>/tests/unit/classify.test.ts
   - docs/handbook/providers/<vendor>.md
 
 Stats :

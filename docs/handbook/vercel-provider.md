@@ -1,13 +1,16 @@
 ---
 title: Vercel provider adapter
-status: current
+status: legacy
 date: 2026-06-15
 tracks:
   - plugins/vercel/src/
   - apps/gateway/src/server/connections/
 ---
 
-> **v4 document.** English rewrite scheduled by the v5 plan; `tracks` paths updated for the new layout.
+> **Legacy v4 document.** Kept for history; superseded by the v5 spec. Not maintained.
+>
+> Current documents: [`providers/vercel.md`](./providers/vercel.md) and
+> [`connections.md`](./connections.md).
 
 # Vercel provider — `@vaubaan/plugin-vercel`
 

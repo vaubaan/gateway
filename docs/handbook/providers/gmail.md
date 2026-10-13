@@ -23,19 +23,18 @@ git history (`docs/handbook/providers/gmail.md` before 2026-10-13).
 
 ## Shape
 
-| Member              | Where                    | Facts                                                                                                                                   |
-| ------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- |
-| `id` / `version`    | `src/index.ts`           | `gmail`, `0.1.0` (pre-1.0 while experimental). Default export `gmailPlugin`, typed `ProviderPlugin & { experimental: true }`.           |
-| `experimental`      | `src/index.ts`           | `true`. Extra typed member : the SDK contract has no flag yet (need reported to P1.2-SDK) ; hosts must hide the plugin until it does.   |
-| `tools`             | `src/tools.ts`           | **Empty.** `gmailClassifiedToolDeclarations` holds the 10 modelled tools (9 official Gmail MCP + synthetic `gmail__describe_zones`).    |
-| `dataModel`         | `src/data-model.ts`      | 1 plane `mailbox`, 7 Gmail entities + 4 synthetic markers ; `mailbox` is `envScopable`.                                                 |
-| `catalog`           | `src/risk-catalog.yaml`  | `catalog_version: 2`, 15 risks + `gmail.uncategorized-write`, 2 presets. Loaded by `loadCatalogFile` at import.                         |
-| `credential`        | `src/credential.ts`      | `oauth2` Google : PKCE, `client_secret_post`, scopes `gmail.readonly` + `gmail.compose`, `access_type=offline`, `prompt=consent`.       |
-| `classify`          | `src/classify.ts`        | Pure ; v4 emission rules kept ; keyed on the mission's single mailbox resource and its `metadata`.                                      |
-| `execute`           | `src/execute.ts`         | Returns `{ isError: true, structuredContent: { error: 'not_implemented', experimental: true, tool } }` for every tool ; no call.        |
-| `discoverResources` | `src/execute.ts`         | `GET /gmail/v1/users/me/profile` → one resource, `ref` = lower-cased address ; `UpstreamAuthError` on 401/403.                          |
-| `refresh`           | —                        | None : Google's refresh is the standard `refresh_token` grant the host performs from the spec (`refreshable: true`) ; P1.2-align.       |
-| legacy              | `src/risk-classifier.ts` | `classifyGmailV4(bindings)` as a `@deprecated` shim over `classifyGmail` ; `gmailRiskCatalog`, `gmailAvailableTools` ; deleted in P1.6. |
+| Member              | Where                   | Facts                                                                                                                                 |
+| ------------------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` / `version`    | `src/index.ts`          | `gmail`, `0.1.0` (pre-1.0 while experimental). Default export `gmailPlugin`, typed `ProviderPlugin & { experimental: true }`.         |
+| `experimental`      | `src/index.ts`          | `true`. Extra typed member : the SDK contract has no flag yet (need reported to P1.2-SDK) ; hosts must hide the plugin until it does. |
+| `tools`             | `src/tools.ts`          | **Empty.** `gmailClassifiedToolDeclarations` holds the 10 modelled tools (9 official Gmail MCP + synthetic `gmail__describe_zones`).  |
+| `dataModel`         | `src/data-model.ts`     | 1 plane `mailbox`, 7 Gmail entities + 4 synthetic markers ; `mailbox` is `envScopable`.                                               |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 2`, 15 risks + `gmail.uncategorized-write`, 2 presets. Loaded by `loadCatalogFile` at import.                       |
+| `credential`        | `src/credential.ts`     | `oauth2` Google : PKCE, `client_secret_post`, scopes `gmail.readonly` + `gmail.compose`, `access_type=offline`, `prompt=consent`.     |
+| `classify`          | `src/classify.ts`       | Pure ; v4 emission rules kept ; keyed on the mission's single mailbox resource and its `metadata`.                                    |
+| `execute`           | `src/execute.ts`        | Returns `{ isError: true, structuredContent: { error: 'not_implemented', experimental: true, tool } }` for every tool ; no call.      |
+| `discoverResources` | `src/execute.ts`        | `GET /gmail/v1/users/me/profile` → one resource, `ref` = lower-cased address ; `UpstreamAuthError` on 401/403.                        |
+| `refresh`           | —                       | None : Google's refresh is the standard `refresh_token` grant the host performs from the spec (`refreshable: true`) ; P1.2-align.     |
 
 ## Classification rules
 
@@ -113,7 +112,7 @@ experimental shape, coverage through a tool-exposing variant, mailbox
 selection, credential spec, absence of a plugin refresh, discovery and execute
 against `mockFetch`, presets), `risk-catalog.test.ts` (43 : loaded catalog
 lint, pattern parsing, per-tool coverage, `risksTouchedBy` spot checks),
-`risk-classifier.test.ts` (32, v4 suite unchanged through the shim),
+`classify.test.ts` (32 : the per-tool suite of `classifyGmail`),
 `q-parser.test.ts` (19, unchanged), `data-model.test.ts` (5, unchanged).
 Before the migration : 116 (the 18 YAML ↔ TS sync tests are gone with the
 twin).
@@ -124,7 +123,7 @@ twin).
   — the v4 `[]` marker is not valid in v5 ; drop the key (see decisions).
 - **`assertCatalogCoverage … no catalog risk matches it`** — a classifier
   slice outside every `matches`. Compare with `serializeSlice` output in
-  `risk-classifier.test.ts` ; add a pattern to an existing entry or a new
+  `classify.test.ts` ; add a pattern to an existing entry or a new
   entry (and bump `catalog_version`).
 - **`risksUntouched` lists more than `gmail.bulk-label-write`** — a tool
   sample is missing in `plugin.test.ts` or a pattern drifted.

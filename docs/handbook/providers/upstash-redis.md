@@ -131,27 +131,19 @@ endpoint, state, database_type, tls }`; the owner labels `env`.
 
 `api-key`: `email` (not secret, loose email pattern) + `api_key` (secret),
 created in the Upstash console → Account → Management API. No OAuth app, no
-refresh. The v4 `email:api_key` concatenation survives only in the legacy
-adapter (`parseLegacyCredentials`).
+refresh.
 
-## 6. Legacy shims (deleted in P1.6)
+## 6. Tests
 
-`classifyUpstashRedisV4(tool, args, bindings)` maps `ProviderBinding[]` to
-`Resource[]` and delegates to `classifyUpstashRedis`, keeping the v4 refusal
-wording for an unbound database. `UpstashRedisAdapter` is a shell over
-`callUpstashTool`. `upstashRedisAvailableTools`, `upstashRedisRiskCatalog`
-(the loaded YAML) and `upstashRedisDataModel` keep their import paths.
-
-## 7. Tests
-
-`npx vitest run plugins/upstash-redis` — 120 tests: `plugin.test.ts` (24:
+`npx vitest run plugins/upstash-redis` — 112 tests: `plugin.test.ts` (24:
 SDK kit with one sample per tool, presets, v5 classifier conventions, env
 resolution through `resourceEnvResolver`, credential spec, execute and
-discovery against `mockFetch`), `risk-classifier.test.ts` (30, v4 suite
-unchanged through the shim), `risk-catalog.test.ts` (49, v4 lint on the
-YAML), `adapter.test.ts` (16, v4 suite unchanged), `data-model.test.ts` (1).
+discovery against `mockFetch`), `classify.test.ts` (30: the security suite
+of `classifyUpstashRedis`), `risk-catalog.test.ts` (49, v4 lint on the
+YAML), `execute.test.ts` (8: request shapes of the management tools and the
+Redis commands of the data tools), `data-model.test.ts` (1).
 
-## 8. How to debug
+## 7. How to debug
 
 - **`Invalid risk catalog` at boot** — read every bullet; paths are exact. An
   env-qualified preset entry on a risk without `acceptable_in_envs` is the
