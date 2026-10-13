@@ -172,6 +172,35 @@ export interface OrphanedOnConnection {
   readonly cause: OrphanCause;
 }
 
+/**
+ * A mission as an owner of one of its connections reads it on the page of that
+ * connection ("Missions using this account"). An owner already reads the audit
+ * entries of their connection, mission names included (spec §8); this is the same
+ * disclosure as a list. Nothing of another connection of the mission is in it.
+ */
+export interface MissionOnConnection {
+  readonly id: string;
+  readonly name: string;
+  /** Who issued it; `label` is the email, or "unknown user" when the row is gone. */
+  readonly creator: { readonly id: string; readonly label: string };
+  /** Derived now, like every reading of a mission's state. */
+  readonly state: MissionState['kind'];
+  /** Accepted risks whose quota is spent for the current period; `0` unless `active`. */
+  readonly exhausted: number;
+  readonly expires_at: Iso8601 | null;
+  /** Why it reads `orphaned`; `null` otherwise. */
+  readonly orphan_cause: OrphanCause | null;
+  /** The resources of THIS connection the mission was issued on: explicit ids. */
+  readonly resource_ids: readonly string[];
+  /** Accepted risks that belong to this connection's provider. */
+  readonly permissions: number;
+  /** How many of them wait for the creator's approval. */
+  readonly asks_first: number;
+  /** Whether the reader may open the mission's own page: its creator, a current member. */
+  readonly readable: boolean;
+  readonly created_at: Iso8601;
+}
+
 /** Who may close a mission, and on what ground (spec §2.3). */
 type Closer =
   | { readonly as: 'creator' }
@@ -675,6 +704,45 @@ export class MissionService {
       });
     }
     return orphaned;
+  }
+
+  /**
+   * Every mission that carries a connection, newest first, for someone who owns that
+   * connection now. Anyone else reads none, like `orphanedOn`. Read-only: the page of
+   * the connection lists them, so that its owner knows what removing an access or
+   * disconnecting would stop.
+   */
+  async onConnection(user: AuthoritySubject, connectionId: string): Promise<MissionOnConnection[]> {
+    const connection = await this.deps.store.connections.getById(connectionId);
+    if (!connection || !(await this.owns(user, connection))) return [];
+    const listed: MissionOnConnection[] = [];
+    for (const stored of await this.deps.store.missions.listForConnection(connectionId)) {
+      const { mission, orphan } = await this.deps.grounds.inspect(stored);
+      const state = await this.stateOf(mission);
+      const creator = await this.deps.store.users.getById(mission.creatorUserId);
+      const membership = await this.membershipOf(mission, user.id);
+      const accepted = mission.policy.filter(
+        (entry) => parseRiskId(entry.riskId)?.provider === connection.provider,
+      );
+      const selection = mission.connections.find((c) => c.connectionId === connectionId);
+      listed.push({
+        id: mission.id,
+        name: mission.name,
+        creator: { id: mission.creatorUserId, label: creator?.email ?? 'unknown user' },
+        state: state.kind,
+        exhausted: state.kind === 'active' ? state.exhausted.length : 0,
+        expires_at: mission.expiresAt,
+        orphan_cause: orphan?.cause ?? null,
+        resource_ids: selection?.resourceIds ?? [],
+        permissions: accepted.length,
+        asks_first: accepted.filter((entry) => entry.gate === 'approval').length,
+        readable: membership === 'creator' || membership === 'member',
+        created_at: mission.createdAt,
+      });
+    }
+    return listed.sort((a, b) =>
+      a.created_at < b.created_at ? 1 : a.created_at > b.created_at ? -1 : 0,
+    );
   }
 
   /**

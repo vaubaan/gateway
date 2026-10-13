@@ -6,7 +6,7 @@
  * credential, its shares, its missions — is reachable from Administration.
  */
 import styles from '@/components/connections/connections.module.css';
-import { NoticeBanner, StateBadge } from '@/components/connections/parts';
+import { NoticeBanner, AccountState } from '@/components/connections/parts';
 import {
   Button,
   Card,
@@ -81,7 +81,7 @@ function OwnerlessCard({
         </CardTitle>
         <span className={styles.badges}>
           <span>{view.providerLabel}</span>
-          <StateBadge status={connection.status} />
+          <AccountState status={connection.status} />
           <span className={styles.muted}>was owned by {view.ownerLabel}</span>
         </span>
       </CardHeader>

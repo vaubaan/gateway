@@ -81,6 +81,8 @@ export const LEGACY_REDIRECTS: readonly {
   { source: '/audit', destination: '/activity' },
   { source: '/providers', destination: '/reference' },
   { source: '/providers/:path*', destination: '/reference/:path*' },
+  // What a colleague gave access to is the second region of Accounts ("Shared with you").
+  { source: '/shares', destination: '/accounts' },
 ];
 
 const nextConfig: NextConfig = {

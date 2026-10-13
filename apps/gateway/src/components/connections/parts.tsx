@@ -1,41 +1,55 @@
 /**
- * Small server components shared by the Connections pages and Admin →
- * Provider apps: the notice banner, the state and "experimental" badges, and
- * the inputs of a plugin-declared `CredentialField` list.
+ * Small server components shared by the Accounts pages and Settings → Company
+ * apps: the note a redirect left, the state of an account, the "experimental"
+ * tag, and the inputs of a plugin-declared `CredentialField` list.
  */
 import type { CredentialField } from '@vaubaan/plugin-sdk';
 
-import { Badge, Banner, Field, Input, Textarea, type BadgeTone } from '@/components/ui';
-import { FIELD_PREFIX, type Notice } from '@/server/connections';
+import { Callout, Field, Input, StatusMark, Tag, Textarea, type Tone } from '@/components/ui';
+import { ACCOUNT_STATES, ACCOUNT_WORDS } from '@/lib/vocabulary';
+import { FIELD_PREFIX, type Notice, type NoticeTone } from '@/server/connections';
 import type { ConnectionStatus } from '@/server/store';
 
-import styles from './connections.module.css';
+import styles from './account.module.css';
+import { shapeOfPattern } from './shape';
 
-const STATE_TONE: Readonly<Record<ConnectionStatus, BadgeTone>> = {
-  active: 'success',
-  expired: 'warning',
-  revoked: 'neutral',
-  unowned: 'warning',
+const NOTICE_TONE: Readonly<Record<NoticeTone, Tone>> = {
+  success: 'ok',
+  info: 'info',
+  warning: 'warn',
+  danger: 'bad',
 };
 
-export function StateBadge({ status }: { status: ConnectionStatus }) {
-  return <Badge tone={STATE_TONE[status]}>{status}</Badge>;
+/**
+ * The state of an account: a mark only when it differs from normal (needs
+ * reconnecting, needs an owner); "connected" and "disconnected" are plain words.
+ */
+export function AccountState({ status }: { status: ConnectionStatus }) {
+  const state = ACCOUNT_STATES[status];
+  if (state.tone === null) return <span className={styles.quiet}>{state.label}</span>;
+  return <StatusMark tone={state.tone}>{state.label}</StatusMark>;
+}
+
+/** True when the state of an account is an exception a row or a title should show. */
+export function isAccountException(status: ConnectionStatus): boolean {
+  return ACCOUNT_STATES[status].tone !== null;
 }
 
 export function ExperimentalBadge() {
-  return <Badge tone="warning">experimental</Badge>;
+  return <Tag>{ACCOUNT_WORDS.experimental}</Tag>;
 }
 
+/** What the act the person just made did, said once after the redirect. */
 export function NoticeBanner({ notice }: { notice: Notice | null }) {
   if (!notice) return null;
   return (
-    <Banner tone={notice.tone} title={notice.title}>
-      {notice.lines.map((line) => (
-        <p key={line} className={styles.noticeLine}>
-          {line}
-        </p>
-      ))}
-    </Banner>
+    <div className={styles.notice}>
+      <Callout tone={NOTICE_TONE[notice.tone]} title={notice.title} testId="notice">
+        {notice.lines.map((line) => (
+          <p key={line}>{line}</p>
+        ))}
+      </Callout>
+    </div>
   );
 }
 
@@ -62,7 +76,12 @@ function isMultiline(field: CredentialField): boolean {
  *
  * Each label is bound to its input through `credentialFieldId(idPrefix,
  * name)`. `idPrefix` must be unique on the page: a page that renders several
- * lists (Admin → Provider apps, one per provider) gives each its own.
+ * lists (Settings → Company apps, one per service) gives each its own.
+ *
+ * The shape a value must have is said before the person types: in the label,
+ * read from the plugin's `pattern` (`shapeOfPattern`), in the field as its
+ * `placeholder`, and under it as its `help`. A field that may stay empty says
+ * "optional" in its label.
  */
 export function credentialFieldId(idPrefix: string, fieldName: string): string {
   return `${idPrefix}-${fieldName}`;
@@ -103,11 +122,13 @@ export function CredentialFieldInputs({
           <Field
             key={field.name}
             htmlFor={id}
-            label={field.required === false ? `${field.label} (optional)` : field.label}
+            label={field.label}
+            shape={shapeOfPattern(field.pattern) ?? undefined}
+            optional={field.required === false}
             hint={hint || undefined}
           >
             {isMultiline(field) ? (
-              <Textarea {...common} rows={4} className={styles.mono} />
+              <Textarea {...common} rows={4} mono />
             ) : (
               <Input
                 {...common}
@@ -115,6 +136,7 @@ export function CredentialFieldInputs({
                 autoComplete={field.secret ? 'new-password' : 'off'}
                 defaultValue={field.secret ? undefined : (values[field.name] ?? '')}
                 pattern={field.secret ? undefined : field.pattern}
+                mono
               />
             )}
           </Field>

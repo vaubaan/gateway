@@ -52,6 +52,7 @@ import type {
   GroupRecord,
   Principal,
   ShareRecord,
+  UserRecord,
 } from '../store/types';
 import { ShareError, type ShareErrorCode } from './errors';
 import type { EnvLabelling } from './restriction';
@@ -155,6 +156,47 @@ export interface ReceivedShare {
   readonly via: string;
   /** The exact restriction, catalog order. */
   readonly risks: readonly ReceivedRisk[];
+}
+
+/**
+ * Who holds a connection, or a part of it, said in names: what the page of the
+ * connection prints under "Who has access". Owner only, like every read here.
+ */
+export interface HolderView {
+  /** `unknown`: the user or the group no longer exists. */
+  readonly kind: 'user' | 'group' | 'unknown';
+  readonly id: string;
+  /** A person's display name, else their email; a group's name. */
+  readonly name: string;
+  /** A person's email; `null` for a group. */
+  readonly email: string | null;
+  /** The reader is this person, or belongs to this group now. */
+  readonly you: boolean;
+  /** The people behind it now: the person, or the current members of the group. */
+  readonly people: readonly HolderPerson[];
+  /** A person who was deactivated and can no longer sign in; `false` for a group. */
+  readonly inactive: boolean;
+  /** A person's last sign-in; `null` for a group, and for someone who never signed in. */
+  readonly lastLoginAt: string | null;
+}
+
+export interface HolderPerson {
+  readonly id: string;
+  readonly name: string;
+  readonly you: boolean;
+}
+
+/** One active share with who holds it and who gave it. */
+export interface HeldShare extends ShareView {
+  readonly holder: HolderView;
+  /** The owner who made the share, as a name; "unknown user" when their row is gone. */
+  readonly givenBy: string;
+}
+
+export interface ConnectionHolders {
+  readonly owner: HolderView;
+  /** The active shares, oldest first. */
+  readonly shares: readonly HeldShare[];
 }
 
 export interface ShareServiceDeps {
@@ -332,6 +374,90 @@ export class ShareService {
   }
 
   /**
+   * Who holds the connection: its owner and every active share, each with the people
+   * behind it. Owner only. Read-only: nothing here decides — `authorityOf` does.
+   */
+  async holders(actor: Actor, connectionId: string): Promise<ConnectionHolders> {
+    const { connection } = await this.owned(actor, connectionId);
+    const shares = (await this.deps.store.shares.listForConnection(connection.id)).filter(
+      (share) => share.status === 'active',
+    );
+    const held: HeldShare[] = [];
+    for (const share of shares) {
+      const giver = await this.deps.store.users.getById(share.createdByUserId);
+      held.push({
+        ...(await this.view(share)),
+        holder: await this.holderOf(actor, share.target),
+        givenBy: giver ? nameOf(giver) : 'unknown user',
+      });
+    }
+    return {
+      owner: await this.holderOf(actor, connection.owner),
+      shares: held.sort((a, b) =>
+        a.share.createdAt < b.share.createdAt ? -1 : a.share.createdAt > b.share.createdAt ? 1 : 0,
+      ),
+    };
+  }
+
+  private async holderOf(actor: Actor, principal: Principal): Promise<HolderView> {
+    if (principal.kind === 'user') {
+      const user = await this.deps.store.users.getById(principal.id);
+      const you = principal.id === actor.user.id;
+      if (!user) {
+        return {
+          kind: 'unknown',
+          id: principal.id,
+          name: 'unknown user',
+          email: null,
+          you,
+          people: [],
+          inactive: true,
+          lastLoginAt: null,
+        };
+      }
+      return {
+        kind: 'user',
+        id: user.id,
+        name: nameOf(user),
+        email: user.email,
+        you,
+        people: [{ id: user.id, name: nameOf(user), you }],
+        inactive: user.status !== 'active',
+        lastLoginAt: user.lastLoginAt,
+      };
+    }
+    const group = await this.deps.store.groups.getById(principal.id);
+    if (!group) {
+      return {
+        kind: 'unknown',
+        id: principal.id,
+        name: 'unknown group',
+        email: null,
+        you: false,
+        people: [],
+        inactive: false,
+        lastLoginAt: null,
+      };
+    }
+    const members = await this.deps.store.groups.listMembers(group.id);
+    const people = members.map((member) => ({
+      id: member.id,
+      name: nameOf(member),
+      you: member.id === actor.user.id,
+    }));
+    return {
+      kind: 'group',
+      id: group.id,
+      name: group.name,
+      email: null,
+      you: people.some((person) => person.you),
+      people,
+      inactive: false,
+      lastLoginAt: null,
+    };
+  }
+
+  /**
    * "Shares received" (spec §4.2): the active shares made to the user or to a
    * group they belong to now, each with its exact restriction.
    */
@@ -448,6 +574,11 @@ export class ShareService {
   private nowIso(): string {
     return toIso(this.deps.clock.now());
   }
+}
+
+/** What a page prints for a person: the name the identity provider gave, else the email. */
+function nameOf(user: Pick<UserRecord, 'displayName' | 'email'>): string {
+  return user.displayName?.trim() || user.email;
 }
 
 /** What the reachable resources of a connection say about environments. */

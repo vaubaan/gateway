@@ -1,51 +1,125 @@
 /**
- * `/accounts/new/<provider>` — the connect form of one provider, rendered
- * from its plugin's `CredentialSpec`: a redirect button for `oauth2` and
- * `app-install`, the declared fields for `api-key` and `ssh-key`.
- * `?connection=<id>` turns it into "reconnect" for an existing connection.
+ * `/accounts/new/<provider>` — connect an account of one service. The form is
+ * rendered from the plugin's `CredentialSpec`: a button that leads to the
+ * service for `oauth2` and `app-install`, the declared fields for `api-key`
+ * and `ssh-key`. `?connection=<id>` turns it into "reconnect" for an existing
+ * account.
+ *
+ * A field says the shape it expects before the person types (its placeholder
+ * and the line under it are the plugin's); the how-to is folded by default.
  */
 import Link from 'next/link';
-import { PAGES } from '@/lib/vocabulary';
 import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import styles from '@/components/connections/connections.module.css';
+import { CredentialFieldInputs, NoticeBanner } from '@/components/connections/parts';
 import {
-  CredentialFieldInputs,
-  credentialKindLabel,
-  ExperimentalBadge,
-  NoticeBanner,
-} from '@/components/connections/parts';
-import {
-  Banner,
   Button,
-  Card,
-  CardBody,
-  CardHeader,
-  CardTitle,
+  ButtonLink,
+  Callout,
+  Disclosure,
   Field,
+  Hint,
   Input,
-  Stack,
+  PageHeader,
+  Section,
+  ServiceMark,
 } from '@/components/ui';
-import { providerPath } from '@/server/providers/links';
 import {
   currentActor,
   firstParam,
   takeNotice,
   type PageSearchParams,
 } from '@/lib/connections/session';
+import { ACCOUNT_ACTIONS, ACCOUNT_PAGES, ACTIONS, PAGES, ROUTES } from '@/lib/vocabulary';
 import {
-  isConnectError,
+  connectionPath,
   CONNECTIONS_PATH,
+  isConnectError,
   NEW_CONNECTION_PATH,
+  PROVIDER_APPS_PAGE,
+  type ConnectableProvider,
   type ConnectionDetail,
 } from '@/server/connections';
+import { providerPath } from '@/server/providers/links';
+
+import styles from '../../accounts.module.css';
 
 export const dynamic = 'force-dynamic';
 
 const MAX_NAME_LENGTH = 80;
 
-export default async function ConnectOneProviderPage({
+/** One sentence: how an account of this service is connected. */
+function ledeOf(provider: ConnectableProvider): string {
+  const name = provider.displayName;
+  switch (provider.kind) {
+    case 'oauth2':
+      return `You sign in at ${name} and allow your company’s app; the gateway never sees your password.`;
+    case 'app-install':
+      return `You install your company’s ${name} app on the account you choose, then come back here.`;
+    case 'api-key':
+      return `${name} has no sign-in flow for this: paste a key you created there.`;
+    case 'ssh-key':
+      return 'The gateway makes a key pair and keeps the private key; you install the public key on the host.';
+  }
+}
+
+/** What the folded how-to says, per way of connecting. */
+function HowTo({ provider, reconnect }: { provider: ConnectableProvider; reconnect: boolean }) {
+  const name = provider.displayName;
+  return (
+    <div className={styles.prose}>
+      {provider.kind === 'oauth2' && (
+        <p>
+          “Continue” sends you to {name}. You sign in there and allow the app your company
+          registered; {name} then sends you back here with a credential, which is encrypted and kept
+          under your name.
+        </p>
+      )}
+      {provider.kind === 'app-install' && (
+        <p>
+          “Continue” sends you to {name}, where you choose the account and what the app may reach.
+          {name} then sends you back here; the gateway checks that the installation is yours before
+          it keeps anything.
+        </p>
+      )}
+      {provider.kind === 'api-key' && (
+        <p>
+          Create the key at {name}
+          {provider.createUrl && (
+            <>
+              {' '}
+              (
+              <a href={provider.createUrl} target="_blank" rel="noreferrer noopener">
+                open its page
+              </a>
+              )
+            </>
+          )}
+          , give it only what your agents will need, and paste it here. It is checked against {name}
+          , then stored encrypted; it is never shown again.
+        </p>
+      )}
+      {provider.kind === 'ssh-key' && (
+        <p>
+          The private key is stored encrypted and never leaves this gateway. The public key is shown
+          on the account page: append it to <code>~/.ssh/authorized_keys</code> of the login user on
+          the host.{reconnect && ' Reconnecting makes a new pair: install the new public key.'}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function submitLabel(provider: ConnectableProvider, reconnect: boolean): string {
+  if (provider.kind === 'oauth2' || provider.kind === 'app-install') {
+    return `Continue to ${provider.displayName}`;
+  }
+  if (reconnect) return ACCOUNT_ACTIONS.reconnect;
+  return provider.kind === 'ssh-key' ? 'Make the key pair and connect' : ACCOUNT_ACTIONS.connect;
+}
+
+export default async function ConnectOneAccountPage({
   params,
   searchParams,
 }: {
@@ -75,146 +149,131 @@ export default async function ConnectOneProviderPage({
   }
   const returnTo = firstParam(query.return_to);
   const redirectFlow = provider.kind === 'oauth2' || provider.kind === 'app-install';
-  // The server refuses to reconnect an unowned connection (`connection-unowned`).
+  // The server refuses to reconnect an account without owner (`connection-unowned`).
   const unowned = reconnect?.connection.status === 'unowned';
+  const name = provider.displayName;
+  const back = reconnect ? connectionPath(reconnect.connection.id) : ROUTES.accounts;
 
   return (
-    <Stack gap="var(--space-6)">
-      <div>
-        <p className={styles.muted}>
-          <Link href={CONNECTIONS_PATH}>{PAGES.accounts.title}</Link> /{' '}
-          <Link href={NEW_CONNECTION_PATH}>Connect a provider</Link> / {provider.displayName}
-        </p>
-        <h1 className={styles.badges}>
-          {reconnect ? `Reconnect ${reconnect.connection.displayName}` : provider.displayName}
-          {provider.experimental && <ExperimentalBadge />}
-        </h1>
-        {provider.description && <p className={styles.muted}>{provider.description}</p>}
-        <p className={styles.muted}>
-          <Link href={providerPath(provider.id)} className={styles.refLink}>
-            What a mission can do with {provider.displayName}: data model, risks, presets
-          </Link>
-        </p>
-      </div>
-
+    <>
+      <PageHeader
+        width="narrow"
+        crumbs={
+          reconnect
+            ? [
+                { label: PAGES.accounts.title, href: ROUTES.accounts },
+                { label: reconnect.connection.displayName, href: back },
+                { label: ACCOUNT_ACTIONS.reconnect },
+              ]
+            : [
+                { label: PAGES.accounts.title, href: ROUTES.accounts },
+                { label: ACCOUNT_PAGES.connect.title, href: NEW_CONNECTION_PATH },
+                { label: name },
+              ]
+        }
+        mark={<ServiceMark name={name} size="lg" />}
+        title={
+          reconnect
+            ? `Reconnect ${reconnect.connection.displayName}`
+            : `Connect ${/^[aeiou]/i.test(name) ? 'an' : 'a'} ${name} account`
+        }
+        lede={ledeOf(provider)}
+      />
       <NoticeBanner notice={notice} />
 
-      {provider.experimental && (
-        <Banner tone="warning" title="Experimental provider">
-          This plugin can be connected, but it is hidden from mission issuance by default and may
-          expose no tool yet.
-        </Banner>
-      )}
-
       {unowned ? (
-        <Banner tone="warning" title="No owner">
-          This connection cannot be reconnected: an operator must reassign an owner first.
-        </Banner>
+        <Callout tone="warn" title="This account has no owner">
+          It cannot be reconnected until an administrator names a new owner. The missions that use
+          it keep running meanwhile.
+        </Callout>
       ) : !provider.configured ? (
-        <Banner tone="warning" title="Not available yet">
-          An operator must register the company app for {provider.displayName} first (Administration
-          → Provider apps).
-        </Banner>
+        <Callout
+          tone="warn"
+          title={`${name} needs a company app first`}
+          action={
+            principal.isOperator ? (
+              <ButtonLink href={PROVIDER_APPS_PAGE} size="sm">
+                Register it
+              </ButtonLink>
+            ) : undefined
+          }
+        >
+          An administrator registers it once, under Settings → Company apps; everyone can then
+          connect their {name} accounts.
+        </Callout>
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>{credentialKindLabel(provider.kind)}</CardTitle>
-          </CardHeader>
-          <CardBody>
-            <form
-              method="post"
-              action={`${CONNECTIONS_PATH}/connect/${encodeURIComponent(provider.id)}`}
+        <form
+          method="post"
+          action={`${CONNECTIONS_PATH}/connect/${encodeURIComponent(provider.id)}`}
+          className={styles.form}
+        >
+          {returnTo && <input type="hidden" name="return_to" value={returnTo} />}
+          {reconnect && (
+            <input type="hidden" name="connection_id" value={reconnect.connection.id} />
+          )}
+          {provider.experimental && (
+            <Callout tone="neutral" title="Experimental service">
+              It can be connected, but it is left out of new missions by default and may offer no
+              tool yet.
+            </Callout>
+          )}
+          {!reconnect && (
+            <Field
+              label="Name"
+              shape="how it appears in missions"
+              optional
+              htmlFor="connection-name"
+              hint={`Useful with two ${name} accounts.`}
             >
-              {returnTo && <input type="hidden" name="return_to" value={returnTo} />}
-              {reconnect && (
-                <input type="hidden" name="connection_id" value={reconnect.connection.id} />
-              )}
-              <Stack gap="var(--space-4)">
-                {!reconnect && (
-                  <Field
-                    label="Connection name (optional)"
-                    htmlFor="connection-name"
-                    hint="How it appears in your list — useful with two accounts of the same provider."
-                  >
-                    <Input
-                      id="connection-name"
-                      name="name"
-                      maxLength={MAX_NAME_LENGTH}
-                      placeholder={provider.displayName}
-                      autoComplete="off"
-                    />
-                  </Field>
-                )}
-
-                {provider.kind === 'oauth2' && (
-                  <p className={styles.muted}>
-                    You will be sent to {provider.displayName} to authorize the app your company
-                    registered, then brought back here. The gateway never sees your password.
-                  </p>
-                )}
-                {provider.kind === 'app-install' && (
-                  <p className={styles.muted}>
-                    You will be sent to {provider.displayName} to install the app your company
-                    registered on the account you choose, then brought back here.
-                  </p>
-                )}
-                {provider.kind === 'api-key' && (
-                  <p className={styles.muted}>
-                    Paste a key you created at {provider.displayName}
-                    {provider.createUrl && (
-                      <>
-                        {' '}
-                        (
-                        <a href={provider.createUrl} target="_blank" rel="noreferrer noopener">
-                          create one
-                        </a>
-                        )
-                      </>
-                    )}
-                    . It is checked against the provider, then stored encrypted; it is never shown
-                    again.
-                  </p>
-                )}
-                {provider.kind === 'ssh-key' && (
-                  <p className={styles.muted}>
-                    The instance generates an ed25519 key pair. The private key is stored encrypted
-                    and never leaves the instance; the public key is shown on the next page for you
-                    to install on the host.
-                    {reconnect && ' Reconnecting generates a new pair: install the new public key.'}
-                  </p>
-                )}
-
-                <CredentialFieldInputs
-                  idPrefix="credential"
-                  fields={provider.fields}
-                  values={reconnect?.fields}
-                />
-
-                <div className={styles.actions}>
-                  <Button type="submit" variant="primary">
-                    {redirectFlow
-                      ? `Continue to ${provider.displayName}`
-                      : reconnect
-                        ? 'Reconnect'
-                        : provider.kind === 'ssh-key'
-                          ? 'Generate key and connect'
-                          : 'Connect'}
-                  </Button>
-                  <Link
-                    href={
-                      reconnect
-                        ? `${CONNECTIONS_PATH}/${reconnect.connection.id}`
-                        : NEW_CONNECTION_PATH
-                    }
-                  >
-                    Cancel
-                  </Link>
-                </div>
-              </Stack>
-            </form>
-          </CardBody>
-        </Card>
+              <Input
+                id="connection-name"
+                name="name"
+                maxLength={MAX_NAME_LENGTH}
+                placeholder={name}
+                autoComplete="off"
+              />
+            </Field>
+          )}
+          <CredentialFieldInputs
+            idPrefix="credential"
+            fields={provider.fields}
+            values={reconnect?.fields}
+          />
+          <div className={styles.formActions}>
+            <Button type="submit" variant="primary">
+              {submitLabel(provider, reconnect !== null)}
+            </Button>
+            <ButtonLink href={back} variant="ghost">
+              {ACTIONS.cancel}
+            </ButtonLink>
+            <span className={styles.formHint}>
+              {redirectFlow
+                ? `You come back here once ${name} has answered.`
+                : provider.kind === 'ssh-key'
+                  ? 'The private key is encrypted at rest and never shown.'
+                  : `Checked against ${name} before saving, encrypted at rest.`}
+            </span>
+          </div>
+          <Disclosure
+            id={`account-connect:${provider.kind}`}
+            show={redirectFlow ? `What happens at ${name}` : 'How to get what this form asks'}
+            hide="Hide the how-to"
+            testId="connect-how-to"
+          >
+            <HowTo provider={provider} reconnect={reconnect !== null} />
+          </Disclosure>
+        </form>
       )}
-    </Stack>
+
+      {!reconnect && (
+        <Section title="After connecting">
+          <Hint>
+            You own it. Give access to a colleague from the account page; a mission can use it right
+            away. What an agent can do on {name}, permission by permission, is in the{' '}
+            <Link href={providerPath(provider.id)}>{name} reference</Link>.
+          </Hint>
+        </Section>
+      )}
+    </>
   );
 }

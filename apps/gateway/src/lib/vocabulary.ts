@@ -479,3 +479,123 @@ export const THEME_WORDS = {
   dark: 'Dark',
   label: 'Theme',
 } as const;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Accounts and access (the pages under `/accounts`). Protocol names: connection,
+// resource, share, restriction, discovery, revoke, transfer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export const ACCOUNT_PAGES = {
+  connect: {
+    title: 'Connect an account',
+    lede: 'Through the service’s own flow where it has one; with a key otherwise. The credential never leaves this gateway.',
+  },
+  yours:
+    'You own these, alone or with a team: all permissions, and you decide who else may use them.',
+  shared: 'A colleague gave you part of an account; your missions can use that part, never more.',
+  whoHasAccess: 'What each person may let their agents do, at most.',
+  missions: 'Removing access, or disconnecting, stops them with the reason in every refusal.',
+  empty: 'No account yet. Connect one: agents then reach it only through a mission key.',
+} as const;
+
+export const ACCOUNT_ACTIONS = {
+  reconnect: 'Reconnect',
+  disconnect: 'Disconnect',
+  refresh: 'Refresh',
+  transfer: 'Transfer ownership',
+  editAccess: 'Edit',
+  updateAccess: 'Update access',
+  closeMission: 'Close',
+  connect: 'Connect',
+  save: 'Save',
+} as const;
+
+/** Column heads and short facts of the accounts pages. */
+export const ACCOUNT_WORDS = {
+  account: 'Account',
+  resources: 'Resources',
+  missions: 'Missions',
+  lastChecked: 'Last checked',
+  neverChecked: 'never checked',
+  checkFailed: 'Check failed',
+  mayAllow: 'May allow',
+  youMayAllow: 'You may allow',
+  givenBy: 'Given by',
+  status: 'Status',
+  who: 'Who',
+  since: 'Since',
+  environment: 'Environment',
+  hidden: 'hidden from new missions',
+  gone: 'no longer found',
+  experimental: 'experimental',
+  noLabel: 'without an environment label',
+} as const;
+
+/** How a service takes its credential, as the picker and the connect form say it. Keyed by `CredentialKind`. */
+export const CREDENTIAL_WORDS = {
+  oauth2: { how: 'sign in at the service', noun: 'a sign-in at the service' },
+  'app-install': { how: 'install the company app', noun: 'an installation of the company app' },
+  'api-key': { how: 'paste a key', noun: 'a key you paste' },
+  'ssh-key': { how: 'a key pair made here', noun: 'a key pair this gateway generates' },
+} as const;
+
+/** "the Platform team" — the server labels a group owner `group <name>`. */
+export function holderWords(label: string): string {
+  return label.startsWith('group ') ? `the ${label.slice('group '.length)} team` : label;
+}
+
+/** "owned by the Platform team (Bob, you, Dan)", "you own it", "owned by Bob". */
+export function ownedBy(owner: {
+  team: boolean;
+  name: string;
+  you: boolean;
+  people?: readonly { name: string; you: boolean }[];
+}): string {
+  if (!owner.team) return owner.you ? 'you own it' : `owned by ${owner.name}`;
+  const people = (owner.people ?? []).map((person) => (person.you ? 'you' : person.name));
+  const names = people.length > 0 ? ` (${people.join(', ')})` : '';
+  return `owned by the ${owner.name} team${names}`;
+}
+
+/** "3 besides owners", "nobody else" — how many hold an access to an account. */
+export function besidesOwners(n: number): string {
+  return n === 0 ? 'nobody else' : `${formatNumber(n)} besides owners`;
+}
+
+/** "Give access · 10 permissions" — the confirming button of the dialog. */
+export function giveAccessLabel(n: number, editing: boolean): string {
+  const act = editing ? ACCOUNT_ACTIONS.updateAccess : ACTIONS.giveAccess;
+  return `${act} · ${count(n, TERMS.risk)}`;
+}
+
+/** Why a mission stopped for want of an owner. Keyed by `OrphanCause`. */
+export const ORPHAN_WORDS = {
+  'creator-removed': 'its creator was deactivated',
+  'connection-missing': 'an account it uses no longer exists',
+  'connection-revoked': 'an account it uses was disconnected',
+  'authority-lost': 'its creator no longer holds the permissions it uses',
+} as const;
+
+const SHORT_MONTHS = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+] as const;
+
+/** A short date, without the year when it is this year: "14 Sep", "2 Sep 2025". UTC. */
+export function shortDate(iso: string, now: Date = new Date()): string {
+  const date = new Date(iso);
+  const day = date.getUTCDate();
+  const month = SHORT_MONTHS[date.getUTCMonth()] ?? '';
+  const year = date.getUTCFullYear();
+  return year === now.getUTCFullYear() ? `${day} ${month}` : `${day} ${month} ${year}`;
+}
