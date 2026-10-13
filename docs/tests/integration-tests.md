@@ -14,6 +14,7 @@ tracks:
   - plugins/railway/tests/
   - plugins/ssh/tests/
   - plugins/resend/tests/
+  - plugins/upstash-redis/tests/
   - packages/gateway-core/tests/
   - apps/gateway/tests/
   - apps/gateway/src/lib/bash/
@@ -85,6 +86,11 @@ are absent.
 | `plugins/ssh/tests/unit/data-model.test.ts`                       |                     1 |
 | `plugins/ssh/tests/unit/risk-catalog.test.ts`                     |                    10 |
 | `plugins/ssh/tests/unit/risk-classifier.test.ts`                  |                    39 |
+| `plugins/upstash-redis/tests/unit/plugin.test.ts` (v5, P1.2h)     |                    24 |
+| `plugins/upstash-redis/tests/unit/risk-classifier.test.ts`        |                    30 |
+| `plugins/upstash-redis/tests/unit/risk-catalog.test.ts`           |                    49 |
+| `plugins/upstash-redis/tests/unit/adapter.test.ts`                |                    16 |
+| `plugins/upstash-redis/tests/unit/data-model.test.ts`             |                     1 |
 | `packages/gateway-core/tests/unit/errors.test.ts`                 |                    24 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                  |                     6 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                  |                     6 |
@@ -121,7 +127,7 @@ are absent.
 | `apps/gateway/tests/integration/store/delegations.test.ts`        |                     7 |
 | `apps/gateway/tests/integration/store/config.test.ts`             |                     4 |
 | `apps/gateway/tests/integration/compose/boot.test.ts`             |                     4 |
-| **TOTAL** (`npm run test`, 2026-10-13, incl. suites not listed)   |  **1673 (6 skipped)** |
+| **TOTAL** (`npm run test`, 2026-10-13, incl. suites not listed)   |  **1681 (6 skipped)** |
 
 Skipped: `members-post` (1), `tokens-rotate` (2), both legacy v4, and the
 three standalone-addon tests when `.next/standalone` is absent. The plugin
@@ -226,6 +232,30 @@ npx vitest run packages/policy-engine     # one package
   unknown tool, slice round-trip), `execute` and `discoverResources`
   against `mockFetch` (bearer header, PATCH body, 401 →
   `UpstreamAuthError`).
+- **`plugins/upstash-redis/tests/unit/plugin.test.ts`** (P1.2h, handbook
+  [[providers/upstash-redis]]) — the four kit assertions with one sample
+  per tool (21 tools, every named risk reached; the fallback left out on
+  purpose); presets (`read-only`, `developer` key-level on `development` /
+  `staging` only, `operator` approval gates, no preset carries the
+  fallback); classifier conventions: `databaseId` resolved against the
+  mission's resources (single-database default, ambiguous / missing /
+  foreign / malformed refused, account-level tools need none), `execute`
+  routed on the Redis verb (read, write, FLUSH marker, unknown verb
+  catch-all, empty or non-array command), keys that are not slice idents
+  (`session:1`, braces, globs) and multi-key DEL fall back to `[*]`, slice
+  round-trip; environment resolved from the database resource label via
+  `resourceEnvResolver` (account-rooted slices: single label or null);
+  credential spec (`email` non-secret, `api_key` secret, `upstashAuth`
+  kind / field / pattern checks); `execute` against `mockFetch` (Basic
+  auth on the Management API, REST tokens redacted from answers, data
+  tool reads `rest_url` + `rest_token` then POSTs the command with the
+  Bearer, SET flags, refusals before any network call, 401/403 →
+  `UpstreamAuthError` on both surfaces, 500 and malformed arguments as
+  `isError`); `discoverResources` (one resource per database, metadata
+  without tokens, `env` left to the owner, 200 cap with a logger
+  warning, 403 → `UpstreamAuthError`). The v4 suites `risk-classifier`
+  (30, through the `classifyUpstashRedisV4` shim), `risk-catalog` (49,
+  lint on the YAML) and `adapter` (16) run unchanged until P1.6.
 
 ## Scenarios — Shared (v5 additions)
 

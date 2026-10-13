@@ -1,39 +1,37 @@
 /**
- * UpstashRedisAdapter — paste-token mode, all custom REST tools.
+ * @deprecated legacy v4, deleted in P1.6.
  *
- * Auth model : the user pastes their Upstash email + Management API key,
- * concatenated as `email:api_key`. This is stored encrypted in
- * `provider_admins.access_token_encrypted`.
- *
- * For Management API calls: decode the stored secret, split on first `:`,
- * use Basic Auth header.
- * For Data API calls: call `GET /v2/redis/database/{id}` to get the
- * per-database `rest_token`, then use it as Bearer token.
- *
- * `mintUpstreamToken()` returns the raw stored secret (the `email:api_key`
- * string). Binding validation calls `GET /v2/redis/database/{id}` to
- * verify the database exists.
+ * `UpstashRedisAdapter` — the v4 `UpstreamAdapter` duck type the gateway
+ * pipeline (`apps/gateway/src/lib/gateway/build.ts`) still instantiates. It
+ * is a thin shell over the v5 modules : the one classifier (`classify.ts`)
+ * and the one upstream caller (`execute.ts`). The v4 stored secret is the
+ * `email:api_key` concatenation ; `parseLegacyCredentials` splits it.
  */
 
 import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
-import { availableTools } from './tools.ts';
-import { executeCall, type FetchImpl } from './execute.ts';
-import { classifyUpstashRedisV4, type ClassifyResult } from './risk-classifier.ts';
 
+import { parseLegacyCredentials } from './credential.ts';
+import { callUpstashTool, type FetchImpl } from './execute.ts';
+import { classifyUpstashRedisV4, type ClassifyResult } from './risk-classifier.ts';
+import { upstashRedisTools } from './tools.ts';
+
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface UpstashRedisAdapterConfig {
   /** Override fetch in tests. */
   fetchImpl?: FetchImpl;
 }
 
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface ValidateResult {
   ok: boolean;
   displayName?: string;
   error?: string;
 }
 
+/** @deprecated legacy v4, deleted in P1.6 — use `upstashRedisPlugin`. */
 export class UpstashRedisAdapter {
   readonly provider = 'upstash-redis' as const;
-  readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
+  readonly availableTools: ReadonlyArray<McpToolDeclaration> = upstashRedisTools;
   private readonly fetchImpl: FetchImpl;
 
   constructor(config: UpstashRedisAdapterConfig = {}) {
@@ -60,10 +58,9 @@ export class UpstashRedisAdapter {
 
   async validateBinding(admin: ProviderAdmin, resourceRef: string): Promise<ValidateResult> {
     try {
-      const { token: credentials } = await this.mintUpstreamToken(admin);
-      const data = (await executeCall(
-        this.fetchImpl,
-        credentials,
+      const { token } = await this.mintUpstreamToken(admin);
+      const data = (await callUpstashTool(
+        { fetch: this.fetchImpl, auth: parseLegacyCredentials(token) },
         null,
         'upstash_redis__get_database',
         { databaseId: resourceRef },
@@ -82,14 +79,15 @@ export class UpstashRedisAdapter {
     tool: string,
     args: Record<string, unknown>,
   ): Promise<unknown> {
-    const { token: credentials } = await this.mintUpstreamToken(admin);
-    return executeCall(this.fetchImpl, credentials, binding.resource_ref, tool, args);
+    const { token } = await this.mintUpstreamToken(admin);
+    return callUpstashTool(
+      { fetch: this.fetchImpl, auth: parseLegacyCredentials(token) },
+      binding.resource_ref,
+      tool,
+      args,
+    );
   }
 
-  /**
-   * v4 classifier — emit the slice(s) the call touches. The provider plugin's
-   * sole authorization responsibility.
-   */
   classifyV4(
     tool: string,
     args: Record<string, unknown>,

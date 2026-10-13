@@ -1,16 +1,41 @@
-# Upstash Redis risk catalog — v4 risk-based model.
+# Risk catalog of the `upstash-redis` provider — one plane, two API layers.
 #
-# Spec    : docs/spec/gateway-risk-model.md §4.
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Handbook : docs/handbook/providers/upstash-redis.md.
 #
-# 10 named risks + 1 fallback. RiskId format follows
-# `<provider>.<name>` (cf. shared/src/risk.ts RISK_ID_REGEX).
+# Loaded by the plugin SDK at boot (`loadCatalogFile`) ; the loader refuses
+# unknown keys, malformed ids, patterns of another provider, a missing
+# fallback, zero presets, a preset entry that is not an explicit risk of this
+# catalog, a deprecated risk in a preset, a non-numeric budget.
 #
-# Slice patterns use the DSL declared in policy-engine/src/slice-dsl.ts
-# (no regex, only `[*]` / `[**]` wildcards and `[a,b,c]` lists). Each
-# pattern must match at least one tool's emitted slice — verified by the
-# `risk-catalog.test.ts` coverage lint.
+# Two API layers, one data model :
+#   - Management API (api.upstash.com/v2, Basic auth) : `account.database[*]`,
+#     `database[D].stats`, `database[D].credentials` ;
+#   - Data API (per-database REST endpoint, Bearer) : `database[D].key-space[K]`,
+#     with the literal markers `.delete` (DEL), `.flush` (FLUSHDB / FLUSHALL)
+#     and `.execute` (a Redis verb the classifier does not know).
+#
+# Environments : the **database** is the resource the owner labels
+# (`development`, `staging`, `prod`), so every write risk is env-scoped : a
+# mission accepts `upstash-redis[staging].write-data`, never a bare
+# `upstash-redis.write-data`. Reads stay account-scoped. `create-database`
+# is account-rooted (the new database is not a resource yet) and stays
+# account-scoped as well.
+#
+# The fallback `upstash-redis.uncategorized-write` counts only when no
+# specific entry matched the write (policy-engine rule, P1.2-SDK) ; presets
+# never carry it. Seen in production, it means a tool classifies to a slice
+# no fine-grained entry covers : add the entry.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor.
+#
+# Risk count : 10 named risks + 1 fallback.
 
 provider: upstash-redis
+catalog_version: 2
+catalog_date: 2026-10-13
 
 risks:
   # ─── READS ─────────────────────────────────────────────────────────────
@@ -20,7 +45,9 @@ risks:
     reason: >-
       Inventory of databases, their configuration, endpoints, and usage
       statistics. Surface of attack is negligible : metadata only, no
-      data or credential leaks. This risk is the always-on baseline.
+      data or credential leaks (`execute` strips the REST tokens from the
+      Management API answers). This risk is the always-on baseline ; every
+      read of the provider fires it.
     matches: 'upstash-redis.[**].R'
     vector:
       reversibility: reversible
@@ -53,7 +80,8 @@ risks:
     reason: >-
       Write operations on individual keys. Reversible (overwrite or
       delete the key). Affects application state if the app reads from
-      Redis at runtime.
+      Redis at runtime. Deliberately broad on the key space : DEL, FLUSH and
+      unknown verbs fire it too, next to their own, more severe risk.
     matches: 'upstash-redis.database[**].key-space[**].W'
     vector:
       reversibility: reversible
@@ -62,6 +90,7 @@ risks:
       cost: free
       visibility: internal
       persistence: session
+    acceptable_in_envs: [development, staging, prod]
 
   - id: upstash-redis.delete-data
     label: 'Delete specific keys (DEL)'
@@ -76,13 +105,15 @@ risks:
       cost: free
       visibility: internal
       persistence: session
+    acceptable_in_envs: [development, staging, prod]
 
   - id: upstash-redis.flush-database
-    label: 'FLUSHDB — mass data deletion via execute tool'
+    label: 'FLUSHDB / FLUSHALL — mass data deletion via the execute tool'
     reason: >-
       FLUSHDB / FLUSHALL wipes all keys in the database. Irreversible
       without a backup. Only reachable via the generic `execute` tool
-      (not exposed as a dedicated tool).
+      (not exposed as a dedicated tool). Presets suggest `approval` outside
+      development.
     matches: 'upstash-redis.database[**].key-space.flush.W'
     vector:
       reversibility: irreversible
@@ -91,6 +122,7 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
+    acceptable_in_envs: [development, staging, prod]
 
   - id: upstash-redis.execute-arbitrary
     label: 'Generic execute — catch-all for uncategorized Redis commands'
@@ -106,6 +138,7 @@ risks:
       cost: free
       visibility: internal
       persistence: session
+    acceptable_in_envs: [development, staging, prod]
 
   # ─── WRITES — MANAGEMENT ───────────────────────────────────────────────
 
@@ -114,6 +147,7 @@ risks:
     reason: >-
       Creates a new Redis database in the Upstash account. Reversible
       (can delete it). May incur costs if the account has a paid plan.
+      Account-rooted : the new database is not a mission resource yet.
     matches: 'upstash-redis.account.database.W'
     vector:
       reversibility: reversible
@@ -128,6 +162,7 @@ risks:
     reason: >-
       Permanently deletes a Redis database and all its data. Irreversible
       without a backup. Equivalent to dropping a production data store.
+      Presets suggest `approval` in every environment.
     matches: 'upstash-redis.account.database[**].delete.W'
     vector:
       reversibility: irreversible
@@ -136,13 +171,15 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
+    acceptable_in_envs: [development, staging, prod]
 
   - id: upstash-redis.modify-database
     label: 'Rename database (Management API)'
     reason: >-
       Modifies database metadata (currently: rename). Rename can break
       any downstream reference that uses the old name. Classified as
-      credentials touch because it affects the database identity.
+      credentials touch because it affects the database identity. Presets
+      suggest `approval` in every environment (configuration change).
     matches: 'upstash-redis.database[**].credentials.W'
     vector:
       reversibility: costly
@@ -151,6 +188,7 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
+    acceptable_in_envs: [development, staging, prod]
 
   - id: upstash-redis.read-stats
     label: 'Read usage statistics'
@@ -174,7 +212,7 @@ risks:
       Catch-all for writes that have not been explicitly categorised. If
       observed in production, signals that a tool was added without a
       matching catalog entry — operators must opt in explicitly (no
-      implicit accept).
+      implicit accept). Never carried by a preset.
     matches: 'upstash-redis.[**].W'
     vector:
       reversibility: costly
@@ -183,3 +221,155 @@ risks:
       cost: free
       visibility: internal
       persistence: session
+    acceptable_in_envs: [development, staging, prod]
+
+# ─────────────────────────────────────────────────────────────────────────
+# Presets — UI sugar : pre-fill a mission policy, the creator adjusts, the
+# persisted policy is always the explicit enumeration (spec §3.2).
+# Quotas are actions per mission period ; rate limits per sliding window.
+# Env labels follow the owner's labels on the databases of the connection.
+# ─────────────────────────────────────────────────────────────────────────
+
+presets:
+  - id: read-only
+    label: Read-only
+    description: Inspect databases, usage statistics and key-value data on the selected databases ; no write.
+    entries:
+      - risk_id: upstash-redis.read-database-metadata
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis.read-stats
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis.read-data
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+
+  - id: developer
+    label: Developer
+    description: One token per code project — key-level reads and writes (with TTL) and targeted DEL on development and staging databases ; no FLUSH, no arbitrary command, no database management.
+    entries:
+      - risk_id: upstash-redis.read-database-metadata
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis.read-stats
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis.read-data
+        quota: 10000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[development].write-data
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[staging].write-data
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[development].delete-data
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[staging].delete-data
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+
+  - id: operator
+    label: Operator
+    description: Everything a developer can do plus production key writes, FLUSH, arbitrary commands and database management — FLUSH outside development, every database deletion and every configuration change behind approval.
+    entries:
+      - risk_id: upstash-redis.read-database-metadata
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis.read-stats
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis.read-data
+        quota: 10000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[development].write-data
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[staging].write-data
+        quota: 2000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[prod].write-data
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[development].delete-data
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[staging].delete-data
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[prod].delete-data
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: approval
+      - risk_id: upstash-redis[development].flush-database
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[staging].flush-database
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: upstash-redis[prod].flush-database
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: upstash-redis[development].execute-arbitrary
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[staging].execute-arbitrary
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[prod].execute-arbitrary
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: upstash-redis.create-database
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: auto
+      - risk_id: upstash-redis[development].delete-database
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: upstash-redis[staging].delete-database
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: upstash-redis[prod].delete-database
+        quota: 2
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
+      - risk_id: upstash-redis[development].modify-database
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: upstash-redis[staging].modify-database
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: upstash-redis[prod].modify-database
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval

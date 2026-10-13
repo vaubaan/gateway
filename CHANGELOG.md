@@ -11,6 +11,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Upstash Redis plugin on the v5 SDK (P1.2h).** `@vaubaan/plugin-upstash-redis` 1.0.0 is a `definePlugin()` descriptor: `api-key` credential (account email + Management API key, replacing the v4 `email:api_key` concatenation), `discoverResources` over the account's databases (one resource per database, capped at 200), classifier re-keyed to mission resources with keys containing `:` no longer embedded in slices (v4 produced unparseable slices), every write risk env-scoped on the owner's database label, three presets (`read-only`, `developer`, `operator` with approval on FLUSH outside development, database deletion and rename), Management API answers redacted of REST tokens, catalog v2 loaded from YAML (TS twin and sync test removed). Legacy v4 exports kept `@deprecated` until P1.6. Handbook `providers/upstash-redis` rewritten in English.
 - **Stripe plugin on the v5 SDK (P1.2e).** `@vaubaan/plugin-stripe` implements
   `definePlugin()`: one `api-key` credential with optional test and live keys,
   one resource per mode (`acct_…/test`, `acct_…/live`) so `stripe[live].*`
