@@ -199,6 +199,8 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
   const bootstrapToken = readBootstrapToken(r, idp);
 
   const telemetryEnabled = r.bool('telemetry.enabled', false);
+  // A null or mistyped value is not a decision: only a boolean pins the toggle.
+  const telemetrySetByConfig = typeof getPath(raw, 'telemetry.enabled') === 'boolean';
   const collectorUrl = r.url('telemetry.collector_url', {
     fallback: DEFAULT_TELEMETRY_COLLECTOR_URL,
     https: true,
@@ -222,7 +224,11 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
     admin,
     providers,
     bootstrapToken,
-    telemetry: { enabled: telemetryEnabled, collectorUrl },
+    telemetry: {
+      enabled: telemetryEnabled,
+      enabledSetByConfig: telemetrySetByConfig,
+      collectorUrl,
+    },
     retentionDays,
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },

@@ -10,6 +10,7 @@ import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { RevokeConnection } from '@/components/connections/RevokeConnection';
+import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import styles from '@/components/connections/connections.module.css';
 import {
   credentialKindLabel,
@@ -90,6 +91,7 @@ export default async function ConnectionPage({
             <span>{detail.providerLabel}</span>
             <StateBadge status={connection.status} />
             {detail.experimental && <ExperimentalBadge />}
+            <ValidationBadge status={await root.telemetry.stats.statusFor(connection.provider)} />
           </span>
         </div>
         {!revoked && (

@@ -1,0 +1,303 @@
+---
+title: Community telemetry — the report, the queue, the toggle, the validation badge
+status: current
+date: 2026-10-13
+last_synced: 2026-10-13
+tracks:
+  - packages/telemetry/src/
+  - apps/gateway/src/server/telemetry/
+  - apps/gateway/src/server/execution/telemetry-sink.ts
+  - apps/gateway/src/server/execution/upstream-stage.ts
+  - apps/gateway/src/server/config/telemetry-default.ts
+  - apps/gateway/src/app/admin/(guarded)/telemetry/
+  - apps/gateway/src/app/api/admin/telemetry/
+  - apps/gateway/src/components/telemetry/
+  - apps/gateway/tests/integration/telemetry/
+  - apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts
+  - apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts
+  - deploy/collector/
+---
+
+# Community telemetry — the report, the queue, the toggle, the validation badge
+
+How an instance that opted in tells the project's collector whether the calls
+its plugins executed worked, and how it shows the resulting community status.
+Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §9, §10 (structural
+test), §4.3 (opt-in and collector URL), §8 (the toggle is audited). Decision:
+[telemetry-collector-shape](../decisions/telemetry-collector-shape.md). The
+collector itself: [`deploy/collector/README.md`](../../deploy/collector/README.md).
+
+**Off at installation.** And even when enabled, **nothing leaves the instance
+while `telemetry.collector_url` is the placeholder default** — no collector
+exists behind it yet.
+
+## Layout
+
+```
+packages/telemetry/src/            @vaubaan/telemetry — no dependency, no I/O but the injected fetch
+  report.ts                        PluginReport (frozen, six keys), vocabularies, createPluginReport,
+                                   isPluginReport, serializeReports
+  queue.ts                         ReportQueue: bounded, batched, backoff; ReportBuffer port
+  client.ts                        TelemetryClient: the three gates, the POST, the collector headers
+apps/gateway/src/server/
+  execution/telemetry-sink.ts      TelemetrySink port + NOOP_TELEMETRY_SINK (owned by the pipeline)
+  execution/upstream-stage.ts      the one hook: report(call, outcome)
+  telemetry/
+    index.ts                       createTelemetryModule → root.telemetry (sink, settings, stats,
+                                   handlers, overview, flush, stop)
+    outcome.ts                     classifyOutcome / reportOf: outcome → closed vocabulary
+    settings.ts                    TelemetrySettingsService: configuration vs operator toggle
+    stats.ts                       PluginStatsReader: validation status from plugin_stats, cached
+    handlers.ts                    POST /api/admin/telemetry
+  config/telemetry-default.ts      the single default URL of the code base (placeholder)
+apps/gateway/src/app/
+  admin/(guarded)/telemetry/page.tsx   Admin → Telemetry
+  api/admin/telemetry/route.ts         one-line adapter over the handler
+apps/gateway/src/components/telemetry/ValidationBadge.tsx
+deploy/collector/                  schema.sql + README.md (no cloud resource is created by the repo)
+```
+
+## The report
+
+`PluginReport` (`packages/telemetry/src/report.ts`) has exactly the keys of
+`PLUGIN_REPORT_KEYS`:
+
+| Key               | Source                                              | Shape                                              |
+| ----------------- | --------------------------------------------------- | -------------------------------------------------- |
+| `plugin`          | `plugin.id`                                         | `^[a-z][a-z0-9-]{0,62}$`                           |
+| `plugin_version`  | `plugin.version`                                    | semver, bounded                                    |
+| `gateway_version` | `root.build.version`                                | semver, or `dev` for an unstamped build            |
+| `tool`            | the call's tool, **only if the plugin declares it** | `^[a-z][a-z0-9_]{0,95}$`                           |
+| `outcome`         | `classifyOutcome`                                   | one of `REPORT_OUTCOMES`                           |
+| `error_class`     | `classifyOutcome`                                   | `null` on success, else a class its outcome allows |
+
+`createPluginReport(input)` is the only constructor: a fresh frozen object
+with the six keys, or `null` when a value does not fit. `serializeReports`
+rebuilds every report through it before `JSON.stringify`, so the request body
+cannot carry a seventh key or an unvetted value. No timestamp, no instance
+identifier, no host name is ever part of a report or of the request.
+
+The same vocabularies and shapes are `CHECK` constraints of the collector's
+table; `telemetry-collector-schema.test.ts` compares the SQL text with the
+exported constants.
+
+## From a `plugin.execute` outcome to a report
+
+`server/telemetry/outcome.ts`. `classifyOutcome(outcome)`:
+
+| What `plugin.execute` ended with                                                                                                      | `outcome`              | `error_class`                                                     |
+| ------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- | ----------------------------------------------------------------- |
+| a result, `isError` not `true`                                                                                                        | `success`              | `null`                                                            |
+| a result with `isError: true`                                                                                                         | `classification-error` | `executor_refused`                                                |
+| `UpstreamRefusalError` (credential refused for good, connection revoked)                                                              | `upstream-error`       | `credential_rejected`                                             |
+| `UpstreamAuthError`, or any object with a numeric `status` 100–599                                                                    | `upstream-error`       | `http_<status>`                                                   |
+| `code` / `name` of a timeout (`ETIMEDOUT`, `UND_ERR_*_TIMEOUT`, `AbortError`, `TimeoutError`), also down the `cause` chain (3 levels) | `upstream-error`       | `timeout`                                                         |
+| a network `code` (`ECONNREFUSED`, `ENOTFOUND`, …) or `TypeError('fetch failed')`                                                      | `upstream-error`       | `network`                                                         |
+| `TypeError` / `RangeError` / `ReferenceError` / `SyntaxError`                                                                         | `execution-error`      | `type_error` / `range_error` / `reference_error` / `syntax_error` |
+| a thrown value that is not an `Error` (string, object, `null`)                                                                        | `execution-error`      | `non_error_throw`                                                 |
+| any other `Error`                                                                                                                     | `upstream-error`       | `unspecified`                                                     |
+
+Rows are tried in that order. The function reads classes by `instanceof`, a
+numeric status, and compares `code` / `name` / the constant message
+`fetch failed` for equality with fixed lists. It never copies a string from a
+result or an error: an error whose `name`, `code` or `status` is free text
+ends as `unspecified`.
+
+`reportOf(execution, gatewayVersion)` returns `null` — no report — when the
+tool is not in `plugin.tools`, or when a declared value does not fit the
+report's shapes (a plugin whose `version` is not semver is never reported).
+
+Known imprecision: a plugin that returns `isError: true` for a provider
+failure (today `plugins/vercel` and `plugins/upstash-redis` catch non-auth
+errors into an error result) is reported `classification-error`. All
+non-success outcomes weigh the same in the collector's success rate; only
+the label is coarse.
+
+## The hook in the pipeline
+
+`execution/telemetry-sink.ts` defines the port:
+
+```ts
+interface TelemetrySink {
+  pluginExecuted(execution: {
+    plugin: Pick<ProviderPlugin, 'id' | 'version' | 'tools'>;
+    tool: string;
+    outcome: { ok: true; result: unknown } | { ok: false; error: unknown };
+  }): void;
+}
+```
+
+`createUpstreamStage` takes `telemetry?: TelemetrySink` (default
+`NOOP_TELEMETRY_SINK`). `forward()` records, in a `WeakMap` keyed by the
+`CallRequest`, the plugin the call reached; `execute()` calls
+`report(call, outcome)` once, after `attempt()` settled — success or the
+error it is about to wrap. Consequences:
+
+- one report per call, after the retry ladder (a 401 followed by a successful
+  refresh is one `success`);
+- no report when the credential broker failed before the plugin ran (nothing
+  in the `WeakMap`), nor for a call refused at an earlier stage;
+- a sink that throws is caught and logged by class name; it cannot fail a call.
+
+The event carries no mission, connection, resource or argument. The module's
+sink (`telemetry/index.ts`) returns at once when telemetry is disabled, and
+otherwise builds the report and hands it to the client. It swallows its own
+errors without logging them (they may carry provider text).
+
+## The client and the queue
+
+`TelemetryClient.record(report)` passes three gates, checked again by `send`
+before every batch:
+
+1. `isEnabled()` false → `state: 'disabled'`, nothing queued;
+2. the collector URL equals the placeholder (`isPlaceholderCollector`, compared
+   as normalized URLs) → `state: 'placeholder-collector'`, nothing queued, one
+   `warn` per process: "telemetry is enabled but the collector URL is still the
+   placeholder default: nothing is sent…";
+3. otherwise `state: 'sending'`: the report is queued.
+
+A closed gate empties the queue, so a report recorded while telemetry was on
+never leaves after it was switched off (`settings.onChange` also calls
+`discardQueued()` on the transition).
+
+`ReportQueue` (`QUEUE_DEFAULTS`): 1 000 reports at most, oldest dropped
+first; batches of 50; a flush 60 s after the first queued report, or at once
+when a batch is full; one request in flight. `send` answers:
+
+| Collector                                    | Result      | Queue                                                                                                    |
+| -------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
+| 2xx                                          | `delivered` | batch removed                                                                                            |
+| network error, timeout (10 s), 408, 429, 5xx | `retry`     | batch kept; next attempt after `30 s × 2^(failures−1)`, capped at 1 h, shortened by up to 20 % at random |
+| any other status                             | `rejected`  | batch dropped, one `warn` with the status                                                                |
+
+The timer is `unref`'d and stopped by `root.close()`. Nothing is persisted.
+The queue is `// single-process only`: each replica of a hosted deployment
+would keep its own, which is harmless since reports carry no identity.
+
+The request: `POST` to the configured URL **without** its `apikey` query
+parameter; the key, when present, goes to the `apikey` and `Authorization:
+Bearer` headers (`collectorEndpoint`, `collectorHeaders`); `Content-Type:
+application/json`, `Prefer: return=minimal`, `User-Agent:
+vaubaan-gateway-telemetry`; `redirect: 'error'`, no credentials, no referrer.
+The response body is never read.
+
+## Who decides: configuration, then the operator
+
+`TelemetrySettingsService` (`settings.ts`):
+
+| `telemetry.enabled` in the file / environment | Stored toggle (`instance_config` key `telemetry.enabled`) | Effective | `source`  | Toggle    |
+| --------------------------------------------- | --------------------------------------------------------- | --------- | --------- | --------- |
+| `true` or `false`                             | ignored                                                   | that      | `config`  | read-only |
+| not set                                       | `true`                                                    | on        | `admin`   | editable  |
+| not set                                       | `false`                                                   | off       | `admin`   | editable  |
+| not set                                       | none                                                      | off       | `default` | editable  |
+
+The loader exposes the distinction as `config.telemetry.enabledSetByConfig`
+(true only for a boolean value; an empty YAML key is not a decision).
+`enabledNow()` answers from memory — the client calls it on every report —
+and re-reads the store in the background when its view is older than
+`REFRESH_MS` (30 s), so a toggle made by another replica is picked up.
+`setEnabled()` throws `TelemetryLockedError` when the configuration decides.
+
+`POST /api/admin/telemetry` (`handlers.ts`), form field `enabled=true|false`:
+operator only, origin-checked (`guardMutation`). A change writes one
+`config-changed` entry on `instance-config:telemetry` with `before` / `after`
+`{ enabled, source }`; a toggle to the current value writes none. Refusals
+redirect to `/admin/telemetry?problem=locked|invalid`.
+
+## Admin → Telemetry
+
+`/admin/telemetry` renders `root.telemetry.overview()`: the state and its
+source, the collector URL in use (without the key; whether a key is set),
+whether reports actually leave (`disabled` / no collector / yes), the
+counters since start, the toggle (absent when locked), and **the exact
+request body of one report** — `serializeReports` applied to a report built
+from the first tool of the first registered plugin, so what the operator
+reads is produced by the code that sends. A warning banner explains the
+"enabled but placeholder collector" case.
+
+## The validation badge
+
+`PluginStatsReader.statusFor(pluginId)` (`stats.ts`) backs
+`<ValidationBadge>` on `/connections` and `/connections/<id>`:
+
+- active only when the client's state is `sending`; otherwise `null` and no
+  request — an instance that does not contribute never contacts the collector;
+- it never waits for the network: it answers from `CacheClient` (key
+  `telemetry:plugin-stats`) and, on a miss, starts `refresh()` in the
+  background and answers `null` — the badge appears on a later render;
+- `refresh()` issues one `GET <collector>/plugin_stats?select=plugin,plugin_version,reports,success_rate,validated&tool=is.null&plugin=in.(<registered ids>)`
+  (5 s timeout, 512 KiB cap), keeps well-formed rows by `plugin@version`,
+  caches them 6 h; any failure is cached 10 min as "nothing to show";
+- the badge shows the row of the plugin version the instance runs:
+  "validated by the community" or "not yet validated by the community", with
+  the rate and the count as a tooltip; no row → no badge.
+
+The thresholds are not in the gateway: `validated` is computed by the
+collector (`plugin_validation_thresholds()`).
+
+## Pointing an instance at a collector
+
+```yaml
+telemetry:
+  enabled: true # optional: leave unset to decide from Admin → Telemetry
+  collector_url: https://collector.example.net/rest/v1/plugin_reports?apikey=<publishable key>
+```
+
+or `VAUBAAN_TELEMETRY_COLLECTOR_URL` / `VAUBAAN_TELEMETRY_ENABLED`. The URL
+must be https. The last path segment is the reports resource; `plugin_stats`
+is read beside it. To run your own collector, apply
+`deploy/collector/schema.sql` to a Postgres exposed by PostgREST (a Supabase
+project) — see its README. To never send anything whatever the Admin page
+says, set `telemetry.enabled: false`.
+
+## How to debug
+
+- **"Enabled" but nothing arrives** → Admin → Telemetry, "Sending": `no — no
+collector is configured` means the URL is still the placeholder (boot log
+  line `telemetry` has `collector: "placeholder (nothing is sent)"`; one
+  `warn` appears at the first report).
+- **Queued grows, sent stays 0** → the collector is unreachable or answers
+  408/429/5xx; `debug` log `telemetry: the collector could not be reached`.
+  Retries back off up to one hour.
+- **Dropped grows** → the collector refused batches (`warn` `telemetry: the
+collector refused a batch; it was dropped` with the status: 401/403 = wrong
+  or missing key, 400 = the collector's constraints are older than the
+  gateway's vocabulary — apply the current `schema.sql`), or the queue
+  overflowed.
+- **The toggle is missing** → the configuration sets `telemetry.enabled`.
+- **No badge** → expected unless telemetry is sending and the collector has a
+  row for that exact plugin version; `debug` log `telemetry: plugin
+statistics unavailable` names a failure.
+- **A tool is never reported** → it is not in the plugin's `tools`, or the
+  plugin's `version` is not semver (`reportOf` returns `null`).
+
+## Tests
+
+- `packages/telemetry/src/report.test.ts`, `queue.test.ts`, `client.test.ts`
+  — shape and vocabularies; batching, overflow, backoff, single flight;
+  disabled → zero calls; placeholder → zero calls and one warning; headers.
+- `apps/gateway/src/server/telemetry/outcome.test.ts`, `settings.test.ts`,
+  `stats.test.ts` — the classification table, precedence, the reader.
+- `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts` — spec
+  §10: property-based over the real pipeline (three seeds × 400 calls);
+  exactly six keys, every value from a universe fixed before the first call,
+  nothing planted in arguments, errors, headers or identifiers found on the
+  wire.
+- `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts` —
+  SQL, README and report type agree.
+- `apps/gateway/tests/integration/telemetry/telemetry.test.ts` — default and
+  placeholder silence on a real root, the toggle and its audit entry, what is
+  reported, the badge.
+- `apps/gateway/tests/integration/audit/admin-mutations.test.ts` —
+  `TelemetrySettingsService.setEnabled` classified as a mutation writing
+  `config-changed`.
+
+## References
+
+- Spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §9, §10, §4.3.
+- ADR [telemetry-collector-shape](../decisions/telemetry-collector-shape.md).
+- Handbooks: [execution-door](execution-door.md) (upstream stage),
+  [configuration](configuration.md) (keys, composition root),
+  [connections](connections.md) (pages carrying the badge),
+  [plugin-sdk](plugin-sdk.md) (`version`, `tools`, what `execute` returns).

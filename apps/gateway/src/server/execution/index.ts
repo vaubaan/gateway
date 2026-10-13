@@ -21,6 +21,7 @@ import { systemClock, type Clock } from '../store/clock';
 import { ConnectionCredentialCache } from './credential-cache';
 import { ExecutionDoor, type DelegatedTokenResolver } from './door';
 import { createResourceStage } from './resource-stage';
+import type { TelemetrySink } from './telemetry-sink';
 import { createRiskStage } from './risk-stage';
 import { TokenVerifier } from './token-verifier';
 import { createUpstreamStage } from './upstream-stage';
@@ -41,6 +42,8 @@ export interface ExecutionModuleDeps {
   readonly clock?: Clock;
   /** Recognises delegated tokens so they are refused by kind; arrives with P2.3. */
   readonly delegations?: DelegatedTokenResolver;
+  /** Receives each `plugin.execute` outcome (community telemetry, P2.5); default: nothing. */
+  readonly telemetry?: TelemetrySink;
 }
 
 export interface ExecutionHandlers {
@@ -73,6 +76,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
       credentials: deps.connections.credentials,
       credentialCache,
       logger,
+      telemetry: deps.telemetry,
     }),
     audit: deps.store.auditWriter,
     now: () => clock.now(),
@@ -150,4 +154,10 @@ export {
   type CatalogTool,
   type MissionCatalog,
 } from './tools';
+export {
+  NOOP_TELEMETRY_SINK,
+  type PluginExecution,
+  type PluginOutcome,
+  type TelemetrySink,
+} from './telemetry-sink';
 export { createUpstreamStage } from './upstream-stage';

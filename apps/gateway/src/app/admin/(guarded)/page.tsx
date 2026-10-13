@@ -1,7 +1,7 @@
 /**
  * `/admin` — the Administration index: instance identity, IdP and bootstrap
- * state, the admin rule. Other sections (provider apps, local groups,
- * telemetry, retention) arrive with their features.
+ * state, the admin rule. Other sections (provider apps, telemetry) have their
+ * own page; local groups and retention arrive with their features.
  */
 import Link from 'next/link';
 

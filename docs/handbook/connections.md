@@ -534,7 +534,12 @@ explicitly and refuses a stale one (handbook [missions](missions.md),
 - **`/connections`** — table: name (link), provider label with the
   `experimental` badge, state badge (`active` green, `expired` / `unowned`
   amber, `revoked` neutral), owner (email or `group <name>`), date. Button
-  "Connect a provider".
+  "Connect a provider". Beside the provider label, `<ValidationBadge>`
+  shows the community validation status of the plugin version the instance
+  runs (`root.telemetry.stats.statusFor(provider)`, one lookup per distinct
+  provider); it renders nothing unless telemetry is sending and the
+  collector has statistics for that version (handbook
+  [telemetry](telemetry.md)).
 - **`/connections/new`** — one card per provider that is connectable now
   (`ConnectableProvider.configured`: the company app is complete, or none
   is needed), with description, credential kind and the `experimental`
@@ -544,7 +549,7 @@ explicitly and refuses a stale one (handbook [missions](missions.md),
   then a "Continue to …" button (redirect flows) or the declared fields
   (`field.<name>` inputs, secrets masked, the plugin's `help` under each).
   Experimental providers carry a warning banner.
-- **`/connections/<id>`** — state, owner, credential kind, the non-secret
+- **`/connections/<id>`** — state (with the same `<ValidationBadge>`), owner, credential kind, the non-secret
   fields, last discovery; the public key card for `ssh-key`; the resources
   table (ref with `stale since` badge and a folded "Settings" block for the
   editable lists, display name input, environment input or `set by the

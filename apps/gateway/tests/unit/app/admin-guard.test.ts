@@ -124,7 +124,12 @@ describe('the Administration surface authorizes in every page and route', () => 
 
   it('finds the pages and the routes of the surface', () => {
     expect(PAGES.map((p) => p.name).sort()).toEqual(
-      ['identity-provider/page.tsx', 'page.tsx', 'provider-apps/page.tsx'].sort(),
+      [
+        'identity-provider/page.tsx',
+        'page.tsx',
+        'provider-apps/page.tsx',
+        'telemetry/page.tsx',
+      ].sort(),
     );
     expect(ROUTES.length).toBeGreaterThan(0);
   });

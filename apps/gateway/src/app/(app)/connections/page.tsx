@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/connections/connections.module.css';
 import { ExperimentalBadge, NoticeBanner, StateBadge } from '@/components/connections/parts';
+import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import { Card, Stack, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
 import { currentActor, takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import { connectionPath, NEW_CONNECTION_PATH } from '@/server/connections';
@@ -24,6 +25,14 @@ export default async function ConnectionsPage({
   const { root, principal, actor } = session;
   const notice = await takeNotice(root, principal.sessionId, await searchParams);
   const connections = await root.connections.service.listFor(actor);
+  // Community validation status per provider (spec §9); empty when telemetry is off.
+  const validation = new Map(
+    await Promise.all(
+      [...new Set(connections.map((view) => view.connection.provider))].map(
+        async (provider) => [provider, await root.telemetry.stats.statusFor(provider)] as const,
+      ),
+    ),
+  );
 
   return (
     <Stack gap="var(--space-6)">
@@ -71,6 +80,9 @@ export default async function ConnectionsPage({
                       <span className={styles.badges}>
                         {view.providerLabel}
                         {view.experimental && <ExperimentalBadge />}
+                        <ValidationBadge
+                          status={validation.get(view.connection.provider) ?? null}
+                        />
                       </span>
                     </Td>
                     <Td>

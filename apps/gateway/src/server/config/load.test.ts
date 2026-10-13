@@ -39,6 +39,7 @@ describe('loadInstanceConfig — required keys', () => {
     expect(config.bootstrapToken).toBe(TEST_BOOTSTRAP_TOKEN);
     expect(config.telemetry).toEqual({
       enabled: false,
+      enabledSetByConfig: false,
       collectorUrl: new URL(DEFAULT_TELEMETRY_COLLECTOR_URL),
     });
     expect(config.retentionDays).toBe(90);
@@ -151,8 +152,25 @@ describe('loadInstanceConfig — required keys', () => {
     expect(ok.config.approvals.expirySeconds).toBe(90);
     expect(ok.config.retentionDays).toBe(30);
     expect(ok.config.telemetry.enabled).toBe(true);
+    expect(ok.config.telemetry.enabledSetByConfig).toBe(true);
     expect(ok.config.telemetry.collectorUrl.href).toBe('https://collector.example.net/ingest');
     expect(ok.config.log.level).toBe('debug');
+  });
+
+  it('tells an explicit telemetry.enabled, true or false, from one that is not set', () => {
+    const set = (value: string | undefined) =>
+      loadInstanceConfig({ env: validEnv({ VAUBAAN_TELEMETRY_ENABLED: value }) }).config.telemetry;
+    expect(set(undefined)).toMatchObject({ enabled: false, enabledSetByConfig: false });
+    expect(set('false')).toMatchObject({ enabled: false, enabledSetByConfig: true });
+    expect(set('true')).toMatchObject({ enabled: true, enabledSetByConfig: true });
+
+    // A YAML key left empty is not a decision.
+    const path = '/config/gateway.yaml';
+    const fromFile = loadInstanceConfig({
+      env: validEnv({ [CONFIG_FILE_ENV]: path }),
+      readFile: fakeFiles({ [path]: 'telemetry:\n  enabled:\n' }),
+    }).config.telemetry;
+    expect(fromFile).toMatchObject({ enabled: false, enabledSetByConfig: false });
   });
 });
 

@@ -52,6 +52,7 @@ apps/gateway/src/server/execution/      host-agnostic, never imports `next`
   resource-stage.ts   createResourceStage(), citedRefs()        → resource-not-in-mission
   risk-stage.ts       createRiskStage()                         → risk-not-accepted
   upstream-stage.ts   createUpstreamStage()                     → broker, retry ladder, connection-unavailable
+  telemetry-sink.ts   TelemetrySink port, NOOP_TELEMETRY_SINK   → the one hook of community telemetry
   credential-cache.ts ConnectionCredentialCache                 — ExecuteContext.credentialCache
   tools.ts            callableProviders(), callableTools(), buildCatalog()
   request-meta.ts     agentLabelOf(), cleanAgentLabel(), clientOriginOf() — over ../http/client-ip.ts
@@ -283,6 +284,16 @@ consumed, and the pipeline's `failed` outcome carries the refusal. A
 `ProviderUnreachableError` from the broker, a 403 and any provider failure
 are plain `failed` outcomes, audited by their summary.
 
+**Telemetry hook.** `UpstreamStageDeps.telemetry` is a `TelemetrySink`
+(`telemetry-sink.ts`; default `NOOP_TELEMETRY_SINK`). `forward()` notes, in a
+`WeakMap` keyed by the `CallRequest`, the plugin the call reached;
+`execute()` then calls `report(call, outcome)` exactly once — with the result,
+or with the error it is about to wrap — after the retry ladder. A call the
+broker stopped before `plugin.execute` ran is not reported, and a sink that
+throws is caught. The event holds the plugin (`id`, `version`, `tools`), the
+tool and the outcome: no mission, no connection, no resource, no argument.
+What becomes of it: handbook [telemetry](telemetry.md).
+
 ### Upstream credential cache (`credential-cache.ts`)
 
 `ConnectionCredentialCache.scopeFor(connection)` is the
@@ -449,6 +460,7 @@ const execution = createExecutionModule({
   logger,
   build,
   delegations: deps.delegatedTokens, // undefined until the management door (P2.3)
+  telemetry: telemetry.sink, // community telemetry (P2.5); inert unless the operator opted in
 });
 ```
 

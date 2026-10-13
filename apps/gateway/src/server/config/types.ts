@@ -90,7 +90,14 @@ export interface EncryptionConfig {
 }
 
 export interface TelemetryConfig {
+  /** The value of `telemetry.enabled`, `false` when the configuration does not set it. */
   readonly enabled: boolean;
+  /**
+   * True when the mounted file or the environment sets `telemetry.enabled`,
+   * to either value: the configuration then wins over the Admin toggle
+   * (handbook telemetry, "Who decides").
+   */
+  readonly enabledSetByConfig: boolean;
   readonly collectorUrl: URL;
 }
 
