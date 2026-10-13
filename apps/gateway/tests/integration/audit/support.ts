@@ -6,7 +6,7 @@
  * session, counters and events, then the store's audit writer for the entry —
  * the two halves `CallPipeline` runs for every call.
  */
-import { hashArguments, type CallAuditEntry } from '@vaubaan/gateway-core';
+import { fingerprintArguments, type CallAuditEntry } from '@vaubaan/gateway-core';
 import type { RiskId } from '@vaubaan/shared';
 
 import { budgetMissionOf, SessionService, type RecordCallResult } from '../../../src/server/budget';
@@ -141,7 +141,7 @@ export async function seedCall(
         : call.connectionId,
     resource_ref: call.resourceRef ?? 'acme/app',
     tool,
-    arguments_hash: hashArguments(args),
+    arguments_hash: fingerprintArguments(args),
     slices_executed: [],
     risks_touched: risks,
     accepted_risks_snapshot: mission.policy.map((p) => p.riskId),

@@ -99,8 +99,9 @@ following pages, and entries with the same timestamp are neither repeated nor sk
 
 ## No raw arguments
 
-- An audit entry never holds arguments: `arguments_hash` is `hashArguments(args)`
-  (sha256, 16 hex) and nothing else is stored (gateway-core).
+- An audit entry never holds arguments: `arguments_hash` is
+  `fingerprintArguments(args)` (sha256 of the canonical JSON, 64 hex — the fingerprint that
+  also binds approvals) and nothing else is stored (gateway-core).
 - `AuditCallView` / `AuditAdminView` are explicit field lists built by `toView`; nothing
   else of a record reaches a page.
 - `before` / `after` of an administrative entry pass through `withoutArguments`, which

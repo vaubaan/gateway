@@ -52,7 +52,7 @@ export interface AuditCallView {
   readonly connection: AuditConnectionRef | null;
   readonly resource_ref: string | null;
   readonly tool: string;
-  /** The only trace of the arguments: sha256 truncated to 16 hex characters. */
+  /** The only trace of the arguments: the canonical sha256 fingerprint (64 hex characters). */
   readonly arguments_hash: string;
   readonly decision: AuditDecision;
   readonly refusal_code: RefusalCode | null;

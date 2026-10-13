@@ -52,6 +52,7 @@ that guarded them) were deleted with the v4 application.
 | Suite                                                                  |    Tests |
 | ---------------------------------------------------------------------- | -------: |
 | `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`           |       22 |
+| `apps/gateway/src/server/audit/filters.test.ts`                        |       18 |
 | `apps/gateway/src/server/auth/admin-rule.test.ts`                      |        5 |
 | `apps/gateway/src/server/auth/bootstrap.test.ts`                       |        3 |
 | `apps/gateway/src/server/auth/claims.test.ts`                          |        8 |
@@ -87,6 +88,10 @@ that guarded them) were deleted with the v4 application.
 | `apps/gateway/src/server/requests/state.test.ts`                       |        9 |
 | `apps/gateway/src/server/requests/sweeper.test.ts`                     |        4 |
 | `apps/gateway/src/server/session/sqlite-session-store.test.ts`         |        6 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`         |       20 |
+| `apps/gateway/tests/integration/audit/audit-query.test.ts`             |       21 |
+| `apps/gateway/tests/integration/audit/mission-session.test.ts`         |       14 |
+| `apps/gateway/tests/integration/audit/retention.test.ts`               |       10 |
 | `apps/gateway/tests/integration/auth/oidc-login.test.ts`               |       12 |
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`   |        5 |
 | `apps/gateway/tests/integration/budget/session-service.test.ts`        |       19 |
@@ -117,7 +122,7 @@ that guarded them) were deleted with the v4 application.
 | `apps/gateway/tests/unit/server/store/db.test.ts`                      |        2 |
 | `apps/gateway/tests/unit/server/store/ids.test.ts`                     |        6 |
 | `apps/gateway/tests/unit/server/store/migrate.test.ts`                 |        9 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`       |      199 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`       |      206 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                       |        2 |
 | `packages/gateway-core/tests/unit/authenticate.test.ts`                |       11 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                       |        6 |
@@ -188,7 +193,7 @@ that guarded them) were deleted with the v4 application.
 | `plugins/vercel/tests/unit/data-model.test.ts`                         |        1 |
 | `plugins/vercel/tests/unit/plugin.test.ts`                             |       33 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                       |       60 |
-| **TOTAL** (`npm run test`, 2026-10-13, P1.6, after a build; 137 files) | **2318** |
+| **TOTAL** (`npm run test`, 2026-10-13, P1.6, after a build; 142 files) | **2408** |
 
 Nothing is skipped after a build. Without `.next/standalone` the five
 standalone tests (`standalone-native-addons` 3, `standalone-plugin-catalogs` 2) skip; `npm run ci` builds first, so they run there. Each plugin has one
@@ -1392,13 +1397,6 @@ Not covered here: call entries written by the real execution door (P1.6).
 - **`unowned` connections** (spec §2: they keep serving) cannot be resolved
   by the credential broker today, which accepts `active` only; no test,
   the state arrives with shares (P2.2).
-- **Four plugin suites fail on `v5` at the P1.1 rebase (2026-10-13):**
-  `plugins/cloudflare-dns/tests/unit/plugin.test.ts` (1),
-  `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts` (2) and
-  `plugins/gmail/tests/unit/plugin.test.ts` (1) — the fallback risk is still
-  reported next to the categorised one, i.e. these plugins predate the
-  P1.2-SDK "fallback only when uncategorized" rule. Owned by the plugin
-  migrations, not by the authentication feature.
 - **`ssh__exec` end to end** — the path is `ssh__exec` over a fake `SshTransport`
   in `plugins/ssh` (P1.2i). No test opens a socket, by design.
 
