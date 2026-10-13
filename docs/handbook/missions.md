@@ -1261,7 +1261,7 @@ discovery; every resource hidden; a resource turned stale).
 Scenarios in [integration-tests](../tests/integration-tests.md).
 
 The mission pages add two pure suites beside the code:
-`app/(app)/missions/mission-view.test.ts` (15: the state of a mission in
+`app/(app)/missions/mission-view.test.ts` (12: the state of a mission in
 words, Can / Asks first / Cannot, the limit that is near) and
 `app/(app)/missions/[id]/session/event-words.test.ts` (8: what a row of the
 activity says of each kind of event). The components they are built from are

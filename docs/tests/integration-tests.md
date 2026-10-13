@@ -92,7 +92,7 @@ this table says where each requirement lives, and what is not written yet.
 | --------------------------------------------------------------------------------------------------------- | -------: |
 | `apps/gateway/src/app/(app)/missions/[id]/session/event-words.test.ts`                                    |        8 |
 | `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                  |        2 |
-| `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                |       15 |
+| `apps/gateway/src/app/(app)/missions/mission-view.test.ts`                                                |       12 |
 | `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                              |       40 |
 | `apps/gateway/src/components/auth/principal.test.ts`                                                      |        2 |
 | `apps/gateway/src/components/connections/shape.test.ts`                                                   |        5 |
@@ -241,7 +241,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`                                               |        8 |
 | `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                              |       18 |
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                         |       63 |
-| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      136 |
+| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      131 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                       |        3 |
 | `apps/gateway/tests/unit/app/design-system.test.tsx`                                                      |       33 |
 | `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                       |       62 |
@@ -265,7 +265,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                     |       10 |
 | `apps/gateway/tests/unit/structural/index.test.ts`                                                        |      100 |
 | `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                         |        3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      377 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      416 |
 | `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                       |       10 |
 | `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       25 |
 | `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                              |       41 |
@@ -376,12 +376,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                              |       99 |
 | `scripts/audit-gate.test.mjs`                                                                             |       29 |
 | `scripts/release-lib.test.mjs`                                                                            |       50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 277 files; 9746 passed, 1 skipped) | **9747** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-14, with a build; 286 files; 9881 passed, 1 skipped) | **9882** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 9746 passed and 1 was skipped in that
+report's number of tests, of which 9881 passed and 1 was skipped in that
 run, made with a build (as `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
@@ -1306,7 +1306,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   nothing**. The three protocol endpoints of the authorization server
   (`token`, `revoke`, `register`) are held to reading no session.
 - **`tests/unit/app/admin-guard.test.ts`** (63) and
-  **`tests/unit/app/app-guard.test.ts`** (136) — **structural: every page and
+  **`tests/unit/app/app-guard.test.ts`** (131) — **structural: every page and
   route authenticates itself; the layout is not the boundary.** The pages
   and routes of `/admin` and of the `(app)` surface are discovered from the
   file tree. Each admin page calls `requireOperator()` and renders nothing
@@ -2103,7 +2103,7 @@ included` equals the catalog; where the environment comes from (Vercel: the
   draft is a custom policy. **The Custom editor**: `editorRows` lists every
   explicit id with why one cannot be ticked; `filterRows` by words and by
   status ("Available to you" is what may be ticked and what is ticked).
-- **`src/app/(app)/missions/mission-view.test.ts`** (15) — what the mission
+- **`src/app/(app)/missions/mission-view.test.ts`** (12) — what the mission
   pages say: **the state of a mission in words** (a running mission is
   written plainly; a waiting request wins over a reached limit and is amber,
   with whose answer it waits for on a teammate's page; "Needs an owner" and
