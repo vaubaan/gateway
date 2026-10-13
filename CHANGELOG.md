@@ -90,6 +90,19 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **Mission session page.** `/missions/<id>/session`, linked from the mission page, shows the
   counters per risk and per period with what is left, the gate of each risk, the open requests
   as links, the agent labels seen and the event timeline.
+- **Community telemetry (opt-in).** Off at installation. An operator enables it on
+  Administration → Telemetry, which shows the exact payload first: plugin, plugin version,
+  gateway version, tool, outcome (`success`, `upstream-error`, `classification-error`,
+  `execution-error`) and a fixed-vocabulary error class — never arguments or their hash,
+  resource refs, mission or user identifiers, an instance identifier, an address or a
+  provider's message. Setting `telemetry.enabled` in the configuration decides instead and
+  makes the page read-only. Reports are batched and retried with backoff. The built-in
+  collector URL is a placeholder: nothing is sent until `telemetry.collector_url` names a
+  real collector. `deploy/collector/` ships the collector's SQL (insert-only table, public
+  `plugin_stats` view, published thresholds: 200 reports and 90 % success over 90 days).
+- **Community validation badge.** With telemetry on and a collector configured, the
+  Connections pages show whether the plugin version in use is validated by the community;
+  nothing is shown, and nothing is fetched, otherwise.
 - **Embedded SQLite store.** `better-sqlite3` with `STRICT` tables and WAL, forward-only
   migrations applied at boot (schema version 4), an append-only audit enforced by triggers,
   encrypted credential blobs and a `:memory:` mode for tests. The runner refuses a database

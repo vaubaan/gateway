@@ -38,6 +38,7 @@ import { ProviderAppsService } from '../provider-apps';
 import { createMissionsModule, type MissionsModule } from '../missions';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
+import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkProviderApps, RegistryCatalogIndex } from './registry';
@@ -73,6 +74,8 @@ export interface GatewayRoot {
   readonly budget: SessionService;
   /** The execution MCP door: `/mcp`, `/mcp/catalog`, the call pipeline (P1.6). */
   readonly execution: ExecutionModule;
+  /** Community telemetry: the pipeline's sink, the operator's toggle, the validation status (P2.5). */
+  readonly telemetry: TelemetryModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
   close(): Promise<void>;
@@ -98,6 +101,8 @@ export interface RootDeps {
   readonly providerFetch?: typeof fetch;
   /** Recognises delegated tokens at the execution door so they are refused by kind (P2.3 wires the real one). */
   readonly delegatedTokens?: DelegatedTokenResolver;
+  /** Outbound HTTP to the telemetry collector (tests assert on it; default: the global `fetch`). */
+  readonly telemetryFetch?: typeof fetch;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
 }
@@ -168,7 +173,11 @@ function logConfigurationSummary(
     idp: config.idp ? config.idp.issuer.origin : 'not configured',
     admin_rule: config.admin.group ? 'group' : `emails (${config.admin.emails.length})`,
     providers: [...config.providers.keys()],
-    telemetry: config.telemetry.enabled ? 'enabled' : 'disabled',
+    telemetry: !config.telemetry.enabledSetByConfig
+      ? 'not set (Administration decides; off by default)'
+      : config.telemetry.enabled
+        ? 'enabled'
+        : 'disabled',
     key_version: config.encryption.keyVersion,
   });
 }
@@ -198,6 +207,7 @@ type RootModules = Pick<
   | 'audit'
   | 'budget'
   | 'execution'
+  | 'telemetry'
 >;
 
 /**
@@ -264,6 +274,18 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     requestUrl: requests.requestUrl,
     requestExpirySeconds: config.requests.expirySeconds,
   });
+  // Off unless the operator turned it on and a real collector is configured.
+  const telemetry = await createTelemetryModule({
+    config,
+    store,
+    registry,
+    authenticator: auth.authenticator,
+    cache,
+    logger,
+    build,
+    fetch: deps.telemetryFetch,
+  });
+  opened.push(() => telemetry.stop());
   const execution = createExecutionModule({
     config,
     store,
@@ -277,6 +299,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     logger,
     build,
     delegations: deps.delegatedTokens,
+    telemetry: telemetry.sink,
   });
 
   return {
@@ -291,6 +314,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     audit,
     budget,
     execution,
+    telemetry,
   };
 }
 

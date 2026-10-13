@@ -92,7 +92,7 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
    - `loadInstanceConfig()` → typed `InstanceConfig` or `ConfigError`;
    - logger with a redactor fed by `secretValues(config)`; boot line
      `configuration loaded` (source, public origin, IdP origin or "not
-     configured", admin rule kind, provider ids, telemetry flag,
+     configured", admin rule kind, provider ids, telemetry flag (or "not set"),
      key version — never a secret);
    - `createEncryptor(config.encryption)` (awaits libsodium);
    - the plugin registry (`@vaubaan/plugin-sdk`'s `PluginRegistry`) from
@@ -144,6 +144,12 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
    - the budget's `SessionService` → `root.budget` (claim and approval URLs
      come from `root.requests.requestUrl`; handbook
      [budget-and-sessions](budget-and-sessions.md)), then
+     `createTelemetryModule()` → `root.telemetry` (`sink`, `settings`,
+     `stats`, `handlers`, `overview()`; handbook [telemetry](telemetry.md)),
+     with `RootDeps.telemetryFetch` for the outbound HTTP to the collector
+     (tests assert on it); it reads the stored toggle once, logs the
+     `telemetry` line (`enabled`, `source`, `collector`) and registers
+     `telemetry.stop()` (the queue's timer) on `opened`; then
      `createExecutionModule()` → `root.execution` (`pipeline`,
      `credentialCache`, `door`, `handlers`; handbook
      [execution-door](execution-door.md)), with `RootDeps.delegatedTokens`
@@ -241,30 +247,30 @@ empty document, and loaded as `VAUBAAN_CONFIG_FILE` next to a valid
 environment every value still comes from the environment). The table below is `KEYS` in `sources.ts`; `(secret)` keys also
 accept `<VAR>_FILE`.
 
-| YAML path                       | Environment variable                   | Rule                                                                                                               |
-| ------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| `public_url`                    | `VAUBAAN_PUBLIC_URL`                   | **required**, https, no query or fragment; trailing slash stripped                                                 |
-| `trusted_proxies`               | `VAUBAAN_TRUSTED_PROXIES`              | list of IPs / CIDR blocks; default none                                                                            |
-| `store.path`                    | `VAUBAAN_STORE_PATH`                   | **required**                                                                                                       |
-| `encryption.master_key`         | `VAUBAAN_MASTER_KEY` (secret)          | **required**, 32 bytes base64                                                                                      |
-| `encryption.key_version`        | `VAUBAAN_MASTER_KEY_VERSION`           | integer >= 1, default 1                                                                                            |
-| `encryption.previous_keys`      | `VAUBAAN_MASTER_KEY_PREVIOUS` (secret) | `{version: key}` / `1=<b64>,2=<b64>`; not the current one                                                          |
-| `idp.issuer`                    | `VAUBAAN_IDP_ISSUER`                   | https; block optional, all-or-nothing                                                                              |
-| `idp.client_id`                 | `VAUBAAN_IDP_CLIENT_ID`                |                                                                                                                    |
-| `idp.client_secret`             | `VAUBAAN_IDP_CLIENT_SECRET` (secret)   |                                                                                                                    |
-| `idp.claims.{sub,email,groups}` | `VAUBAAN_IDP_CLAIM_{SUB,EMAIL,GROUPS}` | defaults `sub`, `email`, `groups`                                                                                  |
-| `idp.allowed_email_domains`     | `VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS`    | list, lower-cased; default any                                                                                     |
-| `admin.group`                   | `VAUBAAN_ADMIN_GROUP`                  | **admin rule**: group and/or emails required                                                                       |
-| `admin.emails`                  | `VAUBAAN_ADMIN_EMAILS`                 | list, lower-cased, must contain `@`                                                                                |
-| `providers.<id>.<field>`        | `VAUBAAN_PROVIDER_<ID>_<FIELD>`        | fields `client_id`, `client_secret` (secret), `app_id`, `app_slug`, `private_key` (secret); `-` in id ↔ `_` in env |
-| `bootstrap_token`               | `VAUBAAN_BOOTSTRAP_TOKEN` (secret)     | **required while `idp` is absent**, >= 32 chars; refused once `bootstrap.revoked_at` is set in the store           |
-| `telemetry.enabled`             | `VAUBAAN_TELEMETRY_ENABLED`            | default false                                                                                                      |
-| `telemetry.collector_url`       | `VAUBAAN_TELEMETRY_COLLECTOR_URL`      | https; default `DEFAULT_TELEMETRY_COLLECTOR_URL`                                                                   |
-| `retention_days`                | `VAUBAAN_RETENTION_DAYS`               | integer >= 1, default 90                                                                                           |
-| `requests.expiry`               | `VAUBAAN_REQUEST_EXPIRY`               | duration, default `24h`                                                                                            |
-| `approvals.expiry`              | `VAUBAAN_APPROVAL_EXPIRY`              | duration, default `10m`                                                                                            |
-| `mcp.rate_limit_per_minute`     | `VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE`    | integer >= 1, default 600: requests per minute on the execution door, per mission (spec §6)                        |
-| `log.level`                     | `VAUBAAN_LOG_LEVEL`                    | `debug` `info` `warn` `error`, default `info`                                                                      |
+| YAML path                       | Environment variable                   | Rule                                                                                                                                                   |
+| ------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `public_url`                    | `VAUBAAN_PUBLIC_URL`                   | **required**, https, no query or fragment; trailing slash stripped                                                                                     |
+| `trusted_proxies`               | `VAUBAAN_TRUSTED_PROXIES`              | list of IPs / CIDR blocks; default none                                                                                                                |
+| `store.path`                    | `VAUBAAN_STORE_PATH`                   | **required**                                                                                                                                           |
+| `encryption.master_key`         | `VAUBAAN_MASTER_KEY` (secret)          | **required**, 32 bytes base64                                                                                                                          |
+| `encryption.key_version`        | `VAUBAAN_MASTER_KEY_VERSION`           | integer >= 1, default 1                                                                                                                                |
+| `encryption.previous_keys`      | `VAUBAAN_MASTER_KEY_PREVIOUS` (secret) | `{version: key}` / `1=<b64>,2=<b64>`; not the current one                                                                                              |
+| `idp.issuer`                    | `VAUBAAN_IDP_ISSUER`                   | https; block optional, all-or-nothing                                                                                                                  |
+| `idp.client_id`                 | `VAUBAAN_IDP_CLIENT_ID`                |                                                                                                                                                        |
+| `idp.client_secret`             | `VAUBAAN_IDP_CLIENT_SECRET` (secret)   |                                                                                                                                                        |
+| `idp.claims.{sub,email,groups}` | `VAUBAAN_IDP_CLAIM_{SUB,EMAIL,GROUPS}` | defaults `sub`, `email`, `groups`                                                                                                                      |
+| `idp.allowed_email_domains`     | `VAUBAAN_IDP_ALLOWED_EMAIL_DOMAINS`    | list, lower-cased; default any                                                                                                                         |
+| `admin.group`                   | `VAUBAAN_ADMIN_GROUP`                  | **admin rule**: group and/or emails required                                                                                                           |
+| `admin.emails`                  | `VAUBAAN_ADMIN_EMAILS`                 | list, lower-cased, must contain `@`                                                                                                                    |
+| `providers.<id>.<field>`        | `VAUBAAN_PROVIDER_<ID>_<FIELD>`        | fields `client_id`, `client_secret` (secret), `app_id`, `app_slug`, `private_key` (secret); `-` in id ↔ `_` in env                                     |
+| `bootstrap_token`               | `VAUBAAN_BOOTSTRAP_TOKEN` (secret)     | **required while `idp` is absent**, >= 32 chars; refused once `bootstrap.revoked_at` is set in the store                                               |
+| `telemetry.enabled`             | `VAUBAAN_TELEMETRY_ENABLED`            | not set: off, and Admin → Telemetry decides; set (true or false): that value, and the Admin toggle is read-only (`TelemetryConfig.enabledSetByConfig`) |
+| `telemetry.collector_url`       | `VAUBAAN_TELEMETRY_COLLECTOR_URL`      | https; default `DEFAULT_TELEMETRY_COLLECTOR_URL`, a placeholder the client refuses to send to; may carry the collector's public key as `?apikey=`      |
+| `retention_days`                | `VAUBAAN_RETENTION_DAYS`               | integer >= 1, default 90                                                                                                                               |
+| `requests.expiry`               | `VAUBAAN_REQUEST_EXPIRY`               | duration, default `24h`                                                                                                                                |
+| `approvals.expiry`              | `VAUBAAN_APPROVAL_EXPIRY`              | duration, default `10m`                                                                                                                                |
+| `mcp.rate_limit_per_minute`     | `VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE`    | integer >= 1, default 600: requests per minute on the execution door, per mission (spec §6)                                                            |
+| `log.level`                     | `VAUBAAN_LOG_LEVEL`                    | `debug` `info` `warn` `error`, default `info`                                                                                                          |
 
 Not in the tree: `VAUBAAN_CONFIG_FILE` (path of the YAML; unset means
 environment only; set but unreadable is an error), and the listener

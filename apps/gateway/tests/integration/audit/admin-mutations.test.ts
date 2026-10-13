@@ -4,7 +4,7 @@
  * enumerates the service methods").
  *
  * The public methods of every class under `server/{connections,
- * provider-apps,missions,auth,requests}` are read from the source with the TypeScript
+ * provider-apps,missions,auth,requests,telemetry}` are read from the source with the TypeScript
  * parser and each must be classified below as a read, a mutation or an
  * exemption with its reason. A method added tomorrow fails the first test
  * until it is classified; a mutation is then driven on an ephemeral instance
@@ -38,7 +38,7 @@ import { silentLogger } from '../../../src/server/logging';
 import type { ConnectionRecord, MissionRecord, UserRecord } from '../../../src/server/store/types';
 
 const SERVER = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/server');
-const SCANNED = ['connections', 'provider-apps', 'missions', 'auth', 'requests'];
+const SCANNED = ['connections', 'provider-apps', 'missions', 'auth', 'requests', 'telemetry'];
 const PUBLIC_URL = 'https://gateway.example.com';
 const OPERATOR_EMAIL = 'ops@example.com';
 
@@ -495,6 +495,29 @@ const RULES: Readonly<Record<string, Rule>> = {
   'SessionService.createPending': exempt(SESSION_STATE),
   'SessionService.takePending': exempt(SESSION_STATE),
   'SessionService.clearPendingCookie': READ,
+
+  // ── telemetry (the entry is written by the Administration handler) ────────
+  'TelemetrySettingsService.isLocked': READ,
+  'TelemetrySettingsService.state': READ,
+  'TelemetrySettingsService.enabledNow': READ,
+  'TelemetrySettingsService.setEnabled': {
+    kind: 'mutation',
+    target: (root) => root.telemetry.settings,
+    drive: async (rig) =>
+      rig.root.telemetry.handlers.setEnabled(
+        await rig.operatorPost('/api/admin/telemetry', { enabled: 'true' }),
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'telemetry',
+      actor: 'operator',
+    },
+  },
+  'PluginStatsReader.statusFor': READ,
+  'PluginStatsReader.refresh': exempt(
+    'refreshes the cached copy of the public plugin statistics read from the collector: nothing of the instance is created, changed or revoked',
+  ),
 };
 
 const MUTATIONS = Object.entries(RULES).flatMap(([name, rule]) =>
@@ -523,6 +546,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
 
   it('covers every mutating act the services can perform', () => {
     expect(MUTATIONS.map((m) => m.rule.writes.act).sort()).toEqual([
+      'config-changed',
       'config-changed',
       'config-changed',
       'config-changed',

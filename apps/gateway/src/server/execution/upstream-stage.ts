@@ -34,6 +34,12 @@
  * id). So the message is the `detail`, for the agent only; what the audit
  * keeps is the `summary` built here from the provider id, the HTTP status
  * when the error carries one, and the error's class name.
+ *
+ * Telemetry (spec §9): the final outcome of a call that reached
+ * `plugin.execute` is handed, once, to the injected `TelemetrySink`
+ * (`telemetry-sink.ts`; a no-op unless the composition root wires the
+ * telemetry module). A call the broker stopped before the plugin ran is not
+ * a plugin outcome and is not reported.
  */
 import {
   isUnavailableConnectionStatus,
@@ -56,6 +62,7 @@ import {
 } from '../connections';
 import type { Logger } from '../logging';
 import type { ConnectionCredentialCache } from './credential-cache';
+import { NOOP_TELEMETRY_SINK, type PluginOutcome, type TelemetrySink } from './telemetry-sink';
 
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_STATUS_MIN = 100;
@@ -65,6 +72,8 @@ export interface UpstreamStageDeps {
   readonly credentials: Pick<CredentialBroker, 'resolve' | 'refresh' | 'contextOf'>;
   readonly credentialCache: ConnectionCredentialCache;
   readonly logger: Logger;
+  /** Receives each `plugin.execute` outcome; default: a sink that does nothing. */
+  readonly telemetry?: TelemetrySink;
 }
 
 /** The provider said the credential itself is not valid (as opposed to "not allowed"). */
@@ -110,12 +119,28 @@ function asUpstreamFailure(err: unknown, provider: string): UpstreamFailureError
 }
 
 export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
+  const telemetry = deps.telemetry ?? NOOP_TELEMETRY_SINK;
+  /** The plugin each call reached, if any: what `report` reads once the call has ended. */
+  const reached = new WeakMap<CallRequest, ResolvedCredential['plugin']>();
+
+  /** The one telemetry hook. A sink never fails a call. */
+  function report(call: CallRequest, outcome: PluginOutcome): void {
+    const plugin = reached.get(call);
+    if (!plugin) return;
+    try {
+      telemetry.pluginExecuted({ plugin, tool: call.tool, outcome });
+    } catch (err) {
+      deps.logger.warn('telemetry sink failed', { error: upstreamErrorClassName(err) });
+    }
+  }
+
   function forward(
     resolved: ResolvedCredential,
     ctx: MissionContext,
     call: CallRequest,
     target: CallTarget,
   ) {
+    reached.set(call, resolved.plugin);
     return resolved.plugin.execute(
       {
         ...deps.credentials.contextOf(resolved),
@@ -196,8 +221,11 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
   return {
     async execute(ctx, call, target): Promise<unknown> {
       try {
-        return await attempt(ctx, call, target);
+        const result = await attempt(ctx, call, target);
+        report(call, { ok: true, result });
+        return result;
       } catch (err) {
+        report(call, { ok: false, error: err });
         if (err instanceof UpstreamRefusalError) throw err;
         throw asUpstreamFailure(err, target.connection.provider);
       }

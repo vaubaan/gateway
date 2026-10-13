@@ -51,30 +51,31 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 
 ## Route map
 
-| Route                                                                                  | File under `apps/gateway/src/app/`                          | Handbook                            |
-| -------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------- |
-| `/`                                                                                    | `page.tsx`                                                  | [authentication](authentication.md) |
-| `/login`                                                                               | `(public)/login/page.tsx`, `(public)/layout.tsx`            | [authentication](authentication.md) |
-| `GET /auth/login`, `GET /auth/callback`                                                | `auth/login/route.ts`, `auth/callback/route.ts`             | [authentication](authentication.md) |
-| `POST /logout`                                                                         | `logout/route.ts`                                           | [authentication](authentication.md) |
-| `/admin/bootstrap`, `POST /api/auth/bootstrap`                                         | `admin/bootstrap/page.tsx`, `api/auth/bootstrap/route.ts`   | [authentication](authentication.md) |
-| `/admin`, `/admin/identity-provider`                                                   | `admin/(guarded)/**`                                        | [authentication](authentication.md) |
-| `POST /api/admin/identity-provider`                                                    | `api/admin/identity-provider/route.ts`                      | [authentication](authentication.md) |
-| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                         | `admin/(guarded)/provider-apps/**`                          | [connections](connections.md)       |
-| `/connections`, `/connections/new`, `/connections/new/<provider>`, `/connections/<id>` | `(app)/connections/**/page.tsx`                             | [connections](connections.md)       |
-| `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`         | `(app)/connections/connect/`, `(app)/connections/callback/` | [connections](connections.md)       |
-| `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                | `(app)/connections/[id]/**/route.ts`                        | [connections](connections.md)       |
-| `/missions`, `/missions/new`, `/missions/<id>`                                         | `(app)/missions/**/page.tsx`                                | [missions](missions.md)             |
-| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`  | `api/missions/**/route.ts`                                  | [missions](missions.md)             |
-| `GET /agent-bootstrap.md`                                                              | `agent-bootstrap.md/route.ts`                               | [missions](missions.md)             |
-| `/missions/<id>/session`                                                               | `(app)/missions/[id]/session/page.tsx`                      | [audit](audit.md)                   |
-| `/audit`                                                                               | `(app)/audit/page.tsx`                                      | [audit](audit.md)                   |
-| `/requests`, `/requests/<id>`                                                          | `(app)/requests/**/page.tsx`                                | [requests](requests.md)             |
-| `GET /r/<id>`                                                                          | `r/[id]/route.ts`                                           | [requests](requests.md)             |
-| `GET /api/requests`, `POST /api/requests/<id>/decide`                                  | `api/requests/**/route.ts`                                  | [requests](requests.md)             |
-| `GET, POST, DELETE /mcp`, `GET /mcp/catalog`                                           | `mcp/route.ts`, `mcp/catalog/route.ts`                      | [execution-door](execution-door.md) |
-| `GET /.well-known/oauth-protected-resource`                                            | `.well-known/oauth-protected-resource/route.ts`             | [execution-door](execution-door.md) |
-| `GET /healthz`                                                                         | `healthz/route.ts`                                          | [configuration](configuration.md)   |
+| Route                                                                                  | File under `apps/gateway/src/app/`                                   | Handbook                            |
+| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------- |
+| `/`                                                                                    | `page.tsx`                                                           | [authentication](authentication.md) |
+| `/login`                                                                               | `(public)/login/page.tsx`, `(public)/layout.tsx`                     | [authentication](authentication.md) |
+| `GET /auth/login`, `GET /auth/callback`                                                | `auth/login/route.ts`, `auth/callback/route.ts`                      | [authentication](authentication.md) |
+| `POST /logout`                                                                         | `logout/route.ts`                                                    | [authentication](authentication.md) |
+| `/admin/bootstrap`, `POST /api/auth/bootstrap`                                         | `admin/bootstrap/page.tsx`, `api/auth/bootstrap/route.ts`            | [authentication](authentication.md) |
+| `/admin`, `/admin/identity-provider`                                                   | `admin/(guarded)/**`                                                 | [authentication](authentication.md) |
+| `POST /api/admin/identity-provider`                                                    | `api/admin/identity-provider/route.ts`                               | [authentication](authentication.md) |
+| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                         | `admin/(guarded)/provider-apps/**`                                   | [connections](connections.md)       |
+| `/admin/telemetry`, `POST /api/admin/telemetry`                                        | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts` | [telemetry](telemetry.md)           |
+| `/connections`, `/connections/new`, `/connections/new/<provider>`, `/connections/<id>` | `(app)/connections/**/page.tsx`                                      | [connections](connections.md)       |
+| `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`         | `(app)/connections/connect/`, `(app)/connections/callback/`          | [connections](connections.md)       |
+| `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                | `(app)/connections/[id]/**/route.ts`                                 | [connections](connections.md)       |
+| `/missions`, `/missions/new`, `/missions/<id>`                                         | `(app)/missions/**/page.tsx`                                         | [missions](missions.md)             |
+| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`  | `api/missions/**/route.ts`                                           | [missions](missions.md)             |
+| `GET /agent-bootstrap.md`                                                              | `agent-bootstrap.md/route.ts`                                        | [missions](missions.md)             |
+| `/missions/<id>/session`                                                               | `(app)/missions/[id]/session/page.tsx`                               | [audit](audit.md)                   |
+| `/audit`                                                                               | `(app)/audit/page.tsx`                                               | [audit](audit.md)                   |
+| `/requests`, `/requests/<id>`                                                          | `(app)/requests/**/page.tsx`                                         | [requests](requests.md)             |
+| `GET /r/<id>`                                                                          | `r/[id]/route.ts`                                                    | [requests](requests.md)             |
+| `GET /api/requests`, `POST /api/requests/<id>/decide`                                  | `api/requests/**/route.ts`                                           | [requests](requests.md)             |
+| `GET, POST, DELETE /mcp`, `GET /mcp/catalog`                                           | `mcp/route.ts`, `mcp/catalog/route.ts`                               | [execution-door](execution-door.md) |
+| `GET /.well-known/oauth-protected-resource`                                            | `.well-known/oauth-protected-resource/route.ts`                      | [execution-door](execution-door.md) |
+| `GET /healthz`                                                                         | `healthz/route.ts`                                                   | [configuration](configuration.md)   |
 
 There is no landing page: `/` redirects a visitor with a session to `/missions`
 and anyone else to `/login`.
@@ -97,7 +98,7 @@ and anyone else to `/login`.
 - **`(app)/layout.tsx`** — the human surface: `currentPrincipal()`; no
   principal → `redirect('/login')`; otherwise `<AppShell principal>`.
 - **`admin/(guarded)/layout.tsx`** — the Administration bar (Identity provider,
-  Provider apps) and the "Not an operator" explanation; rules in
+  Provider apps, Telemetry) and the "Not an operator" explanation; rules in
   [authentication](authentication.md). `/admin/bootstrap` is outside it.
 
 A layout is navigation, never the authorization boundary: the App Router can

@@ -125,14 +125,21 @@
 # (or `${file:/run/secrets/vaubaan_bootstrap_token}` with a secrets mount)
 # bootstrap_token: ${VAUBAAN_BOOTSTRAP_TOKEN}
 
-# Community telemetry (spec §9): anonymous plugin success/failure counts.
-# Off by default; the collector URL has a built-in default and may be
-# pointed at your own collector.
+# Community telemetry (spec §9): anonymous plugin success/failure counts,
+# six fields per report (shown on Administration → Telemetry). Off by default.
 # telemetry:
 #   # env: VAUBAAN_TELEMETRY_ENABLED
+#   # Leave this key out to let an operator decide on Administration →
+#   # Telemetry. Setting it, to true or to false, decides here and makes that
+#   # page read-only; `false` guarantees nothing is ever sent.
 #   enabled: false
-#   # env: VAUBAAN_TELEMETRY_COLLECTOR_URL (example value; the default is built in)
-#   collector_url: https://collector.example.net/v1/reports
+#   # env: VAUBAAN_TELEMETRY_COLLECTOR_URL (example value)
+#   # The built-in default is a placeholder: no collector is published yet,
+#   # and the gateway sends nothing while the URL is that default, even when
+#   # telemetry is enabled. A real collector URL is the endpoint that receives
+#   # reports, with the collector's public key as `apikey` when it needs one
+#   # (deploy/collector/README.md).
+#   collector_url: https://collector.example.net/rest/v1/plugin_reports?apikey=<public key>
 
 # Audit retention in days: the sweeper deletes audit entries older than this
 # (at boot, then hourly). Only the audit trail is purged; session events,

@@ -2,7 +2,7 @@
  * Every mutating handler goes through the one guard (spec §6 "every mutation
  * requires a valid session and an origin check"; `server/auth/guard.ts`).
  *
- * The table below names every handler of the four human surfaces. Two
+ * The table below names every handler of the human surfaces. Two
  * structural tests keep it complete: a handler added to a module must be
  * classified (a mutation with its role, or a read with the reason), and a
  * route file that exports a mutating HTTP method may only delegate to a
@@ -151,6 +151,11 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       }),
     ),
   ),
+  'telemetry.handlers.setEnabled': form('operator', 303, (rig, headers) =>
+    rig.root.telemetry.handlers.setEnabled(
+      post('/api/admin/telemetry', headers, { enabled: 'true' }),
+    ),
+  ),
   'auth.handlers.logout': form('origin-only', 303, (rig, headers) =>
     rig.root.auth.handlers.logout(post('/logout', headers, {})),
   ),
@@ -171,7 +176,7 @@ const READS: Readonly<Record<string, string>> = {
   'requests.handlers.inbox': 'GET; reads the caller’s inbox (guardSession)',
 };
 
-const SURFACES = ['auth', 'connections', 'missions', 'requests'] as const;
+const SURFACES = ['auth', 'connections', 'missions', 'requests', 'telemetry'] as const;
 const GUARDED = Object.entries(MUTATIONS);
 const SESSION_GUARDED = GUARDED.filter(([, m]) => m.role !== 'origin-only');
 

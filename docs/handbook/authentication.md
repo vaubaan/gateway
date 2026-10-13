@@ -357,7 +357,8 @@ rendered without its layout. So:
 - **`/admin`** — issuer, source (file or Admin page), admin rule, bootstrap
   state, build. The Administration bar links Identity provider and
   Provider apps (`/admin/provider-apps`, handbook
-  [connections](connections.md)).
+  [connections](connections.md)) and Telemetry (`/admin/telemetry`, handbook
+  [telemetry](telemetry.md)).
 - **`/admin/identity-provider`** — the settings form (`POST
 /api/admin/identity-provider`: `issuer`, `client_id`, `client_secret`,
   `claim_sub`, `claim_email`, `claim_groups`, `allowed_email_domains`),

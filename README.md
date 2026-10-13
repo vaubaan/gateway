@@ -44,6 +44,7 @@ packages/shared/     risk types, api-key, data-model            @vaubaan/shared
 packages/policy-engine/  slice DSL, matcher, evaluator, runtime @vaubaan/policy-engine
 packages/gateway-core/   pipeline, decisions, refusals, audit   @vaubaan/gateway-core
 packages/plugin-sdk/     the plugin contract, registry, test kit @vaubaan/plugin-sdk
+packages/telemetry/      opt-in report, queue, client (off by default) @vaubaan/telemetry
 plugins/<provider>/  one provider plugin per folder             @vaubaan/plugin-<provider>
 plugins/_template/   scaffold for a new plugin                  @vaubaan/plugin-template
 deploy/              Dockerfile, compose, example configuration
@@ -71,7 +72,7 @@ configuration key): [`deploy/README.md`](deploy/README.md).
 | Tests     | [`docs/tests/`](docs/tests/)                                                                                                                                                                                              |
 | Workflow  | [`docs/workflow/coding-workflow.md`](docs/workflow/coding-workflow.md)                                                                                                                                                    |
 
-Handbooks: [configuration](docs/handbook/configuration.md), [store](docs/handbook/store.md), [authentication](docs/handbook/authentication.md), [connections](docs/handbook/connections.md), [missions](docs/handbook/missions.md), [budget-and-sessions](docs/handbook/budget-and-sessions.md), [execution-door](docs/handbook/execution-door.md), [requests](docs/handbook/requests.md), [audit](docs/handbook/audit.md), [web-app](docs/handbook/web-app.md), [gateway-core](docs/handbook/gateway-core.md), [policy-engine](docs/handbook/policy-engine.md), [plugin-sdk](docs/handbook/plugin-sdk.md), and one per provider under [providers](docs/handbook/providers/README.md).
+Handbooks: [configuration](docs/handbook/configuration.md), [store](docs/handbook/store.md), [authentication](docs/handbook/authentication.md), [connections](docs/handbook/connections.md), [missions](docs/handbook/missions.md), [budget-and-sessions](docs/handbook/budget-and-sessions.md), [execution-door](docs/handbook/execution-door.md), [requests](docs/handbook/requests.md), [audit](docs/handbook/audit.md), [web-app](docs/handbook/web-app.md), [gateway-core](docs/handbook/gateway-core.md), [policy-engine](docs/handbook/policy-engine.md), [plugin-sdk](docs/handbook/plugin-sdk.md), [telemetry](docs/handbook/telemetry.md), and one per provider under [providers](docs/handbook/providers/README.md).
 
 Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). Security:
 [`SECURITY.md`](SECURITY.md). Changes: [`CHANGELOG.md`](CHANGELOG.md).

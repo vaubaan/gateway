@@ -23,6 +23,8 @@ tracks:
   - apps/gateway/src/server/
   - apps/gateway/src/app/
   - apps/gateway/migrations/
+  - packages/telemetry/src/
+  - deploy/collector/
   - packages/shared/src/
 ---
 
@@ -73,7 +75,7 @@ this table says where each requirement lives, and what is not written yet.
 | Integration — revocation flows, `orphaned` states                        | [Missions](#scenarios--missions), [Budget and sessions](#scenarios--budget-and-sessions), [Connections](#scenarios--connections-resources-provider-apps) |
 | Integration — OAuth delegation, issuance by an MCP client                | not written (P2.3)                                                                                                                                       |
 | Integration — simulated IdP                                              | [Human authentication](#scenarios--human-authentication)                                                                                                 |
-| Structural — telemetry report without forbidden fields                   | not written (P2.5)                                                                                                                                       |
+| Structural — telemetry report without forbidden fields                   | [Community telemetry](#scenarios--community-telemetry)                                                                                                   |
 | Structural — session counters agree with the audit                       | [Execution door](#scenarios--execution-door), [Budget and sessions](#scenarios--budget-and-sessions)                                                     |
 | Structural — no configuration value hard-coded                           | [Instance configuration](#scenarios--instance-configuration-crypto-composition-root)                                                                     |
 | Structural — enumerated lists, never a wildcard or a preset reference    | [Plugin SDK](#scenarios--plugin-sdk), [Store](#scenarios--store), [Missions](#scenarios--missions)                                                       |
@@ -98,7 +100,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/authority/authority-service.test.ts`             |        7 |
 | `apps/gateway/src/server/compose/compose.test.ts`                         |       16 |
 | `apps/gateway/src/server/config/duration.test.ts`                         |        2 |
-| `apps/gateway/src/server/config/load.test.ts`                             |       37 |
+| `apps/gateway/src/server/config/load.test.ts`                             |       38 |
 | `apps/gateway/src/server/connections/codec-and-keypair.test.ts`           |       12 |
 | `apps/gateway/src/server/connections/credentials.test.ts`                 |       15 |
 | `apps/gateway/src/server/connections/input.test.ts`                       |       23 |
@@ -124,7 +126,10 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/requests/events.test.ts`                         |        6 |
 | `apps/gateway/src/server/requests/state.test.ts`                          |        9 |
 | `apps/gateway/src/server/requests/sweeper.test.ts`                        |        4 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`            |       20 |
+| `apps/gateway/src/server/telemetry/outcome.test.ts`                       |       28 |
+| `apps/gateway/src/server/telemetry/settings.test.ts`                      |        7 |
+| `apps/gateway/src/server/telemetry/stats.test.ts`                         |       11 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`            |       21 |
 | `apps/gateway/tests/integration/audit/audit-query.test.ts`                |       22 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`            |       15 |
 | `apps/gateway/tests/integration/audit/retention.test.ts`                  |       10 |
@@ -154,10 +159,11 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/schema.test.ts`                     |        6 |
 | `apps/gateway/tests/integration/store/sessions.test.ts`                   |       11 |
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`               |        8 |
-| `apps/gateway/tests/unit/app/admin-guard.test.ts`                         |       24 |
+| `apps/gateway/tests/integration/telemetry/telemetry.test.ts`              |       15 |
+| `apps/gateway/tests/unit/app/admin-guard.test.ts`                         |       29 |
 | `apps/gateway/tests/unit/app/app-guard.test.ts`                           |       80 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                              |        6 |
-| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`              |      113 |
+| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`              |      122 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                    |       15 |
 | `apps/gateway/tests/unit/server/budget/mission-state.test.ts`             |        7 |
 | `apps/gateway/tests/unit/server/budget/period.test.ts`                    |        8 |
@@ -168,7 +174,9 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/server/store/migrate.test.ts`                    |        9 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`        |       12 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`     |       10 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`          |      212 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`          |      222 |
+| `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`   |        7 |
+| `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`       |        3 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                          |        2 |
 | `packages/gateway-core/tests/unit/authenticate.test.ts`                   |       11 |
 | `packages/gateway-core/tests/unit/cache.test.ts`                          |        7 |
@@ -194,6 +202,9 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/shared/src/mcp.test.ts`                                         |       10 |
 | `packages/shared/src/risk-id.test.ts`                                     |       20 |
 | `packages/shared/src/session-events.test.ts`                              |       22 |
+| `packages/telemetry/src/client.test.ts`                                   |       17 |
+| `packages/telemetry/src/queue.test.ts`                                    |       12 |
+| `packages/telemetry/src/report.test.ts`                                   |       24 |
 | `plugins/_template/tests/unit/plugin.test.ts`                             |       18 |
 | `plugins/cloudflare-dns/tests/unit/classify.test.ts`                      |       33 |
 | `plugins/cloudflare-dns/tests/unit/data-model.test.ts`                    |        9 |
@@ -251,7 +262,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/plugin.test.ts`                                |       33 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                          |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                              |       99 |
-| **TOTAL** (`npm run test`, 2026-10-13, after a build; 166 files)          | **4092** |
+| **TOTAL** (`npm run test`, 2026-10-13, after a build; 175 files)          | **4242** |
 
 Nothing is skipped after a build. Without `.next/standalone` the five
 standalone tests (`standalone-native-addons` 3, `standalone-plugin-catalogs` 2) skip; `npm run ci` builds first, so they run there. Each plugin has one
@@ -1716,6 +1727,130 @@ itself are asserted in "Scenarios — Execution door".
   `decideClaim` resetting the period — the entries P1.7 writes; none is added here). Plus: a resource edit records `before` / `after` and a save
   that changes nothing records none; a failed discovery is recorded with its reason.
 
+## Scenarios — Community telemetry
+
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §9 (opt-in
+> per instance, content of a report, what is never sent, validation status on
+> each connection), §10 "a telemetry report contains none of the forbidden
+> fields", §4.3 (opt-in and collector URL), §8 (the toggle is a configuration
+> change). Handbook [[telemetry]]. ADR [[telemetry-collector-shape]]. No test
+> reaches a collector: the outbound `fetch` is injected everywhere.
+
+Unit, beside the code (`packages/telemetry/src/`, 53):
+
+- **`report.test.ts`** (24) — **the frozen shape**: the six keys and the four
+  outcomes; `createPluginReport` returns a frozen six-key object whatever the
+  input smuggles in (`arguments`, `arguments_hash`, `mission_id`,
+  `instance_id`); refuses a plugin, version or tool that is not of its shape
+  (spaces, a query string, free text), an unknown outcome, an error class on
+  a success, none on a failure, free text, a class of another outcome, an
+  HTTP class out of range; each named class belongs to one outcome;
+  `isPluginReport` by exact keys; `serializeReports` drops what is not a
+  vetted report.
+- **`queue.test.ts`** (12) — **batching**: one timer for several pushes, the
+  flush interval, an immediate flush when a batch is full, at most
+  `batchSize` per request, order kept, one request in flight, oldest dropped
+  on overflow. **Backoff**: a batch the collector did not take stays and is
+  retried after 100, 200, 400, 800 ms then the cap; a full batch does not
+  shorten the wait; a `send` that throws is a retry; a refused batch is
+  dropped, never resent; the delay formula with jitter; `clear()`, `stop()`.
+- **`client.test.ts`** (17) — **disabled → zero network calls** (120 reports
+  recorded, the injected `fetch` never called, no warning); **enabled with
+  the placeholder collector URL → zero network calls** and exactly one
+  warning; the placeholder compared as a URL; a report queued while enabled
+  never leaves once telemetry is switched off; the request (JSON array of
+  six-key objects, the public key moved from the URL to `apikey` /
+  `Authorization`, `Prefer: return=minimal`, redirects refused, no
+  credentials, no referrer); 408 / 429 / 5xx and an unreachable collector
+  keep the batch; 400 / 401 / 403 / 404 drop it with one warning.
+
+Unit, beside the code (`apps/gateway/src/server/telemetry/`, 46):
+
+- **`outcome.test.ts`** (28) — **outcome classes**: a result is a `success`;
+  `isError: true` is `classification-error / executor_refused`; a status
+  (`UpstreamAuthError`, numeric `status`), `fetch failed`, Node network and
+  timeout codes down the `cause` chain, `AbortError`, a credential refused
+  for good are `upstream-error` with their class; `TypeError`, `RangeError`,
+  `ReferenceError`, `SyntaxError` and non-`Error` throws are
+  `execution-error`; **an error whose `name`, `code`, `status` and message
+  are a secret ends as `unspecified`**; a cyclic `cause` terminates;
+  `reportOf` yields nothing for a tool the plugin does not declare or a
+  version that is not semver.
+- **`settings.test.ts`** (7) — **who decides**: off by default; the
+  configuration wins for `true` and for `false`, over a stored toggle, and
+  the setter throws; the operator's toggle is stored and applied at once; a
+  stale view is re-read in the background; an unreadable store keeps the last
+  value.
+- **`stats.test.ts`** (11) — the `plugin_stats` request (plugin-level rows,
+  registered ids, key in headers); nothing on the first read, then the row of
+  the running version; cached 6 h; an error status, a non-JSON body, a body
+  that is not a list and an unreachable collector show nothing and are not
+  retried for 10 min; **no request at all while telemetry is not sending**;
+  concurrent refreshes share one request; malformed rows skipped.
+
+Structural (`apps/gateway/tests/unit/structural/`, 10):
+
+- **`telemetry-report-shape.test.ts`** (3) — **spec §10, property-based**:
+  three seeds × 400 calls through the real root (`:memory:` store, the door,
+  the pipeline, the telemetry module, a mocked collector). Each call draws a
+  tool, arguments, an agent label, a caller address and user agent, and one
+  of thirteen ways `plugin.execute` can end — a result echoing the arguments,
+  an error result, thrown errors carrying the arguments, the provider token
+  and a unique message in their message, `name`, `code`, `status`,
+  `statusText` and `cause`, thrown strings, objects, `null`, symbols — and
+  one call in ten is refused before the plugin. Asserted on everything that
+  reached the collector (URL, headers, body): exactly the six keys per
+  report; every value from a universe fixed before the first call (the
+  plugin's declaration, the build stamp, the closed vocabularies); none of
+  the planted values anywhere — argument values, `fingerprintArguments(args)`
+  of every call, resource refs and ids, mission, session, user and connection
+  ids, the mission token and its prefix, the provider key, agent labels,
+  addresses, user agents, the instance's host, provider messages; one report
+  per call that reached the plugin, in order, with the expected class; every
+  outcome class drawn.
+- **`telemetry-collector-schema.test.ts`** (7) — `deploy/collector/schema.sql`
+  read as text: the table's columns are an identity, a day and the six report
+  keys; `anon` holds `INSERT` on those six columns and one `for insert`
+  policy, nothing else; the view runs with its owner's rights and is the only
+  thing `anon` reads; the `CHECK` constraints carry the outcomes, error
+  classes and shapes exported by `@vaubaan/telemetry`; the per-request limit
+  admits a full client batch; the thresholds published in the README are the
+  ones of the SQL function; the README documents every field and class.
+
+Integration (`apps/gateway/tests/integration/telemetry/telemetry.test.ts`, 15):
+
+- **Disabled by default** — 61 calls, a failing one included, a flush and a
+  statistics refresh: the injected collector `fetch` is never called;
+  `telemetry.enabled: false` in the configuration keeps it off and the toggle
+  answers `?problem=locked`, storing and auditing nothing.
+- **Placeholder collector URL** — enabled by the configuration, then by the
+  operator: zero network calls, one `warn` naming the placeholder, state
+  `placeholder-collector`.
+- **The operator's toggle** — stored as `telemetry.enabled` in
+  `instance_config`; only calls made after the opt-in are reported; **one
+  `config-changed` entry on `instance-config:telemetry` per change** with
+  `before` / `after`, none for a toggle to the same value; switching off
+  discards the queue; 401 with no session, 403 for a user who is not an
+  operator and for a foreign origin; an invalid value is refused; the stored
+  toggle is read at boot.
+- **What is reported** — one report per call that reached the plugin, none
+  for a risk not accepted, a foreign resource or an unknown tool; `success`,
+  `classification-error`, `upstream-error http_503`, `execution-error
+type_error` in order; a 401 followed by a successful refresh is one
+  `success`; a credential refused for good is `credential_rejected` and the
+  now-expired connection reports nothing more; a collector that is down
+  does not fail a call; the Admin overview's sample payload has the six keys
+  and the collector URL is shown without its key.
+- **Validation status** — one `plugin_stats` read, cached, the row of the
+  running version; a collector without the endpoint shows nothing.
+
+Elsewhere: `admin-mutations.test.ts` classifies
+`TelemetrySettingsService.setEnabled` as a mutation that writes
+`config-changed`; `mutation-guard.test.ts` drives
+`telemetry.handlers.setEnabled` through every refusal of the guard;
+`admin-guard.test.ts` covers the page `/admin/telemetry`; `load.test.ts`
+tells an explicit `telemetry.enabled` from an unset one.
+
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).
@@ -1732,6 +1867,17 @@ itself are asserted in "Scenarios — Execution door".
   automated suite; the manual check is in [`e2e-tests.md`](./e2e-tests.md).
 
 ## Known gaps
+
+- **The collector's SQL against PostgREST** — `schema.sql` is checked as text
+  here and was applied by hand to a local PostgreSQL 17 (insert as `anon`,
+  refused read / update / delete, constraints, limits, the view). Nothing in
+  the suite runs a database server, and no test goes through PostgREST: the
+  `PT429` → HTTP 429 mapping and the bulk-insert request are taken from its
+  documentation.
+- **Telemetry classes of the shipped plugins** — the outcome reduction is
+  tested on a fixture plugin; no test asserts which class each shipped
+  plugin's failures end in (two of them return provider failures as
+  `isError` results, reported `classification-error`).
 
 - **Claude Code against a running instance** — never done, by a human or an
   agent. The automated suites drive the door with the official MCP client
@@ -1757,6 +1903,7 @@ itself are asserted in "Scenarios — Execution door".
 - Handbooks: [[policy-engine]], [[plugin-sdk]], [[gateway-core]],
   [[configuration]], [[store]], [[authentication]], [[budget-and-sessions]],
   [[connections]], [[missions]], [[execution-door]], [[requests]], [[audit]],
+  [[telemetry]],
   and the provider handbooks under
   [`../handbook/providers/`](../handbook/providers/README.md).
 - CI workflow: [`../workflow/coding-workflow.md`](../workflow/coding-workflow.md)

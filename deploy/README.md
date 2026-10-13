@@ -8,6 +8,7 @@ tracks:
   - deploy/compose.yaml
   - deploy/caddy/
   - deploy/config/
+  - deploy/collector/
   - .github/workflows/ci.yml
   - scripts/gen-master-key.mjs
 ---
@@ -28,6 +29,8 @@ deploy/
   caddy/Caddyfile          reverse proxy, streaming-friendly, security headers
   config/gateway.example.yaml  every key, documented, all commented out
   config/.env.example          every environment variable, documented
+  collector/schema.sql     the community telemetry collector (optional; not part of an instance)
+  collector/README.md      how the project runs it, what it stores, the published thresholds
 ```
 
 ## Quick start (Docker Compose)
@@ -147,6 +150,36 @@ environment.
   checks the fail-fast exit (within 60 seconds), the https rule,
   `/healthz`, secret redaction, native addons, the non-root user and that
   no env file is shipped.
+
+## Community telemetry (optional)
+
+Off at installation, and the only SaaS dependency of the product. When an
+operator opts in, the instance reports, per call a plugin executed, six
+fields: plugin, plugin version, gateway version, tool, outcome, error class.
+Never arguments or their hash, resource refs, mission or user identifiers,
+an instance identifier or an address. Administration → Telemetry shows the
+exact payload before anything is enabled.
+
+- **Decide from the interface**: leave `telemetry.enabled` unset; an operator
+  toggles it on Administration → Telemetry (stored in the database, audited).
+- **Decide from the configuration**: set `telemetry.enabled` to `true` or
+  `false`; the page becomes read-only. `false` guarantees nothing is sent.
+- **The collector URL**: the built-in default is a **placeholder** — the
+  project's collector is not published yet — and the gateway sends nothing
+  while the URL is that default, whatever the toggle says. To contribute to
+  a collector that exists, set `telemetry.collector_url`
+  (`VAUBAAN_TELEMETRY_COLLECTOR_URL`) to its reports endpoint, https, with its
+  public key as the `apikey` query parameter when it needs one.
+- **Outbound traffic**: only then, `POST` batches to that URL (at most every
+  60 seconds) and one `GET` of the public statistics every six hours, which
+  feeds the "validated by the community" badge on the Connections pages. A
+  firewall that blocks them costs nothing but the reports and the badge.
+
+`deploy/collector/` holds the collector itself — a SQL schema for a dedicated
+Supabase project and its [README](collector/README.md) (what is stored, the
+published validation thresholds, how to keep addresses out of its logs). You
+do not need it to run a gateway; it is there so that anyone can audit, or
+run, the other end.
 
 ## What the image contains
 
