@@ -16,8 +16,8 @@ import type {
   MissionSummaryLines,
 } from './model';
 
-/** How many withheld risks a line names before it says "and N more". */
-const NAMED_WITHHELD = 2;
+/** Longest risk label a summary line quotes in full; the rest is cut with an ellipsis. */
+const LABEL_MAX = 44;
 
 const SECONDS = { hour: 3600, day: 86_400, week: 604_800 } as const;
 
@@ -27,6 +27,12 @@ export interface SummaryInput {
   readonly previews: readonly ConnectionPreview[];
   readonly period: DraftPeriod;
   readonly expires_at: string | null;
+}
+
+/** A risk label short enough for a one-line summary. */
+export function shortLabel(label: string): string {
+  if (label.length <= LABEL_MAX) return label;
+  return `${label.slice(0, LABEL_MAX - 1).trimEnd()}…`;
 }
 
 function plural(count: number, word: string): string {
@@ -76,7 +82,7 @@ function canLine(connection: IssuanceConnection, preview: ConnectionPreview): st
     preview.resources_total === 0
       ? 'the account'
       : `${preview.resources.length} of ${plural(preview.resources_total, 'resource')}`;
-  const upTo = top ? `, up to "${top.label}" (${top.level})` : '';
+  const upTo = top ? `, up to "${shortLabel(top.label)}" (${top.level})` : '';
   return `${connection.provider_label} "${connection.display_name}": ${plural(
     accepted.length,
     'risk',
@@ -90,15 +96,12 @@ function cannotLine(connection: IssuanceConnection, preview: ConnectionPreview):
     .filter((r) => held.has(r.risk_id) && !accepted.has(r.risk_id) && !r.deprecated)
     .sort((a, b) => b.severity - a.severity);
   const parts: string[] = [];
-  if (withheld.length === 0) {
+  const [worst] = withheld;
+  if (!worst) {
     parts.push('every risk you hold is accepted');
   } else {
-    const named = withheld.slice(0, NAMED_WITHHELD).map((r) => `"${r.label}"`);
-    const rest = withheld.length - named.length;
     parts.push(
-      `${plural(withheld.length, 'risk')} withheld — ${named.join(', ')}${
-        rest > 0 ? ` and ${rest} more` : ''
-      }`,
+      `${plural(withheld.length, 'risk')} withheld, the most severe "${shortLabel(worst.label)}" (${worst.level})`,
     );
   }
   const leftOut = preview.resources_total - preview.resources.length;
@@ -121,9 +124,9 @@ function quantitiesLine(input: SummaryInput): string {
     if (entry.gate === 'approval') approvals += 1;
   }
   const parts = [
-    `At most ${largest.quota} actions ${periodPhrase(input.period)} on the widest risk ("${
-      labels.get(largest.risk_id) ?? largest.risk_id
-    }")`,
+    `At most ${largest.quota} actions ${periodPhrase(input.period)} on the widest risk ("${shortLabel(
+      labels.get(largest.risk_id) ?? largest.risk_id,
+    )}")`,
     `fastest ${fastest.rate_limit.max} per ${fastest.rate_limit.window_seconds}s`,
     approvals === 0
       ? 'no approval gate'

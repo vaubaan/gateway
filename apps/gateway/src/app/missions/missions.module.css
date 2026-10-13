@@ -1,0 +1,477 @@
+/* Missions pages. The creation screen is one page, one column, in reading
+   order: name, connections (resources and preset on the same row), the
+   three-line summary, the per-risk detail folded, then period, expiry and
+   the Issue button in a bar that stays in view at the bottom. */
+
+.pageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.pageHead h1 {
+  margin: 0;
+}
+.muted {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.mono {
+  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-xs);
+  color: var(--text-subtle);
+}
+
+/* ── Creation form ─────────────────────────────────────────────────────── */
+
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+  max-width: 1080px;
+}
+.form > section {
+  min-width: 0;
+}
+
+.step {
+  font-size: var(--text-xs);
+  font-weight: var(--font-weight-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-subtle);
+  margin: 0 0 var(--space-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.stepTools {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: var(--font-weight-regular);
+}
+
+.nameRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: var(--space-3);
+  align-items: center;
+}
+.nameRow select {
+  width: auto;
+  max-width: 240px;
+}
+@media (max-width: 640px) {
+  .nameRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.panel {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+}
+
+.conn {
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+}
+.conn:last-child {
+  border-bottom: 0;
+}
+.connOff {
+  opacity: 0.75;
+}
+.connHead {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto 220px;
+  gap: var(--space-3);
+  align-items: center;
+}
+.connHead select {
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+@media (max-width: 640px) {
+  .connHead {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+.connName {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  cursor: pointer;
+}
+.connName span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.connMeta {
+  margin: var(--space-1) 0 0 calc(16px + var(--space-2));
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+.linkButton {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.linkButton:hover {
+  color: var(--text-foreground);
+}
+.resources {
+  margin: var(--space-2) 0 0 calc(16px + var(--space-2));
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  font-size: var(--text-sm);
+}
+.resources label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  cursor: pointer;
+}
+
+/* ── Summary (the three lines) ─────────────────────────────────────────── */
+
+.summary {
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+.summaryLine {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr);
+  gap: var(--space-2);
+}
+.summaryLine dt {
+  font-weight: var(--font-weight-semibold);
+  color: var(--text-muted);
+}
+.summaryLine dd {
+  margin: 0;
+}
+.footer {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  padding: var(--space-3) 0 var(--space-4);
+  background: var(--surface-base);
+  border-top: 1px solid var(--border-subtle);
+  display: grid;
+  gap: var(--space-2);
+}
+.footer .step {
+  margin: 0;
+  white-space: nowrap;
+}
+.footerRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+.asideControls {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  flex: 1;
+}
+.asideControls select,
+.asideControls input {
+  width: auto;
+}
+.oneLine {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.issues {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--accent-danger-fg);
+  display: grid;
+  gap: 2px;
+}
+.notes {
+  margin: 0;
+  padding-left: var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  display: grid;
+  gap: 2px;
+}
+.issueButton {
+  min-width: 180px;
+}
+
+/* ── Per-risk detail, folded by default ────────────────────────────────── */
+
+.fold {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.fold:last-child {
+  border-bottom: 0;
+}
+.fold > summary {
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  list-style: none;
+}
+.fold > summary::-webkit-details-marker {
+  display: none;
+}
+.fold > summary::before {
+  content: '▸';
+  color: var(--text-subtle);
+  width: 12px;
+}
+.fold[open] > summary::before {
+  content: '▾';
+}
+.foldBody {
+  padding: 0 var(--space-4) var(--space-3);
+}
+.riskTools {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  margin-bottom: var(--space-2);
+  font-size: var(--text-sm);
+}
+.riskGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 96px 148px 116px;
+  gap: 6px var(--space-3);
+  align-items: center;
+  font-size: var(--text-sm);
+}
+.riskGrid input[type='number'],
+.riskGrid select {
+  padding: 3px 8px;
+  font-size: var(--text-sm);
+}
+.riskGrid select {
+  padding-right: 28px;
+}
+.riskHead {
+  font-size: var(--text-xs);
+  color: var(--text-subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.riskLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  cursor: pointer;
+}
+.riskText {
+  min-width: 0;
+  display: grid;
+}
+.riskText > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rate {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto;
+  gap: 4px;
+  align-items: center;
+  color: var(--text-subtle);
+  font-size: var(--text-xs);
+}
+.refused {
+  color: var(--accent-danger-fg);
+  font-size: var(--text-xs);
+}
+.unavailable {
+  margin-top: var(--space-2);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.unavailable ul {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+}
+@media (max-width: 640px) {
+  .riskGrid {
+    grid-template-columns: minmax(0, 1fr) 80px;
+  }
+  .riskHead {
+    display: none;
+  }
+}
+
+/* ── Proposal box ──────────────────────────────────────────────────────── */
+
+.proposal {
+  margin-top: var(--space-3);
+  display: grid;
+  gap: var(--space-2);
+}
+.proposal textarea {
+  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-xs);
+  min-height: 120px;
+}
+
+/* ── Bootstrap kit ─────────────────────────────────────────────────────── */
+
+.kit {
+  display: grid;
+  gap: var(--space-4);
+}
+.kitStep {
+  display: grid;
+  gap: var(--space-1);
+}
+.kitHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-medium);
+}
+.kitNumber {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: var(--radius-full);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  font-size: var(--text-xs);
+  margin-right: var(--space-2);
+}
+.snippet {
+  margin: 0;
+  padding: var(--space-3);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  overflow: auto;
+  max-height: 220px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: grid;
+  place-items: center;
+  z-index: 100;
+  padding: var(--space-4);
+}
+.dialog {
+  width: 100%;
+  max-width: 760px;
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow: auto;
+  background: var(--surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  display: grid;
+  gap: var(--space-4);
+}
+.dialog h2 {
+  margin: 0;
+  font-size: var(--text-lg);
+}
+.dialogFoot {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+/* ── List and detail ───────────────────────────────────────────────────── */
+
+.rowLink {
+  font-weight: var(--font-weight-medium);
+}
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.facts dt {
+  color: var(--text-muted);
+}
+.facts dd {
+  margin: 0;
+}
+.actions {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+}
+
+/* A link that reads as a button (navigation, not a form action). */
+.primaryLink,
+.secondaryLink {
+  display: inline-flex;
+  align-items: center;
+  height: 32px;
+  padding: 8px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-subtle);
+  font-weight: var(--font-weight-medium);
+  color: var(--text-foreground);
+  white-space: nowrap;
+}
+.primaryLink {
+  background: var(--primary-bg);
+  border-color: var(--primary-bg);
+  color: var(--primary-fg);
+}
+.primaryLink:hover,
+.secondaryLink:hover {
+  text-decoration: none;
+}
+.primaryLink:hover {
+  background: var(--primary-bg-hover);
+}
+.secondaryLink:hover {
+  border-color: var(--border-strong);
+}

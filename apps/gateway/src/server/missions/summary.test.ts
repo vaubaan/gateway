@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { DraftConnection, DraftPeriod } from './model';
 import { previewDraft } from './preview';
-import { expiryPhrase, periodPhrase, reloadPhrase } from './summary';
+import { expiryPhrase, periodPhrase, reloadPhrase, shortLabel } from './summary';
 import { acmeConnection } from './testing';
 
 const NOW = new Date('2026-10-13T09:00:00.000Z');
@@ -35,7 +35,7 @@ describe('summarize — the three lines of the creation screen', () => {
       },
     ]);
     expect(s.cannot).toBe(
-      'Acme: 5 risks withheld — "Delete things in bulk", "Change account settings" and 3 more; 2 resources left out. Anything outside the selected resources and the accepted risks is refused.',
+      'Acme: 5 risks withheld, the most severe "Delete things in bulk" (high); 2 resources left out. Anything outside the selected resources and the accepted risks is refused.',
     );
   });
 
@@ -63,6 +63,15 @@ describe('summarize — the three lines of the creation screen', () => {
     expect(s.can).toBe('Nothing yet — include a connection and pick a preset.');
     expect(s.cannot).toBe('Everything: no connection is included.');
     expect(s.quantities).toBe('No budget yet.');
+  });
+});
+
+describe('shortLabel', () => {
+  it('keeps a short label and cuts a long one with an ellipsis', () => {
+    expect(shortLabel('Read code')).toBe('Read code');
+    const cut = shortLabel('Modify a deployment workflow file under the workflows folder');
+    expect(cut).toBe('Modify a deployment workflow file under the…');
+    expect(cut.length).toBeLessThanOrEqual(44);
   });
 });
 

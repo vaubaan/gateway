@@ -46,8 +46,9 @@ export interface TestInstanceOptions {
   readonly env?: Record<string, string | undefined>;
 }
 
-export async function buildTestRoot(options: TestInstanceOptions = {}): Promise<GatewayRoot> {
-  return buildRoot({
+/** The `RootDeps` of a test instance: fake configuration, `:memory:` store, real plugins. */
+export function testRootDeps(options: TestInstanceOptions = {}): RootDeps {
+  return {
     loadConfig: () =>
       loadInstanceConfig({
         env: validEnv({ VAUBAAN_PUBLIC_URL: options.publicUrl ?? PUBLIC_URL, ...options.env }),
@@ -56,7 +57,11 @@ export async function buildTestRoot(options: TestInstanceOptions = {}): Promise<
     logWrite: () => undefined,
     ...memoryStoreDeps,
     ...options.deps,
-  });
+  };
+}
+
+export async function buildTestRoot(options: TestInstanceOptions = {}): Promise<GatewayRoot> {
+  return buildRoot(testRootDeps(options));
 }
 
 export interface SeededInstance {
