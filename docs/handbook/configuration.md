@@ -8,6 +8,7 @@ tracks:
   - apps/gateway/src/server/logging/
   - apps/gateway/src/server/compose/
   - apps/gateway/src/server/http/
+  - apps/gateway/tests/integration/compose/
   - apps/gateway/src/instrumentation.ts
   - apps/gateway/src/app/healthz/route.ts
   - apps/gateway/src/lib/crypto/index.ts
@@ -48,10 +49,13 @@ apps/gateway/src/
       logger.ts                 JSON-lines logger with level threshold and child bindings
       redact.ts                 token-prefix and secret redaction
     compose/
-      ports.ts                  Store, PluginRegistry, RateLimiter, CacheClient, SessionStore
+      ports.ts                  Store (liveness port), RateLimiter, CacheClient, SessionStore
       memory.ts                 in-memory implementations  // single-process only
+      registry.ts               buildEmptyRegistry(), RegistryCatalogIndex, checkProviderApps()
+      store.ts                  openEmbeddedStore(): the SQLite store from store.path
       root.ts                   buildRoot(), getRoot() (globalThis), resetRoot()
       boot.ts                   bootOrExit(): exit 78 on ConfigError, 1 otherwise
+      testing.ts                memoryStoreDeps, fakePlugin() — tests only
     http/
       healthz.ts                healthResponse(root), healthHandler(getRoot)
   lib/crypto/index.ts           LEGACY v4 shim over the new encryptor (deleted in Phase 1)
@@ -77,9 +81,21 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      configured", admin rule kind, provider ids, telemetry flag,
      key version — never a secret);
    - `createEncryptor(config.encryption)` (awaits libsodium);
-   - store and registry from `RootDeps.openStore` / `buildRegistry`, or the
-     placeholders `NullStore` / `EmptyPluginRegistry`;
-   - a warning per `providers.<id>` whose id the registry does not know;
+   - the plugin registry (`@vaubaan/plugin-sdk`'s `PluginRegistry`) from
+     `RootDeps.buildRegistry`, by default **empty** until the plugins
+     migrate (P1.2);
+   - `checkProviderApps`: every `providers.<id>` must name a registered
+     plugin. While the registry is empty the mismatch is a warning; once
+     plugins are registered it is a `ConfigError` naming
+     `providers.<id>` and `VAUBAAN_PROVIDER_<ID>_*` (exit 78);
+   - the embedded store from `RootDeps.openStore`, by default
+     `openEmbeddedStore`: `openStore()` of [[store]] on `config.store.path`
+     with the encryptor just built and a `RegistryCatalogIndex` (the store
+     checks every persisted `RiskId` against the loaded catalogs,
+     env-qualified ids included). Migrations run here; the boot line
+     `store opened` carries `kind`, `path` and `schema_version`. A store
+     that cannot open fails the boot with a message naming `store.path` and
+     `VAUBAAN_STORE_PATH` (exit 1);
    - in-memory rate limiter, cache and session store unless injected.
 5. On `ConfigError`, `bootOrExit()` prints the error to stderr with a
    pointer to `deploy/config/` and exits with code **78** (`EX_CONFIG`);
@@ -175,7 +191,8 @@ Invalid instance configuration (2 problems):
 
 The provider list is **not** known to the loader: any `providers.<id>` is
 accepted structurally and the root compares ids with the `PluginRegistry`
-(warning today, boot failure once the registry is wired in P1.2).
+(`checkProviderApps`): a warning while no plugin is registered, a
+configuration error (exit 78) as soon as the registry holds plugins.
 
 ## Crypto at rest
 
@@ -212,25 +229,38 @@ bindings. `silentLogger` is for tests.
 
 ## Ports and their single-process implementations
 
-| Port             | Today (`compose/memory.ts`)                  | Hosted replacement                    |
-| ---------------- | -------------------------------------------- | ------------------------------------- |
-| `Store`          | `NullStore` placeholder → SQLite (P0.3)      | Postgres behind the same repositories |
-| `PluginRegistry` | `EmptyPluginRegistry` → plugin-sdk (P0.2)    | same (static)                         |
-| `RateLimiter`    | `MemoryRateLimiter` fixed window per key     | Redis `INCR` + `PEXPIRE`              |
-| `CacheClient`    | `MemoryCache`, TTL, bounded (oldest evicted) | Redis                                 |
-| `SessionStore`   | `MemorySessionStore`                         | store-backed rows or Redis            |
+| Port             | Today                                                          | Hosted replacement                    |
+| ---------------- | -------------------------------------------------------------- | ------------------------------------- |
+| `Store`          | the embedded SQLite store of [[store]] (`openEmbeddedStore`)   | Postgres behind the same repositories |
+| `PluginRegistry` | `@vaubaan/plugin-sdk`'s registry, empty until P1.2             | same (static)                         |
+| `RateLimiter`    | `MemoryRateLimiter` fixed window per key (`compose/memory.ts`) | Redis `INCR` + `PEXPIRE`              |
+| `CacheClient`    | `MemoryCache`, TTL, bounded (oldest evicted)                   | Redis                                 |
+| `SessionStore`   | `MemorySessionStore`                                           | store-backed rows or Redis            |
 
-Features plug their factories through `RootDeps` (`openStore`,
-`buildRegistry`, `rateLimiter`, `cache`, `sessions`); tests inject fakes
-and call `resetRoot()` between cases.
+`GatewayRoot.store` is the full store with its repositories (the `Store`
+of `ports.ts` is only the liveness slice `/healthz` and `close()` need);
+`GatewayRoot.registry` is the SDK registry itself, so every provider list
+derives from one object. Features plug their factories through `RootDeps`
+(`openStore(ctx: { config, logger, encryptor, catalog })`,
+`buildRegistry(config, logger)`, `rateLimiter`, `cache`, `sessions`);
+tests use `memoryStoreDeps` (the `:memory:` store) and `fakePlugin()` from
+`compose/testing.ts`, and call `resetRoot()` between cases.
 
 ## Tests
 
 Co-located `*.test.ts` under `src/server/**` (config loader: named
 failures, https rule, precedence, admin rule, secret references, provider
 env parsing, key rotation; crypto: round trip, AD mismatch, tampering,
-`key_version`; logging: redaction; compose: `getRoot()` memoisation,
-`bootOrExit()` exit codes, in-memory ports; http: `/healthz` states) plus
+`key_version`; logging: redaction; compose: the store receives the
+encryptor and a registry-backed catalog index, provider-app check as a
+warning then as a `ConfigError`, `getRoot()` memoisation, `bootOrExit()`
+exit codes, in-memory ports; http: `/healthz` states), the integration
+test `apps/gateway/tests/integration/compose/boot.test.ts` (the production
+wiring against a temporary SQLite file: database created, migrations
+applied, ping, `/healthz` reports `sqlite`, secrets sealed with the
+configured master key and reopened without re-migrating, unknown risk ids
+refused by the empty registry, unreadable `store.path` named in the exit
+message) plus
 the structural test `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`
 (no literal URL, secret or project ref in the v5 perimeter except
 `telemetry-default.ts` and `deploy/config/*.example*`) and

@@ -9,17 +9,11 @@ export {
 export { bootOrExit, EXIT_BOOT_ERROR, EXIT_CONFIG_ERROR, type BootIo } from './boot';
 export type {
   CacheClient,
-  PluginRegistry,
-  PluginSummary,
   RateLimitDecision,
   RateLimiter,
   SessionStore,
-  Store,
+  Store as StorePort,
 } from './ports';
-export {
-  EmptyPluginRegistry,
-  MemoryCache,
-  MemoryRateLimiter,
-  MemorySessionStore,
-  NullStore,
-} from './memory';
+export { MemoryCache, MemoryRateLimiter, MemorySessionStore } from './memory';
+export { buildEmptyRegistry, checkProviderApps, RegistryCatalogIndex } from './registry';
+export { openEmbeddedStore, type StoreContext } from './store';

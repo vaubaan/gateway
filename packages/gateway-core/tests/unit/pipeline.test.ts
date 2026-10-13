@@ -3,12 +3,13 @@
  * every path, decision core wired through the risk stage.
  */
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding, RiskCatalog, Slice } from '@vaubaan/shared';
+import type { RiskCatalog, Slice } from '@vaubaan/shared';
 import { indexCatalog } from '@vaubaan/policy-engine';
 
 import {
   CallPipeline,
   MemoryAuditWriter,
+  acceptedRisksOf,
   checkConnectionAvailable,
   checkMissionActive,
   evaluateCallForToken,
@@ -69,17 +70,19 @@ const indexed = indexCatalog(catalog);
 const connection: MissionConnection = {
   id: 'con_1',
   provider: 'supabase',
-  name: 'Supabase (acme)',
+  display_name: 'Supabase (acme)',
   status: 'active',
   owner: { kind: 'user', id: 'usr_1', display: 'ana@example.test' },
 };
 
 const resource: MissionResource = {
+  id: 'res_1',
   connection_id: 'con_1',
   provider: 'supabase',
   ref: 'prj_x',
   env: 'staging',
-  display_name: 'API staging',
+  displayName: 'API staging',
+  discovered_at: '2026-10-01T00:00:00.000Z',
 };
 
 const ctx: MissionContext = {
@@ -89,17 +92,19 @@ const ctx: MissionContext = {
     status: 'active',
     creator_id: 'usr_1',
     expires_at: null,
-    period: null,
+    period: { kind: 'one-off' },
   },
   token: { id: 'tok_1', prefix: 'vbn_live_abcd1234' },
   connections: [connection],
   resources: [resource],
-  policy: {
-    'supabase.read-data': {
-      budget: { quota: 100, rate_limit: { max: 60, window_seconds: 60 } },
+  policy: [
+    {
+      risk_id: 'supabase.read-data',
+      quota: 100,
+      rate_limit: { max: 60, window_seconds: 60 },
       gate: 'auto',
     },
-  },
+  ],
   session: null,
 };
 
@@ -128,39 +133,25 @@ function sliceFor(action: 'R' | 'W'): Slice {
 }
 
 /** Risk stage over the real decision core; the classifier is a stub that
- *  emits a read or a write slice. TODO(P0 merge): the binding shim goes away
- *  when the engine takes `Resource` + `EnvResolver` (P0.2). */
+ *  emits a read or a write slice. The mission's resources on the target
+ *  connection go straight to the classifier and the env resolver. */
 function riskStage(action: 'R' | 'W' | 'deny' | 'no-catalog'): RiskStage {
   const classifier: Classifier = {
-    classifyV4: () =>
+    classify: () =>
       action === 'deny'
         ? { denied: 'bad args' }
         : { slices: [sliceFor(action === 'W' ? 'W' : 'R')] },
   };
   return {
-    evaluate: async (c, req, target) => {
-      const bindings: ProviderBinding[] = target.resource
-        ? [
-            {
-              id: target.resource.ref,
-              project_id: c.mission.id,
-              provider: 'supabase',
-              resource_ref: target.resource.ref,
-              display_name: target.resource.display_name,
-              environment: target.resource.env,
-              created_at: NOW.toISOString(),
-            },
-          ]
-        : [];
-      return evaluateCallForToken({
+    evaluate: async (c, req, target) =>
+      evaluateCallForToken({
         tool: req.tool,
         args: req.args,
-        bindings,
-        token: { id: c.token.id, accepted_risks: Object.keys(c.policy), denied_risks: [] },
+        resources: c.resources.filter((r) => r.connection_id === target.connection.id),
+        token: { id: c.token.id, accepted_risks: acceptedRisksOf(c), denied_risks: [] },
         adapter: classifier,
         catalog: action === 'no-catalog' ? undefined : indexed,
-      });
-    },
+      }),
   };
 }
 
@@ -308,7 +299,7 @@ describe('CallPipeline', () => {
     let risksEvaluated = false;
     const refusal = refuse.resourceNotInMission({
       cited_ref: 'prj_other',
-      connection: { id: 'con_1', name: connection.name },
+      connection: { id: 'con_1', name: connection.display_name },
       allowed_resources: [{ ref: 'prj_x', env: 'staging', display_name: 'API staging' }],
     });
     const { p, audit } = pipeline({
@@ -359,6 +350,7 @@ describe('CallPipeline', () => {
       throw new Error('wrong code');
     expect(out.refusal.missing_risks).toEqual(['supabase.bulk-row-write']);
     expect(out.refusal.executed_slices).toHaveLength(1);
+    expect(out.refusal.hint).toContain('supabase.bulk-row-write');
     expect(budgetCalled).toBe(false);
     expect(audit.calls[0]).toMatchObject({ refusal_code: 'risk-not-accepted', risks_touched: [] });
     expect(audit.calls[0]!.slices_executed).toHaveLength(1);

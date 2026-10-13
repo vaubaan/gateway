@@ -6,15 +6,7 @@
  * (acceptable per ADR D1 for rate-limit windows and caches). The comment on
  * each class names the interface a hosted deployment implements instead.
  */
-import type {
-  CacheClient,
-  PluginRegistry,
-  PluginSummary,
-  RateLimitDecision,
-  RateLimiter,
-  SessionStore,
-  Store,
-} from './ports';
+import type { CacheClient, RateLimitDecision, RateLimiter, SessionStore } from './ports';
 
 export type Clock = () => number;
 const wallClock: Clock = () => Date.now();
@@ -90,26 +82,5 @@ export class MemorySessionStore<T = unknown> implements SessionStore<T> {
   }
   async delete(id: string): Promise<void> {
     await this.cache.delete(id);
-  }
-}
-
-// single-process only — placeholder until the SQLite `Store` (P0.3) is wired by the root.
-export class NullStore implements Store {
-  readonly kind = 'none';
-  async ping(): Promise<void> {
-    return undefined;
-  }
-  async close(): Promise<void> {
-    return undefined;
-  }
-}
-
-// Placeholder until `@vaubaan/plugin-sdk`'s registry (P0.2) is wired by the root.
-export class EmptyPluginRegistry implements PluginRegistry {
-  list(): readonly PluginSummary[] {
-    return [];
-  }
-  has(_id: string): boolean {
-    return false;
   }
 }

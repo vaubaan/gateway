@@ -16,6 +16,7 @@
     "@vaubaan/gateway-core": "*",
     "@vaubaan/plugin-cloudflare-dns": "*",
     "@vaubaan/plugin-github": "*",
+    "@vaubaan/plugin-sdk": "*",
     "@vaubaan/plugin-gmail": "*",
     "@vaubaan/plugin-railway": "*",
     "@vaubaan/plugin-ssh": "*",

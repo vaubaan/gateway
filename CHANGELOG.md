@@ -93,6 +93,28 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - `@vaubaan/policy-engine` resolves environments through an `EnvResolver`
   over v5 resources; v4 scope injection is quarantined behind a flag that
   defaults to off.
+- **P0 reconciliation (P0.R).** `@vaubaan/shared` is the single source of
+  truth for the domain types: `@vaubaan/gateway-core` re-exports
+  `RefusalCode`, the connection and mission statuses, `Gate`, `Budget`,
+  `RateLimit`, `Period`, `Principal`, `MissionPolicyEntry` and
+  `acceptedRisksOf` instead of defining twins, and builds `MissionContext`
+  from projections of the shared `Mission`, `Connection`,
+  `ConnectionResource` and `Session`. The three kinds of bearer of spec §6
+  are `BearerKind` (the plugin SDK's `CredentialKind` keeps its meaning:
+  how a connection authenticates). `AuditDecision` says `allowed` |
+  `refused` as the spec does. `RiskDecision` (denied) carries
+  `code: RefusalCode`; the decision core takes `Resource[]` and an
+  `EnvResolver` (default `resourceEnvResolver`) and a `Classifier` that is
+  the `classify` half of `ProviderPlugin`; the v4 `ProviderBinding` inputs
+  and `V4*` aliases are gone from gateway-core.
+- **The composition root boots on the real store and registry.** The root
+  opens the embedded SQLite store at `store.path` with the encryptor it
+  built and a `RegistryCatalogIndex` over the plugin registry (empty until
+  P1.2), runs the migrations at boot, and fails fast naming `store.path`
+  when the database cannot be opened. A `providers.<id>` block that names
+  no registered plugin is a warning while the registry is empty and a
+  configuration error (exit 78) once plugins are registered. `NullStore`
+  and `EmptyPluginRegistry` are gone; tests use the `:memory:` store.
 
 ### Removed
 

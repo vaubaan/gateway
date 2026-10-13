@@ -171,6 +171,14 @@ export interface MissionPolicyEntry extends Budget {
   readonly gate: Gate;
 }
 
+/**
+ * The mission policy : an explicit enumeration of entries, one per accepted
+ * risk, `risk_id` unique within the list (the store enforces it at write
+ * time). The accepted risks are its `risk_id`s — see `acceptedRisksOf`. No
+ * wildcard, no sentinel, no preset reference is ever an entry.
+ */
+export type MissionPolicy = readonly MissionPolicyEntry[];
+
 /** A one-off mission has a single period ; a recurring one reloads its quotas. */
 export type Period =
   | { readonly kind: 'one-off' }
@@ -198,7 +206,7 @@ export interface Mission {
   readonly status: MissionStatus;
   readonly resources: readonly MissionResourceSelection[];
   /** Explicit enumeration ; never a preset reference. */
-  readonly policy: readonly MissionPolicyEntry[];
+  readonly policy: MissionPolicy;
   readonly period: Period;
   readonly expires_at: Iso8601 | null;
   /** Set when the mission was issued through a delegated token. */
@@ -308,4 +316,11 @@ export interface Approval {
 // Audit
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type AuditDecision = 'allowed' | 'denied';
+/**
+ * What the gateway decided for a call (spec §8 : "one entry per call,
+ * allowed or refused"). An allowed call whose provider then failed stays
+ * `allowed` with `upstream_error` set ; a structural rejection without a
+ * code is `refused` with a null `refusal_code`. The v4 rows said `denied`
+ * (`AuditLogRow` in `legacy-v4.ts`).
+ */
+export type AuditDecision = 'allowed' | 'refused';

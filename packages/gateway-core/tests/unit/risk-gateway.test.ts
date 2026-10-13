@@ -1,20 +1,21 @@
 /**
- * Unit tests for the v4 risk-based gateway path.
+ * Unit tests for the decision core.
  *
- * Mocks the V4ClassifierAdapter so we can drive specific slice outputs
- * without spinning up a real provider plugin. The catalog is built in
- * memory from a minimal `RiskCatalog`.
+ * Stubs the `Classifier` (the `classify` half of the plugin contract) so we
+ * can drive specific slice outputs without a real provider plugin. The
+ * catalog is built in memory from a minimal `RiskCatalog`; environments are
+ * resolved from the mission's resources.
  */
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding, RiskCatalog, Slice } from '@vaubaan/shared';
-import { indexCatalog } from '@vaubaan/policy-engine';
+import type { Resource, RiskCatalog, Slice } from '@vaubaan/shared';
+import { indexCatalog, noEnvResolver } from '@vaubaan/policy-engine';
 
 import {
   denyResponseBody,
   evaluateCallForToken,
+  type AcceptedRisksSnapshot,
   type CallVerdict,
-  type V4ClassifierAdapter,
-  type V4TokenSnapshot,
+  type Classifier,
 } from '../../src/risk-gateway.ts';
 
 const catalog: RiskCatalog = {
@@ -81,20 +82,11 @@ const catalog: RiskCatalog = {
 
 const indexed = indexCatalog(catalog);
 
-const bindings: ProviderBinding[] = [
-  {
-    id: 'b1',
-    project_id: 'p1',
-    provider: 'supabase',
-    resource_ref: 'prj_x',
-    display_name: null,
-    created_at: '2026-01-01',
-  },
-];
+const resources: Resource[] = [{ provider: 'supabase', ref: 'prj_x', displayName: 'prj_x' }];
 
-function makeAdapter(outcome: 'read' | 'bulk' | 'deny'): V4ClassifierAdapter {
+function makeAdapter(outcome: 'read' | 'bulk' | 'deny'): Classifier {
   return {
-    classifyV4: () => {
+    classify: () => {
       if (outcome === 'deny') return { denied: 'bad args' };
       const action = outcome === 'read' ? 'R' : 'W';
       const cardinality = outcome === 'bulk' ? 'bulk' : 'one';
@@ -118,7 +110,7 @@ function makeAdapter(outcome: 'read' | 'bulk' | 'deny'): V4ClassifierAdapter {
 }
 
 describe('evaluateCallForToken', () => {
-  const token: V4TokenSnapshot = {
+  const token: AcceptedRisksSnapshot = {
     id: 'tok1',
     accepted_risks: ['supabase.read-data', 'supabase.row-write-one'],
     denied_risks: [],
@@ -128,7 +120,7 @@ describe('evaluateCallForToken', () => {
     const verdict = evaluateCallForToken({
       tool: 'supabase__execute_sql',
       args: { query: 'select 1' },
-      bindings,
+      resources,
       token,
       adapter: makeAdapter('read'),
       catalog: indexed,
@@ -147,16 +139,81 @@ describe('evaluateCallForToken', () => {
     const verdict = evaluateCallForToken({
       tool: 'supabase__bulk_update',
       args: {},
-      bindings,
+      resources,
       token,
       adapter: makeAdapter('bulk'),
       catalog: indexed,
     });
     expect(verdict.kind).toBe('deny');
     if (verdict.kind === 'deny') {
+      expect(verdict.code).toBe('risk-not-accepted');
       expect(verdict.missing_risks).toContain('supabase.bulk-row-write');
       expect(verdict.missing_risks).toContain('supabase.uncategorized-write');
       expect(verdict.hint).toBeTruthy();
+    }
+  });
+
+  test('the classifier receives the tool, the args and the resources', () => {
+    const seen: unknown[] = [];
+    const adapter: Classifier = {
+      classify: (tool, args, res) => {
+        seen.push(tool, args, res);
+        return { denied: 'stop' };
+      },
+    };
+    evaluateCallForToken({
+      tool: 'supabase__execute_sql',
+      args: { query: 'select 1' },
+      resources,
+      token,
+      adapter,
+      catalog: indexed,
+    });
+    expect(seen).toEqual(['supabase__execute_sql', { query: 'select 1' }, resources]);
+  });
+
+  test('environment qualification comes from the resources by default', () => {
+    const envCatalog = indexCatalog({
+      provider: 'supabase',
+      risks: [{ ...catalog.risks[2]!, acceptable_in_envs: ['staging', 'prod'] }],
+    });
+    const staging: Resource = {
+      provider: 'supabase',
+      ref: 'prj_x',
+      env: 'staging',
+      displayName: 'staging',
+    };
+    const qualifiedToken: AcceptedRisksSnapshot = {
+      id: 'tok3',
+      accepted_risks: ['supabase[staging].bulk-row-write'],
+      denied_risks: [],
+    };
+    const verdict = evaluateCallForToken({
+      tool: 'supabase__bulk_update',
+      args: {},
+      resources: [staging],
+      token: qualifiedToken,
+      adapter: makeAdapter('bulk'),
+      catalog: envCatalog,
+    });
+    expect(verdict.kind).toBe('allow');
+    if (verdict.kind === 'allow') {
+      expect(verdict.risks_touched).toEqual(['supabase[staging].bulk-row-write']);
+    }
+
+    // An explicit resolver replaces the default one.
+    const unqualified = evaluateCallForToken({
+      tool: 'supabase__bulk_update',
+      args: {},
+      resources: [staging],
+      token: qualifiedToken,
+      adapter: makeAdapter('bulk'),
+      catalog: envCatalog,
+      envResolver: noEnvResolver,
+    });
+    expect(unqualified.kind).toBe('deny');
+    if (unqualified.kind === 'deny') {
+      expect(unqualified.missing_risks).toEqual(['supabase.bulk-row-write']);
     }
   });
 
@@ -164,7 +221,7 @@ describe('evaluateCallForToken', () => {
     const verdict = evaluateCallForToken({
       tool: 'whatever',
       args: {},
-      bindings,
+      resources,
       token,
       adapter: makeAdapter('deny'),
       catalog: indexed,
@@ -179,7 +236,7 @@ describe('evaluateCallForToken', () => {
     const verdict = evaluateCallForToken({
       tool: 't',
       args: {},
-      bindings,
+      resources,
       token,
       adapter: makeAdapter('read'),
       catalog: undefined,
@@ -191,7 +248,7 @@ describe('evaluateCallForToken', () => {
     const verdict = evaluateCallForToken({
       tool: 'supabase__select',
       args: {},
-      bindings,
+      resources,
       token: {
         id: 'tok2',
         accepted_risks: ['supabase.read-data'],
@@ -208,6 +265,7 @@ describe('denyResponseBody', () => {
   test('shapes the spec-mandated 403 body', () => {
     const verdict: Extract<CallVerdict, { kind: 'deny' }> = {
       kind: 'deny',
+      code: 'risk-not-accepted',
       missing_risks: ['supabase.bulk-row-write'],
       executed_slices: [
         {

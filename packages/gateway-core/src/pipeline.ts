@@ -30,26 +30,25 @@
  * `refusalToRpcError` / `rpcSuccess`.
  */
 
-import type { RiskId } from '@vaubaan/shared';
+import { acceptedRisksOf, type RiskId } from '@vaubaan/shared';
 import { hashArguments, type AuditWriter, type CallAuditEntry } from './audit.ts';
 import { AuthError, refuse, type Refusal } from './errors.ts';
 import type { CallVerdict } from './risk-gateway.ts';
-import {
-  acceptedRisksOf,
-  type CredentialKind,
-  type DelegationContext,
-  type Door,
-  type MissionConnection,
-  type MissionContext,
-  type MissionResource,
+import type {
+  BearerKind,
+  DelegationContext,
+  Door,
+  MissionConnection,
+  MissionContext,
+  MissionResource,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Doors and credentials
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Which credential each door accepts. A human session opens no door. */
-export const EXPECTED_CREDENTIAL_BY_DOOR: Readonly<Record<Door, CredentialKind>> = {
+/** Which bearer each door accepts. A human session opens no door. */
+export const EXPECTED_CREDENTIAL_BY_DOOR: Readonly<Record<Door, BearerKind>> = {
   execution: 'mission-token',
   management: 'delegated-token',
 };
@@ -69,8 +68,8 @@ export interface CredentialResolver {
   resolve(bearer: string): Promise<ResolvedCredential | null>;
 }
 
-/** Pure door check: the credential kind must be the one the door expects. */
-export function checkDoor(presented: CredentialKind, door: Door): Refusal | null {
+/** Pure door check: the bearer kind must be the one the door expects. */
+export function checkDoor(presented: BearerKind, door: Door): Refusal | null {
   const expected = EXPECTED_CREDENTIAL_BY_DOOR[door];
   if (presented === expected) return null;
   return refuse.wrongCredentialKind({ door, presented, expected });
@@ -159,7 +158,7 @@ export function checkMissionActive(ctx: MissionContext, now: Date): Refusal | nu
 export function checkConnectionAvailable(connection: MissionConnection): Refusal | null {
   if (connection.status === 'active') return null;
   return refuse.connectionUnavailable({
-    connection: { id: connection.id, name: connection.name },
+    connection: { id: connection.id, name: connection.display_name },
     status: connection.status,
     owner: { kind: connection.owner.kind, display: connection.owner.display },
   });
@@ -370,7 +369,7 @@ export class CallPipeline {
       arguments_hash: hashArguments(call.args),
       slices_executed: [],
       risks_touched: [],
-      accepted_risks_snapshot: acceptedRisksOf(ctx.policy),
+      accepted_risks_snapshot: acceptedRisksOf(ctx),
       decision: 'refused',
       refusal_code: null,
       refusal_reason: null,

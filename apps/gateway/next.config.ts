@@ -44,6 +44,7 @@ const nextConfig: NextConfig = {
     '@vaubaan/plugin-supabase',
     '@vaubaan/plugin-railway',
     '@vaubaan/gateway-core',
+    '@vaubaan/plugin-sdk',
     '@vaubaan/plugin-ssh',
   ],
   // The harness owns AGENTS.md / CLAUDE.md in this repository; keep `next dev`
@@ -67,6 +68,8 @@ const nextConfig: NextConfig = {
       '../../node_modules/better-sqlite3/build/Release/*.node',
       '../../node_modules/bindings/**',
       '../../node_modules/file-uri-to-path/**',
+      // The store applies these at boot (apps/gateway/src/server/store/migrate.ts).
+      './migrations/*.sql',
     ],
   },
   // Same build id on every replica of one image (hosted deployments need it).

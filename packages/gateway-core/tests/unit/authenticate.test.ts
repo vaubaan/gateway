@@ -24,12 +24,12 @@ const missionCtx: MissionContext = {
     status: 'active',
     creator_id: 'usr_1',
     expires_at: null,
-    period: null,
+    period: { kind: 'one-off' },
   },
   token: { id: 'tok_1', prefix: 'vbn_live_abcd1234' },
   connections: [],
   resources: [],
-  policy: {},
+  policy: [],
   session: null,
 };
 
@@ -53,7 +53,7 @@ const resolver: CredentialResolver = {
 };
 
 describe('checkDoor', () => {
-  test('each door expects exactly one credential kind', () => {
+  test('each door expects exactly one bearer kind', () => {
     expect(EXPECTED_CREDENTIAL_BY_DOOR).toEqual({
       execution: 'mission-token',
       management: 'delegated-token',

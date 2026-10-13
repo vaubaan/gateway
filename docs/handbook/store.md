@@ -42,19 +42,31 @@ apps/gateway/src/server/store/
 
 ## Opening the store
 
+The composition root does it at boot (`apps/gateway/src/server/compose/store.ts`,
+handbook [[configuration]]):
+
 ```ts
-import { openStore, SetCatalogIndex } from '@/server/store/index.ts';
+import { openStore } from '@/server/store/index.ts';
 
 const store = openStore({
   path: config.store.path, // InstanceConfig.store.path, or MEMORY_PATH
   encryptor, // the crypto module's Encryptor built by the composition root
-  catalog: new SetCatalogIndex(registry.allRiskIds()), // one source of truth: the plugin registry
+  catalog: new RegistryCatalogIndex(registry), // one source of truth: the plugin registry
 });
 // store.users, store.groups, store.connections, store.shares, store.missions,
 // store.sessions, store.requests, store.approvals, store.delegations, store.audit,
 // store.config, store.auditWriter, store.schemaVersion, store.backupTo(),
 // store.kind ('sqlite' | 'memory'), store.ping(), store.close()  <- compose/ports.ts Store port
 ```
+
+`RegistryCatalogIndex` (`compose/registry.ts`) answers `has(riskId)` from
+the registry's catalogs: a base id exists when its provider is registered
+and the catalog has the entry; an env-qualified id (`acme[prod].thing-write`)
+exists when the entry is env-scoped and lists that environment in
+`acceptable_in_envs`. With the empty registry of today every write of a
+risk id is refused (`UnknownRiskIdError`), which is correct: no plugin, no
+mission. `SetCatalogIndex` remains for tests. `root.store` is this object;
+`GET /healthz` pings it and reports `kind`.
 
 `openStore()`:
 
@@ -194,3 +206,6 @@ capture both files atomically are also fine.
   schema-level wildcard `CHECK`, the N=50 concurrent `decideAndDecrement` on quota 1
   (exactly one allow), in-transaction approval consumption and request drop, the
   counters-vs-audit structural check, argument erasure on decision and expiry.
+- `tests/integration/compose/boot.test.ts` (handbook [[configuration]]) — the
+  composition root opening this store on a temporary file with the real encryptor
+  and the registry-backed catalog index.

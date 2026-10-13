@@ -21,6 +21,7 @@
  */
 
 import type { Budget, Gate } from './domain.ts';
+import type { RefusalCode } from './refusal.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Slice — the path-based selector
@@ -285,6 +286,10 @@ export type RiskDecision =
   | { readonly outcome: 'allowed'; readonly risks_touched: readonly RiskId[] }
   | {
       readonly outcome: 'denied';
+      /** The structured refusal code the gateway returns for this denial.
+       *  The risk step only ever emits `risk-not-accepted` ; the field
+       *  exists so the audit entry and the refusal body never guess. */
+      readonly code: RefusalCode;
       /** Risks the call touched but the mission did not accept. */
       readonly missing_risks: readonly RiskId[];
       /** Risks the call touched and the mission *did* accept (informational). */

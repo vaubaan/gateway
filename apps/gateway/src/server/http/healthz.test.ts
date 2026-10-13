@@ -3,12 +3,15 @@ import { describe, expect, it } from 'vitest';
 import { loadInstanceConfig } from '../config';
 import { validEnv } from '../config/testing';
 import { buildRoot } from '../compose/root';
+import { memoryStoreDeps } from '../compose/testing';
+import { openMemoryStore } from '../store';
 import { healthHandler, healthResponse } from './healthz';
 
 const deps = {
   loadConfig: () => loadInstanceConfig({ env: validEnv() }),
   logWrite: () => undefined,
   build: { version: '2.0.0-test', commit: 'abc1234' },
+  ...memoryStoreDeps,
 };
 
 describe('/healthz', () => {
@@ -22,27 +25,28 @@ describe('/healthz', () => {
       status: 'ok',
       version: '2.0.0-test',
       commit: 'abc1234',
-      store: { kind: 'none', status: 'ok' },
+      store: { kind: 'memory', status: 'ok' },
     });
     expect(typeof body.uptime_seconds).toBe('number');
     expect(JSON.stringify(body)).not.toContain('example.com');
+    await root.close();
   });
 
   it('answers 503 degraded when the store does not ping', async () => {
     const root = await buildRoot({
       ...deps,
-      openStore: async () => ({
-        kind: 'sqlite',
+      openStore: async ({ encryptor, catalog }) => ({
+        ...openMemoryStore({ encryptor, catalog }),
         ping: async () => Promise.reject(new Error('locked')),
-        close: async () => undefined,
       }),
     });
     const res = await healthResponse(root);
     expect(res.status).toBe(503);
     expect(await res.json()).toMatchObject({
       status: 'degraded',
-      store: { kind: 'sqlite', status: 'error' },
+      store: { kind: 'memory', status: 'error' },
     });
+    await root.close();
   });
 
   it('answers 503 unavailable when the root cannot be built', async () => {
