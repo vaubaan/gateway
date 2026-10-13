@@ -13,6 +13,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
+import { CloseOrphanedMission } from '@/components/connections/CloseOrphanedMission';
 import { RevokeConnection } from '@/components/connections/RevokeConnection';
 import { providerGrantForecast, providerGrantReport } from '@/server/connections/provider-grant';
 import { RiskIdLink } from '@/components/risk/RiskExplain';
@@ -54,11 +55,20 @@ import {
   NEW_CONNECTION_PATH,
   type ConnectionDetail,
 } from '@/server/connections';
+import type { OrphanCause } from '@/server/authority';
 import { providerPath } from '@/server/providers/links';
 import { sharePath, type ShareView } from '@/server/shares';
 import type { ConnectionResourceRecord } from '@/server/store';
 
 export const dynamic = 'force-dynamic';
+
+/** Why a mission is orphaned, in the few words of a table cell. */
+const ORPHAN_CAUSE_LABEL: Readonly<Record<OrphanCause, string>> = {
+  'creator-removed': 'its creator was deactivated',
+  'connection-missing': 'a connection it carries no longer exists',
+  'connection-revoked': 'a connection it carries was revoked',
+  'authority-lost': 'its creator no longer holds the risks it accepted',
+};
 
 const ENV_LABEL_HTML_PATTERN = '[a-z][a-z0-9\\-]*';
 const MAX_NAME_LENGTH = 80;
@@ -102,6 +112,8 @@ export default async function ConnectionPage({
   // Share, reconnect: the rule is the services' (`ownerActRefusal`, spec §2.3), read from the
   // context this page already loads. `revoked` and `unowned` below only choose what is displayed.
   const ownerActs = unshareable === null;
+  // Spec §2.3: an owner of the connection may close a mission that is orphaned on it.
+  const orphaned = await root.missions.service.orphanedOn(actor.user, connection.id);
 
   return (
     <Stack gap="var(--space-6)">
@@ -234,6 +246,47 @@ export default async function ConnectionPage({
           </div>
         )}
       </Card>
+
+      {orphaned.length > 0 && (
+        <Card data-testid="orphaned-missions">
+          <CardHeader>
+            <CardTitle>Orphaned missions</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <p className={styles.muted}>
+              {revoked
+                ? 'These missions carried this connection. It is revoked, so they refuse every call and nothing brings them back.'
+                : 'These missions carry this connection and refuse every call: the authority they were issued under was withdrawn. A share made again to their creator brings them back, with the token their agent still holds.'}{' '}
+              Their creator can close them, and so can you, as an owner of the connection. Closing
+              is final.
+            </p>
+          </CardBody>
+          <div className={styles.tableWrap}>
+            <Table>
+              <Thead>
+                <Tr>
+                  <Th>Mission</Th>
+                  <Th>Issued by</Th>
+                  <Th>Why</Th>
+                  <Th />
+                </Tr>
+              </Thead>
+              <Tbody>
+                {orphaned.map((mission) => (
+                  <Tr key={mission.id}>
+                    <Td>{mission.name}</Td>
+                    <Td>{mission.creator_label}</Td>
+                    <Td>{ORPHAN_CAUSE_LABEL[mission.cause]}</Td>
+                    <Td>
+                      <CloseOrphanedMission missionId={mission.id} name={mission.name} />
+                    </Td>
+                  </Tr>
+                ))}
+              </Tbody>
+            </Table>
+          </div>
+        </Card>
+      )}
 
       {transferTargets.length > 0 && (
         <Card>

@@ -162,6 +162,20 @@ export type RevokeResult =
   | { readonly ok: true; readonly mission: MissionRecord; readonly tokensRevoked: number }
   | { readonly ok: false; readonly reason: 'not-found' };
 
+/** An orphaned mission as an owner of one of its connections reads it. */
+export interface OrphanedOnConnection {
+  readonly id: string;
+  readonly name: string;
+  /** Who issued it: the only other person who can close it. */
+  readonly creator_label: string;
+  readonly cause: OrphanCause;
+}
+
+/** Who may close a mission, and on what ground (spec §2.3). */
+type Closer =
+  | { readonly as: 'creator' }
+  | { readonly as: 'connection-owner'; readonly connectionId: string };
+
 export type SetGateResult =
   | {
       readonly ok: true;
@@ -652,17 +666,48 @@ export class MissionService {
   }
 
   /**
+   * The orphaned missions that carry a connection, for someone who owns that
+   * connection now (spec §2.3: "the creator, or an owner of the connection, may close
+   * it"). Anyone else reads none. Derived at this instant, like every reading of
+   * `orphaned`.
+   */
+  async orphanedOn(user: AuthoritySubject, connectionId: string): Promise<OrphanedOnConnection[]> {
+    const connection = await this.deps.store.connections.getById(connectionId);
+    if (!connection || !(await this.owns(user, connection))) return [];
+    const orphaned: OrphanedOnConnection[] = [];
+    for (const mission of await this.deps.store.missions.listForConnection(connectionId)) {
+      const { orphan } = await this.deps.grounds.inspect(mission);
+      if (!orphan) continue;
+      const creator = await this.deps.store.users.getById(mission.creatorUserId);
+      orphaned.push({
+        id: mission.id,
+        name: mission.name,
+        creator_label: creator?.email ?? 'unknown user',
+        cause: orphan.cause,
+      });
+    }
+    return orphaned;
+  }
+
+  /**
    * The mission refuses everything from now on; every token of every holder is revoked.
-   * Idempotent. An orphaned mission is revoked like any other: this is how its
-   * creator closes it for good (the stored status goes `active` → `revoked`).
+   * Idempotent. An orphaned mission is revoked like any other: this is how it is
+   * closed for good (the stored status goes `active` → `revoked`).
+   *
+   * Who may (spec §2.3): the creator, always; and, **only while the mission is
+   * orphaned**, an owner of one of its connections — the authority that grounded it is
+   * gone, and it would serve again, with the token its agent holds, the day a share is
+   * made again. A mission that serves is its creator's alone. A delegated client acts
+   * for the creator only.
    */
   async revoke(
     user: AuthoritySubject,
     missionId: string,
     options: IssueOptions = {},
   ): Promise<RevokeResult> {
-    const mission = await this.ownMission(user, missionId);
-    if (!mission) return { ok: false, reason: 'not-found' };
+    const closing = await this.closableBy(user, missionId, options);
+    if (!closing) return { ok: false, reason: 'not-found' };
+    const { mission, closer } = closing;
     if (mission.status === 'revoked') return { ok: true, mission, tokensRevoked: 0 };
 
     const revoked = await this.deps.store.missions.setStatus(mission.id, 'revoked');
@@ -674,7 +719,14 @@ export class MissionService {
       act: 'mission-revoked',
       object: { type: 'mission', id: mission.id },
       before: { status: mission.status },
-      after: { status: revoked.status, tokens_revoked: tokensRevoked },
+      after: {
+        status: revoked.status,
+        tokens_revoked: tokensRevoked,
+        // Named only when it is not the creator: the entry says on what ground they acted.
+        ...(closer.as === 'connection-owner'
+          ? { closed_as: closer.as, connection_id: closer.connectionId }
+          : {}),
+      },
       delegated_client_id: options.delegation?.clientId ?? null,
     });
     await this.recordEvent(mission.id, user.id, {
@@ -683,9 +735,42 @@ export class MissionService {
     });
     this.deps.logger.info('mission revoked', {
       mission_id: mission.id,
+      closed_as: closer.as,
       delegated_client_id: options.delegation?.clientId ?? null,
     });
     return { ok: true, mission: revoked, tokensRevoked };
+  }
+
+  /**
+   * The mission as derived now, when `user` may close it, and on what ground.
+   * `null` — "not found" — for everyone else, so that an owner learns nothing about
+   * the missions of their connection that serve.
+   */
+  private async closableBy(
+    user: AuthoritySubject,
+    missionId: string,
+    options: IssueOptions,
+  ): Promise<{ mission: MissionRecord; closer: Closer } | null> {
+    const stored = await this.deps.store.missions.getById(missionId);
+    if (!stored) return null;
+    const { mission } = await this.deps.grounds.inspect(stored);
+    if (stored.creatorUserId === user.id) return { mission, closer: { as: 'creator' } };
+    // A delegation acts for the creator of the missions it issued, never as an owner.
+    if (options.delegation) return null;
+    // Orphaned now; or already closed, which is answered the same to who could close it.
+    if (mission.status !== 'orphaned' && mission.status !== 'revoked') return null;
+    for (const { connectionId } of stored.connections) {
+      const connection = await this.deps.store.connections.getById(connectionId);
+      if (connection && (await this.owns(user, connection))) {
+        return { mission, closer: { as: 'connection-owner', connectionId } };
+      }
+    }
+    return null;
+  }
+
+  /** The one definition of "owns the connection now": the authority's (`basis: 'owner'`). */
+  private async owns(user: AuthoritySubject, connection: ConnectionRecord): Promise<boolean> {
+    return (await this.deps.authority.authorityOf(user, connection)).basis === 'owner';
   }
 
   /**

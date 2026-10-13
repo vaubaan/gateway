@@ -1,5 +1,6 @@
 /**
- * `POST /api/missions/<id>/revoke` — creator only, origin-checked.
+ * `POST /api/missions/<id>/revoke` — the creator; or, while the mission is orphaned,
+ * an owner of one of its connections (spec §2.3). Origin-checked.
  */
 import { getRoot } from '@/server/compose';
 

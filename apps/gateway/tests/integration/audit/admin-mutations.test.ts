@@ -599,6 +599,7 @@ const RULES: Readonly<Record<string, Rule>> = {
       rig.root.missions.service.rotate(rig.alice.user, mission.id),
     writes: { act: 'mission-rotated', object: 'mission', actor: 'alice' },
   },
+  'MissionService.orphanedOn': READ,
   'MissionService.revoke': {
     kind: 'mutation',
     target: missions,

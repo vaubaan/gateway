@@ -6,7 +6,9 @@
  *   POST /api/missions/preview        what a draft would yield (writes nothing)
  *   POST /api/missions                issue; the token secret is in this response only
  *   POST /api/missions/:id/rotate     new token, same mission
- *   POST /api/missions/:id/revoke     the mission refuses everything from now on
+ *   POST /api/missions/:id/revoke     the mission refuses everything from now on (the
+ *                                     creator; or, while it is orphaned, an owner of one
+ *                                     of its connections)
  *   POST /api/missions/:id/gate       `{ risk_id, gate }`: the gate of one accepted risk
  *
  * Every one is a mutation or reveals a secret: valid user session, origin

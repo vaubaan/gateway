@@ -498,6 +498,31 @@ entry: the two acts of a mission need not come in pairs.
 `ConnectionsRepo.markOwnerlessUnowned()` (the one stored state here) and
 returns `{ unowned, orphaned, restored }`.
 
+### Closing an orphaned mission
+
+Spec §2.3: "an orphaned mission may be closed by its creator, or by an owner of
+one of the connections it carries". Closing is the mission's revocation
+(`MissionService.revoke`, handbook [missions](missions.md)): the stored status
+goes `active` → `revoked`, every token is revoked, and no share brings the
+mission back.
+
+- **Who.** The creator, always. Anyone else is asked two things by
+  `closableBy`: is the mission `orphaned` at this instant (`grounds.inspect`),
+  and do they own one of its connections now (`authorityOf(…).basis ===
+'owner'`: the owner, or a current member of the owner group; a revoked
+  connection still has its owner, an `unowned` one has none). Otherwise the
+  answer is "not found" — an owner is not told which missions that serve carry
+  their connection. A delegated client acts for the creator only.
+- **Where.** `/connections/<id>` shows the card "Orphaned missions" when
+  `MissionService.orphanedOn(user, connectionId)` lists any: name, who issued
+  it, why (`OrphanCause`), and "Close", which asks for the mission's name
+  (`CloseOrphanedMission`, client) and posts to `/api/missions/<id>/revoke`.
+  On a revoked connection the card lists every mission the revocation left
+  orphaned.
+- **Trail.** `mission-revoked` under the owner's name, `before.status:
+'orphaned'`, and `after.closed_as: 'connection-owner'` with the
+  `connection_id` they own. The creator's entry carries neither field.
+
 ### The door
 
 `ExecutionDoor.credentialResolver` (`execution/door.ts`) calls
@@ -551,7 +576,7 @@ group overage) never reaches the sync: the sign-in is refused with
 
 | Path                                                                            | What                                                                                                                                                                                                                                                                                     | Guard    |
 | ------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
-| `/connections/<id>`                                                             | "Shares" card (target, restriction on demand, Edit, Revoke), "Ownership" card (transfer)                                                                                                                                                                                                 | owner    |
+| `/connections/<id>`                                                             | "Shares" card (target, restriction on demand, Edit, Revoke), "Orphaned missions" card when there are some (name, issued by, why, Close), "Ownership" card (transfer)                                                                                                                     | owner    |
 | `/connections/<id>/share[?share=<id>][?confirm=<id>]`                           | the Share dialog (`share-form.tsx`, client): the checklist open under its summary, each risk a compact `RiskExplain` row ([missions](missions.md)), the helper text behind "More"; with `confirm`, the orphaned missions the pending share would bring back and the button that makes it | owner    |
 | `POST /connections/<id>/shares`                                                 | `shares.handlers.share` (makes the share, or sends back to the dialog to confirm what it would restore)                                                                                                                                                                                  | user     |
 | `POST /connections/<id>/shares/<shareId>/revoke`                                | `shares.handlers.revoke`                                                                                                                                                                                                                                                                 | user     |
@@ -598,6 +623,7 @@ A page that catches a service error matches it by shape (`isShareError(err,
 | `tests/integration/auth/deactivate-user.test.ts`          | a deactivated user holds nothing: mission `orphaned` with nothing written on it, own connection `unowned` and reassigned by the operator, `mission-restored` on reactivation; what a half-failed deactivation left open is closed before the user is active again, and a reactivation that cannot close it does not happen ([authentication](authentication.md)) |
 | `tests/integration/authority/handlers.test.ts`            | the form posts and their notices                                                                                                                                                                                                                                                                                                                                 |
 | `tests/integration/authority/share-restores.test.ts`      | the forecast (exact, read-only, union of shares, replacement of the target's share, group target), and the confirmation over HTTP: nothing stored on the first post, shared on the post that carries every mission, back again otherwise                                                                                                                         |
+| `tests/integration/authority/close-orphaned.test.ts`      | an owner of the connection closes an orphaned mission (entry, tokens, the door), never one that serves; strangers, former group members and delegated clients read "not found"; what the connection page lists; the route                                                                                                                                        |
 | `tests/integration/authority/rules-read-by-pages.test.ts` | what a page reads is what the act answers: `ownerActRefusal` and `ShareContext.unshareable`, `transferTargets`, `ConnectionService.reassignTargets()`, `gateEditBlockedBy` and `MissionDetail.gates_editable`, on every status                                                                                                                                   |
 | `tests/integration/store/ownership-and-orphans.test.ts`   | the repository transitions; migration `0007` (reset, triggers)                                                                                                                                                                                                                                                                                                   |
 | `tests/integration/store/audit-guarded-append.test.ts`    | `AuditRepo.appendUnlessLatest`: two writers, one entry; per object, within the guarded acts, not for an older equal entry                                                                                                                                                                                                                                        |
@@ -624,9 +650,10 @@ at the execution door` with the same fields. Do not look for `orphaned` in
   lists them before the share is made and the owner confirms; the notice
   counts them, and each has a `mission-restored` entry. A mission restored
   without that step came back by another road: a membership returned, a
-  connection reassigned, or `ShareService.share()` called from code. The
-  creator, not the owner, revokes a mission; the owner narrows or revokes the
-  share.
+  connection reassigned, or `ShareService.share()` called from code. A mission
+  that serves is revoked by its creator only; the owner narrows or revokes the
+  share, and may then close the mission it orphaned ("Closing an orphaned
+  mission", above).
 - **The dialog keeps coming back with a list.** The share asked would restore
   a mission that the confirmation did not carry: the list changed between the
   page and the post (a mission was orphaned meanwhile), or the pending share
@@ -678,10 +705,6 @@ with a local group`), and local membership does not count.
 
 ## Not built here
 
-- Closing an orphaned mission by an owner of the connection (spec §2.3): the
-  creator closes it with the mission's "Revoke"; an orphaned mission already
-  refuses everything. An owner who wants it never to serve again revokes the
-  connection, or does not share again.
 - An audit entry for a change of authority that no service performed (the
   door sees it and refuses or serves; nobody is named).
 - Deleting a group.

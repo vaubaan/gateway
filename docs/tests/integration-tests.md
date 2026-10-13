@@ -2460,6 +2460,18 @@ Unit, beside the code (102):
   every mission shares and restores; one that misses a mission, or names
   something else, comes back again; a share that restores nothing is made
   at once.
+- **`tests/integration/authority/close-orphaned.test.ts`** (11) — **closing an
+  orphaned mission** (spec §2.3): **an owner of the connection revokes it** —
+  stored `revoked`, every token stopped, the door answers `mission-inactive`
+  (revoked), one `mission-revoked` under the owner's name with `before.status:
+orphaned`, `closed_as: connection-owner` and the connection; a closed
+  mission is not restored by a share made again; **an owner cannot close a
+  mission that serves and reads "not found"**; someone who owns none of its
+  connections reads "not found"; the creator closes as before, no ground
+  named; every current member of the owner group may, a former member may
+  not; idempotent, one entry; **a delegated client never acts as an owner**;
+  the missions a revoked connection left orphaned; `orphanedOn` lists them to
+  owners only and none that serves; the route answers 200 then 404.
 - **`src/server/shares/errors.test.ts`** (4) — a `ShareError` / `ConnectError`
   recognised by name and code when thrown by another copy of the class (what
   a page catches); a sentence and a 4xx status for every code.

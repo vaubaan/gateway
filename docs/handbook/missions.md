@@ -160,14 +160,15 @@ same counters ([authority](authority.md), "Orphaned missions"). The state is
 `ownInspected` for one mission, `list` for all), so each of its answers is
 about this instant:
 
-| Method                    | On an orphaned mission                                                             |
-| ------------------------- | ---------------------------------------------------------------------------------- |
-| `list`, `get`             | `mission.status: 'orphaned'`, `state.kind: 'orphaned'`, `orphan: { cause, … }`     |
-| `setGate`                 | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                             |
-| `rotate`                  | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                             |
-| `revoke`                  | revokes: the stored status goes `active` → `revoked`, terminal                     |
-| `draftFrom` / `duplicate` | unaffected: a copy is a new issuance, checked against what the creator holds now   |
-| `verifyToken`             | returns the stored record; the door derives the state right after (execution-door) |
+| Method                           | On an orphaned mission                                                                                                                                                                                                     |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list`, `get`                    | `mission.status: 'orphaned'`, `state.kind: 'orphaned'`, `orphan: { cause, … }`                                                                                                                                             |
+| `setGate`                        | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                                                                                                                                                                     |
+| `rotate`                         | `{ ok: false, reason: 'inactive', state: 'orphaned' }`                                                                                                                                                                     |
+| `revoke`                         | revokes: the stored status goes `active` → `revoked`, terminal. The creator; **or, while the mission is orphaned, an owner of one of its connections** (handbook [authority](authority.md), "Closing an orphaned mission") |
+| `orphanedOn(user, connectionId)` | the orphaned missions that carry a connection, for an owner of that connection; nobody else reads any                                                                                                                      |
+| `draftFrom` / `duplicate`        | unaffected: a copy is a new issuance, checked against what the creator holds now                                                                                                                                           |
+| `verifyToken`                    | returns the stored record; the door derives the state right after (execution-door)                                                                                                                                         |
 
 `MissionOverview.orphan` (`MissionOrphanReason`: `cause`, `connection_id`,
 `uncovered`) is `null` unless the mission is orphaned. `/missions/<id>` renders
