@@ -153,7 +153,7 @@ const INACTIVE_MISSION_REASON: Readonly<
 > = {
   expired: (expires_at) => `the mission expired at ${expires_at ?? 'an unknown time'}`,
   orphaned: () =>
-    'the authority behind the mission vanished (share or connection revoked, creator gone)',
+    'the authority behind the mission is missing right now (share or connection revoked, creator out of the group that grounded it, creator gone)',
   revoked: () => 'the mission was revoked by its creator',
 };
 

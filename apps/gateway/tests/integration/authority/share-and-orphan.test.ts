@@ -3,14 +3,16 @@
  * §10 "Integration … share, issuance, … revocation flows, `orphaned`
  * states"), on the real composition root with the `:memory:` store: the
  * owner shares a restriction, the beneficiary issues within it, exceeding it
- * is refused with the uncovered list, and the day the authority vanishes the
- * mission is `orphaned` and every call is refused `mission-inactive`.
+ * is refused with the uncovered list, and while the authority is missing the
+ * mission is `orphaned` and every call is refused `mission-inactive`. The
+ * state is derived, never stored: when the authority comes back the same
+ * token serves again, with its session and counters (feature P2.2b).
  */
 import { REFUSAL_RPC_CODE } from '@vaubaan/gateway-core';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ShareError } from '../../../src/server/shares';
-import type { RpcBody } from '../../../src/server/execution/testing';
+import { line, type RpcBody } from '../../../src/server/execution/testing';
 import { NO_FILTER } from '../audit/support';
 import {
   authorityRig,
@@ -79,6 +81,8 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     const revoked = await rig.root.shares.service.revoke(await rig.actor(rig.ada), shared.share.id);
     expect(revoked).toMatchObject({ share: { status: 'revoked' }, orphaned: 1 });
     expect(await rig.statusOf(mission)).toBe('orphaned');
+    // …as a derived state: the store still holds `active`.
+    expect(await rig.storedStatusOf(mission)).toBe('active');
     const orphanEntries = await rig.adminEntries('mission-orphaned');
     expect(orphanEntries).toHaveLength(1);
     expect(orphanEntries[0]).toMatchObject({
@@ -174,7 +178,7 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     expect((await rig.read(await rig.issueFor(rig.bob, [READ]))).result).toBeDefined();
   });
 
-  it('is seen by the door itself when nobody swept: authority is never snapshotted in a mission', async () => {
+  it('is seen by the door itself when nobody watched: authority is never snapshotted in a mission', async () => {
     const team = await rig.root.store.groups.getOrCreate('depot-team', 'local');
     await rig.root.store.groups.addMember(team.id, rig.bob.id);
     await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
@@ -184,30 +188,265 @@ describe('share → issue within the restriction → exceed → revoke → orpha
     const mission = await rig.issueFor(rig.bob, [READ]);
     expect((await rig.read(mission)).result).toBeDefined();
 
-    // The membership changes straight in the store: no service, no sweep, no event.
+    // The membership changes straight in the store: no service, no watch, no event.
     await rig.root.store.groups.removeMember(team.id, rig.bob.id);
-    expect(await rig.statusOf(mission)).toBe('active');
 
+    // Every reader derives the state at once: the door, and the creator's page.
     expect(inactive(await rig.read(mission)).status).toBe('orphaned');
     expect(await rig.statusOf(mission)).toBe('orphaned');
+    expect(await rig.storedStatusOf(mission)).toBe('active');
     // No human was behind that detection: the call is audited, no admin entry names anyone.
     expect(await rig.adminEntries('mission-orphaned')).toEqual([]);
     const calls = await rig.root.store.audit.list({ missionId: mission.mission.id, kind: 'call' });
     expect(calls.at(-1)).toMatchObject({ decision: 'refused', refusal_code: 'mission-inactive' });
   });
 
-  it('keeps an orphaned mission orphaned when the authority comes back; a new mission is issued instead', async () => {
-    const first = await shareToBob([READ]);
-    const mission = await rig.issueFor(rig.bob, [READ]);
-    await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
-    expect(await rig.statusOf(mission)).toBe('orphaned');
+  describe('`orphaned` is derived and reversible (spec §2.3)', () => {
+    /** The session and its counters, as the store holds them. */
+    const sessionOf = async (mission: { mission: { id: string } }) => {
+      const session = await rig.root.store.sessions.getByMission(mission.mission.id);
+      if (!session) throw new Error('the mission has no session yet');
+      const counters = await rig.root.store.sessions.counters(session.id);
+      return {
+        id: session.id,
+        createdAt: session.createdAt,
+        consumed: Object.fromEntries(counters.map((c) => [c.riskId, c.consumed])),
+      };
+    };
 
-    await shareToBob([READ]);
-    expect(inactive(await rig.read(mission)).status).toBe('orphaned');
-    expect((await rig.read(await rig.issueFor(rig.bob, [READ]))).result).toBeDefined();
+    it('lose → refused → regain: the same token serves the next call, with the same session and counters', async () => {
+      const first = await shareToBob([READ]);
+      const mission = await rig.issueFor(rig.bob, [READ]);
+      expect((await rig.read(mission)).result).toBeDefined();
+      expect((await rig.read(mission)).result).toBeDefined();
+      const before = await sessionOf(mission);
+      expect(before.consumed).toEqual({ [READ]: 2 });
+
+      // Lost: the owner revokes the share.
+      const revoked = await rig.root.shares.service.revoke(
+        await rig.actor(rig.ada),
+        first.share.id,
+      );
+      expect(revoked.orphaned).toBe(1);
+      expect(await rig.statusOf(mission)).toBe('orphaned');
+      const upstream = rig.depot.calls.length;
+      expect(inactive(await rig.read(mission)).status).toBe('orphaned');
+      expect(inactive(await rig.read(mission)).status).toBe('orphaned');
+      expect(rig.depot.calls).toHaveLength(upstream);
+      // A refused call consumes nothing and the verdict was written nowhere.
+      expect(await sessionOf(mission)).toEqual(before);
+      expect(await rig.storedStatusOf(mission)).toBe('active');
+
+      // Regained: the owner shares again.
+      const again = await shareToBob([READ]);
+      expect(again).toMatchObject({ replaced: null, orphaned: 0, restored: 1 });
+      expect(await rig.statusOf(mission)).toBe('active');
+
+      // The very same Bearer, the very same session, the counters where they were.
+      expect((await rig.read(mission)).result).toBeDefined();
+      expect(rig.depot.calls).toHaveLength(upstream + 1);
+      const after = await sessionOf(mission);
+      expect(after.id).toBe(before.id);
+      expect(after.createdAt).toBe(before.createdAt);
+      expect(after.consumed).toEqual({ [READ]: 3 });
+      const tokens = await rig.root.store.missions.listTokens(mission.mission.id);
+      expect(tokens.map((t) => [t.prefix, t.status])).toEqual([[mission.prefix, 'active']]);
+
+      // Both human acts are in the audit, each with its author; the calls between them too.
+      expect(await rig.adminEntries('mission-orphaned')).toMatchObject([
+        { user_id: rig.ada.id, object: { id: mission.mission.id } },
+      ]);
+      expect(await rig.adminEntries('mission-restored')).toMatchObject([
+        {
+          user_id: rig.ada.id,
+          object: { type: 'mission', id: mission.mission.id },
+          before: {
+            status: 'orphaned',
+            cause: 'authority-lost',
+            connection_id: rig.connection.id,
+            uncovered: [READ],
+          },
+          after: { status: 'active' },
+        },
+      ]);
+      const calls = await rig.root.store.audit.list({
+        missionId: mission.mission.id,
+        kind: 'call',
+      });
+      expect(calls.map((e) => (e.kind === 'call' ? e.decision : e.kind))).toEqual([
+        'allowed',
+        'allowed',
+        'refused',
+        'refused',
+        'allowed',
+      ]);
+    });
+
+    it('is restored only when the new share covers every accepted risk of the mission', async () => {
+      const first = await shareToBob([READ, WRITE_STAGING]);
+      const mission = await rig.issueFor(rig.bob, [READ, WRITE_STAGING]);
+      await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+
+      // Narrower than what the mission accepted: still orphaned, and it says why.
+      expect(await shareToBob([READ])).toMatchObject({ restored: 0 });
+      expect(inactive(await rig.read(mission)).status).toBe('orphaned');
+      const detail = await rig.root.missions.service.get(rig.bob, mission.mission.id);
+      expect(detail?.orphan).toEqual({
+        cause: 'authority-lost',
+        connection_id: rig.connection.id,
+        uncovered: [WRITE_STAGING],
+      });
+
+      expect(await shareToBob([READ, WRITE_STAGING])).toMatchObject({ restored: 1 });
+      expect((await rig.read(mission)).result).toBeDefined();
+      expect((await rig.root.missions.service.get(rig.bob, mission.mission.id))?.orphan).toBeNull();
+    });
+
+    it('is detected by the door in both directions without any administrative entry', async () => {
+      const team = await rig.root.store.groups.getOrCreate('depot-team', 'local');
+      await rig.root.store.groups.addMember(team.id, rig.bob.id);
+      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+        target: { kind: 'group', groupId: team.id },
+        riskIds: [READ],
+      });
+      const mission = await rig.issueFor(rig.bob, [READ]);
+      expect((await rig.read(mission)).result).toBeDefined();
+
+      // The membership goes and comes back straight in the store: no service, no watch.
+      await rig.root.store.groups.removeMember(team.id, rig.bob.id);
+      expect(inactive(await rig.read(mission)).status).toBe('orphaned');
+      await rig.root.store.groups.addMember(team.id, rig.bob.id);
+      expect((await rig.read(mission)).result).toBeDefined();
+
+      expect(await rig.adminEntries('mission-orphaned')).toEqual([]);
+      expect(await rig.adminEntries('mission-restored')).toEqual([]);
+      expect(await rig.storedStatusOf(mission)).toBe('active');
+    });
+
+    it('a group membership the operator returns restores the missions it grounded', async () => {
+      const team = await rig.root.groups.service.create(rig.operator.id, 'depot-team');
+      await rig.root.groups.service.addMember(rig.operator.id, team.id, 'bob@example.com');
+      await rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+        target: { kind: 'group', groupId: team.id },
+        riskIds: [READ],
+      });
+      const mission = await rig.issueFor(rig.bob, [READ]);
+
+      await rig.root.groups.service.removeMember(rig.operator.id, team.id, rig.bob.id);
+      expect(inactive(await rig.read(mission)).status).toBe('orphaned');
+
+      const added = await rig.root.groups.service.addMember(
+        rig.operator.id,
+        team.id,
+        'bob@example.com',
+      );
+      expect(added.restored).toBe(1);
+      expect((await rig.read(mission)).result).toBeDefined();
+      expect(await rig.adminEntries('mission-restored')).toMatchObject([
+        { user_id: rig.operator.id, object: { id: mission.mission.id } },
+      ]);
+    });
+
+    it('a revoked connection never comes back: its missions stay orphaned whatever is shared afterwards', async () => {
+      await shareToBob([READ]);
+      const bobs = await rig.issueFor(rig.bob, [READ]);
+      const adas = await rig.issueFor(rig.ada, [READ]);
+      await rig.root.connections.service.revoke(await rig.actor(rig.ada), rig.connection.id);
+
+      // The service refuses to share a revoked connection…
+      await expect(shareToBob([READ, PURGE])).rejects.toMatchObject({
+        code: 'connection-revoked',
+      });
+      // …and a share written behind its back grounds nothing either.
+      await rig.root.store.shares.create({
+        connectionId: rig.connection.id,
+        target: { kind: 'user', id: rig.bob.id },
+        restriction: [READ, PURGE],
+        createdByUserId: rig.ada.id,
+      });
+      for (const mission of [bobs, adas]) {
+        expect(inactive(await rig.read(mission)).status).toBe('orphaned');
+        expect(await rig.statusOf(mission)).toBe('orphaned');
+      }
+      const detail = await rig.root.missions.service.get(rig.bob, bobs.mission.id);
+      expect(detail?.orphan).toMatchObject({
+        cause: 'connection-revoked',
+        connection_id: rig.connection.id,
+      });
+      expect(await rig.adminEntries('mission-restored')).toEqual([]);
+    });
+
+    it('a revoked mission and an expired mission are unaffected by the authority coming or going', async () => {
+      const first = await shareToBob([READ]);
+      const revokedMission = await rig.issueFor(rig.bob, [READ], 'Revoked');
+      const expiredMission = await rig.issueFor(rig.bob, [READ], 'Expired');
+      await rig.root.missions.service.revoke(rig.bob, revokedMission.mission.id);
+      await rig.root.store.missions.setStatus(expiredMission.mission.id, 'expired');
+
+      await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+      expect(await rig.statusOf(revokedMission)).toBe('revoked');
+      expect(await rig.statusOf(expiredMission)).toBe('expired');
+      expect(inactive(await rig.read(expiredMission)).status).toBe('expired');
+
+      expect(await shareToBob([READ])).toMatchObject({ restored: 0 });
+      expect(await rig.statusOf(revokedMission)).toBe('revoked');
+      expect(inactive(await rig.read(revokedMission)).status).toBe('revoked');
+      expect(inactive(await rig.read(expiredMission)).status).toBe('expired');
+      // Neither was ever orphaned or restored: no entry names them.
+      expect(await rig.adminEntries('mission-orphaned')).toEqual([]);
+      expect(await rig.adminEntries('mission-restored')).toEqual([]);
+    });
+
+    it('while orphaned: no gate edit, no rotation, no decision on a claim; all of them are back with the authority', async () => {
+      const first = await shareToBob([READ]);
+      const mission = await rig.issueFor(rig.bob, [READ], 'Tight', (id) => line(id, 1));
+      expect((await rig.read(mission)).result).toBeDefined();
+      // The quota is spent: the next call opens a claim.
+      const exhausted = await rig.read(mission);
+      expect(exhausted.error?.data?.code).toBe('budget-exhausted');
+      const [claim] = await rig.root.requests.service.inbox(rig.bob);
+      if (!claim) throw new Error('expected an open claim');
+
+      await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+      const { service } = rig.root.missions;
+      expect(await service.setGate(rig.bob, mission.mission.id, READ, 'approval')).toEqual({
+        ok: false,
+        reason: 'inactive',
+        state: 'orphaned',
+      });
+      expect(await service.rotate(rig.bob, mission.mission.id)).toEqual({
+        ok: false,
+        reason: 'inactive',
+        state: 'orphaned',
+      });
+      const viewed = await rig.root.requests.service.view(rig.bob, claim.id);
+      if (viewed.outcome !== 'ok' || viewed.view.kind !== 'claim') {
+        throw new Error('expected the claim view');
+      }
+      const { view } = viewed;
+      expect(view.mission.state).toBe('orphaned');
+      expect(view.options.find((o) => o.resolution === 'reset-period')?.unavailable).toEqual({
+        code: 'mission-closed',
+        message: expect.stringContaining('orphaned') as string,
+      });
+      expect(
+        await rig.root.requests.service.decide(rig.bob, claim.id, { resolution: 'reset-period' }),
+      ).toMatchObject({ ok: false, reason: 'invalid', problem: { code: 'mission-closed' } });
+
+      // The authority is back: the same claim is granted, and the mission serves again.
+      await shareToBob([READ]);
+      expect(
+        await rig.root.requests.service.decide(rig.bob, claim.id, { resolution: 'reset-period' }),
+      ).toMatchObject({ ok: true });
+      expect((await rig.read(mission)).result).toBeDefined();
+      expect(await service.setGate(rig.bob, mission.mission.id, READ, 'approval')).toMatchObject({
+        ok: true,
+        gate: 'approval',
+      });
+    });
   });
 
-  it('leaves nothing to do on an orphaned mission but close it: no gate edit, the creator revokes', async () => {
+  it('lets the creator close an orphaned mission for good: no gate edit, the creator revokes', async () => {
     const { share } = await shareToBob([READ]);
     const mission = await rig.issueFor(rig.bob, [READ]);
     await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id);
@@ -223,6 +462,10 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       mission: { status: 'revoked' },
     });
     expect(inactive(await rig.read(mission)).status).toBe('revoked');
+    expect(await rig.storedStatusOf(mission)).toBe('revoked');
+    // Revoked is stored and terminal: the authority coming back changes nothing.
+    expect(await shareToBob([READ])).toMatchObject({ restored: 0 });
+    expect(await rig.statusOf(mission)).toBe('revoked');
   });
 
   it('orphans the missions of a creator the IdP removed', async () => {

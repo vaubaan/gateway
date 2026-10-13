@@ -125,8 +125,11 @@ interface Rig {
   approvalRequest(): Promise<string>;
   /** A user who signed in once: the target of a share, a member to add. */
   bob(): Promise<UserRecord>;
-  /** A mission of Alice whose connection was revoked behind the services' back. */
-  ungrounded(): Promise<MissionRecord>;
+  /**
+   * A mission of Alice on a connection owned by a local group she belongs to: her
+   * authority there is that membership, which a test removes or returns.
+   */
+  groupGrounded(): Promise<{ mission: MissionRecord; group: GroupRecord }>;
   /** A connection of Alice, transferred to a local group that then lost its only member. */
   ownerless(): Promise<ConnectionRecord>;
   /** An OAuth client of the management door, redirecting to `redirectUri`. */
@@ -258,12 +261,17 @@ async function openRig(): Promise<Rig> {
     bob() {
       return root.store.users.upsertFromIdp({ subject: 'idp|bob', email: 'bob@example.com' });
     },
-    async ungrounded() {
+    async groupGrounded() {
       const mission = await rig.issue();
       const [carried] = mission.connections;
       if (!carried) throw new Error('expected a connection');
-      await root.store.connections.revoke(carried.connectionId);
-      return mission;
+      const group = await root.store.groups.getOrCreate('mission-owners', 'local');
+      await root.store.groups.addMember(group.id, aliceUser.id);
+      await root.store.connections.transferOwner(carried.connectionId, {
+        kind: 'group',
+        id: group.id,
+      });
+      return { mission, group };
     },
     async ownerless() {
       const connection = await rig.connectByKey();
@@ -340,8 +348,6 @@ const exempt = (why: string): Rule => ({ kind: 'exempt', why });
 
 const SESSION_STATE =
   'web session and transient per-session state (sign-in, notices, pending flows): not an administrative act of spec §8';
-const DOOR_SETTLE =
-  'performed by the execution door while it authenticates a call, with no human actor: an administrative entry always names a user (spec §8); the transition is in the instance log and the call that met it is audited as `mission-inactive`';
 const SYSTEM_REFRESH =
   'performed by the gateway during a call or a discovery, with no human actor: an administrative entry always names a user (spec §8); the outcome is in the call entry and the instance log';
 
@@ -574,31 +580,52 @@ const RULES: Readonly<Record<string, Rule>> = {
   'ConnectionAuthorityService.connectionsOf': READ,
   'ConnectionAuthorityService.gapsOf': READ,
   'MissionGrounds.check': READ,
-  'MissionGrounds.settle': exempt(DOOR_SETTLE),
-  'MissionGrounds.sweepConnection': {
+  // `orphaned` is derived on every read and never stored (spec §2.3): the door's own
+  // detection (`inspect`) and every reader's (`derive`) write nothing at all, in either
+  // direction. Only a watch around a human act writes, and it names that human.
+  'MissionGrounds.inspect': READ,
+  'MissionGrounds.derive': READ,
+  'MissionGrounds.watchConnection': {
     kind: 'mutation',
     target: (root) => root.authority.grounds,
-    prepare: (rig) => rig.ungrounded(),
-    drive: (rig, mission: MissionRecord) =>
-      rig.root.authority.grounds.sweepConnection(
-        mission.connections[0]?.connectionId ?? '',
-        rig.alice.user.id,
-      ),
+    prepare: (rig) => rig.issue(),
+    // The act: the connection is revoked. Loss of authority → `mission-orphaned`.
+    drive: async (rig, mission: MissionRecord) => {
+      const connectionId = mission.connections[0]?.connectionId ?? '';
+      const watch = await rig.root.authority.grounds.watchConnection(connectionId);
+      await rig.root.store.connections.revoke(connectionId);
+      await watch.settle(rig.alice.user.id);
+    },
     writes: { act: 'mission-orphaned', object: 'mission', actor: 'alice' },
   },
-  'MissionGrounds.sweepCreator': {
+  'MissionGrounds.watchCreator': {
     kind: 'mutation',
     target: (root) => root.authority.grounds,
-    prepare: (rig) => rig.ungrounded(),
-    drive: (rig) => rig.root.authority.grounds.sweepCreator(rig.alice.user.id, rig.operator.id),
+    prepare: (rig) => rig.groupGrounded(),
+    // The act: the operator removes the creator from the group that grounded the mission.
+    drive: async (rig, { group }: { group: GroupRecord }) => {
+      const watch = await rig.root.authority.grounds.watchCreator(rig.alice.user.id);
+      await rig.root.store.groups.removeMember(group.id, rig.alice.user.id);
+      await watch.settle(rig.operator.id);
+    },
     writes: { act: 'mission-orphaned', object: 'mission', actor: 'operator' },
   },
-  'MembershipSettler.afterRemoval': {
+  'MembershipSettler.watch': {
     kind: 'mutation',
     target: (root) => root.authority.membership,
-    prepare: (rig) => rig.ungrounded(),
-    drive: (rig) => rig.root.authority.membership.afterRemoval(rig.alice.user.id, rig.operator.id),
-    writes: { act: 'mission-orphaned', object: 'mission', actor: 'operator' },
+    // The mission is orphaned first, behind the services' back…
+    prepare: async (rig) => {
+      const grounded = await rig.groupGrounded();
+      await rig.root.store.groups.removeMember(grounded.group.id, rig.alice.user.id);
+      return grounded;
+    },
+    // …and the act returns the membership. Authority back → `mission-restored`.
+    drive: async (rig, { group }: { group: GroupRecord }) => {
+      const watch = await rig.root.authority.membership.watch(rig.alice.user.id);
+      await rig.root.store.groups.addMember(group.id, rig.alice.user.id);
+      await watch.settle(rig.operator.id);
+    },
+    writes: { act: 'mission-restored', object: 'mission', actor: 'operator' },
   },
 
   // ── shares ────────────────────────────────────────────────────────────────
@@ -892,7 +919,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'mission-issued',
       'mission-orphaned',
       'mission-orphaned',
-      'mission-orphaned',
+      'mission-restored',
       'mission-revoked',
       'mission-rotated',
       'oauth-client-approved',

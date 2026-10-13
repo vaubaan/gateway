@@ -31,13 +31,19 @@ export interface LoginDeps {
   readonly logger: Logger;
   readonly clock?: Clock;
   /**
-   * Called once the sign-in has replaced the user's IdP-sourced memberships:
-   * the stored states a lost membership held (an `unowned` connection, an
-   * `orphaned` mission) are settled there. A failure is logged and does not
-   * fail the sign-in: every authority check reads the new memberships anyway.
+   * Called before the sign-in replaces the user's IdP-sourced memberships;
+   * the function it returns is called once they are replaced. What the
+   * change did is settled between the two: a connection left without owner
+   * becomes `unowned`, and the user's missions that a lost membership left
+   * orphaned, or a regained one grounds again, are audited. A failure of
+   * either call is logged and does not fail the sign-in: every authority
+   * check reads the new memberships anyway.
    */
-  readonly membershipsSynced?: (user: UserRecord) => Promise<void>;
+  readonly membershipsChanging?: (user: UserRecord) => Promise<MembershipsChanged>;
 }
+
+/** Called once the memberships are replaced (`LoginDeps.membershipsChanging`). */
+export type MembershipsChanged = () => Promise<void>;
 
 /** The user's authority right now, from the store (never from the session). */
 export async function currentAuthority(
@@ -83,14 +89,23 @@ export async function completeLogin(
     email: claims.email,
     displayName: claims.displayName,
   });
-  await syncIdpGroups(deps.store, user.id, claims.groups, deps.logger);
-  try {
-    await deps.membershipsSynced?.(user);
-  } catch (err) {
+  const settleFailed = (err: unknown): void => {
     deps.logger.error('could not settle the memberships changed by a sign-in', {
       user_id: user.id,
       err,
     });
+  };
+  let membershipsChanged: MembershipsChanged | undefined;
+  try {
+    membershipsChanged = await deps.membershipsChanging?.(user);
+  } catch (err) {
+    settleFailed(err);
+  }
+  await syncIdpGroups(deps.store, user.id, claims.groups, deps.logger);
+  try {
+    await membershipsChanged?.();
+  } catch (err) {
+    settleFailed(err);
   }
   const authority = await currentAuthority(deps.store, user, deps.adminRule);
 

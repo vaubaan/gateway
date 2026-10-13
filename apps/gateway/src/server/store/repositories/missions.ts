@@ -15,7 +15,7 @@ import {
   type RiskId,
 } from '../types.ts';
 import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
-import { GATES, MISSION_STATUSES } from './enums.ts';
+import { GATES, STORED_MISSION_STATUSES } from './enums.ts';
 import { createSessionPrimitives } from './sessions.ts';
 
 export interface CreateMissionInput {
@@ -39,18 +39,20 @@ export interface IssueTokenInput {
   readonly hashAlg: string;
 }
 
+/** What the `missions.status` column may hold: every `MissionStatus` but the derived one. */
+export type StoredMissionStatus = Exclude<MissionStatus, 'orphaned'>;
+
 export interface MissionsRepo {
   create(input: CreateMissionInput): Promise<MissionRecord>;
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
   listForConnection(connectionId: string): Promise<MissionRecord[]>;
-  setStatus(id: string, status: MissionStatus): Promise<MissionRecord>;
   /**
-   * `active` → `orphaned` (spec §2.3): the authority behind the mission vanished.
-   * Conditional, so it never overwrites `revoked` or `expired`. Returns false when the
-   * mission was not `active`.
+   * `orphaned` is not a stored status (spec §2.3: derived from the creator's current
+   * authority, never stored as a verdict): the type refuses it here, and the trigger of
+   * migration 0007 refuses it in the table.
    */
-  markOrphaned(id: string): Promise<boolean>;
+  setStatus(id: string, status: StoredMissionStatus): Promise<MissionRecord>;
   setExpiresAt(id: string, expiresAt: Iso | null): Promise<MissionRecord>;
   /** The creator enlarges or shrinks the mission; the whole policy is replaced atomically. */
   replacePolicy(id: string, policy: readonly MissionPolicyEntry[]): Promise<MissionRecord>;
@@ -244,10 +246,6 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const setStatusStmt = db.prepare<[string, string | null, string, string]>(
     'UPDATE missions SET status = ?, closed_at = COALESCE(?, closed_at), updated_at = ? WHERE id = ?',
   );
-  const markOrphanedStmt = db.prepare<[string, string, string]>(
-    `UPDATE missions SET status = 'orphaned', closed_at = COALESCE(closed_at, ?), updated_at = ?
-     WHERE id = ? AND status = 'active'`,
-  );
   const setExpiry = db.prepare<[string | null, string, string]>(
     'UPDATE missions SET expires_at = ?, updated_at = ? WHERE id = ?',
   );
@@ -286,7 +284,7 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       id: row.id,
       name: row.name,
       creatorUserId: row.creator_user_id,
-      status: parseEnum(MISSION_STATUSES, row.status, 'missions.status'),
+      status: parseEnum(STORED_MISSION_STATUSES, row.status, 'missions.status'),
       periodAnchor: row.period_anchor,
       periodSeconds: row.period_seconds,
       expiresAt: row.expires_at,
@@ -356,14 +354,10 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     },
     async setStatus(id, status) {
       const now = nowIso(ctx);
-      const terminal = status === 'revoked' || status === 'expired' || status === 'orphaned';
+      const terminal = status === 'revoked' || status === 'expired';
       const result = setStatusStmt.run(status, terminal ? now : null, now, id);
       if (result.changes === 0) throw new NotFoundError('mission', id);
       return requireMission(id);
-    },
-    async markOrphaned(id) {
-      const now = nowIso(ctx);
-      return markOrphanedStmt.run(now, now, id).changes > 0;
     },
     async setExpiresAt(id, expiresAt) {
       const result = setExpiry.run(expiresAt, nowIso(ctx), id);

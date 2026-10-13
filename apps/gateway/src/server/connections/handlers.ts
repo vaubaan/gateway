@@ -337,7 +337,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           tone: 'success',
           title: 'Connection revoked',
           lines: [
-            'The stored credential was erased. Missions that carry this connection are now orphaned and refuse every call.',
+            'The stored credential was erased. Missions that carry this connection are now orphaned and refuse every call; a revoked connection never comes back, so they stay orphaned.',
             'The authorization granted at the provider is not withdrawn by the gateway: remove it there too if needed.',
           ],
         });

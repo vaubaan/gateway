@@ -188,62 +188,83 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
     });
   });
 
-  describe('settle — the execution door', () => {
-    it('returns a grounded mission untouched', async () => {
+  describe('inspect / derive — what every reader sees', () => {
+    it('returns a grounded mission untouched, with no reason', async () => {
       const connection = await connect(user(ada));
       const m = await mission(ada, [connection], [READ]);
-      expect(await authority.grounds.settle(m)).toBe(m);
-      expect((await reread(m)).status).toBe('active');
+      expect(await authority.grounds.inspect(m)).toEqual({ mission: m, orphan: null });
+      expect(await authority.grounds.derive(m)).toBe(m);
     });
 
-    it('turns an ungrounded active mission orphaned, with no admin entry (no human behind it)', async () => {
+    it('reads an ungrounded mission orphaned with the reason, and writes nothing: no status, no admin entry', async () => {
       const connection = await connect(user(ada));
       const granted = await share(connection, user(bob), [READ]);
       const m = await mission(bob, [connection], [READ]);
       await store.shares.revoke(granted.id);
 
-      const settled = await authority.grounds.settle(m);
-      expect(settled.status).toBe('orphaned');
-      expect(settled.closedAt).not.toBeNull();
-      expect((await reread(m)).status).toBe('orphaned');
+      const inspected = await authority.grounds.inspect(m);
+      expect(inspected.mission).toEqual({ ...m, status: 'orphaned' });
+      expect(inspected.orphan).toEqual({
+        cause: 'authority-lost',
+        connectionId: connection.id,
+        uncovered: [READ],
+      });
+      // No human is behind a read: the store still holds `active`, untouched.
+      expect(await reread(m)).toEqual(m);
       expect(audit.admin).toEqual([]);
     });
 
-    it('never touches a mission that is not active', async () => {
+    it('is reversible: the same mission reads active again once the authority is back', async () => {
+      const connection = await connect(user(ada));
+      const granted = await share(connection, user(bob), [READ]);
+      const m = await mission(bob, [connection], [READ]);
+      await store.shares.revoke(granted.id);
+      expect((await authority.grounds.derive(m)).status).toBe('orphaned');
+
+      await share(connection, user(bob), [READ]);
+      expect(await authority.grounds.derive(await reread(m))).toEqual(m);
+      expect(audit.admin).toEqual([]);
+    });
+
+    it('stays orphaned on a revoked connection whatever is shared afterwards', async () => {
+      const connection = await connect(user(ada));
+      await share(connection, user(bob), [READ]);
+      const m = await mission(bob, [connection], [READ]);
+      await store.connections.revoke(connection.id);
+      await share(connection, user(bob), [READ, WRITE_STAGING]);
+      expect((await authority.grounds.inspect(m)).orphan?.cause).toBe('connection-revoked');
+    });
+
+    it('never checks a mission the store does not hold as active', async () => {
       const connection = await connect(user(ada));
       const m = await mission(ada, [connection], [READ]);
       const revoked = await store.missions.setStatus(m.id, 'revoked');
       await store.connections.revoke(connection.id);
-      expect(await authority.grounds.settle(revoked)).toBe(revoked);
-      expect((await reread(m)).status).toBe('revoked');
-    });
-
-    it('does not overwrite a mission revoked between the read and the write', async () => {
-      const connection = await connect(user(ada));
-      const stale = await mission(ada, [connection], [READ]);
-      await store.connections.revoke(connection.id);
-      await store.missions.setStatus(stale.id, 'revoked');
-      // `stale` still says `active`: the conditional update must lose.
-      expect((await authority.grounds.settle(stale)).status).toBe('revoked');
+      expect(await authority.grounds.inspect(revoked)).toEqual({ mission: revoked, orphan: null });
+      const expired = await store.missions.setStatus(m.id, 'expired');
+      expect(await authority.grounds.derive(expired)).toBe(expired);
     });
   });
 
-  describe('sweeps — right after the act that removed an authority', () => {
-    it('sweepConnection orphans the ungrounded missions of that connection and names the actor', async () => {
+  describe('watches — around the human act that removed or returned an authority', () => {
+    it('watchConnection audits the missions the act orphaned, naming the actor, and stores nothing', async () => {
       const connection = await connect(user(ada));
       const elsewhere = await connect(user(ada));
       const granted = await share(connection, user(bob), [READ]);
       await share(elsewhere, user(bob), [READ]);
       const lost = await mission(bob, [connection], [READ]);
       const owners = await mission(ada, [connection], [READ]);
-      const untouched = await mission(bob, [elsewhere], [READ]);
+      await mission(bob, [elsewhere], [READ]);
+
+      const watch = await authority.grounds.watchConnection(connection.id);
       await store.shares.revoke(granted.id);
+      const shift = await watch.settle(ada.id);
 
-      const orphaned = await authority.grounds.sweepConnection(connection.id, ada.id);
-
-      expect(orphaned.map((m) => m.id)).toEqual([lost.id]);
-      expect((await reread(owners)).status).toBe('active');
-      expect((await reread(untouched)).status).toBe('active');
+      expect(shift.orphaned.map((m) => m.id)).toEqual([lost.id]);
+      expect(shift.orphaned[0]?.status).toBe('orphaned');
+      expect(shift.restored).toEqual([]);
+      expect((await reread(lost)).status).toBe('active');
+      expect((await authority.grounds.derive(await reread(owners))).status).toBe('active');
       expect(audit.admin).toEqual([
         expect.objectContaining({
           user_id: ada.id,
@@ -260,40 +281,121 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       ]);
     });
 
-    it('sweepCreator orphans the ungrounded missions of that user only, once', async () => {
+    it('watchConnection audits the missions the act restored, with the cause they were orphaned for', async () => {
+      const connection = await connect(user(ada));
+      const granted = await share(connection, user(bob), [READ]);
+      const m = await mission(bob, [connection], [READ]);
+      await store.shares.revoke(granted.id);
+
+      const watch = await authority.grounds.watchConnection(connection.id);
+      await share(connection, user(bob), [READ]);
+      const shift = await watch.settle(ada.id);
+
+      expect(shift.orphaned).toEqual([]);
+      expect(shift.restored.map((x) => x.id)).toEqual([m.id]);
+      expect(shift.restored[0]?.status).toBe('active');
+      expect(audit.admin).toEqual([
+        expect.objectContaining({
+          user_id: ada.id,
+          act: 'mission-restored',
+          object: { type: 'mission', id: m.id },
+          before: {
+            status: 'orphaned',
+            cause: 'authority-lost',
+            connection_id: connection.id,
+            uncovered: [READ],
+          },
+          after: { status: 'active' },
+        }),
+      ]);
+    });
+
+    it('writes nothing when the act changed no verdict, or changed it back', async () => {
+      const connection = await connect(user(ada));
+      const granted = await share(connection, user(bob), [READ]);
+      await mission(bob, [connection], [READ]);
+
+      const idle = await authority.grounds.watchConnection(connection.id);
+      expect(await idle.settle(ada.id)).toEqual({ orphaned: [], restored: [] });
+
+      const replaced = await authority.grounds.watchConnection(connection.id);
+      await store.shares.revoke(granted.id);
+      await share(connection, user(bob), [READ, WRITE_STAGING]);
+      expect(await replaced.settle(ada.id)).toEqual({ orphaned: [], restored: [] });
+      expect(audit.admin).toEqual([]);
+    });
+
+    it('leaves out a mission revoked during the act, and one that was not active before it', async () => {
+      const connection = await connect(user(ada));
+      const granted = await share(connection, user(bob), [READ]);
+      const revokedMeanwhile = await mission(bob, [connection], [READ]);
+      const alreadyRevoked = await mission(bob, [connection], [READ]);
+      await store.missions.setStatus(alreadyRevoked.id, 'revoked');
+
+      const watch = await authority.grounds.watchConnection(connection.id);
+      await store.shares.revoke(granted.id);
+      await store.missions.setStatus(revokedMeanwhile.id, 'revoked');
+      expect(await watch.settle(ada.id)).toEqual({ orphaned: [], restored: [] });
+      expect(audit.admin).toEqual([]);
+    });
+
+    it('watchCreator follows the missions of that user only, in both directions', async () => {
       const group = await store.groups.getOrCreate('admins', 'local');
       await store.groups.addMember(group.id, bob.id);
       await store.groups.addMember(group.id, ada.id);
       const connection = await connect({ kind: 'group', id: group.id });
       const bobs = await mission(bob, [connection], [READ]);
-      const adas = await mission(ada, [connection], [READ]);
-      await store.groups.removeMember(group.id, bob.id);
+      await mission(ada, [connection], [READ]);
 
-      expect((await authority.grounds.sweepCreator(bob.id, 'operator')).map((m) => m.id)).toEqual([
-        bobs.id,
+      const leaving = await authority.grounds.watchCreator(bob.id);
+      await store.groups.removeMember(group.id, bob.id);
+      expect((await leaving.settle('operator')).orphaned.map((m) => m.id)).toEqual([bobs.id]);
+
+      const returning = await authority.grounds.watchCreator(bob.id);
+      await store.groups.addMember(group.id, bob.id);
+      expect((await returning.settle('operator')).restored.map((m) => m.id)).toEqual([bobs.id]);
+
+      expect(audit.admin.map((entry) => [entry.act, entry.user_id, entry.object.id])).toEqual([
+        ['mission-orphaned', 'operator', bobs.id],
+        ['mission-restored', 'operator', bobs.id],
       ]);
-      expect((await reread(adas)).status).toBe('active');
-      // A second sweep finds nothing left to orphan and writes nothing.
-      expect(await authority.grounds.sweepCreator(bob.id, 'operator')).toEqual([]);
-      expect(audit.admin).toHaveLength(1);
     });
   });
 
-  describe('MembershipSettler.afterRemoval', () => {
-    it('marks the connections whose owner group emptied unowned and orphans what the member lost', async () => {
+  describe('MembershipSettler.watch', () => {
+    it('marks the connections whose owner group emptied unowned and reports what the member lost', async () => {
       const group = await store.groups.getOrCreate('admins', 'local');
       await store.groups.addMember(group.id, bob.id);
       const owned = await connect({ kind: 'group', id: group.id });
       const adas = await connect(user(ada));
       const m = await mission(bob, [owned], [READ]);
-      await store.groups.removeMember(group.id, bob.id);
 
-      const settlement = await authority.membership.afterRemoval(bob.id, 'operator');
+      const watch = await authority.membership.watch(bob.id);
+      await store.groups.removeMember(group.id, bob.id);
+      const settlement = await watch.settle('operator');
 
       expect(settlement.unowned.map((c) => c.id)).toEqual([owned.id]);
       expect(settlement.orphaned.map((x) => x.id)).toEqual([m.id]);
+      expect(settlement.restored).toEqual([]);
       expect((await store.connections.getById(owned.id))?.status).toBe('unowned');
       expect((await store.connections.getById(adas.id))?.status).toBe('active');
+    });
+
+    it('reports the missions a regained membership grounds again', async () => {
+      const group = await store.groups.getOrCreate('admins', 'local');
+      await store.groups.addMember(group.id, bob.id);
+      await store.groups.addMember(group.id, ada.id);
+      const owned = await connect({ kind: 'group', id: group.id });
+      const m = await mission(bob, [owned], [READ]);
+      await store.groups.removeMember(group.id, bob.id);
+
+      const watch = await authority.membership.watch(bob.id);
+      await store.groups.addMember(group.id, bob.id);
+      const settlement = await watch.settle('operator');
+
+      expect(settlement.restored.map((x) => x.id)).toEqual([m.id]);
+      expect(settlement.orphaned).toEqual([]);
+      expect(settlement.unowned).toEqual([]);
     });
 
     it('changes nothing while the group keeps another member', async () => {
@@ -301,9 +403,9 @@ describe('MissionGrounds — the `orphaned` derivation', () => {
       await store.groups.addMember(group.id, bob.id);
       await store.groups.addMember(group.id, ada.id);
       const owned = await connect({ kind: 'group', id: group.id });
+      const watch = await authority.membership.watch(bob.id);
       await store.groups.removeMember(group.id, bob.id);
-      const settlement = await authority.membership.afterRemoval(bob.id, 'operator');
-      expect(settlement).toEqual({ unowned: [], orphaned: [] });
+      expect(await watch.settle('operator')).toEqual({ unowned: [], orphaned: [], restored: [] });
       expect((await store.connections.getById(owned.id))?.status).toBe('active');
     });
   });

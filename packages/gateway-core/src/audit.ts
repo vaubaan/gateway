@@ -99,11 +99,18 @@ export type AdminAct =
   | 'mission-rotated'
   | 'mission-revoked'
   | 'mission-closed'
-  /** The authority behind a mission vanished (spec §2.3 "orphaned"). The entry
-   *  names the human whose act removed it (the owner who revoked a share or a
-   *  connection, the operator who edited a group, the user whose sign-in
-   *  changed their groups); `after` carries the cause and the uncovered risks. */
+  /** The authority behind a mission went missing (spec §2.3 "orphaned", a state
+   *  derived on every read and never stored). The entry names the human whose
+   *  act removed it (the owner who revoked a share or a connection, the operator
+   *  who edited a group, the user whose sign-in changed their groups); `after`
+   *  carries the cause and the uncovered risks. */
   | 'mission-orphaned'
+  /** The authority behind an orphaned mission came back: it serves calls again,
+   *  session and counters intact. The entry names the human whose act returned
+   *  it (the owner who shared again, the operator who reassigned the connection
+   *  or added a group member, the user whose sign-in carried the group again);
+   *  `before` carries the cause the mission was orphaned for. */
+  | 'mission-restored'
   | 'budget-extended'
   | 'period-reset'
   | 'expiry-extended'

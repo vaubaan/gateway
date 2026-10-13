@@ -1,5 +1,5 @@
 /**
- * Mission grounds — is the authority a mission was issued under still there?
+ * Mission grounds — is the authority a mission was issued under there, now?
  * (spec §2.3 "orphaned", §7.8).
  *
  * A mission is grounded while its creator, *now*, still covers on every
@@ -12,24 +12,32 @@
  *                        share that grounded it was revoked or narrowed, or
  *                        they left the group that owned or received it
  *
- * An ungrounded `active` mission becomes `orphaned`: a stored, final status
- * (`MissionsRepo.markOrphaned`, conditional on `active`). Authority that
- * comes back later does not revive it; the creator issues a new mission,
- * which is checked against what they hold then. The derivation itself is
- * never stored: `check` reads the creator's status, their memberships and the
- * active shares on every call.
+ * `orphaned` is that verdict and nothing else: it is **derived on every
+ * read, never stored**. The store keeps `active` for an orphaned mission, and
+ * a migration trigger refuses the value. When the authority comes back (the
+ * share is made again, the creator is back in the group at the next sign-in,
+ * the operator reassigns the connection), the same mission serves calls
+ * again, with the same token, the same session and the same counters. A
+ * revoked connection never comes back, so its missions stay orphaned.
  *
- * Two ways in:
+ * Three ways in:
  *
- *   settle(mission)      the execution door, on every request (no human
- *                        behind it: the transition is logged, and the call
- *                        that met it is audited as `mission-inactive`)
- *   sweep*(…, actorId)   the services, right after the act that may have
- *                        removed an authority (a share revoked or replaced, a
- *                        connection revoked, transferred or reassigned, a
- *                        membership removed, a sign-in that changed the
- *                        user's groups): one `mission-orphaned` entry per
- *                        mission, naming the human behind that act
+ *   check(mission)       the verdict, from the store, right now
+ *   inspect / derive     the mission as every reader must see it: `orphaned`
+ *                        in place of `active` when the verdict says so. The
+ *                        execution door asks on every request; the mission
+ *                        and request services ask on every load. Nothing is
+ *                        written, and no administrative entry either: no
+ *                        human is behind a read.
+ *   watch*(…)            the services, around a human act that may remove or
+ *                        return an authority (a share made, replaced or
+ *                        revoked, a connection revoked, transferred or
+ *                        reassigned, a membership added or removed, a sign-in
+ *                        that changed the user's groups): the verdicts are
+ *                        taken before the act and again by `settle(actorId)`
+ *                        after it, and each mission whose verdict changed
+ *                        gets one entry naming that human: `mission-orphaned`
+ *                        or `mission-restored`.
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { RiskId } from '@vaubaan/shared';
@@ -50,23 +58,43 @@ export const ORPHAN_CAUSES = [
 ] as const;
 export type OrphanCause = (typeof ORPHAN_CAUSES)[number];
 
+/** Why a mission is orphaned right now. */
+export interface OrphanReason {
+  readonly cause: OrphanCause;
+  /** The first connection the cause was met on; `null` when the creator is gone. */
+  readonly connectionId: string | null;
+  /** The accepted risks the creator no longer covers (empty unless `authority-lost`). */
+  readonly uncovered: readonly RiskId[];
+}
+
 export type GroundsVerdict =
   | { readonly grounded: true }
-  | {
-      readonly grounded: false;
-      readonly cause: OrphanCause;
-      /** The first connection the cause was met on; `null` when the creator is gone. */
-      readonly connectionId: string | null;
-      /** The accepted risks the creator no longer covers (empty unless `authority-lost`). */
-      readonly uncovered: readonly RiskId[];
-    };
+  | ({ readonly grounded: false } & OrphanReason);
+
+/** A mission as a reader sees it, with the reason when it reads `orphaned`. */
+export interface InspectedMission {
+  /** `status` is `orphaned` when the stored one is `active` and the grounds are gone. */
+  readonly mission: MissionRecord;
+  readonly orphan: OrphanReason | null;
+}
+
+/** What a human act did to the missions that were watched around it. */
+export interface GroundsShift {
+  /** Grounded before the act, orphaned after it. */
+  readonly orphaned: readonly MissionRecord[];
+  /** Orphaned before the act, grounded after it. */
+  readonly restored: readonly MissionRecord[];
+}
+
+/** The verdicts taken before a human act; `settle` compares them with the ones after it. */
+export interface GroundsWatch {
+  /** `actorId` is the human behind the act: every entry written names them. */
+  settle(actorId: string): Promise<GroundsShift>;
+}
 
 export interface MissionGroundsDeps {
   readonly authority: AuthorityRecheck;
-  readonly missions: Pick<
-    MissionsRepo,
-    'getById' | 'markOrphaned' | 'listForConnection' | 'listForCreator'
-  >;
+  readonly missions: Pick<MissionsRepo, 'listForConnection' | 'listForCreator'>;
   readonly connections: Pick<ConnectionsRepo, 'getById'>;
   readonly audit: AuditWriter;
   readonly clock: Clock;
@@ -74,6 +102,7 @@ export interface MissionGroundsDeps {
 }
 
 const GROUNDED: GroundsVerdict = { grounded: true };
+const NO_SHIFT: GroundsShift = { orphaned: [], restored: [] };
 
 /**
  * The accepted risks of a mission that belong to one connection (spec §3.1
@@ -115,76 +144,97 @@ export class MissionGrounds {
   }
 
   /**
-   * The mission as the door must see it: an `active` mission whose grounds
-   * vanished is turned `orphaned` first. A mission in any other status is
-   * returned untouched, without a read.
+   * The mission as a reader must see it, with the reason when it is orphaned.
+   * Only a mission the store holds as `active` is checked: `revoked` and
+   * `expired` are stored facts no authority changes, returned without a read.
    */
-  async settle(mission: MissionRecord): Promise<MissionRecord> {
-    if (mission.status !== 'active') return mission;
+  async inspect(mission: MissionRecord): Promise<InspectedMission> {
+    if (mission.status !== 'active') return { mission, orphan: null };
     const verdict = await this.check(mission);
-    if (verdict.grounded) return mission;
-    return (await this.orphan(mission, verdict, null)) ?? mission;
+    if (verdict.grounded) return { mission, orphan: null };
+    const { cause, connectionId, uncovered } = verdict;
+    return {
+      mission: { ...mission, status: 'orphaned' },
+      orphan: { cause, connectionId, uncovered },
+    };
   }
 
-  /** Re-checks the active missions that carry the connection. Returns the ones orphaned. */
-  async sweepConnection(connectionId: string, actorId: string): Promise<MissionRecord[]> {
-    return this.sweep(await this.deps.missions.listForConnection(connectionId), actorId);
+  /** `inspect` without the reason. */
+  async derive(mission: MissionRecord): Promise<MissionRecord> {
+    return (await this.inspect(mission)).mission;
   }
 
-  /** Re-checks the active missions the user created. Returns the ones orphaned. */
-  async sweepCreator(userId: string, actorId: string): Promise<MissionRecord[]> {
-    return this.sweep(await this.deps.missions.listForCreator(userId), actorId);
+  /** Before an act on one connection (its shares, its owner, its revocation). */
+  async watchConnection(connectionId: string): Promise<GroundsWatch> {
+    return this.watch(() => this.deps.missions.listForConnection(connectionId));
   }
 
-  private async sweep(
+  /** Before an act on one user's memberships: the missions that user created. */
+  async watchCreator(userId: string): Promise<GroundsWatch> {
+    return this.watch(() => this.deps.missions.listForCreator(userId));
+  }
+
+  private async watch(list: () => Promise<MissionRecord[]>): Promise<GroundsWatch> {
+    const before = await this.verdictsOf(await list());
+    return {
+      settle: async (actorId) => {
+        if (before.size === 0) return NO_SHIFT;
+        const orphaned: MissionRecord[] = [];
+        const restored: MissionRecord[] = [];
+        // Listed again: a mission revoked during the act is no longer `active`,
+        // and one issued during it was not watched.
+        for (const mission of await list()) {
+          const was = before.get(mission.id);
+          if (!was || mission.status !== 'active') continue;
+          const now = await this.check(mission);
+          if (was.grounded === now.grounded) continue;
+          if (now.grounded) {
+            await this.record(mission, 'mission-restored', actorId, was, now);
+            restored.push(mission);
+          } else {
+            await this.record(mission, 'mission-orphaned', actorId, was, now);
+            orphaned.push({ ...mission, status: 'orphaned' });
+          }
+        }
+        return { orphaned, restored };
+      },
+    };
+  }
+
+  /** The verdict of each mission the store holds as `active`, by mission id. */
+  private async verdictsOf(
     missions: readonly MissionRecord[],
-    actorId: string,
-  ): Promise<MissionRecord[]> {
-    const orphaned: MissionRecord[] = [];
+  ): Promise<Map<string, GroundsVerdict>> {
+    const verdicts = new Map<string, GroundsVerdict>();
     for (const mission of missions) {
       if (mission.status !== 'active') continue;
-      const verdict = await this.check(mission);
-      if (verdict.grounded) continue;
-      const after = await this.orphan(mission, verdict, actorId);
-      if (after) orphaned.push(after);
+      verdicts.set(mission.id, await this.check(mission));
     }
-    return orphaned;
+    return verdicts;
   }
 
-  /** `active` → `orphaned`; `null` when another path closed the mission first. */
-  private async orphan(
+  private async record(
     mission: MissionRecord,
-    verdict: Extract<GroundsVerdict, { grounded: false }>,
-    actorId: string | null,
-  ): Promise<MissionRecord | null> {
-    if (!(await this.deps.missions.markOrphaned(mission.id))) {
-      return this.deps.missions.getById(mission.id);
-    }
-    this.deps.logger.warn('mission orphaned', {
+    act: 'mission-orphaned' | 'mission-restored',
+    actorId: string,
+    before: GroundsVerdict,
+    after: GroundsVerdict,
+  ): Promise<void> {
+    this.deps.logger.warn(act === 'mission-orphaned' ? 'mission orphaned' : 'mission restored', {
       mission_id: mission.id,
-      cause: verdict.cause,
-      connection_id: verdict.connectionId,
-      uncovered: verdict.uncovered,
-      detected_by: actorId === null ? 'execution-door' : 'sweep',
+      actor_id: actorId,
+      ...reasonFields(before.grounded ? after : before),
     });
-    if (actorId !== null) {
-      await this.deps.audit.write({
-        kind: 'admin',
-        ts: toIso(this.deps.clock.now()),
-        user_id: actorId,
-        act: 'mission-orphaned',
-        object: { type: 'mission', id: mission.id },
-        before: { status: mission.status },
-        after: {
-          status: 'orphaned',
-          cause: verdict.cause,
-          connection_id: verdict.connectionId,
-          uncovered: verdict.uncovered,
-        },
-        delegated_client_id: null,
-      });
-    }
-    return this.deps.missions.getById(mission.id);
+    await this.deps.audit.write({
+      kind: 'admin',
+      ts: toIso(this.deps.clock.now()),
+      user_id: actorId,
+      act,
+      object: { type: 'mission', id: mission.id },
+      before: stateOf(before),
+      after: stateOf(after),
+      delegated_client_id: null,
+    });
   }
 }
 
@@ -194,4 +244,18 @@ function ungrounded(
   uncovered: readonly RiskId[] = [],
 ): GroundsVerdict {
   return { grounded: false, cause, connectionId, uncovered };
+}
+
+function reasonFields(verdict: GroundsVerdict): Record<string, unknown> {
+  if (verdict.grounded) return {};
+  return {
+    cause: verdict.cause,
+    connection_id: verdict.connectionId,
+    uncovered: verdict.uncovered,
+  };
+}
+
+/** One side of an audit entry: the derived state, with the reason when orphaned. */
+function stateOf(verdict: GroundsVerdict): Record<string, unknown> {
+  return { status: verdict.grounded ? 'active' : 'orphaned', ...reasonFields(verdict) };
 }

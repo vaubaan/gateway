@@ -28,8 +28,8 @@ export interface ConnectionsModuleDeps {
   readonly sessions: SessionStore;
   readonly rateLimiter: RateLimiter;
   readonly authenticator: Authenticator;
-  /** Orphans the missions of a connection that was revoked, transferred or reassigned. */
-  readonly grounds: Pick<MissionGrounds, 'sweepConnection'>;
+  /** Watches the missions of a connection across its revocation, transfer or reassignment. */
+  readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
   readonly logger: Logger;
   /** Outbound HTTP of the connect flows and of the plugins' discovery (tests inject a mock). */
   readonly fetch?: typeof fetch;

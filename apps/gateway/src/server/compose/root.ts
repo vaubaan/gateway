@@ -74,7 +74,7 @@ export interface GatewayRoot {
   readonly providerApps: ProviderAppsService;
   /** Connect flows, resources, credential broker with the generic OAuth refresh (P1.4). */
   readonly connections: ConnectionsModule;
-  /** Authority: owner or union of shares, mission grounds (`orphaned`), membership settlement (P2.2). */
+  /** Authority: owner or union of shares, mission grounds (`orphaned`, derived), membership settlement (P2.2). */
   readonly authority: AuthorityModule;
   /** Shares of a connection to a user or a group, and the shares a user received (P2.2). */
   readonly shares: SharesModule;
@@ -250,7 +250,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // deployment injects a shared `SessionStore` instead.
   const sessions: SessionStore = deps.sessions ?? store.webSessions;
   // Authority reads the store only, so it is built first: the sign-in settles what a
-  // lost membership held, and every module below checks or sweeps through it.
+  // changed membership did, and every module below checks, derives or watches through it.
   const authority = createAuthorityModule({ store, registry, logger });
   const auth = createAuthModule({
     config,
@@ -258,8 +258,12 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     sessions,
     logger,
     oidc: deps.oidc,
-    membershipsSynced: async (user) => {
-      await authority.membership.afterRemoval(user.id, user.id);
+    // The user themselves is the human behind a sign-in that changes their groups.
+    membershipsChanging: async (user) => {
+      const watch = await authority.membership.watch(user.id);
+      return async () => {
+        await watch.settle(user.id);
+      };
     },
   });
   const missions = createMissionsModule({
@@ -268,6 +272,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     registry,
     authenticator: auth.authenticator,
     authority: authority.service,
+    grounds: authority.grounds,
     logger,
   });
 
@@ -312,6 +317,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     config,
     store,
     registry,
+    grounds: authority.grounds,
     authenticator: auth.authenticator,
     rateLimiter,
     logger,

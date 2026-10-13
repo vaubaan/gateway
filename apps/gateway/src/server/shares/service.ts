@@ -15,8 +15,10 @@
  *     catalog, and an empty list is refused rather than stored;
  *   - one active share per `(connection, target)`: sharing again to the same
  *     target replaces the previous restriction (that is how it is edited);
- *   - a share that is revoked or narrowed turns the missions it grounded
- *     `orphaned`, at once.
+ *   - a share that is revoked or narrowed leaves the missions it grounded
+ *     `orphaned`, at once; a share made again brings them back. The state
+ *     is derived (`MissionGrounds`): this service only watches the missions
+ *     of the connection around its act, so that each change is audited.
  */
 import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
@@ -75,6 +77,8 @@ export interface ShareOutcome {
   readonly replaced: ShareRecord | null;
   /** Missions that lost their grounds because the restriction shrank. */
   readonly orphaned: number;
+  /** Orphaned missions this share grounds again: they serve calls from now on. */
+  readonly restored: number;
 }
 
 export interface RevokeOutcome {
@@ -106,7 +110,7 @@ export interface ShareServiceDeps {
   readonly store: Pick<Store, 'shares' | 'connections' | 'users' | 'groups'>;
   readonly registry: PluginRegistry;
   readonly connections: Pick<ConnectionService, 'get'>;
-  readonly grounds: Pick<MissionGrounds, 'sweepConnection'>;
+  readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -145,6 +149,7 @@ export class ShareService {
     const restriction = this.restrictionOf(connection, input.riskIds);
     const target = await this.targetOf(connection, input.target);
 
+    const watch = await this.deps.grounds.watchConnection(connection.id);
     const { created, replaced } = await this.deps.store.shares.replaceForTarget({
       connectionId: connection.id,
       target,
@@ -166,26 +171,31 @@ export class ShareService {
       },
       delegated_client_id: null,
     });
-    // A replacement may have narrowed the restriction under missions already issued.
-    const orphaned = replaced
-      ? await this.deps.grounds.sweepConnection(connection.id, actor.user.id)
-      : [];
+    // A replacement may have narrowed the restriction under missions already issued;
+    // a share made again may ground missions that an earlier revocation orphaned.
+    const { orphaned, restored } = await watch.settle(actor.user.id);
     this.deps.logger.info('connection shared', {
       connection_id: connection.id,
       share_id: created.id,
       target_kind: target.kind,
       risks: created.restriction.length,
       replaced: replaced?.id ?? null,
+      missions_orphaned: orphaned.length,
+      missions_restored: restored.length,
     });
     return {
       share: created,
       targetLabel: await principalLabel(this.deps.store, created.target),
       replaced,
       orphaned: orphaned.length,
+      restored: restored.length,
     };
   }
 
-  /** Terminal (spec §2.3). The missions the share grounded become `orphaned`. */
+  /**
+   * Terminal for the share (spec §2.3). The missions it grounded read
+   * `orphaned` until a new share covers them again.
+   */
   async revoke(actor: Actor, shareId: string): Promise<RevokeOutcome> {
     const share = await this.deps.store.shares.getById(shareId);
     if (!share) throw new ShareError('not-found');
@@ -193,9 +203,10 @@ export class ShareService {
     const targetLabel = await principalLabel(this.deps.store, share.target);
     if (share.status === 'revoked') return { share, targetLabel, orphaned: 0 };
 
+    const watch = await this.deps.grounds.watchConnection(share.connectionId);
     const revoked = await this.deps.store.shares.revoke(share.id);
     await this.auditRevoked(actor, share, null);
-    const orphaned = await this.deps.grounds.sweepConnection(share.connectionId, actor.user.id);
+    const { orphaned } = await watch.settle(actor.user.id);
     this.deps.logger.info('share revoked', {
       connection_id: share.connectionId,
       share_id: share.id,

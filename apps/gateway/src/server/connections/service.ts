@@ -196,7 +196,7 @@ export interface ConnectionServiceDeps {
   readonly providerApps: ProviderAppsService;
   readonly broker: CredentialBroker;
   /** Re-checks the missions of a connection after an act that may have removed an authority. */
-  readonly grounds: Pick<MissionGrounds, 'sweepConnection'>;
+  readonly grounds: Pick<MissionGrounds, 'watchConnection'>;
   readonly pending: PendingConnectStore;
   readonly rateLimiter: RateLimiter;
   readonly audit: AuditWriter;
@@ -824,14 +824,16 @@ export class ConnectionService {
 
   /**
    * Terminal. The sealed credential is erased; the provider-side grant is not
-   * revoked. The missions that carry the connection become `orphaned` (spec §7.8).
+   * revoked. The missions that carry the connection are `orphaned` from then
+   * on, and stay so: a revoked connection never comes back (spec §2.3, §7.8).
    */
   async revoke(actor: Actor, connectionId: string): Promise<ConnectionRecord> {
     const connection = await this.requireOwned(actor, connectionId);
     if (connection.status === 'revoked') return connection;
+    const watch = await this.deps.grounds.watchConnection(connection.id);
     const revoked = await this.deps.store.connections.revoke(connection.id);
     await this.audit(actor.user.id, 'connection-revoked', revoked, { status: connection.status });
-    await this.deps.grounds.sweepConnection(revoked.id, actor.user.id);
+    await watch.settle(actor.user.id);
     this.deps.logger.info('connection revoked', {
       connection_id: revoked.id,
       provider: revoked.provider,
@@ -857,7 +859,8 @@ export class ConnectionService {
    * Transfers ownership to a group the actor belongs to (spec §7.2): every
    * current and future member of that group is then a full owner. Shares of
    * the connection are kept. Members of a previous owner group who are not in
-   * the new one lose their authority: their missions are re-checked.
+   * the new one lose their authority, members of the new one gain it: the
+   * missions of the connection are watched across the transfer.
    */
   async transfer(actor: Actor, connectionId: string, groupId: string): Promise<ConnectionRecord> {
     const connection = await this.requireOwned(actor, connectionId);
@@ -867,6 +870,7 @@ export class ConnectionService {
     if (!group) throw new ConnectError('transfer-not-member');
     if (connection.owner.kind === 'group' && connection.owner.id === group.id) return connection;
 
+    const watch = await this.deps.grounds.watchConnection(connection.id);
     const transferred = await this.deps.store.connections.transferOwner(connection.id, {
       kind: 'group',
       id: group.id,
@@ -874,7 +878,7 @@ export class ConnectionService {
     await this.audit(actor.user.id, 'connection-transferred', transferred, {
       owner: connection.owner,
     });
-    await this.deps.grounds.sweepConnection(transferred.id, actor.user.id);
+    await watch.settle(actor.user.id);
     this.deps.logger.info('connection transferred', {
       connection_id: transferred.id,
       group_id: group.id,
@@ -894,7 +898,9 @@ export class ConnectionService {
    * gives an ownerless connection a new owner. An `unowned` connection is
    * `active` again; an `expired` one stays `expired` until its new owner
    * reconnects. Nothing else of the connection is reachable from here: no
-   * credential, no share, no mission.
+   * credential, no share, no mission. The missions the emptied owner group
+   * had left orphaned serve again when their creator is the new owner, or a
+   * member of the new owner group.
    */
   async reassign(
     operatorId: string,
@@ -908,12 +914,13 @@ export class ConnectionService {
       throw new ConnectError(exists ? 'not-ownerless' : 'not-found');
     }
     const owner = await this.resolveNewOwner(newOwner);
+    const watch = await this.deps.grounds.watchConnection(connection.id);
     const reassigned = await this.deps.store.connections.assignOwner(connection.id, owner);
     await this.audit(operatorId, 'connection-reassigned', reassigned, {
       owner: connection.owner,
       status: connection.status,
     });
-    await this.deps.grounds.sweepConnection(reassigned.id, operatorId);
+    await watch.settle(operatorId);
     this.deps.logger.info('connection reassigned by the operator', {
       connection_id: reassigned.id,
       owner_kind: owner.kind,

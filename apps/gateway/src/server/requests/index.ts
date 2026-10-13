@@ -10,6 +10,7 @@
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth';
+import type { MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
@@ -37,6 +38,8 @@ export interface RequestsModuleDeps {
   readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies' | 'approvals'>;
   readonly store: Store;
   readonly registry: PluginRegistry;
+  /** Derives `orphaned` on every mission read (handbook authority). */
+  readonly grounds: Pick<MissionGrounds, 'derive'>;
   readonly authenticator: Authenticator;
   readonly rateLimiter: RateLimiter;
   readonly logger: Logger;
@@ -50,6 +53,7 @@ export function createRequestsModule(deps: RequestsModuleDeps): RequestsModule {
   const service = new RequestService({
     store: deps.store,
     registry: deps.registry,
+    grounds: deps.grounds,
     publicUrl: deps.config.publicUrl,
     approvalValiditySeconds: deps.config.approvals.expirySeconds,
     clock: deps.clock ?? systemClock,

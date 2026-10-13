@@ -95,11 +95,21 @@ function untilPeriodEnd(periodEnd: Iso8601 | null): string {
     : 'for the rest of this one-off mission';
 }
 
+/**
+ * `orphaned` is derived from the creator's authority at the instant of the decision
+ * (spec §2.3): the same request can be decided once that authority is back.
+ */
+export const ORPHANED_PROBLEM =
+  'The mission is orphaned: the authority behind it is missing, so every call is refused whatever you decide. The request can be granted once that authority is back.';
+
 function closedProblem(state: ClaimMissionState): ClaimProblem | null {
   if (state === 'revoked' || state === 'orphaned') {
     return {
       code: 'mission-closed',
-      message: `The mission is ${state}: every call is refused whatever its budget.`,
+      message:
+        state === 'orphaned'
+          ? ORPHANED_PROBLEM
+          : `The mission is ${state}: every call is refused whatever its budget.`,
     };
   }
   return null;

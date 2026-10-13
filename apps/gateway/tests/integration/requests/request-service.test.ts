@@ -14,6 +14,7 @@ import type {
   RecordCallRefused,
   RecordCallResult,
 } from '../../../src/server/budget/index.ts';
+import { alwaysGrounded } from '../../../src/server/authority/testing.ts';
 import { createLogger } from '../../../src/server/logging/index.ts';
 import {
   RequestService,
@@ -48,6 +49,7 @@ describe('RequestService', () => {
       store: f.store,
       // No plugin registered: labels fall back to the risk ids.
       registry: { get: () => undefined },
+      grounds: alwaysGrounded,
       publicUrl: PUBLIC_URL,
       approvalValiditySeconds: APPROVAL_VALIDITY_SECONDS,
       clock: f.clock,

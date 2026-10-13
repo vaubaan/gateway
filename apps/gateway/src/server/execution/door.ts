@@ -13,8 +13,9 @@
  *                 `wrong-credential-kind` (spec §6 "none crosses over")
  *   grounds       the creator's authority over the mission, re-read from the
  *                 store on every request (spec §2.3 "orphaned", §10): a mission
- *                 whose grounds vanished is turned `orphaned` here and every
- *                 call is then refused `mission-inactive`
+ *                 whose grounds are gone reads `orphaned` for this request and
+ *                 the call is refused `mission-inactive`; nothing is stored,
+ *                 so the same token serves again once the authority is back
  *   surface rate  requests per minute per mission (spec §6) → 429
  *   protocol      the MCP SDK (`@modelcontextprotocol/server`, v2): 2026-07-28
  *                 requests through `createMcpHandler` (stateless, JSON, upgraded
@@ -104,7 +105,7 @@ export interface ExecutionDoorDeps {
   readonly registry: PluginRegistry;
   readonly tokens: TokenVerifier;
   /** Is the mission still grounded in its creator's current authority? Never optional. */
-  readonly grounds: Pick<MissionGrounds, 'settle'>;
+  readonly grounds: Pick<MissionGrounds, 'inspect'>;
   readonly webSessions: Pick<WebSessionService, 'read'>;
   readonly budget: Pick<SessionService, 'stateOf'>;
   readonly pipeline: CallPipeline;
@@ -275,9 +276,20 @@ export class ExecutionDoor {
           if (dead || (verified.outcome === 'retired' && verified.reason === 'rotated')) {
             return null;
           }
-          // Authority is never snapshotted in a mission: the creator's is re-read
-          // here, and a mission it no longer grounds is `orphaned` from this call on.
-          const mission = await this.deps.grounds.settle(verified.mission);
+          // Authority is never snapshotted in a mission, and `orphaned` is never
+          // stored: the creator's authority is re-read here, and the mission is
+          // orphaned for this request exactly when it does not ground it now.
+          const { mission, orphan } = await this.deps.grounds.inspect(verified.mission);
+          if (orphan) {
+            // No administrative entry: no human is behind this read. The refused
+            // call itself is audited by the pipeline (`mission-inactive`).
+            this.deps.logger.info('mission orphaned at the execution door', {
+              mission_id: mission.id,
+              cause: orphan.cause,
+              connection_id: orphan.connectionId,
+              uncovered: orphan.uncovered,
+            });
+          }
           const context = await loadMissionContext(this.deps.store, mission, verified.token);
           this.missionsByContext.set(context, mission);
           return { kind: 'mission-token', context };

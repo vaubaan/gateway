@@ -17,7 +17,7 @@ import { GroupService } from './service';
 export interface GroupsModuleDeps {
   readonly config: Pick<InstanceConfig, 'publicUrl' | 'admin'>;
   readonly store: Store;
-  readonly membership: Pick<MembershipSettler, 'afterRemoval'>;
+  readonly membership: Pick<MembershipSettler, 'watch'>;
   readonly connections: Pick<ConnectionsModule, 'notices'>;
   readonly authenticator: Authenticator;
   readonly logger: Logger;

@@ -15,7 +15,7 @@ export interface UsersRepo {
   getBySubject(subject: string): Promise<UserRecord | null>;
   findByEmail(email: string): Promise<UserRecord[]>;
   list(): Promise<UserRecord[]>;
-  /** The user vanished from the IdP; their missions become `orphaned` (handled by the caller). */
+  /** The user vanished from the IdP; their missions read `orphaned` from then on (derived, `MissionGrounds`). */
   markRemoved(id: string): Promise<UserRecord>;
 }
 

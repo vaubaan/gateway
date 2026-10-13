@@ -1,7 +1,8 @@
 /**
  * Authority (spec §3.1, §2.3 "orphaned" / "unowned"): what a user may accept on
  * a connection (owner, or the union of the shares they receive), whether a
- * mission is still grounded, and what a membership removal settles. Built
+ * mission is grounded right now (`orphaned` is that answer, derived on every
+ * read and never stored), and what a membership change settles. Built
  * once by the composition root as `root.authority`.
  * Handbook: docs/handbook/authority.md.
  */
@@ -73,13 +74,18 @@ export {
   MembershipSettler,
   type MembershipSettlement,
   type MembershipSettlerDeps,
+  type MembershipWatch,
 } from './membership';
 export { findActiveUserByEmail, principalLabel, type UserLookup } from './principals';
 export {
   MissionGrounds,
   ORPHAN_CAUSES,
   partitionOf,
+  type GroundsShift,
   type GroundsVerdict,
+  type GroundsWatch,
+  type InspectedMission,
   type MissionGroundsDeps,
   type OrphanCause,
+  type OrphanReason,
 } from './mission-grounds';

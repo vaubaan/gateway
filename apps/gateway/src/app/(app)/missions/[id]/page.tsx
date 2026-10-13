@@ -12,6 +12,7 @@ import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import {
   Badge,
+  Banner,
   Card,
   CardBody,
   CardHeader,
@@ -27,6 +28,7 @@ import {
 } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import { maskedToken } from '@/server/missions';
+import { explainOrphan } from '@/server/missions/orphan-reason';
 import { reloadPhrase } from '@/server/missions/summary';
 
 import { BootstrapKitView } from '../bootstrap-kit-view';
@@ -47,9 +49,11 @@ export default async function MissionPage({ params }: Props) {
   const { id } = await params;
   const detail = await session.root.missions.service.get(session.user, id);
   if (!detail) notFound();
-  const { mission, state, token } = detail;
-  // A revoked or orphaned mission refuses every call: its gates no longer matter.
+  const { mission, state, token, orphan } = detail;
+  // A revoked or orphaned mission refuses every call: its gates are not edited. `orphaned`
+  // is derived on this very read, so the control is back as soon as the authority is.
   const gatesEditable = mission.status !== 'revoked' && mission.status !== 'orphaned';
+  const orphanExplanation = orphan && explainOrphan(orphan, detail.connections);
 
   return (
     <Stack gap="var(--space-5)">
@@ -70,9 +74,21 @@ export default async function MissionPage({ params }: Props) {
             missionId={mission.id}
             name={mission.name}
             active={state.kind === 'active'}
+            revocable={state.kind !== 'revoked'}
           />
         </div>
       </div>
+
+      {orphanExplanation && (
+        <Banner
+          tone={orphanExplanation.reversible ? 'warning' : 'danger'}
+          title={orphanExplanation.title}
+        >
+          {orphanExplanation.lines.map((line) => (
+            <p key={line}>{line}</p>
+          ))}
+        </Banner>
+      )}
 
       <Card>
         <CardBody>

@@ -5,7 +5,7 @@
  *
  *   VAUBAAN_BENCH=1 npx vitest run apps/gateway/tests/integration/authority/door-latency.bench.test.ts
  *
- * It prints the mean cost of `MissionGrounds.settle` for the three shapes a
+ * It prints the mean cost of `MissionGrounds.inspect` for the three shapes a
  * mission can be grounded in, next to the mean of a whole `tools/call`
  * through the door on the same instance (`:memory:` store, echo plugin).
  */
@@ -87,17 +87,17 @@ describe.skipIf(!process.env.VAUBAAN_BENCH)('latency of the authority re-check',
     await rig.close();
   });
 
-  it('prints the cost of settle() and of a whole call', async () => {
+  it('prints the cost of inspect() and of a whole call', async () => {
     const lines: string[] = [];
     for (const { name, mission } of shapes) {
       const record = (await rig.root.store.missions.getById(mission.mission.id))!;
       const settle = await meanMicros(SETTLE_ITERATIONS, () =>
-        rig.root.authority.grounds.settle(record),
+        rig.root.authority.grounds.inspect(record),
       );
       const call = await meanMicros(CALL_ITERATIONS, () => rig.read(mission));
       expect((await rig.read(mission)).result).toBeDefined();
       lines.push(
-        `${name.padEnd(22)} settle ${settle.toFixed(1).padStart(7)} µs   tools/call ${call
+        `${name.padEnd(22)} inspect ${settle.toFixed(1).padStart(7)} µs   tools/call ${call
           .toFixed(1)
           .padStart(8)} µs   share of the call ${((settle / call) * 100).toFixed(1)} %`,
       );
