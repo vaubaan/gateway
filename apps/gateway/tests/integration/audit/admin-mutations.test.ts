@@ -1,0 +1,630 @@
+/**
+ * Structural test (spec §8 "one entry … per administrative act"; plan P1.8
+ * "every admin mutation path writes an admin audit entry — the test
+ * enumerates the service methods").
+ *
+ * The public methods of every class under `server/{connections,
+ * provider-apps,missions,auth,requests}` are read from the source with the TypeScript
+ * parser and each must be classified below as a read, a mutation or an
+ * exemption with its reason. A method added tomorrow fails the first test
+ * until it is classified; a mutation is then driven on an ephemeral instance
+ * and must leave the administrative entry named next to it.
+ */
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+import type { AdminAct, AdminObjectType } from '@vaubaan/gateway-core';
+import { createRegistry } from '@vaubaan/plugin-sdk';
+import { mockFetch } from '@vaubaan/plugin-sdk/testing';
+import ts from 'typescript';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+
+import { SESSION_COOKIE } from '../../../src/server/auth';
+import { completeLogin } from '../../../src/server/auth/login';
+import { buildRoot, type GatewayRoot } from '../../../src/server/compose/root';
+import { memoryStoreDeps } from '../../../src/server/compose/testing';
+import { loadInstanceConfig } from '../../../src/server/config';
+import { validEnv } from '../../../src/server/config/testing';
+import type { Actor } from '../../../src/server/connections';
+import {
+  API_KEY_SPEC,
+  fixturePlugin,
+  OAUTH_SPEC,
+  stateOf,
+  UNVERIFIED_APP_INSTALL_SPEC,
+} from '../../../src/server/connections/testing';
+import { silentLogger } from '../../../src/server/logging';
+import type { ConnectionRecord, MissionRecord, UserRecord } from '../../../src/server/store/types';
+
+const SERVER = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/server');
+const SCANNED = ['connections', 'provider-apps', 'missions', 'auth', 'requests'];
+const PUBLIC_URL = 'https://gateway.example.com';
+const OPERATOR_EMAIL = 'ops@example.com';
+
+// ── The enumeration: public methods of every class, from the source ─────────
+
+const SKIPPED_FILE = /\.test\.ts$|\/testing\.ts$/;
+
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir).flatMap((name) => {
+    const path = join(dir, name);
+    if (statSync(path).isDirectory()) return sourceFiles(path);
+    return name.endsWith('.ts') && !SKIPPED_FILE.test(path) ? [path] : [];
+  });
+}
+
+function isHidden(member: ts.ClassElement): boolean {
+  const modifiers = ts.canHaveModifiers(member) ? (ts.getModifiers(member) ?? []) : [];
+  return modifiers.some(
+    (m) =>
+      m.kind === ts.SyntaxKind.PrivateKeyword ||
+      m.kind === ts.SyntaxKind.ProtectedKeyword ||
+      m.kind === ts.SyntaxKind.StaticKeyword,
+  );
+}
+
+/** `Class.method` for every public instance method declared under the scanned directories. */
+function publicMethods(): string[] {
+  const found: string[] = [];
+  for (const dir of SCANNED) {
+    for (const file of sourceFiles(join(SERVER, dir))) {
+      const source = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.ES2022);
+      const visit = (node: ts.Node): void => {
+        if (ts.isClassDeclaration(node) && node.name) {
+          for (const member of node.members) {
+            if (!ts.isMethodDeclaration(member) || isHidden(member)) continue;
+            if (ts.isPrivateIdentifier(member.name)) continue;
+            found.push(`${node.name.text}.${member.name.getText(source)}`);
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(source);
+    }
+  }
+  return found.sort();
+}
+
+// ── The rig: a real root over fixture plugins and a mocked provider ─────────
+
+interface Rig {
+  readonly root: GatewayRoot;
+  readonly operator: UserRecord;
+  readonly alice: Actor;
+  /** Same-origin form POST carrying the operator's session. */
+  operatorPost(path: string, fields: Record<string, string>): Promise<Request>;
+  connectByKey(): Promise<ConnectionRecord>;
+  registerOAuthApp(): Promise<void>;
+  issue(): Promise<MissionRecord>;
+  /** An open claim on a mission of Alice whose risk has consumed one action. */
+  claim(): Promise<string>;
+}
+
+async function openRig(): Promise<Rig> {
+  const provider = mockFetch([
+    {
+      method: 'POST',
+      url: OAUTH_SPEC.tokenUrl,
+      body: { access_token: 'access-token', refresh_token: 'refresh-token', expires_in: 3600 },
+    },
+  ]);
+  const root = await buildRoot({
+    loadConfig: () =>
+      loadInstanceConfig({
+        env: validEnv({ VAUBAAN_PUBLIC_URL: PUBLIC_URL, VAUBAAN_ADMIN_EMAILS: OPERATOR_EMAIL }),
+      }),
+    logWrite: () => undefined,
+    buildRegistry: async () =>
+      createRegistry([
+        fixturePlugin({
+          id: 'keyco',
+          credential: API_KEY_SPEC,
+          discoverResources: async () => [
+            { provider: 'keyco', ref: 'acct-a', displayName: 'Account A' },
+          ],
+        }),
+        fixturePlugin({ id: 'oauthco', credential: OAUTH_SPEC }),
+        fixturePlugin({ id: 'oldappco', credential: UNVERIFIED_APP_INSTALL_SPEC }),
+      ]),
+    providerFetch: provider,
+    ...memoryStoreDeps,
+  });
+  const operator = await root.store.users.upsertFromIdp({
+    subject: 'idp|ops',
+    email: OPERATOR_EMAIL,
+  });
+  const aliceUser = await root.store.users.upsertFromIdp({
+    subject: 'idp|alice',
+    email: 'alice@example.com',
+  });
+  const alice: Actor = { user: aliceUser, groups: [] };
+
+  const rig: Rig = {
+    root,
+    operator,
+    alice,
+    async operatorPost(path, fields) {
+      const session = await root.auth.sessions.create({
+        kind: 'user',
+        userId: operator.id,
+        login: { email: operator.email, groups: [] },
+      });
+      return new Request(`${PUBLIC_URL}${path}`, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/x-www-form-urlencoded',
+          origin: PUBLIC_URL,
+          cookie: `${SESSION_COOKIE}=${session.id}`,
+        },
+        body: new URLSearchParams(fields).toString(),
+      });
+    },
+    async connectByKey() {
+      const started = await root.connections.service.start(alice, 'keyco', {
+        displayName: 'Key account',
+        fields: { token: 'key-0123456789', team_id: 'team_abc' },
+      });
+      if (started.kind !== 'connected') throw new Error('expected an immediate connection');
+      return started.connection;
+    },
+    async registerOAuthApp() {
+      await root.providerApps.save('oauthco', { client_id: 'cid', client_secret: 'csecret' });
+    },
+    async issue() {
+      const connection = await rig.connectByKey();
+      const result = await root.missions.service.issue(alice.user, {
+        name: 'Read the things',
+        connections: [{ connection_id: connection.id, preset: 'reader' }],
+        period: { kind: 'recurring', length_seconds: 86_400 },
+        expires_at: null,
+      });
+      if (!result.ok) throw new Error(`issue refused: ${JSON.stringify(result)}`);
+      return result.mission;
+    },
+    async claim() {
+      const mission = await rig.issue();
+      const riskId = mission.policy[0]?.riskId;
+      if (!riskId) throw new Error('expected a policy');
+      const decided = await root.store.sessions.decideAndDecrement(
+        { missionId: mission.id, riskIds: [riskId], periodStart: mission.periodAnchor },
+        () => ({ allow: true }),
+      );
+      const request = await root.store.requests.create({
+        missionId: mission.id,
+        sessionId: decided.session.id,
+        kind: 'claim',
+        riskId,
+        expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
+      });
+      return request.id;
+    },
+  };
+  return rig;
+}
+
+// ── The classification ──────────────────────────────────────────────────────
+
+interface ExpectedEntry {
+  readonly act: AdminAct;
+  readonly object: AdminObjectType;
+  /** `object.id`, when it is not the id of something the driver creates. */
+  readonly objectId?: string;
+  /** Who the entry names: the acting user. */
+  readonly actor: 'alice' | 'operator';
+}
+
+type Rule =
+  | { readonly kind: 'read' }
+  | { readonly kind: 'exempt'; readonly why: string }
+  | {
+      readonly kind: 'mutation';
+      /** The instance whose method the driver must end up calling. */
+      readonly target: (root: GatewayRoot) => object;
+      /** Setup that is not the act under test (its own entries are not counted). */
+      readonly prepare?: (rig: Rig) => Promise<unknown>;
+      readonly drive: (rig: Rig, prepared: never) => Promise<unknown>;
+      readonly writes: ExpectedEntry;
+    };
+
+const READ: Rule = { kind: 'read' };
+const exempt = (why: string): Rule => ({ kind: 'exempt', why });
+
+const SESSION_STATE =
+  'web session and transient per-session state (sign-in, notices, pending flows): not an administrative act of spec §8';
+const SYSTEM_REFRESH =
+  'performed by the gateway during a call or a discovery, with no human actor: an administrative entry always names a user (spec §8); the outcome is in the call entry and the instance log';
+
+const connections = (root: GatewayRoot) => root.connections.service;
+const missions = (root: GatewayRoot) => root.missions.service;
+const providerApps = (root: GatewayRoot) => root.providerApps;
+
+const RULES: Readonly<Record<string, Rule>> = {
+  // ── connections ───────────────────────────────────────────────────────────
+  'ConnectionService.providers': READ,
+  'ConnectionService.provider': READ,
+  'ConnectionService.listFor': READ,
+  'ConnectionService.get': READ,
+  'ConnectionService.callbackUrl': READ,
+  'ConnectionService.start': {
+    kind: 'mutation',
+    target: connections,
+    drive: (rig) => rig.connectByKey(),
+    writes: { act: 'connection-created', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.complete': {
+    kind: 'mutation',
+    target: connections,
+    prepare: async (rig) => {
+      await rig.registerOAuthApp();
+      const started = await rig.root.connections.service.start(rig.alice, 'oauthco');
+      if (started.kind !== 'redirect') throw new Error('expected a redirect');
+      return stateOf(started.url);
+    },
+    drive: (rig, state: string) =>
+      rig.root.connections.service.complete(
+        rig.alice,
+        'oauthco',
+        new URLSearchParams({ code: 'code-1', state }),
+      ),
+    writes: { act: 'connection-created', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.discover': {
+    kind: 'mutation',
+    target: connections,
+    prepare: (rig) => rig.connectByKey(),
+    drive: (rig, connection: ConnectionRecord) =>
+      rig.root.connections.service.discover(rig.alice, connection.id),
+    writes: { act: 'resources-discovered', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.updateResource': {
+    kind: 'mutation',
+    target: connections,
+    prepare: (rig) => rig.connectByKey(),
+    drive: async (rig, connection: ConnectionRecord) => {
+      const [resource] = await rig.root.store.connections.listResources(connection.id);
+      if (!resource) throw new Error('expected a discovered resource');
+      return rig.root.connections.service.updateResource(rig.alice, connection.id, resource.id, {
+        displayName: 'Renamed',
+        env: 'prod',
+        hidden: true,
+      });
+    },
+    writes: { act: 'resource-edited', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.revoke': {
+    kind: 'mutation',
+    target: connections,
+    prepare: (rig) => rig.connectByKey(),
+    drive: (rig, connection: ConnectionRecord) =>
+      rig.root.connections.service.revoke(rig.alice, connection.id),
+    writes: { act: 'connection-revoked', object: 'connection', actor: 'alice' },
+  },
+  'CredentialBroker.resolve': READ,
+  'CredentialBroker.contextOf': READ,
+  'CredentialBroker.oauthClient': READ,
+  'CredentialBroker.refresh': exempt(SYSTEM_REFRESH),
+  'PendingConnectStore.create': exempt(SESSION_STATE),
+  'PendingConnectStore.take': exempt(SESSION_STATE),
+  'NoticeStore.put': exempt(SESSION_STATE),
+  'NoticeStore.take': exempt(SESSION_STATE),
+
+  // ── provider apps (the entry is written by the Administration handler) ────
+  'ProviderAppsService.isReadOnly': READ,
+  'ProviderAppsService.list': READ,
+  'ProviderAppsService.status': READ,
+  'ProviderAppsService.installVerification': READ,
+  'ProviderAppsService.hostAppConfig': READ,
+  'ProviderAppsService.pluginAppConfig': READ,
+  'ProviderAppsService.save': {
+    kind: 'mutation',
+    target: providerApps,
+    drive: async (rig) =>
+      rig.root.connections.handlers.saveProviderApp(
+        await rig.operatorPost('/admin/provider-apps/oauthco', {
+          'field.client_id': 'cid',
+          'field.client_secret': 'csecret',
+        }),
+        'oauthco',
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'provider-app:oauthco',
+      actor: 'operator',
+    },
+  },
+  'ProviderAppsService.clear': {
+    kind: 'mutation',
+    target: providerApps,
+    prepare: (rig) => rig.registerOAuthApp(),
+    drive: async (rig) =>
+      rig.root.connections.handlers.saveProviderApp(
+        await rig.operatorPost('/admin/provider-apps/oauthco', { action: 'clear' }),
+        'oauthco',
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'provider-app:oauthco',
+      actor: 'operator',
+    },
+  },
+  'ProviderAppsService.setAcceptUnverifiedInstallations': {
+    kind: 'mutation',
+    target: providerApps,
+    drive: async (rig) =>
+      rig.root.connections.handlers.saveProviderApp(
+        await rig.operatorPost('/admin/provider-apps/oldappco', { action: 'accept-unverified' }),
+        'oldappco',
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'provider-app:oldappco',
+      actor: 'operator',
+    },
+  },
+
+  // ── missions ──────────────────────────────────────────────────────────────
+  'MissionService.issuanceContext': READ,
+  'MissionService.preview': READ,
+  'MissionService.draftFrom': READ,
+  'MissionService.verifyToken': READ,
+  'MissionService.list': READ,
+  'MissionService.get': READ,
+  'MissionService.issue': {
+    kind: 'mutation',
+    target: missions,
+    // The connection is made first so that its own entry is not the one counted.
+    prepare: (rig) => rig.connectByKey(),
+    drive: (rig, connection: ConnectionRecord) =>
+      rig.root.missions.service.issue(rig.alice.user, {
+        name: 'Read the things',
+        connections: [{ connection_id: connection.id, preset: 'reader' }],
+        period: { kind: 'one-off' },
+        expires_at: null,
+      }),
+    writes: { act: 'mission-issued', object: 'mission', actor: 'alice' },
+  },
+  'MissionService.duplicate': {
+    kind: 'mutation',
+    target: missions,
+    prepare: (rig) => rig.issue(),
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.missions.service.duplicate(rig.alice.user, mission.id),
+    writes: { act: 'mission-issued', object: 'mission', actor: 'alice' },
+  },
+  'MissionService.rotate': {
+    kind: 'mutation',
+    target: missions,
+    prepare: (rig) => rig.issue(),
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.missions.service.rotate(rig.alice.user, mission.id),
+    writes: { act: 'mission-rotated', object: 'mission', actor: 'alice' },
+  },
+  'MissionService.revoke': {
+    kind: 'mutation',
+    target: missions,
+    prepare: (rig) => rig.issue(),
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.missions.service.revoke(rig.alice.user, mission.id),
+    writes: { act: 'mission-revoked', object: 'mission', actor: 'alice' },
+  },
+
+  // ── requests ──────────────────────────────────────────────────────────────
+  'RequestService.inbox': READ,
+  'RequestService.openCount': READ,
+  'RequestService.view': READ,
+  'RequestService.decide': {
+    kind: 'mutation',
+    target: (root) => root.requests.service,
+    prepare: (rig) => rig.claim(),
+    drive: (rig, requestId: string) =>
+      rig.root.requests.service.decide(rig.alice.user, requestId, { resolution: 'refuse' }),
+    writes: { act: 'request-refused', object: 'request', actor: 'alice' },
+  },
+  'RequestService.decideClaim': {
+    kind: 'mutation',
+    target: (root) => root.requests.service,
+    prepare: (rig) => rig.claim(),
+    drive: (rig, requestId: string) =>
+      rig.root.requests.service.decideClaim(rig.alice.user, requestId, {
+        resolution: 'reset-period',
+      }),
+    writes: { act: 'period-reset', object: 'request', actor: 'alice' },
+  },
+  'RequestService.sweep': exempt(
+    'expiry of unanswered requests by the instance timer, with no human actor: an administrative entry always names a user (spec §8)',
+  ),
+
+  // ── auth ──────────────────────────────────────────────────────────────────
+  'IdpSettingsService.current': READ,
+  'IdpSettingsService.stored': READ,
+  'IdpSettingsService.save': {
+    kind: 'mutation',
+    target: (root) => root.auth.idp,
+    drive: async (rig) =>
+      rig.root.auth.handlers.saveIdpSettings(
+        await rig.operatorPost('/api/admin/identity-provider', {
+          issuer: 'https://idp.example.com',
+          client_id: 'gateway',
+          client_secret: 'idp-client-secret',
+          claim_sub: 'sub',
+          claim_email: 'email',
+          claim_groups: 'groups',
+          allowed_email_domains: 'example.com',
+        }),
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'idp',
+      actor: 'operator',
+    },
+  },
+  'BootstrapService.state': READ,
+  'BootstrapService.verify': READ,
+  'BootstrapService.revoke': {
+    kind: 'mutation',
+    target: (root) => root.auth.bootstrap,
+    // The first operator sign-in revokes the bootstrap token (`completeLogin`).
+    drive: (rig) =>
+      completeLogin(
+        {
+          store: rig.root.store,
+          adminRule: rig.root.config.admin,
+          bootstrap: rig.root.auth.bootstrap,
+          logger: silentLogger,
+        },
+        { subject: 'idp|ops', email: OPERATOR_EMAIL, displayName: 'Ops', groups: [] },
+      ),
+    writes: {
+      act: 'config-changed',
+      object: 'instance-config',
+      objectId: 'bootstrap',
+      actor: 'operator',
+    },
+  },
+  'Authenticator.authenticate': exempt(SESSION_STATE),
+  'Authenticator.authorizeAdmin': exempt(SESSION_STATE),
+  'SessionService.create': exempt(SESSION_STATE),
+  'SessionService.read': READ,
+  'SessionService.destroyById': exempt(SESSION_STATE),
+  'SessionService.destroy': exempt(SESSION_STATE),
+  'SessionService.createPending': exempt(SESSION_STATE),
+  'SessionService.takePending': exempt(SESSION_STATE),
+  'SessionService.clearPendingCookie': READ,
+};
+
+const MUTATIONS = Object.entries(RULES).flatMap(([name, rule]) =>
+  rule.kind === 'mutation' ? [{ name, rule }] : [],
+);
+
+describe('every administrative mutation writes an admin audit entry', () => {
+  let rig: Rig | null = null;
+
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await rig?.root.close();
+    rig = null;
+  });
+
+  it('every public service method is classified: read, mutation or exempt with a reason', () => {
+    const declared = publicMethods();
+    expect(declared.length).toBeGreaterThan(40);
+    expect(declared.filter((name) => !(name in RULES))).toEqual([]);
+    // No stale row either: a renamed or removed method takes its rule with it.
+    expect(Object.keys(RULES).filter((name) => !declared.includes(name))).toEqual([]);
+    for (const [name, rule] of Object.entries(RULES)) {
+      if (rule.kind === 'exempt') expect(rule.why.length, name).toBeGreaterThan(20);
+    }
+  });
+
+  it('covers every mutating act the services can perform', () => {
+    expect(MUTATIONS.map((m) => m.rule.writes.act).sort()).toEqual([
+      'config-changed',
+      'config-changed',
+      'config-changed',
+      'config-changed',
+      'config-changed',
+      'connection-created',
+      'connection-created',
+      'connection-revoked',
+      'mission-issued',
+      'mission-issued',
+      'mission-revoked',
+      'mission-rotated',
+      'period-reset',
+      'request-refused',
+      'resource-edited',
+      'resources-discovered',
+    ]);
+  });
+
+  it.each(MUTATIONS)('$name writes $rule.writes.act', async ({ name, rule }) => {
+    rig = await openRig();
+    const { root } = rig;
+    const method = name.slice(name.indexOf('.') + 1);
+    const prepared = rule.prepare ? await rule.prepare(rig) : undefined;
+    const before = new Set((await root.store.audit.list({ kind: 'admin' })).map((e) => e.id));
+    const spy = vi.spyOn(rule.target(root) as Record<string, () => unknown>, method);
+
+    await rule.drive(rig, prepared as never);
+
+    // The driver really went through the method under test, and it did not throw.
+    expect(spy, name).toHaveBeenCalled();
+    expect(spy.mock.results.every((r) => r.type === 'return')).toBe(true);
+    await Promise.all(spy.mock.results.map((r): unknown => r.value)); // rejects if a call failed
+
+    const written = (await root.store.audit.list({ kind: 'admin' })).filter(
+      (e) => !before.has(e.id),
+    );
+    const actorId = rule.writes.actor === 'alice' ? rig.alice.user.id : rig.operator.id;
+    const matching = written.flatMap((e) =>
+      e.kind === 'admin' &&
+      e.act === rule.writes.act &&
+      e.object.type === rule.writes.object &&
+      (rule.writes.objectId === undefined || e.object.id === rule.writes.objectId) &&
+      e.user_id === actorId
+        ? [e]
+        : [],
+    );
+    expect(matching, `${name}: admin entries written = ${JSON.stringify(written)}`).toHaveLength(1);
+    const [entry] = matching;
+    expect(entry?.object.id.length).toBeGreaterThan(0);
+    expect(Number.isNaN(Date.parse(entry?.ts ?? ''))).toBe(false);
+  });
+
+  it('a resource edit records the fields before and after, and a save that changes nothing records none', async () => {
+    rig = await openRig();
+    const { root, alice } = rig;
+    const connection = await rig.connectByKey();
+    const [resource] = await root.store.connections.listResources(connection.id);
+    if (!resource) throw new Error('expected a discovered resource');
+    const edits = async () =>
+      (await root.store.audit.list({ kind: 'admin' })).filter(
+        (e) => e.kind === 'admin' && e.act === 'resource-edited',
+      );
+
+    await root.connections.service.updateResource(alice, connection.id, resource.id, {
+      env: 'staging',
+      hidden: true,
+    });
+    expect(await edits()).toMatchObject([
+      {
+        object: { type: 'connection', id: connection.id },
+        before: { resource_id: resource.id, ref: 'acct-a', env: null, hidden: false },
+        after: { resource_id: resource.id, ref: 'acct-a', env: 'staging', hidden: true },
+      },
+    ]);
+
+    await root.connections.service.updateResource(alice, connection.id, resource.id, {
+      env: 'staging',
+      hidden: true,
+    });
+    expect(await edits()).toHaveLength(1);
+  });
+
+  it('a discovery that fails is recorded too, with the reason', async () => {
+    rig = await openRig();
+    const { root, alice } = rig;
+    const connection = await rig.connectByKey();
+    await root.store.connections.revoke(connection.id);
+    const reconnectable = await root.store.connections.create({
+      provider: 'keyco',
+      owner: { kind: 'user', id: alice.user.id },
+      displayName: 'No credential',
+      credential: null,
+    });
+
+    const outcome = await root.connections.service.discover(alice, reconnectable.id);
+    expect(outcome.ok).toBe(false);
+    const entry = (await root.store.audit.list({ kind: 'admin' })).at(-1);
+    expect(entry).toMatchObject({
+      act: 'resources-discovered',
+      object: { type: 'connection', id: reconnectable.id },
+      after: { ok: false, count: 0, error: outcome.error },
+    });
+  });
+});

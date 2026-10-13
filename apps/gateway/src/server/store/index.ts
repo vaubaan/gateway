@@ -196,5 +196,14 @@ export type {
   RegisterClientInput,
 } from './repositories/delegations.ts';
 export { DEFAULT_AUDIT_RETENTION_DAYS } from './repositories/audit.ts';
-export type { AuditFilter, AuditRecord, AuditRepo, AuditRiskRow } from './repositories/audit.ts';
+export type {
+  AgentLabelSeen,
+  AuditCursor,
+  AuditFilter,
+  AuditRecord,
+  AuditRepo,
+  AuditRiskRow,
+  AuditScope,
+  AuditSearch,
+} from './repositories/audit.ts';
 export type { ConfigRepo } from './repositories/config.ts';

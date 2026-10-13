@@ -83,6 +83,13 @@ export type AdminAct =
   | 'connection-refused'
   | 'connection-transferred'
   | 'connection-revoked'
+  /** The owner ran "refresh discovery": the outcome (count or the provider's
+   *  error), never the resource list. Object: the connection. */
+  | 'resources-discovered'
+  /** The owner edited one resource (name, environment label, hidden flag,
+   *  editable settings). Object: the connection; `before` / `after` name the
+   *  resource and carry the edited fields. */
+  | 'resource-edited'
   | 'share-created'
   | 'share-revoked'
   | 'mission-issued'

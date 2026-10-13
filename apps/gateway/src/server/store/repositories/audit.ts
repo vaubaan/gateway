@@ -18,13 +18,14 @@ import type {
 import { isRefusalCode, type Slice } from '@vaubaan/shared';
 import { withImmediateTransaction } from '../db.ts';
 import { InvariantError } from '../errors.ts';
-import type { Iso, RiskId } from '../types.ts';
+import type { Iso, Principal, RiskId } from '../types.ts';
 import {
   DEFAULT_LIST_LIMIT,
   MS_PER_DAY,
   parseEnum,
   parseJson,
   placeholders,
+  principalPredicate,
   requireColumn,
   requireRow,
   toJson,
@@ -57,10 +58,69 @@ export interface AuditFilter {
   readonly limit?: number;
 }
 
+/**
+ * Whose audit a search may return (spec §4.2 "Audit", §6): the entries about the
+ * missions one user created and about the connections some principals own, plus —
+ * for an operator — every administrative entry. A search always carries a scope;
+ * an empty one (`missionCreatorUserId: null`, no owner, `allAdmin: false`) matches
+ * nothing.
+ */
+export interface AuditScope {
+  /** Entries about the missions this user created (calls, acts on them, their requests). */
+  readonly missionCreatorUserId: string | null;
+  /** Entries about the connections these principals own (calls through them, acts on them). */
+  readonly connectionOwners: readonly Principal[];
+  /** Every administrative entry, whatever its object. */
+  readonly allAdmin: boolean;
+}
+
+/** Keyset position: the last entry of the previous page (`ts`, then `id`). */
+export interface AuditCursor {
+  readonly ts: Iso;
+  readonly id: string;
+}
+
+export interface AuditSearch {
+  readonly scope: AuditScope;
+  /** Calls of the mission, administrative acts on it and on its requests. */
+  readonly missionId?: string;
+  /** Acts performed by these users and calls of the missions they created. An empty
+   *  list matches nothing. */
+  readonly userIds?: readonly string[];
+  /** Calls through the connection and administrative acts on it. */
+  readonly connectionId?: string;
+  /** Exact tool name (call entries only). */
+  readonly tool?: string;
+  /** Call entries only. */
+  readonly decision?: AuditDecision;
+  readonly kind?: 'call' | 'admin';
+  /** `ts >= since`. */
+  readonly since?: Iso;
+  /** `ts < until`. */
+  readonly until?: Iso;
+  /** Entries strictly older than this position (newest first). */
+  readonly before?: AuditCursor;
+  readonly limit: number;
+}
+
+/** One agent label seen on a mission's calls (attribution only, spec §3.3). */
+export interface AgentLabelSeen {
+  readonly label: string;
+  readonly calls: number;
+  readonly lastSeenAt: Iso;
+}
+
 export interface AuditRepo {
   append(entry: AuditEntry): Promise<AuditRecord>;
   getById(id: string): Promise<AuditRecord | null>;
   list(filter?: AuditFilter): Promise<AuditRecord[]>;
+  /**
+   * The Audit page's query: scoped, filtered, newest first (`ts DESC, id DESC`), paged
+   * by keyset. Returns at most `limit` records.
+   */
+  search(query: AuditSearch): Promise<AuditRecord[]>;
+  /** Distinct agent labels of a mission's call entries, most recently seen first. */
+  agentLabels(missionId: string): Promise<AgentLabelSeen[]>;
   /**
    * Allowed call entries touching `riskId` in `[since, until)` — the audit side of the
    * structural check "session counters agree with the audit" (spec §10).
@@ -218,6 +278,92 @@ function riskRows(e: CallAuditEntry): AuditRiskRow[] {
   }));
 }
 
+const REQUESTS_OF_MISSION = 'SELECT id FROM requests WHERE mission_id';
+
+/**
+ * The WHERE clause of `search`: the scope first (what the viewer may see at all), then
+ * the filters, then the keyset position. Plain subqueries and `IN` lists only, so the
+ * statement is the same on Postgres.
+ */
+function searchStatement(query: AuditSearch): { sql: string; params: (string | number)[] } {
+  const where: string[] = [];
+  const params: (string | number)[] = [];
+  const add = (sql: string, ...values: (string | number)[]) => {
+    where.push(sql);
+    params.push(...values);
+  };
+
+  const { scope } = query;
+  const owners = principalPredicate(scope.connectionOwners, 'owner_user_id', 'owner_group_id');
+  const ownMissions = 'SELECT id FROM missions WHERE creator_user_id = ?';
+  const ownConnections = `SELECT id FROM connections WHERE ${owners.sql}`;
+  const creator = scope.missionCreatorUserId ?? '';
+  // A null creator matches no mission: `creator_user_id` is NOT NULL and never ''.
+  add(
+    `(
+      (kind = 'call' AND (mission_id IN (${ownMissions}) OR connection_id IN (${ownConnections})))
+      OR (kind = 'admin' AND (
+        ${scope.allAdmin ? '1 = 1' : '1 = 0'}
+        OR (object_type = 'mission' AND object_id IN (${ownMissions}))
+        OR (object_type = 'connection' AND object_id IN (${ownConnections}))
+        OR (object_type = 'request' AND object_id IN (${REQUESTS_OF_MISSION} IN (${ownMissions})))
+      ))
+    )`,
+    creator,
+    ...owners.params,
+    creator,
+    ...owners.params,
+    creator,
+  );
+
+  if (query.missionId) {
+    add(
+      `(mission_id = ?
+        OR (object_type = 'mission' AND object_id = ?)
+        OR (object_type = 'request' AND object_id IN (${REQUESTS_OF_MISSION} = ?)))`,
+      query.missionId,
+      query.missionId,
+      query.missionId,
+    );
+  }
+  if (query.userIds) {
+    const ids = query.userIds;
+    if (ids.length === 0) add('1 = 0');
+    else {
+      const list = placeholders(ids.length);
+      add(
+        `(user_id IN (${list})
+          OR mission_id IN (SELECT id FROM missions WHERE creator_user_id IN (${list})))`,
+        ...ids,
+        ...ids,
+      );
+    }
+  }
+  if (query.connectionId) {
+    add(
+      "(connection_id = ? OR (object_type = 'connection' AND object_id = ?))",
+      query.connectionId,
+      query.connectionId,
+    );
+  }
+  if (query.tool) add('tool = ?', query.tool);
+  if (query.decision) add('decision = ?', query.decision);
+  if (query.kind) add('kind = ?', query.kind);
+  if (query.since) add('ts >= ?', query.since);
+  if (query.until) add('ts < ?', query.until);
+  if (query.before) {
+    add('(ts < ? OR (ts = ? AND id < ?))', query.before.ts, query.before.ts, query.before.id);
+  }
+  if (!Number.isInteger(query.limit) || query.limit < 1) {
+    throw new InvariantError('audit search: limit must be a positive integer');
+  }
+  params.push(query.limit);
+  return {
+    sql: `SELECT ${COLUMNS} FROM audit WHERE ${where.join(' AND ')} ORDER BY ts DESC, id DESC LIMIT ?`,
+    params,
+  };
+}
+
 export function createAuditRepo(ctx: RepoContext): AuditRepo {
   const { db } = ctx;
   const insert = db.prepare<SqlParams>(
@@ -243,6 +389,11 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     'DELETE FROM audit_risks WHERE audit_id IN (SELECT id FROM audit WHERE ts < ?)',
   );
   const purge = db.prepare<[string]>('DELETE FROM audit WHERE ts < ?');
+  const labelsOf = db.prepare<[string], { label: string; calls: number; last_seen: string }>(
+    `SELECT agent_label AS label, COUNT(*) AS calls, MAX(ts) AS last_seen FROM audit
+     WHERE kind = 'call' AND mission_id = ? AND agent_label IS NOT NULL
+     GROUP BY agent_label ORDER BY last_seen DESC, agent_label`,
+  );
 
   function toRecord(row: AuditRow): AuditRecord {
     return row.kind === 'admin' ? toAdminRecord(row) : toCallRecord(row);
@@ -370,6 +521,18 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
         .prepare<(string | number)[], AuditRow>(sql)
         .all(...params)
         .map(toRecord);
+    },
+    async search(query) {
+      const { sql, params } = searchStatement(query);
+      return db
+        .prepare<(string | number)[], AuditRow>(sql)
+        .all(...params)
+        .map(toRecord);
+    },
+    async agentLabels(missionId) {
+      return labelsOf
+        .all(missionId)
+        .map((r) => ({ label: r.label, calls: r.calls, lastSeenAt: r.last_seen }));
     },
     async countAllowedTouches(missionId, riskId, since, until) {
       return countTouches.get(missionId, riskId, since, until)?.n ?? 0;

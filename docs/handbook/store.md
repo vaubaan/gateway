@@ -209,6 +209,16 @@ the shape, `packages/gateway-core/src/audit.ts`):
 
 Reads: `getById(id)` and `list(filter)` with `AuditFilter { missionId?, kind?,
 since?, until?, limit? }` (default limit 1000, ordered by `ts, id`).
+`search(query)` is the Audit page's query (P1.8, handbook [audit](audit.md)): a
+mandatory `AuditScope` (missions created by one user, connections owned by some
+principals, optionally every administrative entry) applied before the filters
+(`missionId`, `userIds`, `connectionId`, `tool`, `decision`, `kind`, `since`, `until`),
+newest first (`ts DESC, id DESC`), paged by keyset (`before: { ts, id }`, `limit`).
+`agentLabels(missionId)` lists the distinct agent labels of a mission's calls with
+their count and last timestamp. The sessions repository gained the matching
+`listRecentEvents(sessionId, { before?, limit })` (newest first, same keyset;
+`listEvents` with `order: 'desc'` returns the same first page but cannot resume after a
+position).
 
 Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks` aborts;
 a `DELETE` on `audit` or on `audit_risks` aborts unless `audit_purge_guard` holds a

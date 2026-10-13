@@ -48,11 +48,13 @@ async function fulfillRedirect(route: Route, location: string, setCookies: strin
 
 /**
  * A request still in flight when its test ends (a link prefetch, typically)
- * fails with "Target page, context or browser has been closed". Nobody waits
- * for that answer; anything else is a real failure and is rethrown.
+ * fails with "Target page, context or browser has been closed" or, when the
+ * answer arrived just as the page went away, "Fetch response has been
+ * disposed". Nobody waits for that answer; anything else is a real failure
+ * and is rethrown.
  */
 function ignoreClosedTarget(err: unknown): void {
-  if (err instanceof Error && /has been closed/.test(err.message)) return;
+  if (err instanceof Error && /has been (closed|disposed)/.test(err.message)) return;
   throw err;
 }
 
@@ -147,4 +149,17 @@ export async function replayCall(
     outcome: 'allowed' | 'refused';
     refusal: { code: string } | null;
   };
+}
+
+export interface SeededDay {
+  readonly mission_id: string;
+  readonly claim_id: string;
+  readonly approval_id: string;
+}
+
+/** Issues a mission for the signed-in user and leaves a day of calls on it. */
+export async function seedDay(request: APIRequestContext): Promise<SeededDay> {
+  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/seed-day`);
+  if (!response.ok()) throw new Error(`seed-day answered ${response.status()}`);
+  return (await response.json()) as SeededDay;
 }

@@ -56,6 +56,11 @@ are absent.
 | Suite                                                                             |                Tests |
 | --------------------------------------------------------------------------------- | -------------------: |
 | `apps/gateway/src/lib/bash/exec-host.test.ts` (v4 glue)                           |                    7 |
+| `apps/gateway/src/server/audit/filters.test.ts`                                   |                   18 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                    |                   20 |
+| `apps/gateway/tests/integration/audit/audit-query.test.ts`                        |                   21 |
+| `apps/gateway/tests/integration/audit/mission-session.test.ts`                    |                   14 |
+| `apps/gateway/tests/integration/audit/retention.test.ts`                          |                   10 |
 | `apps/gateway/tests/integration/auth/oidc-login.test.ts`                          |                   12 |
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`              |                    5 |
 | `apps/gateway/tests/integration/budget/session-service.test.ts`                   |                   19 |
@@ -1270,6 +1275,65 @@ Integration:
 
 Not covered here: the claim reaching an MCP client through the execution
 door (P1.6), and the approval decision (P2.1).
+
+## v5 — Audit search, mission session, retention (P1.8)
+
+Handbook [audit](../handbook/audit.md). Suites under
+`apps/gateway/tests/integration/audit/` run on the real composition root with the
+`:memory:` store and the shipped plugins (`support.ts`). The execution door is not merged
+yet, so calls are seeded the way `CallPipeline` produces them: `SessionService.recordCall`
+(session, counters, events, requests) then the store's audit writer.
+
+- `src/server/audit/filters.test.ts` (18, unit) — **audit filters**: every parameter
+  read and trimmed; first value of a repeated parameter; decision and kind outside their
+  closed sets dropped and reported; unreadable or impossible dates dropped; a reversed
+  period ignored; a single day is `[00:00, next 00:00)` UTC; oversized value refused;
+  cursor round trip and every malformed cursor refused; `auditQueryString`; `scopeOf` for
+  a user, an operator and the bootstrap operator; `withoutArguments`.
+- `audit-query.test.ts` (21) — **visibility**: a creator sees the calls and acts of their
+  missions, another user none; a connection's owner sees the calls made through it by a
+  mission they did not create; a member of the owning group sees it, a non-member does
+  not; an operator sees every administrative entry and still not other people's calls;
+  the bootstrap operator sees administrative entries only; a request's entries belong to
+  its mission; **a filter never widens the scope**. **Filters**: mission, connection,
+  tool (exact), decision, kind, period, user (email or id, unknown user → nothing),
+  combined. **Paging**: page sizes 3/3/1 over seven entries, no entry twice, stable on
+  equal timestamps, no further page announced on an exact fit, a write during paging does
+  not shift the next page. **No raw arguments**: the argument marker reaches no viewer's
+  page; arguments wrongly put in an administrative entry are replaced by `[not shown]`.
+- `mission-session.test.ts` (14) — creator only (another user, an operator and an unknown
+  id get `null`); before the first call (no session, full budget, gate per risk, catalog
+  labels); counted / left / exhausted per risk; past periods kept apart and yesterday's
+  exhaustion gone; one-off mission; **open requests by link only** (kind, risk, dates,
+  `/requests/<id>`; the sealed arguments exist in the store and are not in the view); decided
+  request no longer listed; **a granted claim lowers the counters** (quota extension then
+  period reset: counted and left follow the counter, the `extension` / `reset` events carry
+  the credits, the decisions are in the mission's audit); agent labels with counts; timeline newest first with tool,
+  risks, what is left, refusal code and request; timeline paging; revoked mission keeps
+  its history; `eventView` ignores every detail it does not name.
+- `retention.test.ts` (10) — **the purge removes the entries older than N days and
+  nothing else**: older call and act gone with their risk rows, the entry exactly N days
+  old and the recent ones intact, seven other tables unchanged; **the triggers still
+  forbid `UPDATE` and `DELETE`** on `audit` and `audit_risks` afterwards and the purge
+  window is closed; idempotent; the configured number of days is honoured; boot sweep,
+  interval, stop; a failing purge is logged and retried; concurrent sweeps share one
+  purge; the composition root starts the sweeper with `retention_days` and `close()`
+  stops it; default 90 days.
+- `admin-mutations.test.ts` (20) — **structural: every administrative mutation writes an
+  admin audit entry.** The public methods of every class under
+  `server/{connections,provider-apps,missions,auth,requests}` are enumerated from the source with
+  the TypeScript parser; each must be classified (read, mutation, exempt with a reason),
+  with no unclassified method and no stale rule. Each of the 16 mutations is driven on an
+  ephemeral instance, must go through the method under test (spy) and leave exactly one
+  entry with the expected act, object and acting user: connection created (key and OAuth
+  callback), resources discovered, resource edited, connection revoked, mission issued
+  (issue and duplicate), rotated, revoked, configuration changed (provider app saved,
+  cleared, unverified installations accepted, IdP saved, bootstrap token revoked by the
+  first operator sign-in), request decided (`RequestService.decide` refusing,
+  `decideClaim` resetting the period — the entries P1.7 writes; none is added here). Plus: a resource edit records `before` / `after` and a save
+  that changes nothing records none; a failed discovery is recorded with its reason.
+
+Not covered here: call entries written by the real execution door (P1.6).
 
 ## Out of scope for these tests
 

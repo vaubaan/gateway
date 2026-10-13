@@ -387,7 +387,13 @@ describe('connections: provider app, connect, resources, revoke', () => {
       (await root.store.audit.list({ kind: 'admin' })).map((e) =>
         e.kind === 'admin' ? e.act : null,
       ),
-    ).toEqual(['config-changed', 'connection-created', 'connection-revoked']);
+    ).toEqual([
+      'config-changed',
+      'connection-created',
+      'resource-edited',
+      'resources-discovered',
+      'connection-revoked',
+    ]);
   });
 
   it('stores an API key and an SSH private key encrypted, and marks plugin-set labels', async () => {

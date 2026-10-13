@@ -638,14 +638,18 @@ export class ConnectionService {
         }
         resources = await this.discoverWith(resolved.plugin, this.deps.broker.contextOf(resolved));
       }
-      return await this.storeDiscovery(connection, resolved.plugin, resources);
+      const record = await this.storeDiscovery(connection, resolved.plugin, resources);
+      await this.auditDiscovery(actor, connection, record);
+      return record;
     } catch (err) {
       this.deps.logger.warn('resource discovery failed', {
         connection_id: connection.id,
         provider: connection.provider,
         detail: errorMessage(err),
       });
-      return this.recordDiscovery(connection.id, 0, oneLine(errorMessage(err)));
+      const record = await this.recordDiscovery(connection.id, 0, oneLine(errorMessage(err)));
+      await this.auditDiscovery(actor, connection, record);
+      return record;
     }
   }
 
@@ -659,6 +663,7 @@ export class ConnectionService {
     const { connections } = this.deps.store;
     let resource = await connections.getResource(resourceId);
     if (!resource || resource.connectionId !== connection.id) throw new ConnectError('not-found');
+    const before = resourceAuditView(resource);
 
     // Validate everything before the first write.
     let env: string | null | undefined;
@@ -699,6 +704,7 @@ export class ConnectionService {
     if (ownerMetadata) await connections.setResourceOwnerMetadata(resource.id, ownerMetadata);
 
     resource = (await connections.getResource(resource.id)) ?? resource;
+    await this.auditResourceEdit(actor, connection, before, resourceAuditView(resource));
     this.deps.logger.info('resource edited by its owner', {
       connection_id: connection.id,
       resource_id: resource.id,
@@ -890,6 +896,44 @@ export class ConnectionService {
     });
   }
 
+  /** The owner's "refresh discovery": the outcome, never the resource list. */
+  private async auditDiscovery(
+    actor: Actor,
+    connection: ConnectionRecord,
+    record: DiscoveryRecord,
+  ): Promise<void> {
+    await this.deps.audit.write({
+      kind: 'admin',
+      ts: this.nowIso(),
+      user_id: actor.user.id,
+      act: 'resources-discovered',
+      object: { type: 'connection', id: connection.id },
+      before: null,
+      after: { ok: record.ok, count: record.count, error: record.error },
+      delegated_client_id: null,
+    });
+  }
+
+  /** One entry per save that changed something; a save that changed nothing writes none. */
+  private async auditResourceEdit(
+    actor: Actor,
+    connection: ConnectionRecord,
+    before: ResourceAuditView,
+    after: ResourceAuditView,
+  ): Promise<void> {
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    await this.deps.audit.write({
+      kind: 'admin',
+      ts: this.nowIso(),
+      user_id: actor.user.id,
+      act: 'resource-edited',
+      object: { type: 'connection', id: connection.id },
+      before,
+      after,
+      delegated_client_id: null,
+    });
+  }
+
   /** Nothing was created: the entry names the provider and the claim that was refused. */
   private async auditRefusal(
     actor: Actor,
@@ -918,6 +962,27 @@ export class ConnectionService {
   private nowIso(): string {
     return toIso(this.deps.clock.now());
   }
+}
+
+/** What a `resource-edited` audit entry says of a resource: the fields its owner can edit. */
+interface ResourceAuditView {
+  readonly resource_id: string;
+  readonly ref: string;
+  readonly display_name: string;
+  readonly env: string | null;
+  readonly hidden: boolean;
+  readonly owner_metadata: Record<string, unknown> | null;
+}
+
+function resourceAuditView(resource: ConnectionResourceRecord): ResourceAuditView {
+  return {
+    resource_id: resource.id,
+    ref: resource.ref,
+    display_name: resource.displayName,
+    env: resource.env,
+    hidden: resource.hidden,
+    owner_metadata: resource.ownerMetadata,
+  };
 }
 
 /** The plugin-facing `Resource` of a stored row (what `classify` and `execute` receive). */

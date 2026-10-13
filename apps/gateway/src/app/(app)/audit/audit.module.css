@@ -1,0 +1,158 @@
+/* Audit and Mission session pages: plain tables, filters in one row. */
+
+.pageHead {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-4);
+}
+.pageHead h1 {
+  margin: 0;
+}
+.muted {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.mono {
+  font-family: var(--font-geist-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+  font-size: var(--text-xs);
+  color: var(--text-subtle);
+  overflow-wrap: break-word;
+}
+
+/* One row: four flexible filters, two short selects, two dates, the buttons. */
+.filters {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)
+    88px 88px 128px 128px auto;
+  align-items: end;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+@media (max-width: 900px) {
+  .filters {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+}
+.filter {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.filter span {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.filter input,
+.filter select {
+  height: 32px;
+  padding: 5px 8px;
+  font-size: var(--text-sm);
+  min-width: 0;
+}
+.filter select {
+  padding-right: 24px;
+  text-overflow: ellipsis;
+}
+.filter input[type='date'] {
+  padding-left: 6px;
+  padding-right: 4px;
+}
+.filterActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  height: 32px;
+}
+
+.scroll {
+  overflow-x: auto;
+}
+/* The audit table is wider than the reading column: it takes the width of the
+   window (up to a limit), centred, and scrolls sideways only below that. */
+.wide {
+  position: relative;
+  left: 50%;
+  width: min(1400px, calc(100vw - 2 * var(--space-8)));
+  min-width: 100%;
+  transform: translateX(-50%);
+}
+.nowrap {
+  white-space: nowrap;
+}
+.empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+}
+.pager {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.problems {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--accent-danger-fg);
+}
+
+.risks {
+  display: grid;
+  gap: 2px;
+}
+.state {
+  margin: var(--space-1) 0 0;
+  padding: var(--space-2);
+  background: var(--surface-sunken);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-width: 420px;
+  max-height: 200px;
+  overflow: auto;
+}
+.fold > summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+}
+.reason {
+  margin: var(--space-1) 0 0;
+  max-width: 420px;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.facts dt {
+  color: var(--text-muted);
+}
+.facts dd {
+  margin: 0;
+}
+.labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+}

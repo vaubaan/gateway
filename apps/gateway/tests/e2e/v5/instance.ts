@@ -32,3 +32,9 @@ export function localOrigin(): string {
 export const E2E_USER = { sub: 'idp|ada', email: 'ada@example.com', name: 'Ada' } as const;
 /** A second user of the same IdP, who created nothing. */
 export const E2E_OTHER_USER = { sub: 'idp|bob', email: 'bob@example.com', name: 'Bob' } as const;
+/** Who the audit spec signs in as: their requests stay out of the other specs' inbox. */
+export const E2E_AUDIT_USER = {
+  sub: 'idp|grace',
+  email: 'grace@example.com',
+  name: 'Grace',
+} as const;

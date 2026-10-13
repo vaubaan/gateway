@@ -23,6 +23,7 @@ export const APP_NAV: readonly AppNavEntry[] = [
   { href: '/connections', label: 'Connections' },
   { href: '/missions', label: 'Missions' },
   { href: '/requests', label: 'Requests', Count: OpenRequestCount },
+  { href: '/audit', label: 'Audit' },
 ];
 
 export function AppShell({
