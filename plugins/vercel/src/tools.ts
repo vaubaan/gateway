@@ -45,6 +45,3 @@ export function toUpstreamName(toolName: string): string {
 }
 
 export { isCustomTool };
-
-/** @deprecated legacy v4, deleted in P1.6 — use `vercelTools`. */
-export const availableTools: readonly McpToolDeclaration[] = vercelTools;

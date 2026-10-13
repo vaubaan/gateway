@@ -1,35 +1,34 @@
 /**
- * Unit tests for `classifyUpstashRedisV4` — the v4 risk-based classifier.
+ * Security suite of the Upstash Redis classifier,
+ * `classifyUpstashRedis(tool, args, resources)` ("a classification error is
+ * a security hole").
  *
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,
  *   - the execute tool's smart routing (read / write / destructive / unknown),
- *   - binding enforcement (denial for an unbound databaseId).
+ *   - resource enforcement (denial for a databaseId outside the mission).
  */
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding } from '@vaubaan/shared';
+import type { Resource } from '@vaubaan/plugin-sdk';
 import { serializeSlice } from '@vaubaan/policy-engine';
 
-import { classifyUpstashRedisV4 } from '../../src/risk-classifier.ts';
+import { classifyUpstashRedis } from '../../src/classify.ts';
 
-const binding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
+const database: Resource = {
   provider: 'upstash-redis',
-  resource_ref: 'db-abc-123',
-  display_name: null,
-  created_at: '2026-01-01',
+  ref: 'db-abc-123',
+  displayName: 'db-abc-123',
 };
 
 function classify(tool: string, args: Record<string, unknown> = {}) {
-  const result = classifyUpstashRedisV4(tool, args, [binding]);
+  const result = classifyUpstashRedis(tool, args, [database]);
   if ('denied' in result) {
     throw new Error(`unexpected denial: ${result.denied}`);
   }
   return result.slices.map((s) => serializeSlice(s));
 }
 
-describe('classifyUpstashRedisV4 — management reads', () => {
+describe('classifyUpstashRedis — management reads', () => {
   test('list_databases -> account.database[*].R', () => {
     expect(classify('upstash_redis__list_databases')).toEqual([
       'upstash-redis.account.database[*].R',
@@ -49,7 +48,7 @@ describe('classifyUpstashRedisV4 — management reads', () => {
   });
 });
 
-describe('classifyUpstashRedisV4 — management writes', () => {
+describe('classifyUpstashRedis — management writes', () => {
   test('create_database -> account.database.W', () => {
     expect(
       classify('upstash_redis__create_database', { name: 'test', region: 'us-east-1' }),
@@ -69,7 +68,7 @@ describe('classifyUpstashRedisV4 — management writes', () => {
   });
 });
 
-describe('classifyUpstashRedisV4 — data reads', () => {
+describe('classifyUpstashRedis — data reads', () => {
   test('get -> database[db-abc-123].key-space[mykey].R', () => {
     expect(classify('upstash_redis__get', { databaseId: 'db-abc-123', key: 'mykey' })).toEqual([
       'upstash-redis.database[db-abc-123].key-space[mykey].R',
@@ -123,14 +122,14 @@ describe('classifyUpstashRedisV4 — data reads', () => {
     ]);
   });
 
-  test('data read without explicit databaseId uses first binding', () => {
+  test('data read without explicit databaseId uses the single database of the mission', () => {
     expect(classify('upstash_redis__get', { key: 'mykey' })).toEqual([
       'upstash-redis.database[db-abc-123].key-space[mykey].R',
     ]);
   });
 });
 
-describe('classifyUpstashRedisV4 — data writes', () => {
+describe('classifyUpstashRedis — data writes', () => {
   test('set -> database[db-abc-123].key-space[mykey].W', () => {
     expect(
       classify('upstash_redis__set', { databaseId: 'db-abc-123', key: 'mykey', value: 'v' }),
@@ -190,7 +189,7 @@ describe('classifyUpstashRedisV4 — data writes', () => {
   });
 });
 
-describe('classifyUpstashRedisV4 — execute smart routing', () => {
+describe('classifyUpstashRedis — execute smart routing', () => {
   test('execute with known read (GET) -> key-space[*].R', () => {
     expect(
       classify('upstash_redis__execute', { databaseId: 'db-abc-123', command: ['GET', 'k'] }),
@@ -234,20 +233,20 @@ describe('classifyUpstashRedisV4 — execute smart routing', () => {
   });
 });
 
-describe('classifyUpstashRedisV4 — denials', () => {
+describe('classifyUpstashRedis — denials', () => {
   test('unknown tool -> denied', () => {
-    const result = classifyUpstashRedisV4('upstash_redis__bogus', {}, [binding]);
+    const result = classifyUpstashRedis('upstash_redis__bogus', {}, [database]);
     expect(result).toEqual({ denied: "unknown upstash-redis tool 'upstash_redis__bogus'." });
   });
 
-  test('unbound databaseId -> denied', () => {
-    const result = classifyUpstashRedisV4(
+  test('databaseId outside the mission resources -> denied', () => {
+    const result = classifyUpstashRedis(
       'upstash_redis__get_database',
       { databaseId: 'db-unbound' },
-      [binding],
+      [database],
     );
     expect(result).toEqual({
-      denied: "upstash-redis database 'db-unbound' is not bound to this project.",
+      denied: "upstash-redis database 'db-unbound' is not a resource of this mission.",
     });
   });
 });

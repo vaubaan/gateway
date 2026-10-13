@@ -9,8 +9,8 @@
  * The host runs the flow : it generates the key pair, shows the public key
  * for the operator to append to `~/.ssh/authorized_keys` on the target, and
  * collects the four fields below. The private key never leaves the instance
- * and is stored encrypted (v4 kept it as a plain bytea). The host key
- * fingerprint is part of the credential and is verified on every connection
+ * and is stored encrypted. The host key fingerprint is part of the
+ * credential and is verified on every connection
  * (`transport.ts`) : a host that presents another key is refused, never
  * trusted on first use.
  */
@@ -79,8 +79,8 @@ export interface SshTarget {
   readonly port: number;
   readonly user: string;
   readonly privateKeyPem: string;
-  /** Normalised `SHA256:<base64>` ; `null` only on the legacy v4 path (no pin). */
-  readonly hostKeyFingerprint: string | null;
+  /** Normalised `SHA256:<base64>` — the pin every connection is verified against. */
+  readonly hostKeyFingerprint: string;
 }
 
 /**

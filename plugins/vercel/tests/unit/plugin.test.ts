@@ -1,10 +1,9 @@
 /**
- * Mandatory suite of the `vercel` plugin : the SDK kit, the v5 classifier
+ * Mandatory suite of the `vercel` plugin : the SDK kit, the classifier
  * conventions (project resolution against mission resources), the credential
  * spec, `execute` and `discoverResources` against `mockFetch`.
  *
- * The v4 classifier cases live unchanged in `risk-classifier.test.ts` (31) ;
- * the legacy adapter in `adapter.test.ts` (23) ; both go with P1.6.
+ * The per-tool slice shapes of the classifier are in `classify.test.ts`.
  * No test ever reaches the network : an unmatched request rejects.
  */
 import { describe, expect, test } from 'vitest';
@@ -179,7 +178,7 @@ describe('vercel plugin — structural kit', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// v5 classifier conventions (the v4 cases are in risk-classifier.test.ts)
+// Classifier conventions (the per-tool slice shapes are in classify.test.ts)
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('classifyVercel — project resolution against mission resources', () => {
@@ -425,6 +424,222 @@ describe('executeVercel with mockFetch', () => {
     });
     expect(r2.isError).toBe(true);
     expect((r2.content[0] as { text: string }).text).toMatch(/500/);
+  });
+});
+
+describe('executeVercel — request shapes of the custom REST tools', () => {
+  const text = (result: { content: readonly unknown[] }) =>
+    (result.content[0] as { text: string }).text;
+
+  test('declares the custom tools next to the rewrapped ones', () => {
+    const names = vercelPlugin.tools.map((t) => t.name);
+    for (const expected of [
+      'vercel__list_projects',
+      'vercel__update_project_settings',
+      'vercel__upsert_env_var',
+      'vercel__list_env_vars',
+      'vercel__delete_env_var',
+      'vercel__list_project_domains',
+      'vercel__add_project_domain',
+      'vercel__verify_project_domain',
+      'vercel__remove_project_domain',
+    ]) {
+      expect(names).toContain(expected);
+    }
+    expect(names).not.toContain('vercel__update_deployment_protection');
+  });
+
+  test('forwards an explicit teamId equal to the connection team unchanged', async () => {
+    const fetch = mockFetch([
+      { method: 'POST', url: VERCEL_MCP_URL, respond: (c) => sseFrame(c, { content: [] }) },
+    ]);
+    await vercelPlugin.execute(ctx(fetch), 'vercel__list_projects', { teamId: 'team_abc' });
+    expect((fetch.calls[0]!.json as { params: { arguments: unknown } }).params.arguments).toEqual({
+      teamId: 'team_abc',
+    });
+  });
+
+  test('update_project_settings PATCHes /v9/projects/{id} with the whitelisted fields and the team query', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'PATCH',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_abc?teamId=team_abc`,
+        body: { id: 'prj_abc', rootDirectory: 'app' },
+      },
+    ]);
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__update_project_settings', {
+      projectId: 'prj_abc',
+      rootDirectory: 'app',
+      framework: 'nextjs',
+      // a field outside the whitelist must be dropped
+      secretField: 'should-not-leak',
+    });
+    expect(JSON.parse(text(result))).toEqual({ id: 'prj_abc', rootDirectory: 'app' });
+    const call = fetch.calls[0]!;
+    expect(call.headers.authorization).toBe('Bearer vcp_secret');
+    expect(call.json).toEqual({ rootDirectory: 'app', framework: 'nextjs' });
+  });
+
+  test('a custom tool without a resolvable projectId fails before any network call', async () => {
+    const fetch = mockFetch([]);
+    // Two projects : `execute` cannot default the argument.
+    const result = await vercelPlugin.execute(
+      ctx(fetch, [app, site]),
+      'vercel__update_project_settings',
+      { rootDirectory: 'app' },
+    );
+    expect(result.isError).toBe(true);
+    expect(text(result)).toMatch(/projectId is required/);
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('upsert_env_var keeps type and comment in the body', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'POST',
+        url: `${VERCEL_API_BASE}/v10/projects/prj_abc/env?teamId=team_abc&upsert=true`,
+        body: { created: { key: 'DATABASE_URL' } },
+      },
+    ]);
+    await vercelPlugin.execute(ctx(fetch), 'vercel__upsert_env_var', {
+      projectId: 'prj_abc',
+      key: 'DATABASE_URL',
+      value: 'postgres://...',
+      target: ['production', 'preview'],
+      type: 'encrypted',
+      comment: 'set by gateway',
+    });
+    expect(fetch.calls[0]!.json).toEqual({
+      key: 'DATABASE_URL',
+      value: 'postgres://...',
+      target: ['production', 'preview'],
+      type: 'encrypted',
+      comment: 'set by gateway',
+    });
+  });
+
+  test('list_env_vars GETs without a body ; decrypt=true reaches the query', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${VERCEL_API_BASE}/v10/projects/prj_abc/env?teamId=team_abc`,
+        body: { envs: [{ id: 'env_a', key: 'X', target: ['production'] }] },
+      },
+      {
+        method: 'GET',
+        url: `${VERCEL_API_BASE}/v10/projects/prj_abc/env?teamId=team_abc&decrypt=true`,
+        body: { envs: [] },
+      },
+    ]);
+    const listed = await vercelPlugin.execute(ctx(fetch), 'vercel__list_env_vars', {
+      projectId: 'prj_abc',
+    });
+    expect(JSON.parse(text(listed))).toEqual({
+      envs: [{ id: 'env_a', key: 'X', target: ['production'] }],
+    });
+    expect(fetch.calls[0]!.body).toBeNull();
+    expect(fetch.calls[0]!.headers['content-type']).toBeUndefined();
+
+    await vercelPlugin.execute(ctx(fetch), 'vercel__list_env_vars', {
+      projectId: 'prj_abc',
+      decrypt: true,
+    });
+    expect(fetch.calls[1]!.url).toBe(
+      `${VERCEL_API_BASE}/v10/projects/prj_abc/env?teamId=team_abc&decrypt=true`,
+    );
+  });
+
+  test('delete_env_var DELETEs /v9/projects/{id}/env/{envId} without a body ; a missing id fails first', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'DELETE',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_abc/env/env_xyz?teamId=team_abc`,
+        body: {},
+      },
+    ]);
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__delete_env_var', {
+      projectId: 'prj_abc',
+      id: 'env_xyz',
+    });
+    expect(result.isError).toBeUndefined();
+    expect(fetch.calls[0]!.body).toBeNull();
+
+    const missing = await vercelPlugin.execute(ctx(fetch), 'vercel__delete_env_var', {
+      projectId: 'prj_abc',
+    });
+    expect(missing.isError).toBe(true);
+    expect(text(missing)).toMatch(/id is required/);
+    expect(fetch.calls).toHaveLength(1);
+  });
+
+  test('list_project_domains GETs /v9/projects/{id}/domains with the team query', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_abc/domains?teamId=team_abc`,
+        body: { domains: [{ name: 'example.com', verified: true }] },
+      },
+    ]);
+    const result = await vercelPlugin.execute(ctx(fetch), 'vercel__list_project_domains', {
+      projectId: 'prj_abc',
+    });
+    expect(JSON.parse(text(result))).toEqual({
+      domains: [{ name: 'example.com', verified: true }],
+    });
+    expect(fetch.calls[0]!.body).toBeNull();
+  });
+
+  test('add_project_domain POSTs the whitelisted body ; a missing name fails first', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'POST',
+        url: `${VERCEL_API_BASE}/v10/projects/prj_abc/domains?teamId=team_abc`,
+        body: { name: 'www.example.com', verified: false },
+      },
+    ]);
+    await vercelPlugin.execute(ctx(fetch), 'vercel__add_project_domain', {
+      projectId: 'prj_abc',
+      name: 'www.example.com',
+      gitBranch: 'main',
+      // a field outside the whitelist must be dropped
+      sneakyExtra: 'nope',
+    });
+    expect(fetch.calls[0]!.json).toEqual({ name: 'www.example.com', gitBranch: 'main' });
+
+    const missing = await vercelPlugin.execute(ctx(fetch), 'vercel__add_project_domain', {
+      projectId: 'prj_abc',
+    });
+    expect(missing.isError).toBe(true);
+    expect(text(missing)).toMatch(/name is required/);
+    expect(fetch.calls).toHaveLength(1);
+  });
+
+  test('verify_project_domain POSTs …/domains/{domain}/verify ; remove_project_domain DELETEs …/domains/{domain}', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'POST',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_abc/domains/www.example.com/verify?teamId=team_abc`,
+        body: { verified: true },
+      },
+      {
+        method: 'DELETE',
+        url: `${VERCEL_API_BASE}/v9/projects/prj_abc/domains/www.example.com?teamId=team_abc`,
+        body: {},
+      },
+    ]);
+    const verified = await vercelPlugin.execute(ctx(fetch), 'vercel__verify_project_domain', {
+      projectId: 'prj_abc',
+      domain: 'www.example.com',
+    });
+    expect(JSON.parse(text(verified))).toEqual({ verified: true });
+
+    const removed = await vercelPlugin.execute(ctx(fetch), 'vercel__remove_project_domain', {
+      projectId: 'prj_abc',
+      domain: 'www.example.com',
+    });
+    expect(removed.isError).toBeUndefined();
+    expect(fetch.calls[1]!.method).toBe('DELETE');
+    expect(fetch.calls[1]!.body).toBeNull();
   });
 });
 

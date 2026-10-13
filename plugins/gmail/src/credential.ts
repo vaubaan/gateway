@@ -12,7 +12,7 @@
  * `include_granted_scopes=true` for incremental authorization. Access tokens
  * live one hour ; the token endpoint answers `expires_in`.
  *
- * Scopes mirror the v4 decision (handbook §5) : `gmail.readonly` and
+ * Scopes follow the handbook decision (§5) : `gmail.readonly` and
  * `gmail.compose` only — enough for every read tool and for `create_draft`.
  * `gmail.modify` (needed upstream by `label_*` and also unlocking `send`) and
  * `gmail.send` are **not** requested : opening them is an incremental

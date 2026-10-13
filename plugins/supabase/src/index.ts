@@ -51,30 +51,8 @@ export {
 };
 export type { SupabasePlane } from './classify.ts';
 export {
-  REFRESH_THRESHOLD_MS,
   SUPABASE_APP_CONFIG_KEYS,
   SUPABASE_OAUTH_AUTHORIZE_URL,
   SUPABASE_OAUTH_TOKEN_URL,
 } from './credential.ts';
 export { MAX_DISCOVERED_PROJECTS, SUPABASE_API_BASE, projectUrl } from './execute.ts';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Legacy v4 exports — consumed by apps/gateway until P1.6 ; deleted with it.
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** @deprecated legacy v4, deleted in P1.6 — use `supabasePlugin`. */
-export { SupabaseAdapter } from './supabase-adapter.ts';
-/** @deprecated legacy v4, deleted in P1.6. */
-export type { SupabaseRefreshedTokens } from './supabase-adapter.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `supabasePlugin.tools`. */
-export { supabaseTools as supabaseAvailableTools } from './tools.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `supabasePlugin.catalog`. */
-export const supabaseRiskCatalog = supabaseCatalog.catalog;
-/** @deprecated legacy v4, deleted in P1.6 — use `supabasePlugin.classify`. */
-export {
-  classifySupabaseV4,
-  SUPPORTED_TOOLS as supabaseSupportedTools,
-  TOOL_PLANES as supabaseToolPlanes,
-} from './risk-classifier.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome` from the SDK. */
-export type { ClassifyV4Result as SupabaseClassifyV4Result } from './risk-classifier.ts';

@@ -2,7 +2,7 @@
  * Catalog invariants the SDK loader does not check for us : the bulk entries
  * keep their caps, the irreversible set is exact, only the exfiltration risk
  * is env-scoped, no preset offers the fallback, a deprecated id or an
- * env-scoped risk unqualified, and the v5 patterns are disjoint where the v4
+ * env-scoped risk unqualified, and the patterns are disjoint where the version 1
  * ones overlapped. Structure, patterns, presets and fallback are validated by
  * `loadCatalogFile` at import and by the kit in `plugin.test.ts`.
  */
@@ -11,13 +11,13 @@ import { describe, expect, test } from 'vitest';
 import { parseSlice } from '@vaubaan/plugin-sdk';
 import { isEnvScopedEntry, risksTouchedBy } from '@vaubaan/policy-engine';
 
-import { resendCatalog, resendPlugin, resendRiskCatalog } from '../../src/index.ts';
+import { resendCatalog, resendPlugin } from '../../src/index.ts';
 
 const { catalog, indexed } = resendCatalog;
 const touched = (raw: string) => risksTouchedBy(parseSlice(raw), indexed);
 
 describe('resend risk-catalog — shape', () => {
-  test('16 live risks + 2 deprecated v4 ids, one fallback, version 2', () => {
+  test('16 live risks + 2 deprecated version 1 ids, one fallback, version 2', () => {
     expect(catalog.provider).toBe('resend');
     expect(catalog.catalog_version).toBe(2);
     expect(catalog.risks).toHaveLength(18);
@@ -74,8 +74,8 @@ describe('resend risk-catalog — shape', () => {
     }
   });
 
-  test('the legacy export is the loaded catalog itself', () => {
-    expect(resendRiskCatalog).toBe(resendPlugin.catalog);
+  test('the plugin serves the loaded catalog itself', () => {
+    expect(resendPlugin.catalog).toBe(catalog);
   });
 });
 
@@ -125,7 +125,7 @@ describe('resend risk-catalog — slices resolve to the expected risk, and only 
     expect(touched('resend.api-key.W')).toEqual(['resend.uncategorized-write']);
   });
 
-  test('the v4 account-rooted slices match nothing but the fallback any more', () => {
+  test('the version 1 account-rooted slices match nothing but the fallback any more', () => {
     expect(touched('resend.account[prod-email].to-zone[internal].W')).toEqual([
       'resend.uncategorized-write',
     ]);

@@ -4,13 +4,11 @@
 # Handbook : docs/handbook/providers/ssh.md.
 #
 # Loaded at boot by `@vaubaan/plugin-sdk` (`loadCatalogFile`) ; this file is
-# the only catalog artefact (the v4 TypeScript twin is gone). The v4 file used
-# the legacy top-level `ssh:` key ; this is the v5 shape.
+# the only catalog artefact.
 #
-# 7 named risks + 1 fallback. The three v4 ids survive unchanged
-# (`exec-read`, `exec-read-secret-files`, `exec-write`, `uncategorized-write`) ;
-# four command classes the v4 research listed as "holes" get their own risk
-# (`exec-destructive`, `exec-package-install`, `exec-service-control`,
+# 7 named risks + 1 fallback (`uncategorized-write`) : `exec-read`,
+# `exec-read-secret-files`, `exec-write`, and one risk per command class that
+# hurts (`exec-destructive`, `exec-package-install`, `exec-service-control`,
 # `exec-sudo`) so a preset can gate them with `approval`.
 #
 # How a command reaches a risk (see `src/command-classes.ts`) :

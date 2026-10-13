@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { validateDataModel } from '@vaubaan/shared';
+import { validateDataModel } from '@vaubaan/plugin-sdk';
 
 import { stripeDataModel } from '../../src/index.ts';
 

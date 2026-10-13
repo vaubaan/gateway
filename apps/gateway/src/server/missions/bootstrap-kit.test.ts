@@ -86,6 +86,9 @@ describe('buildBootstrapKit', () => {
     );
     expect(text).toContain('quotas reload every day; the mission never expires');
     expect(text).toContain('the budget below is shared, it is not multiplied');
+    // Both carriers of the agent label the execution door reads.
+    expect(text).toContain('`X-Vaubaan-Agent: <label>`');
+    expect(text).toContain('`_meta.agent`');
   });
 
   it('3 — says what to do on each structured refusal, and never to work around one', () => {

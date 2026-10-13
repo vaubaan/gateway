@@ -6,9 +6,8 @@
  *
  * Rules :
  *   - `fetch` comes from the context, never from the global ;
- *   - the bearer is the `api_token` field of the `api-key` secret ; the
- *     legacy Global API Key (`email|key`) is accepted by the v4 entry point
- *     only ;
+ *   - the bearer is the `api_token` field of the `api-key` secret ; a
+ *     Global API Key (`email|key`) is never accepted ;
  *   - the zone in the URL is the **resolved mission resource**, never the
  *     raw argument ; `zone_id` / `record_id` are consumed and not forwarded ;
  *   - `update_record` is preceded by a read of the record : when the call
@@ -48,9 +47,6 @@ export const API_TOKEN_FIELD = 'api_token';
 
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type Args = Readonly<Record<string, unknown>>;
-
-/** @deprecated legacy v4, deleted in P1.6. */
-export type FetchImpl = typeof fetch;
 
 interface Route {
   readonly method: HttpMethod;
@@ -344,36 +340,4 @@ async function callCloudflareApi(
   } catch {
     return text;
   }
-}
-
-// ─── Legacy v4 entry point ───────────────────────────────────────────────────
-
-/** The v4 secret : an API token, or a Global API Key as `email|key`. */
-function legacyAuthHeaders(token: string): Record<string, string> {
-  if (token.includes('|')) {
-    const [email, key] = token.split('|', 2);
-    return { 'X-Auth-Email': email!, 'X-Auth-Key': key!, Accept: 'application/json' };
-  }
-  return bearerHeaders(token);
-}
-
-/**
- * The v4 dispatcher : one raw secret, the zone taken from the arguments, no
- * mission filter and no sensitivity check. Kept for
- * `apps/gateway/src/lib/gateway/build.ts` until P1.6.
- *
- * @deprecated legacy v4, deleted in P1.6 — use `executeCloudflareDns(ctx, tool, args)`.
- */
-export async function executeCall(
-  fetchImpl: FetchImpl,
-  token: string,
-  tool: string,
-  args: Record<string, unknown>,
-  _accountId: string,
-): Promise<unknown> {
-  const route = ROUTES[tool];
-  if (!route) throw new Error(`Cloudflare DNS tool not implemented: ${tool}`);
-  const { zone_id, record_id, ...rest } = args;
-  const path = route.path(String(zone_id ?? ''), String(record_id ?? ''));
-  return callCloudflareApi(fetchImpl, legacyAuthHeaders(token), route, path, rest);
 }

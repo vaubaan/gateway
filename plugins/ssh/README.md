@@ -1,6 +1,6 @@
 # `@vaubaan/plugin-ssh`
 
-Bash over SSH as a Vaubaan Gateway provider plugin on the v5 SDK
+Bash over SSH as a Vaubaan Gateway provider plugin on the plugin SDK
 (`@vaubaan/plugin-sdk`). One tool, `ssh__exec`, runs a shell command line on a
 host the connection reaches with its own ed25519 key pair and a **pinned host
 key**. Inspection commands on a read whitelist are low-risk; everything else
@@ -16,22 +16,21 @@ Contributor guide: [`plugins/README.md`](../README.md).
 
 | File                            | Role                                                                                                                          |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`                  | `createSshPlugin({ transport })` → `definePlugin({...})`; default export `sshPlugin` over `ssh2`; `@deprecated` v4 exports.   |
+| `src/index.ts`                  | `createSshPlugin({ transport })` → `definePlugin({...})`; default export `sshPlugin` over `ssh2`.                             |
 | `src/risk-catalog.yaml`         | 7 risks + fallback, three presets, `catalog_version: 2`. Loaded at boot by the SDK; the only catalog artefact.                |
 | `src/data-model.ts`             | One plane `host`: `host` (the resource, env-scopable) → `command` → classification markers.                                   |
-| `src/tools.ts`                  | `ssh__exec` (`host?`, `cmd`, `timeout_s?`); legacy v4 declaration with `host_slug`.                                           |
-| `src/policy.ts`                 | The read whitelist (`isReadAllowed`), unchanged since v4.                                                                     |
+| `src/tools.ts`                  | `ssh__exec` (`host?`, `cmd`, `timeout_s?`).                                                                                   |
+| `src/policy.ts`                 | The read whitelist (`isReadAllowed`).                                                                                         |
 | `src/command-classes.ts`        | Quote-aware splitter, credential-path heuristic, destructive / package / service / privilege detectors, `profileCommandLine`. |
 | `src/classify.ts`               | `classifySsh(tool, args, resources)` — pure; host resolution against the mission's resources; `resolveExecArgs` shared.       |
 | `src/credential.ts`             | `ssh-key` spec (host, port, user, host key fingerprint); `sshTarget()` narrows the secret; fingerprint helpers.               |
 | `src/transport.ts`              | `SshTransport` interface; `ssh2Transport` with host key verification, timeouts, output caps; `SshHostKeyMismatchError`.       |
-| `src/execute.ts`                | `createSshRuntime({ transport })` → `execute`, `discoverResources`; legacy `sshExec`.                                         |
-| `src/bash/{parse,args,exec}.ts` | Annotated-script parser, argument materialisation, invocation builder — moved from `apps/gateway/src/lib/bash` (P1.2i).       |
-| `src/risk-classifier.ts`        | Legacy `classifySshV4` (`host_slug`, two identical R slices on a secret read). `// legacy v4, deleted in P1.6`.               |
+| `src/execute.ts`                | `createSshRuntime({ transport })` → `execute`, `discoverResources`.                                                           |
+| `src/bash/{parse,args,exec}.ts` | Annotated-script parser, argument materialisation, invocation builder (not wired to a tool yet).                              |
 
 `src/index.ts` resolves the YAML path from `import.meta.url` as a **string**
 (`SSH_CATALOG_PATH`), not with `new URL('./risk-catalog.yaml', import.meta.url)`:
-Turbopack, which bundles the plugin into the v4 `apps/gateway`, rewrites that
+Turbopack, which bundles the plugin into `apps/gateway`, rewrites that
 pattern into an asset URL that Node's `fileURLToPath` rejects.
 
 ## Data model
@@ -76,8 +75,7 @@ ssh-keyscan -t ed25519 vps-1.example.com 2>/dev/null | ssh-keygen -lf -
 ```
 
 There is no company-registered app for SSH: the key pair _is_ the app. The
-private key is stored encrypted by the host (v4 kept it as a plain bytea) and
-never leaves the instance. A host that presents another key is refused with
+private key is stored encrypted by the host and never leaves the instance. A host that presents another key is refused with
 `SshHostKeyMismatchError` before authentication — if the host was legitimately
 re-keyed, the owner updates the connection. An authentication failure is an
 `UpstreamAuthError`: the host marks the connection `expired` and the owner
@@ -156,14 +154,13 @@ Stdout is capped at 1 MiB (`truncated: true`), stderr at 4 KiB. The gateway's
 
 ### Annotated scripts
 
-The v4 "bash provider" let an owner attach an annotated script
-(`# @vaubaan: ring=… action=…`) to a binding and exposed one tool per
-function. The parser, argument materialisation and invocation builder moved
-here (`src/bash/`) with their tests, but no tool uses them yet: an
-owner-curated script is per-connection configuration the v5 connection model
-does not carry, and a script supplied by the agent could not be trusted for
-its `action=read` annotation. Re-wiring it is a question for the connections
-feature (P1.4); until then `ssh__exec` is the whole surface.
+An annotated script (`# @vaubaan: ring=… action=…`) declares one tool per
+function. The parser, argument materialisation and invocation builder live
+in `src/bash/` with their tests, but no tool uses them yet: an owner-curated
+script is per-connection configuration the connection model does not carry,
+and a script supplied by the agent could not be trusted for its
+`action=read` annotation. Wiring it is a question for the connections
+feature; until then `ssh__exec` is the whole surface.
 
 ## Tests
 
@@ -172,22 +169,11 @@ npx vitest run plugins/ssh
 ```
 
 `tests/unit/plugin.test.ts` runs the SDK kit (`assertPluginWellFormed`,
-`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage`), the v5
+`assertPresetsValid`, `assertNoWildcard`, `assertCatalogCoverage`), the
 classifier, the splitter and the class detectors, the credential spec and the
 fingerprint pin, and `execute` / `discoverResources` over a fake
 `SshTransport` injected through `createSshPlugin({ transport })`.
-`bash-{parse,args,exec}.test.ts` are the moved parser suites, unchanged.
-`risk-classifier.test.ts` (39 v4 cases) and `data-model.test.ts` are kept
-until P1.6. No test opens a socket.
-
-## Removed from v4
-
-- `risk-catalog.ts` (TypeScript twin) and `risk-catalog.test.ts` (its lint):
-  the YAML is the only catalog artefact, in the v5 shape (`provider:` instead
-  of the legacy top-level `ssh:`).
-- `acceptable_in_envs` as host slugs (`staging-vps`, `prod-vps`): the
-  environment is the owner's label on the resource.
-- The duplicated-slice "co-touch" on a credential-file read: `exec-read` and
-  `exec-read-secret-files` now match different slices, so a `read-only`
-  mission can read logs without being granted the credential-file risk.
-- Unpinned host keys: v4 accepted whatever key the host presented.
+`classify.test.ts` is the classifier's security suite: one scenario per
+command line, pinning the exact slices or the exact denial.
+`bash-{parse,args,exec}.test.ts` cover the annotated-script modules and
+`data-model.test.ts` the data model's integrity. No test opens a socket.

@@ -102,7 +102,7 @@ describe('gmail risk-catalog — structural validation of the loaded catalog', (
   });
 
   test('gmail.draft-to-zone-external-unbounded is kept in the catalog, unscoped, and offered by no preset', () => {
-    // v4 marked it `acceptable_in_envs: []` ("never acceptable") ; the v5
+    // "Never acceptable" cannot be written as `acceptable_in_envs: []` : the
     // loader refuses an empty list, so the guarantee now rests on the
     // presets (and on the issuance UI) rather than on the catalog.
     const entry = parsedCatalog.risks.find(

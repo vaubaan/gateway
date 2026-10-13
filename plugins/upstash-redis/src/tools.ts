@@ -489,6 +489,3 @@ export const ACCOUNT_TOOL_NAMES: ReadonlySet<string> = new Set([
   'upstash_redis__list_databases',
   'upstash_redis__create_database',
 ]);
-
-/** @deprecated legacy v4, deleted in P1.6 — use `upstashRedisTools`. */
-export const availableTools: readonly McpToolDeclaration[] = upstashRedisTools;

@@ -142,19 +142,9 @@ starting point — ADR `mission-presets-default-values` is deferred.
 
 ## Tests
 
-`npx vitest run plugins/resend` — 136 tests: the SDK kit
+`npx vitest run plugins/resend` — 121 tests: the SDK kit
 (`assertPluginWellFormed`, `assertCatalogCoverage`, `assertNoWildcard`,
-`assertPresetsValid`), the v5 classifier, `execute` and
+`assertPresetsValid`), the classifier (cross-cutting rules in
+`plugin.test.ts`, one scenario per tool in `classify.test.ts`), `execute` and
 `discoverResources` against `mockFetch`, the credential spec and presets,
-catalog invariants, the data model, and the v4 suites kept unchanged for the
-legacy surface (`risk-classifier.test.ts`, 46; `adapter.test.ts`, 12). No
-test ever calls Resend.
-
-## Legacy v4 surface
-
-`ResendAdapter`, `resendAvailableTools` (the 25 audience-era v4 tools),
-`resendExecuteCall`, `resendRiskCatalog` (now the loaded YAML) and
-`classifyResendV4` are kept, `@deprecated`, so `apps/gateway` compiles until
-P1.6 replaces the execution door. The v4 classifier emits
-`account[<slug>]`-rooted slices that the v2 catalog no longer matches; it is
-kept verbatim, not delegated, and deleted with the v4 app.
+catalog invariants and the data model. No test ever calls Resend.

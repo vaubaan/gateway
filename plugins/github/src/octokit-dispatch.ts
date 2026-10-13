@@ -6,15 +6,13 @@
  * one-shot endpoint for). The result is the raw Octokit `data` payload.
  *
  * The Octokit instance is built by the caller (`execute.ts` injects
- * `ctx.fetch` and `ctx.signal` ; the legacy v4 adapter injects a test
- * double), so this module never touches the global fetch.
+ * `ctx.fetch` and `ctx.signal`), so this module never touches the global
+ * fetch.
  */
 
 import type { Octokit as OctokitType } from '@octokit/rest';
 
 export type OctokitLike = Pick<OctokitType, 'rest' | 'request'>;
-
-export type OctokitFactory = (token: string) => OctokitLike;
 
 const repoArgs = (a: Readonly<Record<string, unknown>>) =>
   ({
@@ -282,14 +280,4 @@ export async function dispatchGithubTool(
     default:
       throw new Error(`Unknown GitHub MCP tool: ${tool}`);
   }
-}
-
-/** @deprecated legacy v4 signature, deleted in P1.6 — use `dispatchGithubTool`. */
-export async function executeCall(
-  octokitFactory: OctokitFactory,
-  upstreamToken: string,
-  tool: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  return dispatchGithubTool(octokitFactory(upstreamToken), tool, args);
 }

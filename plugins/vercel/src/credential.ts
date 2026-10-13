@@ -5,9 +5,9 @@
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md D2.
  *
  * Vercel has no OAuth app flow that an on-prem instance can register for the
- * REST API and the MCP server at once ; what v4 did — and what works — is a
- * **personal access token** pasted by the user, scoped to one team. v5 keeps
- * that as an `api-key` credential with two fields : the token (secret) and
+ * REST API and the MCP server at once ; what works is a **personal access
+ * token** pasted by the user, scoped to one team. It is declared as an
+ * `api-key` credential with two fields : the token (secret) and
  * the team id (not secret). The team id is required because almost every
  * upstream call takes `teamId`, and because a token created with full
  * account scope could otherwise be pointed at any team the user belongs to.

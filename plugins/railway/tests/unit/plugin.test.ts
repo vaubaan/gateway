@@ -1,10 +1,9 @@
 /**
- * Mandatory test suite of the Railway plugin : the SDK kit, the v5
+ * Mandatory test suite of the Railway plugin : the SDK kit, the
  * classifier on `Resource[]`, the credential spec, `execute`
  * and `discoverResources` against `mockFetch`. No network, ever.
  *
- * The v4 classifier behaviour is covered unchanged by
- * `risk-classifier.test.ts` through the `classifyRailwayV4` bridge.
+ * The per-tool slice shapes of the classifier are in `classify.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 
@@ -184,7 +183,7 @@ describe('railway plugin — structural kit', () => {
   });
 });
 
-// ─── v5 classifier on Resource[] ─────────────────────────────────────────────
+// ─── Classifier on Resource[] ────────────────────────────────────────────────
 
 describe('classifyRailway', () => {
   const slices = (
@@ -467,6 +466,67 @@ describe('executeRailway with mockFetch', () => {
     });
     expect((fetch.calls[3]!.json as { query: string }).query).toContain('mutation variableDelete');
     for (const c of fetch.calls) expect(c.headers.authorization).toBe('Bearer rlwy_at');
+  });
+
+  test('an SSE-framed JSON-RPC error surfaces too', async () => {
+    const fetch = mockFetch([
+      {
+        url: RAILWAY_MCP_URL,
+        headers: { 'content-type': 'text/event-stream' },
+        respond: (c) =>
+          `event: message\ndata: ${JSON.stringify({
+            jsonrpc: '2.0',
+            id: (c.json as { id: number }).id,
+            error: { code: -32602, message: 'invalid args' },
+          })}\n\n`,
+      },
+    ]);
+    await expect(
+      railwayPlugin.execute(execCtx(fetch), 'railway__get-status', { projectId: PROJECT_STG }),
+    ).rejects.toThrow(/invalid args/);
+  });
+
+  test('bulk upsert and delete send the whole input, undefined fields stripped', async () => {
+    const fetch = mockFetch([
+      {
+        method: 'POST',
+        url: RAILWAY_GRAPHQL_URL,
+        respond: (c) =>
+          (c.json as { query: string }).query.includes('variableCollectionUpsert')
+            ? { data: { variableCollectionUpsert: true } }
+            : { data: { variableDelete: true } },
+      },
+    ]);
+    const ctx = execCtx(fetch);
+    await railwayPlugin.execute(ctx, 'railway__upsert-variables', {
+      projectId: PROJECT_STG,
+      environmentId: ENV_STG,
+      serviceId: SERVICE,
+      variables: { A: '1', B: '2' },
+      replace: true,
+    });
+    const bulk = fetch.calls[0]!.json as { query: string; variables: { input: unknown } };
+    expect(bulk.query).toContain('mutation variableCollectionUpsert');
+    expect(bulk.variables.input).toEqual({
+      projectId: PROJECT_STG,
+      environmentId: ENV_STG,
+      serviceId: SERVICE,
+      variables: { A: '1', B: '2' },
+      replace: true,
+    });
+
+    await railwayPlugin.execute(ctx, 'railway__delete-variable', {
+      projectId: PROJECT_STG,
+      environmentId: ENV_STG,
+      name: 'OLD_KEY',
+    });
+    const del = fetch.calls[1]!.json as { query: string; variables: { input: unknown } };
+    expect(del.query).toContain('mutation variableDelete');
+    expect(del.variables.input).toEqual({
+      projectId: PROJECT_STG,
+      environmentId: ENV_STG,
+      name: 'OLD_KEY',
+    });
   });
 
   test('GraphQL errors and 401 surface clearly', async () => {

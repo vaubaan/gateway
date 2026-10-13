@@ -10,7 +10,7 @@
  * default `resourceEnvResolver` finds the ref as the first ident segment and
  * qualifies env-scoped risks (`stripe[live].refund-create`).
  *
- * Stripe-specific conventions, carried over from the v4 modelling :
+ * Stripe-specific conventions :
  *
  *   1. **Mode comes from the resource, never from an argument.** A key is
  *      pinned to one mode and the namespaces are disjoint upstream.

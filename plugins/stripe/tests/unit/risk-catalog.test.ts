@@ -11,7 +11,7 @@ import { describe, expect, test } from 'vitest';
 import { parseSlice } from '@vaubaan/plugin-sdk';
 import { risksTouchedBy } from '@vaubaan/policy-engine';
 
-import { stripeCatalog, stripePlugin, stripeRiskCatalog } from '../../src/index.ts';
+import { stripeCatalog } from '../../src/index.ts';
 
 const { catalog, indexed } = stripeCatalog;
 
@@ -65,10 +65,6 @@ describe('stripe risk-catalog — shape', () => {
       'stripe.refund-create',
       'stripe.subscription-cancel',
     ]);
-  });
-
-  test('the legacy export is the loaded catalog itself', () => {
-    expect(stripeRiskCatalog).toBe(stripePlugin.catalog);
   });
 });
 

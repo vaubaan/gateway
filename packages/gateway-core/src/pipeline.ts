@@ -16,7 +16,7 @@
  *   connection availability         connection-unavailable (this module)
  *   classify + risk decision        risk-not-accepted      (RiskStage over risk-gateway.ts)
  *   budget / rate / gate            budget-exhausted, rate-limited, approval-required (BudgetStage, P1.3)
- *   upstream mint + forward         —                      (UpstreamStage, P1.2 plugins, P1.6 door)
+ *   upstream mint + forward         —                      (UpstreamStage, execution door)
  *   audit                           always, exactly once   (AuditWriter, P0.3 store)
  *
  * A refused call decrements nothing and still produces an audit entry. An
@@ -71,7 +71,7 @@ export type ResolvedCredential =
   | { readonly kind: 'human-session'; readonly user_id: string };
 
 /**
- * Identifies a raw bearer. Implemented by the door (P1.6) over the store:
+ * Identifies a raw bearer. Implemented by the execution door over the store:
  * prefix lookup, slow-hash verification, context load, cache. Returns `null`
  * for an unknown, revoked or malformed bearer; never guesses a kind.
  */

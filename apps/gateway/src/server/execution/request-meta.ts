@@ -21,8 +21,9 @@ import { BlockList, isIP } from 'node:net';
 
 import type { ClientOrigin } from '@vaubaan/gateway-core';
 
-export const AGENT_LABEL_HEADER = 'x-vaubaan-agent';
-export const AGENT_LABEL_META_KEY = 'agent';
+import { AGENT_LABEL_HEADER, AGENT_LABEL_META_KEY } from '../missions/bootstrap-kit';
+
+export { AGENT_LABEL_HEADER, AGENT_LABEL_META_KEY };
 export const AGENT_LABEL_MAX_LENGTH = 120;
 const USER_AGENT_MAX_LENGTH = 256;
 

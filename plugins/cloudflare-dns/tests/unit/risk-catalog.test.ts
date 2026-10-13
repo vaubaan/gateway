@@ -9,23 +9,19 @@
  */
 import { describe, expect, test } from 'vitest';
 
-import { parseSlice } from '@vaubaan/plugin-sdk';
-import type { ProviderBinding, Slice } from '@vaubaan/shared';
+import { parseSlice, type Resource, type Slice } from '@vaubaan/plugin-sdk';
 import { matches, prepareCatalog, risksTouchedBy } from '@vaubaan/policy-engine';
 
-import { classifyCloudflareDnsV4 } from '../../src/risk-classifier.ts';
-import { cloudflareDnsCatalog, cloudflareDnsRiskCatalog } from '../../src/index.ts';
+import { classifyCloudflareDns } from '../../src/classify.ts';
+import { cloudflareDnsCatalog } from '../../src/index.ts';
 
 const { catalog, indexed: idx } = cloudflareDnsCatalog;
 
-const binding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
+const zone: Resource = {
   provider: 'cloudflare-dns',
-  resource_ref: 'abc123account',
-  display_name: null,
-  metadata: {},
-  created_at: '2026-01-01',
+  ref: 'zone_x',
+  displayName: 'example.com',
+  metadata: { account_id: 'abc123account', zone_name: 'example.com' },
 };
 
 describe('cloudflare-dns risk-catalog — shape', () => {
@@ -36,10 +32,6 @@ describe('cloudflare-dns risk-catalog — shape', () => {
     expect(
       catalog.risks.filter((r) => r.id.startsWith('cloudflare-dns.uncategorized')),
     ).toHaveLength(1);
-  });
-
-  test('the legacy export is the loaded YAML', () => {
-    expect(cloudflareDnsRiskCatalog).toBe(catalog);
   });
 
   test('zone-delete is the only irreversible risk', () => {
@@ -74,7 +66,7 @@ describe('cloudflare-dns risk-catalog — prepareCatalog', () => {
   });
 });
 
-// ─── Coverage lint on the v4 classifier (frozen) ─────────────────────────────
+// ─── Coverage lint on the classifier ─────────────────────────────────────────
 
 const patterns = catalog.risks.flatMap((entry) => {
   const raws: readonly string[] =
@@ -84,7 +76,7 @@ const patterns = catalog.risks.flatMap((entry) => {
 
 const FALLBACK_ID = 'cloudflare-dns.uncategorized-write';
 
-/** The 15 tools the v4 classifier knows (7 reads + 8 writes). */
+/** The 15 tools the classifier knows (7 reads + 8 writes). */
 const CF_DNS_TOOLS = [
   'cloudflare_dns__list_zones',
   'cloudflare_dns__get_zone',
@@ -119,7 +111,7 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
 function slicesForTool(tool: string): Slice[] {
   const out: Slice[] = [];
   for (const args of syntheticArgsForTool(tool)) {
-    const result = classifyCloudflareDnsV4(tool, args, [binding]);
+    const result = classifyCloudflareDns(tool, args, [zone]);
     if ('slices' in result) out.push(...result.slices);
   }
   return out;

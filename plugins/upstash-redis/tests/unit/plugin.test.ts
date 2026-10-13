@@ -5,8 +5,7 @@
  * label, the credential spec, `execute` and `discoverResources` against
  * `mockFetch`.
  *
- * The v4 classifier cases live unchanged in `risk-classifier.test.ts` (30) ;
- * the legacy adapter in `adapter.test.ts` (16) ; both go with P1.6.
+ * The per-tool slice expectations live in `classify.test.ts`.
  * No test ever reaches the network : an unmatched request rejects.
  */
 import { describe, expect, test, vi } from 'vitest';
@@ -209,7 +208,7 @@ describe('upstash-redis plugin — structural kit', () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// v5 classifier conventions (the v4 cases are in risk-classifier.test.ts)
+// Classifier conventions (the per-tool slice expectations are in classify.test.ts)
 // ─────────────────────────────────────────────────────────────────────────────
 
 describe('classifyUpstashRedis — database resolution against mission resources', () => {

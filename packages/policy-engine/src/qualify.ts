@@ -113,7 +113,7 @@ export interface EnvResolver {
   resolveEnv(slice: Slice): string | null;
 }
 
-/** Resolver that never qualifies anything — the test and legacy mode. */
+/** Resolver that never qualifies anything — the test mode. */
 export const noEnvResolver: EnvResolver = {
   resolveEnv: () => null,
 };

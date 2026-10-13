@@ -1,5 +1,5 @@
 /**
- * Unit tests for `classifyVercelV4` — the v4 risk-based classifier.
+ * Unit tests for `classifyVercel(tool, args, resources)` — the classifier.
  *
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,
@@ -7,35 +7,27 @@
  *     plaintext-read),
  *   - the custom REST tools surface (domains, deployment-protection,
  *     project-settings, env-var CRUD),
- *   - binding enforcement (denial for an unbound projectId).
+ *   - resource enforcement (denial for a projectId the mission does not hold).
  *
- * Wherever possible, tests assert the *serialised* form via the policy-
- * engine's `serializeSlice` to make the expected wire shape readable.
+ * Wherever possible, tests assert the *serialised* form via `serializeSlice`
+ * to make the expected wire shape readable.
  */
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding } from '@vaubaan/shared';
-import { serializeSlice } from '@vaubaan/policy-engine';
+import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 
-import { classifyVercelV4 } from '../../src/risk-classifier.ts';
+import { classifyVercel } from '../../src/classify.ts';
 
-const binding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
-  provider: 'vercel',
-  resource_ref: 'prj_abc',
-  display_name: null,
-  created_at: '2026-01-01',
-};
+const resource: Resource = { provider: 'vercel', ref: 'prj_abc', displayName: 'prj_abc' };
 
 function classify(tool: string, args: Record<string, unknown> = {}) {
-  const result = classifyVercelV4(tool, args, [binding]);
+  const result = classifyVercel(tool, args, [resource]);
   if ('denied' in result) {
     throw new Error(`unexpected denial: ${result.denied}`);
   }
   return result.slices.map((s) => serializeSlice(s));
 }
 
-describe('classifyVercelV4 — reads', () => {
+describe('classifyVercel — reads', () => {
   test('search_vercel_documentation → account.docs.R', () => {
     expect(classify('vercel__search_vercel_documentation')).toEqual(['vercel.account.docs.R']);
   });
@@ -85,7 +77,7 @@ describe('classifyVercelV4 — reads', () => {
   });
 });
 
-describe('classifyVercelV4 — bug-fix #4 : decrypt=true emits plaintext slice', () => {
+describe('classifyVercel — bug-fix #4 : decrypt=true emits plaintext slice', () => {
   test('list_env_vars decrypt=true → both env-var.R AND env-var.plaintext.R', () => {
     const slices = classify('vercel__list_env_vars', { projectId: 'prj_abc', decrypt: true });
     expect(slices).toContain('vercel.project[prj_abc].env-var[*].R');
@@ -94,7 +86,7 @@ describe('classifyVercelV4 — bug-fix #4 : decrypt=true emits plaintext slice',
   });
 });
 
-describe('classifyVercelV4 — writes (deploy)', () => {
+describe('classifyVercel — writes (deploy)', () => {
   test('deploy_to_vercel target=production → env[prod].deployment.W', () => {
     expect(
       classify('vercel__deploy_to_vercel', { projectId: 'prj_abc', target: 'production' }),
@@ -114,7 +106,7 @@ describe('classifyVercelV4 — writes (deploy)', () => {
   });
 });
 
-describe('classifyVercelV4 — bug-fix #3 : get_access_to_vercel_url is a credential mint', () => {
+describe('classifyVercel — bug-fix #3 : get_access_to_vercel_url is a credential mint', () => {
   test('emits bypass-token.W (not deployment.R)', () => {
     const slices = classify('vercel__get_access_to_vercel_url', {
       projectId: 'prj_abc',
@@ -132,7 +124,7 @@ describe('classifyVercelV4 — bug-fix #3 : get_access_to_vercel_url is a creden
   });
 });
 
-describe('classifyVercelV4 — bug-fix #1 : upsert_env_var fan-out', () => {
+describe('classifyVercel — bug-fix #1 : upsert_env_var fan-out', () => {
   test('target=[preview] → single env slice, no fan-out marker', () => {
     const slices = classify('vercel__upsert_env_var', {
       projectId: 'prj_abc',
@@ -180,7 +172,7 @@ describe('classifyVercelV4 — bug-fix #1 : upsert_env_var fan-out', () => {
   });
 });
 
-describe('classifyVercelV4 — bug-fix #2 : delete_env_var always touches all 3 envs', () => {
+describe('classifyVercel — bug-fix #2 : delete_env_var always touches all 3 envs', () => {
   test('delete_env_var with hint=preview → still emits 3 env slices + fan-out marker', () => {
     const slices = classify('vercel__delete_env_var', {
       projectId: 'prj_abc',
@@ -201,7 +193,7 @@ describe('classifyVercelV4 — bug-fix #2 : delete_env_var always touches all 3 
   });
 });
 
-describe('classifyVercelV4 — custom REST tools (project settings, domains, protection)', () => {
+describe('classifyVercel — custom REST tools (project settings, domains, protection)', () => {
   test('update_project_settings → project[prj_abc].project-settings.W', () => {
     expect(
       classify('vercel__update_project_settings', { projectId: 'prj_abc', rootDirectory: 'app' }),
@@ -233,7 +225,7 @@ describe('classifyVercelV4 — custom REST tools (project settings, domains, pro
   });
 });
 
-describe('classifyVercelV4 — toolbar surface', () => {
+describe('classifyVercel — toolbar surface', () => {
   test('reply_to_toolbar_thread → toolbar-message.W under the thread', () => {
     const slices = classify('vercel__reply_to_toolbar_thread', {
       projectId: 'prj_abc',
@@ -269,16 +261,16 @@ describe('classifyVercelV4 — toolbar surface', () => {
   });
 });
 
-describe('classifyVercelV4 — denials', () => {
+describe('classifyVercel — denials', () => {
   test('unknown tool → denied', () => {
-    const result = classifyVercelV4('vercel__bogus', {}, [binding]);
+    const result = classifyVercel('vercel__bogus', {}, [resource]);
     expect(result).toEqual({ denied: "unknown vercel tool 'vercel__bogus'." });
   });
 
-  test('unbound projectId → denied', () => {
-    const result = classifyVercelV4('vercel__get_project', { projectId: 'prj_unbound' }, [binding]);
+  test('projectId outside the mission resources → denied', () => {
+    const result = classifyVercel('vercel__get_project', { projectId: 'prj_unbound' }, [resource]);
     expect(result).toEqual({
-      denied: "vercel project 'prj_unbound' is not bound to this project.",
+      denied: "vercel project 'prj_unbound' is not a resource of this mission.",
     });
   });
 });

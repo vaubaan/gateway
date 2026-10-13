@@ -26,6 +26,10 @@ export const MISSION_TOKEN_ENV = 'VAUBAAN_MISSION_TOKEN';
 export const EXECUTION_DOOR_PATH = '/mcp';
 /** Name of the server entry in the client's MCP configuration. */
 export const MCP_SERVER_NAME = 'vaubaan';
+/** Optional HTTP header carrying a free-form agent label (audit attribution only). */
+export const AGENT_LABEL_HEADER = 'X-Vaubaan-Agent';
+/** Key of the same label inside `params._meta` of one `tools/call`; wins over the header. */
+export const AGENT_LABEL_META_KEY = 'agent';
 
 export interface KitResource {
   readonly ref: string;
@@ -123,6 +127,8 @@ function agentInstructions(input: BootstrapKitInput, endpoint: string): string {
     `## Vaubaan mission "${mission.name}"`,
     '',
     `You reach the company's cloud providers only through the Vaubaan Gateway MCP server \`${MCP_SERVER_NAME}\` (${endpoint}), authenticated by the mission token in \`${MISSION_TOKEN_ENV}\`. You hold no provider credential and must not look for one. Sub-agents use the same MCP configuration and the same token: the budget below is shared, it is not multiplied.`,
+    '',
+    `To tell several agents apart in the audit, each may add a label of its own: the HTTP header \`${AGENT_LABEL_HEADER}: <label>\` in its MCP configuration, or \`_meta.${AGENT_LABEL_META_KEY}\` on a single call. A label changes nothing about what is allowed.`,
     '',
     '### Connections and resources you may touch',
     ...connections,

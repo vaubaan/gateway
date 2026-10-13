@@ -4,7 +4,7 @@
  * splitter, the credential spec and the host key pin, `execute` and
  * `discoverResources` over a fake transport. No socket is ever opened : the
  * real `ssh2` transport is replaced through `createSshPlugin({ transport })`.
- * The v4 classifier cases live unchanged in `risk-classifier.test.ts`.
+ * The classifier's scenario-by-scenario security suite is `classify.test.ts`.
  */
 import { createHash } from 'node:crypto';
 

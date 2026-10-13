@@ -23,10 +23,6 @@
  *   - Management API answers about a database are **redacted** : the REST
  *     tokens and password never reach the agent (`read-database-metadata`
  *     promises "no credential leak").
- *
- * The response of `fetch` is only read through `ok`, `status` and `text()`,
- * so the legacy adapter tests (hand-rolled response objects) keep passing
- * until P1.6 deletes them.
  */
 
 import {
@@ -38,12 +34,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 
 import { PROVIDER } from './classify.ts';
-import {
-  basicAuthHeader,
-  parseLegacyCredentials,
-  upstashAuth,
-  type UpstashAuth,
-} from './credential.ts';
+import { basicAuthHeader, upstashAuth, type UpstashAuth } from './credential.ts';
 import { MANAGEMENT_TOOL_NAMES } from './tools.ts';
 
 /** The Upstash Developer (Management) API. A fact about the provider. */
@@ -59,11 +50,8 @@ export const REDACTED_DATABASE_FIELDS: readonly string[] = [
   'password',
 ];
 
-/** @deprecated legacy v4, deleted in P1.6. */
-export type FetchImpl = typeof fetch;
-
-/** What one upstream call needs. Built from the context by `execute`, by hand by the legacy adapter. */
-export interface UpstashCall {
+/** What one upstream call needs, built from the context. */
+interface UpstashCall {
   readonly fetch: typeof fetch;
   readonly auth: UpstashAuth;
   readonly signal?: AbortSignal;
@@ -72,7 +60,7 @@ export interface UpstashCall {
 type ManagementMethod = 'GET' | 'POST' | 'DELETE';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// v5 entry points
+// ProviderPlugin entry points
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function executeUpstashRedis(
@@ -169,48 +157,6 @@ interface DatabaseDto {
   readonly rest_token?: string;
   readonly state?: string;
   readonly tls?: boolean;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Core : one tool call → raw upstream payload
-// ─────────────────────────────────────────────────────────────────────────────
-
-/**
- * Run one tool against Upstash and return the raw payload (Management API
- * body, or the Data API `{ result }` envelope). Throws `UpstreamAuthError`
- * on 401/403, a plain `Error` otherwise. `databaseId` is only used by data
- * tools, and only when the arguments carry none.
- */
-export async function callUpstashTool(
-  call: UpstashCall,
-  databaseId: string | null,
-  tool: string,
-  args: Readonly<Record<string, unknown>>,
-): Promise<unknown> {
-  if (MANAGEMENT_TOOL_NAMES.has(tool)) return executeManagementTool(call, tool, args);
-  const effective = typeof args.databaseId === 'string' ? args.databaseId : databaseId;
-  if (!effective) {
-    throw new Error(
-      `Upstash Redis data tool '${tool}' requires a databaseId (from the mission or args).`,
-    );
-  }
-  return executeDataTool(call, effective, tool, args);
-}
-
-/** @deprecated legacy v4, deleted in P1.6 — use `callUpstashTool`. */
-export async function executeCall(
-  fetchImpl: FetchImpl,
-  credentials: string,
-  databaseId: string | null,
-  tool: string,
-  args: Record<string, unknown>,
-): Promise<unknown> {
-  return callUpstashTool(
-    { fetch: fetchImpl, auth: parseLegacyCredentials(credentials) },
-    databaseId,
-    tool,
-    args,
-  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

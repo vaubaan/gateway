@@ -1,5 +1,5 @@
 /**
- * `@vaubaan/plugin-cloudflare-dns` — Cloudflare DNS zones and records, on the v5 SDK.
+ * `@vaubaan/plugin-cloudflare-dns` — Cloudflare DNS zones and records.
  *
  * Spec : docs/spec/vaubaan-gateway.md §5 (plugins) ; docs/spec/gateway-risk-model.md §7.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md.
@@ -11,12 +11,7 @@
  * at import (that is, at gateway boot).
  */
 
-import {
-  catalogPathNextTo,
-  definePlugin,
-  loadCatalogFile,
-  type RiskCatalog,
-} from '@vaubaan/plugin-sdk';
+import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import { classifyCloudflareDns } from './classify.ts';
 import { cloudflareDnsDataModel } from './data-model.ts';
@@ -89,18 +84,3 @@ export {
   zoneNameOf,
   type RecordSensitivity,
 } from './resources.ts';
-
-// ─── Legacy v4 surface — kept so apps/gateway compiles until P1.6 ────────────
-
-/** @deprecated legacy v4, deleted in P1.6 — use `cloudflareDnsPlugin`. */
-export { CloudflareDnsAdapter } from './cloudflare-dns-adapter.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `cloudflareDnsPlugin.tools`. */
-export { availableTools as cloudflareDnsAvailableTools } from './tools.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `cloudflareDnsPlugin.execute`. */
-export { executeCall as cloudflareDnsExecuteCall } from './execute.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `cloudflareDnsPlugin.catalog` (loaded from the YAML). */
-export const cloudflareDnsRiskCatalog: RiskCatalog = cloudflareDnsCatalog.catalog;
-/** @deprecated legacy v4, deleted in P1.6 — use `cloudflareDnsPlugin.classify`. */
-export { classifyCloudflareDnsV4 } from './risk-classifier.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome`. */
-export type { ClassifyResult as CloudflareDnsClassifyV4Result } from './risk-classifier.ts';

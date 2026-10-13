@@ -50,7 +50,7 @@ const GLOBAL_SEARCH = new Set<string>(['github__search_code', 'github__search_is
 // Public entry points
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** v5 entry point : `resources` are the mission's resources on this connection. */
+/** Entry point : `resources` are the mission's resources on this connection. */
 export function classifyGithub(
   tool: string,
   args: Readonly<Record<string, unknown>>,
@@ -68,10 +68,7 @@ export function githubRepoRefs(resources: readonly Resource[]): string[] {
   return out;
 }
 
-/**
- * Core classifier over the set of repository refs the mission may touch.
- * Shared by the v5 entry point and the legacy v4 wrapper (`risk-classifier.ts`).
- */
+/** Core classifier over the set of repository refs the mission may touch. */
 export function classifyGithubRefs(
   tool: string,
   args: Readonly<Record<string, unknown>>,

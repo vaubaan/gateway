@@ -1,5 +1,6 @@
 /**
- * Unit tests for `classifyGmailV4` — the Gmail v4 risk-based classifier.
+ * Unit tests for `classifyGmail` — the Gmail risk classifier
+ * (`(tool, args, resources) → slices`).
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7.
  * Research : .vaubaan/research/providers/gmail.md §2 + §5.
@@ -8,22 +9,19 @@
  *   - the slice(s) emitted for a given (tool, args) call,
  *   - the worst-case rule for `get_thread` (research Q2),
  *   - the bulk-marker rule for non-discriminating `search_threads`,
- *   - the from-zone / to-zone classification against binding metadata,
+ *   - the from-zone / to-zone classification against the mailbox resource metadata,
  *   - the synthetic tool `gmail__describe_zones` (research Q7).
  */
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding } from '@vaubaan/shared';
-import { serializeSlice } from '@vaubaan/policy-engine';
+import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 
-import { classifyGmailV4 } from '../../src/risk-classifier.ts';
+import { classifyGmail } from '../../src/classify.ts';
 
-const binding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
+const mailbox: Resource = {
   provider: 'gmail',
-  resource_ref: 'me@myorg.com',
-  display_name: null,
-  environment: null,
+  ref: 'me@myorg.com',
+  displayName: 'me@myorg.com',
+  env: null,
   metadata: {
     internal_domains: ['myorg.com'],
     allowlist_addresses: ['partner@vendor.com'],
@@ -31,24 +29,23 @@ const binding: ProviderBinding = {
     sensitive_labels: ['LEGAL', 'HR'],
     account_email: 'me@myorg.com',
   },
-  created_at: '2026-01-01',
 };
 
 function classify(tool: string, args: Record<string, unknown> = {}) {
-  const result = classifyGmailV4(tool, args, [binding]);
+  const result = classifyGmail(tool, args, [mailbox]);
   if ('denied' in result) {
     throw new Error(`unexpected denial: ${result.denied}`);
   }
   return result.slices.map((s) => serializeSlice(s));
 }
 
-describe('classifyGmailV4 — describe_zones (synthetic Vaubaan tool)', () => {
+describe('classifyGmail — describe_zones (synthetic Vaubaan tool)', () => {
   test('emits a single label-read slice (matches read-mailbox)', () => {
     expect(classify('gmail__describe_zones')).toEqual(['gmail.mailbox.label[*].R']);
   });
 });
 
-describe('classifyGmailV4 — search_threads (q parsing → zones)', () => {
+describe('classifyGmail — search_threads (q parsing → zones)', () => {
   test('from:no-reply@github.com → from-zone[automated]', () => {
     const sl = classify('gmail__search_threads', { q: 'from:no-reply@github.com' });
     expect(sl).toContain('gmail.mailbox.label[*].R');
@@ -99,7 +96,7 @@ describe('classifyGmailV4 — search_threads (q parsing → zones)', () => {
   });
 });
 
-describe('classifyGmailV4 — get_thread (worst-case unknown, research Q2)', () => {
+describe('classifyGmail — get_thread (worst-case unknown, research Q2)', () => {
   test('always emits from-zone[unknown].R regardless of thread id', () => {
     const sl = classify('gmail__get_thread', { id: 't_xyz' });
     expect(sl).toContain('gmail.mailbox.from-zone[unknown].R');
@@ -112,7 +109,7 @@ describe('classifyGmailV4 — get_thread (worst-case unknown, research Q2)', () 
   });
 });
 
-describe('classifyGmailV4 — list_drafts / list_labels', () => {
+describe('classifyGmail — list_drafts / list_labels', () => {
   test('list_drafts → draft[*].R', () => {
     expect(classify('gmail__list_drafts')).toEqual(['gmail.mailbox.draft[*].R']);
   });
@@ -122,7 +119,7 @@ describe('classifyGmailV4 — list_drafts / list_labels', () => {
   });
 });
 
-describe('classifyGmailV4 — create_draft (to-zone derived from recipients)', () => {
+describe('classifyGmail — create_draft (to-zone derived from recipients)', () => {
   test('to=[me@myorg.com] (account self) → to-zone[self]', () => {
     const sl = classify('gmail__create_draft', { to: ['me@myorg.com'] });
     expect(sl).toContain('gmail.mailbox.draft.W');
@@ -178,7 +175,7 @@ describe('classifyGmailV4 — create_draft (to-zone derived from recipients)', (
   });
 });
 
-describe('classifyGmailV4 — label_message / unlabel_message', () => {
+describe('classifyGmail — label_message / unlabel_message', () => {
   test('label_message → thread[T].message[M].label.W', () => {
     const sl = classify('gmail__label_message', {
       thread_id: 't1',
@@ -198,7 +195,7 @@ describe('classifyGmailV4 — label_message / unlabel_message', () => {
   });
 });
 
-describe('classifyGmailV4 — label_thread / unlabel_thread', () => {
+describe('classifyGmail — label_thread / unlabel_thread', () => {
   test('label_thread → thread[T].label.W (whole-thread)', () => {
     const sl = classify('gmail__label_thread', { thread_id: 't1', label: 'Archive' });
     expect(sl).toEqual(['gmail.mailbox.thread[t1].label.W']);
@@ -210,19 +207,19 @@ describe('classifyGmailV4 — label_thread / unlabel_thread', () => {
   });
 });
 
-describe('classifyGmailV4 — denials', () => {
+describe('classifyGmail — denials', () => {
   test('unknown tool → denied', () => {
-    const result = classifyGmailV4('gmail__bogus', {}, [binding]);
+    const result = classifyGmail('gmail__bogus', {}, [mailbox]);
     expect(result).toEqual({ denied: "unknown gmail tool 'gmail__bogus'." });
   });
 
-  test('no gmail binding on the token → denied', () => {
-    const result = classifyGmailV4('gmail__search_threads', { q: 'is:unread' }, []);
-    expect(result).toEqual({ denied: 'no gmail binding is attached to this token.' });
+  test('no gmail mailbox in the mission → denied', () => {
+    const result = classifyGmail('gmail__search_threads', { q: 'is:unread' }, []);
+    expect(result).toEqual({ denied: 'no gmail mailbox is a resource of this mission.' });
   });
 });
 
-describe('classifyGmailV4 — automated heuristic (research §1.3)', () => {
+describe('classifyGmail — automated heuristic (research §1.3)', () => {
   test('from:notifications@myorg.com → automated (trumps internal)', () => {
     const sl = classify('gmail__search_threads', { q: 'from:notifications@myorg.com' });
     expect(sl).toContain('gmail.mailbox.from-zone[automated].R');
@@ -236,18 +233,15 @@ describe('classifyGmailV4 — automated heuristic (research §1.3)', () => {
   });
 });
 
-describe('classifyGmailV4 — binding without metadata defaults safely', () => {
+describe('classifyGmail — mailbox without metadata defaults safely', () => {
   test('classification falls back to from-zone[unknown] when no metadata is set', () => {
-    const noMd: ProviderBinding = {
-      id: 'b2',
-      project_id: 'p1',
+    const noMd: Resource = {
       provider: 'gmail',
-      resource_ref: 'me@myorg.com',
-      display_name: null,
-      environment: null,
-      created_at: '2026-01-01',
+      ref: 'me@myorg.com',
+      displayName: 'me@myorg.com',
+      env: null,
     };
-    const result = classifyGmailV4('gmail__search_threads', { q: 'from:colleague@myorg.com' }, [
+    const result = classifyGmail('gmail__search_threads', { q: 'from:colleague@myorg.com' }, [
       noMd,
     ]);
     expect('slices' in result).toBe(true);

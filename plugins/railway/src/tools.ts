@@ -29,11 +29,6 @@ export const railwayTools: readonly McpToolDeclaration[] = [
   ...customTools,
 ];
 
-/**
- * @deprecated legacy v4 name, deleted in P1.6 — use `railwayTools`.
- */
-export const availableTools = railwayTools;
-
 /** Strip the `railway__` prefix to get the upstream tool name. */
 export function toUpstreamName(toolName: string): string {
   return toolName.startsWith(RAILWAY_TOOL_PREFIX)

@@ -1,45 +1,47 @@
 /**
- * Unit tests for `classifyCloudflareDnsV4` — the Cloudflare DNS v4 risk-based
- * classifier.
+ * Unit tests for `classifyCloudflareDns` — the per-tool security suite of the
+ * Cloudflare DNS classifier ("a classification error is a security hole").
  *
- * Spec     : docs/spec/gateway-risk-model.md §3, §7.
- * Research : .vaubaan/research/providers/cloudflare-dns.md §2.
+ * Spec : docs/spec/gateway-risk-model.md §3, §7.
  *
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,
- *   - the account propagation from the binding into every slice,
- *   - the denials (unknown tool, no binding),
+ *   - the account propagation from the zone resource into every slice,
+ *   - the denials (unknown tool, no Cloudflare DNS zone in the mission),
  *   - the absence of mode segment (no envScopable).
+ *
+ * Zone resolution, the critical overlay and malformed identifiers are
+ * covered in depth by `plugin.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding } from '@vaubaan/shared';
-import { serializeSlice } from '@vaubaan/policy-engine';
 
-import { classifyCloudflareDnsV4 } from '../../src/risk-classifier.ts';
+import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 
-const binding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
+import { classifyCloudflareDns } from '../../src/classify.ts';
+
+const zone: Resource = {
   provider: 'cloudflare-dns',
-  resource_ref: 'acct_cf123',
-  display_name: null,
-  metadata: {},
-  created_at: '2026-01-01',
+  ref: 'z1',
+  displayName: 'example.com',
+  metadata: { account_id: 'acct_cf123', zone_name: 'example.com' },
 };
+
+/** An ordinary subdomain record : keeps a record write out of the critical overlay. */
+const ordinary = { type: 'A', name: 'www.example.com' };
 
 function classify(
   tool: string,
   args: Record<string, unknown> = {},
-  bindings: ReadonlyArray<ProviderBinding> = [binding],
+  resources: readonly Resource[] = [zone],
 ): string[] {
-  const result = classifyCloudflareDnsV4(tool, args, bindings);
+  const result = classifyCloudflareDns(tool, args, resources);
   if ('denied' in result) {
     throw new Error(`unexpected denial: ${result.denied}`);
   }
   return result.slices.map((s) => serializeSlice(s));
 }
 
-describe('classifyCloudflareDnsV4 — reads (zones)', () => {
+describe('classifyCloudflareDns — reads (zones)', () => {
   test('list_zones -> zone[*].R', () => {
     expect(classify('cloudflare_dns__list_zones')).toEqual([
       'cloudflare-dns.account[acct_cf123].zone[*].R',
@@ -53,7 +55,7 @@ describe('classifyCloudflareDnsV4 — reads (zones)', () => {
   });
 });
 
-describe('classifyCloudflareDnsV4 — reads (records)', () => {
+describe('classifyCloudflareDns — reads (records)', () => {
   test('list_records(zone_id=z1) -> zone[z1].record[*].R', () => {
     expect(classify('cloudflare_dns__list_records', { zone_id: 'z1' })).toEqual([
       'cloudflare-dns.account[acct_cf123].zone[z1].record[*].R',
@@ -67,7 +69,7 @@ describe('classifyCloudflareDnsV4 — reads (records)', () => {
   });
 });
 
-describe('classifyCloudflareDnsV4 — reads (export, settings, dnssec)', () => {
+describe('classifyCloudflareDns — reads (export, settings, dnssec)', () => {
   test('export_records(zone_id=z1) -> zone[z1].zone-export.R', () => {
     expect(classify('cloudflare_dns__export_records', { zone_id: 'z1' })).toEqual([
       'cloudflare-dns.account[acct_cf123].zone[z1].zone-export.R',
@@ -87,27 +89,27 @@ describe('classifyCloudflareDnsV4 — reads (export, settings, dnssec)', () => {
   });
 });
 
-describe('classifyCloudflareDnsV4 — writes (record CRUD)', () => {
-  test('create_record(zone_id=z1) -> zone[z1].record.W (no ident)', () => {
-    expect(classify('cloudflare_dns__create_record', { zone_id: 'z1' })).toEqual([
+describe('classifyCloudflareDns — writes (record CRUD)', () => {
+  test('create_record(zone_id=z1, ordinary record) -> zone[z1].record.W (no ident)', () => {
+    expect(classify('cloudflare_dns__create_record', { zone_id: 'z1', ...ordinary })).toEqual([
       'cloudflare-dns.account[acct_cf123].zone[z1].record.W',
     ]);
   });
 
-  test('update_record(zone_id=z1, record_id=r1) -> zone[z1].record[r1].W', () => {
-    expect(classify('cloudflare_dns__update_record', { zone_id: 'z1', record_id: 'r1' })).toEqual([
-      'cloudflare-dns.account[acct_cf123].zone[z1].record[r1].W',
-    ]);
+  test('update_record(zone_id=z1, record_id=r1, ordinary record) -> zone[z1].record[r1].W', () => {
+    expect(
+      classify('cloudflare_dns__update_record', { zone_id: 'z1', record_id: 'r1', ...ordinary }),
+    ).toEqual(['cloudflare-dns.account[acct_cf123].zone[z1].record[r1].W']);
   });
 
-  test('delete_record(zone_id=z1, record_id=r1) -> zone[z1].record[r1].W', () => {
+  test('delete_record(zone_id=z1, record_id=r1) -> zone[z1].record[r1].delete.W', () => {
     expect(classify('cloudflare_dns__delete_record', { zone_id: 'z1', record_id: 'r1' })).toEqual([
-      'cloudflare-dns.account[acct_cf123].zone[z1].record[r1].W',
+      'cloudflare-dns.account[acct_cf123].zone[z1].record[r1].delete.W',
     ]);
   });
 });
 
-describe('classifyCloudflareDnsV4 — writes (import, settings, cache, dnssec)', () => {
+describe('classifyCloudflareDns — writes (import, settings, cache, dnssec)', () => {
   test('import_records(zone_id=z1) -> zone[z1].zone-import.W', () => {
     expect(classify('cloudflare_dns__import_records', { zone_id: 'z1' })).toEqual([
       'cloudflare-dns.account[acct_cf123].zone[z1].zone-import.W',
@@ -133,7 +135,7 @@ describe('classifyCloudflareDnsV4 — writes (import, settings, cache, dnssec)',
   });
 });
 
-describe('classifyCloudflareDnsV4 — writes (zone delete)', () => {
+describe('classifyCloudflareDns — writes (zone delete)', () => {
   test('delete_zone(zone_id=z1) -> zone[z1].W (zone-level write, no sub-entity)', () => {
     expect(classify('cloudflare_dns__delete_zone', { zone_id: 'z1' })).toEqual([
       'cloudflare-dns.account[acct_cf123].zone[z1].W',
@@ -141,19 +143,20 @@ describe('classifyCloudflareDnsV4 — writes (zone delete)', () => {
   });
 });
 
-describe('classifyCloudflareDnsV4 — account propagation from binding', () => {
-  test('account_id from resource_ref appears in slices', () => {
-    expect(classify('cloudflare_dns__list_zones', {}, [binding])).toEqual([
+describe('classifyCloudflareDns — account propagation from the zone resource', () => {
+  test('account_id from the resource metadata appears in slices', () => {
+    expect(classify('cloudflare_dns__list_zones', {}, [zone])).toEqual([
       'cloudflare-dns.account[acct_cf123].zone[*].R',
     ]);
   });
 
-  test('binding without resource_ref falls back to account[*] (safe wildcard)', () => {
-    const noRef: ProviderBinding = {
-      ...binding,
-      resource_ref: '',
+  test('resource without account_id falls back to account[*] (safe wildcard)', () => {
+    const noAccount: Resource = {
+      provider: 'cloudflare-dns',
+      ref: 'z1',
+      displayName: 'example.com',
     };
-    expect(classify('cloudflare_dns__list_zones', {}, [noRef])).toEqual([
+    expect(classify('cloudflare_dns__list_zones', {}, [noAccount])).toEqual([
       'cloudflare-dns.account[*].zone[*].R',
     ]);
   });
@@ -167,32 +170,25 @@ describe('classifyCloudflareDnsV4 — account propagation from binding', () => {
   });
 });
 
-describe('classifyCloudflareDnsV4 — denials', () => {
+describe('classifyCloudflareDns — denials', () => {
   test('unknown tool -> denied', () => {
-    const result = classifyCloudflareDnsV4('cloudflare_dns__bogus', {}, [binding]);
+    const result = classifyCloudflareDns('cloudflare_dns__bogus', {}, [zone]);
     expect(result).toEqual({ denied: "unknown cloudflare-dns tool 'cloudflare_dns__bogus'." });
   });
 
-  test('no cloudflare-dns binding on the token -> denied', () => {
-    const result = classifyCloudflareDnsV4('cloudflare_dns__list_zones', {}, []);
-    expect(result).toEqual({
-      denied: 'no cloudflare-dns binding is attached to this token.',
-    });
+  test('no cloudflare-dns resource in the mission -> denied', () => {
+    const result = classifyCloudflareDns('cloudflare_dns__list_zones', {}, []);
+    expect(result).toEqual({ denied: 'the mission touches no Cloudflare DNS zone' });
   });
 
-  test('non-cloudflare-dns bindings are ignored (binding picker)', () => {
-    const other: ProviderBinding = {
-      ...binding,
-      provider: 'stripe',
-    };
-    const result = classifyCloudflareDnsV4('cloudflare_dns__list_zones', {}, [other]);
-    expect(result).toEqual({
-      denied: 'no cloudflare-dns binding is attached to this token.',
-    });
+  test('resources of other providers are ignored', () => {
+    const other: Resource = { ...zone, provider: 'stripe' };
+    const result = classifyCloudflareDns('cloudflare_dns__list_zones', {}, [other]);
+    expect(result).toEqual({ denied: 'the mission touches no Cloudflare DNS zone' });
   });
 });
 
-describe('classifyCloudflareDnsV4 — future tools fall through to denied (MVP scope)', () => {
+describe('classifyCloudflareDns — undeclared tools are denied (fail-loud)', () => {
   for (const tool of [
     'cloudflare_dns__create_zone',
     'cloudflare_dns__batch_records',
@@ -200,7 +196,7 @@ describe('classifyCloudflareDnsV4 — future tools fall through to denied (MVP s
     'cloudflare_dns__list_firewall_rules',
   ]) {
     test(`'${tool}' is denied at the classifier (fail-loud)`, () => {
-      const result = classifyCloudflareDnsV4(tool, {}, [binding]);
+      const result = classifyCloudflareDns(tool, {}, [zone]);
       expect(result).toHaveProperty('denied');
     });
   }

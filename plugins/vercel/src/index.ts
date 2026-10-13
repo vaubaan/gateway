@@ -8,18 +8,9 @@
  * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates the
  * definition at import time ; the YAML catalog is loaded here, once, when the
  * module is first imported (that is, at gateway boot).
- *
- * The block at the end re-exports the v4 shapes the gateway application
- * still imports (`VercelAdapter`, `vercelAvailableTools`, `vercelRiskCatalog`,
- * `classifyVercelV4`). They are deleted in P1.6 with the v4 pipeline.
  */
 
-import {
-  catalogPathNextTo,
-  definePlugin,
-  loadCatalogFile,
-  type RiskCatalog,
-} from '@vaubaan/plugin-sdk';
+import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import {
   classifyVercel,
@@ -92,18 +83,3 @@ export {
   VERCEL_TOKENS_URL,
   type VercelEnv,
 };
-
-// ─── legacy v4, deleted in P1.6 ──────────────────────────────────────────────
-// Same import paths as before so `apps/gateway` keeps compiling until the v4
-// pipeline goes. Nothing new may import these.
-
-/** @deprecated legacy v4, deleted in P1.6 — use `vercelPlugin`. */
-export { VercelAdapter } from './vercel-adapter.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `vercelPlugin.tools`. */
-export { availableTools as vercelAvailableTools } from './tools.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `vercelPlugin.catalog` (same object, loaded from the YAML). */
-export const vercelRiskCatalog: RiskCatalog = vercelCatalog.catalog;
-/** @deprecated legacy v4, deleted in P1.6 — use `vercelPlugin.classify(tool, args, resources)`. */
-export { classifyVercelV4 } from './risk-classifier.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome` from the SDK. */
-export type { ClassifyResult as VercelClassifyV4Result } from './risk-classifier.ts';

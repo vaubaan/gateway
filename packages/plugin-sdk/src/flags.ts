@@ -4,8 +4,8 @@
  * Plan §8-Q4 : whether v5 keeps auto-filling arguments the mission leaves
  * no choice over. The plugin hook `normalizeArgs` exists so the answer can
  * be "yes" without a contract change ; until then the host does not call
- * it. The v4 module `@vaubaan/policy-engine` `scope-injection.ts` is
- * quarantined behind its own flag for the same reason.
+ * it. (The v4 scope-injection module of the policy engine, which did the
+ * same from project bindings, was deleted with the v4 application.)
  */
 
 import type { Resource } from '@vaubaan/shared';

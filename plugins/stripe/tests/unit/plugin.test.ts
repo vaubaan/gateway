@@ -2,7 +2,8 @@
  * Mandatory suite of the Stripe plugin : the SDK kit, the v5 classifier
  * (resource resolution, mode, malformed ids, new tools), `execute` and
  * `discoverResources` against `mockFetch`, and the credential spec.
- * The v4 classifier cases live unchanged in `risk-classifier.test.ts`.
+ * The classifier's tool-by-tool security suite is `classify.test.ts` ; the
+ * request shapes sent to Stripe are in `execute.test.ts`.
  */
 import { describe, expect, test } from 'vitest';
 
@@ -158,7 +159,7 @@ describe('classifyStripe — resource resolution', () => {
 });
 
 describe('modeOf', () => {
-  test('ref suffix wins over metadata and env ; env label alone is the v4 fallback', () => {
+  test('ref suffix wins over metadata and env ; env label alone is the last fallback', () => {
     expect(modeOf(liveRes)).toBe('live');
     expect(modeOf({ ...liveRes, env: 'prod' })).toBe('live');
     expect(

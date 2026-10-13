@@ -232,9 +232,3 @@ const WRITE_TOOLS: readonly McpToolDeclaration[] = [
 ];
 
 export const cloudflareDnsTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS];
-
-/** @deprecated legacy v4, deleted in P1.6 — use `cloudflareDnsTools`. */
-export const availableTools = cloudflareDnsTools;
-
-/** @deprecated legacy v4, deleted in P1.6. */
-export const WRITE_TOOL_NAMES = new Set(WRITE_TOOLS.map((t) => t.name));

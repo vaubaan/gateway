@@ -1,5 +1,6 @@
 /**
- * Tests for the v4 Supabase risk classifier.
+ * Security suite of the Supabase classifier, `classifySupabase(tool, args, resources)`
+ * ("a classification error is a security hole").
  *
  * Coverage : ~25 tests, 4 planes × ~6 tools. Verifies :
  *   - Slice path shape (entity chain matches the data-model).
@@ -14,37 +15,29 @@
 import { describe, expect, test } from 'vitest';
 
 import { serializeSlice } from '@vaubaan/policy-engine';
-import type { ProviderBinding } from '@vaubaan/shared';
+import type { Resource } from '@vaubaan/plugin-sdk';
 
-import { classifySupabaseV4 } from '../../src/risk-classifier.ts';
+import { classifySupabase } from '../../src/classify.ts';
 
 // ── fixtures ────────────────────────────────────────────────────────────
 
 const STAGING_REF = 'tlqgxnezmthbpzhdwxgi';
 const PROD_REF = 'prodxxxxxxxxxxxxxxxx';
 
-function mkBinding(ref: string, environment: string): ProviderBinding {
-  return {
-    id: `bind-${ref}`,
-    project_id: 'project-1',
-    provider: 'supabase',
-    resource_ref: ref,
-    display_name: null,
-    environment,
-    created_at: '2026-01-01T00:00:00Z',
-  };
+function mkResource(ref: string, env: string): Resource {
+  return { provider: 'supabase', ref, env, displayName: ref };
 }
 
-const stagingBinding = mkBinding(STAGING_REF, 'staging');
-const prodBinding = mkBinding(PROD_REF, 'prod');
+const staging = mkResource(STAGING_REF, 'staging');
+const prod = mkResource(PROD_REF, 'prod');
 
 /** Helper : run the classifier and return the serialized slice strings. */
 function classifySerialized(
   tool: string,
   args: Record<string, unknown>,
-  bindings: ReadonlyArray<ProviderBinding> = [stagingBinding],
+  resources: readonly Resource[] = [staging],
 ): string[] | string {
-  const r = classifySupabaseV4(tool, args, bindings);
+  const r = classifySupabase(tool, args, resources);
   if ('denied' in r) return r.denied;
   return r.slices.map(serializeSlice);
 }
@@ -53,7 +46,7 @@ function classifySerialized(
 // Plane `db`
 // ────────────────────────────────────────────────────────────────────────
 
-describe('classifySupabaseV4 — plane db', () => {
+describe('classifySupabase — plane db', () => {
   test('get_project → project-settings.R', () => {
     expect(classifySerialized('supabase__get_project', { project_ref: STAGING_REF })).toEqual([
       `supabase.project[${STAGING_REF}].project-settings.R`,
@@ -133,7 +126,7 @@ describe('classifySupabaseV4 — plane db', () => {
 // Plane `storage`
 // ────────────────────────────────────────────────────────────────────────
 
-describe('classifySupabaseV4 — plane storage', () => {
+describe('classifySupabase — plane storage', () => {
   test('list_buckets → bucket[any].R', () => {
     expect(classifySerialized('supabase__list_buckets', { project_ref: STAGING_REF })).toEqual([
       `supabase.project[${STAGING_REF}].bucket[any].R`,
@@ -199,7 +192,7 @@ describe('classifySupabaseV4 — plane storage', () => {
 // Plane `auth`
 // ────────────────────────────────────────────────────────────────────────
 
-describe('classifySupabaseV4 — plane auth', () => {
+describe('classifySupabase — plane auth', () => {
   test('list_users → user[any].R', () => {
     expect(classifySerialized('supabase__list_users', { project_ref: STAGING_REF })).toEqual([
       `supabase.project[${STAGING_REF}].user[any].R`,
@@ -264,7 +257,7 @@ describe('classifySupabaseV4 — plane auth', () => {
 // Plane `functions`
 // ────────────────────────────────────────────────────────────────────────
 
-describe('classifySupabaseV4 — plane functions', () => {
+describe('classifySupabase — plane functions', () => {
   test('list_functions → edge-function[any].R', () => {
     expect(classifySerialized('supabase__list_functions', { project_ref: STAGING_REF })).toEqual([
       `supabase.project[${STAGING_REF}].edge-function[any].R`,
@@ -349,30 +342,28 @@ describe('classifySupabaseV4 — plane functions', () => {
 // Strict-fail behavior
 // ────────────────────────────────────────────────────────────────────────
 
-describe('classifySupabaseV4 — strict-fail', () => {
+describe('classifySupabase — strict-fail', () => {
   test('unknown tool → denied', () => {
-    const r = classifySupabaseV4('supabase__nope_not_a_tool', { project_ref: STAGING_REF }, [
-      stagingBinding,
+    const r = classifySupabase('supabase__nope_not_a_tool', { project_ref: STAGING_REF }, [
+      staging,
     ]);
     expect(r).toEqual({ denied: "unknown supabase tool 'supabase__nope_not_a_tool'." });
   });
 
-  test('unbound project_ref → denied', () => {
-    const r = classifySupabaseV4('supabase__get_project', { project_ref: 'rogue-ref' }, [
-      stagingBinding,
-    ]);
+  test('project_ref outside the mission resources → denied', () => {
+    const r = classifySupabase('supabase__get_project', { project_ref: 'rogue-ref' }, [staging]);
     expect(r).toEqual({
-      denied: "supabase project 'rogue-ref' is not bound to this access token.",
+      denied: "supabase project 'rogue-ref' is not a resource of this mission.",
     });
   });
 
-  test('ambiguous binding without explicit project_ref → denied', () => {
-    const r = classifySupabaseV4('supabase__get_project', {}, [stagingBinding, prodBinding]);
+  test('several resources without explicit project_ref → denied', () => {
+    const r = classifySupabase('supabase__get_project', {}, [staging, prod]);
     expect(r).toEqual({ denied: 'ambiguous supabase target: specify project_ref.' });
   });
 
-  test('single binding without project_ref → resolves from binding', () => {
-    expect(classifySerialized('supabase__get_project', {}, [stagingBinding])).toEqual([
+  test('single resource without project_ref → resolves from the resource', () => {
+    expect(classifySerialized('supabase__get_project', {}, [staging])).toEqual([
       `supabase.project[${STAGING_REF}].project-settings.R`,
     ]);
   });

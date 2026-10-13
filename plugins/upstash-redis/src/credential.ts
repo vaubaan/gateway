@@ -4,16 +4,15 @@
  * Spec : docs/spec/vaubaan-gateway.md §0 "Connection", §7.2.
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md D2.
  *
- * Upstash has no OAuth app flow for its Developer (Management) API ; what v4
- * did — and what works — is a **Management API key** pasted by the user,
- * together with the account email, sent as HTTP Basic auth
- * (`email:api_key`). v5 keeps that as an `api-key` credential with two
- * fields : the email (not secret) and the API key (secret). The former
- * `email:api_key` concatenation is gone ; each fact has its own field.
+ * Upstash has no OAuth app flow for its Developer (Management) API ; what
+ * works is a **Management API key** pasted by the user, together with the
+ * account email, sent as HTTP Basic auth (`email:api_key`). The credential
+ * is an `api-key` with two fields : the email (not secret) and the API key
+ * (secret) — each fact has its own field.
  *
  * The per-database REST tokens (Data API, Bearer) are **not** part of the
  * credential : `execute` reads them from the Management API at call time
- * (`GET /v2/redis/database/{id}`), exactly as v4 did. A connection made of
+ * (`GET /v2/redis/database/{id}`). A connection made of
  * per-database REST tokens would not be able to discover its databases,
  * nor to reach the Management API tools, so it was not retained.
  *
@@ -79,16 +78,4 @@ export function upstashAuth(secret: CredentialSecret): UpstashAuth {
 /** `Basic base64(email:apiKey)` — the Management API authentication scheme. */
 export function basicAuthHeader(auth: UpstashAuth): string {
   return `Basic ${Buffer.from(`${auth.email}:${auth.apiKey}`, 'utf8').toString('base64')}`;
-}
-
-/**
- * @deprecated legacy v4, deleted in P1.6. Split the v4 stored secret
- * (`email:api_key`, split on the FIRST `:` — the key may contain colons).
- */
-export function parseLegacyCredentials(secret: string): UpstashAuth {
-  const idx = secret.indexOf(':');
-  if (idx < 0) {
-    throw new Error('Upstash Redis credentials must be in `email:api_key` format.');
-  }
-  return { email: secret.slice(0, idx), apiKey: secret.slice(idx + 1) };
 }

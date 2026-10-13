@@ -1,40 +1,15 @@
 /**
- * Audit hashing (unchanged since v4: sha256 truncated to 16 hex) and the
- * in-memory writer over both entry kinds.
+ * The audit entry shape and the in-memory writer over both entry kinds. The
+ * argument hash itself is covered by `fingerprint.test.ts`.
  */
-import { createHash } from 'node:crypto';
 import { describe, expect, test } from 'vitest';
 
 import {
   MemoryAuditWriter,
-  hashArguments,
+  fingerprintArguments,
   type AdminAuditEntry,
   type CallAuditEntry,
 } from '../../src/index.ts';
-
-describe('hashArguments', () => {
-  test('sha256 of the JSON, truncated to 16 hex characters', () => {
-    const args = { query: 'select 1', limit: 10 };
-    const full = createHash('sha256').update(JSON.stringify(args)).digest('hex');
-    expect(hashArguments(args)).toBe(full.slice(0, 16));
-    expect(hashArguments(args)).toMatch(/^[0-9a-f]{16}$/);
-  });
-
-  test('known vector: empty object', () => {
-    // sha256('{}') = 44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a
-    expect(hashArguments({})).toBe('44136fa355b3678a');
-  });
-
-  test('undefined and null hash like an empty object', () => {
-    expect(hashArguments(undefined)).toBe(hashArguments({}));
-    expect(hashArguments(null)).toBe(hashArguments({}));
-  });
-
-  test('is deterministic and sensitive to a one-byte change', () => {
-    expect(hashArguments({ a: 1 })).toBe(hashArguments({ a: 1 }));
-    expect(hashArguments({ a: 1 })).not.toBe(hashArguments({ a: 2 }));
-  });
-});
 
 const callEntry: CallAuditEntry = {
   kind: 'call',
@@ -44,7 +19,7 @@ const callEntry: CallAuditEntry = {
   connection_id: 'con_1',
   resource_ref: 'acme/api',
   tool: 'github__create_pull_request',
-  arguments_hash: hashArguments({ title: 'x' }),
+  arguments_hash: fingerprintArguments({ title: 'x' }),
   slices_executed: [],
   risks_touched: ['github.open-pull-request'],
   accepted_risks_snapshot: ['github.open-pull-request', 'github.read-repo'],

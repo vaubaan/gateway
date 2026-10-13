@@ -179,13 +179,6 @@ export const ssh2Transport: SshTransport = {
         privateKey: target.privateKeyPem,
         readyTimeout: Math.min(options.timeoutMs, MAX_READY_TIMEOUT_MS),
         hostVerifier: (key: Buffer): boolean => {
-          if (target.hostKeyFingerprint === null) {
-            options.logger?.warn('ssh host key accepted without a pin (legacy v4 path)', {
-              host: target.host,
-              fingerprint: fingerprintOf(key),
-            });
-            return true;
-          }
           if (hostKeyMatches(target.hostKeyFingerprint, key)) return true;
           hostKeyMismatch = new SshHostKeyMismatchError(
             target.host,

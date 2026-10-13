@@ -35,11 +35,6 @@ function withAccountArg(tool: McpToolDeclaration): McpToolDeclaration {
   };
 }
 
-const V5_ONLY_TOOLS: ReadonlySet<string> = new Set([
-  'stripe__create_payout',
-  'stripe__delete_customer',
-]);
-
 // ─── Read tools ─────────────────────────────────────────────────────────────
 
 const READ_TOOLS: readonly McpToolDeclaration[] = [
@@ -814,14 +809,3 @@ export const stripeTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRI
 
 /** Tools that write ; everything else reads. */
 export const WRITE_TOOL_NAMES: ReadonlySet<string> = new Set(WRITE_TOOLS.map((t) => t.name));
-
-/**
- * The 25 tools the v4 gateway listed, in their v4 shape (no `account`
- * argument). `stripe__create_payout` and `stripe__delete_customer` are v5
- * additions and never reach the v4 pipeline.
- *
- * @deprecated legacy v4, deleted in P1.6 — use `stripeTools`.
- */
-export const availableTools: readonly McpToolDeclaration[] = [...READ_TOOLS, ...WRITE_TOOLS].filter(
-  (t) => !V5_ONLY_TOOLS.has(t.name),
-);

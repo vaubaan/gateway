@@ -39,7 +39,7 @@ export const SUPABASE_API_BASE = 'https://api.supabase.com/v1';
 /** Upper bound on the projects one connection may expose ; the owner labels them one by one. */
 export const MAX_DISCOVERED_PROJECTS = 200;
 
-export type FetchImpl = typeof fetch;
+type FetchImpl = typeof fetch;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // ProviderPlugin entry points
@@ -187,11 +187,8 @@ async function fetchServiceRoleKey(
   return sr;
 }
 
-/**
- * Dispatch one tool call. Exposed (besides `executeSupabase`) for the v4
- * adapter shim, which hands it a bare token. Throws on unknown tool.
- */
-export async function callSupabase(
+/** Dispatch one tool call with the bare access token. Throws on unknown tool. */
+async function callSupabase(
   fetchImpl: FetchImpl,
   token: string,
   tool: string,

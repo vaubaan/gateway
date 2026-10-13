@@ -1,11 +1,12 @@
 /**
  * Canonical argument fingerprint (spec §3.5: an approval is bound to the exact argument
- * fingerprint; a replay must match byte for byte in canonical form).
+ * fingerprint; a replay must match byte for byte in canonical form; spec §6: call
+ * arguments are never logged in clear, only hashed).
  */
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { canonicalJson, fingerprintArguments } from '../../../../src/server/budget/index.ts';
-import { hashArguments } from '@vaubaan/gateway-core';
+
+import { canonicalJson, fingerprintArguments } from '../../src/index.ts';
 
 describe('canonicalJson', () => {
   it('sorts object keys recursively and keeps array order', () => {
@@ -55,8 +56,8 @@ describe('fingerprintArguments', () => {
     expect(fingerprintArguments(null)).toBe(fingerprintArguments({}));
   });
 
-  it('differs from the non-canonical audit hash, which is order-sensitive', () => {
-    expect(hashArguments({ b: 1, a: 2 })).not.toBe(hashArguments({ a: 2, b: 1 }));
+  it('is what the audit entry carries: 64 hex characters, insensitive to key order', () => {
+    expect(fingerprintArguments({ b: 1, a: 2 })).toMatch(/^[0-9a-f]{64}$/);
     expect(fingerprintArguments({ b: 1, a: 2 })).toBe(fingerprintArguments({ a: 2, b: 1 }));
   });
 });

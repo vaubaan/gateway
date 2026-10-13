@@ -47,7 +47,7 @@ describe('resendDataModel', () => {
     }
   });
 
-  test('the v4 account root and batch marker are gone', () => {
+  test('the version 1 account root and batch marker are gone', () => {
     expect(entities.find((e) => e.name === 'account')).toBeUndefined();
     expect(entities.find((e) => e.name === 'batch')).toBeUndefined();
   });

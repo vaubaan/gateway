@@ -1,5 +1,5 @@
 /**
- * Tests — Railway v4 risk-based classifier.
+ * Tests — Railway classifier (`classifyRailway(tool, args, resources)`).
  *
  * Spec : docs/spec/gateway-risk-model.md §3 (slice DSL), §7 (plugin
  *        contract). Research : .vaubaan/research/providers/railway-ssh.md
@@ -14,13 +14,17 @@
  *  - `railway-agent` emits THREE slices in parallel (agent-session +
  *    deployment catch-all + service-var catch-all), so the token must
  *    accept ALL possible write risks the agent could touch.
- *  - Unknown tool → `denied`. Ambiguous binding → `denied`.
+ *  - Unknown tool → `denied`. Ambiguous target → `denied`.
  */
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding, Slice } from '@vaubaan/shared';
+import {
+  serializeSlice,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+} from '@vaubaan/plugin-sdk';
 
-import { classifyRailwayV4 } from '../../src/risk-classifier.ts';
-import { serializeSlice } from '@vaubaan/policy-engine';
+import { classifyRailway } from '../../src/classify.ts';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -28,31 +32,15 @@ const PROJECT = '00000000-0000-4000-8000-000000000001';
 const SERVICE = '00000000-0000-4000-8000-000000000002';
 const ENV_ID = '00000000-0000-4000-8000-000000000003';
 
-function stagingBinding(): ProviderBinding {
-  return {
-    id: 'b-staging',
-    project_id: 'p-1',
-    provider: 'railway',
-    resource_ref: PROJECT,
-    display_name: 'railway-staging',
-    environment: 'staging',
-    created_at: '2026-01-01T00:00:00Z',
-  };
+function stagingResource(): Resource {
+  return { provider: 'railway', ref: PROJECT, displayName: 'railway-staging', env: 'staging' };
 }
 
-function prodBinding(): ProviderBinding {
-  return {
-    id: 'b-prod',
-    project_id: 'p-1',
-    provider: 'railway',
-    resource_ref: PROJECT,
-    display_name: 'railway-prod',
-    environment: 'prod',
-    created_at: '2026-01-01T00:00:00Z',
-  };
+function prodResource(): Resource {
+  return { provider: 'railway', ref: PROJECT, displayName: 'railway-prod', env: 'prod' };
 }
 
-function ok(result: { slices: Slice[] } | { denied: string }): Slice[] {
+function ok(result: ClassifyOutcome): readonly Slice[] {
   if ('denied' in result) {
     throw new Error(`expected slices, got denied: ${result.denied}`);
   }
@@ -61,9 +49,9 @@ function ok(result: { slices: Slice[] } | { denied: string }): Slice[] {
 
 // ─── Reads ─────────────────────────────────────────────────────────────────
 
-describe('classifyRailwayV4 — account-level reads', () => {
+describe('classifyRailway — account-level reads', () => {
   test('whoami → single account[*].R slice (env-less)', () => {
-    const slices = ok(classifyRailwayV4('railway__whoami', {}, []));
+    const slices = ok(classifyRailway('railway__whoami', {}, []));
     expect(slices).toHaveLength(1);
     expect(slices[0]).toMatchObject({ provider: 'railway', action: 'R' });
     // Path : name(account), wild-one
@@ -71,7 +59,7 @@ describe('classifyRailwayV4 — account-level reads', () => {
   });
 
   test('list-projects → account[*].project[*].R (env-less)', () => {
-    const slices = ok(classifyRailwayV4('railway__list-projects', {}, []));
+    const slices = ok(classifyRailway('railway__list-projects', {}, []));
     expect(slices).toHaveLength(1);
     expect(slices[0]!.action).toBe('R');
     expect(slices[0]!.path).toEqual([
@@ -83,10 +71,10 @@ describe('classifyRailwayV4 — account-level reads', () => {
   });
 });
 
-describe('classifyRailwayV4 — project-scoped reads', () => {
-  test('list-services stamps env from binding', () => {
+describe('classifyRailway — project-scoped reads', () => {
+  test('list-services names the project of the resource', () => {
     const slices = ok(
-      classifyRailwayV4('railway__list-services', { projectId: PROJECT }, [stagingBinding()]),
+      classifyRailway('railway__list-services', { projectId: PROJECT }, [stagingResource()]),
     );
     expect(slices).toHaveLength(1);
     expect(slices[0]!.action).toBe('R');
@@ -99,10 +87,10 @@ describe('classifyRailwayV4 — project-scoped reads', () => {
 
   test('get-logs : deployment[*].logs.R', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__get-logs',
         { projectId: PROJECT, serviceId: SERVICE, environmentId: ENV_ID },
-        [stagingBinding()],
+        [stagingResource()],
       ),
     );
     expect(slices).toHaveLength(1);
@@ -111,10 +99,10 @@ describe('classifyRailwayV4 — project-scoped reads', () => {
     expect(text).toContain(`service[${SERVICE}]`);
   });
 
-  test('list-variables : env from binding stamped in slice', () => {
+  test('list-variables : env label of the resource stamped in slice', () => {
     const slices = ok(
-      classifyRailwayV4('railway__list-variables', { projectId: PROJECT, environmentId: ENV_ID }, [
-        prodBinding(),
+      classifyRailway('railway__list-variables', { projectId: PROJECT, environmentId: ENV_ID }, [
+        prodResource(),
       ]),
     );
     expect(slices).toHaveLength(1);
@@ -126,13 +114,13 @@ describe('classifyRailwayV4 — project-scoped reads', () => {
 
 // ─── Deploys ───────────────────────────────────────────────────────────────
 
-describe('classifyRailwayV4 — deploys', () => {
+describe('classifyRailway — deploys', () => {
   test('redeploy : deployment.W qualified by env=staging', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__redeploy',
         { projectId: PROJECT, serviceId: SERVICE, environmentId: ENV_ID },
-        [stagingBinding()],
+        [stagingResource()],
       ),
     );
     expect(slices).toHaveLength(1);
@@ -145,8 +133,8 @@ describe('classifyRailwayV4 — deploys', () => {
 
   test('accept-deploy : deployment.W with serviceId omitted → service[*]', () => {
     const slices = ok(
-      classifyRailwayV4('railway__accept-deploy', { projectId: PROJECT, environmentId: ENV_ID }, [
-        prodBinding(),
+      classifyRailway('railway__accept-deploy', { projectId: PROJECT, environmentId: ENV_ID }, [
+        prodResource(),
       ]),
     );
     expect(slices).toHaveLength(1);
@@ -158,10 +146,10 @@ describe('classifyRailwayV4 — deploys', () => {
 
 // ─── Variables : the crucial replace=true / replace=false branching ────────
 
-describe('classifyRailwayV4 — upsert-variables (replace branching)', () => {
+describe('classifyRailway — upsert-variables (replace branching)', () => {
   test('upsert-variables replace=true → service-var[*].W (wildcard / destructive)', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__upsert-variables',
         {
           projectId: PROJECT,
@@ -170,7 +158,7 @@ describe('classifyRailwayV4 — upsert-variables (replace branching)', () => {
           variables: { FOO: 'a', BAR: 'b' },
           replace: true,
         },
-        [stagingBinding()],
+        [stagingResource()],
       ),
     );
     expect(slices).toHaveLength(1);
@@ -183,7 +171,7 @@ describe('classifyRailwayV4 — upsert-variables (replace branching)', () => {
 
   test('upsert-variables replace=false → service-var[K1,K2,…].W (bounded list)', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__upsert-variables',
         {
           projectId: PROJECT,
@@ -192,7 +180,7 @@ describe('classifyRailwayV4 — upsert-variables (replace branching)', () => {
           variables: { FOO: 'a', BAR: 'b' },
           replace: false,
         },
-        [stagingBinding()],
+        [stagingResource()],
       ),
     );
     expect(slices).toHaveLength(1);
@@ -205,7 +193,7 @@ describe('classifyRailwayV4 — upsert-variables (replace branching)', () => {
 
   test('upsert-variables without replace flag defaults to non-destructive list', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__upsert-variables',
         {
           projectId: PROJECT,
@@ -214,7 +202,7 @@ describe('classifyRailwayV4 — upsert-variables (replace branching)', () => {
           variables: { STRIPE_SECRET_KEY: 'sk_test_xxx' },
           // replace omitted ⇒ defaults to false.
         },
-        [stagingBinding()],
+        [stagingResource()],
       ),
     );
     const seg = slices[0]!.path[slices[0]!.path.length - 1];
@@ -223,10 +211,10 @@ describe('classifyRailwayV4 — upsert-variables (replace branching)', () => {
 
   test('upsert-variables replace=false with empty variables → falls back to wildcard', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__upsert-variables',
         { projectId: PROJECT, environmentId: ENV_ID, variables: {}, replace: false },
-        [stagingBinding()],
+        [stagingResource()],
       ),
     );
     // Empty bulk → pessimistic wildcard.
@@ -235,13 +223,13 @@ describe('classifyRailwayV4 — upsert-variables (replace branching)', () => {
   });
 });
 
-describe('classifyRailwayV4 — single variable upsert/delete', () => {
+describe('classifyRailway — single variable upsert/delete', () => {
   test('upsert-variable → service-var[<name>].W (list of one)', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__upsert-variable',
         { projectId: PROJECT, environmentId: ENV_ID, name: 'DATABASE_URL', value: 'postgres://' },
-        [stagingBinding()],
+        [stagingResource()],
       ),
     );
     expect(slices).toHaveLength(1);
@@ -251,10 +239,10 @@ describe('classifyRailwayV4 — single variable upsert/delete', () => {
 
   test('delete-variable → service-var[<name>].W (list of one)', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__delete-variable',
         { projectId: PROJECT, environmentId: ENV_ID, name: 'OBSOLETE_VAR' },
-        [stagingBinding()],
+        [stagingResource()],
       ),
     );
     expect(slices).toHaveLength(1);
@@ -266,9 +254,9 @@ describe('classifyRailwayV4 — single variable upsert/delete', () => {
 
 // ─── Account writes ────────────────────────────────────────────────────────
 
-describe('classifyRailwayV4 — account writes', () => {
+describe('classifyRailway — account writes', () => {
   test('create-project : account[*].project.W (env-less)', () => {
-    const slices = ok(classifyRailwayV4('railway__create-project', { name: 'foo' }, []));
+    const slices = ok(classifyRailway('railway__create-project', { name: 'foo' }, []));
     expect(slices).toHaveLength(1);
     expect(slices[0]!.action).toBe('W');
     expect(slices[0]!.path).toEqual([
@@ -281,13 +269,13 @@ describe('classifyRailwayV4 — account writes', () => {
 
 // ─── Meta-tool : railway-agent — multi-slice pessimistic emission ──────────
 
-describe('classifyRailwayV4 — railway-agent (meta-tool, pessimistic)', () => {
+describe('classifyRailway — railway-agent (meta-tool, pessimistic)', () => {
   test('railway-agent emits 3 slices : agent-session + deployment + service-var', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__railway-agent',
         { projectId: PROJECT, environmentId: ENV_ID, message: 'scale up the worker' },
-        [stagingBinding()],
+        [stagingResource()],
       ),
     );
     expect(slices).toHaveLength(3);
@@ -315,12 +303,12 @@ describe('classifyRailwayV4 — railway-agent (meta-tool, pessimistic)', () => {
     expect(text3).toMatch(/service-var\[\*\]\.W$/);
   });
 
-  test('railway-agent on prod binding stamps env=prod in the catch-all slices', () => {
+  test('railway-agent on a prod resource stamps env=prod in the catch-all slices', () => {
     const slices = ok(
-      classifyRailwayV4(
+      classifyRailway(
         'railway__railway-agent',
         { projectId: PROJECT, environmentId: ENV_ID, message: 'fix the deploy' },
-        [prodBinding()],
+        [prodResource()],
       ),
     );
     expect(slices).toHaveLength(3);
@@ -333,33 +321,31 @@ describe('classifyRailwayV4 — railway-agent (meta-tool, pessimistic)', () => {
 
 // ─── Denied paths ──────────────────────────────────────────────────────────
 
-describe('classifyRailwayV4 — denied paths', () => {
+describe('classifyRailway — denied paths', () => {
   test('unknown tool → denied', () => {
-    const result = classifyRailwayV4('railway__yolo', {}, [stagingBinding()]);
+    const result = classifyRailway('railway__yolo', {}, [stagingResource()]);
     expect(result).toEqual({ denied: "unknown railway tool 'railway__yolo'." });
   });
 
-  test('multiple bindings, no projectId arg → ambiguous denied', () => {
-    const result = classifyRailwayV4('railway__list-services', {}, [
-      stagingBinding(),
-      { ...prodBinding(), resource_ref: '00000000-0000-4000-8000-000000000099' },
+  test('multiple resources, no projectId arg → ambiguous denied', () => {
+    const result = classifyRailway('railway__list-services', {}, [
+      stagingResource(),
+      { ...prodResource(), ref: '00000000-0000-4000-8000-000000000099' },
     ]);
     expect(result).toEqual({ denied: 'ambiguous railway target: specify projectId.' });
   });
 
-  test('projectId arg not in bindings → denied', () => {
-    const result = classifyRailwayV4(
-      'railway__list-services',
-      { projectId: 'unbound-project-id' },
-      [stagingBinding()],
-    );
+  test('projectId arg not among the resources → denied', () => {
+    const result = classifyRailway('railway__list-services', { projectId: 'unbound-project-id' }, [
+      stagingResource(),
+    ]);
     expect(result).toEqual({
-      denied: "railway project 'unbound-project-id' is not bound to this project.",
+      denied: "railway project 'unbound-project-id' is not a resource of this mission.",
     });
   });
 
-  test('single binding auto-fills projectId', () => {
-    const result = classifyRailwayV4('railway__list-services', {}, [stagingBinding()]);
+  test('single resource auto-fills projectId', () => {
+    const result = classifyRailway('railway__list-services', {}, [stagingResource()]);
     expect('slices' in result).toBe(true);
   });
 });

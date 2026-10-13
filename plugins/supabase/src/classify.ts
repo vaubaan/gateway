@@ -26,7 +26,7 @@
  *
  * ─── execute_sql is read-only ───────────────────────────────────────────
  *
- * Spec v4 §7.2 #2 : `supabase__execute_sql` is strictly read-only. The
+ * Risk-model spec §7.2 #2 : `supabase__execute_sql` is strictly read-only. The
  * classifier always emits a single R slice ; `execute.ts` enforces it by
  * calling the Management API read-only endpoint, where Postgres refuses any
  * mutation.

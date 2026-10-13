@@ -6,10 +6,9 @@
  * telemetry collector default in `telemetry-default.ts`; example files under
  * `deploy/config/*.example*` may show placeholders.
  *
- * Scope: the v5 perimeter (`apps/gateway/src/server`, `instrumentation.ts`,
- * `app/healthz`, the Connections and Provider apps pages with their components, `next.config.ts`, `deploy/`, `scripts/`, `.github/workflows`).
- * The v4 UI and `lib/` are not scanned: they are deleted feature by feature in
- * Phase 1, and each feature widens this scope as it lands.
+ * Scope: the whole application (`apps/gateway/src`, `next.config.ts`), `deploy/`,
+ * `scripts/` and `.github/workflows`. The v4 UI and `lib/`, which the scan used
+ * to leave out, were deleted with the v4 application (P1.6).
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -19,15 +18,7 @@ import { describe, expect, it } from 'vitest';
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../..');
 
 const SCANNED = [
-  'apps/gateway/src/server',
-  'apps/gateway/src/instrumentation.ts',
-  'apps/gateway/src/app/healthz',
-  'apps/gateway/src/app/(app)/connections',
-  'apps/gateway/src/app/(app)/audit',
-  'apps/gateway/src/app/(app)/missions/[id]/session',
-  'apps/gateway/src/app/admin/(guarded)/provider-apps',
-  'apps/gateway/src/components/connections',
-  'apps/gateway/src/components/shell',
+  'apps/gateway/src',
   'apps/gateway/next.config.ts',
   'deploy',
   'scripts',

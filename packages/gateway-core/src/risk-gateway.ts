@@ -123,26 +123,3 @@ export function evaluateCallForToken(input: {
     hint: decision.hint,
   };
 }
-
-/**
- * Format a `CallVerdict` of `kind: 'deny'` into the v4 `risk-not-accepted`
- * body (spec gateway-risk-model §8). Same fields as the v5 refusal of that
- * code; `refuse.riskNotAccepted` in `errors.ts` builds the typed refusal.
- *
- * @deprecated Only the legacy v4 gateway (`apps/gateway/src/lib/gateway/
- * legacy-v4-gateway.ts`) answers in this shape; v5 doors serialize the
- * refusal with `refusalToRpcError`. Deleted with the v4 app at P1.6.
- */
-export function denyResponseBody(verdict: Extract<CallVerdict, { kind: 'deny' }>): {
-  error: RefusalCode;
-  missing_risks: readonly RiskId[];
-  executed_slices: readonly Slice[];
-  hint: string;
-} {
-  return {
-    error: verdict.code,
-    missing_risks: verdict.missing_risks,
-    executed_slices: verdict.executed_slices,
-    hint: verdict.hint,
-  };
-}

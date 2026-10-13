@@ -1,59 +1,53 @@
 /**
- * Unit tests for `classifyStripeV4` — the Stripe v4 risk-based classifier.
+ * Security suite of the Stripe classifier — `classifyStripe(tool, args, resources)`.
  *
  * Spec     : docs/spec/gateway-risk-model.md §3, §7.
  * Research : .vaubaan/research/providers/stripe.md §2 + §5.
  *
  * Each test pins down :
  *   - the slice(s) emitted for a given (tool, args) call,
- *   - the mode (test/live) propagation from the binding into every slice,
+ *   - the mode (test/live) propagation from the resource into every slice,
  *   - the customer-PII overlay on customer reads (research Q3),
  *   - the webhook-endpoint + secret dual emission on create (research Q8),
  *   - the subscription-create + payment-intent worst-case (research §4.3),
  *   - the refund hierarchy slice path (research §5.7),
- *   - the denials (unknown tool, no binding).
+ *   - the denials (unknown tool, no Stripe resource).
  */
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding } from '@vaubaan/shared';
-import { serializeSlice } from '@vaubaan/policy-engine';
 
-import { classifyStripeV4 } from '../../src/risk-classifier.ts';
+import { serializeSlice, type Resource } from '@vaubaan/plugin-sdk';
 
-const liveBinding: ProviderBinding = {
-  id: 'b1',
-  project_id: 'p1',
+import { classifyStripe } from '../../src/classify.ts';
+
+const liveResource: Resource = {
   provider: 'stripe',
-  resource_ref: 'acct_live',
-  display_name: null,
-  environment: 'live',
+  ref: 'acct_live',
+  displayName: 'acct_live',
+  env: 'live',
   metadata: {},
-  created_at: '2026-01-01',
 };
 
-const testBinding: ProviderBinding = {
-  id: 'b2',
-  project_id: 'p1',
+const testResource: Resource = {
   provider: 'stripe',
-  resource_ref: 'acct_test',
-  display_name: null,
-  environment: 'test',
+  ref: 'acct_test',
+  displayName: 'acct_test',
+  env: 'test',
   metadata: {},
-  created_at: '2026-01-01',
 };
 
 function classify(
   tool: string,
   args: Record<string, unknown> = {},
-  bindings: ReadonlyArray<ProviderBinding> = [liveBinding],
+  resources: readonly Resource[] = [liveResource],
 ): string[] {
-  const result = classifyStripeV4(tool, args, bindings);
+  const result = classifyStripe(tool, args, resources);
   if ('denied' in result) {
     throw new Error(`unexpected denial: ${result.denied}`);
   }
   return result.slices.map((s) => serializeSlice(s));
 }
 
-describe('classifyStripeV4 — reads (catalog)', () => {
+describe('classifyStripe — reads (catalog)', () => {
   test('list_products → product[*].R', () => {
     expect(classify('stripe__list_products')).toEqual([
       'stripe.account[acct_live].mode[live].product[*].R',
@@ -67,7 +61,7 @@ describe('classifyStripeV4 — reads (catalog)', () => {
   });
 });
 
-describe('classifyStripeV4 — reads (customers + PII overlay, research Q3)', () => {
+describe('classifyStripe — reads (customers + PII overlay, research Q3)', () => {
   test('list_customers emits both customer[*].R AND customer[*].pii.R', () => {
     const sl = classify('stripe__list_customers');
     expect(sl).toContain('stripe.account[acct_live].mode[live].customer[*].R');
@@ -81,7 +75,7 @@ describe('classifyStripeV4 — reads (customers + PII overlay, research Q3)', ()
   });
 });
 
-describe('classifyStripeV4 — reads (billing history)', () => {
+describe('classifyStripe — reads (billing history)', () => {
   test('list_subscriptions(customer=cus_x) → customer[cus_x].subscription[*].R', () => {
     expect(classify('stripe__list_subscriptions', { customer: 'cus_x' })).toEqual([
       'stripe.account[acct_live].mode[live].customer[cus_x].subscription[*].R',
@@ -107,7 +101,7 @@ describe('classifyStripeV4 — reads (billing history)', () => {
   });
 });
 
-describe('classifyStripeV4 — reads (monitoring)', () => {
+describe('classifyStripe — reads (monitoring)', () => {
   test('get_balance → balance.R singleton', () => {
     expect(classify('stripe__get_balance')).toEqual([
       'stripe.account[acct_live].mode[live].balance.R',
@@ -121,7 +115,7 @@ describe('classifyStripeV4 — reads (monitoring)', () => {
   });
 });
 
-describe('classifyStripeV4 — writes (catalog)', () => {
+describe('classifyStripe — writes (catalog)', () => {
   test('create_product → product.W (no ident)', () => {
     expect(classify('stripe__create_product')).toEqual([
       'stripe.account[acct_live].mode[live].product.W',
@@ -159,7 +153,7 @@ describe('classifyStripeV4 — writes (catalog)', () => {
   });
 });
 
-describe('classifyStripeV4 — writes (subscriptions)', () => {
+describe('classifyStripe — writes (subscriptions)', () => {
   test('create_subscription emits BOTH subscription.W AND payment-intent.W (worst-case)', () => {
     const sl = classify('stripe__create_subscription', { customer: 'cus_x' });
     expect(sl).toContain('stripe.account[acct_live].mode[live].customer[cus_x].subscription.W');
@@ -186,7 +180,7 @@ describe('classifyStripeV4 — writes (subscriptions)', () => {
   });
 });
 
-describe('classifyStripeV4 — writes (invoices)', () => {
+describe('classifyStripe — writes (invoices)', () => {
   test('create_invoice(customer=cus_x) → customer[cus_x].invoice.W', () => {
     expect(classify('stripe__create_invoice', { customer: 'cus_x' })).toEqual([
       'stripe.account[acct_live].mode[live].customer[cus_x].invoice.W',
@@ -206,7 +200,7 @@ describe('classifyStripeV4 — writes (invoices)', () => {
   });
 });
 
-describe('classifyStripeV4 — writes (refund — cardinal)', () => {
+describe('classifyStripe — writes (refund — cardinal)', () => {
   test('create_refund(charge=ch_x) → payment-intent[*].charge[ch_x].refund.W', () => {
     expect(classify('stripe__create_refund', { charge: 'ch_x' })).toEqual([
       'stripe.account[acct_live].mode[live].payment-intent[*].charge[ch_x].refund.W',
@@ -226,7 +220,7 @@ describe('classifyStripeV4 — writes (refund — cardinal)', () => {
   });
 });
 
-describe('classifyStripeV4 — writes (webhook endpoint + secret mint, research Q8)', () => {
+describe('classifyStripe — writes (webhook endpoint + secret mint, research Q8)', () => {
   test('create_webhook_endpoint emits BOTH webhook-endpoint.W AND webhook-endpoint[*].secret.W', () => {
     const sl = classify('stripe__create_webhook_endpoint');
     expect(sl).toContain('stripe.account[acct_live].mode[live].webhook-endpoint.W');
@@ -234,76 +228,95 @@ describe('classifyStripeV4 — writes (webhook endpoint + secret mint, research 
   });
 });
 
-describe('classifyStripeV4 — mode propagation (test vs live)', () => {
-  test('live binding produces mode[live] in slices', () => {
-    expect(classify('stripe__get_balance', {}, [liveBinding])).toEqual([
+describe('classifyStripe — mode propagation (test vs live)', () => {
+  test('live resource produces mode[live] in slices', () => {
+    expect(classify('stripe__get_balance', {}, [liveResource])).toEqual([
       'stripe.account[acct_live].mode[live].balance.R',
     ]);
   });
 
-  test('test binding produces mode[test] in slices', () => {
-    expect(classify('stripe__get_balance', {}, [testBinding])).toEqual([
+  test('test resource produces mode[test] in slices', () => {
+    expect(classify('stripe__get_balance', {}, [testResource])).toEqual([
       'stripe.account[acct_test].mode[test].balance.R',
     ]);
   });
 
-  test('binding without environment falls back to mode[*] (safe wildcard)', () => {
-    const noEnv: ProviderBinding = {
-      ...liveBinding,
-      environment: null,
-    };
+  test('resource without env falls back to mode[*] (safe wildcard)', () => {
+    const { env: _env, ...noEnv } = liveResource;
     expect(classify('stripe__get_balance', {}, [noEnv])).toEqual([
       'stripe.account[acct_live].mode[*].balance.R',
     ]);
   });
 
-  test('binding with garbage environment falls back to mode[*]', () => {
-    const weirdEnv: ProviderBinding = {
-      ...liveBinding,
-      environment: 'production',
-    };
+  test('resource with a null env falls back to mode[*]', () => {
+    const nullEnv: Resource = { ...liveResource, env: null };
+    expect(classify('stripe__get_balance', {}, [nullEnv])).toEqual([
+      'stripe.account[acct_live].mode[*].balance.R',
+    ]);
+  });
+
+  test('resource with garbage env falls back to mode[*]', () => {
+    const weirdEnv: Resource = { ...liveResource, env: 'production' };
     expect(classify('stripe__get_balance', {}, [weirdEnv])).toEqual([
       'stripe.account[acct_live].mode[*].balance.R',
     ]);
   });
 });
 
-describe('classifyStripeV4 — denials', () => {
+describe('classifyStripe — denials', () => {
   test('unknown tool → denied', () => {
-    const result = classifyStripeV4('stripe__bogus', {}, [liveBinding]);
+    const result = classifyStripe('stripe__bogus', {}, [liveResource]);
     expect(result).toEqual({ denied: "unknown stripe tool 'stripe__bogus'." });
   });
 
-  test('no stripe binding on the token → denied', () => {
-    const result = classifyStripeV4('stripe__get_balance', {}, []);
-    expect(result).toEqual({ denied: 'no stripe binding is attached to this token.' });
+  test('no Stripe resource in the mission → denied', () => {
+    const result = classifyStripe('stripe__get_balance', {}, []);
+    expect(result).toEqual({
+      denied: 'account: argument missing and the mission touches no Stripe resource',
+    });
   });
 
-  test('non-stripe bindings are ignored (binding picker)', () => {
-    const other: ProviderBinding = {
-      ...liveBinding,
-      provider: 'gmail',
-    };
-    const result = classifyStripeV4('stripe__get_balance', {}, [other]);
-    expect(result).toEqual({ denied: 'no stripe binding is attached to this token.' });
+  test('non-stripe resources are ignored (resource picker)', () => {
+    const other: Resource = { ...liveResource, provider: 'gmail' };
+    const result = classifyStripe('stripe__get_balance', {}, [other]);
+    expect(result).toEqual({
+      denied: 'account: argument missing and the mission touches no Stripe resource',
+    });
   });
 });
 
-describe('classifyStripeV4 — confirm/delete/connect tools fall through to denied (MVP scope)', () => {
-  // The classifier knows 25 tools ; anything else is denied here (the
-  // fallback risk only kicks in if the runtime executes the call via a
-  // non-classifier path). This is fail-loud by design — adding a new tool
-  // requires (1) classifier case + (2) catalog risk entry.
+describe('classifyStripe — confirm/transfer/connect tools fall through to denied', () => {
+  // The classifier knows the declared tools only ; anything else is denied
+  // here (the fallback risk only kicks in if the runtime executes the call
+  // via a non-classifier path). This is fail-loud by design — adding a new
+  // tool requires (1) classifier case + (2) catalog risk entry.
   for (const tool of [
-    'stripe__delete_customer',
     'stripe__confirm_payment_intent',
-    'stripe__create_payout',
     'stripe__create_transfer',
     'stripe__create_account', // Connect
   ]) {
     test(`'${tool}' is denied at the classifier (fail-loud)`, () => {
-      const result = classifyStripeV4(tool, {}, [liveBinding]);
-      expect(result).toHaveProperty('denied');
+      const result = classifyStripe(tool, {}, [liveResource]);
+      expect(result).toEqual({ denied: `unknown stripe tool '${tool}'.` });
     });
   }
+});
+
+describe('classifyStripe — money-out and irreversible tools carry their own slice', () => {
+  test('create_payout → payout.W', () => {
+    expect(classify('stripe__create_payout')).toEqual([
+      'stripe.account[acct_live].mode[live].payout.W',
+    ]);
+  });
+
+  test('delete_customer(id=cus_x) → customer[cus_x].delete.W', () => {
+    expect(classify('stripe__delete_customer', { id: 'cus_x' })).toEqual([
+      'stripe.account[acct_live].mode[live].customer[cus_x].delete.W',
+    ]);
+  });
+
+  test('delete_customer without id is denied, never a customer[*] delete', () => {
+    const result = classifyStripe('stripe__delete_customer', {}, [liveResource]);
+    expect(result).toEqual({ denied: 'id: missing' });
+  });
 });

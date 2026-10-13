@@ -13,9 +13,6 @@
  * classifier falls back to the mission's single project when it is absent.
  * `teamId` is always the connection's team : an explicit different value is
  * refused by `execute`.
- *
- * The v4 `vercel__upsert_env_from_venv` tool (secret transfer from the
- * project env-var store) is gone : v5 has no venv counterpart (plan §8-Q5).
  */
 
 import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';

@@ -1,5 +1,5 @@
 /**
- * Unit tests for `classifyGithubV4` (Phase 1).
+ * Unit tests for `classifyGithub` — the classifier's security suite.
  *
  * These tests pin the (tool, args) → Slice[] contract. They cover :
  *  - happy paths for the common reads / writes
@@ -7,8 +7,8 @@
  *  - the multi-slice tools (`create_pull_request`, `merge_pull_request`,
  *    `create_release`, `push_files`)
  *  - the `workflow-via-file` virtual slice
- *  - retired tools (spec v4 §7.2 #1) — they must return `{ denied: ... }`
- *  - structural denials (unbound repo, missing args, unknown tool)
+ *  - retired tools (risk-model spec §7.2 #1) — they must return `{ denied: ... }`
+ *  - structural denials (repo outside the mission, missing args, unknown tool)
  *
  * The test does NOT exercise the matcher or the catalog ; that's the
  * `risk-catalog.test.ts` job. Here we only verify the classifier emits the
@@ -16,39 +16,34 @@
  */
 
 import { describe, expect, test } from 'vitest';
-import type { ProviderBinding } from '@vaubaan/shared';
-import { serializeSlice } from '@vaubaan/policy-engine';
+import { serializeSlice, type ClassifyOutcome, type Resource } from '@vaubaan/plugin-sdk';
 
-import { classifyGithubV4 } from '../../src/risk-classifier.ts';
+import { classifyGithub } from '../../src/classify.ts';
 
 // ─── fixtures ──────────────────────────────────────────────────────────────
 
 const repoRef = 'sbw-vaubaan/gateway';
 
-const githubBinding: ProviderBinding = {
-  id: 'pb-1',
-  project_id: 'prj-1',
+const githubRepo: Resource = {
   provider: 'github',
-  resource_ref: repoRef,
-  display_name: null,
-  environment: null,
-  created_at: '2026-01-01T00:00:00Z',
+  ref: repoRef,
+  displayName: repoRef,
 };
 
-const bindings: readonly ProviderBinding[] = [githubBinding];
+const resources: readonly Resource[] = [githubRepo];
 
 const baseArgs = { owner: 'sbw-vaubaan', repo: 'gateway' };
 
 // ─── helpers ───────────────────────────────────────────────────────────────
 
-function expectSlices(result: ReturnType<typeof classifyGithubV4>): string[] {
+function expectSlices(result: ClassifyOutcome): string[] {
   if ('denied' in result) {
     throw new Error(`expected slices, got denied: ${result.denied}`);
   }
   return result.slices.map(serializeSlice);
 }
 
-function expectDenied(result: ReturnType<typeof classifyGithubV4>): string {
+function expectDenied(result: ClassifyOutcome): string {
   if (!('denied' in result)) {
     throw new Error(`expected denied, got slices: ${result.slices.map(serializeSlice).join(', ')}`);
   }
@@ -57,54 +52,54 @@ function expectDenied(result: ReturnType<typeof classifyGithubV4>): string {
 
 // ─── reads ─────────────────────────────────────────────────────────────────
 
-describe('classifyGithubV4 — reads', () => {
+describe('classifyGithub — reads', () => {
   test('list_branches → branch.R (bare-name read = "list all")', () => {
-    const r = classifyGithubV4('github__list_branches', baseArgs, bindings);
+    const r = classifyGithub('github__list_branches', baseArgs, resources);
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch.R`]);
   });
 
   test('get_file_contents (with ref) → branch[ref].file[path].R', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__get_file_contents',
       { ...baseArgs, path: 'src/foo.ts', ref: 'main' },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch[main].file[src/foo.ts].R`]);
   });
 
   test('get_file_contents (no ref) → bare-name branch', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__get_file_contents',
       { ...baseArgs, path: 'README.md' },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch.file[README.md].R`]);
   });
 
-  test('search_code (global, no binding lookup) → search.code.R', () => {
-    const r = classifyGithubV4('github__search_code', { q: 'foo' }, bindings);
+  test('search_code (global, no resource lookup) → search.code.R', () => {
+    const r = classifyGithub('github__search_code', { q: 'foo' }, resources);
     expect(expectSlices(r)).toEqual(['github.search.code.R']);
   });
 
   test('search_issues → search.issues.R', () => {
-    const r = classifyGithubV4('github__search_issues', { q: 'foo' }, bindings);
+    const r = classifyGithub('github__search_issues', { q: 'foo' }, resources);
     expect(expectSlices(r)).toEqual(['github.search.issues.R']);
   });
 
   test('list_workflow_runs (with workflow_id) → workflow[id].workflow-run.R', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__list_workflow_runs',
       { ...baseArgs, workflow_id: 'ci.yml' },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].workflow[ci.yml].workflow-run.R`]);
   });
 
   test('get_branch_protection → branch-protection[branch].R', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__get_branch_protection',
       { ...baseArgs, branch: 'main' },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch-protection[main].R`]);
   });
@@ -112,18 +107,18 @@ describe('classifyGithubV4 — reads', () => {
 
 // ─── writes — branches / files ─────────────────────────────────────────────
 
-describe('classifyGithubV4 — branch / file writes', () => {
+describe('classifyGithub — branch / file writes', () => {
   test('create_branch on feature/* → branch[feature/x].W', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__create_branch',
       { ...baseArgs, branch: 'feature/auth-bug' },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch[feature/auth-bug].W`]);
   });
 
   test('create_or_update_file on feature/* → branch[…].file[path].W (no workflow marker)', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__create_or_update_file',
       {
         ...baseArgs,
@@ -132,7 +127,7 @@ describe('classifyGithubV4 — branch / file writes', () => {
         content: 'export const x = 1;',
         message: 'add x',
       },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([
       `github.repo[${repoRef}].branch[feature/x].file[src/foo.ts].W`,
@@ -140,7 +135,7 @@ describe('classifyGithubV4 — branch / file writes', () => {
   });
 
   test('create_or_update_file on .github/workflows/*.yml → also emits workflow-via-file', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__create_or_update_file',
       {
         ...baseArgs,
@@ -149,7 +144,7 @@ describe('classifyGithubV4 — branch / file writes', () => {
         content: 'name: ci\n…',
         message: 'tweak CI',
       },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([
       `github.repo[${repoRef}].branch[feature/ci-tweak].file[.github/workflows/ci.yml].W`,
@@ -158,7 +153,7 @@ describe('classifyGithubV4 — branch / file writes', () => {
   });
 
   test('create_or_update_file on main → branch[main].file[…].W (matches merge-protected via catalog)', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__create_or_update_file',
       {
         ...baseArgs,
@@ -167,13 +162,13 @@ describe('classifyGithubV4 — branch / file writes', () => {
         content: '...',
         message: 'fix readme',
       },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch[main].file[README.md].W`]);
   });
 
   test('push_files (3 files on feature/*) → per-file + files-bulk marker', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__push_files',
       {
         ...baseArgs,
@@ -185,7 +180,7 @@ describe('classifyGithubV4 — branch / file writes', () => {
           { path: 'c.ts', content: '3' },
         ],
       },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([
       `github.repo[${repoRef}].branch[feature/x].file[a.ts].W`,
@@ -196,7 +191,7 @@ describe('classifyGithubV4 — branch / file writes', () => {
   });
 
   test('push_files (1 file) → no files-bulk marker', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__push_files',
       {
         ...baseArgs,
@@ -204,35 +199,35 @@ describe('classifyGithubV4 — branch / file writes', () => {
         message: 'one file',
         files: [{ path: 'a.ts', content: '1' }],
       },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch[feature/x].file[a.ts].W`]);
   });
 
   test('delete_file on main → branch[main].file[…].W', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__delete_file',
       {
         ...baseArgs,
         branch: 'main',
-        path: 'src/legacy.ts',
-        message: 'rm legacy',
+        path: 'src/old.ts',
+        message: 'rm old',
         sha: 'deadbeef',
       },
-      bindings,
+      resources,
     );
-    expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch[main].file[src/legacy.ts].W`]);
+    expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch[main].file[src/old.ts].W`]);
   });
 });
 
 // ─── writes — PRs / comments / releases ───────────────────────────────────
 
-describe('classifyGithubV4 — PRs, comments, releases', () => {
+describe('classifyGithub — PRs, comments, releases', () => {
   test('create_pull_request → pull_request.W + branch[head].propose-to[base].W', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__create_pull_request',
       { ...baseArgs, title: 't', head: 'feature/x', base: 'main' },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([
       `github.repo[${repoRef}].pull_request.W`,
@@ -241,10 +236,10 @@ describe('classifyGithubV4 — PRs, comments, releases', () => {
   });
 
   test('merge_pull_request → pull_request[N].W + branch[base].merge-into.W', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__merge_pull_request',
       { ...baseArgs, pull_number: 42, base: 'main' },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([
       `github.repo[${repoRef}].pull_request[42].W`,
@@ -253,10 +248,10 @@ describe('classifyGithubV4 — PRs, comments, releases', () => {
   });
 
   test('merge_pull_request without base → defaults to main', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__merge_pull_request',
       { ...baseArgs, pull_number: 7 },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([
       `github.repo[${repoRef}].pull_request[7].W`,
@@ -265,19 +260,19 @@ describe('classifyGithubV4 — PRs, comments, releases', () => {
   });
 
   test('add_issue_comment → issue[N].comment.W', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__add_issue_comment',
       { ...baseArgs, issue_number: 142, body: 'lgtm' },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].issue[142].comment.W`]);
   });
 
   test('create_release → release.W + tag[name].W', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__create_release',
       { ...baseArgs, tag_name: 'v1.2.3', name: 'v1.2.3' },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([
       `github.repo[${repoRef}].release.W`,
@@ -286,10 +281,10 @@ describe('classifyGithubV4 — PRs, comments, releases', () => {
   });
 
   test('delete_release → release[id].W', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__delete_release',
       { ...baseArgs, release_id: 9001 },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].release[9001].W`]);
   });
@@ -297,33 +292,33 @@ describe('classifyGithubV4 — PRs, comments, releases', () => {
 
 // ─── writes — rules / mint ─────────────────────────────────────────────────
 
-describe('classifyGithubV4 — rules / mint', () => {
+describe('classifyGithub — rules / mint', () => {
   test('update_branch_protection → branch-protection[branch].W', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__update_branch_protection',
       { ...baseArgs, branch: 'main', required_status_checks: { strict: true, contexts: [] } },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].branch-protection[main].W`]);
   });
 
   test('mint_install_token clone (with repoFullName) → install-token[clone].W', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__mint_install_token',
       { purpose: 'clone', repoFullName: repoRef },
-      bindings,
+      resources,
     );
     expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].install-token[clone].W`]);
   });
 
-  test('mint_install_token push (no repoFullName) → fan-out over bound repos', () => {
-    const second: ProviderBinding = {
-      ...githubBinding,
-      id: 'pb-2',
-      resource_ref: 'sbw-vaubaan/other',
+  test('mint_install_token push (no repoFullName) → fan-out over the mission repos', () => {
+    const second: Resource = {
+      ...githubRepo,
+      ref: 'sbw-vaubaan/other',
+      displayName: 'sbw-vaubaan/other',
     };
-    const r = classifyGithubV4('github__mint_install_token', { purpose: 'push' }, [
-      githubBinding,
+    const r = classifyGithub('github__mint_install_token', { purpose: 'push' }, [
+      githubRepo,
       second,
     ]);
     expect(expectSlices(r)).toEqual([
@@ -333,20 +328,20 @@ describe('classifyGithubV4 — rules / mint', () => {
   });
 
   test('mint_install_token rejects invalid purpose', () => {
-    const r = classifyGithubV4('github__mint_install_token', { purpose: 'delete' }, bindings);
+    const r = classifyGithub('github__mint_install_token', { purpose: 'delete' }, resources);
     expect(expectDenied(r)).toContain("requires purpose 'clone' or 'push'");
   });
 });
 
-// ─── retired tools (spec v4 §7.2 #1) ───────────────────────────────────────
+// ─── retired tools (risk-model spec §7.2 #1) ───────────────────────────────────────
 
-describe('classifyGithubV4 — retired tools (spec v4 §7.2 #1)', () => {
+describe('classifyGithub — retired tools (risk-model spec §7.2 #1)', () => {
   test.each([
     ['github__dispatch_workflow', { ...baseArgs, workflow_id: 'ci.yml', ref: 'main' }],
     ['github__cancel_workflow_run', { ...baseArgs, run_id: 1 }],
     ['github__rerun_workflow_run', { ...baseArgs, run_id: 1 }],
   ])('%s returns denied', (tool, args) => {
-    const r = classifyGithubV4(tool, args, bindings);
+    const r = classifyGithub(tool, args, resources);
     expect(expectDenied(r)).toBe(
       'tool removed in v4 risk-based model — use cloud-provider tool directly',
     );
@@ -355,31 +350,31 @@ describe('classifyGithubV4 — retired tools (spec v4 §7.2 #1)', () => {
 
 // ─── structural denials ────────────────────────────────────────────────────
 
-describe('classifyGithubV4 — structural denials', () => {
+describe('classifyGithub — structural denials', () => {
   test('unknown tool', () => {
-    const r = classifyGithubV4('github__moonshot', baseArgs, bindings);
+    const r = classifyGithub('github__moonshot', baseArgs, resources);
     expect(expectDenied(r)).toContain('unknown github tool');
   });
 
-  test('unbound repo', () => {
-    const r = classifyGithubV4(
+  test('repo outside the mission', () => {
+    const r = classifyGithub(
       'github__list_branches',
       { owner: 'someone-else', repo: 'private' },
-      bindings,
+      resources,
     );
     expect(expectDenied(r)).toContain('is not bound to this project');
   });
 
   test('missing owner/repo', () => {
-    const r = classifyGithubV4('github__list_branches', {}, bindings);
+    const r = classifyGithub('github__list_branches', {}, resources);
     expect(expectDenied(r)).toContain("'owner' and 'repo'");
   });
 
   test('create_or_update_file missing branch', () => {
-    const r = classifyGithubV4(
+    const r = classifyGithub(
       'github__create_or_update_file',
       { ...baseArgs, path: 'a.ts', content: '', message: 'm' },
-      bindings,
+      resources,
     );
     expect(expectDenied(r)).toContain("'branch' and 'path'");
   });

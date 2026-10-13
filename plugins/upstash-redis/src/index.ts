@@ -8,19 +8,9 @@
  * The plugin imports `@vaubaan/plugin-sdk` only. `definePlugin` validates the
  * definition at import time ; the YAML catalog is loaded here, once, when the
  * module is first imported (that is, at gateway boot).
- *
- * The block at the end re-exports the v4 shapes the gateway application
- * still imports (`UpstashRedisAdapter`, `upstashRedisAvailableTools`,
- * `upstashRedisRiskCatalog`, `classifyUpstashRedisV4`). They are deleted in
- * P1.6 with the v4 pipeline.
  */
 
-import {
-  catalogPathNextTo,
-  definePlugin,
-  loadCatalogFile,
-  type RiskCatalog,
-} from '@vaubaan/plugin-sdk';
+import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
 
 import {
   classifyUpstashRedis,
@@ -98,18 +88,3 @@ export {
   UPSTASH_MANAGEMENT_API,
   type UpstashAuth,
 };
-
-// ─── legacy v4, deleted in P1.6 ──────────────────────────────────────────────
-// Same import paths as before so `apps/gateway` keeps compiling until the v4
-// pipeline goes. Nothing new may import these.
-
-/** @deprecated legacy v4, deleted in P1.6 — use `upstashRedisPlugin`. */
-export { UpstashRedisAdapter } from './upstash-redis-adapter.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `upstashRedisPlugin.tools`. */
-export { availableTools as upstashRedisAvailableTools } from './tools.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `upstashRedisPlugin.catalog` (same object, loaded from the YAML). */
-export const upstashRedisRiskCatalog: RiskCatalog = upstashRedisCatalog.catalog;
-/** @deprecated legacy v4, deleted in P1.6 — use `upstashRedisPlugin.classify(tool, args, resources)`. */
-export { classifyUpstashRedisV4 } from './risk-classifier.ts';
-/** @deprecated legacy v4, deleted in P1.6 — use `ClassifyOutcome` from the SDK. */
-export type { ClassifyResult as UpstashRedisClassifyV4Result } from './risk-classifier.ts';

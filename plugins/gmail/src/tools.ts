@@ -14,7 +14,7 @@
  * kit can check catalog coverage and so the execution phase can expose them
  * by moving them into `gmailTools`.
  *
- * Argument names are the v4 ones the classifier reads (`q`, `id`,
+ * Argument names are the ones the classifier reads (`q`, `id`,
  * `thread_id`, `message_id`, `to` / `cc` / `bcc`) ; the execution phase maps
  * them onto the upstream names (`threadId`, `labelIds`…).
  */
