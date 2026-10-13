@@ -66,14 +66,14 @@ this table says where each requirement lives, and what is not written yet.
 | Unit — the budget                                                        | [Budget and sessions](#scenarios--budget-and-sessions)                                                                                                                  |
 | Unit — the approval                                                      | [Budget and sessions](#scenarios--budget-and-sessions) (fingerprint, lookup, consumption), [Approval gate](#scenarios--approval-gate) (decision, gate opening, erasure) |
 | Unit — structured refusals                                               | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door)                                                                                  |
-| Unit — credential separation                                             | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door); the management surface is not built (P2.3)                                      |
+| Unit — credential separation                                             | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door), [Authorization server](#scenarios--authorization-server-of-the-management-door) |
 | Integration — connection                                                 | [Connections](#scenarios--connections-resources-provider-apps)                                                                                                          |
 | Integration — share                                                      | [Authority, shares, groups](#scenarios--authority-shares-groups)                                                                                                        |
 | Integration — issuance                                                   | [Missions](#scenarios--missions)                                                                                                                                        |
 | Integration — claim and replay                                           | [Requests](#scenarios--requests), [Execution door](#scenarios--execution-door)                                                                                          |
 | Integration — approval and replay                                        | [Approval gate](#scenarios--approval-gate)                                                                                                                              |
 | Integration — revocation flows, `orphaned` states                        | [Authority, shares, groups](#scenarios--authority-shares-groups), [Missions](#scenarios--missions), [Connections](#scenarios--connections-resources-provider-apps)      |
-| Integration — OAuth delegation, issuance by an MCP client                | not written (P2.3)                                                                                                                                                      |
+| Integration — OAuth delegation, issuance by an MCP client                | [Authorization server](#scenarios--authorization-server-of-the-management-door) (delegation by the official MCP client); issuance through the door is not built (P2.4)  |
 | Integration — simulated IdP                                              | [Human authentication](#scenarios--human-authentication)                                                                                                                |
 | Structural — telemetry report without forbidden fields                   | [Community telemetry](#scenarios--community-telemetry)                                                                                                                  |
 | Structural — session counters agree with the audit                       | [Execution door](#scenarios--execution-door), [Budget and sessions](#scenarios--budget-and-sessions)                                                                    |
@@ -2161,6 +2161,141 @@ Elsewhere: `admin-mutations.test.ts` classifies
 `admin-guard.test.ts` covers the page `/admin/telemetry`; `load.test.ts`
 tells an explicit `telemetry.enabled` from an unset one.
 
+## Scenarios — Authorization server of the management door
+
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §0
+> "Delegation", §4.1 bis (OAuth, metadata discovery, "a client such as Claude
+> Code connects with no special configuration", delegations visible and
+> revocable), §6 "separation of the three credentials", "short, traceable
+> delegated tokens", §8 (delegation granted or revoked), §10 "credential
+> separation" and "OAuth delegation … by an MCP client". Handbook
+> [[management-door]]. ADR [[management-door-authorization-server]]. The
+> door's tools (issuance by an MCP client within the user's authority) are
+> feature P2.4: the door behind the gate lists no tool here.
+
+Unit, beside the code (`apps/gateway/src/server/oauth-as/`):
+
+- **`pkce.test.ts`** — **PKCE, S256 only**: the RFC 7636 vector; another
+  verifier refused, even one character away; the challenge presented as its
+  own verifier (the `plain` method) refused; verifiers shorter than 43,
+  longer than 128 or outside the unreserved set; challenges that are not 43
+  base64url characters.
+- **`secrets.test.ts`** — 256-bit secrets under a prefix per kind; the kinds
+  told apart by shape; none mistaken for a mission token; SHA-256 digests;
+  a secret matches its digest only.
+- **`redirect-uri.test.ts`** — what registers (loopback in its written forms,
+  https, application schemes) and what never does (plain http off the
+  loopback, look-alike hosts, fragments, credentials, `javascript:` / `data:`
+  / `file:`, spaces, line breaks, backslashes); **exact match** and every
+  near miss (longer or shorter path, trailing slash, added query, other host,
+  sub-domain, host suffix, port, scheme, case, dot segment, encoding,
+  credentials); the loopback port exception and its limits; the label the
+  consent screen shows.
+- **`client-metadata-document.test.ts`** — the identifier's rules (canonical,
+  default port, a path, no IP literal); **the address filter**: public
+  addresses accepted, loopback, private, link-local (the cloud metadata
+  address), carrier-grade NAT, documentation, multicast, unique-local, NAT64,
+  IPv4-mapped and IPv4-compatible refused; the lookup fails whole when one
+  address of the name is not public, and no connection is opened; the
+  document's rules (status, content type, its own `client_id`, no secret,
+  public clients only, name, redirect URIs); cache lifetimes; names cleaned
+  of control, zero-width and bidirectional characters.
+- **`endpoints.test.ts`** — every URL built on `public_url`; the RFC 8414
+  document advertises the code flow, S256 and one scope and nothing else, no
+  registration endpoint when closed; the RFC 9728 document.
+- **`pages.test.ts`** — the consent screen names the client, the user, the
+  scope and where the code goes; says the name is a claim; warns per
+  destination kind; posts an opaque id with Deny first; **escapes** a hostile
+  name, client id, email and destination; never cached, never framed, no
+  script, a fresh style nonce.
+- **`clients.test.ts`** — registration of a public and of a confidential
+  client (secret returned once, digest stored); what a registration cannot
+  decide; every refusal; unused clients forgotten after a month; **the three
+  policies**, the loopback exception, the policy evaluated at every use;
+  **operator decisions**: approval and its entry, disabling revokes every
+  delegation with one entry each; metadata documents: off by default, cache
+  and refetch, a loopback client back in the queue when its document adds a
+  server, fail closed, never fetched for a non-canonical identifier, rate
+  limit per user.
+- **`authorization.test.ts`** — the client and its redirect URI first, a page
+  and never a redirect when wrong; the rest of the request (response type,
+  PKCE required and S256, scope, resource, oversized state not echoed); **the
+  consent**: an approval creates one delegation, its entry and a code stored
+  as a digest; a denial grants nothing; **answered once**, also under two
+  simultaneous answers; not by another user (and spent by the attempt);
+  expiry; a client disabled meanwhile; no code when the entry cannot be
+  written; the response keeps the registered query and names the issuer.
+- **`token-service.test.ts`** — the code exchange; digests only in the
+  database and the audit; **PKCE verification** (wrong verifier, the
+  challenge as verifier, missing verifier; the code is spent by the failed
+  attempt); **code single-use**: a replay revokes the delegation and the
+  tokens it produced, with the entry; two simultaneous exchanges; expiry;
+  bound to its client; **refresh rotation**: a new pair, the presented token
+  spent, the lifetime restarted at each renewal; **replay revokes the whole
+  family and the delegation, audited once**, whoever presents the token and
+  under two simultaneous renewals; other delegations untouched; bound to its
+  client; expiry without being a replay; scope and resource cannot widen;
+  nothing for a revoked delegation or a removed user; access tokens expire to
+  the second and follow the configuration; **revocation**: a refresh token
+  ends the delegation, an access token is revoked alone, another client's or
+  an unknown token changes nothing; client authentication (public,
+  confidential, waiting, disabled; Basic or body, never both); the sweep.
+- **`delegations.test.ts`** — a user's delegations with their client, most
+  recent first, with the missions each issued; `idle` when no token is left;
+  **revoke cascades** to every token, with its entry, once; not another
+  user's; the verifier: what resolves, what never does (a refresh token, a
+  code, a client id, a mission-token shape), revocation and a removed user at
+  once, the MCP SDK's `AuthInfo` contract.
+
+Integration, `apps/gateway/tests/integration/oauth-as/` (the real composition
+root on the `:memory:` store, the in-process `FakeIdp`, the instance's HTTP
+surface as one `fetch`):
+
+- **`mcp-client-flow.test.ts`** — **the official `@modelcontextprotocol/client`
+  with nothing configured but the door's URL**: the `401` challenge, the two
+  discovery documents and the registration, in that order; the authorization
+  request it builds (S256, `mgmt`, the resource, its state); sign-in at the
+  IdP and the consent screen; the code exchange; the door opens; the access
+  token expires and **the client renews by itself**, the refresh token
+  rotated; the user revokes and the client is sent back to the browser; a
+  refusal reaches it as `access_denied`.
+- **`credential-separation.test.ts`** — **the three real credentials on one
+  instance**: a delegated token at `/mcp` → `wrong-credential-kind`; a
+  mission token at `/mcp/manage` → `wrong-credential-kind`; a web session at
+  `/mcp/manage`, as cookie or as bearer → `wrong-credential-kind`; `401` with
+  the RFC 9728 challenge for no credential, an unknown one or a look-alike;
+  the delegated token **cannot open the interface** (as a bearer or in the
+  session cookie: issue or revoke a mission, revoke a delegation, answer a
+  consent) **nor answer a request**, even next to the creator's cookie.
+- **`http-surface.test.ts`** — each endpoint: status, headers, CORS for the
+  protocol endpoints and none of their answers changed by a cookie; body
+  limits; rate limits per address; the policies over HTTP (closed; a hosted
+  client waits, a user cannot approve it, an operator does; disabling ends
+  the delegations and the user finds it in their audit); the authorization
+  endpoint (sign-in and back to the same request; pages that never redirect;
+  errors through the redirect **only once signed in and for an approved
+  client**; the bootstrap operator refused); the decision (once, not from
+  another session); a replayed refresh token over HTTP; revocation; metadata
+  documents fetched only for a signed-in user; **no code, token or verifier in
+  the logs**.
+- **`routes.test.ts`** — the route table the tests drive is the
+  application's: each path's route file delegates to the handler named.
+- **`tests/integration/store/oauth-clients.test.ts`** — what migration `0006`
+  added: client kinds and operator decisions, unused clients deleted,
+  revocation reasons, `revokeIfActive` once, token activity, the lookups a
+  replay is recognised with, the sweep that keeps a rotated token while its
+  successor lives, and **the audit scope**: a user sees the entries of their
+  own delegations only.
+
+Structural: `tests/unit/server/auth/mutation-guard.test.ts` holds the three
+human mutations of the module (consent answer, delegation revocation, client
+decision) to the one guard, and the three protocol endpoints to **reading no
+session** (an operator's cookie from a foreign origin changes nothing);
+`tests/unit/app/app-guard.test.ts` and `admin-guard.test.ts` cover the
+Delegations and OAuth clients pages and their routes;
+`tests/integration/audit/admin-mutations.test.ts` classifies every public
+method of the module's classes and drives the four that leave an entry.
+
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).
@@ -2186,6 +2321,14 @@ tells an explicit `telemetry.enabled` from an unset one.
   plugin's failures end in (two of them return provider failures as
   `isError` results, reported `classification-error`).
 
+- **The management door has no tool yet** — the OAuth flow ends on a
+  placeholder MCP server that lists nothing; reading, previewing and issuing
+  missions by delegation, within the user's authority and refused beyond it,
+  arrive with P2.4.
+- **The production fetcher of Client ID Metadata Documents over a real TLS
+  connection** — the address filter, the lookup and the document rules are
+  tested; a successful fetch from a public host is not (no test reaches a
+  network), and the feature is off by default.
 - **Claude Code against a running instance** — never done, by a human or an
   agent. The automated suites drive the door with the official MCP client
   instead (here against the handler, in the browser smoke over HTTP); the

@@ -157,9 +157,9 @@ connection created/reconnected/refused/transferred/revoked, resources
 discovered, resource edited, share created/revoked,
 mission issued/rotated/revoked/closed, budget extended, period reset,
 expiry extended, gate opened, approval granted, request refused,
-delegation granted/revoked, config changed), `object {type, id}` with
-`type: AdminObjectType` (`connection | share | mission | request |
-delegation | instance-config`),
+delegation granted/revoked, OAuth client approved/disabled, config changed),
+`object {type, id}` with `type: AdminObjectType` (`connection | share |
+mission | request | delegation | oauth-client | instance-config`),
 `before`, `after`, `delegated_client_id` (set when the act came through
 the management door).
 
@@ -217,7 +217,9 @@ maps its rows to it without translation:
   before the first call.
 
 `DelegationContext` carries what the door check needs for a delegated
-token; its full shape is P2.3's.
+token (delegation, user, public client id, scopes, expiry); it is produced
+by the authorization server's `DelegatedTokenVerifier`
+([management-door](management-door.md)).
 
 ## Pipeline (`pipeline.ts`)
 
