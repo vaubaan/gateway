@@ -484,7 +484,7 @@ export const INVARIANTS: readonly Invariant[] = [
     statement:
       'The session and pending sign-in cookies carry the __Host- prefix with what it requires (Secure, Path=/, no Domain), HttpOnly and SameSite=Lax.',
     source:
-      'spec §6 "Web sessions are short and bound to the instance’s origin"; ADR host-prefixed-session-cookies',
+      'spec §6 "Web sessions are short and bound to the instance’s origin"; ADR sign-in-hardening-host-cookies-group-overage',
     proofs: [
       {
         file: `${SERVER}/auth/session-service.test.ts`,

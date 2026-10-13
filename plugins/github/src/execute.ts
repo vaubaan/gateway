@@ -65,13 +65,20 @@ export async function executeGithub(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
-  if (tool === MINT_TOOL) return mintInstallTokenTool(ctx, args);
+  // The reader the classifier used, over the same mission resources : the
+  // call that runs is the call that was classified, or nothing runs — not
+  // even the token mint.
+  const call = readGithubCall(tool, args, githubRepoRefs(ctx.resources));
+  if ('denied' in call) throw new Error(refusalOf(tool, call.denied));
+  if (call.tool === MINT_TOOL) return mintInstallTokenTool(ctx, call);
 
-  const repo = typeof args.repo === 'string' && args.repo.length > 0 ? args.repo : undefined;
   // Least privilege : the per-call token only sees the repository the call
   // names ; account-shaped tools (search) get an installation-wide token.
   // Reused across calls when the host provides a connection-scoped cache.
-  const token = await installationTokenForCall(ctx, repo);
+  const token = await installationTokenForCall(
+    ctx,
+    'target' in call ? call.target.repo : undefined,
+  );
   const octokit: OctokitLike = new Octokit({
     auth: token,
     request: { fetch: ctx.fetch, ...(ctx.signal ? { signal: ctx.signal } : {}) },
@@ -79,7 +86,7 @@ export async function executeGithub(
     log: octokitLog(ctx.logger),
   });
   try {
-    return json(await dispatchGithubTool(octokit, tool, args));
+    return json(await dispatchGithubTool(octokit, call, args));
   } catch (e: unknown) {
     const status = (e as { status?: number }).status;
     if (status === 401 || status === 403) {
@@ -91,36 +98,31 @@ export async function executeGithub(
 }
 
 /**
+ * What `execute` throws for a call the reader refuses : the classifier's
+ * sentence, led by the tool name (`tool 'x' requires …` → `x requires …`).
+ * Thrown, like every refusal of this executor — nothing was sent.
+ */
+function refusalOf(tool: string, denied: string): string {
+  const classifierLead = `tool '${tool}' `;
+  if (denied.startsWith(classifierLead)) return `${tool} ${denied.slice(classifierLead.length)}`;
+  return denied.startsWith(tool) ? denied : `${tool}: ${denied}`;
+}
+
+/**
  * Mint a short-lived installation token scoped to the mission's repositories
  * (or the one named by `repoFullName`) with the permission set of `purpose`.
- * The classifier already refused unknown purposes and foreign repositories ;
- * the checks are repeated here so the function is safe on its own.
+ * `call` comes from `readGithubCall` : an unknown purpose or a repository
+ * outside the mission never reaches this function, and the repositories of
+ * the token are the ones the slices named.
  */
 async function mintInstallTokenTool(
   ctx: ExecuteContext,
-  args: Readonly<Record<string, unknown>>,
+  call: Extract<GithubCall, { tool: typeof MINT_TOOL }>,
 ): Promise<McpToolResult> {
-  const purpose = args.purpose;
-  if (purpose !== 'clone' && purpose !== 'push') {
-    throw new Error(`${MINT_TOOL} requires purpose in ['clone','push'], got ${String(purpose)}.`);
-  }
-  const refs = githubRepoRefs(ctx.resources);
-  if (refs.length === 0) throw new Error(`${MINT_TOOL}: ${NO_REPOSITORY_SELECTED}`);
-
-  const repoFullName = typeof args.repoFullName === 'string' ? args.repoFullName : undefined;
-  let scoped: readonly string[];
-  if (repoFullName) {
-    if (!refs.includes(repoFullName)) {
-      throw new Error(`${MINT_TOOL}: ${repositoryNotSelectedMessage(repoFullName, refs)}`);
-    }
-    scoped = [repoFullName];
-  } else {
-    scoped = refs;
-  }
-
   const minted = await installationTokenFor(ctx, {
-    repositories: scoped.map(repoNameOf),
-    permissions: MINT_PERMISSIONS[purpose],
+    // The access_tokens endpoint takes names without owner.
+    repositories: call.repositories.map((r) => r.repo),
+    permissions: MINT_PERMISSIONS[call.purpose],
   });
   return json({
     token: minted.token,
