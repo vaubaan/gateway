@@ -305,7 +305,7 @@ revoke the missions the target already issued; it turns them `orphaned`
 - `expired` — `expires_at` passed. Terminal unless extended by the
   creator.
 - `orphaned` — the upstream authority vanished (share revoked,
-  connection revoked, creator removed from the IdP or dropped from the
+  connection revoked, creator deactivated by an operator or dropped from the
   owner group that grounded their authority). Every call is refused. The
   state is **derived from the creator's current authority, never
   stored as a verdict**: if the authority comes back (the share is made
@@ -584,7 +584,8 @@ authority:
   recorded creator is the **delegating user**, never the agent. The
   response contains the mission token, revealed once, and the bootstrap
   kit.
-- **Rotate** a mission's token, **revoke** one of the user's missions.
+- **Rotate** the token of a mission that this delegation issued,
+  **revoke** one of the user's missions.
 
 What the management surface **never exposes**, whatever scope is
 requested:
