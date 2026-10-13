@@ -71,10 +71,10 @@ test('exhaust a budget, then the creator — and only the creator — answers th
   const refusedHtml = await bob.content();
   for (const detail of [mission, RISK, E2E_USER.email]) expect(refusedHtml).not.toContain(detail);
   // Nor is it in their inbox, nor reachable by its inbox address.
-  await bob.goto('/requests');
+  await bob.goto('/waiting');
   await expect(bob.getByText('Nothing awaits you.')).toBeVisible();
   await expect(bob.getByTestId('open-request-count')).toHaveCount(0);
-  await bob.goto(claimUrl.replace('/r/', '/requests/'));
+  await bob.goto(claimUrl.replace('/r/', '/waiting/'));
   await expect(bob.getByText('This request is addressed to its creator.')).toBeVisible();
   expect(await bob.content()).not.toContain(mission);
   await bob.context().close();
@@ -84,7 +84,7 @@ test('exhaust a budget, then the creator — and only the creator — answers th
   const ada = await freshPage(browser);
   await ada.goto(claimUrl);
   // Sign-in on the way, then straight to the request.
-  await expect(ada).toHaveURL(/\/requests\/[0-9a-f-]{36}$/);
+  await expect(ada).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
   await expect(ada.getByRole('heading', { name: `Claim on ${mission}` })).toBeVisible();
   await expect(ada.getByText(E2E_USER.email)).toBeVisible();
 
@@ -112,9 +112,9 @@ test('exhaust a budget, then the creator — and only the creator — answers th
   await expect(ada.getByTestId('open-request-count')).toHaveText('1');
   await ada
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: /Requests/ })
+    .getByRole('link', { name: /Waiting for you/ })
     .click();
-  await expect(ada.getByRole('heading', { name: 'Requests', level: 1 })).toBeVisible();
+  await expect(ada.getByRole('heading', { name: 'Waiting for you', level: 1 })).toBeVisible();
   const row = ada.getByRole('row', { name: new RegExp(mission) });
   await expect(row).toContainText(RISK);
   await snap(ada, 'request-inbox');
@@ -140,7 +140,7 @@ test('exhaust a budget, then the creator — and only the creator — answers th
   // The token did not change: the executor replays its call.
   expect(await readFile(executor)).toMatchObject({ outcome: 'allowed' });
 
-  await ada.goto('/requests');
+  await ada.goto('/waiting');
   await expect(ada.getByText('Nothing awaits you.')).toBeVisible();
   await ada.context().close();
 });

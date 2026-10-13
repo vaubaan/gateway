@@ -54,7 +54,7 @@ async function browserOf(
   opened.push(page);
   await signInAs(request, user);
   await page.goto(`/auth/login?return_to=${encodeURIComponent(landing)}`);
-  await expect(page.getByRole('banner').getByText(user.email)).toBeVisible();
+  await expect(page.getByTestId('user-menu')).toContainText(user.email);
   return page;
 }
 
@@ -66,7 +66,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   const { connection_id: connectionId } = await seedShareScenario(request, connectionName);
 
   // ── The owner shares ────────────────────────────────────────────────────
-  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/connections/${connectionId}`);
+  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/accounts/${connectionId}`);
   await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
   await expect(ines.getByText('Not shared.')).toBeVisible();
   await ines.getByRole('link', { name: 'Share', exact: true }).click();
@@ -89,7 +89,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(ines.getByText('A risk added to the catalog later is not shared.')).toBeVisible();
   await expect(readCode.getByRole('link', { name: READ_CODE })).toHaveAttribute(
     'href',
-    `/providers/github#risk-${READ_CODE}`,
+    `/reference/github#risk-${READ_CODE}`,
   );
   await snap(ines, 'share-dialog');
 
@@ -107,7 +107,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(summary).toContainText('2 of 15 risks');
   await submit.click();
 
-  await expect(ines).toHaveURL(new RegExp(`/connections/${connectionId}\\?notice=`));
+  await expect(ines).toHaveURL(new RegExp(`/accounts/${connectionId}\\?notice=`));
   await expect(ines.getByText('Shared', { exact: true })).toBeVisible();
   await expect(
     ines.getByText(`${E2E_SHARE_TARGET.email} may now accept 2 risks of this connection`),
@@ -122,7 +122,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
 
   // ── The beneficiary reads what she received ─────────────────────────────
   const joan = await browserOf(browser, request, E2E_SHARE_TARGET, '/shares');
-  await expect(joan.getByRole('heading', { name: 'Shares received' })).toBeVisible();
+  await expect(joan.getByRole('heading', { name: 'Shared with you' })).toBeVisible();
   const received = joan.getByRole('row').filter({ hasText: connectionName });
   await expect(received).toContainText(E2E_SHARE_OWNER.email);
   await expect(received).toContainText('you');
@@ -133,9 +133,9 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(received.getByText(READ_META)).toBeVisible();
   await snap(joan, 'shares-received');
   // The connection is not hers: it is not under her Connections.
-  await joan.goto('/connections');
+  await joan.goto('/accounts');
   await expect(joan.getByText(connectionName)).toHaveCount(0);
-  const foreign = await joan.goto(`/connections/${connectionId}/share`);
+  const foreign = await joan.goto(`/accounts/${connectionId}/share`);
   expect(foreign?.status()).toBe(404);
 
   // ── …and issues a mission within it ─────────────────────────────────────
@@ -163,7 +163,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   expect(await read()).toMatchObject({ outcome: 'allowed' });
 
   // ── The owner revokes the share ─────────────────────────────────────────
-  await ines.goto(`/connections/${connectionId}`);
+  await ines.goto(`/accounts/${connectionId}`);
   await ines.getByRole('button', { name: `Revoke the share to ${E2E_SHARE_TARGET.email}` }).click();
   await expect(ines.getByText('Share revoked', { exact: true })).toBeVisible();
   await expect(
@@ -243,7 +243,7 @@ test('share two risks, issue within them, revoke the share: the mission is orpha
   await expect(joan.getByText('mission-restored').first()).toBeVisible();
 
   // ── The owner revokes the share again, then closes the orphaned mission ──
-  await ines.goto(`/connections/${connectionId}`);
+  await ines.goto(`/accounts/${connectionId}`);
   await expect(ines.getByTestId('orphaned-missions')).toHaveCount(0);
   await ines.getByRole('button', { name: `Revoke the share to ${E2E_SHARE_TARGET.email}` }).click();
   await expect(ines.getByText('Share revoked', { exact: true })).toBeVisible();
@@ -290,7 +290,7 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   await snap(ops, 'admin-groups');
 
   // ── The owner transfers her connection to it ────────────────────────────
-  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/connections/${connectionId}`);
+  const ines = await browserOf(browser, request, E2E_SHARE_OWNER, `/accounts/${connectionId}`);
   await ines.getByLabel('Group to transfer to').selectOption({ label: group });
   await ines.getByRole('button', { name: 'Transfer' }).click();
   await expect(ines.getByText(`Transferred to group ${group}`)).toBeVisible();
@@ -302,7 +302,7 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   await expect(ops.getByText('1 connection has no owner left', { exact: false })).toBeVisible();
 
   // Nobody owns it: it left the former owner's list.
-  await ines.goto('/connections');
+  await ines.goto('/accounts');
   await expect(ines.getByText(connectionName)).toHaveCount(0);
 
   // ── The operator names a new owner ──────────────────────────────────────
@@ -316,7 +316,7 @@ test('transfer to a group; the group empties; the operator reassigns the connect
   await expect(ops.getByText(`${connectionName}: owner reassigned`)).toBeVisible();
   await expect(ops.getByText('Every connection has an owner.')).toBeVisible();
 
-  await ines.goto(`/connections/${connectionId}`);
+  await ines.goto(`/accounts/${connectionId}`);
   await expect(ines.getByRole('heading', { name: connectionName, level: 1 })).toBeVisible();
   await expect(ines.getByText(E2E_SHARE_OWNER.email, { exact: true }).first()).toBeVisible();
   await expect(ines.getByRole('link', { name: 'Share', exact: true })).toBeVisible();

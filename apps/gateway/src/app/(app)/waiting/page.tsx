@@ -1,0 +1,93 @@
+/**
+ * `/waiting` — the inbox: claims and approval requests awaiting me as
+ * creator (spec §4.2 "Request inbox", §3.4 "the creator also finds it in
+ * their inbox without anyone forwarding anything").
+ */
+import Link from 'next/link';
+import { PAGES } from '@/lib/vocabulary';
+
+import { LocalDate } from '@/components/LocalDate';
+import { NeedsUser } from '@/components/auth/NeedsUser';
+import { RiskIdLink } from '@/components/risk/RiskExplain';
+import { Badge, Card, Table, Tbody, Td, Th, Thead, Tr, Slug } from '@/components/ui';
+import { currentUser } from '@/lib/auth/session';
+import { inboxRequestPath } from '@/server/requests/url';
+
+import styles from './waiting.module.css';
+
+export const dynamic = 'force-dynamic';
+
+export default async function RequestsPage() {
+  const session = await currentUser();
+  if (!session) return <NeedsUser />;
+  const requests = await session.root.requests.service.inbox(session.user);
+
+  return (
+    <>
+      <div className={styles.pageHead}>
+        <div>
+          <h1>{PAGES.waiting.title}</h1>
+          <p className={styles.muted}>
+            What your missions ask of you: a claim when a budget is exhausted, an approval when an
+            action touches a risk you gated. Only you can answer.
+          </p>
+        </div>
+      </div>
+      <Card>
+        {requests.length === 0 ? (
+          <div className={styles.empty}>Nothing awaits you.</div>
+        ) : (
+          <Table>
+            <Thead>
+              <Tr>
+                <Th>Request</Th>
+                <Th>Mission</Th>
+                <Th>Risk</Th>
+                <Th>Asked</Th>
+                <Th>Expires</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {requests.map((request) => (
+                <Tr key={request.id}>
+                  <Td>
+                    <Link href={inboxRequestPath(request.id)} className={styles.rowLink}>
+                      {request.kind === 'claim' ? 'Claim' : 'Approval request'}
+                    </Link>{' '}
+                    <Badge tone="warning">{request.state}</Badge>
+                    {request.tool && (
+                      <div>
+                        <Slug kind="tool">{request.tool}</Slug>
+                      </div>
+                    )}
+                  </Td>
+                  <Td>
+                    <Slug kind="mission" mono={false} href={`/missions/${request.mission.id}`}>
+                      {request.mission.name}
+                    </Slug>
+                  </Td>
+                  <Td>
+                    {request.risks.map((risk) => (
+                      <div key={risk.risk_id}>
+                        {risk.label}
+                        <div>
+                          <RiskIdLink riskId={risk.risk_id} />
+                        </div>
+                      </div>
+                    ))}
+                  </Td>
+                  <Td>
+                    <LocalDate ts={request.created_at} />
+                  </Td>
+                  <Td>
+                    <LocalDate ts={request.expires_at} />
+                  </Td>
+                </Tr>
+              ))}
+            </Tbody>
+          </Table>
+        )}
+      </Card>
+    </>
+  );
+}

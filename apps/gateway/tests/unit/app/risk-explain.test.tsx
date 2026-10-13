@@ -29,11 +29,11 @@ describe('Slug', () => {
 
   it('is a link when it is given somewhere to go, in a new tab on request', () => {
     const html = renderToStaticMarkup(
-      <Slug kind="preset" href="/providers/github#preset-developer" newTab mono={false}>
+      <Slug kind="preset" href="/reference/github#preset-developer" newTab mono={false}>
         Developer
       </Slug>,
     );
-    expect(html).toMatch(/^<a[^>]*href="\/providers\/github#preset-developer"/);
+    expect(html).toMatch(/^<a[^>]*href="\/reference\/github#preset-developer"/);
     expect(html).toContain('target="_blank"');
     expect(html).toContain('data-kind="preset"');
   });
@@ -41,7 +41,7 @@ describe('Slug', () => {
   it('prints a risk id in the risk colour, linked to its catalog entry', () => {
     const html = renderToStaticMarkup(<RiskIdLink riskId="supabase[staging].bulk-row-write" />);
     expect(html).toContain('data-kind="risk"');
-    expect(html).toContain('href="/providers/supabase#risk-supabase.bulk-row-write"');
+    expect(html).toContain('href="/reference/supabase#risk-supabase.bulk-row-write"');
   });
 
   it('has a legend entry for every kind', () => {

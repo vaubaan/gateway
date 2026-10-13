@@ -154,7 +154,7 @@ describe('a share that would bring orphaned missions back', () => {
     });
   });
 
-  describe('POST /connections/<id>/shares', () => {
+  describe('POST /accounts/<id>/shares', () => {
     async function sessionOf(user: UserRecord): Promise<string> {
       const session = await rig.root.auth.sessions.create({
         kind: 'user',
@@ -172,7 +172,7 @@ describe('a share that would bring orphaned missions back', () => {
         ...restores.map((id): [string, string] => [SHARE_FIELDS.restore, id]),
       ];
       return rig.root.shares.handlers.share(
-        new Request(`${PUBLIC_URL}/connections/${rig.connection.id}/shares`, {
+        new Request(`${PUBLIC_URL}/accounts/${rig.connection.id}/shares`, {
           method: 'POST',
           headers: {
             'content-type': 'application/x-www-form-urlencoded',
@@ -196,7 +196,7 @@ describe('a share that would bring orphaned missions back', () => {
       const session = await sessionOf(rig.ada);
 
       const url = locationOf(await post(session, [READ]));
-      expect(url.pathname).toBe(`/connections/${rig.connection.id}/share`);
+      expect(url.pathname).toBe(`/accounts/${rig.connection.id}/share`);
       // The URL carries an opaque id, nothing of the share.
       expect([...url.searchParams.keys()]).toEqual([SHARE_CONFIRM_PARAM]);
       expect(await activeShares()).toEqual([]);
@@ -218,7 +218,7 @@ describe('a share that would bring orphaned missions back', () => {
       const session = await sessionOf(rig.ada);
 
       const url = locationOf(await post(session, [READ], [reader.mission.id]));
-      expect(url.pathname).toBe(`/connections/${rig.connection.id}`);
+      expect(url.pathname).toBe(`/accounts/${rig.connection.id}`);
       const notice = await rig.root.connections.notices.take(
         session,
         url.searchParams.get(NOTICE_PARAM),
@@ -248,7 +248,7 @@ describe('a share that would bring orphaned missions back', () => {
     it('shares at once when nothing would come back', async () => {
       const session = await sessionOf(rig.ada);
       const url = locationOf(await post(session, [READ]));
-      expect(url.pathname).toBe(`/connections/${rig.connection.id}`);
+      expect(url.pathname).toBe(`/accounts/${rig.connection.id}`);
       expect([...url.searchParams.keys()]).toEqual([NOTICE_PARAM]);
       expect((await activeShares()).length).toBe(1);
     });

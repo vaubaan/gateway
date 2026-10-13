@@ -110,10 +110,10 @@ and configure your identity provider.
 │ Vaubaan Gateway — one instance, one company, one process                 │
 │                                                                          │
 │  EXECUTION DOOR          MANAGEMENT DOOR           WEB INTERFACE         │
-│  POST /mcp               POST /mcp/manage          /connections /shares  │
-│  tools/list, tools/call  read authority, preview,  /missions /requests   │
-│  GET /mcp/catalog        issue / rotate / revoke   /audit /delegations   │
-│                          a mission                 /providers /admin     │
+│  POST /mcp               POST /mcp/manage          /accounts /shares  │
+│  tools/list, tools/call  read authority, preview,  /missions /waiting   │
+│  GET /mcp/catalog        issue / rotate / revoke   /activity /delegations   │
+│                          a mission                 /reference /admin     │
 │       │                  never executes,           sign-in through your  │
 │       │                  never approves            identity provider     │
 │       ▼                                                                  │

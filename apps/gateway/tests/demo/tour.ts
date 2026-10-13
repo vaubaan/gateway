@@ -89,7 +89,7 @@ From another machine, forward the port and open the same URL there:
 The listener is bound to 127.0.0.1: nothing else on the network reaches it.
 
 Accounts (no password: pick one on the sign-in page; to switch, open the
-account button at the end of the bar and "Sign out")
+side navigation: your name at its foot, then "Sign out")
 ${accounts}
 
 Tokens of three seeded missions of Alice, for the commands below:
@@ -102,7 +102,7 @@ The named token "${seeded.team.named.name}" of "${seeded.team.mission.name}" (st
 Things to try
   1. Sign in as Alice. Missions lists ${seeded.counts.missions} missions in every state: active,
      quota spent, waiting for an approval, expired, revoked, issued by an agent.
-  2. Connect a provider: Connections -> Connect a provider.
+  2. Connect an account: Accounts -> Connect a provider.
        Stripe      test key  sk_test_demo        live key  sk_live_demo
        Cloudflare  API token demo-cloudflare-token-0123456789
        Resend      API key   re_demo_key
@@ -111,7 +111,7 @@ Things to try
        GitHub      opens a simulated installation page: pick an organisation.
      Any value of the right shape is accepted. Supabase and Railway connect
      through an OAuth app the demo does not configure: the picker says so.
-  3. Read what a provider is: Providers -> GitHub. What the plugin connects to,
+  3. Read what a service allows: Reference -> GitHub. What the plugin connects to,
      then four tabs: its presets side by side against the risks, each risk with
      the reason it is a risk and its six-cell profile, its data model, its
      tools. Supabase adds a plane control (db, storage, auth, functions).
@@ -127,14 +127,14 @@ Things to try
   7. Exhaust a quota. The mission "${seeded.quotaMission.name}" allows ${SMALL_QUOTA} file reads:
      ${quotaLoopCommand(origin, seeded)}
      The last answer is a refusal "budget-exhausted" carrying a claim_url. Open
-     it as Alice (or Requests), grant a reset or an extension, run the loop again.
+     it as Alice (or "Waiting for you"), grant a reset or an extension, run the loop again.
      An older claim is already waiting: ${seeded.openClaimUrl}
-  8. Approve the pending action: Requests shows a merge of pull request #128
+  8. Approve the pending action: "Waiting for you" shows a merge of pull request #128
      with its arguments (${seeded.openApprovalUrl}).
      Approve it, then replay the call with exactly the same arguments:
      ${approvalReplayCommand(origin, seeded)}
-  9. Share to Bob: Connections -> "${seeded.sharedConnection.name}" -> Share. Bob already
-     holds a share of it; sign out, sign in as Bob: Shares received, and his mission.
+  9. Share to Bob: Accounts -> "${seeded.sharedConnection.name}" -> Share. Bob already
+     holds a share of it; sign out, sign in as Bob: Accounts -> "Shared with you", and his mission.
  10. As Alice, revoke that share; as Bob, his mission now reads "orphaned" and
      every call with its token is refused. Share again as Alice: the same
      mission comes back, same token, same counters.
@@ -152,13 +152,15 @@ Things to try
      each token was last used; "Session" has "Calls per token holder", and each
      call of the timeline names its holder. Remove Bob: his token is refused at
      once (401, reason "holder-removed"), the others keep working.
- 12. Audit: every call and every administrative act, with filters (mission,
+ 12. Activity: every call and every administrative act, with filters (mission,
      token holder, agent label, decision). On a mission, "Session" shows the
      calls of the current period per token holder and per agent label
      ("planner", "coder").
- 13. Admin, as Alice (she is the operator): Identity provider, Provider apps
-     (the GitHub App), Groups ("GitHub admins", "Contractors"), Connections
-     without owner, OAuth clients ("Claude Code (demo)"), Telemetry (off).
+ 13. Settings, as Alice (she administers the gateway): under Administration,
+     Sign-in, Company apps (the GitHub App), Teams ("GitHub admins",
+     "Contractors"), Accounts without owner, Registered apps ("Claude Code
+     (demo)"), Telemetry (off). Settings also holds the theme (System, Light,
+     Dark) and the interface reference (/design).
  14. Sign in as Carol: she sees the GitHub connection owned by the group
      "GitHub admins", which Alice transferred to it, and her own Stripe account
      (test and live mode as two resources), whose test mode she shares to Alice.

@@ -1,12 +1,14 @@
 /**
- * The count next to "Requests" in the application bar: open requests awaiting
- * the signed-in user as creator (spec §4.2 "Request inbox"). Nothing when
- * there is none, and nothing for the bootstrap operator, who creates no
- * mission. Server component.
+ * The count at the end of "Waiting for you" in the side navigation: what
+ * awaits the signed-in person as the creator of a mission (spec §4.2 "Request
+ * inbox") — an approval, a limit that was reached. Nothing when there is
+ * none, and nothing for the bootstrap operator, who creates no mission.
+ * Server component.
  */
-import { Badge } from '@/components/ui';
 import type { Principal } from '@/server/auth';
 import { getRoot } from '@/server/compose';
+
+import styles from './shell.module.css';
 
 export async function OpenRequestCount({ principal }: { principal: Principal }) {
   if (principal.kind !== 'user') return null;
@@ -14,16 +16,12 @@ export async function OpenRequestCount({ principal }: { principal: Principal }) 
   const count = await root.requests.service.openCount(principal.user);
   if (count === 0) return null;
   return (
-    <>
-      {' '}
-      <Badge tone="warning">
-        <span
-          data-testid="open-request-count"
-          aria-label={`${count} open ${count === 1 ? 'request' : 'requests'}`}
-        >
-          {count}
-        </span>
-      </Badge>
-    </>
+    <span
+      className={styles.navCount}
+      data-testid="open-request-count"
+      aria-label={`${count} waiting for you`}
+    >
+      {count}
+    </span>
   );
 }

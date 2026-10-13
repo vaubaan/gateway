@@ -2,7 +2,7 @@
    where its access goes, since when, what it issued, then the revocation. */
 
 .muted {
-  color: var(--text-muted);
+  color: var(--ink-3);
   font-size: var(--text-sm);
 }
 .badges {
@@ -19,7 +19,7 @@
   font-size: var(--text-sm);
 }
 .facts dt {
-  color: var(--text-muted);
+  color: var(--ink-3);
 }
 .facts dd {
   margin: 0;
@@ -27,7 +27,7 @@
 }
 .sub {
   font-size: var(--text-sm);
-  font-weight: var(--font-weight-semibold);
+  font-weight: var(--weight-strong);
   margin: 0 0 var(--space-2);
 }
 .missions {
@@ -38,5 +38,5 @@
 .empty {
   padding: var(--space-8) var(--space-4);
   text-align: center;
-  color: var(--text-muted);
+  color: var(--ink-3);
 }

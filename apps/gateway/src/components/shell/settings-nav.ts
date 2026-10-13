@@ -1,0 +1,51 @@
+/**
+ * The local navigation of Settings: what is the person's own, then — for an
+ * administrator — the gateway of the company. Pure; `SettingsFrame` renders
+ * it, and a unit test pins that every entry leads to a page that exists.
+ *
+ * Until the settings pages are redesigned the entries lead to the pages that
+ * exist today (`/delegations`, `/admin/**`), under the words of the redesign:
+ * no label is used for two things (the audit found "Connections" twice).
+ */
+import type { SubNavGroup } from '@/components/ui';
+import { capitalize, ROUTES, SECTIONS, TERMS } from '@/lib/vocabulary';
+
+export const ADMIN_PAGES = {
+  setup: '/admin',
+  signIn: '/admin/identity-provider',
+  companyApps: '/admin/provider-apps',
+  people: '/admin/users',
+  teams: '/admin/groups',
+  ownerlessAccounts: '/admin/connections',
+  telemetry: '/admin/telemetry',
+  registeredApps: '/admin/oauth-clients',
+} as const;
+
+export function settingsNav(administrator: boolean): SubNavGroup[] {
+  const groups: SubNavGroup[] = [
+    {
+      label: 'You',
+      items: [
+        { label: 'Preferences', href: ROUTES.settings, exact: true },
+        { label: SECTIONS.connectedApps, href: ROUTES.connectedApps },
+      ],
+    },
+  ];
+  if (administrator) {
+    groups.push({
+      label: 'Administration',
+      items: [
+        // In the order an administrator sets a gateway up.
+        { label: SECTIONS.setup, href: ADMIN_PAGES.setup, exact: true },
+        { label: 'Sign-in', href: ADMIN_PAGES.signIn },
+        { label: SECTIONS.companyApps, href: ADMIN_PAGES.companyApps },
+        { label: capitalize(TERMS.user.many), href: ADMIN_PAGES.people },
+        { label: capitalize(TERMS.group.many), href: ADMIN_PAGES.teams },
+        { label: 'Accounts without owner', href: ADMIN_PAGES.ownerlessAccounts },
+        { label: 'Telemetry', href: ADMIN_PAGES.telemetry },
+        { label: 'Registered apps', href: ADMIN_PAGES.registeredApps },
+      ],
+    });
+  }
+  return groups;
+}

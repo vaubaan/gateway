@@ -1,0 +1,126 @@
+.dialog {
+  width: 520px;
+  max-width: calc(100vw - var(--space-8));
+  max-height: calc(100vh - var(--space-12));
+  margin-top: 96px;
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--radius-lg);
+  background: var(--paper-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-overlay);
+}
+.dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.dialog::backdrop {
+  background: var(--scrim);
+}
+.wide {
+  width: 640px;
+  margin-top: 60px;
+}
+
+.head {
+  padding: var(--space-4) var(--space-5) var(--space-3);
+}
+.headDivided {
+  border-bottom: 1px solid var(--line);
+}
+.title {
+  margin: 0;
+  font-size: var(--text-base);
+  font-weight: var(--weight-strong);
+  line-height: var(--leading-tight);
+}
+.description {
+  margin-top: 6px;
+  color: var(--ink-2);
+  font-size: var(--text-sm);
+}
+.body {
+  min-height: 0;
+  padding: 0 var(--space-5) 14px;
+  overflow-y: auto;
+  font-size: var(--text-sm);
+}
+.bodyDivided {
+  padding-top: 14px;
+}
+.foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--line);
+  background: var(--paper-side);
+}
+.hint {
+  margin-left: auto;
+  color: var(--ink-3);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  text-align: right;
+}
+
+.options {
+  display: grid;
+  gap: var(--space-2);
+}
+.option {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px var(--space-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.optionOn {
+  border-color: var(--ink);
+  box-shadow: inset 0 0 0 1px var(--ink);
+}
+.option:has(:focus-visible) {
+  box-shadow: var(--focus-ring);
+}
+.optionInput {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: var(--space-half) 0 0;
+  accent-color: var(--accent);
+}
+.optionInput:focus-visible {
+  box-shadow: none;
+}
+.optionLabel {
+  display: block;
+}
+.optionDescription {
+  display: block;
+  margin-top: 1px;
+  color: var(--ink-3);
+}
+
+.phraseLabel {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--ink-2);
+}
+.error {
+  margin: var(--space-2) 0 0;
+  color: var(--bad);
+  font-size: var(--text-sm);
+}
+
+@media (max-width: 720px) {
+  .dialog {
+    margin-top: var(--space-6);
+  }
+  .foot {
+    flex-wrap: wrap;
+  }
+}

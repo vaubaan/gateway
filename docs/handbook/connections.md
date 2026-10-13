@@ -9,7 +9,9 @@ tracks:
   - apps/gateway/src/server/compose/shipped-plugins.ts
   - apps/gateway/src/server/store/repositories/connections.ts
   - apps/gateway/migrations/0004_connection_resource_curation.sql
-  - apps/gateway/src/app/(app)/connections/
+  - apps/gateway/src/app/(app)/accounts/
+  callback/[provider]/route.ts       GET  /connections/callback/<provider>   registered at the provider: kept its path
+apps/gateway/src/app/(app)/accounts/   (was connections/; the old paths redirect, handbook web-app)
   - apps/gateway/src/app/(app)/layout.tsx
   - apps/gateway/src/app/admin/(guarded)/provider-apps/
   - apps/gateway/src/components/connections/
@@ -63,24 +65,23 @@ apps/gateway/src/server/compose/shipped-plugins.ts   SHIPPED_PLUGINS, buildShipp
 apps/gateway/migrations/0004_connection_resource_curation.sql
 apps/gateway/src/lib/connections/session.ts  Next glue: currentActor(), takeNotice()
 apps/gateway/src/components/
-  shell/AppShell.tsx                 the bar: AppShell (APP_NAV, the cardinal pages) and AdminShell (ADMIN_NAV, the pages of Administration)
+  shell/AppShell.tsx                 the shell: AppShell (the side navigation) and AdminShell (the same, with the local navigation of Settings)
   connections/parts.tsx              NoticeBanner, StateBadge, ExperimentalBadge, CredentialFieldInputs
   connections/RevokeConnection.tsx   client: type-to-confirm, then a plain form POST
-apps/gateway/src/app/(app)/connections/
-  page.tsx                           /connections
-  new/page.tsx                       /connections/new            "Connect a provider"
-  new/[provider]/page.tsx            /connections/new/<provider>  (?connection=<id> = reconnect)
-  [id]/page.tsx                      /connections/<id>
-  connect/[provider]/route.ts        POST /connections/connect/<provider>
-  callback/[provider]/route.ts       GET  /connections/callback/<provider>
-  [id]/discover/route.ts             POST /connections/<id>/discover
-  [id]/revoke/route.ts               POST /connections/<id>/revoke
-  [id]/resources/[resourceId]/route.ts  POST /connections/<id>/resources/<resourceId>
-  [id]/transfer/route.ts             POST /connections/<id>/transfer          (handbook authority)
-  [id]/share/page.tsx                /connections/<id>/share                  the Share dialog (handbook authority)
+apps/gateway/src/app/(app)/accounts/
+  page.tsx                           /accounts
+  new/page.tsx                       /accounts/new            "Connect a provider"
+  new/[provider]/page.tsx            /accounts/new/<provider>  (?connection=<id> = reconnect)
+  [id]/page.tsx                      /accounts/<id>
+  connect/[provider]/route.ts        POST /accounts/connect/<provider>
+  [id]/discover/route.ts             POST /accounts/<id>/discover
+  [id]/revoke/route.ts               POST /accounts/<id>/revoke
+  [id]/resources/[resourceId]/route.ts  POST /accounts/<id>/resources/<resourceId>
+  [id]/transfer/route.ts             POST /accounts/<id>/transfer          (handbook authority)
+  [id]/share/page.tsx                /accounts/<id>/share                  the Share dialog (handbook authority)
   [id]/share/share-form.tsx          the dialog's client form (handbook authority)
-  [id]/shares/route.ts               POST /connections/<id>/shares            → root.shares.handlers.share
-  [id]/shares/[shareId]/revoke/route.ts  POST /connections/<id>/shares/<shareId>/revoke → root.shares.handlers.revoke
+  [id]/shares/route.ts               POST /accounts/<id>/shares            → root.shares.handlers.share
+  [id]/shares/[shareId]/revoke/route.ts  POST /accounts/<id>/shares/<shareId>/revoke → root.shares.handlers.revoke
 apps/gateway/src/app/admin/(guarded)/connections/
   page.tsx                           /admin/connections   ownerless connections (handbook authority)
   [id]/reassign/route.ts             POST /admin/connections/<id>/reassign    → connections.handlers.reassign (handbook authority)
@@ -292,7 +293,7 @@ metadata })`. The credential text is the JSON `CredentialSecret`, sealed by
   values: team id, host, user…), `public_key` (ssh), `installation_id`,
   and `discovery { at, ok, count, error }`. Audit: `connection-created`.
 - **Reconnect.** `start(…, { reconnectId })` (the page
-  `/connections/new/<provider>?connection=<id>`) re-runs the flow of the
+  `/accounts/new/<provider>?connection=<id>`) re-runs the flow of the
   same provider for a connection the actor owns and ends with
   `connections.reconnect()` — new credential, status `active`, same id, so
   missions keep working. Refused for a `revoked` connection
@@ -586,7 +587,7 @@ single-process only`: rotating refresh tokens are single use, a hosted
 
 `plugin.discoverResources(ctx)` runs at connect time (see the policy
 table) and on the owner's "Refresh discovery"
-(`ConnectionService.discover` → `POST /connections/<id>/discover`), with a
+(`ConnectionService.discover` → `POST /accounts/<id>/discover`), with a
 30 s timeout. On `UpstreamAuthError` the broker refreshes once and the
 discovery is retried; a second rejection leaves the connection `expired`
 and the provider's message in the outcome. The owner's refresh is audited
@@ -621,7 +622,7 @@ hands to `classify` / `execute`. The destructive `replaceResources` of the first
 repository: fixtures seed resources through `syncDiscoveredResources` too.
 
 Owner edits (`ConnectionService.updateResource` → `POST
-/connections/<id>/resources/<resourceId>`), all validated before the first
+/accounts/<id>/resources/<resourceId>`), all validated before the first
 write, and audited: one `resource-edited` entry on the connection with the
 resource's editable fields `before` and `after` (none when the save changed
 nothing; handbook [audit](audit.md)):
@@ -647,7 +648,7 @@ explicitly and refuses a stale one (handbook [missions](missions.md),
 
 ## Pages
 
-- **`/connections`** — table: name (link), provider label with the
+- **`/accounts`** — table: name (link), provider label with the
   `experimental` badge, state badge (`active` green, `expired` / `unowned`
   amber, `revoked` neutral), owner (email or `group <name>`), date. Button
   "Connect a provider". Beside the provider label, `<ValidationBadge>`
@@ -656,16 +657,16 @@ explicitly and refuses a stale one (handbook [missions](missions.md),
   provider); it renders nothing unless telemetry is sending and the
   collector has statistics for that version (handbook
   [telemetry](telemetry.md)).
-- **`/connections/new`** — one card per provider that is connectable now
+- **`/accounts/new`** — one card per provider that is connectable now
   (`ConnectableProvider.configured`: the company app is complete, or none
   is needed), with description, credential kind and the `experimental`
   badge; the others are named in one muted line. `?return_to=` is passed
   on.
-- **`/connections/new/<provider>`** — the form: optional connection name,
+- **`/accounts/new/<provider>`** — the form: optional connection name,
   then a "Continue to …" button (redirect flows) or the declared fields
   (`field.<name>` inputs, secrets masked, the plugin's `help` under each).
   Experimental providers carry a warning banner.
-- **`/connections/<id>`** — state (with the same `<ValidationBadge>`), owner, credential kind, the non-secret
+- **`/accounts/<id>`** — state (with the same `<ValidationBadge>`), owner, credential kind, the non-secret
   fields, last discovery; the public key card for `ssh-key`; the resources
   table (ref with `stale since` badge and a folded "Settings" block for the
   editable lists, display name input, environment input or `set by the
@@ -683,11 +684,11 @@ plugin` badge, hidden checkbox, Save — inputs reach their per-row form
   `connection-unowned`); the page says so instead.
   The owner also gets a **Shares** card (target, the restriction as a folded
   list of risk ids, date, Revoke, and — unless the connection is `revoked`
-  or `unowned` — Edit and a "Share" link to `/connections/<id>/share`) and,
+  or `unowned` — Edit and a "Share" link to `/accounts/<id>/share`) and,
   when they belong to a group other than the current owner
   (`ConnectionService.transferTargets`) and the connection is neither
   `revoked` nor `unowned`, an **Ownership** card whose form posts `group_id`
-  to `/connections/<id>/transfer` (handbook [authority](authority.md)).
+  to `/accounts/<id>/transfer` (handbook [authority](authority.md)).
 - **Shell.** `app/(app)/layout.tsx` renders `AppShell` for a web session
   (`currentPrincipal()`, a user or the bootstrap operator) and redirects
   anyone else to `/login`. `APP_NAV` in `AppShell.tsx` is the list of pages

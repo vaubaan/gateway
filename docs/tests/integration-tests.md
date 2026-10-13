@@ -227,11 +227,13 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`                                               |        8 |
 | `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                              |       18 |
 | `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                         |       63 |
-| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      121 |
+| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      136 |
 | `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                       |        3 |
+| `apps/gateway/tests/unit/app/design-system.test.tsx`                                                      |       29 |
+| `apps/gateway/tests/unit/app/design-tokens.test.ts`                                                       |       62 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        6 |
-| `apps/gateway/tests/unit/app/item-kinds.test.ts`                                                          |        5 |
 | `apps/gateway/tests/unit/app/risk-explain.test.tsx`                                                       |        9 |
+| `apps/gateway/tests/unit/app/shell-and-vocabulary.test.ts`                                                |       18 |
 | `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      287 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                    |       15 |
 | `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                     |        9 |
@@ -357,12 +359,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                                              |       99 |
 | `scripts/audit-gate.test.mjs`                                                                             |       29 |
 | `scripts/release-lib.test.mjs`                                                                            |       50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-13, with a build; 267 files; 9298 passed, 1 skipped) | **9299** |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-13, with a build; 269 files; 9445 passed, 1 skipped) | **9446** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 9298 passed and 1 was skipped in that
+report's number of tests, of which 9445 passed and 1 was skipped in that
 run, made with a build (as `npm run ci` does). The one skipped whatever the
 build is the latency measurement of the authority re-check
 (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
@@ -1287,7 +1289,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   nothing**. The three protocol endpoints of the authorization server
   (`token`, `revoke`, `register`) are held to reading no session.
 - **`tests/unit/app/admin-guard.test.ts`** (63) and
-  **`tests/unit/app/app-guard.test.ts`** (121) — **structural: every page and
+  **`tests/unit/app/app-guard.test.ts`** (136) — **structural: every page and
   route authenticates itself; the layout is not the boundary.** The pages
   and routes of `/admin` and of the `(app)` surface are discovered from the
   file tree. Each admin page calls `requireOperator()` and renders nothing
@@ -1303,11 +1305,30 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   controls, no label element without a label, the error shown in place of
   the hint; `CredentialFieldInputs` binds every label, textarea included,
   with ids that stay unique when two lists share a page.
-- **`tests/unit/app/item-kinds.test.ts`** (5) — the type colours: every kind
-  named with a label and a meaning for the legend; three tokens per kind in
-  both themes and the `data-kind` scope that applies them; no kind borrows a
-  status hue and each has a hue of its own; the current section of the
-  application bar is the entry the path is under, and no other.
+- **`tests/unit/app/design-tokens.test.ts`** (62) — the token sheet is the
+  specification of the look: light is the default, dark exists for a chosen
+  theme and for the system, and the two dark blocks hold the same values;
+  four text sizes and two weights; **every documented pair of text and
+  surface meets WCAG AA in both themes** (26 pairs each; the placeholder ink
+  is below it on purpose); a white letter holds on every mark hue; every
+  style refers only to tokens that exist, every token is used, no style sheet
+  holds a raw colour, and a font size is a token or relative.
+- **`tests/unit/app/shell-and-vocabulary.test.ts`** (18) — the side
+  navigation holds seven entries in the order of the redesign, each leading
+  to a page that exists; every page is under exactly one entry; the local
+  navigation of Settings leads to pages that exist and uses no label twice;
+  the path constants the server redirects with equal the routes; **every old
+  page path redirects to a page or a route that exists, and the provider
+  callback is never redirected**; the three states of the theme and its
+  cookie; the words and sentence patterns of the vocabulary.
+- **`tests/unit/app/design-system.test.tsx`** (29) — the components rendered
+  to static markup: one `h1` per page header and the order of its actions; a
+  meter drawn only near its limit, with its figure in words; **a table over
+  its column budget throws** (five by default, seven with details), its
+  caption, its detail columns and its row tones; marks that carry their word;
+  the columns of each permission table and the closed "why?"; Can / Asks you
+  first / Cannot; a field that says its expected shape and ties its error to
+  its control; a dialog that states its consequence before its button.
 - **`tests/unit/app/risk-explain.test.tsx`** (9) — static markup of the
   shared risk components: a `Slug` carries its kind as an attribute, a glyph
   and a word for assistive technology, is a link when given a target, prints
@@ -1900,7 +1921,7 @@ Integration:
   1. the operator registers the provider app (403 for a non-operator, 401
      without a session, audit entry without the secret) → the user starts
      the flow → the callback arrives on the internal host and lands on
-     `/connections/<id>?notice=<id>` (no message in the URL; the notice
+     `/accounts/<id>?notice=<id>` (no message in the URL; the notice
      is read once) → **the credential blob and a dump of every table
      contain neither the access token, the refresh token nor the client
      secret**, and the blob does not open under another connection id →
@@ -2971,7 +2992,7 @@ itself are asserted in "Scenarios — Execution door".
   id get `null`); before the first call (no session, full budget, gate per risk, catalog
   labels); counted / left / exhausted per risk; past periods kept apart and yesterday's
   exhaustion gone; one-off mission; **open requests by link only** (kind, risk, dates,
-  `/requests/<id>`; the sealed arguments exist in the store and are not in the view); decided
+  `/waiting/<id>`; the sealed arguments exist in the store and are not in the view); decided
   request no longer listed; **a granted claim lowers the counters** (quota extension then
   period reset: counted and left follow the counter, the `extension` / `reset` events carry
   the credits, the decisions are in the mission's audit); agent labels with counts; timeline newest first with tool,
@@ -3538,7 +3559,7 @@ and `rotateSuccessorOf`; the refresh reuse window is in
   is sent to `/login`; **Alice signs in through the account picker**, the
   redirects of `/auth/login` followed by hand with a cookie jar (authorize →
   picker → `account=alice` → `/auth/callback` → `/missions`, session cookie
-  set); `/missions`, `/connections`, `/requests`, `/audit`, `/shares`,
+  set); `/missions`, `/accounts`, `/waiting`, `/activity`, `/shares`,
   `/delegations`, `/admin/provider-apps` and `/admin/groups` answer 200 with
   one seeded item each; `tools/list` on `/mcp` with the mission token the
   tour prints lists GitHub and Redis tools; **the seeded team**: `/mcp/catalog`
@@ -3723,11 +3744,12 @@ runner` and Alice as creator, and with Alice's own token `kind: member`;
 ## Out of scope for these tests
 
 - **E2E** (Playwright, container smoke) → [`e2e-tests.md`](./e2e-tests.md).
-- **UI rendering** (React components) — three static-markup suites only
-  (`apps/gateway/tests/unit/app/field.test.tsx`, label binding;
-  `build-footer.test.tsx`, the build stamps; `risk-explain.test.tsx`, the
-  slug, the vector strip, the three-line risk, help and callout); the pages
-  are walked by Playwright.
+- **UI rendering** (React components) — static-markup suites only
+  (`apps/gateway/tests/unit/app/design-system.test.tsx`, the components of the
+  design system; `field.test.tsx`, label binding; `build-footer.test.tsx`, the
+  build stamps; `risk-explain.test.tsx`, the slug, the vector strip, the
+  three-line risk, help and callout); how a component looks is judged on the
+  gallery (`/design`), and the pages are walked by Playwright.
 - **Accounting rules** (period arithmetic, quota/rate comparison, gates) —
   "Scenarios — Budget and sessions" tests them against the store's
   `decideAndDecrement`.

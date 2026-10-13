@@ -222,9 +222,9 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
 
   it.each([
     ['/missions', 'Ship the billing page'],
-    ['/connections', 'Acme product repositories'],
-    ['/requests', 'Nightly dependency audit'],
-    ['/audit', 'github__list_pull_requests'],
+    ['/accounts', 'Acme product repositories'],
+    ['/waiting', 'Nightly dependency audit'],
+    ['/activity', 'github__list_pull_requests'],
     ['/shares', 'Acme billing'],
     ['/delegations', 'Claude Code (demo)'],
     ['/admin/provider-apps', 'installations verified'],
@@ -276,13 +276,13 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
 
     // The audit, filtered on each holder (Alice is signed in).
     const byCi = readable(
-      await (await browser.get(`/audit?holder=${encodeURIComponent(CI_TOKEN_NAME)}`)).text(),
+      await (await browser.get(`/activity?holder=${encodeURIComponent(CI_TOKEN_NAME)}`)).text(),
     );
     expect(byCi).toContain(CI_TOKEN_NAME);
     expect(byCi).toContain('named token');
     expect(byCi).toContain('github__list_branches');
     const byBob = readable(
-      await (await browser.get(`/audit?holder=${encodeURIComponent(BOB.email)}`)).text(),
+      await (await browser.get(`/activity?holder=${encodeURIComponent(BOB.email)}`)).text(),
     );
     expect(byBob).toContain(BOB.email);
     expect(byBob).toContain('github__get_file_contents');

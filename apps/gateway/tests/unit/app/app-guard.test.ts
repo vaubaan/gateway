@@ -31,12 +31,15 @@ const ROUTES = surfaceFiles(APP_DIR, 'route.ts');
 
 /** The session helpers a page of the surface may use as its guard. */
 const PAGE_GUARD = /await (currentUser|currentActor|requirePrincipal)\(\)/;
-/** The one page that renders for the bootstrap operator too. */
+/** The pages that render for the bootstrap operator too: they show nothing that belongs to a user. */
 const PAGES_FOR_ANY_SESSION: readonly string[] = [
-  'audit/page.tsx',
-  // The provider reference documents the instance: it shows no connection and no mission.
-  'providers/page.tsx',
-  'providers/[id]/page.tsx',
+  'activity/page.tsx',
+  // The reference documents the instance: it shows no account and no mission.
+  'reference/page.tsx',
+  'reference/[id]/page.tsx',
+  // Settings leads the bootstrap operator to Administration; the gallery holds invented specimens.
+  'settings/page.tsx',
+  'design/page.tsx',
 ];
 
 /**
@@ -225,7 +228,7 @@ describe('the human surface authenticates in every page and route', () => {
           init.body = '';
         }
         responses.push(
-          await handler(new Request(`${PUBLIC_URL}/connections/x`, init), {
+          await handler(new Request(`${PUBLIC_URL}/accounts/x`, init), {
             params: Promise.resolve(PARAMS),
           }),
         );

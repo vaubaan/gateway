@@ -104,10 +104,10 @@ test('a gated action of the developer preset: refused, approved by its creator o
   for (const detail of [MARKER, TOOL, MISSION, GATED, WORKFLOW.path]) {
     expect(await bob.content()).not.toContain(detail);
   }
-  await bob.goto(approvalUrl.replace('/r/', '/requests/'));
+  await bob.goto(approvalUrl.replace('/r/', '/waiting/'));
   await expect(bob.getByText('This request is addressed to its creator.')).toBeVisible();
   for (const detail of [MARKER, TOOL, MISSION]) expect(await bob.content()).not.toContain(detail);
-  await bob.goto('/requests');
+  await bob.goto('/waiting');
   await expect(bob.getByText('Nothing awaits you.')).toBeVisible();
   await bob.context().close();
 
@@ -115,7 +115,7 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await signInAs(request, E2E_APPROVER_USER);
   const hedy = await freshPage(browser);
   await hedy.goto(approvalUrl);
-  await expect(hedy).toHaveURL(/\/requests\/[0-9a-f-]{36}$/);
+  await expect(hedy).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
   await expect(hedy.getByRole('heading', { name: `Approval request on ${MISSION}` })).toBeVisible();
   await expect(hedy.getByText(E2E_APPROVER_USER.email)).toBeVisible();
 
@@ -159,7 +159,7 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await expect(hedy.getByTestId('open-request-count')).toHaveText('1');
   await hedy
     .getByRole('navigation', { name: 'Main' })
-    .getByRole('link', { name: /Requests/ })
+    .getByRole('link', { name: /Waiting for you/ })
     .click();
   const inboxRow = hedy.getByRole('row', { name: new RegExp(MISSION) });
   await expect(inboxRow).toContainText(TOOL);
@@ -220,7 +220,7 @@ test('a gated action of the developer preset: refused, approved by its creator o
 
   // ── Open the gate for the rest of the period ────────────────────────────
   await hedy.goto(String(third.approval_url));
-  await expect(hedy).toHaveURL(/\/requests\/[0-9a-f-]{36}$/);
+  await expect(hedy).toHaveURL(/\/waiting\/[0-9a-f-]{36}$/);
   await expect(hedy.getByTestId('approval-arguments')).toContainText(MARKER);
   await hedy.getByRole('button', { name: 'Open the gate for the rest of the period' }).click();
   await expect(hedy.getByText('Decision recorded')).toBeVisible();
@@ -269,8 +269,8 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await snap(hedy, 'mission-gate-edited');
 
   // ── What the audit keeps: the acts and the fingerprint, never the arguments ──
-  await hedy.goto(`/audit?mission=${issued.mission_id}`);
-  await expect(hedy.getByRole('heading', { name: 'Audit', level: 1 })).toBeVisible();
+  await hedy.goto(`/activity?mission=${issued.mission_id}`);
+  await expect(hedy.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
   const entries = hedy.locator('table tbody tr');
   await expect(entries.filter({ hasText: 'approval-granted' })).toHaveCount(1);
   await expect(entries.filter({ hasText: 'gate-opened' })).toHaveCount(1);
@@ -361,7 +361,7 @@ test('a call that touches two gated risks asks once: one request, one approval, 
   await snap(hedy, 'approval-two-gated-risks');
 
   // The inbox holds one line for the call, with both risks.
-  await hedy.goto('/requests');
+  await hedy.goto('/waiting');
   const inboxRow = hedy.getByRole('row', { name: /Develop behind two gates/ });
   await expect(inboxRow).toHaveCount(1);
   await expect(inboxRow).toContainText(GATED);

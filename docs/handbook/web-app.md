@@ -1,11 +1,11 @@
 ---
-title: Web app — route map, layouts, shell, UI primitives
+title: Web app — route map, layouts, shell, design system
 status: current
 date: 2026-10-13
 last_synced: 2026-10-13
 tracks:
   - apps/gateway/src/app/layout.tsx
-  - apps/gateway/src/app/page.tsx
+  - apps/gateway/src/app/(app)/page.tsx
   - apps/gateway/src/app/(public)/layout.tsx
   - apps/gateway/src/app/(app)/layout.tsx
   - apps/gateway/src/app/admin/(guarded)/layout.tsx
@@ -15,6 +15,12 @@ tracks:
   - apps/gateway/src/styles/tokens.css
   - apps/gateway/src/components/ui/
   - apps/gateway/src/components/shell/
+  - apps/gateway/src/lib/vocabulary.ts
+  - apps/gateway/src/lib/theme.ts
+  - apps/gateway/src/lib/theme-server.ts
+  - apps/gateway/src/app/(app)/design/
+  - apps/gateway/src/app/(app)/settings/
+  - apps/gateway/src/app/(app)/delegations/layout.tsx
   - apps/gateway/src/components/LocalDate.tsx
   - apps/gateway/src/components/auth/NeedsUser.tsx
   - apps/gateway/src/components/auth/PrincipalCard.tsx
@@ -24,7 +30,7 @@ tracks:
   - apps/gateway/src/server/providers/
   - apps/gateway/src/server/oauth-as/pages.ts
   - apps/gateway/src/app/admin/bootstrap/page.tsx
-  - apps/gateway/src/app/(app)/providers/
+  - apps/gateway/src/app/(app)/reference/
   - apps/gateway/src/components/telemetry/ValidationBadge.tsx
   - apps/gateway/src/app/(app)/missions/message-of.ts
   - apps/gateway/src/app/(app)/missions/state-badge.tsx
@@ -34,13 +40,15 @@ tracks:
   - apps/gateway/tests/unit/app/
 ---
 
-# Web app — route map, layouts, shell, UI primitives
+# Web app — route map, layouts, shell, design system
 
 The frame of the human surface of the instance (spec
 [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2): which route is served by
 which file, which handbook owns it, and what every page shares — root layout,
-application bar, UI primitives. The behaviour of each page is in the handbook
-of its feature. The v4 text that used to live here (Supabase sign-in,
+the shell with its side navigation, the words, the themes, the tokens and the
+components of the design system. The behaviour of each page is in the handbook
+of its feature. The look and the rules a screen must follow are in the spec
+[style-guide](../spec/style-guide.md). The v4 text that used to live here (Supabase sign-in,
 organisations, sidebar) is kept in [legacy/web-app.md](legacy/web-app.md); none
 of that code exists any more.
 
@@ -59,10 +67,12 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 - **Client components are the exception** (`'use client'`): the mission
   creation form with its preset panel and its Custom editor, the mission actions, the gate control
   of the mission page (`GateControl`), its "Members and tokens" section (`TeamSection`), the bootstrap kit view, the share form
-  (`ShareForm`), `RevokeConnection`, `DangerConfirm`, `LocalDate`, the body of
-  a provider's reference (`ProviderView` and its sections), the two parts of
-  the bar that need the browser (`NavLinks`, `UserMenu`) and two primitives
-  (`Help`, `TabList`). The only
+  (`ShareForm`), `RevokeConnection`, `LocalDate`, the body of
+  a service's reference (`ProviderView` and its sections), the gallery of
+  `/design`, the parts of the shell that need the browser (`NavLinks`,
+  `UserMenu`, `ThemeToggle`) and the components of the design system that hold
+  state or read the path (marked "client" in
+  [The design system](#the-design-system--componentsui)). The only
   `fetch` calls from the browser are the mission form (`POST /api/missions`,
   `POST /api/missions/preview`), the mission actions
   (`POST /api/missions/<id>/rotate|revoke`), the gate control
@@ -82,81 +92,123 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 
 ## Route map
 
-| Route                                                                                                                       | File under `apps/gateway/src/app/`                                                                            | Handbook                                                                    |
-| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `/`                                                                                                                         | `page.tsx`                                                                                                    | [authentication](authentication.md)                                         |
-| `/login`                                                                                                                    | `(public)/login/page.tsx`, `(public)/layout.tsx`                                                              | [authentication](authentication.md)                                         |
-| `GET /auth/login`, `GET /auth/callback`                                                                                     | `auth/login/route.ts`, `auth/callback/route.ts`                                                               | [authentication](authentication.md)                                         |
-| `POST /logout`                                                                                                              | `logout/route.ts`                                                                                             | [authentication](authentication.md)                                         |
-| `/admin/bootstrap`, `POST /api/auth/bootstrap`                                                                              | `admin/bootstrap/page.tsx`, `api/auth/bootstrap/route.ts`                                                     | [authentication](authentication.md)                                         |
-| `/admin`, `/admin/identity-provider`                                                                                        | `admin/(guarded)/page.tsx`, `admin/(guarded)/identity-provider/page.tsx`, `admin/(guarded)/layout.tsx`        | [authentication](authentication.md)                                         |
-| `POST /api/admin/identity-provider`                                                                                         | `api/admin/identity-provider/route.ts`                                                                        | [authentication](authentication.md)                                         |
-| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                                                              | `admin/(guarded)/provider-apps/**`                                                                            | [connections](connections.md)                                               |
-| `/admin/telemetry`, `POST /api/admin/telemetry`                                                                             | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts`                                          | [telemetry](telemetry.md)                                                   |
-| `/connections`, `/connections/new`, `/connections/new/<provider>`, `/connections/<id>`                                      | `(app)/connections/**/page.tsx`                                                                               | [connections](connections.md)                                               |
-| `/connections/<id>/share`, `POST /connections/<id>/shares`, `…/shares/<id>/revoke`, `…/transfer`                            | `(app)/connections/[id]/share/`, `shares/`, `transfer/`                                                       | [authority](authority.md)                                                   |
-| `/shares`                                                                                                                   | `(app)/shares/page.tsx`                                                                                       | [authority](authority.md)                                                   |
-| `/admin/users`, `POST /admin/users/<id>/deactivate`, `…/<id>/reactivate`                                                    | `admin/(guarded)/users/**`                                                                                    | [authentication](authentication.md)                                         |
-| `/admin/groups`, `POST /admin/groups/create`, `…/<id>/members[/<userId>/remove]`                                            | `admin/(guarded)/groups/**`                                                                                   | [authority](authority.md)                                                   |
-| `/admin/connections`, `POST /admin/connections/<id>/reassign`                                                               | `admin/(guarded)/connections/**`                                                                              | [authority](authority.md)                                                   |
-| `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`                                              | `(app)/connections/connect/`, `(app)/connections/callback/`                                                   | [connections](connections.md)                                               |
-| `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                                                     | `(app)/connections/[id]/**/route.ts`                                                                          | [connections](connections.md)                                               |
-| `/missions`, `/missions/new`, `/missions/<id>`                                                                              | `(app)/missions/page.tsx`, `(app)/missions/new/page.tsx`, `(app)/missions/[id]/page.tsx`                      | [missions](missions.md)                                                     |
-| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`, `/gate`, `/members/**`, `/tokens/**` | `api/missions/**/route.ts`                                                                                    | [missions](missions.md)                                                     |
-| `GET /agent-bootstrap.md`                                                                                                   | `agent-bootstrap.md/route.ts`                                                                                 | [missions](missions.md)                                                     |
-| `/missions/<id>/session`                                                                                                    | `(app)/missions/[id]/session/page.tsx`                                                                        | [audit](audit.md)                                                           |
-| `/audit`                                                                                                                    | `(app)/audit/page.tsx`                                                                                        | [audit](audit.md)                                                           |
-| `/providers`, `/providers/<id>`                                                                                             | `(app)/providers/page.tsx`, `(app)/providers/[id]/page.tsx`                                                   | this handbook, [The provider reference](#the-provider-reference--providers) |
-| `/requests`, `/requests/<id>`                                                                                               | `(app)/requests/**/page.tsx`                                                                                  | [requests](requests.md)                                                     |
-| `GET /r/<id>`                                                                                                               | `r/[id]/route.ts`                                                                                             | [requests](requests.md)                                                     |
-| `GET /api/requests`, `POST /api/requests/<id>/decide`                                                                       | `api/requests/**/route.ts`                                                                                    | [requests](requests.md)                                                     |
-| `GET, POST, DELETE /mcp`, `GET /mcp/catalog`                                                                                | `mcp/route.ts`, `mcp/catalog/route.ts`                                                                        | [execution-door](execution-door.md)                                         |
-| `GET /.well-known/oauth-protected-resource`                                                                                 | `.well-known/oauth-protected-resource/route.ts`                                                               | [execution-door](execution-door.md)                                         |
-| `GET /.well-known/oauth-authorization-server`, `GET /.well-known/oauth-protected-resource/mcp/manage`                       | `.well-known/oauth-authorization-server/route.ts`, `.well-known/oauth-protected-resource/mcp/manage/route.ts` | [management-door](management-door.md)                                       |
-| `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/authorize/decision`, `POST /oauth/token`, `POST /oauth/revoke` | `oauth/**/route.ts`                                                                                           | [management-door](management-door.md)                                       |
-| `GET, POST, DELETE /mcp/manage`                                                                                             | `mcp/manage/route.ts`                                                                                         | [management-door](management-door.md)                                       |
-| `/delegations`, `POST /delegations/<id>/revoke`                                                                             | `(app)/delegations/**`                                                                                        | [management-door](management-door.md)                                       |
-| `/admin/oauth-clients`, `POST /admin/oauth-clients/<id>`                                                                    | `admin/(guarded)/oauth-clients/**`                                                                            | [management-door](management-door.md)                                       |
-| `GET /healthz`                                                                                                              | `healthz/route.ts`                                                                                            | [configuration](configuration.md)                                           |
+| Route                                                                                                                       | File under `apps/gateway/src/app/`                                                                            | Handbook                                                                                     |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `/`                                                                                                                         | `(app)/page.tsx`                                                                                              | this handbook: the one home; until the "Now" page lands, the missions list                   |
+| `/settings`, `/design`                                                                                                      | `(app)/settings/page.tsx`, `(app)/design/**`                                                                  | this handbook, [The shell](#the-shell--componentsshell), [The gallery](#the-gallery--design) |
+| `/login`                                                                                                                    | `(public)/login/page.tsx`, `(public)/layout.tsx`                                                              | [authentication](authentication.md)                                                          |
+| `GET /auth/login`, `GET /auth/callback`                                                                                     | `auth/login/route.ts`, `auth/callback/route.ts`                                                               | [authentication](authentication.md)                                                          |
+| `POST /logout`                                                                                                              | `logout/route.ts`                                                                                             | [authentication](authentication.md)                                                          |
+| `/admin/bootstrap`, `POST /api/auth/bootstrap`                                                                              | `admin/bootstrap/page.tsx`, `api/auth/bootstrap/route.ts`                                                     | [authentication](authentication.md)                                                          |
+| `/admin`, `/admin/identity-provider`                                                                                        | `admin/(guarded)/page.tsx`, `admin/(guarded)/identity-provider/page.tsx`, `admin/(guarded)/layout.tsx`        | [authentication](authentication.md)                                                          |
+| `POST /api/admin/identity-provider`                                                                                         | `api/admin/identity-provider/route.ts`                                                                        | [authentication](authentication.md)                                                          |
+| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                                                              | `admin/(guarded)/provider-apps/**`                                                                            | [connections](connections.md)                                                                |
+| `/admin/telemetry`, `POST /api/admin/telemetry`                                                                             | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts`                                          | [telemetry](telemetry.md)                                                                    |
+| `/accounts`, `/accounts/new`, `/accounts/new/<provider>`, `/accounts/<id>`                                                  | `(app)/accounts/**/page.tsx`                                                                                  | [connections](connections.md)                                                                |
+| `/accounts/<id>/share`, `POST /accounts/<id>/shares`, `…/shares/<id>/revoke`, `…/transfer`                                  | `(app)/accounts/[id]/share/`, `shares/`, `transfer/`                                                          | [authority](authority.md)                                                                    |
+| `/shares`                                                                                                                   | `(app)/shares/page.tsx`                                                                                       | [authority](authority.md)                                                                    |
+| `/admin/users`, `POST /admin/users/<id>/deactivate`, `…/<id>/reactivate`                                                    | `admin/(guarded)/users/**`                                                                                    | [authentication](authentication.md)                                                          |
+| `/admin/groups`, `POST /admin/groups/create`, `…/<id>/members[/<userId>/remove]`                                            | `admin/(guarded)/groups/**`                                                                                   | [authority](authority.md)                                                                    |
+| `/admin/connections`, `POST /admin/connections/<id>/reassign`                                                               | `admin/(guarded)/connections/**`                                                                              | [authority](authority.md)                                                                    |
+| `POST /accounts/connect/<provider>`, `GET /connections/callback/<provider>`                                                 | `(app)/accounts/connect/`, `(app)/connections/callback/`                                                      | [connections](connections.md)                                                                |
+| `POST /accounts/<id>/discover`, `/revoke`, `/resources/<resourceId>`                                                        | `(app)/accounts/[id]/**/route.ts`                                                                             | [connections](connections.md)                                                                |
+| `/missions`, `/missions/new`, `/missions/<id>`                                                                              | `(app)/missions/page.tsx`, `(app)/missions/new/page.tsx`, `(app)/missions/[id]/page.tsx`                      | [missions](missions.md)                                                                      |
+| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`, `/gate`, `/members/**`, `/tokens/**` | `api/missions/**/route.ts`                                                                                    | [missions](missions.md)                                                                      |
+| `GET /agent-bootstrap.md`                                                                                                   | `agent-bootstrap.md/route.ts`                                                                                 | [missions](missions.md)                                                                      |
+| `/missions/<id>/session`                                                                                                    | `(app)/missions/[id]/session/page.tsx`                                                                        | [audit](audit.md)                                                                            |
+| `/activity`                                                                                                                 | `(app)/activity/page.tsx`                                                                                     | [audit](audit.md)                                                                            |
+| `/reference`, `/reference/<id>`                                                                                             | `(app)/reference/page.tsx`, `(app)/reference/[id]/page.tsx`                                                   | this handbook, [The provider reference](#the-provider-reference--reference)                  |
+| `/waiting`, `/waiting/<id>`                                                                                                 | `(app)/waiting/**/page.tsx`                                                                                   | [requests](requests.md)                                                                      |
+| `GET /r/<id>`                                                                                                               | `r/[id]/route.ts`                                                                                             | [requests](requests.md)                                                                      |
+| `GET /api/requests`, `POST /api/requests/<id>/decide`                                                                       | `api/requests/**/route.ts`                                                                                    | [requests](requests.md)                                                                      |
+| `GET, POST, DELETE /mcp`, `GET /mcp/catalog`                                                                                | `mcp/route.ts`, `mcp/catalog/route.ts`                                                                        | [execution-door](execution-door.md)                                                          |
+| `GET /.well-known/oauth-protected-resource`                                                                                 | `.well-known/oauth-protected-resource/route.ts`                                                               | [execution-door](execution-door.md)                                                          |
+| `GET /.well-known/oauth-authorization-server`, `GET /.well-known/oauth-protected-resource/mcp/manage`                       | `.well-known/oauth-authorization-server/route.ts`, `.well-known/oauth-protected-resource/mcp/manage/route.ts` | [management-door](management-door.md)                                                        |
+| `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/authorize/decision`, `POST /oauth/token`, `POST /oauth/revoke` | `oauth/**/route.ts`                                                                                           | [management-door](management-door.md)                                                        |
+| `GET, POST, DELETE /mcp/manage`                                                                                             | `mcp/manage/route.ts`                                                                                         | [management-door](management-door.md)                                                        |
+| `/delegations`, `POST /delegations/<id>/revoke`                                                                             | `(app)/delegations/**`                                                                                        | [management-door](management-door.md)                                                        |
+| `/admin/oauth-clients`, `POST /admin/oauth-clients/<id>`                                                                    | `admin/(guarded)/oauth-clients/**`                                                                            | [management-door](management-door.md)                                                        |
+| `GET /healthz`                                                                                                              | `healthz/route.ts`                                                                                            | [configuration](configuration.md)                                                            |
 
-There is no landing page: `/` redirects a visitor with a session to `/missions`
-and anyone else to `/login`.
+`/` is the one home of a signed-in person (`(app)/page.tsx`: `currentUser()`,
+then the missions list until the "Now" page lands); a visitor without a
+session is sent to `/login`. Every path the interface had before its words
+changed answers with a permanent redirect
+([Routes follow the words](#routes-follow-the-words--nextconfigts)).
 
 The table names the method a caller uses. The three `.well-known` routes also
 export `HEAD` and `OPTIONS`, and `POST /oauth/register`, `/oauth/token` and
 `/oauth/revoke` also export `OPTIONS`, on the same handler
 ([management-door](management-door.md)). A segment that holds only a
-`route.ts` has no page: `/connections/<id>/shares`, `/connections/connect/…`,
+`route.ts` has no page: `/accounts/<id>/shares`, `/accounts/connect/…`,
 `/delegations/<id>/revoke` and the `admin/(guarded)` mutations answer `POST`
 only.
 
 ## Layouts
 
-- **Root — `app/layout.tsx`.** `<html lang="en" data-theme="light">` with the
-  Geist Sans and Geist Mono font variables (`geist` package), the page
-  `metadata` (title `Vaubaan Gateway` and a one-sentence description of the
-  instance), and `globals.css`. It reads no session.
-- **`globals.css`** imports `src/styles/tokens.css` (the design tokens: colours
-  per theme, spacing, radii, type scale; the root layout pins the light theme),
-  sets the root font size to 125 %, the base element styles (headings, links,
-  focus ring, `code`) and one global class, `.vbn-container` (the page column),
-  which `Container` uses.
+- **Root — `app/layout.tsx`.** `<html lang="en">` with the Geist Sans and Geist
+  Mono font variables (`geist` package), the page `metadata` and `globals.css`.
+  It reads no session; it reads the theme of the request (`currentTheme()`,
+  [Themes](#themes--libthemets-libtheme-serverts)) and writes it as
+  `data-theme` on `<html>`, or writes nothing for "follow the system".
+- **`globals.css`** imports `src/styles/tokens.css` (the design tokens,
+  [below](#tokens--stylestokenscss)) and sets the base element styles: body
+  text at 14 px on the paper colour, three headings, links, the focus ring,
+  `code`, the `prefers-reduced-motion` rule, the `.vbn-sr-only` utility and one
+  layout class, `.vbn-container`, the column of a page **outside** the shell
+  (sign-in, bootstrap). The root font size is the browser's: the 125 % of the
+  first interface is gone.
 - **Icons.** `app/icon.svg` and `app/apple-icon.png` are picked up by the Next
   file convention.
 - **`(public)/layout.tsx`** — the pages reachable without a session (`/login`):
-  the page inside a `Container`.
+  the page inside a `Container`, then the build footer.
 - **`(app)/layout.tsx`** — the human surface: `currentPrincipal()`; no
-  principal → `redirect('/login')`; otherwise `<AppShell principal>`.
+  principal → `redirect('/login')`; otherwise
+  `<AppShell principal instance>`, `instance` being the host of the public URL.
+- **`(app)/delegations/layout.tsx`** — connected apps are part of Settings: the
+  page inside `SettingsFrame` (the local navigation of Settings).
 - **`admin/(guarded)/layout.tsx`** — `adminDecision()`; no session → the
-  admin sign-in; an operator → `<AdminShell principal>`, the application shell
-  with the entries of Administration ([The shell](#the-shell--componentsshell));
-  a signed-in user who is not an operator → the "Not an operator" explanation
-  in a `Container`, followed by the build footer and no bar. Rules in
-  [authentication](authentication.md). `/admin/bootstrap` is outside it.
+  admin sign-in; an administrator → `<AdminShell principal instance>`, the
+  application shell with the local navigation of Settings
+  ([The shell](#the-shell--componentsshell)); a signed-in person who is not one
+  → the "Not an operator" explanation in a `Container`, followed by the build
+  footer and no navigation. Rules in [authentication](authentication.md).
+  `/admin/bootstrap` is outside it.
 
 A layout is navigation, never the authorization boundary: the App Router can
 render a page segment without its layout. Every page and every route
 authenticates itself (next section).
+
+## Routes follow the words — `next.config.ts`
+
+The pages are served under the words a person reads (`/accounts`, `/waiting`,
+`/activity`, `/reference`, `/settings`), and the server builds its redirects
+from the same constants: `CONNECTIONS_PATH` (`server/connections/service.ts`)
+is `/accounts`, `INBOX_PATH` (`server/requests/url.ts`) is `/waiting`,
+`PROVIDERS_PATH` (`server/providers/links.ts`) is `/reference`. The directories
+under `(app)/` carry the same names; the modules under `src/server/` keep the
+protocol's (`connections`, `requests`, `audit`, `providers`).
+
+`LEGACY_REDIRECTS` in `next.config.ts` is the list of the paths the interface
+had before (`/accounts`, `/accounts/<anything but callback>/**`,
+`/waiting/**`, `/activity`, `/reference/**`); `redirects()` answers each with a
+permanent redirect. Next sends 308: a form post keeps its method and its body,
+and the query string is carried over. A redirect is answered before any page
+or route is looked up.
+
+Three kinds of path are never redirected, because they are part of a protocol:
+
+- `/connections/callback/<provider>` (`CONNECT_CALLBACK_PATH`): the callback a
+  company registered at a provider. Its route file stays at
+  `(app)/connections/callback/[provider]/route.ts`, alone in that directory,
+  and the first-segment pattern of the redirect excludes `callback`;
+- `/r/<id>`, the URL a refusal hands an agent: its handler redirects the
+  creator to `/waiting/<id>` through `inboxRequestPath`;
+- `/mcp/**`, `/api/**`, `/oauth/**`, `/auth/**`, `/.well-known/**`.
+
+`/shares` and `/delegations` keep their paths until their pages are redesigned;
+neither has a navigation entry: the first is linked from Accounts, the second
+is in the local navigation of Settings.
 
 ## Session helpers — `lib/auth/session.ts`
 
@@ -164,12 +216,12 @@ Server components learn who is behind the request through one of these. They
 add `headers()` and Next's navigation to the authenticator of `src/server/auth`;
 authority is recomputed on every request.
 
-| Helper               | For                                                               | No session                    | Bootstrap operator                        | Signed-in user                              |
-| -------------------- | ----------------------------------------------------------------- | ----------------------------- | ----------------------------------------- | ------------------------------------------- |
-| `currentPrincipal()` | pages open to anyone (`/`, `/login`, `/admin/bootstrap`), layouts | `principal: null`             | the principal                             | the principal                               |
-| `requirePrincipal()` | an `(app)` page open to every session (`/audit`, `/providers/**`) | `redirect('/login')`          | the principal                             | the principal                               |
-| `currentUser()`      | an `(app)` page that needs an identified user                     | `redirect('/login')`          | `null` → the page renders `<NeedsUser />` | `{ root, principal, user }`                 |
-| `requireOperator()`  | every page under `admin/(guarded)`                                | redirect to the admin sign-in | the principal while the token is active   | the principal if operator, else "not found" |
+| Helper               | For                                                                  | No session                    | Bootstrap operator                        | Signed-in user                              |
+| -------------------- | -------------------------------------------------------------------- | ----------------------------- | ----------------------------------------- | ------------------------------------------- |
+| `currentPrincipal()` | pages open to anyone (`/`, `/login`, `/admin/bootstrap`), layouts    | `principal: null`             | the principal                             | the principal                               |
+| `requirePrincipal()` | an `(app)` page open to every session (`/activity`, `/reference/**`) | `redirect('/login')`          | the principal                             | the principal                               |
+| `currentUser()`      | an `(app)` page that needs an identified user                        | `redirect('/login')`          | `null` → the page renders `<NeedsUser />` | `{ root, principal, user }`                 |
+| `requireOperator()`  | every page under `admin/(guarded)`                                   | redirect to the admin sign-in | the principal while the token is active   | the principal if operator, else "not found" |
 
 - `currentUser()` is the single answer to "the bootstrap operator opened a page
   that needs a user": Missions, the mission session, Connections (the share
@@ -184,7 +236,7 @@ authority is recomputed on every request.
   `PageSearchParams` and `takeNotice`.
 - `adminDecision()` is the undecorated answer behind `requireOperator()`
   (`{ root, decision }`): the `admin/(guarded)` layout uses it to render the
-  bar or the "Not an operator" explanation without redirecting.
+  shell or the "Not an operator" explanation without redirecting.
 - A `route.ts` under `(app)` calls no helper: it delegates to a handler of its
   module — `src/server/connections/handlers.ts` (connect, callback, discover,
   revoke, resource edit, transfer), `src/server/shares/handlers.ts` (share,
@@ -195,63 +247,100 @@ authority is recomputed on every request.
 
 ## The shell — `components/shell/`
 
-One private `Shell` (server component, `AppShell.tsx`) renders one bar, then
-the page in a `Container`, then the build footer, and two exports feed it:
-`AppShell({ principal, children })` for the application and
-`AdminShell({ principal, children })` for Administration — one bar, one
-account menu and one footer for the whole product. The bar is **one line**:
-its entries never wrap (`shell.module.css`, `.nav`), and a Playwright
-assertion holds the application bar at 1280 px for an operator.
+`AppShell({ principal, instance, children })` (server component,
+`AppShell.tsx`) is the frame of every page a signed-in person sees: a side
+navigation, then the page. `AdminShell` is the same shell with the local
+navigation of Settings beside the page — one navigation, one person control
+and one footer for the whole product.
 
-The application bar (`AppShell`, `<nav aria-label="Main">`):
+```
+<ToastProvider>
+  <div.app>
+    <a.skip href="#main">           "Skip to the page", shown on focus
+    <aside.side>
+      <Link.brand href="/">         the mark, "Vaubaan", the host of the gateway
+      <nav aria-label="Main">       NavLinks: a <ul> of seven entries
+      <div.foot>                    UserMenu, ThemeToggle
+    <div.main>
+      <main#main.page>              the page column
+      <BuildFooter>
+```
 
-- the brand link (to `/connections`) and one link per entry of `APP_NAV`:
-  **Connections**, **Shares**, **Missions**, **Requests**, **Audit**,
-  **Delegations**, **Providers**. A label is one short word — the page behind
-  "Shares" is still titled "Shares received" — so that one more entry fits.
-  Every principal sees these links;
-- **Admin** (`/admin`), only when `isOperatorPrincipal(principal)`
-  (`components/auth/principal.ts`): the bootstrap operator or a user with
-  `isOperator`. `PrincipalCard` (the account card of `/login` for a visitor
-  who already has a session) and the Audit page's sentence read the same
-  function;
-- the links are rendered by `NavLinks` (client, `usePathname`) from
-  `NavItem`s (`{ href, label, count?, exact? }`): the entry the path is under
-  (`isCurrentSection` in `shell/nav.ts`: equal, or below it) carries
-  `aria-current="page"`, a heavier word and a rule under it. An item with
-  `exact: true` is current on its own path only, not on the pages under it:
-  an index among its siblings;
-- on the right, `UserMenu` (client): one button with the user's email (or
-  `bootstrap token`), cut with an ellipsis past 260 px and whole in its
-  `title` and `aria-label` ("Account: `<email>`"). It opens a small panel —
-  the only overlay surface with a shadow — holding `OperatorBadge`
-  (`Operator` / `User` / "Bootstrap operator") and `SignOutButton`, both from
-  `components/auth/PrincipalCard.tsx`. Escape or a click outside closes it.
+**The side navigation.** Seven entries, from `NAV_ORDER` and `NAV`
+(`lib/vocabulary.ts`): **Now** (`/`), **Waiting for you** (`/waiting`),
+**Missions**, **Accounts**, **Activity**, **Reference**, then **Settings**
+after a hairline. Every principal sees the seven. A feature adds no entry:
+seven is the budget (style guide §1).
+
+- `NavLinks` (client, `usePathname`) renders them from `NavItem`s
+  (`{ key, href, label, count?, ruleBefore? }`) with the icon of each entry
+  (`Icon`). The current entry carries `aria-current="page"`, a fill and the
+  strong weight.
+- **Which entry is current** is `sectionOf(pathname)` (`nav.ts`, pure): the
+  home is its own path only; any other entry is its path and what is under
+  it; and the pages that have no entry belong to one — `/shares` to Accounts,
+  `/delegations`, `/admin/**` and `/design` to Settings. Outside the
+  application (`/login`) it is `null`.
+- **The count** of "Waiting for you" is `OpenRequestCount` (server component):
+  the number of open requests awaiting the signed-in person as creator, in
+  amber, nothing at zero and nothing for the bootstrap operator
+  ([requests](requests.md)). `data-testid="open-request-count"`.
+- **The brand** leads to `/`, the one home. Under the name it prints
+  `instance`, the host of the public URL. There is no health line and no
+  version string in the navigation.
+
+**The person and the theme**, at the foot:
+
+- `UserMenu` (client): one button with the person's mark (`Avatar`), their
+  name and their email (`personOf(principal)`: the display name when the
+  identity provider gave one, else the email; "Bootstrap token" for the
+  bootstrap operator). Long values are cut with an ellipsis and whole in the
+  `title` and the `aria-label` ("Account: …"). It opens a small panel upwards —
+  one of the few surfaces with a shadow — holding `RoleMark` ("administrator",
+  or "installing this gateway" for the bootstrap operator; nothing for anyone
+  else) and `SignOutButton` (a plain `POST /logout` form). Escape or a click
+  outside closes it; Escape gives the focus back to the button.
   `data-testid="user-menu"`.
+- `ThemeToggle` (client): one icon button showing the current choice; a press
+  moves to the next of System, Light, Dark. `data-testid="theme-toggle"`.
 
-The Administration bar (`AdminShell`, `<nav aria-label="Administration">`) is
-the same component with other entries:
+**The collapsed form** is CSS only (`shell.module.css`). Under 1024 px the
+navigation is a 56 px rail of icons: the labels and the person's name are
+visually hidden, still read by assistive technology, and each link carries its
+label as `title`. Under 641 px it becomes a bar above the page, and the theme
+toggle is hidden (the choice is in Settings).
 
-- the brand link leads a user back to the application (`/connections`); the
-  bootstrap operator has no application to go to, so for them it leads to
-  `/admin`;
-- **Administration** (`/admin`), the `section` entry that names the surface
-  right after the brand, with `exact: true`: it is marked on `/admin` only,
-  never on the pages under it;
-- one link per entry of `ADMIN_NAV`, in the order an operator sets an instance
-  up: **Identity provider**, **Provider apps**, **Users**, **Groups**,
-  **Connections**, **Telemetry**, **OAuth clients**. No entry has a count;
-- the same `UserMenu` on the right.
+**The page column.** `main.page` is 1120 px wide at most, with 44 px of side
+padding. A page chooses another measure through its `PageHeader`
+(`width="narrow"` 860 px, `width="wide"` 1240 px), which the shell reads with
+`:has([data-page-width])`. A page written before the redesign that holds a
+wide table asks for the wide measure from its own style sheet
+(`main:has(.wide)` in `activity.module.css`).
 
-Administration has no styles of its own for the bar: `shell.module.css`
-serves both, and `components/auth/auth.module.css` keeps the sign-in and
-bootstrap pages only.
+**Settings.** `settingsNav(administrator)` (`settings-nav.ts`, pure) gives the
+groups of the local navigation: **You** — Preferences (`/settings`), Connected
+apps (`/delegations`) — and, for an administrator
+(`isOperatorPrincipal(principal)`, `components/auth/principal.ts`),
+**Administration** — Setup (`/admin`), Sign-in (`/admin/identity-provider`),
+Company apps (`/admin/provider-apps`), People (`/admin/users`), Teams
+(`/admin/groups`), Accounts without owner (`/admin/connections`), Telemetry,
+Registered apps (`/admin/oauth-clients`), in the order a gateway is set up.
+No label is used for two things. `SettingsFrame({ principal, children })`
+renders it beside its children (`SubNavFrame` + `SubNav`); the
+`admin/(guarded)` layout (through `AdminShell`), the `delegations` layout and
+the Settings page use it. Until the settings pages are redesigned, the
+entries lead to the pages that exist, under their earlier titles.
 
-`BuildFooter` (server component, `shell.module.css`) is one line at the
-bottom of every page: `Vaubaan Gateway <version> · <commit>`, the build
-stamps of `server/config/build-info.ts` — the values `/healthz` answers and
-telemetry reports as `gateway_version`; `dev` for an unstamped build. Every
-page a human reads carries it:
+`/settings` (`(app)/settings/page.tsx`, `requirePrincipal()`) holds the theme
+as three named options (`ThemeChoiceControl`, `data-testid="settings-theme"`),
+a link to connected apps and to the interface reference, and for an
+administrator a link to Administration.
+
+`BuildFooter` (server component) is one quiet line where the page ends:
+`Vaubaan Gateway <version> · <commit>`, the build stamps of
+`server/config/build-info.ts` — the values `/healthz` answers and telemetry
+reports as `gateway_version`; `dev` for an unstamped build. Every page a human
+reads carries it:
 
 - the shell, for the application and for Administration, and the "Not an
   operator" explanation of the Administration layout;
@@ -260,26 +349,102 @@ page a human reads carries it:
   itself (`admin/bootstrap/page.tsx`);
 - the pages of the authorization endpoint — the consent screen and its
   message pages. They are HTML documents built as strings by
-  `server/oauth-as/pages.ts`, not React: `buildFooter(build)` there writes the
-  same line with the same test ids, from the `BuildInfo` the composition root
-  hands the OAuth handlers ([management-door](management-door.md)).
+  `server/oauth-as/pages.ts`, not React, with their own minimal styles (they
+  do not read the tokens): `buildFooter(build)` there writes the same line
+  with the same test ids ([management-door](management-door.md)).
 
 `data-testid`: `build-footer`, `gateway-version`, `gateway-commit`. The
 version has one source, the root `package.json`
 ([coding workflow, "One version"](../workflow/coding-workflow.md#one-version)).
 
-`AppNavEntry` — the type of `APP_NAV` and `ADMIN_NAV` — is
-`{ href, label, Count? }`. `Count` is an optional server
-component rendered after the label with the principal; `AppShell` renders it
-and hands the result to `NavLinks` as a node (`NavItem.count`). The only one is
-`OpenRequestCount` on "Requests": a warning badge with the number of open
-requests awaiting the signed-in user as creator, nothing at zero and nothing
-for the bootstrap operator ([requests](requests.md)).
-
 Seeing a link is not the authorisation. Each page decides for its principal
-with a session helper: the Connections, Shares received, Missions, Requests and Delegations pages render
-`NeedsUser` for the bootstrap operator (`currentUser()`), `/audit` is open to
-both (`requirePrincipal()`) and widens what it shows for an operator.
+with a session helper: the Accounts, Shared with you, Missions, Waiting for
+you and Connected apps pages render `NeedsUser` for the bootstrap operator
+(`currentUser()`); `/activity`, `/reference/**`, `/settings` and `/design` are
+open to every session (`requirePrincipal()`), and `/activity` widens what it
+shows for an administrator.
+
+## Words — `lib/vocabulary.ts`
+
+The words a person reads are in one file, pure and browser-safe, imported by
+the shell, the components and the pages (ADR
+[interface-redesign-vocabulary-and-design-system](../decisions/interface-redesign-vocabulary-and-design-system.md)).
+The protocol keeps its names; this file is the bridge, keyed by them.
+
+| Export                                                                  | Holds                                                                                                                   |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `ROUTES`, `NAV`, `NAV_ORDER`, `NavKey`                                  | the page paths and the seven entries, in order                                                                          |
+| `TERMS`, `count(n, term)`, `formatNumber`, `capitalize`                 | one word per thing, keyed by the spec's name (`TERMS.connection.one` is "account"); "26 permissions", "1,212 calls"     |
+| `PAGES`, `ACTIONS`, `SECTIONS`                                          | page titles and their one-sentence ledes; the labels of actions ("Replace key", "Give access"); shared section headings |
+| `GATE_WORDS`, `gateWordOf(gate)`, `ALLOW_WORDS`, `asksFirst(name)`      | "runs freely", "ask me first", "not included"; "Can", "Asks you first" / "Asks Alice first", "Cannot", "Limits today"   |
+| `SEVERITY_LABEL`, `WHY_LABELS`, `WHY_ORDER`, `whyValue(axis, v)`        | the six axes of the risk model in words (Undo, Blast radius, Data, Cost, Visible to, Lasts) and their values            |
+| `LIMIT_WORDS`, `usage`, `roomLeft`, `perPeriod`, `limitsReset`          | "1,860 / 3,000", "49 of 50 left today", "3,000 a day", "limits reset every day"                                         |
+| `KEY_WORDS`, `keyOf(holder)`, `possessive`                              | "your key", "Carol’s key", "the machine key nightly"                                                                    |
+| `ROLE_WORDS`, `qualifiers`, `ownership`, `accessGiven`, `mayAllow`      | "· you · creator", "you own it with Platform", "access given by Bob · 12 of 17", "all 15"                               |
+| `MISSION_STATES`, `ACCOUNT_STATES`, `REQUEST_STATES`, `DECISION_WORDS`  | a label and a tone per state, keyed by the protocol's state; the tone is `null` for the normal state                    |
+| `WAITING`, `waitingFor(name)`, `ASKED_FIRST`, `reachedLimit`, `running` | the sentences of "Waiting for you"                                                                                      |
+| `ago(from, now)`                                                        | "now", "4 min", "1 h", "yesterday", "4 d"                                                                               |
+| `THEME_WORDS`                                                           | System, Light, Dark                                                                                                     |
+
+A page that needs a word or a sentence pattern that is not there adds it
+there. A page never prints a protocol name as prose; it prints an id with
+`Mono`.
+
+## Themes — `lib/theme.ts`, `lib/theme-server.ts`
+
+Three states: `system`, `light`, `dark` (`THEME_CHOICES`). The choice is kept
+in the cookie `vaubaan_theme` (`THEME_COOKIE`), not in `localStorage`, so that
+the server renders it: `currentTheme()` (`theme-server.ts`) reads the `cookie`
+header of the request, the root layout writes `data-theme` on `<html>`
+(`themeAttribute`: nothing for `system`), and the document arrives in the
+right theme with no inline script — nothing flashes.
+
+- `parseTheme(raw)` accepts `light` and `dark`; anything else is `system`.
+- `themeCookie(choice, secure)` is the `document.cookie` assignment: one year,
+  `SameSite=Lax`, `Secure` on https; `system` deletes the cookie. It is not
+  `HttpOnly` on purpose — the toggle writes it — and carries a display
+  preference only.
+- `useTheme(initial)` (`components/shell/ThemeToggle.tsx`) is a
+  `useSyncExternalStore` over the `data-theme` attribute of `<html>`: the
+  attribute is the store, so the toggle of the shell and the control of
+  Settings stay in step. `initial` is what the server rendered.
+- Without an attribute the style sheet follows `prefers-color-scheme`.
+
+## Tokens — `styles/tokens.css`
+
+One layer of named decisions (spec [style-guide](../spec/style-guide.md) §3).
+
+- `:root` holds what does not depend on the theme: the two font tokens
+  (`--font-sans`, `--font-mono`, over the variables of the `geist` package),
+  four sizes (`--text-xs` 12 px, `--text-sm` 13, `--text-base` 14,
+  `--text-title` 20), two weights (`--weight-regular`, `--weight-strong`),
+  `--leading`, `--measure` (680 px, the cap of a line of prose), the space
+  scale (`--space-half`, `--space-1` … `--space-12`), the page rhythm
+  (`--page-max`, `--page-max-narrow`, `--page-max-wide`, `--page-pad-x`,
+  `--section-gap`, `--side-width`, `--side-width-collapsed`, `--row-y`,
+  `--cell-y`, `--cell-x`), three control heights, four radii, two durations and
+  one easing, and the six mark hues (`--hue-0` … `--hue-5`, `--on-hue`).
+- `:root, [data-theme='light']` holds the light colours; `[data-theme='dark']`
+  the dark ones; and `@media (prefers-color-scheme: dark)` repeats the dark
+  values for `:root:not([data-theme])`. The dark values are written twice
+  because a media query and an attribute cannot share a rule; a test keeps
+  the two blocks identical.
+- The theme selectors are not tied to `:root`: any element with `data-theme`
+  re-declares the colours for what it contains. The gallery uses it to draw
+  both themes on one page.
+- Colours are plain hex values so that the contrast test can read them.
+
+The colours: `--paper`, `--paper-side`, `--paper-raised`, `--fill`, `--hover`;
+`--line`, `--line-strong`; `--ink`, `--ink-2`, `--ink-3`, `--ink-4`;
+`--accent`, `--accent-ink`, `--accent-soft`, `--accent-line`, `--on-accent`;
+`--ok`, `--warn`, `--bad`, each with `-soft` and `-line`, and `--on-warn`; the
+`--code-*` set; `--scrim`, `--shadow-overlay`, `--knob`; `--focus-ring`.
+
+The tokens of the first interface (the gray and status scales, the semantic
+`surface-*` / `text-*` / `border-*` names, the nine `type-*` hues and their
+`[data-kind]` rules) are gone. The style sheets of the pages written before
+the redesign were moved to the new names one for one, so those pages read the
+new palette without having been redesigned.
 
 ## One root, several module graphs
 
@@ -313,106 +478,108 @@ The statuses a page still tests itself (`revoked`, `unowned` on the connection
 page) choose a banner or a read-only field: what is displayed, not what is
 allowed.
 
-## UI primitives — `components/ui/`
+## The design system — `components/ui/`
 
-Imported from `@/components/ui` (`index.ts`). Styles are CSS modules next to
-each file and use the tokens only.
+Imported from `@/components/ui` (`index.ts`). Each component has its CSS
+module beside it and reads the tokens only. **A page is built from these; a
+component a page misses is added here, never in the page.** The rule of use of
+each one is in its file header and on the gallery.
 
-| Export                                        | What it is                                                                                                                                                                                                                                                                                                |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Button`                                      | `<button>` with `variant` (`primary`, `secondary`, `ghost`, `danger`; default `secondary`), `size` (`sm`, `md`; default `md`) and `loading` (disables the button), ref forwarded. The small size is 26 px high to the eye and answers on 32 px (an `::after` reaching 3 px above and below)               |
-| `Input`, `Textarea`, `Select`                 | styled form controls, refs forwarded                                                                                                                                                                                                                                                                      |
-| `Field`                                       | a labelled field with `label`, `htmlFor`, `hint` and `error` (the error replaces the hint)                                                                                                                                                                                                                |
-| `Card`, `CardHeader`, `CardTitle`, `CardBody` | the bordered panel and its parts                                                                                                                                                                                                                                                                          |
-| `Badge`                                       | inline status, `tone`: `neutral` (default), `info`, `success`, `warning`, `danger` (`BadgeTone`); `mono` for the monospace face                                                                                                                                                                           |
-| `Banner`                                      | block message with an optional `title`, same tones (default `info`)                                                                                                                                                                                                                                       |
-| `Table`, `Thead`, `Tbody`, `Tr`, `Th`, `Td`   | styled table elements; a row of a `Tbody` is highlighted on hover (`.tbody .tr:hover`)                                                                                                                                                                                                                    |
-| `Container`, `Stack`                          | page column (`.vbn-container`), vertical flex with a `gap`                                                                                                                                                                                                                                                |
-| `Code`                                        | inline `<code>`                                                                                                                                                                                                                                                                                           |
-| `DangerConfirm`                               | client modal: the user types `phrase` before Confirm enables; Escape or the backdrop cancels (not while `busy`); the field takes focus when the dialog opens, and Tab / Shift+Tab stay inside the panel (a focus that got outside is brought back in). Used by the mission actions and `RevokeConnection` |
-| `Slug`                                        | the name of an object in the colour of its kind (`kind`, below): an inline tag with the glyph of the kind, a visually hidden word for it, `href` to make it a link, `newTab`, `mono={false}` for a human name                                                                                             |
-| `Glyph`, `GlyphName`                          | the one glyph set, drawn in `Glyph.tsx` (no icon package): one 12 px line drawing per kind, plus `help`, `chevron`, `warning`, `info`, `key`, `flask`, `archive`, `user`; always `aria-hidden`                                                                                                            |
-| `Callout`                                     | a note with an icon and a short title on a neutral surface (`role="note"`); only the icon and the title carry the tone. Used for the fallback, deprecated, token hand-out and experimental notes                                                                                                          |
-| `Help`, `HelpButton`, `useHelp`               | client. Help on demand: `Help({ id, line })` shows one line and a "More" button; the panel is closed by default and its state is remembered per browser (`localStorage`, key `vaubaan:help:<id>`). `useHelp` + `HelpButton` are the same thing for a panel rendered elsewhere                             |
-| `TabList`, `TabPanel`, `TabItem`              | client. Tabs with the ARIA roles and keyboard (arrows, Home, End; a tab is selected when it takes focus); the state belongs to the caller                                                                                                                                                                 |
-| `KindLegend`                                  | "what the colours mean": every kind as its slug, with one sentence                                                                                                                                                                                                                                        |
-| `ITEM_KINDS`, `ITEM_KIND_WORDS`, `ItemKind`   | the list of kinds, and the label and meaning of each (`kinds.ts`)                                                                                                                                                                                                                                         |
+**The frame of a page**
+
+| Export                                                      | What it is                                                                                                                                                                                                                                                                           |
+| ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PageHeader`, `Crumbs`                                      | crumbs, the `h1`, a one-sentence `lede`, `primary` (one action), `secondary` (a tuple of one or two: the type refuses a third), `more`, `mark` and `status` beside the title, `width` (`narrow`, `default`, `wide`: the measure of the page column), `level={2}` inside another page |
+| `Section`, `SectionHeading`                                 | a `<section>` named by its heading; `title`, `count`, `note` (a sentence or a link on the right); `first` removes the gap above the first region                                                                                                                                     |
+| `SummaryLine`, `KeyValue`, `Stats`, `Hint`                  | counts that lead elsewhere (an item with `href` is a link); a definition list; labelled figures (a `tone` only on the exception); quiet text under a list                                                                                                                            |
+| `SubNav`, `SubNavFrame`                                     | client. The local navigation of a page that is a small place of its own, and the grid that lays it beside the content; an item is current by path, or by `current` when the page navigates by fragment                                                                               |
+| `Card`, `CardHeader`, `CardTitle`, `CardBody`, `CardFooter` | the one bordered box of a page (the rail)                                                                                                                                                                                                                                            |
+| `Container`, `Stack`                                        | the column of a page outside the shell; a vertical flex with a `gap`                                                                                                                                                                                                                 |
+
+**Lists and tables**
+
+| Export                                      | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Rows`, `Row`                               | a `<ul>` of quiet rows: `lead` (a mark), `title` (a link with `href`), `description`, `aside` (at most one thing), `end` (an action or a short fact), `muted`                                                                                                                                                                                                                                                                                     |
+| `DataTable`, `Column`                       | a typed table: `columns` (`id`, `header`, `cell`, `align`, `nowrap`, `width`, `detail`), `rows` or `groups`, `rowKey`, a required `caption` (not drawn), `actions` (shown on hover and on focus), `rowTone` (`bad`, `warn`, `quiet`), `rowDetail`, `headless`, `density`, `empty`. **Five columns by default, seven with details**: `checkColumnBudget` throws beyond that; `columnBudget={6}` is the documented exception of the activity record |
+| `Table`, `Thead`, `Tbody`, `Tr`, `Th`, `Td` | the bare elements with the same look, for the pages written before the redesign                                                                                                                                                                                                                                                                                                                                                                   |
+| `Meter`, `meterState`, `NEAR_LIMIT`         | `used`, `limit`, `threshold` (a share of the limit, default 0.6): below it a dash (`placeholder="none"` renders nothing) that still says the figure to assistive technology; near it an amber bar; at the limit a red one and "Limit reached". `threshold={0}` always draws. `format="percent"`, `label`                                                                                                                                          |
+
+**Marks**
+
+| Export                                         | What it is                                                                                                                                                                                                                            |
+| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `StatusMark`, `Dot`, `Tag`, `EnvTag`           | a pill with a dot for an exception (`tone`: `neutral`, `info`, `ok`, `warn`, `bad`); the dot alone; a squared tag for a fact that is not a state; an environment label (`null` → "no label", dashed)                                  |
+| `Badge`, `BadgeTone`, `toneOfBadge`            | the inline label of the earlier pages, drawn as a tag; its tone names (`success`, `warning`, `danger`) map to the new ones                                                                                                            |
+| `Avatar`, `AvatarStack`, `KeyHolder`           | a person (round), a machine key (`kind="machine"`: dashed square, no hue), a team; three sizes; the hue comes from the name (`hueOf`), the letters from `initialsOf`; the name and its qualifiers                                     |
+| `ServiceMark`, `KeyMark`, `AgentLabel`, `Mono` | the two letters of a service (from its display name, never from a list of services); a masked key in mono; the label an agent gave itself; an identifier in mono that wraps between its words                                         |
+| `SeverityChip`, `GateMark`, `WhyCells`         | one severity word; "runs freely" / "ask me first" / "not included" with a dot; the six cells of the risk model in words                                                                                                               |
+| `Icon`, `IconName`                             | sixteen-pixel line icons on a 24-unit grid, drawn in `Icon.tsx`: the seven of the navigation, `search`, `sun`, `moon`, `system`, `check`, `cross`, `alert`, `info`, `key`, `copy`, `chevron`, `more`, `signout`; always `aria-hidden` |
+
+**Permissions, answers, states**
+
+| Export                                                                    | What it is                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PermissionTable`, `PermissionGroup`, `PermissionRow`                     | client. The table chooses its columns by `variant`: `editor` (tick, permission, risk, per day, per minute, ask me first), `read`, `usage` (used today, per minute, gate), `pick` (tick, permission, risk). A row takes `label`, `id` (mono, under the label), `severity`, `included`, `select`, `usage`, `perDay`, `perMinute`, `gate`, `gateControl`, `tag`, and `why` (`reason`, `cells`, `referenceHref`, `tools`), closed behind "why?" |
+| `AllowSummary`                                                            | Can / Asks you first / Cannot, and "Limits today" when given; the asking line is left out when nothing asks; `asksLabel` for someone else's mission; `compact` in the rail                                                                                                                                                                                                                                                                  |
+| `AnswerList`, `AnswerRow`                                                 | what waits for the person: `who`, `title`, `age`, `description`, `answers`; `boxed` is the one filled (amber) box of a page                                                                                                                                                                                                                                                                                                                 |
+| `EmptyState`, `Lede`, `ModelDiagram`, `StepMark`, `CheckMark`, `Skeleton` | one sentence and one action; the paragraph and the drawn model of a first run; the lead of a step row and of a checklist row; the shape of what is loading                                                                                                                                                                                                                                                                                  |
+| `Callout`, `Banner`                                                       | a note with an optional `title`, a `tone`, an optional `action`; `role="note"`. `Banner` is the same component under the name the earlier pages import                                                                                                                                                                                                                                                                                      |
+
+**Actions, overlays, details, forms**
+
+| Export                                                                     | What it is                                                                                                                                                                                                                                                                                                                                                               |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Button`, `ButtonLink`                                                     | `variant` (`primary` — the accent —, `secondary`, `ghost`, `danger`), `size` (`sm` 26 px, `md` 30 px, `lg` 36 px; the two small ones answer on 32 px), `loading`. `ButtonLink` is a link with the same look (`external` for a plain `<a>`)                                                                                                                               |
+| `Dialog`, `DialogPanel`, `ConfirmDialog`, `OptionCard`, `DangerConfirm`    | client. A native `<dialog>` opened with `showModal()`: the browser keeps the focus inside, Escape and the backdrop call `onClose` (not while `dismissible` is false). `ConfirmDialog` takes a required `consequence`, optional `options` (radio cards), a `confirmLabel` named after the act, `tone`, `busy`, `error`, `hint`. `DangerConfirm` asks for a typed `phrase` |
+| `ToastProvider`, `useToast`, `ToastCard`                                   | client. Mounted once by the shell; `useToast()` returns `toast({ title, description?, tone? })`; announced politely; leaves after five seconds unless it is a failure                                                                                                                                                                                                    |
+| `Disclosure`, `DetailScope`, `DetailToggle`, `DetailOnly`, `useRemembered` | client. Details on demand, remembered in `localStorage` under `vaubaan:open:<id>` (`id` names the page and the region). A scope flips `data-details` on a wrapper: the `detail` columns of a `DataTable` and any `DetailOnly` block inside follow it, even when rendered by the server                                                                                   |
+| `TabList`, `TabPanel`, `TabItem`                                           | client. Tabs with the ARIA roles and keyboard; the state belongs to the caller                                                                                                                                                                                                                                                                                           |
+| `Segmented`, `FilterChips`, `SearchField`, `FilterOption`                  | client. One choice among a few; facets that add up; a search field. An option with `href` is a link (the filter lives in the URL), otherwise a button                                                                                                                                                                                                                    |
+| `Field`, `Input`, `Textarea`, `Select`, `Checkbox`, `Radio`, `Switch`      | `Field` takes `label`, `htmlFor`, `shape` (the expected shape, said in the label), `optional`, `hint`, `error`; it gives its control `aria-describedby` and, with an error, `aria-invalid`. Controls take `size="sm"` and `mono`                                                                                                                                         |
+| `Code`, `CodeBlock`, `CodeTone`, `CopyButton`                              | inline code; a dark block with a Copy button that copies `copy` (or the text when it is a plain string); a keyword, a string or a comment inside a block; a copy button on its own                                                                                                                                                                                       |
 
 **Labels are bound to their controls.** A `Field` that holds one control
-takes `htmlFor`, the `id` of that control, and renders a real
-`<label for>`: clicking the label focuses the control and assistive technology
-announces it. A `Field` that holds several controls (the claim mapping of the
-identity provider) takes no `htmlFor`: its wrapper is a `role="group"` named by
-the label, and each control carries its own `aria-label`. Ids must be unique on
+takes `htmlFor`, the `id` of that control, and renders a real `<label for>`.
+A `Field` that holds several controls (the claim mapping of the identity
+provider) takes no `htmlFor`: its wrapper is a `role="group"` named by the
+label, and each control carries its own `aria-label`. Ids must be unique on
 the page: `CredentialFieldInputs` (`components/connections/parts.tsx`) takes an
-`idPrefix` and derives one id per field with `credentialFieldId(idPrefix,
-name)`; Admin → Provider apps passes `provider-app-<provider id>` because it
-renders one list per provider. Controls outside a `Field` are either wrapped in
-their `<label>` (Audit filters, the request decision form, checkboxes) or carry
-an `aria-label` (the mission form, the inline resource cells).
+`idPrefix`; Administration → Company apps passes `provider-app-<provider id>`
+because it renders one list per provider.
 
-### Type colours: what kind of thing a name is
+**Server or client.** Everything not marked "client" above has no hook and
+renders in server and client components alike. A client component takes
+rendered nodes from a server page (`select`, `usage`, `answers`), never a
+function.
 
-Every name the interface prints for an object — as a row, a column, or a mere
-reference — carries the colour of its **kind**, through `Slug` or through
-`data-kind` on its container. The colour says what kind of thing it is and
-nothing else: severity, class of risk, gate, status and callouts keep the four
-status accents and their own marks (a filled badge, an outlined word, the
-vector strip). A kind is never said by the colour alone: the slug has its
-glyph, its `title` and a visually hidden word (`Risk: `, `Tool: `…) that is
-generated content (`data-kind-label`, `.slug::before`): assistive technology
-reads it, and the text of the element stays the bare name. An identifier
-wraps between its words — a `<wbr>` follows each separator
-(`github__create_|or_|update_|file`) — and never inside one.
+### The gallery — `/design`
 
-| Kind         | Hue (`tokens.css`) | Glyph      | Where it appears                                                                                                                                                                                                  |
-| ------------ | ------------------ | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `risk`       | `violet`           | diamond    | every risk id (`RiskIdLink`): mission page, Custom editor, Share dialog, Requests, session, Audit, Shares received; the rail of a risk row                                                                        |
-| `preset`     | `teal`             | three bars | the columns of the preset matrix, the preset tags of a risk row, the chosen preset of mission creation                                                                                                            |
-| `tool`       | `pink`             | prompt     | tool names: the tools table, a risk's declared tools, Audit, session, Requests                                                                                                                                    |
-| `plane`      | `lime`             | branch     | planes and entities of a data model: the plane control, the outline, the index cards, the tools table                                                                                                             |
-| `resource`   | `cyan`             | box        | resource refs: mission page, mission creation, connection page, Audit                                                                                                                                             |
-| `connection` | `indigo`           | two rings  | connection names: mission page, Audit, Shares received, Admin → Connections                                                                                                                                       |
-| `mission`    | `orange`           | flag       | mission names: Audit, Requests, Delegations (the missions a client issued, the missions to review)                                                                                                                |
-| `member`     | `magenta`          | person     | a user of the instance, labelled "Person": the Members table, the holder of a member token (mission page, session, Audit), the "Shared with you" callout, Admin → Users, the members of a group in Admin → Groups |
-| `token`      | `gold`             | key        | the masked mission token (mission page, missions list, "Members and tokens") and the name a named token goes by (session, Audit)                                                                                  |
+`(app)/design/` renders every component in every state: `page.tsx`
+(`requirePrincipal()`, any session) and a client gallery (`gallery.tsx`,
+three files of sections, `specimen.tsx`). A `Specimen` draws its content twice,
+on an island with `data-theme="light"` and on one with `data-theme="dark"`, so
+both themes are compared on one screen whatever the theme of the page. Every
+value on it is invented. It is linked from Settings, and it is what a page is
+compared with in review. Adding a component, a variant or a state means adding
+its specimen.
 
-Tokens, in `styles/tokens.css`: nine hue families of four steps (50, 200, 600, 900) beside the status accents, and per kind three semantic tokens mapped per
-theme — `--type-<kind>-rail` (step 600: a rail, a band, the glyph),
-`--type-<kind>-bg` and `--type-<kind>-fg` (the tag: 50 under 900 in light, 900
-under 200 in dark). The same file ends with one rule per kind,
-`[data-kind='<kind>'] { --kind-rail; --kind-bg; --kind-fg }`: a component
-reads the three `--kind-*` variables and never a family step. Adding a kind is
-one entry in `kinds.ts` (the compiler then asks for its words and its glyph),
-its tokens in both themes and its `[data-kind]` rule;
-`tests/unit/app/item-kinds.test.ts` fails until the three exist, and if two
-kinds share a hue or one borrows a status hue.
+### Legacy primitives
 
-The identifier of a kind is not always its word: the kind `member` is
-labelled **Person** (`ITEM_KIND_WORDS`, the hidden word of the slug and the
-legend), because the same colour names a user wherever one is printed — the
-creator or a member of a mission, a member of a group — and `plane` is
-labelled "Data model". A human name (an email, a connection or mission name)
-is a slug with `mono={false}`.
+Kept for the pages written before the redesign, restyled through the tokens,
+and removed with the last page that imports them:
 
-Two page rules keep long names inside their column:
-
-- **The session timeline** (`missions/[id]/session/page.tsx`): in the event
-  cell, the kind badge stays on one line and the refusal code under it wraps
-  like any other text, so a long code never widens the column
-  ([audit](audit.md)).
-- **The notices of the mission form** (`missions/new/mission-form.tsx`,
-  `noticeHeadline`): the one-line headline names each resource by its display
-  name, as every page does, and by its ref only when it has none; the ref (a
-  UUID at some providers) is on the connection's page. The list is one grid
-  column that never grows past the form (`.notices`, `minmax(0, 1fr)`): a
-  folded headline is cut with an ellipsis and shown whole when unfolded
-  ([missions](missions.md)).
-
-`tokens.css` also gained `--text-2xs` (the axis captions of the vector strip
-and the captions of the budget columns), and `globals.css` a
-`prefers-reduced-motion` rule (transitions and animations take no time), the
-`.vbn-sr-only` utility and the focus ring on `summary` and `[tabindex]`.
+- `Slug` — a name with the glyph of its kind and a visually hidden word for
+  it (`data-kind`, `data-kind-label`); it carries no colour of its own any
+  more. A redesigned page uses `Mono` and `KeyMark` and says the kind in
+  words.
+- `Glyph`, `GlyphName` — the twelve-pixel glyph set of the kinds, plus `help`,
+  `chevron`, `warning`, `info`, `key`, `flask`, `archive`, `user`.
+- `KindLegend`, `ITEM_KINDS`, `ITEM_KIND_WORDS`, `ItemKind` (`kinds.ts`) — the
+  list of kinds and the legend of their glyphs (the reference pages).
+- `Help`, `HelpButton`, `useHelp` — one line and a "More" button
+  (`vaubaan:help:<id>`). A redesigned page uses a one-sentence lede and
+  `Disclosure`.
 
 ### Display helpers
 
@@ -467,14 +634,14 @@ handbook:
   `SignOutButton` (a plain `POST /logout` form)
   ([authentication](authentication.md)).
 
-## The provider reference — `/providers`
+## The provider reference — `/reference`
 
 Documentation of the instance inside the instance (spec §4.2 "Providers"): what
 each shipped plugin connects to and what a mission can accept on it. Both pages
 call `requirePrincipal()`: any session reads them, the bootstrap operator
 included; they show no connection, no mission and no credential. The
 structural test of the surface (`tests/unit/app/app-guard.test.ts`) lists them
-with `/audit` among the pages open to any session.
+with `/activity` among the pages open to any session.
 
 Everything is generated from the plugin registry by
 `src/server/providers/reference.ts` (pure, no IO); no provider has a
@@ -502,9 +669,9 @@ its neighbours by what it holds: the name, the credential kind, the one-line
 description, the planes of the model as `plane` slugs, the environments the
 catalog knows, `experimental` and the community validation badge, and three
 counts with the glyph of their kind (presets, risks, tools). The lead is one
-line; the rest, with the colour legend, is behind "More".
+line; the rest, with the legend of the glyphs, is behind "More".
 
-**`/providers/<id>`** is a compact header rendered by the server (`[id]/page.tsx`)
+**`/reference/<id>`** is a compact header rendered by the server (`[id]/page.tsx`)
 and a client body (`[id]/provider-view.tsx`):
 
 - **Header** — name, `experimental`, the community validation badge
@@ -525,13 +692,13 @@ and a client body (`[id]/provider-view.tsx`):
   `data-testid="plane-control"`.
 - **Help** — "How to read this page" (`useHelp('provider-reference')`,
   `#legend` opens it): presets and risks in one paragraph, how to read a risk
-  with the legend of the six axes and the two markers, what the colours mean
-  (`KindLegend`), how planes are read. Closed by default.
+  with the legend of the six axes and the two markers, what the glyphs mean
+  (`KindLegend`: the glyph of each kind — kinds carry no colour any more), how planes are read. Closed by default.
 
 The four sections, one file each beside the page:
 
 1. **Presets** (`preset-matrix.tsx`, `#presets`) — one table: a column per
-   preset (`<th id="preset-<id>">`, the preset colour as a band, its label, its
+   preset (`<th id="preset-<id>">`, a band, its label, its
    counts, its description on three lines), a row per catalog entry grouped
    into reads, writes and irreversible writes. A cell is the budget the preset
    gives the risk — quota, rate limit, gate (`approval` as a badge) — once per
@@ -561,7 +728,7 @@ The four sections, one file each beside the page:
 4. **Tools** (`tool-table.tsx`, `#tools`) — a dense table: the name as a
    `tool` slug, the description, required and optional arguments, the plane
    when the model has several, and the risks. The columns have fixed shares
-   of the width (`providers.module.css`: tool 29 %, arguments 16 %, plane
+   of the width (`reference.module.css`: tool 29 %, arguments 16 %, plane
    10 %, risks 19 %, the description taking the rest), so that a qualified
    risk id (`github.mint-install-token-clone`) holds on two lines at most. The
    "Risks" column reads "by
@@ -649,10 +816,11 @@ as the Dockerfile does.
 
 ## Adding a page
 
-1. **Place it** under `(app)/` to get the session redirect and the bar, under
-   `admin/(guarded)/` for an operator page, under `(public)/` if it must work
-   without a session. Add one entry to `APP_NAV` if it belongs in the bar
-   (to `ADMIN_NAV` for an Administration page).
+1. **Place it** under `(app)/` to get the session redirect and the shell, under
+   `admin/(guarded)/` for a page of Administration, under `(public)/` if it
+   must work without a session. A page belongs to one of the seven entries:
+   if its path is not under an entry's, add it to `ALSO_UNDER` in
+   `components/shell/nav.ts`. Do not add an eighth entry.
 2. **Authenticate in the page itself**, as its first statement, with the
    session helper that fits ([Session helpers](#session-helpers--libauthsessionts)):
    `currentUser()` then `if (!session) return <NeedsUser />;` for a page that
@@ -670,70 +838,90 @@ as the Dockerfile does.
    with a redirect (a message goes through the `NoticeStore`, never the URL:
    [connections](connections.md)); the mission endpoints answer JSON to their
    client components.
-5. **Build with the primitives** above; page-specific styles go in a CSS module
-   next to the page. Give every single-control `Field` an `htmlFor` and its
-   control the matching `id`.
-6. **Document it** in the handbook of its feature and add its route to the map
-   above.
+5. **Build it from the design system**: a `PageHeader` (one sentence of lede,
+   one primary action), `Section`s, then rows, tables and the rest. Take every
+   word from `lib/vocabulary.ts`. Hold the attention budget (spec
+   [style-guide](../spec/style-guide.md) §1): three regions above the fold,
+   five columns, a meter only near a limit, colour for the exception only,
+   detail behind a `Disclosure` or a `DetailScope`. A page-specific layout goes
+   in a CSS module next to the page and reads the tokens only; a missing
+   component goes into `components/ui` with its specimen on `/design`.
+6. **Look at it**: at 1440×900 and 1280×800, in both themes, beside the
+   gallery.
+7. **Document it** in the handbook of its feature and add its route to the map
+   above. If it replaces a path people may have bookmarked, add the old path
+   to `LEGACY_REDIRECTS`.
 
 ## Tests
 
-Six unit files under `apps/gateway/tests/unit/app/` run without a browser
+Unit files under `apps/gateway/tests/unit/app/` run without a browser
 (`npx vitest run apps/gateway/tests/unit/app`):
 
 - `app-guard.test.ts` discovers every `page.tsx` and `route.ts` under `(app)`.
   Each page must call a session helper before it reads the root, redirect a
   visitor with no session (and a bootstrap session whose token was revoked) to
-  `/login`, render only `NeedsUser` for the bootstrap operator (`/audit` and the
-  two `/providers` pages excepted), and render or answer "not found" for a signed-in user. Each route
-  must delegate to a handler listed as authenticating, refuse a caller with no
-  session and the bootstrap operator, and let a signed-in user through.
+  `/login`, render only `NeedsUser` for the bootstrap operator (`/activity`,
+  the two `/reference` pages, `/settings` and `/design` excepted), and render
+  or answer "not found" for a signed-in user. Each route must delegate to a
+  handler listed as authenticating, refuse a caller with no session and the
+  bootstrap operator, and let a signed-in user through.
 - `admin-guard.test.ts` does the same for `admin/(guarded)` with
   `requireOperator()` ([authentication](authentication.md)).
-- `field.test.tsx` renders `Field` and `CredentialFieldInputs` with
-  `renderToStaticMarkup`: label bound by `for`/`id`, group role without
-  `htmlFor`, unique ids when two lists share a page.
-
-- `item-kinds.test.ts` reads `tokens.css`: every kind of `kinds.ts` has its
-  three tokens in both themes and its `[data-kind]` rule, no kind borrows a
-  status hue, no two kinds share one; and the rule that marks the current
-  section of the bar (`isCurrentSection`).
+- `design-tokens.test.ts` reads `tokens.css` and every style sheet: the two
+  dark blocks hold the same values and both themes the same tokens; four text
+  sizes and two weights; every documented pair of text and surface meets AA in
+  both themes (`ink-4` is below it on purpose); every token is used and every
+  `var(--…)` resolves; no raw colour outside the token sheet; a font size is a
+  token or relative.
+- `shell-and-vocabulary.test.ts`: the seven entries in order, each leading to
+  a page that exists; `sectionOf` for every area; the local navigation of
+  Settings (its pages exist, no label twice); the path constants of the server
+  equal the routes; every rule of `LEGACY_REDIRECTS` lands on a page or a
+  route that exists and none matches the provider callback; the theme helpers;
+  the sentence patterns of the vocabulary.
+- `design-system.test.tsx` renders the components to static markup: one `h1`
+  and the order of the actions of a page header; the meter and its threshold;
+  the column budget of `DataTable`, its caption, detail columns and row tones;
+  marks that carry their word; the columns of each `PermissionTable` variant
+  and the closed "why?"; the lines of `AllowSummary`; `Field` tying its error
+  to its control; a dialog stating its consequence before its button.
+- `field.test.tsx` renders `Field` and `CredentialFieldInputs`: label bound by
+  `for`/`id`, group role without `htmlFor`, unique ids when two lists share a
+  page.
 - `risk-explain.test.tsx` renders `Slug`, `RiskIdLink`, `KindLegend`,
-  `VectorStrip`, `RiskExplain`, `Help` and `Callout` to static markup: the
-  kind as attribute, glyph and hidden word; six cells with the axis named in
-  full; help closed.
+  `VectorStrip`, `RiskExplain`, `Help` and `Callout` to static markup.
+- `build-footer.test.tsx` renders the footer (given stamps, the stamps of the
+  build, `dev`), and `tests/unit/structural/version-single-source.test.ts`
+  checks that the build stamps the version of the root `package.json`.
+
+`guard-harness.ts` holds what the two guard files share (file discovery,
+calling a page as a function, naming a redirect or a "not found").
 
 `server/providers/planes.test.ts` covers the plane rules on a two-plane model
-and on the shipped Supabase and GitHub plugins.
+and on the shipped Supabase and GitHub plugins. Three helpers have a unit file
+beside them: `components/auth/principal.test.ts`,
+`app/(app)/missions/message-of.test.ts` and
+`app/(app)/missions/new/form-state.test.ts`.
 
-Three helpers have a unit file beside them:
-`components/auth/principal.test.ts`, `app/(app)/missions/message-of.test.ts`
-and `app/(app)/missions/new/form-state.test.ts` (the state of the mission
-form, [missions](missions.md)).
-
-`guard-harness.ts` holds what the two guard files share (file discovery, calling
-a page as a function, naming a redirect or a "not found").
-
-`build-footer.test.tsx`, the sixth, renders the footer (given stamps, the
-stamps of the build, `dev`), and
-`tests/unit/structural/version-single-source.test.ts` checks that the build
-stamps the version of the root `package.json`.
-
-The other primitives and the rest of the shell have no unit test of their own. They are
-exercised by the Playwright suite `apps/gateway/tests/e2e/v5/` (`npm run test:e2e:v5`,
-eight specs): navigation through the bar (`navigation` named "Main", on one
-line at 1280 px, the current entry marked, the account menu), the tabs, the
-plane control, the fragments and the help of the provider reference, the open
-request count (`data-testid="open-request-count"`), forms, tables and dialogs of
-the Missions, Requests, Audit, Connections (shares), Delegations and Providers pages. The
-suite runs the standalone server of the build, the one the image starts
-([e2e tests](../tests/e2e-tests.md)). What a page decides is tested without
-Next, in the unit and integration suites of its `src/server/**` module (`npm
-test`); see each feature handbook.
+In a browser, the Playwright suite `apps/gateway/tests/e2e/v5/`
+(`npm run test:e2e:v5`, nine specs) exercises the rest. `shell.spec.ts` is the
+frame's own: one home and seven entries, each leading to a page and then
+marked; the person's menu and the skip link; the collapsed navigation at
+900 px and the bar at 390 px; the three states of the theme, kept across a
+reload and present in the HTML the server sends; a 308 from every old path
+and none from the provider callback; Settings for a person and for an
+administrator; and the gallery — every section of its navigation, every
+specimen on a light and a dark island, "show details" remembered, a meter
+drawn only near its limit, "why?", a confirmation closed by Escape and a
+toast. The other specs follow the journeys of each feature through the new
+navigation ([e2e tests](../tests/e2e-tests.md)). What a page decides is tested
+without Next, in the unit and integration suites of its `src/server/**` module
+(`npm test`); see each feature handbook.
 
 ## References
 
-- Spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2.
+- Spec [style-guide](../spec/style-guide.md); [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2.
+- ADR [interface-redesign-vocabulary-and-design-system](../decisions/interface-redesign-vocabulary-and-design-system.md).
 - Handbooks: [authentication](authentication.md),
   [connections](connections.md), [authority](authority.md),
   [missions](missions.md), [requests](requests.md), [audit](audit.md),

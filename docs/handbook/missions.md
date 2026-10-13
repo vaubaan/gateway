@@ -124,8 +124,9 @@ form imports them directly and runs the same decision as the server. The
 
 The pages live in the `(app)` route group and take its layout: a web
 session gets the `AppShell` (`components/shell/AppShell.tsx`), where "Missions"
-is one entry of `APP_NAV` (an entry may carry a `Count` server component, used
-by "Requests": handbook [requests](requests.md)); a visitor with no session is
+is one of the seven entries of the side navigation (handbook
+[web-app](web-app.md), "The shell"); until the "Now" page lands, the home (`/`)
+shows this list too; a visitor with no session is
 sent to `/login`. The
 bootstrap operator has a session but is not a user: each page then renders
 `NeedsUser` (a mission always has an identified human behind it).
@@ -884,7 +885,7 @@ For the preset picked, the block shows, without leaving the page:
   need your approval · 5 not included", plus "N entries of the preset left out
   here" when some cannot apply), a button that spreads the lists out or hides
   them, and a link to the preset's entry in the provider reference
-  (`/providers/<id>#preset-<preset>`, new tab);
+  (`/reference/<id>#preset-<preset>`, new tab);
 - spread out: **Allowed without asking** and **Needs your approval, action by
   action** — each risk by its human label, its environment, its quota and its
   rate limit (`formatRate`: `240/min`) —, **Not included** (a count; the names
@@ -983,7 +984,7 @@ policy table of `/missions/<id>` and the provider reference:
 | `RiskExplain({ risk })`          | a compact row: label, environment, class, severity, markers; then the id and one line of reason; then the vector strip. `kindTag={false}` in a list already grouped by class                                                                                                                     |
 | `VectorStrip({ vector })`        | six cells, the axis in a few letters over its value (`vectorBadges`): neutral at the mildest value, a status tone above it; the value is always written, each cell names its axis in full (`aria-label`, `title`), and the whole profile shows on hover and, with `focusable`, on keyboard focus |
 | `VectorLegend()`                 | each axis with its short name, the question it answers, its scale (`VECTOR_AXES`)                                                                                                                                                                                                                |
-| `RiskIdLink({ riskId })`         | the id as a `Slug` of kind `risk`, linked to `/providers/<provider>#risk-<base id>` (`riskReferencePath`); `newTab` on pages holding unsaved input                                                                                                                                               |
+| `RiskIdLink({ riskId })`         | the id as a `Slug` of kind `risk`, linked to `/reference/<provider>#risk-<base id>` (`riskReferencePath`); `newTab` on pages holding unsaved input                                                                                                                                               |
 | `RiskClassTag({ kind })`         | `read`, `write` or `irreversible` as an outlined word: the class of a risk where the list is not grouped by it (mission page, Share dialog)                                                                                                                                                      |
 | `RiskReason`                     | the reason on one line that unfolds in place (a native `<details>`: a button to the keyboard, no script)                                                                                                                                                                                         |
 | `RiskMarkers`, `RiskMarkerNotes` | the `fallback` and `deprecated` badges, and the sentence that explains each                                                                                                                                                                                                                      |

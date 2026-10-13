@@ -142,7 +142,7 @@ describe('requests: exhaust and claim over HTTP', () => {
       claim.id,
     );
     expect(ada.status).toBe(303);
-    expect(ada.headers.get('location')).toBe(`/requests/${claim.id}`);
+    expect(ada.headers.get('location')).toBe(`/waiting/${claim.id}`);
 
     const decided = await root.requests.handlers.decide(
       decideRequest(claim.id, await sessionHeaders(root, seeded.ada), {
@@ -337,16 +337,16 @@ describe('requests: exhaust and claim over HTTP', () => {
 
       const invalid = await form({ resolution: 'extend-quota', amount: '9' });
       expect(invalid.status).toBe(303);
-      expect(invalid.headers.get('location')).toBe(`/requests/${claim.id}?problem=invalid-amount`);
+      expect(invalid.headers.get('location')).toBe(`/waiting/${claim.id}?problem=invalid-amount`);
 
       const granted = await form({ resolution: 'extend-quota', amount: '1' });
       expect(granted.status).toBe(303);
-      expect(granted.headers.get('location')).toBe(`/requests/${claim.id}?decided=1`);
+      expect(granted.headers.get('location')).toBe(`/waiting/${claim.id}?decided=1`);
       expect((await call()).outcome).toBe('allowed');
       expect((await call()).outcome).toBe('refused');
 
       const late = await form({ resolution: 'refuse' });
-      expect(late.headers.get('location')).toBe(`/requests/${claim.id}?problem=request-not-open`);
+      expect(late.headers.get('location')).toBe(`/waiting/${claim.id}?problem=request-not-open`);
     });
   });
 

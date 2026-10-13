@@ -37,20 +37,20 @@ function referenceOf(id: string) {
 
 describe('links into the provider reference', () => {
   it('points a risk id at its catalog entry, whatever its environment', () => {
-    expect(riskReferencePath('github.read-code')).toBe('/providers/github#risk-github.read-code');
+    expect(riskReferencePath('github.read-code')).toBe('/reference/github#risk-github.read-code');
     expect(riskReferencePath('supabase[staging].bulk-row-write')).toBe(
-      '/providers/supabase#risk-supabase.bulk-row-write',
+      '/reference/supabase#risk-supabase.bulk-row-write',
     );
     expect(riskReferencePath('cloudflare-dns.read-zone')).toBe(
-      '/providers/cloudflare-dns#risk-cloudflare-dns.read-zone',
+      '/reference/cloudflare-dns#risk-cloudflare-dns.read-zone',
     );
     expect(riskReferencePath('not a risk id')).toBeNull();
   });
 
   it('builds the provider, preset and section paths', () => {
-    expect(providerPath('upstash-redis')).toBe('/providers/upstash-redis');
-    expect(presetReferencePath('github', 'developer')).toBe('/providers/github#preset-developer');
-    expect(sectionPath('github', 'presets')).toBe('/providers/github#presets');
+    expect(providerPath('upstash-redis')).toBe('/reference/upstash-redis');
+    expect(presetReferencePath('github', 'developer')).toBe('/reference/github#preset-developer');
+    expect(sectionPath('github', 'presets')).toBe('/reference/github#presets');
     expect(riskAnchor('github.read-code')).toBe('risk-github.read-code');
     expect(presetAnchor('developer')).toBe('preset-developer');
   });

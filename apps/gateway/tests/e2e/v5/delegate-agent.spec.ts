@@ -337,7 +337,7 @@ test('an agent obtains a delegation, prepares and issues a mission, and the user
   await context.close();
 });
 
-test('the navigation shows Delegations, and an empty page says how to authorize an agent', async ({
+test('connected apps are part of Settings, and an empty page says how to authorize an agent', async ({
   browser,
   request,
 }) => {
@@ -347,7 +347,14 @@ test('the navigation shows Delegations, and an empty page says how to authorize 
   await routeToInstance(context);
   const page = await context.newPage();
   await page.goto(`${PUBLIC_URL}/auth/login?return_to=/delegations`);
-  await expect(page.getByRole('navigation', { name: 'Main' })).toContainText('Delegations');
+  await expect(
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Settings' }),
+  ).toHaveAttribute('aria-current', 'page');
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Settings' })
+      .getByRole('link', { name: 'Connected apps' }),
+  ).toHaveAttribute('aria-current', 'page');
   await expect(page.getByText('You authorized no application.')).toBeVisible();
   await expect(page.locator('body')).toContainText(`${PUBLIC_URL}/mcp/manage`);
   await context.close();

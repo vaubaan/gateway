@@ -7,7 +7,7 @@ tracks:
   - apps/gateway/src/server/requests/
   - apps/gateway/src/app/r/
   - apps/gateway/src/app/api/requests/
-  - apps/gateway/src/app/(app)/requests/
+  - apps/gateway/src/app/(app)/waiting/
   - apps/gateway/src/components/shell/OpenRequestCount.tsx
   - apps/gateway/src/server/store/repositories/requests.ts
   - apps/gateway/src/server/store/repositories/approvals.ts
@@ -51,7 +51,7 @@ starts from that row.
 
 ```
 apps/gateway/src/server/requests/        host-agnostic, never imports `next`
-  url.ts              REQUEST_PATH_PREFIX (/r), INBOX_PATH (/requests), requestPath(), inboxRequestPath(), requestUrl(), requestUrlBuilder()
+  url.ts              REQUEST_PATH_PREFIX (/r), INBOX_PATH (/waiting), requestPath(), inboxRequestPath(), requestUrl(), requestUrlBuilder()
   state.ts            nextState(), effectiveState(), isDecidable(), isTerminal()                    (pure)
   claim.ts            ClaimDecision, ClaimSituation, claimOptions(), checkClaimDecision(),
                       parseClaimDecision(), formatUtc(), orphanedProblem()                          (pure, browser-safe)
@@ -67,10 +67,10 @@ apps/gateway/src/app/
   r/[id]/route.ts                        GET  /r/<id>            → handlers.open
   api/requests/route.ts                  GET  /api/requests      → handlers.inbox
   api/requests/[id]/decide/route.ts      POST /api/requests/<id>/decide → handlers.decide
-  (app)/requests/page.tsx                /requests       — the inbox
-  (app)/requests/[id]/page.tsx           /requests/<id>  — the creator's view and its actions (four for a claim, three for an approval request)
-  (app)/requests/requests.module.css
-apps/gateway/src/components/shell/OpenRequestCount.tsx   the count next to "Requests" in APP_NAV
+  (app)/waiting/page.tsx                /waiting       — the inbox
+  (app)/waiting/[id]/page.tsx           /waiting/<id>  — the creator's view and its actions (four for a claim, three for an approval request)
+  (app)/waiting/waiting.module.css
+apps/gateway/src/components/shell/OpenRequestCount.tsx   the count of "Waiting for you" in the side navigation
 ```
 
 The route files are one-line adapters; everything that decides is under
@@ -115,12 +115,12 @@ refused before the service is asked.
 | 2    | an `Authorization` header is present              | 403 JSON `wrong-credential-kind` (`presented`, `expected: human-session`) |
 | 3    | no web session                                    | 303 `/auth/login?return_to=%2Fr%2F<id>` (sign-in, then back here)         |
 | 4    | bootstrap session, or the user is not the creator | 403 page: "This request is addressed to its creator." and nothing else    |
-| 5    | the creator                                       | 303 `/requests/<id>`                                                      |
+| 5    | the creator                                       | 303 `/waiting/<id>`                                                       |
 
 The 403 and 429 pages are self-contained HTML built in `handlers.ts` (`page()`):
 the route answers with a real status code before any application shell
 exists, `noindex`, `no-store`. The sentence is `ADDRESSED_TO_CREATOR`; the
-page `/requests/<id>` shows the same one to a non-creator who types its
+page `/waiting/<id>` shows the same one to a non-creator who types its
 address.
 
 **Rate limit.** `RateLimiter.take('request-page:ip:<ip>',
@@ -379,21 +379,22 @@ events of the period (`CREDIT_EVENT_KINDS`). Each report line is
 the service. `inbox` and `open` are reads: bearer, then `guardSession` (the
 same session and role check, no origin). A JSON body gets JSON; a form post (the page's forms,
 `application/x-www-form-urlencoded` or `multipart/form-data`) gets a 303 back
-to `/requests/<id>` with `?decided=1` or `?problem=<code>`
+to `/waiting/<id>` with `?decided=1` or `?problem=<code>`
 (`DecideProblemCode`), except `forbidden`, which gets the same 403 page as
 `/r/<id>`. All answers are
 `Cache-Control: no-store`.
 
 ## Pages
 
-- **`/requests`** — the inbox: one row per open request addressed to me
+- **`/waiting`** — the inbox: one row per open request addressed to me
   (kind — with the tool for an approval request —, mission, risk label and
   id, asked, expires). Reachable from the
-  application bar without any forwarded URL. `APP_NAV` has the entry
-  `{ href: '/requests', label: 'Requests', Count: OpenRequestCount }`; an
-  entry's optional `Count` is a server component rendered after the label
+  side navigation without any forwarded URL: the entry "Waiting for you"
+  (`NAV.waiting` in `lib/vocabulary.ts`, `/waiting`) carries `OpenRequestCount`
+  (`COUNTS` in `components/shell/AppShell.tsx`); an entry's count is a server
+  component rendered at the end of the entry
   (`AppShell`), here a badge with `openCount()`, nothing at zero.
-- **`/requests/<id>`** — the creator's view, top to bottom: _What is asked_
+- **`/waiting/<id>`** — the creator's view, top to bottom: _What is asked_
   (mission and its state, risk, `quota · consumed · left` this period, period
   end, mission expiry, asked, expiry or outcome), _Your decision_ (one row per
   option: a plain `method="post"` form to `/api/requests/<id>/decide` with a
@@ -656,7 +657,7 @@ show `open until <period end>` from the same derivation.
 
 ### The page
 
-For an approval request `/requests/<id>` shows, top to bottom: _What is
+For an approval request `/waiting/<id>` shows, top to bottom: _What is
 asked_ (mission and its state, tool, **arguments** as pretty-printed JSON —
 or "erased when the request was decided; only their fingerprint remains",
 "closed" in place of "decided" for an expired request —,
@@ -666,7 +667,7 @@ outcome with what became of the approval), _Your decision_ (one plain
 counts against, this period_ (one row per touched risk: gate, quota,
 consumed, left), _Last session events_. No client component, no script.
 
-A form post answers 303 to `/requests/<id>?decided=1` or `?problem=<code>`.
+A form post answers 303 to `/waiting/<id>?decided=1` or `?problem=<code>`.
 The document the browser then loads is a fresh one: the arguments are not in
 it once the request is decided.
 

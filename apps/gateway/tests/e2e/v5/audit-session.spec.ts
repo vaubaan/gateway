@@ -66,11 +66,11 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
   await expect(requests.locator('tbody tr')).toHaveCount(2);
   await expect(requests.getByRole('link', { name: 'Claim' })).toHaveAttribute(
     'href',
-    `/requests/${day.claim_id}`,
+    `/waiting/${day.claim_id}`,
   );
   await expect(requests.getByRole('link', { name: 'Approval request' })).toHaveAttribute(
     'href',
-    `/requests/${day.approval_id}`,
+    `/waiting/${day.approval_id}`,
   );
 
   // Agent labels seen.
@@ -98,7 +98,7 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
   await expect(timeline.getByRole('link', { name: 'open claim' })).toHaveCount(2);
   await expect(timeline.getByRole('link', { name: 'open claim' }).first()).toHaveAttribute(
     'href',
-    `/requests/${day.claim_id}`,
+    `/waiting/${day.claim_id}`,
   );
   await expect(page.locator('body')).not.toContainText(ARGUMENT_MARKER);
   await snap(page, 'mission-session');
@@ -119,8 +119,8 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
 
   // ── The audit of this mission ─────────────────────────────────────────────
   await page.getByRole('link', { name: 'Audit of this mission' }).click();
-  await expect(page.getByRole('heading', { name: 'Audit', level: 1 })).toBeVisible();
-  await expect(page).toHaveURL(new RegExp(`/audit\\?mission=${day.mission_id}$`));
+  await expect(page.getByRole('heading', { name: 'Activity', level: 1 })).toBeVisible();
+  await expect(page).toHaveURL(new RegExp(`/activity\\?mission=${day.mission_id}$`));
   const entries = page.locator('table tbody tr');
   // Six calls and the issuance of the mission.
   await expect(entries).toHaveCount(7);
@@ -193,9 +193,9 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
 
   // The page is in the navigation, and "Clear" brings everything back.
   await page.getByRole('link', { name: 'Clear' }).click();
-  await expect(page).toHaveURL(/\/audit$/);
+  await expect(page).toHaveURL(/\/activity$/);
   await expect(
-    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Audit' }),
+    page.getByRole('navigation', { name: 'Main' }).getByRole('link', { name: 'Activity' }),
   ).toBeVisible();
   await expect(entries.first()).toBeVisible();
 });
@@ -206,7 +206,7 @@ test('the audit table shows every column at 1280 px', async ({ page, request }) 
   // on screen at this width.
   const day = await seedDay(request);
   await signIn(page);
-  await page.goto(`/audit?mission=${day.mission_id}`);
+  await page.goto(`/activity?mission=${day.mission_id}`);
   await expect(page.locator('table tbody tr').first()).toBeVisible();
   // Every column is on screen: the table does not scroll sideways at this width.
   const table = await page

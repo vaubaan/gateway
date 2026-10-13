@@ -10,7 +10,11 @@ import { currentPrincipal } from '@/lib/auth/session';
 export const dynamic = 'force-dynamic';
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
-  const { principal } = await currentPrincipal();
+  const { root, principal } = await currentPrincipal();
   if (!principal) redirect('/login');
-  return <AppShell principal={principal}>{children}</AppShell>;
+  return (
+    <AppShell principal={principal} instance={root.config.publicUrl.host}>
+      {children}
+    </AppShell>
+  );
 }

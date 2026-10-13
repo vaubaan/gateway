@@ -1,9 +1,48 @@
 .code {
-  font-family: var(--font-geist-mono);
-  font-size: 0.92em;
-  background: var(--surface-sunken);
-  border: 1px solid var(--border-subtle);
-  border-radius: var(--radius-xs);
-  padding: 1px 6px;
-  color: var(--text-foreground);
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: var(--fill);
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 0.93em;
+}
+
+.block {
+  position: relative;
+}
+.pre {
+  margin: 0;
+  padding: var(--space-3) 76px var(--space-3) 14px;
+  overflow: auto;
+  border-radius: var(--radius-lg);
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+  white-space: pre;
+}
+.pre code {
+  font-size: inherit;
+}
+.pre:focus-visible {
+  border-radius: var(--radius-lg);
+}
+.wrap {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.copy {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+}
+.tone_key {
+  color: var(--code-key);
+}
+.tone_string {
+  color: var(--code-string);
+}
+.tone_comment {
+  color: var(--code-dim);
 }

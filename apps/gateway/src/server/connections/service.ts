@@ -93,7 +93,15 @@ export const CONNECT_RATE_LIMIT = 10;
 export const CONNECT_RATE_WINDOW_MS = 60_000;
 /** A discovery that does not finish within this delay is reported as failed. */
 export const DISCOVERY_TIMEOUT_MS = 30_000;
-export const CONNECTIONS_PATH = '/connections';
+/** The pages of the accounts a person can use ("connections" in the spec and the store). */
+export const CONNECTIONS_PATH = '/accounts';
+/**
+ * Where a provider sends the browser back after an authorization. This path is
+ * registered at the provider (the callback URL of the company's GitHub App, the
+ * redirect URI of its OAuth apps): it is part of the protocol, so it kept its name
+ * when the pages moved to `/accounts`.
+ */
+export const CONNECT_CALLBACK_PATH = '/connections/callback';
 const INSTALLATION_ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
 const SSH_KEY_COMMENT = 'vaubaan-gateway';
 
@@ -278,7 +286,7 @@ export class ConnectionService {
   /** The URL the provider sends the browser back to — always on `public_url`. */
   callbackUrl(providerId: string): URL {
     return new URL(
-      `${CONNECTIONS_PATH}/callback/${encodeURIComponent(providerId)}`,
+      `${CONNECT_CALLBACK_PATH}/${encodeURIComponent(providerId)}`,
       this.deps.publicUrl,
     );
   }

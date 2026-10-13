@@ -18,12 +18,12 @@
 }
 
 .muted {
-  color: var(--text-muted);
+  color: var(--ink-3);
   font-size: var(--text-sm);
 }
 
 .mono {
-  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
 
@@ -49,14 +49,14 @@
   display: inline-flex;
   align-items: center;
   padding: 6px 12px;
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
   font-size: var(--text-sm);
-  color: var(--text-foreground);
-  background: var(--surface-base);
+  color: var(--ink);
+  background: var(--paper);
 }
 .linkButton:hover {
-  border-color: var(--border-strong);
+  border-color: var(--line-strong);
   text-decoration: none;
 }
 
@@ -75,13 +75,13 @@
   gap: var(--space-2);
   height: 100%;
   padding: var(--space-4);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
-  background: var(--surface-base);
-  color: var(--text-foreground);
+  background: var(--paper);
+  color: var(--ink);
 }
 .providerCard:hover {
-  border-color: var(--border-strong);
+  border-color: var(--line-strong);
   text-decoration: none;
 }
 
@@ -90,7 +90,7 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-2);
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--weight-regular);
 }
 
 .dl {
@@ -100,7 +100,7 @@
   margin: 0;
 }
 .dl dt {
-  color: var(--text-muted);
+  color: var(--ink-3);
 }
 .dl dd {
   margin: 0;
@@ -110,10 +110,10 @@
 .keyBlock {
   display: block;
   padding: var(--space-3);
-  border: 1px solid var(--border-subtle);
+  border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  background: var(--surface-sunken);
-  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  background: var(--fill);
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
   user-select: all;
@@ -124,7 +124,7 @@
 }
 
 .ref {
-  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-family: var(--font-mono);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
 }
@@ -151,7 +151,7 @@
 }
 .settings summary {
   cursor: pointer;
-  color: var(--text-muted);
+  color: var(--ink-3);
   font-size: var(--text-sm);
 }
 
@@ -172,13 +172,13 @@
 .empty {
   padding: var(--space-8) var(--space-4);
   text-align: center;
-  color: var(--text-muted);
+  color: var(--ink-3);
 }
 
 /* A link into the provider reference: underlined, so it reads as a link at rest. */
 .refLink {
   text-decoration: underline;
-  text-decoration-color: var(--border-strong);
+  text-decoration-color: var(--line-strong);
   text-underline-offset: 3px;
 }
 /* Under a provider card of the picker: its reference, one click away. */
@@ -186,9 +186,9 @@
   display: inline-block;
   margin-top: var(--space-2);
   font-size: var(--text-sm);
-  color: var(--text-muted);
+  color: var(--ink-3);
   text-decoration: underline;
-  text-decoration-color: var(--border-strong);
+  text-decoration-color: var(--line-strong);
   text-underline-offset: 3px;
 }
 .providerList > li {
