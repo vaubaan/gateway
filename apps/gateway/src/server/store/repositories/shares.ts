@@ -58,6 +58,8 @@ interface ShareRow {
 
 const COLUMNS = `id, connection_id, target_kind, target_user_id, target_group_id, status,
   created_by_user_id, created_at, revoked_at`;
+/** Distinct compiled shapes of `listActiveForTargets` kept at once. */
+const MAX_ACTIVE_STATEMENTS = 64;
 
 export function createSharesRepo(ctx: RepoContext): SharesRepo {
   const { db } = ctx;
@@ -79,6 +81,23 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
   const revokeActive = db.prepare<[string, string]>(
     `UPDATE shares SET status = 'revoked', revoked_at = ? WHERE id = ? AND status = 'active'`,
   );
+
+  // The execution door asks `listActiveForTargets` on every call of a mission grounded
+  // in a share. Its SQL text only varies with the number of principals, so the compiled
+  // statement is kept per text: a handful of shapes, bounded, tied to this handle.
+  const activeStatements = new Map<string, ReturnType<typeof prepareActive>>();
+  function prepareActive(sql: string) {
+    return db.prepare<string[], ShareRow>(sql);
+  }
+  function activeForTargets(sql: string) {
+    let statement = activeStatements.get(sql);
+    if (!statement) {
+      if (activeStatements.size >= MAX_ACTIVE_STATEMENTS) activeStatements.clear();
+      statement = prepareActive(sql);
+      activeStatements.set(sql, statement);
+    }
+    return statement;
+  }
 
   function toRecord(row: ShareRow): ShareRecord {
     return {
@@ -153,11 +172,10 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
     async listActiveForTargets(principals, connectionId) {
       const pred = principalPredicate(principals, 'target_user_id', 'target_group_id');
       const onConnection = connectionId === undefined ? '' : ' AND connection_id = ?';
-      return db
-        .prepare<string[], ShareRow>(
-          `SELECT ${COLUMNS} FROM shares
-           WHERE status = 'active' AND ${pred.sql}${onConnection} ORDER BY created_at`,
-        )
+      return activeForTargets(
+        `SELECT ${COLUMNS} FROM shares
+         WHERE status = 'active' AND ${pred.sql}${onConnection} ORDER BY created_at`,
+      )
         .all(...pred.params, ...(connectionId === undefined ? [] : [connectionId]))
         .map(toRecord);
     },

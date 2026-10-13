@@ -125,6 +125,8 @@ describe('the Administration surface authorizes in every page and route', () => 
   it('finds the pages and the routes of the surface', () => {
     expect(PAGES.map((p) => p.name).sort()).toEqual(
       [
+        'connections/page.tsx',
+        'groups/page.tsx',
         'identity-provider/page.tsx',
         'page.tsx',
         'provider-apps/page.tsx',
@@ -187,7 +189,7 @@ describe('the Administration surface authorizes in every page and route', () => 
           headers,
           body: '',
         }),
-        { params: Promise.resolve({ provider: 'acme' }) },
+        { params: Promise.resolve({ provider: 'acme', id: 'no-such-id', userId: 'no-such-user' }) },
       );
     }
 

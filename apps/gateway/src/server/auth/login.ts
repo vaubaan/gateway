@@ -46,9 +46,12 @@ export async function currentAuthority(
   adminRule: AdminRule,
 ): Promise<Authority> {
   const groups = await store.groups.groupsOf(user.id);
+  // The admin rule names an IdP group: only a membership the IdP claimed counts. A local
+  // group, kept by an operator in Administration, never makes anyone an operator.
+  const claimed = groups.filter((g) => g.source === 'idp').map((g) => g.name);
   return {
     groups,
-    isOperator: isOperator({ email: user.email, groupNames: groups.map((g) => g.name) }, adminRule),
+    isOperator: isOperator({ email: user.email, groupNames: claimed }, adminRule),
   };
 }
 
