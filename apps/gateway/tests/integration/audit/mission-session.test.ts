@@ -54,6 +54,77 @@ describe('mission session view', () => {
     expect(await rig.root.audit.sessions.get(rig.seeded.ada, 'no-such-mission')).toBeNull();
   });
 
+  it('a member reads the whole session, attributed per holder, and is given no way to answer a request', async () => {
+    const { ada, bob } = rig.seeded;
+    const added = await rig.root.missions.team.addMember(ada, mission.id, { email: bob.email });
+    expect(added.ok).toBe(true);
+    const bobsToken = { token_id: 'bobs-token', token_kind: 'member', holder: bob.id } as const;
+    const ci = { token_id: 'ci-token', token_kind: 'named', holder: 'CI runner' } as const;
+    const pr = { tool: 'github__create_pull_request', risks: [PR] } as const;
+    await seedCall(rig, mission, { ...pr });
+    await seedCall(rig, mission, { ...pr, token: bobsToken, agentLabel: 'coder' });
+    // The quota of two is spent: the third is refused, and a claim waits for the creator.
+    const refused = await seedCall(rig, mission, { ...pr, token: ci });
+    expect(refused.result.outcome).toBe('refused');
+    // A call written before tokens had a holder.
+    await seedCall(rig, mission, { token: null });
+
+    const asAda = await view(ada);
+    const asBob = await view(bob);
+    expect(asAda.viewer_role).toBe('creator');
+    expect(asBob.viewer_role).toBe('member');
+    // The same session: counters, timeline, per-holder table.
+    expect(asBob.risks).toEqual(asAda.risks);
+    expect(asBob.events).toEqual(asAda.events);
+    expect(asBob.holder_activity).toEqual(asAda.holder_activity);
+    expect(asBob.holder_activity.map((a) => [a.holder, a.allowed, a.refused])).toEqual([
+      [{ kind: 'member', key: ada.id, label: ada.email }, 1, 0],
+      [{ kind: 'member', key: bob.id, label: bob.email }, 1, 0],
+      [{ kind: 'named', key: 'CI runner', label: 'CI runner' }, 0, 1],
+      // Not guessed: a call with no holder stays unattributed, listed last.
+      [null, 1, 0],
+    ]);
+    expect(
+      asBob.events
+        .filter((e) => e.kind.startsWith('call-'))
+        .map((e) => [e.kind, e.holder?.label ?? null, e.agent_label]),
+    ).toEqual([
+      ['call-allowed', null, null],
+      ['call-refused', 'CI runner', null],
+      ['call-allowed', bob.email, 'coder'],
+      ['call-allowed', ada.email, null],
+    ]);
+
+    // The request is the creator's: she gets the link, he sees that it waits.
+    expect(asAda.open_requests).toHaveLength(1);
+    expect(asAda.open_requests[0]?.path).toMatch(/^\/requests\//);
+    expect(asBob.open_requests).toEqual([{ ...asAda.open_requests[0], path: null }]);
+    // Arguments are shown to nobody.
+    expect(JSON.stringify(asBob)).not.toContain(ARGUMENT_MARKER);
+
+    // The timeline of one holder; a holder with no call lists nothing.
+    const of = async (holder: { kind: 'member' | 'named'; key: string }) =>
+      (await rig.root.audit.sessions.get(bob, mission.id, {
+        timeline: { kind: 'holder', holder },
+      }))!;
+    const ciOnly = await of({ kind: 'named', key: 'CI runner' });
+    expect(ciOnly.timeline_filter).toEqual({
+      kind: 'holder',
+      holder: { kind: 'named', key: 'CI runner' },
+    });
+    expect(ciOnly.events.map((e) => [e.kind, e.holder?.label])).toEqual([
+      ['call-refused', 'CI runner'],
+    ]);
+    expect((await of({ kind: 'member', key: bob.id })).events).toHaveLength(1);
+    expect((await of({ kind: 'member', key: 'nobody' })).events).toEqual([]);
+    // A name spelled like a member's id is another holder.
+    expect((await of({ kind: 'named', key: bob.id })).events).toEqual([]);
+
+    // Removed, the mission is gone for him again.
+    await rig.root.missions.team.removeMember(ada, mission.id, bob.id);
+    expect(await rig.root.audit.sessions.get(bob, mission.id)).toBeNull();
+  });
+
   it('before the first call: no session, a full budget, the gate of every risk', async () => {
     const v = await view();
     expect(v.session).toBeNull();
@@ -524,9 +595,18 @@ describe('mission session view', () => {
     await rig.root.missions.service.revoke(rig.seeded.ada, mission.id);
     v = await view();
     expect(lines(v.events[0])).toEqual([{ text: '1 token revoked', at: null, mono: false }]);
+    // The rotation names the new token, whose it is, and the one it replaced.
     expect(lines(v.events[1])).toEqual([
       { text: `token ${v.events[1]?.token_prefix}…`, at: null, mono: true },
+      { text: 'member ada@example.com', at: null, mono: false },
+      { text: `replaces ${v.events[1]?.replaced_prefix}…`, at: null, mono: true },
     ]);
+    expect(v.events[1]?.replaced_prefix).toMatch(/^[A-Za-z0-9]{8}$/);
+    expect(v.events[1]?.holder).toEqual({
+      kind: 'member',
+      key: rig.seeded.ada.id,
+      label: 'ada@example.com',
+    });
     expect(JSON.stringify(v.events)).not.toContain(ARGUMENT_MARKER);
   });
 
@@ -637,6 +717,7 @@ describe('eventView', () => {
       tool: 'github__merge_pull_request',
       refusal_code: null,
       agent_label: null,
+      holder: null,
       remaining: { [MERGE]: 1 },
       request_id: null,
       request_kind: null,
@@ -647,6 +728,7 @@ describe('eventView', () => {
       gate_open_until: null,
       tokens_revoked: null,
       token_prefix: null,
+      replaced_prefix: null,
       credits: null,
       dimension: null,
       expires_at: null,
@@ -699,6 +781,7 @@ describe('eventView', () => {
       tool: null,
       refusal_code: null,
       agent_label: null,
+      holder: null,
       remaining: null,
       request_id: null,
       request_kind: null,
@@ -709,6 +792,7 @@ describe('eventView', () => {
       gate_open_until: null,
       tokens_revoked: null,
       token_prefix: null,
+      replaced_prefix: null,
       credits: null,
       dimension: null,
       expires_at: null,

@@ -366,6 +366,18 @@ const connections = (root: GatewayRoot) => root.connections.service;
 const missions = (root: GatewayRoot) => root.missions.service;
 const providerApps = (root: GatewayRoot) => root.providerApps;
 const managementTools = (root: GatewayRoot) => root.management.tools;
+const team = (root: GatewayRoot) => root.missions.team;
+
+/** A mission of Alice with Bob as a member (he has generated no token yet). */
+async function sharedWithBob(rig: Rig): Promise<{ mission: MissionRecord; bob: UserRecord }> {
+  const mission = await rig.issue();
+  const bob = await rig.bob();
+  const added = await rig.root.missions.team.addMember(rig.alice.user, mission.id, {
+    email: bob.email,
+  });
+  if (!added.ok) throw new Error(`add refused: ${added.reason}`);
+  return { mission, bob };
+}
 
 /** Alice's delegation to a fresh client, as the management door hands it to its tools. */
 async function delegatedActor(rig: Rig): Promise<ManagementActor> {
@@ -536,8 +548,12 @@ const RULES: Readonly<Record<string, Rule>> = {
   'MissionService.preview': READ,
   'MissionService.draftFrom': READ,
   'MissionService.verifyToken': READ,
+  'MissionService.provenToken': READ,
   'MissionService.list': READ,
   'MissionService.get': READ,
+  'MissionService.access': READ,
+  'MissionService.stateOf': READ,
+  'MissionService.kitOf': READ,
   'MissionService.issue': {
     kind: 'mutation',
     target: missions,
@@ -589,6 +605,80 @@ const RULES: Readonly<Record<string, Rule>> = {
         'approval',
       ),
     writes: { act: 'gate-changed', object: 'mission', actor: 'alice' },
+  },
+
+  // ── missions: members and per-holder tokens ───────────────────────────────
+  'MissionTeamService.team': READ,
+  'UserNames.get': READ,
+  'UserNames.label': READ,
+  'MissionTeamService.addMember': {
+    kind: 'mutation',
+    target: team,
+    prepare: async (rig) => ({ mission: await rig.issue(), bob: await rig.bob() }),
+    drive: (rig, prepared: { mission: MissionRecord; bob: UserRecord }) =>
+      rig.root.missions.team.addMember(rig.alice.user, prepared.mission.id, {
+        email: prepared.bob.email,
+      }),
+    writes: { act: 'mission-member-added', object: 'mission', actor: 'alice' },
+  },
+  'MissionTeamService.removeMember': {
+    kind: 'mutation',
+    target: team,
+    prepare: (rig) => sharedWithBob(rig),
+    drive: (rig, prepared: { mission: MissionRecord; bob: UserRecord }) =>
+      rig.root.missions.team.removeMember(rig.alice.user, prepared.mission.id, prepared.bob.id),
+    writes: { act: 'mission-member-removed', object: 'mission', actor: 'alice' },
+  },
+  'MissionTeamService.generateToken': {
+    kind: 'mutation',
+    target: team,
+    prepare: (rig) => rig.issue(),
+    // Alice holds the token her mission was born with: generating again is a rotation.
+    // (A member's first token is `mission-token-issued`, as a named token below.)
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.missions.team.generateToken(rig.alice.user, mission.id),
+    writes: { act: 'mission-rotated', object: 'mission', actor: 'alice' },
+  },
+  'MissionTeamService.createNamedToken': {
+    kind: 'mutation',
+    target: team,
+    prepare: (rig) => rig.issue(),
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.missions.team.createNamedToken(rig.alice.user, mission.id, 'CI runner'),
+    writes: { act: 'mission-token-issued', object: 'mission', actor: 'alice' },
+  },
+  'MissionTeamService.revokeToken': {
+    kind: 'mutation',
+    target: team,
+    prepare: async (rig) => {
+      const mission = await rig.issue();
+      const [token] = await rig.root.store.missions.listTokens(mission.id);
+      if (!token) throw new Error('expected the token the mission was born with');
+      return { mission, tokenId: token.id };
+    },
+    drive: (rig, prepared: { mission: MissionRecord; tokenId: string }) =>
+      rig.root.missions.team.revokeToken(rig.alice.user, prepared.mission.id, prepared.tokenId),
+    writes: { act: 'mission-token-revoked', object: 'mission', actor: 'alice' },
+  },
+  'MissionTeamService.revokeTokensOfDeactivated': {
+    kind: 'mutation',
+    target: team,
+    // Reached through the one act that calls it: an operator deactivating a member.
+    prepare: async (rig) => {
+      const prepared = await sharedWithBob(rig);
+      const generated = await rig.root.missions.team.generateToken(
+        prepared.bob,
+        prepared.mission.id,
+      );
+      if (!generated.ok) throw new Error(`generate refused: ${generated.reason}`);
+      return prepared;
+    },
+    drive: (rig, prepared: { bob: UserRecord }) =>
+      rig.root.users.service.deactivate(
+        { actorId: rig.operator.id, userId: rig.operator.id },
+        prepared.bob.id,
+      ),
+    writes: { act: 'mission-token-revoked', object: 'mission', actor: 'operator' },
   },
 
   // ── authority ─────────────────────────────────────────────────────────────
@@ -1025,6 +1115,8 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'mission-issued',
       'mission-issued',
       'mission-issued',
+      'mission-member-added',
+      'mission-member-removed',
       'mission-orphaned',
       'mission-orphaned',
       'mission-restored',
@@ -1032,6 +1124,10 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'mission-revoked',
       'mission-rotated',
       'mission-rotated',
+      'mission-rotated',
+      'mission-token-issued',
+      'mission-token-revoked',
+      'mission-token-revoked',
       'oauth-client-approved',
       'period-reset',
       'request-refused',

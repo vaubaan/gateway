@@ -12,14 +12,18 @@
  * gateway's writers build a typed `NewEvent` and readers go through `parseEventDetails`
  * (`@vaubaan/shared`); this module does not interpret details, with one exception: the
  * `agent_label` column of a call event is a copy of `details.agent_label`, made at
- * insert (`agentLabelColumn`) so the timeline of one label is an indexed read. The
- * details stay the source: the column is never returned in an `EventRecord`.
+ * insert (`agentLabelColumn`) so the timeline of one label is an indexed read; the
+ * `token_kind` / `token_holder` columns are the same kind of copy (`holderColumns`,
+ * migration 0010) for the timeline of one token holder. The details stay the source:
+ * the columns are never returned in an `EventRecord`.
  *
  * This file is the only writer of `sessions`, `session_counters` and `events`. The
  * requests repository reaches them through `createSessionPrimitives` (a granted claim
  * credits counters and leaves events inside its own transaction). The two files import
  * each other; each only calls the other's functions once the store is being built.
  */
+
+import { isMissionTokenKind, type MissionTokenKind } from '@vaubaan/shared';
 
 import { withImmediateTransaction } from '../db.ts';
 import { NotFoundError } from '../errors.ts';
@@ -137,10 +141,17 @@ export interface RecentEventsOptions {
   readonly before?: { readonly ts: Iso; readonly id: string };
   readonly limit: number;
   /**
-   * Only the call events (`CALL_EVENT_KINDS`) that carried this agent label; `null`:
-   * the calls that carried none. Same order and keyset as the unfiltered timeline.
+   * Only the call events (`CALL_EVENT_KINDS`) that carried this agent label (`null`:
+   * the calls that carried none), or only those made with a token of this holder.
+   * Same order and keyset as the unfiltered timeline.
    */
-  readonly calls?: { readonly agentLabel: string | null };
+  readonly calls?: { readonly agentLabel: string | null } | { readonly holder: EventHolder };
+}
+
+/** A token holder as the events keep it: the kind, and the user id or the token name. */
+export interface EventHolder {
+  readonly kind: MissionTokenKind;
+  readonly holder: string;
 }
 
 /** The event kinds that carry an agent label (`CallEventDetails`, `@vaubaan/shared`). */
@@ -156,6 +167,19 @@ export function agentLabelColumn(event: UntypedNewEvent): string | null {
   const details: { readonly agent_label?: unknown } = event.details ?? {};
   const label = details.agent_label;
   return typeof label === 'string' && label !== '' ? label : null;
+}
+
+/**
+ * The `token_kind` / `token_holder` columns of an event about to be stored: what its
+ * writer put in `details.token_kind` and `details.holder`, on a call event; `null`
+ * otherwise (and for a call written before tokens had a holder).
+ */
+export function holderColumns(event: UntypedNewEvent): EventHolder | null {
+  if (!(CALL_EVENT_KINDS as readonly string[]).includes(event.kind)) return null;
+  const details: { readonly token_kind?: unknown; readonly holder?: unknown } = event.details ?? {};
+  const { token_kind: kind, holder } = details;
+  if (!isMissionTokenKind(kind) || typeof holder !== 'string' || holder === '') return null;
+  return { kind, holder };
 }
 
 export interface ListEventsOptions {
@@ -247,8 +271,22 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     `SELECT ${SESSION_COLUMNS} FROM sessions WHERE mission_id = ?`,
   );
   const insertEvent = db.prepare<
-    [string, string, string, string, string | null, string | null, string | null, string | null]
-  >(`INSERT INTO events (${EVENT_COLUMNS}, agent_label) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    [
+      string,
+      string,
+      string,
+      string,
+      string | null,
+      string | null,
+      string | null,
+      string | null,
+      string | null,
+      string | null,
+    ]
+  >(
+    `INSERT INTO events (${EVENT_COLUMNS}, agent_label, token_kind, token_holder)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
   const eventById = db.prepare<[string], EventRow>(
     `SELECT ${EVENT_COLUMNS} FROM events WHERE id = ?`,
   );
@@ -271,6 +309,7 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
     },
     recordEvent(sessionId, event, now) {
       const id = ctx.newId();
+      const holder = holderColumns(event);
       insertEvent.run(
         id,
         sessionId,
@@ -280,6 +319,8 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
         event.actorUserId ?? null,
         toJson(event.details),
         agentLabelColumn(event),
+        holder?.kind ?? null,
+        holder?.holder ?? null,
       );
       return eventToRecord(requireRow(eventById.get(id), 'event', id));
     },
@@ -358,6 +399,15 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
     `${CALLS} AND agent_label IS NULL ${KEYSET} ${NEWEST_FIRST}`,
   );
 
+  // The calls made with a token of one holder (index `events_session_holder_ts`).
+  const callsOfHolder = db.prepare<[string, string, string, number], EventRow>(
+    `${CALLS} AND token_kind = ? AND token_holder = ? ${NEWEST_FIRST}`,
+  );
+  const callsOfHolderBefore = db.prepare<
+    [string, string, string, string, string, string, number],
+    EventRow
+  >(`${CALLS} AND token_kind = ? AND token_holder = ? ${KEYSET} ${NEWEST_FIRST}`);
+
   function getOrCreateSync(missionId: string, now: Iso): SessionRecord {
     // Checked first: with foreign keys on, the insert would otherwise surface a driver
     // error instead of the store's NotFoundError.
@@ -389,6 +439,12 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       return before
         ? eventsRecentBefore.all(sessionId, before.ts, before.ts, before.id, limit)
         : eventsRecent.all(sessionId, limit);
+    }
+    if ('holder' in calls) {
+      const { kind, holder } = calls.holder;
+      return before
+        ? callsOfHolderBefore.all(sessionId, kind, holder, before.ts, before.ts, before.id, limit)
+        : callsOfHolder.all(sessionId, kind, holder, limit);
     }
     const label = calls.agentLabel;
     if (label === null) {

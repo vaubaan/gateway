@@ -51,7 +51,11 @@ function contextOf(f: BudgetFixture, mission: BudgetMission): MissionContext {
               anchor_at: mission.period.anchor_at,
             },
     },
-    token: { id: 'tok_1', prefix: 'abcdefgh' },
+    token: {
+      id: 'tok_1',
+      prefix: 'abcdefgh',
+      holder: { kind: 'member', user_id: 'usr_1', display: 'ada@example.com' },
+    },
     connections: [
       {
         id: f.connectionId,

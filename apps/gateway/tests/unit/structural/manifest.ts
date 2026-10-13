@@ -61,7 +61,7 @@ export const INVARIANTS: readonly Invariant[] = [
   {
     id: 'telemetry-shape',
     statement:
-      'A telemetry report carries the six frozen fields and nothing else: no argument, no resource ref, no token, no label, no instance identifier — whatever a plugin returns or throws.',
+      'A telemetry report carries the six frozen fields and nothing else: no argument, no resource ref, no token, no token holder (member id, member email, token name), no label, no instance identifier — whatever a plugin returns or throws.',
     source: 'spec §9, §10; ADR telemetry-collector-shape',
     specBullet: 'a telemetry report contains none of the forbidden fields',
     proofs: [
@@ -259,7 +259,63 @@ export const INVARIANTS: readonly Invariant[] = [
         tests: [
           'the three credentials never cross over',
           'each credential opens its own door',
+          'refuses every kind of mission token alike: a member’s own and a named one open the execution door only',
           'requests are granted only in a human session',
+        ],
+      },
+    ],
+  },
+  {
+    id: 'calls-attributed-to-token-holder',
+    statement:
+      'Every call through the execution door is attributed to the holder of the token it presented — a member, or a named token — in the audit entry and in the session event, from the authenticated token and never from what the caller declares; every token of a mission draws from one budget; and a token whose member was removed or deactivated, or that was rotated or revoked on its own, is refused at the next call, cache hit or miss.',
+    source:
+      'spec §0 "Mission token", §3.2, §7.9 bis, §8; ADR mission-members-and-per-holder-tokens',
+    proofs: [
+      {
+        file: `${INTEGRATION}/execution/team-door.test.ts`,
+        tests: [
+          'two members and a named token share one counter and are attributed separately',
+          'the holder is the token’s: nothing a caller sends changes who called',
+          'refuses a removed member at the next call, warm cache included; the others keep working',
+          'refuses a member the moment their membership row says removed, even if their token row still reads active',
+          'refuses a deactivated member at once; reactivated, they generate a new token',
+          'refuses a member the moment their user row says removed, before anything else is written',
+        ],
+      },
+      {
+        file: `${SERVER}/execution/execution.test.ts`,
+        tests: [
+          'a cached proof never outlives the holder: removed or deactivated is refused on the next call, with no hash',
+          'keeps one proof per token: two holders of one mission never share a cache entry or a throttle window',
+        ],
+      },
+      {
+        file: 'packages/gateway-core/tests/unit/pipeline.test.ts',
+        tests: ['happy path: allowed, result returned, one audit entry with the §8 fields'],
+      },
+    ],
+  },
+  {
+    id: 'member-token-secret-stays-with-member',
+    statement:
+      'The secret of a member token is returned once, to the member who generated it, and to nobody else: no API answer read by the creator, no audit entry and no row of the store carries it (the store keeps a hash); a member reads and uses the mission and changes nothing of it, nor answers its requests.',
+    source: 'spec §0 "Mission member", "Mission token"; ADR mission-members-and-per-holder-tokens',
+    proofs: [
+      {
+        file: `${INTEGRATION}/missions/team.test.ts`,
+        tests: [
+          'no answer of any API read by the creator, and no row of the store, carries it',
+          'over HTTP: the secret is in the answer to the member who generated it, and in no answer to the creator',
+          'cannot %s: not-found, and nothing is written',
+          'cannot see or answer the requests of the mission: they are the creator’s',
+        ],
+      },
+      {
+        file: `${INTEGRATION}/store/missions.test.ts`,
+        tests: [
+          'stores a hash, never a secret: no column of a token row can give the bearer back',
+          'removing a member revokes their token in the same step, and only theirs',
         ],
       },
     ],

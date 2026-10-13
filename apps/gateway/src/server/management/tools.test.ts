@@ -233,6 +233,8 @@ describe('ManagementTools — every act is the delegating user’s', () => {
           delegationId,
         },
         state: { kind: 'active', period: { start: NOW.toISOString(), end: null }, remaining: {} },
+        role: 'creator',
+        creator: { id: 'user-ada', email: 'ada@example.com' },
         orphan: null,
         token: null,
         issuedVia:
@@ -298,6 +300,37 @@ describe('ManagementTools — every act is the delegating user’s', () => {
       expect(calls.some((call) => call.method === 'revoke')).toBe(true);
     });
 
+    it('a mission the user is only a member of is read, never changed: rotate and revoke answer not-found and reach no service', async () => {
+      // Shared with the user by its creator: `get` returns it, with `role: 'member'`.
+      const shared = (): MissionDetail => ({
+        ...activeIssuedBy(ACTOR.delegationId),
+        role: 'member',
+        creator: { id: 'user-grace', email: 'grace@example.com' },
+      });
+      const { tools, calls } = rig({ missions: { get: async () => shared() } });
+      for (const act of [
+        () => tools.rotateMissionToken(ACTOR, { mission_id: 'm1' }),
+        () => tools.revokeMission(ACTOR, { mission_id: 'm1' }),
+      ]) {
+        expect(await act()).toMatchObject({
+          ok: false,
+          refusal: { code: 'mission-not-found', mission_id: 'm1' },
+        });
+      }
+      expect(calls.some((call) => call.method === 'rotate' || call.method === 'revoke')).toBe(
+        false,
+      );
+      // It is listed, marked as such, with its creator.
+      expect(missionView(shared(), ACTOR, (prefix) => prefix)).toMatchObject({
+        role: 'member',
+        creator_email: 'grace@example.com',
+      });
+      expect(missionView(activeIssuedBy(null), ACTOR, (prefix) => prefix)).toMatchObject({
+        role: 'creator',
+        creator_email: 'ada@example.com',
+      });
+    });
+
     it('a listing says which missions this delegation issued', () => {
       const view = (delegationId: string | null) =>
         missionView(activeIssuedBy(delegationId), ACTOR, (prefix) => prefix).issued_via;
@@ -323,6 +356,8 @@ describe('ManagementTools — every act is the delegating user’s', () => {
         delegationId: ACTOR.delegationId,
       },
       state: { kind: 'active', period: { start: NOW.toISOString(), end: null }, remaining: {} },
+      role: 'creator',
+      creator: { id: 'user-ada', email: 'ada@example.com' },
       orphan: null,
       token: null,
       issuedVia: {
@@ -515,6 +550,8 @@ describe('views', () => {
           connections: [],
           policy: [],
         },
+        role: 'creator',
+        creator: { id: 'user-ada', email: 'ada@example.com' },
         state: { kind: 'orphaned' },
         orphan: { cause, connection_id: 'conn-acme', uncovered: ['acme.read'] },
         token: null,
@@ -630,6 +667,8 @@ describe('views', () => {
           { riskId: 'acme.read', quota: 5, rateLimit: 2, rateWindowSeconds: 60, gate: 'approval' },
         ],
       },
+      role: 'creator',
+      creator: { id: 'user-ada', email: 'ada@example.com' },
       state: { kind: 'orphaned' },
       orphan: { cause: 'connection-revoked', connection_id: 'conn-acme', uncovered: [] },
       token: { prefix: 'AbCd1234', createdAt: NOW.toISOString() },

@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
+import { AUTH_FAILURE_REASONS } from '@vaubaan/gateway-core';
 import { REFUSAL_CODES } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
@@ -10,6 +11,7 @@ import {
   buildBootstrapKit,
   MISSION_TOKEN_ENV,
   REFUSAL_GUIDANCE,
+  TOKEN_STOPPED_GUIDANCE,
   type BootstrapKitInput,
 } from './bootstrap-kit';
 
@@ -95,7 +97,9 @@ describe('buildBootstrapKit', () => {
     expect(text).toContain('### Sub-agents and agent labels');
     // The same configuration and the same token, never one per agent.
     expect(text).toContain('hands its sub-agents this MCP configuration as is');
-    expect(text).toContain('There is no token per agent');
+    // A token belongs to a holder, not to an agent.
+    expect(text).toContain('there is no token per agent');
+    expect(text).toContain('A token belongs to its holder');
     // Both carriers of the agent label the execution door reads, and which one wins.
     expect(text).toContain('`X-Vaubaan-Agent: <label>`');
     expect(text).toContain('`_meta.agent` wins');
@@ -118,6 +122,36 @@ describe('buildBootstrapKit', () => {
     );
     expect(kit.agent_instructions).toContain('Never work around a refusal');
     expect(kit.agent_instructions).toContain('give that URL to the human as is');
+  });
+
+  it('3 — says whose token it is, that the budget is one for every holder, and who answers requests', () => {
+    const text = kit.agent_instructions;
+    expect(text).toContain('### Whose token this is');
+    expect(text).toContain('This token belongs to one holder');
+    expect(text).toContain('`GET https://gateway.acme.example/mcp/catalog`');
+    expect(text).toContain('`token.holder`');
+    expect(text).toContain('`mission.creator`');
+    expect(text).toContain('The budget is one for all of them');
+    expect(text).toContain('answered by the mission creator alone');
+    // Read before the labels: the identity first, the declared refinement second.
+    expect(text.indexOf('### Whose token this is')).toBeLessThan(
+      text.indexOf('### Sub-agents and agent labels'),
+    );
+  });
+
+  it('3 — says what to do when the token itself stops working, for every reason the door states', () => {
+    const text = kit.agent_instructions;
+    expect(text).toContain('### When the token itself stops working');
+    expect(text).toContain('`error.data.reason`');
+    for (const reason of AUTH_FAILURE_REASONS) {
+      expect(text).toContain(`- \`${reason}\` — ${TOKEN_STOPPED_GUIDANCE[reason]}`);
+      // Never a way around: each line ends with a human.
+      expect(TOKEN_STOPPED_GUIDANCE[reason]).toMatch(/the human/);
+    }
+    // These are not refusal codes: the table of refusals is still the closed set.
+    for (const reason of AUTH_FAILURE_REASONS) {
+      expect((REFUSAL_CODES as readonly string[]).includes(reason)).toBe(false);
+    }
   });
 
   it('3 — names the management door, says the mission token does not open it and that it lifts no refusal', () => {
@@ -193,6 +227,15 @@ describe('/agent-bootstrap.md', () => {
     for (const character of AGENT_LABEL_PUNCTUATION) expect(page).toContain(`\`${character}\``);
     expect(page).toContain('attribution only');
     expect(page).toContain('reserves no share of the budget');
+  });
+
+  it('says that a token has one holder, that the budget is one, and what a stopped token means', () => {
+    expect(page).toContain('exactly one **holder**');
+    expect(page).toContain('## 4. One budget, however many agents or tokens');
+    expect(page).toContain('`token.holder`');
+    expect(page).toContain('`mission.creator`');
+    for (const reason of AUTH_FAILURE_REASONS) expect(page).toContain(`\`${reason}\``);
+    expect(page).toContain('Never look for another token to continue.');
   });
 
   it('refers to the token by its variable and names no instance', () => {

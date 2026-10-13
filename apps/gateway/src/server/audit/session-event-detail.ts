@@ -59,6 +59,11 @@ function nameOf(kind: RequestKind | null): string {
   return kind ?? 'request';
 }
 
+/** `member bob@acme.test`, `named token "CI runner"`. */
+function holderPhrase(holder: NonNullable<SessionEventView['holder']>): string {
+  return holder.kind === 'member' ? `member ${holder.label}` : `named token "${holder.label}"`;
+}
+
 function creditLines(event: SessionEventView): EventDetailLine[] {
   return Object.entries(event.credits ?? {}).map(([risk, given]) =>
     identifier(`${risk} +${given} given back`),
@@ -101,11 +106,22 @@ export function eventDetailLines(
       return event.dimension === 'expiry' && event.expires_at
         ? [line('expiry moved to', event.expires_at)]
         : creditLines(event);
-    case 'rotation':
-      return event.token_prefix ? [identifier(`token ${event.token_prefix}…`)] : [];
+    case 'rotation': {
+      if (!event.token_prefix) return [];
+      const lines = [identifier(`token ${event.token_prefix}…`)];
+      if (event.holder) lines.push(line(`${holderPhrase(event.holder)}`));
+      if (event.replaced_prefix) lines.push(identifier(`replaces ${event.replaced_prefix}…`));
+      return lines;
+    }
     case 'revocation': {
       const count = event.tokens_revoked;
       if (count === null) return [];
+      // One token revoked on its own names it; a mission revoked counts them.
+      if (event.token_prefix) {
+        const lines = [identifier(`token ${event.token_prefix}… revoked`)];
+        if (event.holder) lines.push(line(holderPhrase(event.holder)));
+        return lines;
+      }
       return [line(`${count} ${count === 1 ? 'token' : 'tokens'} revoked`)];
     }
   }

@@ -109,6 +109,38 @@ describe('describeEvent', () => {
     expect(describeEvent(event('revocation'))).toContain('revoked');
   });
 
+  it('tells a token issued from a token rotated, and one token revoked from the mission revoked', () => {
+    const at = (kind: string, details: Record<string, unknown>) =>
+      describeEvent({ ...event(kind), details });
+    // Stored before tokens had a holder: always a rotation.
+    expect(at('rotation', { token_prefix: 'AbCd1234' })).toBe('A mission token was rotated');
+    expect(
+      at('rotation', {
+        token_prefix: 'AbCd1234',
+        token_kind: 'member',
+        holder: 'usr-bob',
+        replaced_prefix: null,
+      }),
+    ).toBe('A mission token was issued');
+    expect(
+      at('rotation', {
+        token_prefix: 'EfGh5678',
+        token_kind: 'member',
+        holder: 'usr-bob',
+        replaced_prefix: 'AbCd1234',
+      }),
+    ).toBe('A mission token was rotated');
+    expect(at('revocation', { tokens_revoked: 3 })).toBe('The mission was revoked');
+    expect(
+      at('revocation', {
+        tokens_revoked: 1,
+        token_prefix: 'AbCd1234',
+        token_kind: 'named',
+        holder: 'CI runner',
+      }),
+    ).toBe('One token of the mission was revoked');
+  });
+
   it('shows an event with malformed details without detail, and does not throw', () => {
     // A renamed key (`toolName`), a wrong type, a state no writer produces.
     expect(describeEvent(event('call-allowed', { ...CALL, tool: undefined, toolName: 'x' }))).toBe(

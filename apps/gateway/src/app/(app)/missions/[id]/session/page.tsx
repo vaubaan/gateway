@@ -2,13 +2,18 @@
  * `/missions/<id>/session` — the mission's session (spec §4.2, §3.3): counters
  * per risk and per period with what is left, gate per risk (and until when
  * the creator opened it), open requests (by link), the calls of the current
- * period per agent label, and the event timeline — whole, or the calls of one
- * label (`?agent=<label>`, `?unlabelled=1`). What the Detail column says of an
- * event is `eventDetailLines` (`@/server/audit`).
+ * period per token holder and per agent label, and the event timeline — whole,
+ * the calls of one holder (`?holder=member:<user id>`, `?holder=named:<name>`)
+ * or the calls of one label (`?agent=<label>`, `?unlabelled=1`). What the Detail
+ * column says of an event is `eventDetailLines` (`@/server/audit`).
  *
- * An agent label is what a caller declared about itself (spec §0, §7.9): the
- * page says so wherever it shows one. The per-label counts are counts of
- * calls, not a budget.
+ * A token holder is authenticated: it is whose token the call presented (spec
+ * §8). An agent label is what a caller declared about itself (spec §0, §7.9):
+ * the page says so wherever it shows one. Both tables are counts of calls, not
+ * budgets: a mission has one budget, however many tokens or agents.
+ *
+ * The creator and the members of the mission read this page (spec §11.2 "What
+ * a member sees"); only the creator is given the links that answer a request.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -40,9 +45,12 @@ import {
   decodeCursor,
   encodeCursor,
   eventDetailLines,
+  holderParam,
   isSessionEventKind,
+  parseHolderParam,
   type MissionSessionView,
   type SessionEventView,
+  type SessionHolderView,
   type SessionTimelineFilter,
 } from '@/server/audit';
 
@@ -56,11 +64,18 @@ const EVENTS_CURSOR_PARAM = 'before';
 const AGENT_PARAM = 'agent';
 /** Timeline filter: the calls that carried no label. */
 const UNLABELLED_PARAM = 'unlabelled';
+/** Timeline filter: the calls made with a token of one holder. */
+const HOLDER_PARAM = 'holder';
 const MAX_LABEL_PARAM_LENGTH = 200;
 
 type SearchParams = Record<string, string | string[] | undefined>;
 
 function timelineFilterOf(params: SearchParams): SessionTimelineFilter {
+  const holderRaw = params[HOLDER_PARAM];
+  if (typeof holderRaw === 'string' && holderRaw.length <= MAX_LABEL_PARAM_LENGTH) {
+    const holder = parseHolderParam(holderRaw);
+    if (holder) return { kind: 'holder', holder };
+  }
   const agent = params[AGENT_PARAM];
   if (typeof agent === 'string') {
     const label = agent.trim();
@@ -74,6 +89,7 @@ function sessionQuery(filter: SessionTimelineFilter, cursor: string | null): str
   const params = new URLSearchParams();
   if (filter.kind === 'label') params.set(AGENT_PARAM, filter.label);
   if (filter.kind === 'unlabelled') params.set(UNLABELLED_PARAM, '1');
+  if (filter.kind === 'holder') params.set(HOLDER_PARAM, holderParam(filter.holder));
   if (cursor) params.set(EVENTS_CURSOR_PARAM, cursor);
   const text = params.toString();
   return text ? `?${text}` : '';
@@ -101,6 +117,14 @@ export default async function MissionSessionPage({ params, searchParams }: Props
   const base = `/missions/${encodeURIComponent(mission.id)}`;
   const sessionPath = `${base}/session`;
   const auditOfMission = `/audit?${AUDIT_PARAMS.mission}=${encodeURIComponent(mission.id)}`;
+  // The Audit page lists the entries of the missions one created: a member reads the session.
+  const isCreator = view.viewer_role === 'creator';
+  const filteredHolder =
+    filter.kind === 'holder'
+      ? (view.holder_activity.find(
+          (a) => a.holder?.kind === filter.holder.kind && a.holder.key === filter.holder.key,
+        )?.holder ?? { ...filter.holder, label: filter.holder.key })
+      : null;
 
   return (
     <Stack gap="var(--space-5)">
@@ -113,7 +137,7 @@ export default async function MissionSessionPage({ params, searchParams }: Props
             Session <StateBadge state={state} />
           </h1>
         </div>
-        <Link href={auditOfMission}>Audit of this mission</Link>
+        {isCreator && <Link href={auditOfMission}>Audit of this mission</Link>}
       </div>
 
       <Card>
@@ -256,8 +280,20 @@ export default async function MissionSessionPage({ params, searchParams }: Props
         <CardHeader>
           <CardTitle>Open requests</CardTitle>
         </CardHeader>
+        {!isCreator && view.open_requests.length > 0 && (
+          <CardBody>
+            <p className={styles.muted} data-testid="requests-are-the-creators">
+              Requests are answered by the creator of the mission alone. You see that they are
+              waiting; you cannot answer them.
+            </p>
+          </CardBody>
+        )}
         {view.open_requests.length === 0 ? (
-          <div className={styles.empty}>No request is waiting for you on this mission.</div>
+          <div className={styles.empty}>
+            {isCreator
+              ? 'No request is waiting for you on this mission.'
+              : 'No request is waiting for the creator on this mission.'}
+          </div>
         ) : (
           <Table>
             <Thead>
@@ -272,9 +308,15 @@ export default async function MissionSessionPage({ params, searchParams }: Props
               {view.open_requests.map((request) => (
                 <Tr key={request.id}>
                   <Td>
-                    <Link href={request.path}>
-                      {request.kind === 'claim' ? 'Claim' : 'Approval request'}
-                    </Link>
+                    {request.path ? (
+                      <Link href={request.path}>
+                        {request.kind === 'claim' ? 'Claim' : 'Approval request'}
+                      </Link>
+                    ) : request.kind === 'claim' ? (
+                      'Claim'
+                    ) : (
+                      'Approval request'
+                    )}
                   </Td>
                   <Td className={styles.mono}>{request.risk_id}</Td>
                   <Td>
@@ -285,6 +327,76 @@ export default async function MissionSessionPage({ params, searchParams }: Props
                   </Td>
                 </Tr>
               ))}
+            </Tbody>
+          </Table>
+        )}
+      </Card>
+
+      <Card data-testid="holder-activity">
+        <CardHeader>
+          <CardTitle>Calls per token holder — current period</CardTitle>
+        </CardHeader>
+        <CardBody>
+          <p className={styles.muted}>
+            For information only: this is not a budget. A holder is whose token the call presented —
+            a member of the mission, or a named token — and is authenticated by that token. Every
+            token of the mission draws from the same budget per risk, above.
+          </p>
+        </CardBody>
+        {state.kind !== 'active' ? (
+          <div className={styles.empty}>No current period: the mission is {state.kind}.</div>
+        ) : view.holder_activity.length === 0 ? (
+          <div className={styles.empty}>No call in this period yet.</div>
+        ) : (
+          <Table>
+            <Thead>
+              <Tr>
+                <Th>Token holder</Th>
+                <Th>Calls allowed</Th>
+                <Th>Calls refused</Th>
+                <Th>Last call</Th>
+                <Th>Show</Th>
+              </Tr>
+            </Thead>
+            <Tbody>
+              {view.holder_activity.map((activity) => {
+                const { holder } = activity;
+                return (
+                  <Tr key={holder ? holderParam(holder) : ''} data-holder={holder?.label ?? ''}>
+                    <Td>
+                      <HolderName holder={holder} />
+                    </Td>
+                    <Td>{activity.allowed}</Td>
+                    <Td>{activity.refused}</Td>
+                    <Td>
+                      <LocalDate ts={activity.last_seen_at} />
+                    </Td>
+                    <Td className={styles.nowrap}>
+                      {holder ? (
+                        <>
+                          <Link
+                            href={`${sessionPath}${sessionQuery({ kind: 'holder', holder }, null)}`}
+                          >
+                            in the timeline
+                          </Link>
+                          {isCreator && (
+                            <>
+                              {' · '}
+                              <Link
+                                href={`${auditOfMission}&${AUDIT_PARAMS.holder}=${encodeURIComponent(holderParam(holder))}`}
+                              >
+                                in the audit
+                              </Link>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        '—'
+                      )}
+                    </Td>
+                  </Tr>
+                );
+              })}
             </Tbody>
           </Table>
         )}
@@ -338,7 +450,7 @@ export default async function MissionSessionPage({ params, searchParams }: Props
                     </Td>
                     <Td className={styles.nowrap}>
                       <Link href={`${sessionPath}${sessionQuery(own, null)}`}>in the timeline</Link>
-                      {activity.label !== null && (
+                      {activity.label !== null && isCreator && (
                         <>
                           {' · '}
                           <Link
@@ -364,14 +476,18 @@ export default async function MissionSessionPage({ params, searchParams }: Props
         {filter.kind !== 'all' && (
           <CardBody>
             <p className={styles.muted} data-testid="timeline-filter">
-              {filter.kind === 'label' ? (
+              {filter.kind === 'holder' ? (
+                <>
+                  Calls made with a token of <HolderName holder={filteredHolder} /> only
+                </>
+              ) : filter.kind === 'label' ? (
                 <>
                   Calls labelled <Badge mono>{filter.label}</Badge> only
                 </>
               ) : (
                 'Calls without an agent label only'
               )}
-              ; requests, resets and other events carry no label and are not listed.{' '}
+              ; requests, resets and other events are not calls and are not listed.{' '}
               <Link href={sessionPath}>Show the whole timeline</Link>
             </p>
           </CardBody>
@@ -389,7 +505,8 @@ export default async function MissionSessionPage({ params, searchParams }: Props
                   <Th>Event</Th>
                   <Th>Tool</Th>
                   <Th>Risks → left</Th>
-                  <Th>Agent / actor</Th>
+                  <Th>Token holder</Th>
+                  <Th>Agent label / actor</Th>
                   <Th>Detail</Th>
                 </Tr>
               </Thead>
@@ -418,6 +535,20 @@ export default async function MissionSessionPage({ params, searchParams }: Props
         </span>
       </div>
     </Stack>
+  );
+}
+
+/** A member by their email, a named token by its name with its kind; `null`: not attributed. */
+function HolderName({ holder }: { holder: SessionHolderView | null }) {
+  if (!holder) {
+    return <span className={styles.muted}>not attributed (before tokens had a holder)</span>;
+  }
+  return holder.kind === 'member' ? (
+    <>{holder.label}</>
+  ) : (
+    <>
+      {holder.label} <Badge>named token</Badge>
+    </>
   );
 }
 
@@ -474,7 +605,7 @@ function EventRow({
           <div className={`${styles.mono} ${styles.nowrap}`}>{event.refusal_code}</div>
         )}
       </Td>
-      <Td className={`${styles.mono} ${styles.nowrap}`}>{event.tool ?? '—'}</Td>
+      <Td className={`${styles.mono} ${styles.tool}`}>{event.tool ?? '—'}</Td>
       <Td>
         {event.risk_ids.length === 0 ? (
           '—'
@@ -489,6 +620,9 @@ function EventRow({
           </div>
         )}
       </Td>
+      <Td className={styles.holder} data-testid="event-holder">
+        {event.holder ? <HolderName holder={event.holder} /> : '—'}
+      </Td>
       <Td>{event.agent_label ?? event.actor_email ?? '—'}</Td>
       <Td className={styles.detail} data-testid="event-detail">
         {eventDetailLines(event, { requestOpen: request !== undefined }).map((line) => (
@@ -502,7 +636,12 @@ function EventRow({
             )}
           </div>
         ))}
-        {request && <Link href={request.path}>open {request.kind}</Link>}
+        {request &&
+          (request.path ? (
+            <Link href={request.path}>open {request.kind}</Link>
+          ) : (
+            <span className={styles.muted}>{request.kind} waiting for the creator</span>
+          ))}
       </Td>
     </Tr>
   );

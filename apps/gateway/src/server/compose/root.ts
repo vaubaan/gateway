@@ -404,6 +404,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     store,
     membership: authority.membership,
     delegations: oauth.delegations,
+    memberTokens: missions.team,
     connections,
     authenticator: auth.authenticator,
     logger,

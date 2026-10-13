@@ -20,6 +20,7 @@
  * expired connection or a stale resource must be seen by the next call.
  */
 import type {
+  AuthenticatedToken,
   ConnectionOwner,
   MissionConnection,
   MissionContext,
@@ -29,12 +30,7 @@ import type {
 import { isStale, periodOf, policyEntryOf } from '../budget';
 import { connectionOwnerOf, connectionSummaryOf } from '../connections/mapping';
 import type { Store } from '../store';
-import type {
-  ConnectionRecord,
-  ConnectionResourceRecord,
-  MissionRecord,
-  MissionTokenRecord,
-} from '../store/types';
+import type { ConnectionRecord, ConnectionResourceRecord, MissionRecord } from '../store/types';
 
 export type MissionContextStore = Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
 
@@ -70,7 +66,8 @@ export { periodOf };
 export async function loadMissionContext(
   store: MissionContextStore,
   mission: MissionRecord,
-  token: Pick<MissionTokenRecord, 'id' | 'prefix'>,
+  /** The verified token and its holder (`MissionService.verifyToken`): who is calling. */
+  token: AuthenticatedToken,
 ): Promise<MissionContext> {
   const connections: MissionConnection[] = [];
   const resources: MissionResource[] = [];
@@ -102,7 +99,7 @@ export async function loadMissionContext(
       expires_at: mission.expiresAt,
       period: periodOf(mission),
     },
-    token: { id: token.id, prefix: token.prefix },
+    token: { id: token.id, prefix: token.prefix, holder: token.holder },
     connections,
     resources,
     policy: mission.policy.map(policyEntryOf),

@@ -1,6 +1,7 @@
 /**
  * Missions (feature P1.5): authority-bounded issuance, presets, resource
- * selection, token mint / rotate / revoke, bootstrap kit.
+ * selection, token mint / rotate / revoke, bootstrap kit; and the members and
+ * per-holder tokens of a mission (`team`).
  *
  * Server-only barrel (argon2 through `token.ts`). Client components import
  * the pure files directly — `model`, `catalog-view`, `preview`, `summary` —
@@ -22,12 +23,17 @@ import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import { createMissionHandlers, type MissionHandlers } from './handlers';
 import { MissionService } from './mission-service';
+import { createTeamHandlers, type TeamHandlers } from './team-handlers';
+import { MissionTeamService } from './team-service';
 import type { TokenMinter } from './token';
 
 export interface MissionsModule {
   readonly authority: AuthorityService;
   readonly service: MissionService;
-  readonly handlers: MissionHandlers;
+  /** Members and tokens of a mission (spec §7.9 bis). */
+  readonly team: MissionTeamService;
+  /** The handlers of `/api/missions/**`: the mission's own and its team's, one table. */
+  readonly handlers: MissionHandlers & TeamHandlers;
 }
 
 export interface MissionsModuleDeps {
@@ -67,12 +73,26 @@ export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
     mint: deps.mint,
     budget: deps.budget,
   });
-  const handlers = createMissionHandlers({
-    publicUrl: deps.config.publicUrl,
-    authenticator: deps.authenticator,
-    service,
+  const team = new MissionTeamService({
+    store: deps.store,
+    missions: service,
+    clock: deps.clock ?? systemClock,
+    logger: deps.logger.child({ component: 'mission-team' }),
+    mint: deps.mint,
   });
-  return { authority, service, handlers };
+  const handlers = {
+    ...createMissionHandlers({
+      publicUrl: deps.config.publicUrl,
+      authenticator: deps.authenticator,
+      service,
+    }),
+    ...createTeamHandlers({
+      publicUrl: deps.config.publicUrl,
+      authenticator: deps.authenticator,
+      team,
+    }),
+  };
+  return { authority, service, team, handlers };
 }
 
 export {
@@ -101,22 +121,41 @@ export { missionDraftSchema, parseMissionDraft, type ParsedDraft } from './draft
 export { createMissionHandlers, type MissionHandlers } from './handlers';
 export {
   MissionService,
+  tokenHolderOf,
   type IssueOptions,
   type IssueResult,
+  type MissionAccess,
   type MissionDetail,
   type MissionDetailConnection,
   type MissionDetailRisk,
   type MissionIssuedAudit,
   type MissionOrphanReason,
   type MissionOverview,
+  type MissionRole,
   type MissionServiceDeps,
   type RevealedToken,
   type RevokeResult,
   type RotateResult,
   type SetGateResult,
+  type TokenRetirement,
   type TokenVerification,
   type VerifiedToken,
 } from './mission-service';
+export { createTeamHandlers, type TeamHandlers } from './team-handlers';
+export {
+  MissionTeamService,
+  type AddMemberResult,
+  type IssuedTokenResult,
+  type MissionTeam,
+  type MissionTeamDeps,
+  type NamedTokenResult,
+  type RemoveMemberResult,
+  type RevokeTokenResult,
+  type TeamHolderView,
+  type TeamMemberView,
+  type TeamTokenView,
+} from './team-service';
+export { parseTokenName, TOKEN_NAME_MAX_LENGTH, TOKEN_NAME_RULE } from './token-name';
 export type * from './model';
 export { PREVIEW_ISSUE_CODES, PREVIEW_NOTICE_CODES, SEVERITY_LEVELS } from './model';
 export {

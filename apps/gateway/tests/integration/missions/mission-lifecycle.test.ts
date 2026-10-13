@@ -55,8 +55,14 @@ describe('missions: issue, rotate, revoke', () => {
     const verified = await missions.verifyToken(first.token.secret);
     if (verified.outcome !== 'verified') throw new Error('expected a verified token');
     expect(verified.mission.id).toBe(first.mission.id);
-    // The door gets the token's id and prefix, never the stored hash.
-    expect(Object.keys(verified.token).sort()).toEqual(['id', 'prefix']);
+    // The door gets the token's id, prefix and holder, never the stored hash.
+    expect(Object.keys(verified.token).sort()).toEqual(['holder', 'id', 'prefix']);
+    // A mission is born with its creator's own member token.
+    expect(verified.token.holder).toEqual({
+      kind: 'member',
+      user_id: seeded.ada.id,
+      display: seeded.ada.email,
+    });
     expect(verified.token.prefix).toBe(first.token.prefix);
     const ctx = await loadMissionContext(root.store, verified.mission, verified.token);
     expect(checkMissionActive(ctx, new Date(first.mission.createdAt))).toBeNull();
@@ -159,6 +165,7 @@ describe('missions: issue, rotate, revoke', () => {
     const ctx = await loadMissionContext(root.store, mission, {
       id: 'token',
       prefix: token.prefix,
+      holder: { kind: 'named', name: 'test' },
     });
     expect(ctx.resources).toEqual([]);
     // The page and the kit say what the door enforces.
@@ -191,6 +198,7 @@ describe('missions: issue, rotate, revoke', () => {
     const ctx = await loadMissionContext(root.store, mission, {
       id: 'token',
       prefix: token.prefix,
+      holder: { kind: 'named', name: 'test' },
     });
     const reachable = ctx.resources.map((r) => r.ref).sort();
     expect(reachable).toEqual(['acme/app', 'acme/infra']);

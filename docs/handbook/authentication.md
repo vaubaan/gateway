@@ -456,10 +456,20 @@ deactivate anyone. A refused act writes nothing.
    `user-deactivated`: every active delegation is revoked with its tokens,
    each with its own `delegation-revoked` entry in the operator's name
    (handbook [management-door](management-door.md)).
-4. One `user-deactivated` entry (object type `user`): `before` carries
+4. `MissionTeamService.revokeTokensOfDeactivated(actorId, user.id)`: the
+   tokens the user generated as a **member** of other people's missions are
+   revoked, each with a `mission-token-revoked` entry (reason
+   `holder-deactivated`) in the operator's name. The execution door refuses
+   them from step 1 already — it reads the holder's status on every call —
+   and this makes it durable: reactivated, the user is still a member and
+   generates a new token (handbook [missions](missions.md), "Members and
+   tokens"). Their tokens on missions they **created** are left alone: those
+   missions are orphaned by the derived rule and serve again, same tokens, on
+   reactivation.
+5. One `user-deactivated` entry (object type `user`): `before` carries
    `status: 'active'` and the email, `after` `status: 'removed'`,
-   `groups_left` and `delegations_revoked`.
-5. `watch.settle(actorId)`, in a `finally`: connections nobody owns any more
+   `groups_left`, `delegations_revoked` and `member_tokens_revoked`.
+6. `watch.settle(actorId)`, in a `finally`: connections nobody owns any more
    become `unowned`, and each mission of the user that read `active` gets a
    `mission-orphaned` entry (`creator-removed`) — handbook
    [authority](authority.md).

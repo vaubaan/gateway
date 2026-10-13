@@ -207,7 +207,8 @@ const result = await service.recordCall({
   tool,
   args, // fingerprinted here; sealed for an approval request when a touched risk is gated
   risks_touched,
-  agent_label, // event attribution only
+  agent_label, // event attribution only: what the caller declared
+  token, // { token_id, token_kind, holder }: whose token it was; event attribution only
   now,
 });
 ```
@@ -246,7 +247,8 @@ approval_ids }` (remaining computed from the committed counters) or `{ outcome: 
 session_id, period, fingerprint, refusal, request_id }`.
 
 Events (`events` table, `kind` = shared `SessionEventKind`): `call-allowed`
-with `{ tool, fingerprint, risk_ids, agent_label, remaining, approval_ids }`,
+with `{ tool, fingerprint, risk_ids, agent_label, token_id, token_kind, holder, remaining, approval_ids }`
+(the three token fields are absent on an event stored before tokens had a holder; `parseEventDetails` reads both),
 `call-refused` with `{ …, refusal_code, request_id }` and `riskId` set to the refusing
 risk, `request` with `{ request_id, request_kind, tool, fingerprint }`.
 
@@ -265,9 +267,17 @@ missions repository in the transaction that edits the gate). A `null` event is s
 with its kind and no detail, and gives back no credit; nothing throws. Stored keys are
 part of the data: renaming one needs a migration of the `events` rows.
 
-**One budget per mission, however many agents** (spec §3.2, §7.9). The session is the
-mission's and the counters are keyed by session, risk and period: nothing in a decision
-reads who the caller says it is. `agent_label` enters `recordCall` for one purpose, the
+**One budget per mission, however many agents or tokens** (spec §3.2, §7.9, §7.9 bis).
+The session is the mission's and the counters are keyed by session, risk and period:
+nothing in a decision reads who the caller says it is, nor whose token it presented. A
+mission has one or more tokens, each with one holder — a member, or a named token
+(handbook [missions](missions.md), "Members and tokens") — and `recordCall` takes the
+call's `token` (`TokenAttribution`, built by the budget stage from the authenticated
+`MissionContext`) for one purpose, like the label: the `call-allowed` / `call-refused`
+event carries `token_id`, `token_kind` and `holder`. Neither is a key nor an input of
+`decide`: two members and a named token on one mission spend the same credits, and
+adding a member or a token adds no budget
+(`tests/integration/execution/team-door.test.ts`). `agent_label` enters `recordCall` for one purpose, the
 `call-allowed` / `call-refused` event it is copied into, and is neither a key nor an input
 of `decide`. An orchestrator and its sub-agents, with different labels or with none, draw
 from the same counters and the same rate windows; a label cannot reserve, split or widen

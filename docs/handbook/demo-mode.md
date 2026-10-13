@@ -86,15 +86,15 @@ Created by `seed.ts` through the application's own code paths (see
 [How it is built](#how-it-is-built)), so every state is one the application
 can reach by itself.
 
-| For   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
-| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Alice | **Connections**: "Acme product repositories" (GitHub, four repositories); "Acme platform repositories" (GitHub, transferred to the local group "GitHub admins"); "Acme cache" (Upstash Redis, databases labelled `prod` and `staging`); "Acme transactional mail" (Resend, the staging domain labelled, the production domain and the segment left without a label: the mission form and the share dialog warn about it); "Acme DNS" (Cloudflare)                                                                                                             |
-|       | **A share** of "Acme product repositories" to Bob, restricted to five risks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
-|       | **Missions**: "Ship the billing page" (active, GitHub + Redis, a session of calls under the agent labels `planner` and `coder`, one refused call); "Nightly dependency audit" (quota spent, **open claim**); "Release 2.4 hotfix" (the `release-manager` preset, **open approval request** for a merge, with its arguments); "Migration dry-run (finished)" (expired); "Spike: move the status page DNS" (revoked); "Fix the flaky checkout test" (issued by the delegated client "Claude Code (demo)"); "Tour: a tiny quota to exhaust" (fresh, three reads) |
-|       | **A delegation** to "Claude Code (demo)", a client registered through dynamic registration                                                                                                                                                                                                                                                                                                                                                                                                                                                                    |
-| Bob   | "Review the docs pull requests", issued within the share, with two calls                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
-| Carol | "Acme billing" (Stripe, test and live), its test mode shared to Alice                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
-| Admin | local groups "GitHub admins" (Alice, Carol) and "Contractors" (Bob), next to the IdP group `engineering`; the GitHub App as provider app; telemetry off and locked by the configuration                                                                                                                                                                                                                                                                                                                                                                       |
+| For   | What                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Alice | **Connections**: "Acme product repositories" (GitHub, four repositories); "Acme platform repositories" (GitHub, transferred to the local group "GitHub admins"); "Acme cache" (Upstash Redis, databases labelled `prod` and `staging`); "Acme transactional mail" (Resend, the staging domain labelled, the production domain and the segment left without a label: the mission form and the share dialog warn about it); "Acme DNS" (Cloudflare)                                                                                                                                                                                                                                            |
+|       | **A share** of "Acme product repositories" to Bob, restricted to five risks                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+|       | **Missions**: "Ship the billing page" (active, GitHub + Redis, a session of calls under the agent labels `planner` and `coder`, one refused call; **a team**: Bob is a member and has generated his own token, and a named token "CI runner" exists, each with calls of its own); "Nightly dependency audit" (quota spent, **open claim**); "Release 2.4 hotfix" (the `release-manager` preset, **open approval request** for a merge, with its arguments); "Migration dry-run (finished)" (expired); "Spike: move the status page DNS" (revoked); "Fix the flaky checkout test" (issued by the delegated client "Claude Code (demo)"); "Tour: a tiny quota to exhaust" (fresh, three reads) |
+|       | **A delegation** to "Claude Code (demo)", a client registered through dynamic registration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Bob   | "Review the docs pull requests", issued within the share, with two calls; member of Alice's "Ship the billing page" ("Shared with me"), with his own token                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| Carol | "Acme billing" (Stripe, test and live), its test mode shared to Alice                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Admin | local groups "GitHub admins" (Alice, Carol) and "Contractors" (Bob), next to the IdP group `engineering`; the GitHub App as provider app; telemetry off and locked by the configuration                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
 Audit entries are the ones those acts and calls wrote.
 
@@ -138,12 +138,24 @@ Audit entries are the ones those acts and calls wrote.
 10. **Revoke that share** as Alice: Bob's mission reads `orphaned` and every
     call with its token is refused. **Share again**: the same mission comes
     back, same token, same counters.
-11. **Audit**: every call and administrative act, with filters (mission, agent
-    label, decision). On a mission, "Session" shows the calls of the current
-    period per agent label.
-12. **Admin**, as Alice: Identity provider, Provider apps, Groups, Connections
+11. **Work on a mission as a team.** Alice added Bob as a member of "Ship the
+    billing page" and created the named token "CI runner". Sign in as Bob:
+    Missions → "Shared with me" → that mission. He reads it and cannot change
+    it. In "Members and tokens", **Rotate my token**: his new token is shown
+    once, to him, with the bootstrap kit; Alice never sees it. Ask the gateway
+    whose token it is (`curl …/mcp/catalog`, printed by the tour): the answer
+    reads `"token": { "kind": "member", "holder": "bob@…" }`; the machine's
+    token (`$VAUBAAN_CI_TOKEN`) answers with its name. As Alice, the same
+    section lists Bob and "CI runner" with when each token was last used;
+    "Session" has "Calls per token holder" and each call names its holder.
+    Remove Bob: his token is refused at once (401, reason `holder-removed`),
+    the others keep working.
+12. **Audit**: every call and administrative act, with filters (mission, token
+    holder, agent label, decision). On a mission, "Session" shows the calls of
+    the current period per token holder and per agent label.
+13. **Admin**, as Alice: Identity provider, Provider apps, Groups, Connections
     without owner, OAuth clients, Telemetry.
-13. **Sign in as Carol**: the group-owned GitHub connection and her Stripe
+14. **Sign in as Carol**: the group-owned GitHub connection and her Stripe
     account.
 
 ## How it is built
@@ -253,6 +265,9 @@ services, and writes nothing to the store directly:
   `ConnectionService.start` / `complete` (discovery runs against the simulated
   providers), labels through `updateResource`, the transfer through
   `transfer`, shares through `ShareService.share`;
+- the team through `MissionTeamService`: `addMember` as Alice, `generateToken`
+  as Bob (his token is his: the seed uses it for his calls and prints it
+  nowhere), `createNamedToken` as Alice;
 - missions through `MissionService.issue` / `revoke`; the delegated one
   through the OAuth handlers (registration, consent answered with Alice's
   session, code exchange) and `issue_mission` on the management door;
@@ -262,8 +277,8 @@ services, and writes nothing to the store directly:
 - the expired mission is issued with an expiry two seconds ahead, and the seed
   ends after that instant.
 
-`SeedSummary` carries what the tour prints (three tokens, the two request
-URLs, the names).
+`SeedSummary` carries what the tour prints (three tokens of Alice's missions,
+the named token of the team mission, the two request URLs, the names).
 
 ## Safety
 

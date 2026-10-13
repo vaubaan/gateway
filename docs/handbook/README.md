@@ -33,15 +33,15 @@ Packaging and deployment (image, compose file, reverse proxy) are in
 
 ## Humans
 
-| Handbook                            | What it covers                                                                                                                                             |
-| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [authentication](authentication.md) | How a human gets a session: OIDC sign-in, the web session, the bootstrap token, and how "operator" is decided (the admin rule).                            |
-| [authority](authority.md)           | What a user may accept on a connection right now: owners, shares, local groups, and what follows when it changes (orphaned missions, unowned connections). |
-| [connections](connections.md)       | Connect flows through the company's own provider app, credential storage and refresh, resource discovery and curation, provider apps.                      |
-| [missions](missions.md)             | How a connection owner issues a mission (a per-risk budget and gate on selected resources): authority, presets, resources, tokens, the bootstrap kit.      |
-| [requests](requests.md)             | Claims and approval requests once a refusal dropped them into the creator's inbox: the request URL, who may open it, the decision, events, expiry.         |
-| [audit](audit.md)                   | How what happened is made visible: the Audit page's search, the Mission session page, the retention sweeper, administrative entries.                       |
-| [web-app](web-app.md)               | The frame of the human surface: route map, layouts, the application bar, session helpers, UI primitives.                                                   |
+| Handbook                            | What it covers                                                                                                                                                               |
+| ----------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [authentication](authentication.md) | How a human gets a session: OIDC sign-in, the web session, the bootstrap token, and how "operator" is decided (the admin rule).                                              |
+| [authority](authority.md)           | What a user may accept on a connection right now: owners, shares, local groups, and what follows when it changes (orphaned missions, unowned connections).                   |
+| [connections](connections.md)       | Connect flows through the company's own provider app, credential storage and refresh, resource discovery and curation, provider apps.                                        |
+| [missions](missions.md)             | How a connection owner issues a mission (a per-risk budget and gate on selected resources): authority, presets, resources, members and per-holder tokens, the bootstrap kit. |
+| [requests](requests.md)             | Claims and approval requests once a refusal dropped them into the creator's inbox: the request URL, who may open it, the decision, events, expiry.                           |
+| [audit](audit.md)                   | How what happened is made visible: the Audit page's search, the Mission session page, the retention sweeper, administrative entries.                                         |
+| [web-app](web-app.md)               | The frame of the human surface: route map, layouts, the application bar, session helpers, UI primitives.                                                                     |
 
 ## Agents
 

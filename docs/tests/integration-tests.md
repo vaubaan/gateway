@@ -88,270 +88,277 @@ this table says where each requirement lives, and what is not written yet.
 
 ## Coverage
 
-| Suite                                                                                                         |    Tests |
-| ------------------------------------------------------------------------------------------------------------- | -------: |
-| `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                      |        2 |
-| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                                  |       36 |
-| `apps/gateway/src/components/auth/principal.test.ts`                                                          |        2 |
-| `apps/gateway/src/server/audit/filters.test.ts`                                                               |       18 |
-| `apps/gateway/src/server/audit/session-event-detail.test.ts`                                                  |        8 |
-| `apps/gateway/src/server/auth/admin-rule.test.ts`                                                             |        5 |
-| `apps/gateway/src/server/auth/bootstrap.test.ts`                                                              |        3 |
-| `apps/gateway/src/server/auth/claims.test.ts`                                                                 |       16 |
-| `apps/gateway/src/server/auth/guard.test.ts`                                                                  |       10 |
-| `apps/gateway/src/server/auth/handlers.test.ts`                                                               |        9 |
-| `apps/gateway/src/server/auth/idp-settings.test.ts`                                                           |        8 |
-| `apps/gateway/src/server/auth/origin.test.ts`                                                                 |        5 |
-| `apps/gateway/src/server/auth/session-service.test.ts`                                                        |        9 |
-| `apps/gateway/src/server/authority/authority-service.test.ts`                                                 |       20 |
-| `apps/gateway/src/server/authority/mission-grounds.test.ts`                                                   |       27 |
-| `apps/gateway/src/server/compose/compose.test.ts`                                                             |       17 |
-| `apps/gateway/src/server/config/duration.test.ts`                                                             |        2 |
-| `apps/gateway/src/server/config/keys-doc.test.ts`                                                             |       34 |
-| `apps/gateway/src/server/config/load.test.ts`                                                                 |       54 |
-| `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                               |       12 |
-| `apps/gateway/src/server/connections/credentials.test.ts`                                                     |       15 |
-| `apps/gateway/src/server/connections/input.test.ts`                                                           |       23 |
-| `apps/gateway/src/server/connections/install-verification.test.ts`                                            |        5 |
-| `apps/gateway/src/server/connections/mapping.test.ts`                                                         |        3 |
-| `apps/gateway/src/server/connections/oauth2.test.ts`                                                          |       16 |
-| `apps/gateway/src/server/connections/pending.test.ts`                                                         |        7 |
-| `apps/gateway/src/server/connections/service.test.ts`                                                         |       33 |
-| `apps/gateway/src/server/connections/shipped-providers.test.ts`                                               |        5 |
-| `apps/gateway/src/server/crypto/aead.test.ts`                                                                 |       12 |
-| `apps/gateway/src/server/execution/execution.test.ts`                                                         |       24 |
-| `apps/gateway/src/server/groups/service.test.ts`                                                              |       15 |
-| `apps/gateway/src/server/http/client-ip.test.ts`                                                              |       11 |
-| `apps/gateway/src/server/http/healthz.test.ts`                                                                |        4 |
-| `apps/gateway/src/server/logging/logging.test.ts`                                                             |        6 |
-| `apps/gateway/src/server/management/door.test.ts`                                                             |        4 |
-| `apps/gateway/src/server/management/hard-deny.test.ts`                                                        |       16 |
-| `apps/gateway/src/server/management/output-schemas.test.ts`                                                   |       10 |
-| `apps/gateway/src/server/management/tools.test.ts`                                                            |       31 |
-| `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                      |       13 |
-| `apps/gateway/src/server/missions/catalog-view.test.ts`                                                       |       19 |
-| `apps/gateway/src/server/missions/orphan-reason.test.ts`                                                      |        4 |
-| `apps/gateway/src/server/missions/preview.test.ts`                                                            |       44 |
-| `apps/gateway/src/server/missions/summary.test.ts`                                                            |        8 |
-| `apps/gateway/src/server/missions/token.test.ts`                                                              |        8 |
-| `apps/gateway/src/server/oauth-as/authorization.test.ts`                                                      |       41 |
-| `apps/gateway/src/server/oauth-as/client-metadata-document.test.ts`                                           |       91 |
-| `apps/gateway/src/server/oauth-as/clients.test.ts`                                                            |       40 |
-| `apps/gateway/src/server/oauth-as/delegations.test.ts`                                                        |       26 |
-| `apps/gateway/src/server/oauth-as/endpoints.test.ts`                                                          |       15 |
-| `apps/gateway/src/server/oauth-as/pages.test.ts`                                                              |        9 |
-| `apps/gateway/src/server/oauth-as/pkce.test.ts`                                                               |       13 |
-| `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                                                       |       52 |
-| `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                            |        6 |
-| `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                      |       58 |
-| `apps/gateway/src/server/provider-apps/service.test.ts`                                                       |       15 |
-| `apps/gateway/src/server/providers/reference.test.ts`                                                         |       18 |
-| `apps/gateway/src/server/requests/approval.test.ts`                                                           |       28 |
-| `apps/gateway/src/server/requests/claim.test.ts`                                                              |       38 |
-| `apps/gateway/src/server/requests/client-ip.test.ts`                                                          |        2 |
-| `apps/gateway/src/server/requests/events.test.ts`                                                             |        6 |
-| `apps/gateway/src/server/requests/state.test.ts`                                                              |        9 |
-| `apps/gateway/src/server/requests/sweeper.test.ts`                                                            |        4 |
-| `apps/gateway/src/server/shares/errors.test.ts`                                                               |        4 |
-| `apps/gateway/src/server/shares/restriction.test.ts`                                                          |        8 |
-| `apps/gateway/src/server/shares/service.test.ts`                                                              |       24 |
-| `apps/gateway/src/server/telemetry/outcome.test.ts`                                                           |       30 |
-| `apps/gateway/src/server/telemetry/settings.test.ts`                                                          |        7 |
-| `apps/gateway/src/server/telemetry/stats.test.ts`                                                             |       11 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                                |       46 |
-| `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                    |       24 |
-| `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                             |        3 |
-| `apps/gateway/tests/integration/audit/mission-session.test.ts`                                                |       20 |
-| `apps/gateway/tests/integration/audit/retention.test.ts`                                                      |       10 |
-| `apps/gateway/tests/integration/auth/deactivate-user.test.ts`                                                 |        9 |
-| `apps/gateway/tests/integration/auth/oidc-login.test.ts`                                                      |       17 |
-| `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`                                         |        1 |
-| `apps/gateway/tests/integration/authority/handlers.test.ts`                                                   |       11 |
-| `apps/gateway/tests/integration/authority/ownership.test.ts`                                                  |       13 |
-| `apps/gateway/tests/integration/authority/rules-read-by-pages.test.ts`                                        |        7 |
-| `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`                                           |       19 |
-| `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`                                          |        6 |
-| `apps/gateway/tests/integration/budget/session-service.test.ts`                                               |       20 |
-| `apps/gateway/tests/integration/compose/boot.test.ts`                                                         |        4 |
-| `apps/gateway/tests/integration/connections/connect-flow.test.ts`                                             |        6 |
-| `apps/gateway/tests/integration/connections/reassign-and-settle.test.ts`                                      |        5 |
-| `apps/gateway/tests/integration/connections/repository-status.test.ts`                                        |        6 |
-| `apps/gateway/tests/integration/demo/demo-safety.test.ts`                                                     |       13 |
-| `apps/gateway/tests/integration/demo/demo-smoke.test.ts`                                                      |       15 |
-| `apps/gateway/tests/integration/execution/agent-label.test.ts`                                                |        6 |
-| `apps/gateway/tests/integration/execution/approval-door.test.ts`                                              |        7 |
-| `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                          |        4 |
-| `apps/gateway/tests/integration/execution/door-http.test.ts`                                                  |       21 |
-| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                                   |       23 |
-| `apps/gateway/tests/integration/execution/streaming.test.ts`                                                  |       13 |
-| `apps/gateway/tests/integration/management/hard-deny.test.ts`                                                 |        6 |
-| `apps/gateway/tests/integration/management/management-door.test.ts`                                           |       33 |
-| `apps/gateway/tests/integration/management/output-schemas.test.ts`                                            |        9 |
-| `apps/gateway/tests/integration/missions/gate.test.ts`                                                        |       18 |
-| `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                            |        8 |
-| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                           |       28 |
-| `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                       |       17 |
-| `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`                                                |       66 |
-| `apps/gateway/tests/integration/oauth-as/mcp-client-flow.test.ts`                                             |        4 |
-| `apps/gateway/tests/integration/oauth-as/routes.test.ts`                                                      |       16 |
-| `apps/gateway/tests/integration/requests/approval-access.test.ts`                                             |       29 |
-| `apps/gateway/tests/integration/requests/approval.test.ts`                                                    |       42 |
-| `apps/gateway/tests/integration/requests/request-handlers.test.ts`                                            |       14 |
-| `apps/gateway/tests/integration/requests/request-service.test.ts`                                             |       34 |
-| `apps/gateway/tests/integration/standalone-native-addons.test.ts`                                             |        3 |
-| `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`                                           |        3 |
-| `apps/gateway/tests/integration/store/approval-decisions.test.ts`                                             |       17 |
-| `apps/gateway/tests/integration/store/audit-guarded-append.test.ts`                                           |       10 |
-| `apps/gateway/tests/integration/store/audit.test.ts`                                                          |       15 |
-| `apps/gateway/tests/integration/store/config.test.ts`                                                         |        7 |
-| `apps/gateway/tests/integration/store/connections-shares.test.ts`                                             |       13 |
-| `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                                   |       14 |
-| `apps/gateway/tests/integration/store/delegations.test.ts`                                                    |       20 |
-| `apps/gateway/tests/integration/store/identities.test.ts`                                                     |       11 |
-| `apps/gateway/tests/integration/store/missions.test.ts`                                                       |        8 |
-| `apps/gateway/tests/integration/store/oauth-clients.test.ts`                                                  |       16 |
-| `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`                                          |       13 |
-| `apps/gateway/tests/integration/store/requests-approvals.test.ts`                                             |       10 |
-| `apps/gateway/tests/integration/store/schema.test.ts`                                                         |        6 |
-| `apps/gateway/tests/integration/store/sessions.test.ts`                                                       |       11 |
-| `apps/gateway/tests/integration/store/web-sessions.test.ts`                                                   |        8 |
-| `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                                  |       18 |
-| `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                             |       63 |
-| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                               |      121 |
-| `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                           |        3 |
-| `apps/gateway/tests/unit/app/field.test.tsx`                                                                  |        6 |
-| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                                  |      242 |
-| `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                        |       15 |
-| `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                         |        9 |
-| `apps/gateway/tests/unit/server/budget/mission-state.test.ts`                                                 |        7 |
-| `apps/gateway/tests/unit/server/budget/period.test.ts`                                                        |        8 |
-| `apps/gateway/tests/unit/server/connections/provider-app-handler.test.ts`                                     |        4 |
-| `apps/gateway/tests/unit/server/rate-limit/sliding-window.test.ts`                                            |        8 |
-| `apps/gateway/tests/unit/server/store/db.test.ts`                                                             |        2 |
-| `apps/gateway/tests/unit/server/store/ids.test.ts`                                                            |        6 |
-| `apps/gateway/tests/unit/server/store/migrate.test.ts`                                                        |        9 |
-| `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`                                        |       27 |
-| `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                               |        4 |
-| `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                            |       12 |
-| `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                         |       10 |
-| `apps/gateway/tests/unit/structural/index.test.ts`                                                            |       86 |
-| `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                             |        3 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                              |      309 |
-| `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                           |       10 |
-| `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                          |       12 |
-| `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                                  |       41 |
-| `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                       |        7 |
-| `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                           |        3 |
-| `apps/gateway/tests/unit/structural/version-single-source.test.ts`                                            |        4 |
-| `packages/gateway-core/tests/unit/audit.test.ts`                                                              |        2 |
-| `packages/gateway-core/tests/unit/authenticate.test.ts`                                                       |       11 |
-| `packages/gateway-core/tests/unit/cache.test.ts`                                                              |        7 |
-| `packages/gateway-core/tests/unit/errors.test.ts`                                                             |       29 |
-| `packages/gateway-core/tests/unit/fingerprint.test.ts`                                                        |       12 |
-| `packages/gateway-core/tests/unit/pipeline.test.ts`                                                           |       28 |
-| `packages/gateway-core/tests/unit/risk-gateway.test.ts`                                                       |        9 |
-| `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                       |       31 |
-| `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                         |        4 |
-| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                        |       26 |
-| `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                               |        3 |
-| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                             |       11 |
-| `packages/plugin-sdk/tests/unit/streaming.test.ts`                                                            |        9 |
-| `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                                                          |       14 |
-| `packages/policy-engine/tests/unit/budget.test.ts`                                                            |       25 |
-| `packages/policy-engine/tests/unit/qualify.test.ts`                                                           |       29 |
-| `packages/policy-engine/tests/unit/risk-evaluator.test.ts`                                                    |       20 |
-| `packages/policy-engine/tests/unit/risk-policy.test.ts`                                                       |        9 |
-| `packages/policy-engine/tests/unit/risk-runtime.test.ts`                                                      |       25 |
-| `packages/policy-engine/tests/unit/slice-dsl.test.ts`                                                         |       23 |
-| `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                     |       29 |
-| `packages/shared/src/api-key.test.ts`                                                                         |        9 |
-| `packages/shared/src/data-model.test.ts`                                                                      |        4 |
-| `packages/shared/src/mcp.test.ts`                                                                             |       10 |
-| `packages/shared/src/risk-id.test.ts`                                                                         |       20 |
-| `packages/shared/src/session-events.test.ts`                                                                  |       28 |
-| `packages/telemetry/src/client.test.ts`                                                                       |       24 |
-| `packages/telemetry/src/queue.test.ts`                                                                        |       12 |
-| `packages/telemetry/src/report.test.ts`                                                                       |       24 |
-| `plugins/_template/tests/unit/plugin.test.ts`                                                                 |       25 |
-| `plugins/cloudflare-dns/tests/unit/classify.test.ts`                                                          |       33 |
-| `plugins/cloudflare-dns/tests/unit/data-model.test.ts`                                                        |        9 |
-| `plugins/cloudflare-dns/tests/unit/identifiers.test.ts`                                                       |       59 |
-| `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                            |       42 |
-| `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts`                                                      |       38 |
-| `plugins/github/tests/unit/classify.test.ts`                                                                  |       69 |
-| `plugins/github/tests/unit/data-model.test.ts`                                                                |        1 |
-| `plugins/github/tests/unit/execute.test.ts`                                                                   |       25 |
-| `plugins/github/tests/unit/injection.test.ts`                                                                 |      415 |
-| `plugins/github/tests/unit/plugin.test.ts`                                                                    |       14 |
-| `plugins/github/tests/unit/risk-catalog.test.ts`                                                              |       56 |
-| `plugins/github/tests/unit/token-cache.test.ts`                                                               |        5 |
-| `plugins/gmail/tests/unit/classify.test.ts`                                                                   |      105 |
-| `plugins/gmail/tests/unit/data-model.test.ts`                                                                 |        5 |
-| `plugins/gmail/tests/unit/injection.test.ts`                                                                  |      190 |
-| `plugins/gmail/tests/unit/plugin.test.ts`                                                                     |       26 |
-| `plugins/gmail/tests/unit/q-parser.test.ts`                                                                   |       32 |
-| `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                               |       45 |
-| `plugins/railway/tests/unit/classify.test.ts`                                                                 |       22 |
-| `plugins/railway/tests/unit/data-model.test.ts`                                                               |        1 |
-| `plugins/railway/tests/unit/identifier-injection.test.ts`                                                     |      288 |
-| `plugins/railway/tests/unit/plugin.test.ts`                                                                   |       30 |
-| `plugins/railway/tests/unit/policy.test.ts`                                                                   |       39 |
-| `plugins/railway/tests/unit/risk-catalog.test.ts`                                                             |       19 |
-| `plugins/resend/tests/unit/addresses.test.ts`                                                                 |       13 |
-| `plugins/resend/tests/unit/classify.test.ts`                                                                  |       64 |
-| `plugins/resend/tests/unit/data-model.test.ts`                                                                |        6 |
-| `plugins/resend/tests/unit/identifiers.test.ts`                                                               |       58 |
-| `plugins/resend/tests/unit/mission-evaluation.test.ts`                                                        |       15 |
-| `plugins/resend/tests/unit/plugin.test.ts`                                                                    |       43 |
-| `plugins/resend/tests/unit/risk-catalog.test.ts`                                                              |       33 |
-| `plugins/ssh/tests/unit/adversarial.test.ts`                                                                  |      181 |
-| `plugins/ssh/tests/unit/classify.test.ts`                                                                     |       90 |
-| `plugins/ssh/tests/unit/data-model.test.ts`                                                                   |        2 |
-| `plugins/ssh/tests/unit/host-key-pinning.test.ts`                                                             |       37 |
-| `plugins/ssh/tests/unit/injection.test.ts`                                                                    |       87 |
-| `plugins/ssh/tests/unit/plugin.test.ts`                                                                       |      299 |
-| `plugins/stripe/tests/unit/classify.test.ts`                                                                  |       48 |
-| `plugins/stripe/tests/unit/data-model.test.ts`                                                                |        8 |
-| `plugins/stripe/tests/unit/execute.test.ts`                                                                   |       23 |
-| `plugins/stripe/tests/unit/identifiers.test.ts`                                                               |       59 |
-| `plugins/stripe/tests/unit/plugin.test.ts`                                                                    |       31 |
-| `plugins/stripe/tests/unit/policy.test.ts`                                                                    |       30 |
-| `plugins/stripe/tests/unit/risk-catalog.test.ts`                                                              |       20 |
-| `plugins/supabase/tests/unit/classify.test.ts`                                                                |      109 |
-| `plugins/supabase/tests/unit/data-model.test.ts`                                                              |        1 |
-| `plugins/supabase/tests/unit/execute.test.ts`                                                                 |       35 |
-| `plugins/supabase/tests/unit/identifier-injection.test.ts`                                                    |     1337 |
-| `plugins/supabase/tests/unit/mission-evaluation.test.ts`                                                      |       34 |
-| `plugins/supabase/tests/unit/plugin.test.ts`                                                                  |       22 |
-| `plugins/supabase/tests/unit/risk-catalog.test.ts`                                                            |       44 |
-| `plugins/upstash-redis/tests/unit/classify.test.ts`                                                           |       30 |
-| `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                      |       88 |
-| `plugins/upstash-redis/tests/unit/data-model.test.ts`                                                         |        1 |
-| `plugins/upstash-redis/tests/unit/execute.test.ts`                                                            |       11 |
-| `plugins/upstash-redis/tests/unit/identifiers.test.ts`                                                        |       42 |
-| `plugins/upstash-redis/tests/unit/plugin.test.ts`                                                             |       26 |
-| `plugins/upstash-redis/tests/unit/policy.test.ts`                                                             |       24 |
-| `plugins/upstash-redis/tests/unit/risk-catalog.test.ts`                                                       |       49 |
-| `plugins/vercel/tests/unit/binding.test.ts`                                                                   |       50 |
-| `plugins/vercel/tests/unit/classify.test.ts`                                                                  |       43 |
-| `plugins/vercel/tests/unit/data-model.test.ts`                                                                |        1 |
-| `plugins/vercel/tests/unit/firewall.test.ts`                                                                  |       11 |
-| `plugins/vercel/tests/unit/identifier-injection.test.ts`                                                      |      315 |
-| `plugins/vercel/tests/unit/plugin.test.ts`                                                                    |       35 |
-| `plugins/vercel/tests/unit/risk-catalog.test.ts`                                                              |       55 |
-| `plugins/vercel/tests/unit/team-pin.test.ts`                                                                  |       99 |
-| `scripts/audit-gate.test.mjs`                                                                                 |       28 |
-| `scripts/release-lib.test.mjs`                                                                                |       50 |
-| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-13, without a build; 252 files; 8834 passed, 26 skipped) | **8860** |
+| Suite                                                                                                     |    Tests |
+| --------------------------------------------------------------------------------------------------------- | -------: |
+| `apps/gateway/src/app/(app)/missions/message-of.test.ts`                                                  |        2 |
+| `apps/gateway/src/app/(app)/missions/new/form-state.test.ts`                                              |       36 |
+| `apps/gateway/src/components/auth/principal.test.ts`                                                      |        2 |
+| `apps/gateway/src/server/audit/filters.test.ts`                                                           |       20 |
+| `apps/gateway/src/server/audit/session-event-detail.test.ts`                                              |       10 |
+| `apps/gateway/src/server/auth/admin-rule.test.ts`                                                         |        5 |
+| `apps/gateway/src/server/auth/bootstrap.test.ts`                                                          |        3 |
+| `apps/gateway/src/server/auth/claims.test.ts`                                                             |       16 |
+| `apps/gateway/src/server/auth/guard.test.ts`                                                              |       10 |
+| `apps/gateway/src/server/auth/handlers.test.ts`                                                           |        9 |
+| `apps/gateway/src/server/auth/idp-settings.test.ts`                                                       |        8 |
+| `apps/gateway/src/server/auth/origin.test.ts`                                                             |        5 |
+| `apps/gateway/src/server/auth/session-service.test.ts`                                                    |       11 |
+| `apps/gateway/src/server/authority/authority-service.test.ts`                                             |       20 |
+| `apps/gateway/src/server/authority/mission-grounds.test.ts`                                               |       27 |
+| `apps/gateway/src/server/compose/compose.test.ts`                                                         |       17 |
+| `apps/gateway/src/server/config/duration.test.ts`                                                         |        2 |
+| `apps/gateway/src/server/config/keys-doc.test.ts`                                                         |       34 |
+| `apps/gateway/src/server/config/load.test.ts`                                                             |       54 |
+| `apps/gateway/src/server/connections/codec-and-keypair.test.ts`                                           |       12 |
+| `apps/gateway/src/server/connections/credentials.test.ts`                                                 |       15 |
+| `apps/gateway/src/server/connections/input.test.ts`                                                       |       23 |
+| `apps/gateway/src/server/connections/install-verification.test.ts`                                        |        5 |
+| `apps/gateway/src/server/connections/mapping.test.ts`                                                     |        3 |
+| `apps/gateway/src/server/connections/oauth2.test.ts`                                                      |       16 |
+| `apps/gateway/src/server/connections/pending.test.ts`                                                     |        7 |
+| `apps/gateway/src/server/connections/service.test.ts`                                                     |       33 |
+| `apps/gateway/src/server/connections/shipped-providers.test.ts`                                           |        5 |
+| `apps/gateway/src/server/crypto/aead.test.ts`                                                             |       12 |
+| `apps/gateway/src/server/execution/execution.test.ts`                                                     |       26 |
+| `apps/gateway/src/server/groups/service.test.ts`                                                          |       15 |
+| `apps/gateway/src/server/http/client-ip.test.ts`                                                          |       11 |
+| `apps/gateway/src/server/http/healthz.test.ts`                                                            |        4 |
+| `apps/gateway/src/server/logging/logging.test.ts`                                                         |        6 |
+| `apps/gateway/src/server/management/door.test.ts`                                                         |        4 |
+| `apps/gateway/src/server/management/hard-deny.test.ts`                                                    |       16 |
+| `apps/gateway/src/server/management/output-schemas.test.ts`                                               |       10 |
+| `apps/gateway/src/server/management/tools.test.ts`                                                        |       32 |
+| `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                                                  |       16 |
+| `apps/gateway/src/server/missions/catalog-view.test.ts`                                                   |       19 |
+| `apps/gateway/src/server/missions/orphan-reason.test.ts`                                                  |        4 |
+| `apps/gateway/src/server/missions/preview.test.ts`                                                        |       44 |
+| `apps/gateway/src/server/missions/summary.test.ts`                                                        |        8 |
+| `apps/gateway/src/server/missions/token-name.test.ts`                                                     |       23 |
+| `apps/gateway/src/server/missions/token.test.ts`                                                          |        8 |
+| `apps/gateway/src/server/oauth-as/authorization.test.ts`                                                  |       41 |
+| `apps/gateway/src/server/oauth-as/client-metadata-document.test.ts`                                       |       91 |
+| `apps/gateway/src/server/oauth-as/clients.test.ts`                                                        |       40 |
+| `apps/gateway/src/server/oauth-as/delegations.test.ts`                                                    |       26 |
+| `apps/gateway/src/server/oauth-as/endpoints.test.ts`                                                      |       15 |
+| `apps/gateway/src/server/oauth-as/pages.test.ts`                                                          |        9 |
+| `apps/gateway/src/server/oauth-as/pkce.test.ts`                                                           |       13 |
+| `apps/gateway/src/server/oauth-as/redirect-uri.test.ts`                                                   |       52 |
+| `apps/gateway/src/server/oauth-as/secrets.test.ts`                                                        |        6 |
+| `apps/gateway/src/server/oauth-as/token-service.test.ts`                                                  |       58 |
+| `apps/gateway/src/server/provider-apps/service.test.ts`                                                   |       15 |
+| `apps/gateway/src/server/providers/reference.test.ts`                                                     |       18 |
+| `apps/gateway/src/server/requests/approval.test.ts`                                                       |       28 |
+| `apps/gateway/src/server/requests/claim.test.ts`                                                          |       38 |
+| `apps/gateway/src/server/requests/client-ip.test.ts`                                                      |        2 |
+| `apps/gateway/src/server/requests/events.test.ts`                                                         |        7 |
+| `apps/gateway/src/server/requests/state.test.ts`                                                          |        9 |
+| `apps/gateway/src/server/requests/sweeper.test.ts`                                                        |        4 |
+| `apps/gateway/src/server/shares/errors.test.ts`                                                           |        4 |
+| `apps/gateway/src/server/shares/restriction.test.ts`                                                      |        8 |
+| `apps/gateway/src/server/shares/service.test.ts`                                                          |       24 |
+| `apps/gateway/src/server/telemetry/outcome.test.ts`                                                       |       30 |
+| `apps/gateway/src/server/telemetry/settings.test.ts`                                                      |        7 |
+| `apps/gateway/src/server/telemetry/stats.test.ts`                                                         |       11 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`                                            |       52 |
+| `apps/gateway/tests/integration/audit/audit-query.test.ts`                                                |       25 |
+| `apps/gateway/tests/integration/audit/events-agent-label.test.ts`                                         |        3 |
+| `apps/gateway/tests/integration/audit/mission-session.test.ts`                                            |       21 |
+| `apps/gateway/tests/integration/audit/retention.test.ts`                                                  |       10 |
+| `apps/gateway/tests/integration/auth/deactivate-user.test.ts`                                             |       10 |
+| `apps/gateway/tests/integration/auth/oidc-login.test.ts`                                                  |       17 |
+| `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`                                     |        1 |
+| `apps/gateway/tests/integration/authority/handlers.test.ts`                                               |       11 |
+| `apps/gateway/tests/integration/authority/ownership.test.ts`                                              |       13 |
+| `apps/gateway/tests/integration/authority/rules-read-by-pages.test.ts`                                    |        7 |
+| `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`                                       |       19 |
+| `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`                                      |        6 |
+| `apps/gateway/tests/integration/budget/session-service.test.ts`                                           |       20 |
+| `apps/gateway/tests/integration/compose/boot.test.ts`                                                     |        4 |
+| `apps/gateway/tests/integration/connections/connect-flow.test.ts`                                         |        6 |
+| `apps/gateway/tests/integration/connections/reassign-and-settle.test.ts`                                  |        5 |
+| `apps/gateway/tests/integration/connections/repository-status.test.ts`                                    |        6 |
+| `apps/gateway/tests/integration/demo/demo-safety.test.ts`                                                 |       13 |
+| `apps/gateway/tests/integration/demo/demo-smoke.test.ts`                                                  |       17 |
+| `apps/gateway/tests/integration/execution/agent-label.test.ts`                                            |        6 |
+| `apps/gateway/tests/integration/execution/approval-door.test.ts`                                          |        7 |
+| `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                                      |        4 |
+| `apps/gateway/tests/integration/execution/door-http.test.ts`                                              |       21 |
+| `apps/gateway/tests/integration/execution/pipeline.test.ts`                                               |       23 |
+| `apps/gateway/tests/integration/execution/streaming.test.ts`                                              |       13 |
+| `apps/gateway/tests/integration/execution/team-door.test.ts`                                              |       11 |
+| `apps/gateway/tests/integration/management/hard-deny.test.ts`                                             |        6 |
+| `apps/gateway/tests/integration/management/management-door.test.ts`                                       |       34 |
+| `apps/gateway/tests/integration/management/output-schemas.test.ts`                                        |        9 |
+| `apps/gateway/tests/integration/missions/gate.test.ts`                                                    |       18 |
+| `apps/gateway/tests/integration/missions/mission-handlers.test.ts`                                        |        8 |
+| `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`                                       |       28 |
+| `apps/gateway/tests/integration/missions/team.test.ts`                                                    |       27 |
+| `apps/gateway/tests/integration/oauth-as/credential-separation.test.ts`                                   |       18 |
+| `apps/gateway/tests/integration/oauth-as/http-surface.test.ts`                                            |       66 |
+| `apps/gateway/tests/integration/oauth-as/mcp-client-flow.test.ts`                                         |        4 |
+| `apps/gateway/tests/integration/oauth-as/routes.test.ts`                                                  |       16 |
+| `apps/gateway/tests/integration/requests/approval-access.test.ts`                                         |       29 |
+| `apps/gateway/tests/integration/requests/approval.test.ts`                                                |       42 |
+| `apps/gateway/tests/integration/requests/request-handlers.test.ts`                                        |       14 |
+| `apps/gateway/tests/integration/requests/request-service.test.ts`                                         |       34 |
+| `apps/gateway/tests/integration/standalone-native-addons.test.ts`                                         |        3 |
+| `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`                                       |        3 |
+| `apps/gateway/tests/integration/store/approval-decisions.test.ts`                                         |       17 |
+| `apps/gateway/tests/integration/store/audit-guarded-append.test.ts`                                       |       10 |
+| `apps/gateway/tests/integration/store/audit.test.ts`                                                      |       15 |
+| `apps/gateway/tests/integration/store/config.test.ts`                                                     |        7 |
+| `apps/gateway/tests/integration/store/connections-shares.test.ts`                                         |       13 |
+| `apps/gateway/tests/integration/store/corrupt-rows.test.ts`                                               |       14 |
+| `apps/gateway/tests/integration/store/delegations.test.ts`                                                |       20 |
+| `apps/gateway/tests/integration/store/identities.test.ts`                                                 |       11 |
+| `apps/gateway/tests/integration/store/missions.test.ts`                                                   |       15 |
+| `apps/gateway/tests/integration/store/oauth-clients.test.ts`                                              |       16 |
+| `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`                                      |       13 |
+| `apps/gateway/tests/integration/store/requests-approvals.test.ts`                                         |       10 |
+| `apps/gateway/tests/integration/store/schema.test.ts`                                                     |        6 |
+| `apps/gateway/tests/integration/store/sessions.test.ts`                                                   |       11 |
+| `apps/gateway/tests/integration/store/token-holders.test.ts`                                              |        4 |
+| `apps/gateway/tests/integration/store/web-sessions.test.ts`                                               |        8 |
+| `apps/gateway/tests/integration/telemetry/telemetry.test.ts`                                              |       18 |
+| `apps/gateway/tests/unit/app/admin-guard.test.ts`                                                         |       63 |
+| `apps/gateway/tests/unit/app/app-guard.test.ts`                                                           |      121 |
+| `apps/gateway/tests/unit/app/build-footer.test.tsx`                                                       |        3 |
+| `apps/gateway/tests/unit/app/field.test.tsx`                                                              |        6 |
+| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`                                              |      287 |
+| `apps/gateway/tests/unit/server/budget/decide.test.ts`                                                    |       15 |
+| `apps/gateway/tests/unit/server/budget/gates.test.ts`                                                     |        9 |
+| `apps/gateway/tests/unit/server/budget/mission-state.test.ts`                                             |        7 |
+| `apps/gateway/tests/unit/server/budget/period.test.ts`                                                    |        8 |
+| `apps/gateway/tests/unit/server/connections/provider-app-handler.test.ts`                                 |        4 |
+| `apps/gateway/tests/unit/server/rate-limit/sliding-window.test.ts`                                        |        8 |
+| `apps/gateway/tests/unit/server/store/db.test.ts`                                                         |        2 |
+| `apps/gateway/tests/unit/server/store/ids.test.ts`                                                        |        6 |
+| `apps/gateway/tests/unit/server/store/migrate.test.ts`                                                    |        9 |
+| `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`                                    |       27 |
+| `apps/gateway/tests/unit/structural/base-images-pinned.test.ts`                                           |        4 |
+| `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`                                        |       12 |
+| `apps/gateway/tests/unit/structural/example-config-providers.test.ts`                                     |       10 |
+| `apps/gateway/tests/unit/structural/index.test.ts`                                                        |       96 |
+| `apps/gateway/tests/unit/structural/no-arguments-in-logs.test.ts`                                         |        3 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`                                          |      326 |
+| `apps/gateway/tests/unit/structural/persisted-enumerations.test.ts`                                       |       10 |
+| `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`                                      |       12 |
+| `apps/gateway/tests/unit/structural/shipped-presets.test.ts`                                              |       41 |
+| `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`                                   |        7 |
+| `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`                                       |        3 |
+| `apps/gateway/tests/unit/structural/version-single-source.test.ts`                                        |        4 |
+| `packages/gateway-core/tests/unit/audit.test.ts`                                                          |        2 |
+| `packages/gateway-core/tests/unit/authenticate.test.ts`                                                   |       11 |
+| `packages/gateway-core/tests/unit/cache.test.ts`                                                          |        7 |
+| `packages/gateway-core/tests/unit/errors.test.ts`                                                         |       31 |
+| `packages/gateway-core/tests/unit/fingerprint.test.ts`                                                    |       12 |
+| `packages/gateway-core/tests/unit/pipeline.test.ts`                                                       |       30 |
+| `packages/gateway-core/tests/unit/risk-gateway.test.ts`                                                   |        9 |
+| `packages/gateway-core/tests/unit/token-holder.test.ts`                                                   |        3 |
+| `packages/plugin-sdk/tests/unit/catalog-loader.test.ts`                                                   |       31 |
+| `packages/plugin-sdk/tests/unit/catalog-path.test.ts`                                                     |        4 |
+| `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                                                    |       26 |
+| `packages/plugin-sdk/tests/unit/env-of.test.ts`                                                           |        3 |
+| `packages/plugin-sdk/tests/unit/registry.test.ts`                                                         |       11 |
+| `packages/plugin-sdk/tests/unit/streaming.test.ts`                                                        |        9 |
+| `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                                                      |       14 |
+| `packages/policy-engine/tests/unit/budget.test.ts`                                                        |       25 |
+| `packages/policy-engine/tests/unit/qualify.test.ts`                                                       |       29 |
+| `packages/policy-engine/tests/unit/risk-evaluator.test.ts`                                                |       20 |
+| `packages/policy-engine/tests/unit/risk-policy.test.ts`                                                   |        9 |
+| `packages/policy-engine/tests/unit/risk-runtime.test.ts`                                                  |       28 |
+| `packages/policy-engine/tests/unit/slice-dsl.test.ts`                                                     |       23 |
+| `packages/policy-engine/tests/unit/slice-matcher.test.ts`                                                 |       29 |
+| `packages/shared/src/api-key.test.ts`                                                                     |        9 |
+| `packages/shared/src/data-model.test.ts`                                                                  |        4 |
+| `packages/shared/src/mcp.test.ts`                                                                         |       10 |
+| `packages/shared/src/risk-id.test.ts`                                                                     |       20 |
+| `packages/shared/src/session-events.test.ts`                                                              |       30 |
+| `packages/telemetry/src/client.test.ts`                                                                   |       24 |
+| `packages/telemetry/src/queue.test.ts`                                                                    |       12 |
+| `packages/telemetry/src/report.test.ts`                                                                   |       24 |
+| `plugins/_template/tests/unit/plugin.test.ts`                                                             |       25 |
+| `plugins/cloudflare-dns/tests/unit/classify.test.ts`                                                      |       33 |
+| `plugins/cloudflare-dns/tests/unit/data-model.test.ts`                                                    |        9 |
+| `plugins/cloudflare-dns/tests/unit/identifiers.test.ts`                                                   |       59 |
+| `plugins/cloudflare-dns/tests/unit/plugin.test.ts`                                                        |       42 |
+| `plugins/cloudflare-dns/tests/unit/risk-catalog.test.ts`                                                  |       38 |
+| `plugins/github/tests/unit/classify.test.ts`                                                              |       69 |
+| `plugins/github/tests/unit/data-model.test.ts`                                                            |        1 |
+| `plugins/github/tests/unit/execute.test.ts`                                                               |       25 |
+| `plugins/github/tests/unit/injection.test.ts`                                                             |      415 |
+| `plugins/github/tests/unit/plugin.test.ts`                                                                |       14 |
+| `plugins/github/tests/unit/risk-catalog.test.ts`                                                          |       56 |
+| `plugins/github/tests/unit/token-cache.test.ts`                                                           |        5 |
+| `plugins/gmail/tests/unit/classify.test.ts`                                                               |      105 |
+| `plugins/gmail/tests/unit/data-model.test.ts`                                                             |        5 |
+| `plugins/gmail/tests/unit/injection.test.ts`                                                              |      190 |
+| `plugins/gmail/tests/unit/plugin.test.ts`                                                                 |       26 |
+| `plugins/gmail/tests/unit/q-parser.test.ts`                                                               |       32 |
+| `plugins/gmail/tests/unit/risk-catalog.test.ts`                                                           |       45 |
+| `plugins/railway/tests/unit/classify.test.ts`                                                             |       22 |
+| `plugins/railway/tests/unit/data-model.test.ts`                                                           |        1 |
+| `plugins/railway/tests/unit/identifier-injection.test.ts`                                                 |      288 |
+| `plugins/railway/tests/unit/plugin.test.ts`                                                               |       30 |
+| `plugins/railway/tests/unit/policy.test.ts`                                                               |       39 |
+| `plugins/railway/tests/unit/risk-catalog.test.ts`                                                         |       19 |
+| `plugins/resend/tests/unit/addresses.test.ts`                                                             |       13 |
+| `plugins/resend/tests/unit/classify.test.ts`                                                              |       64 |
+| `plugins/resend/tests/unit/data-model.test.ts`                                                            |        6 |
+| `plugins/resend/tests/unit/identifiers.test.ts`                                                           |       58 |
+| `plugins/resend/tests/unit/mission-evaluation.test.ts`                                                    |       15 |
+| `plugins/resend/tests/unit/plugin.test.ts`                                                                |       43 |
+| `plugins/resend/tests/unit/risk-catalog.test.ts`                                                          |       33 |
+| `plugins/ssh/tests/unit/adversarial.test.ts`                                                              |      181 |
+| `plugins/ssh/tests/unit/classify.test.ts`                                                                 |       90 |
+| `plugins/ssh/tests/unit/data-model.test.ts`                                                               |        2 |
+| `plugins/ssh/tests/unit/host-key-pinning.test.ts`                                                         |       37 |
+| `plugins/ssh/tests/unit/injection.test.ts`                                                                |       87 |
+| `plugins/ssh/tests/unit/plugin.test.ts`                                                                   |      299 |
+| `plugins/stripe/tests/unit/classify.test.ts`                                                              |       48 |
+| `plugins/stripe/tests/unit/data-model.test.ts`                                                            |        8 |
+| `plugins/stripe/tests/unit/execute.test.ts`                                                               |       23 |
+| `plugins/stripe/tests/unit/identifiers.test.ts`                                                           |       59 |
+| `plugins/stripe/tests/unit/plugin.test.ts`                                                                |       31 |
+| `plugins/stripe/tests/unit/policy.test.ts`                                                                |       30 |
+| `plugins/stripe/tests/unit/risk-catalog.test.ts`                                                          |       20 |
+| `plugins/supabase/tests/unit/classify.test.ts`                                                            |      109 |
+| `plugins/supabase/tests/unit/data-model.test.ts`                                                          |        1 |
+| `plugins/supabase/tests/unit/execute.test.ts`                                                             |       35 |
+| `plugins/supabase/tests/unit/identifier-injection.test.ts`                                                |     1337 |
+| `plugins/supabase/tests/unit/mission-evaluation.test.ts`                                                  |       34 |
+| `plugins/supabase/tests/unit/plugin.test.ts`                                                              |       22 |
+| `plugins/supabase/tests/unit/risk-catalog.test.ts`                                                        |       44 |
+| `plugins/upstash-redis/tests/unit/classify.test.ts`                                                       |       30 |
+| `plugins/upstash-redis/tests/unit/command-table.test.ts`                                                  |       88 |
+| `plugins/upstash-redis/tests/unit/data-model.test.ts`                                                     |        1 |
+| `plugins/upstash-redis/tests/unit/execute.test.ts`                                                        |       11 |
+| `plugins/upstash-redis/tests/unit/identifiers.test.ts`                                                    |       42 |
+| `plugins/upstash-redis/tests/unit/plugin.test.ts`                                                         |       26 |
+| `plugins/upstash-redis/tests/unit/policy.test.ts`                                                         |       24 |
+| `plugins/upstash-redis/tests/unit/risk-catalog.test.ts`                                                   |       49 |
+| `plugins/vercel/tests/unit/binding.test.ts`                                                               |       50 |
+| `plugins/vercel/tests/unit/classify.test.ts`                                                              |       43 |
+| `plugins/vercel/tests/unit/data-model.test.ts`                                                            |        1 |
+| `plugins/vercel/tests/unit/firewall.test.ts`                                                              |       11 |
+| `plugins/vercel/tests/unit/identifier-injection.test.ts`                                                  |      315 |
+| `plugins/vercel/tests/unit/plugin.test.ts`                                                                |       35 |
+| `plugins/vercel/tests/unit/risk-catalog.test.ts`                                                          |       55 |
+| `plugins/vercel/tests/unit/team-pin.test.ts`                                                              |       99 |
+| `scripts/audit-gate.test.mjs`                                                                             |       28 |
+| `scripts/release-lib.test.mjs`                                                                            |       50 |
+| **TOTAL** (`npx vitest run --reporter=json`, 2026-10-13, with a build; 257 files; 9023 passed, 1 skipped) | **9024** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 8834 passed and 26 were skipped in that
-run, made without a build. One of them is skipped whatever the build: the
-latency measurement of the authority
-re-check (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). The other 25 need `.next/standalone`: the six
-standalone tests (`standalone-native-addons` 3, `standalone-plugin-catalogs` 3), `demo-smoke` (15) and four tests of
+report's number of tests, of which 9023 passed and 1 was skipped in that
+run, made with a build (as `npm run ci` does). The one skipped whatever the
+build is the latency measurement of the authority re-check
+(`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without a build 27
+more are skipped, which need `.next/standalone`: the six standalone tests
+(`standalone-native-addons` 3, `standalone-plugin-catalogs` 3), `demo-smoke`
+(17) and four tests of
 `demo-safety`; `npm run ci` builds first, so they run there. Each plugin has one
 classifier suite, `classify.test.ts`, on its v5 entry point
 `classify(tool, args, resources)`, and its adapter scenarios in
@@ -950,7 +957,7 @@ enforced limits is pinned to what the code enforces today.
   exactly what the matcher keeps.
 - **`tests/integration/compose/boot.test.ts`** (4) — the production
   wiring against a temporary SQLite file: the database is created, the
-  migrations applied (`schema_version` 9, nine `schema_migrations` rows),
+  migrations applied (`schema_version` 10, ten `schema_migrations` rows),
   the store pings and `/healthz` reports `{ kind: 'sqlite', status: 'ok' }`,
   the boot log carries `store opened`; a store secret is sealed with the
   encryptor built from the configuration (blob not clear text, current
@@ -1183,7 +1190,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > §3.5, §6 ("encryption at rest", "authoritative, atomic counting",
 > "immutable audit"), §8, §10 (structural tests). Handbook [[store]]. ADR
 > [[embedded-store-sqlite-and-migrations]]. Every suite runs on an
-> ephemeral `:memory:` store with the real migrations (`0001`-`0009`), a
+> ephemeral `:memory:` store with the real migrations (`0001`-`0010`), a
 > `ManualClock`, a `StubEncryptor` and a five-id `SetCatalogIndex`
 > (`apps/gateway/src/server/store/testing.ts`); the two file-based cases
 > use a temp directory. Paths are relative to `apps/gateway/tests/`.
@@ -1198,7 +1205,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   immutability of an applied file (boot refused), full rollback of a
   failing file (nothing recorded, no table left), a database carrying a
   migration this image does not ship is refused, the nine shipped
-  migrations `0001`-`0009` in the default directory.
+  migrations `0001`-`0010` in the default directory.
 - **`unit/server/store/db.test.ts`** (2) — `isSqliteVersionAtLeast`
   against `MIN_SQLITE_VERSION`: major, minor and patch compared in order;
   a missing or malformed component counts as zero.
@@ -1256,14 +1263,35 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   wildcard risk ids refused by the catalog check** (`*`, `github.*`,
   unknown, empty) and **by the schema `CHECK`** when bypassed, empty
   restriction allowed, active-for-targets listing and revocation.
-- **`integration/store/missions.test.ts`** (8) — creation with
+- **`integration/store/missions.test.ts`** (15) — creation with
   connections and policy rows, resource selection per connection,
   inconsistent selections refused (`selected` without resources, `all`
   with resources, resource of another connection, no connection), policy
   validation (catalog, non-negative integer quota and rate, positive
   window, duplicates), atomic `replacePolicy`, status and expiry
-  transitions, token issuance and rotation (`active` → `rotated`,
-  revoke), schema-level single active token and unique prefix.
+  transitions. **Tokens, one holder each**: one active token per member, a
+  member's rotation retiring their own token only (the other member's and
+  the named one stay `active`); one token revoked on its own, idempotent,
+  its name free again; a name identifying one active named token per
+  mission; the schema's CHECKs (a second active token of one member, a
+  member token without a holder or with a name, a named token without a
+  name or with a holder, an unknown kind) and unique prefixes; **the columns
+  of a token row: a hash, no secret**; `markTokenUsed` at most once per
+  granularity. **Members**: added, listed, `listForMember` (never the
+  creator's own missions), the creator refused as a row; removing a member
+  revokes their token in the same step and only theirs, and adding them
+  again leaves it revoked; `revokeMemberTokensOf` revokes a user's tokens on
+  the missions they did not create and leaves their own missions' tokens.
+- **`integration/store/token-holders.test.ts`** (4) — **migration `0010`** on
+  a database an earlier image wrote: every token becomes a member token of
+  its mission's creator with the same id, prefix, hash, status and dates; no
+  member row is written; the audit entry written before keeps no holder; the
+  "one active token per mission" index is gone and the four new ones exist.
+  `holderColumns` (a call event's holder, nothing for a rotation, an unknown
+  kind or an empty holder); the timeline of one holder by keyset and
+  `tokenHolderActivity` (per holder and decision, the unattributed entry
+  apart, an empty span); the audit search by holder (a kind and its holders,
+  several members, never across kinds, an empty list matches nothing).
 - **`integration/store/sessions.test.ts`** (11) — session born on first
   call and never recreated; **N=50 concurrent `decideAndDecrement` on
   quota 1 → exactly one allow**, 49 refusals, one counter at 1; a call
@@ -1769,6 +1797,87 @@ connections and resources seeded through the repositories (36):
   operator; 400 with the fields named; 422 with the preview; preview of an
   agent's proposal (provider and refs resolved, nothing written); rotate
   200 / 404 / 409; revoke 404 for someone else's mission.
+
+### Mission members and per-holder tokens
+
+> Covers: spec §0 "Mission member", "Mission token"; §3.2 "one budget per
+> mission, however many agents or tokens"; §7.9 bis; §8 "the token used and
+> its holder"; §11.2 "Members and authority", "What a member sees". ADR
+> [[mission-members-and-per-holder-tokens]]. Handbooks [[missions]] ("Members
+> and tokens"), [[execution-door]] ("Token holders"), [[audit]], [[store]].
+
+- **`src/server/missions/token-name.test.ts`** (23) — the name of a named
+  token: what is taken (trimmed, inner spaces collapsed, the maximum length),
+  what is refused with the rule stated (empty, too long, leading punctuation,
+  an email, a slash, a colon, a line break, markup, non-ASCII, anything that
+  is not text), and never a name with an `@`.
+- **`tests/integration/missions/team.test.ts`** (27) — on the real root:
+  - **members**: the creator is a member by construction; adding a user makes
+    the mission appear in their list as `member` with the creator's email;
+    candidates are the active users not on the mission, for the creator only;
+    only an active user is added, once, and not to a revoked mission; **a
+    member needs no authority of their own** and the mission is orphaned for
+    every holder when the creator's authority goes; removing a member revokes
+    their token, takes the mission away from them and leaves the others, with
+    the entry carrying the member and the revoked prefix; a member added again
+    starts with no token;
+  - **tokens**: a member generates their own (shown once with the kit, the
+    page afterwards has the prefix only) and rotating retires theirs alone;
+    the creator's rotation leaves every other holder working; a named token
+    (name normalised, one working token per name, every bad name refused, the
+    name free again once revoked); one token revoked on its own by its holder
+    or by the creator, idempotent, with `by-holder` / `by-creator` in the
+    audit; revoking the mission revokes every token; a session event for each
+    token issued or revoked;
+  - **a member uses the mission as it is**: reads it with nothing editable;
+    cannot edit a gate, rotate the creator's token, revoke or duplicate the
+    mission, add or remove a member, create a named token (each `not-found`,
+    the store and the audit compared before and after); cannot take it as a
+    draft nor revoke a token that is not theirs, nor one of another mission;
+    **cannot see or answer its requests** (inbox, count, view, `decide`,
+    `decideClaim`), which the creator then answers;
+  - **the secret of a member token belongs to the member alone**: everything
+    the creator can read (detail, list, team, session, audit search) and every
+    column of every table hold the prefix and never the secret, and the row
+    is an argon2id hash; over HTTP the secret is in the answer to the member
+    and in no answer to the creator's own mutations;
+  - **handlers**: each refusal with its status and a sentence; no session,
+    another origin.
+- **`tests/integration/execution/team-door.test.ts`** (11) — over HTTP at the
+  door: **two members and a named token share one counter and are attributed
+  separately** (five calls by three holders spend the five credits, the sixth
+  is `budget-exhausted` for each; `token_kind` / `token_holder` / `token_id`
+  on every entry, refused ones included; the session's per-holder table and
+  the timeline of one holder; the audit search by email, by name and by the
+  exact form); the holder is the token's whatever headers or `_meta` the
+  caller sends; the catalog names the holder and the creator and carries no
+  secret; last used per token; **a removed member is refused** at the next
+  call with a warm cache (401 `holder-removed`, nothing counted, no call
+  entry), by the membership row alone, and added again needs a new token; **a
+  deactivated member is refused at once** (401 `holder-deactivated`, the
+  revocation audited in the operator's name), by the user row alone, and
+  generates a new token once reactivated; rotated vs revoked, each with its
+  reason, the others served; a revoked mission is `mission-inactive` for its
+  holders and tells a removed member nothing; a deactivated creator orphans
+  every holder and reactivation restores every token.
+- **`tests/integration/store/token-holders.test.ts`** (4) and
+  **`store/missions.test.ts`** — migration `0010` and the repository: see
+  "Scenarios — Store".
+- **`src/server/execution/execution.test.ts`** — the verified-token cache asks
+  the mission service on every hit: a cached proof never outlives a removed or
+  deactivated holder; one proof and one throttle window per token.
+- **`tests/unit/structural/telemetry-report-shape.test.ts`** — the calls of
+  the property are made with three holders, and the member's id, subject and
+  email, the token name, every token id, prefix and secret are among what must
+  never reach the collector.
+- Elsewhere: `audit/mission-session.test.ts` (a member reads the whole
+  session, with no link to answer a request), `audit/audit-query.test.ts` (the
+  holder filter), `management/management-door.test.ts` and
+  `server/management/tools.test.ts` (a member's mission is listed, marked, and
+  changed by no tool), `oauth-as/credential-separation.test.ts` (a member's
+  and a named token open the execution door only),
+  `audit/admin-mutations.test.ts` and `unit/server/auth/mutation-guard.test.ts`
+  (the six service mutations audited, the five routes guarded).
 
 Not covered here: the browser (Playwright, see
 [`e2e-tests.md`](./e2e-tests.md)); calls through the execution door with an
@@ -3025,7 +3134,7 @@ and `rotateSuccessorOf`; the refresh reuse window is in
 > integration test against a real provider, ever": every provider request of
 > the demo is answered from memory). `apps/gateway/tests/integration/demo/`.
 
-- **`demo-smoke.test.ts`** (15; needs a build) — **the command, as a human
+- **`demo-smoke.test.ts`** (17; needs a build) — **the command, as a human
   runs it**: spawns `tests/demo/main.ts` on a port the system picks
   (`DEMO_PORT=0`, `DEMO_SKIP_BUILD=1`) and waits for the printed tour; the
   tour carries the banner, the three accounts, the `ssh -L` line and the list
@@ -3037,7 +3146,13 @@ and `rotateSuccessorOf`; the refresh reuse window is in
   set); `/missions`, `/connections`, `/requests`, `/audit`, `/shares`,
   `/delegations`, `/admin/provider-apps` and `/admin/groups` answer 200 with
   one seeded item each; `tools/list` on `/mcp` with the mission token the
-  tour prints lists GitHub and Redis tools; `/mcp` without a token is 401;
+  tour prints lists GitHub and Redis tools; **the seeded team**: `/mcp/catalog`
+  with the named token the tour prints answers `kind: named`, `holder: CI
+runner` and Alice as creator, and with Alice's own token `kind: member`;
+  the Audit page filtered on each holder lists its calls; **Bob signs in**,
+  finds "Ship the billing page" under "Shared with me" with Alice's email,
+  and its page has "Shared with you", "Rotate my token" and the named token,
+  none of the creator's controls and no secret; `/mcp` without a token is 401;
   `SIGTERM` ends the process with code 0, deletes the data directory and
   closes the listener.
 - **`demo-safety.test.ts`** (13) — **the guards**: `assertDemoAllowed` passes

@@ -260,7 +260,9 @@ describe('authority is recomputed, never snapshotted', () => {
       'authority/mission-grounds.ts': 'is the derivation: lists the missions it checks',
       'authority/derived-missions.ts': 'derives: wraps the listing with `grounds.derive`',
       'missions/mission-service.ts':
-        'derives: `ownInspected` and `list` go through `grounds.inspect`; `verifyToken` hands the record to the door, which derives',
+        'derives: `access`, `ownInspected` and `list` go through `grounds.inspect`; `verifyToken` hands the record to the door, which derives',
+      'missions/token-issuer.ts':
+        'reads a token row by prefix only to know whether a drawn prefix is free; the mission that comes with it is never looked at',
       'requests/request-service.ts':
         'derives: `own` goes through `grounds.derive`; the inbox reads the name only',
       'execution/door.ts': 'derives: `grounds.inspect` on every request, before the pipeline',
@@ -271,7 +273,7 @@ describe('authority is recomputed, never snapshotted', () => {
         'lists through the reads the composition root hands it (`derivedMissionReads`)',
     };
     const LOADS =
-      /missions\s*\.\s*(?:getById|listForCreator|listForConnection|findTokenByPrefix)\b/;
+      /missions\s*\.\s*(?:getById|listForCreator|listForMember|listForConnection|findTokenByPrefix)\b/;
     const DERIVES = /grounds\s*\.\s*(?:inspect|derive)\b/;
 
     it('every reader of a mission record derives the state or does not read it', () => {
@@ -297,7 +299,11 @@ describe('authority is recomputed, never snapshotted', () => {
 
     it('the readers that do not derive really do not read the status', () => {
       const text = (path: string) => PRODUCTION.find((s) => s.path === path)?.text ?? '';
-      for (const path of ['audit/query-service.ts', 'budget/budget-stage.ts']) {
+      for (const path of [
+        'audit/query-service.ts',
+        'budget/budget-stage.ts',
+        'missions/token-issuer.ts',
+      ]) {
         // `record.status`, `mission.status`, `m.status`: none on a loaded record (the
         // pipeline context `ctx.mission.status` is the door's derived one).
         expect(text(path), path).not.toMatch(/(?<!\.)\b(?:record|mission|m)\.status\b/);

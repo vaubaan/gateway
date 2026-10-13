@@ -60,8 +60,10 @@ endpoints behind them, and the agent-facing MCP door from the same process.
   (`ShareForm`), `RevokeConnection`, `DangerConfirm` and `LocalDate`. The only
   `fetch` calls from the browser are the mission form (`POST /api/missions`,
   `POST /api/missions/preview`), the mission actions
-  (`POST /api/missions/<id>/rotate|revoke`) and the gate control
-  (`POST /api/missions/<id>/gate`).
+  (`POST /api/missions/<id>/rotate|revoke`), the gate control
+  (`POST /api/missions/<id>/gate`) and the "Members and tokens" section of the
+  mission page (`POST /api/missions/<id>/members`, `…/members/<userId>/remove`,
+  `…/tokens`, `…/tokens/mine`, `…/tokens/<tokenId>/revoke`).
 - **Everything that decides lives under `src/server/`**, host-agnostic (it
   never imports `next`). A `route.ts` is a one-line adapter:
   `(await getRoot()).<module>.handlers.<name>(request, …)`. Three routes have
@@ -95,7 +97,7 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 | `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`                                              | `(app)/connections/connect/`, `(app)/connections/callback/`                                                   | [connections](connections.md)         |
 | `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                                                     | `(app)/connections/[id]/**/route.ts`                                                                          | [connections](connections.md)         |
 | `/missions`, `/missions/new`, `/missions/<id>`                                                                              | `(app)/missions/page.tsx`, `(app)/missions/new/page.tsx`, `(app)/missions/[id]/page.tsx`                      | [missions](missions.md)               |
-| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`, `/gate`                              | `api/missions/**/route.ts`                                                                                    | [missions](missions.md)               |
+| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`, `/gate`, `/members/**`, `/tokens/**` | `api/missions/**/route.ts`                                                                                    | [missions](missions.md)               |
 | `GET /agent-bootstrap.md`                                                                                                   | `agent-bootstrap.md/route.ts`                                                                                 | [missions](missions.md)               |
 | `/missions/<id>/session`                                                                                                    | `(app)/missions/[id]/session/page.tsx`                                                                        | [audit](audit.md)                     |
 | `/audit`                                                                                                                    | `(app)/audit/page.tsx`                                                                                        | [audit](audit.md)                     |

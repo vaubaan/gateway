@@ -23,8 +23,12 @@ function stored(kind: string, details: EventRecord['details']): EventRecord {
   };
 }
 
-const linesOf = (kind: string, details: EventRecord['details'], requestOpen = false) =>
-  eventDetailLines(eventView(stored(kind, details), null), { requestOpen });
+const linesOf = (
+  kind: string,
+  details: EventRecord['details'],
+  requestOpen = false,
+  holder: Parameters<typeof eventView>[2] = null,
+) => eventDetailLines(eventView(stored(kind, details), null, holder), { requestOpen });
 
 const text = (value: string, at: string | null = null) => ({ text: value, at, mono: false });
 const mono = (value: string) => ({ text: value, at: null, mono: true });
@@ -132,6 +136,64 @@ describe('eventDetailLines', () => {
     expect(linesOf('rotation', { token_prefix: 'AbCd1234' })).toEqual([mono('token AbCd1234…')]);
     expect(linesOf('revocation', { tokens_revoked: 1 })).toEqual([text('1 token revoked')]);
     expect(linesOf('revocation', { tokens_revoked: 2 })).toEqual([text('2 tokens revoked')]);
+  });
+
+  it('a token issued to a holder names the holder and the token it replaced', () => {
+    const bob = { kind: 'member', key: 'usr-bob', label: 'bob@example.com' } as const;
+    const ci = { kind: 'named', key: 'CI runner', label: 'CI runner' } as const;
+    // A member's first token.
+    expect(
+      linesOf(
+        'rotation',
+        {
+          token_prefix: 'AbCd1234',
+          token_kind: 'member',
+          holder: 'usr-bob',
+          replaced_prefix: null,
+        },
+        false,
+        bob,
+      ),
+    ).toEqual([mono('token AbCd1234…'), text('member bob@example.com')]);
+    // A rotation: the previous token of the same holder is named.
+    expect(
+      linesOf(
+        'rotation',
+        {
+          token_prefix: 'EfGh5678',
+          token_kind: 'member',
+          holder: 'usr-bob',
+          replaced_prefix: 'AbCd1234',
+        },
+        false,
+        bob,
+      ),
+    ).toEqual([
+      mono('token EfGh5678…'),
+      text('member bob@example.com'),
+      mono('replaces AbCd1234…'),
+    ]);
+    expect(
+      linesOf(
+        'rotation',
+        { token_prefix: 'IjKl9012', token_kind: 'named', holder: 'CI runner' },
+        false,
+        ci,
+      ),
+    ).toEqual([mono('token IjKl9012…'), text('named token "CI runner"')]);
+  });
+
+  it('one token revoked on its own names it and its holder; a mission revoked counts them', () => {
+    const ci = { kind: 'named', key: 'CI runner', label: 'CI runner' } as const;
+    expect(
+      linesOf(
+        'revocation',
+        { tokens_revoked: 1, token_prefix: 'IjKl9012', token_kind: 'named', holder: 'CI runner' },
+        false,
+        ci,
+      ),
+    ).toEqual([mono('token IjKl9012… revoked'), text('named token "CI runner"')]);
+    expect(linesOf('revocation', { tokens_revoked: 3 })).toEqual([text('3 tokens revoked')]);
   });
 
   it('shows nothing for malformed details or a kind of a later version', () => {

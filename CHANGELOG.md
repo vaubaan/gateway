@@ -11,6 +11,27 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Mission members and per-holder tokens: every call says who made it.** A mission now has
+  one or more tokens, each with one holder. The creator adds colleagues as **members** (any
+  active user of the instance, picked by email); each signs in, finds the mission under
+  "Shared with me" and **generates their own token**, shown once with the bootstrap kit —
+  the creator never sees it. For a CI runner or a shared machine the creator creates a
+  **named token**. Every token shares the mission's resources, policy and **one budget**:
+  adding a member or a token adds no quota. A member uses the mission as it is — they
+  cannot change it, add members or answer its requests, which still go to the creator
+  alone — and rotates or revokes their own token; the creator can revoke any token and
+  remove a member (their token stops with them). The mission page has a "Members and
+  tokens" section with holder, kind, creation and last use of each token; the session page
+  a "Calls per token holder" table (not a budget) and a holder filter on the timeline; the
+  Audit page a "Token holder" column and filter. `GET /mcp/catalog` tells an agent whose
+  token it holds (`token.holder`) and who created the mission.
+- **A token that stops says why.** A mission token that was rotated, revoked on its own,
+  or whose member was removed from the mission or deactivated on the instance is refused
+  with HTTP 401 and `error.data.reason` (`token-rotated`, `token-revoked`,
+  `holder-removed`, `holder-deactivated`) at the very next call, while the mission keeps
+  serving its other holders. The eight structured refusals are unchanged; the bootstrap
+  kit and `/agent-bootstrap.md` say what each reason means.
+
 - **A provider reference inside the interface.** "Providers" in the navigation lists the
   plugins of the instance; each has a page generated from the plugin itself: what it
   connects to in plain words, its data model as a tree, every risk a mission can accept —

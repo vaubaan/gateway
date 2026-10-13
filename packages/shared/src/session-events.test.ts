@@ -129,6 +129,52 @@ describe('parseEventDetails', () => {
     expect(parseEventDetails('revocation', details)).toEqual({ kind: 'revocation', details });
   });
 
+  test('reads a call with the token it presented and its holder, and a call stored before tokens had one', () => {
+    const before = { ...CALL, remaining: {}, approval_ids: [] };
+    expect(parseEventDetails('call-allowed', before)).toEqual({
+      kind: 'call-allowed',
+      details: before,
+    });
+    for (const attribution of [
+      { token_id: 't1', token_kind: 'member', holder: 'usr-bob' },
+      { token_id: 't2', token_kind: 'named', holder: 'CI runner' },
+      { token_id: null, token_kind: null, holder: null },
+    ]) {
+      const details = { ...before, ...attribution };
+      expect(parseEventDetails('call-allowed', details)).toEqual({
+        kind: 'call-allowed',
+        details,
+      });
+    }
+    // A kind outside the closed set, or a holder that is not text, is not a call event.
+    expect(parseEventDetails('call-allowed', { ...before, token_kind: 'machine' })).toBeNull();
+    expect(parseEventDetails('call-allowed', { ...before, holder: 7 })).toBeNull();
+    expect(parseEventDetails('call-allowed', { ...before, token_id: {} })).toBeNull();
+  });
+
+  test('reads a token issued to a holder and one token revoked on its own', () => {
+    const issued = {
+      token_prefix: 'AbCd1234',
+      token_kind: 'named',
+      holder: 'CI runner',
+      replaced_prefix: null,
+    };
+    expect(parseEventDetails('rotation', issued)).toEqual({ kind: 'rotation', details: issued });
+    const revoked = {
+      tokens_revoked: 1,
+      token_prefix: 'AbCd1234',
+      token_kind: 'member',
+      holder: 'usr-bob',
+    };
+    expect(parseEventDetails('revocation', revoked)).toEqual({
+      kind: 'revocation',
+      details: revoked,
+    });
+    expect(parseEventDetails('rotation', { ...issued, token_kind: 'robot' })).toBeNull();
+    expect(parseEventDetails('rotation', { ...issued, replaced_prefix: 3 })).toBeNull();
+    expect(parseEventDetails('revocation', { ...revoked, token_prefix: 3 })).toBeNull();
+  });
+
   test('tells the two shapes of an extension apart on its dimension', () => {
     const parsed = parseEventDetails('extension', SAMPLES['an expiry extension']?.valid);
     expect(parsed?.kind === 'extension' && parsed.details.dimension === 'expiry').toBe(true);

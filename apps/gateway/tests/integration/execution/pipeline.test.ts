@@ -90,6 +90,10 @@ describe('execution door: the call pipeline', () => {
       expect(entries[0]).toMatchObject({
         kind: 'call',
         mission_id: mission.mission.id,
+        // The token the call presented and its holder: the creator's own member token.
+        token_id: expect.any(String) as string,
+        token_kind: 'member',
+        token_holder: mission.mission.creatorUserId,
         session_id: session?.id,
         connection_id: instance.connection.id,
         resource_ref: 'scratch',

@@ -58,6 +58,11 @@ client code: the filters are a plain `GET` form, paging is a link.
 | user matching the admin rule | their id               | themselves and each of their groups | `true`     |
 | bootstrap operator           | `null`                 | none                                | `true`     |
 
+A **member** of a mission is not in this table: the Audit page stays scoped to the
+missions one created and the connections one owns. A member reads the mission's
+**session** ("Mission session view" below), where every call is listed with its holder
+(spec §11.2 "What a member sees").
+
 `AuditViewer` is structurally the `Principal` of `server/auth`, so a page passes
 `currentPrincipal().principal` as is; the groups are the current ones, never a snapshot.
 
@@ -103,8 +108,8 @@ missions. The statement is plain `IN` subqueries over `missions`, `connections`,
 ## Filters and paging (`filters.ts`)
 
 `parseAuditQuery(searchParams)` → `{ filters, cursor, raw, problems }`. Query parameters
-(`AUDIT_PARAMS`): `mission`, `user`, `connection`, `tool`, `decision`, `agent`, `kind`,
-`from`, `to`, `cursor`.
+(`AUDIT_PARAMS`): `mission`, `user`, `connection`, `tool`, `decision`, `agent`, `holder`,
+`kind`, `from`, `to`, `cursor`.
 
 | Filter       | Matches                                                                                   |
 | ------------ | ----------------------------------------------------------------------------------------- |
@@ -114,6 +119,7 @@ missions. The statement is plain `IN` subqueries over `missions`, `connections`,
 | `tool`       | exact tool name (calls only)                                                              |
 | `decision`   | `allowed` \| `refused` (calls only: administrative entries drop out)                      |
 | `agent`      | exact agent label, case-sensitive (calls only): what the caller declared, not an identity |
+| `holder`     | the holder of the token a call presented (calls only): see "Token holders" below          |
 | `kind`       | `call` \| `admin`                                                                         |
 | `from`, `to` | a day `YYYY-MM-DD` read as UTC, or a full ISO instant; `to` includes its day              |
 
@@ -121,6 +127,26 @@ A value that cannot be read (unknown decision, impossible date, `from` after `to
 oversized value, unreadable cursor) is dropped and listed in `problems`, which the page
 shows; it never widens the search. An unknown email matches nothing, exactly like a known
 user with no entry, so the filter does not reveal who has an account.
+
+### Token holders
+
+Every call entry names the token it presented and its holder (spec §8; ADR
+[mission-members-and-per-holder-tokens](../decisions/mission-members-and-per-holder-tokens.md)):
+`token_id`, `token_kind` (`member` | `named`) and `token_holder` — the member's user id,
+or the name of a named token — written by the pipeline from the authenticated context.
+Unlike the agent label it is not a claim of the caller.
+
+- **The view.** `AuditCallView.token` is `{ kind, key, label }`: `label` is the member's
+  email (their id when the user row is gone) or the token's name; `null` on an entry
+  written before tokens had a holder, which the page shows as "not attributed". The page
+  has a "Token holder" column next to "Mission, agent label / actor"; a named token
+  carries a "named token" badge.
+- **The filter.** `holder`, as typed (`AuditQueryService.holdersOf`): the exact form the
+  session page links with (`member:<user id>`, `named:<name>` — `holderParam` /
+  `parseHolderParam`), otherwise an email names a member (a token name never contains
+  `@`, `parseTokenName`) and anything else a named token. A kind is never crossed: a
+  token named like a user's id is not that member. An unknown email matches nothing, like
+  a known member with no call.
 
 Order is `ts DESC, id DESC`. `AuditQueryService.search(viewer, filters, cursor, pageSize
 = AUDIT_PAGE_SIZE /* 50 */)` asks the store for one row more than the page; when it comes
@@ -155,9 +181,10 @@ following pages, and entries with the same timestamp are neither repeated nor sk
   replaces the value of any key named `args`, `arguments` or `raw_arguments`, at any
   depth, by `[not shown]` — defence in depth against a future writer's mistake.
 - The session timeline is built by `eventView`, which surfaces `tool`, `refusal_code`,
-  `agent_label`, `remaining`, `risk_ids`, `request_id`, `request_kind`, `request_state`,
+  `agent_label`, `holder` (the token holder, resolved to a label), `remaining`, `risk_ids`,
+  `request_id`, `request_kind`, `request_state`,
   `approvals_consumed` (a count, never the approval ids), `gate`, `gate_before`,
-  `gate_open_until`, `tokens_revoked`, `token_prefix`, `credits`, `dimension`,
+  `gate_open_until`, `tokens_revoked`, `token_prefix`, `replaced_prefix`, `credits`, `dimension`,
   `expires_at` and ignores the rest of the event's `details` (the fingerprint, the
   approval ids, the period start).
   It reads them through `parseEventDetails` (`@vaubaan/shared`, see
@@ -174,20 +201,22 @@ following pages, and entries with the same timestamp are neither repeated nor sk
 ## Mission session view (`session-view.ts`)
 
 `root.audit.sessions.get(user, missionId, { eventsBefore?, timeline? })` returns `null` for a
-mission that does not exist or is not the user's (the same answer, as on the mission
-detail page: it goes through `MissionService.get`), otherwise:
+mission that does not exist or that the user neither created nor is a member of (the same
+answer, as on the mission detail page: it goes through `MissionService.get`), otherwise —
+for the creator and for a member alike, with `viewer_role` saying which:
 
-| Field             | Content                                                                                                                                                                                                                  |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `state`           | `deriveMissionState` (active with its current period, expired, revoked, orphaned)                                                                                                                                        |
-| `session`         | `{ id, created_at }`, or `null` until the first call                                                                                                                                                                     |
-| `risks`           | one row per accepted risk: catalog label and severity `level`, `quota`, `consumed` and `remaining` this period, `exhausted`, `rate_limit`, `gate`, and `gate_open_until` (below)                                         |
-| `periods`         | the counters per period, newest first: the current one (listed even before its first action) then up to `PAST_PERIODS_SHOWN` (7) past ones                                                                               |
-| `events`          | the timeline, newest first, `SESSION_EVENTS_PAGE_SIZE` (100) per page, keyset-paged with `next_events` (`SessionsRepo.listRecentEvents`)                                                                                 |
-| `open_requests`   | requests in state `open` whose expiry is in the future, with their `path`                                                                                                                                                |
-| `agent_labels`    | distinct `agent_label` of the mission's call entries with call count and last seen (`AuditRepo.agentLabels`)                                                                                                             |
-| `label_activity`  | the calls of the **current period** per agent label — `allowed`, `refused`, `last_seen_at`, the unlabelled calls as `label: null` — busiest first; empty when the mission is not active (`AuditRepo.agentLabelActivity`) |
-| `timeline_filter` | the filter `events` was read with (below)                                                                                                                                                                                |
+| Field             | Content                                                                                                                                                                                                                                              |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `state`           | `deriveMissionState` (active with its current period, expired, revoked, orphaned)                                                                                                                                                                    |
+| `session`         | `{ id, created_at }`, or `null` until the first call                                                                                                                                                                                                 |
+| `risks`           | one row per accepted risk: catalog label and severity `level`, `quota`, `consumed` and `remaining` this period, `exhausted`, `rate_limit`, `gate`, and `gate_open_until` (below)                                                                     |
+| `periods`         | the counters per period, newest first: the current one (listed even before its first action) then up to `PAST_PERIODS_SHOWN` (7) past ones                                                                                                           |
+| `events`          | the timeline, newest first, `SESSION_EVENTS_PAGE_SIZE` (100) per page, keyset-paged with `next_events` (`SessionsRepo.listRecentEvents`)                                                                                                             |
+| `open_requests`   | requests in state `open` whose expiry is in the future, with their `path` — `null` for a member: they see that a request waits, only the creator answers it                                                                                          |
+| `holder_activity` | the calls of the **current period** per token holder — `holder` (`{ kind, key, label }`, `null` for calls written before tokens had a holder), `allowed`, `refused`, `last_seen_at` — busiest first, then by label (`AuditRepo.tokenHolderActivity`) |
+| `agent_labels`    | distinct `agent_label` of the mission's call entries with call count and last seen (`AuditRepo.agentLabels`)                                                                                                                                         |
+| `label_activity`  | the calls of the **current period** per agent label — `allowed`, `refused`, `last_seen_at`, the unlabelled calls as `label: null` — busiest first; empty when the mission is not active (`AuditRepo.agentLabelActivity`)                             |
+| `timeline_filter` | the filter `events` was read with (below)                                                                                                                                                                                                            |
 
 `consumed` and `remaining` are read from `session_counters` as they stand, never
 recomputed from the audit: a granted claim (period reset, quota extension —
@@ -225,6 +254,7 @@ later version (`isSessionEventKind` is false) shows no detail and a neutral badg
 | `reset`, quota `extension` | one line per risk: `<risk id> +N given back`                                                                                                                                                                                                                                             |
 | expiry `extension`         | `expiry moved to <date>`                                                                                                                                                                                                                                                                 |
 | `rotation`                 | `token <prefix>…`                                                                                                                                                                                                                                                                        |
+| `revocation` (one token)   | `token <prefix>… revoked`, then `member <email>` or `named token "<name>"`                                                                                                                                                                                                               |
 | `revocation`               | `<n> token(s) revoked`                                                                                                                                                                                                                                                                   |
 
 The request page words the same events as sentences (`describeEvent`,
@@ -234,6 +264,28 @@ The timeline card takes the width of the window like the audit table (`.wide`), 
 risk ids wrap (`.wraps`) and its Detail cell wraps (`.detail`), so the six columns are on
 screen at 1280 px; the browser suite asserts it, on the seeded day and on a timeline
 that holds gate and approval details.
+
+### Token holders on the session page
+
+Who called, authenticated by the token (spec §4.2 "Mission session … and calls per token
+holder"). Two reads, both informational, the counterparts of the agent-label ones below:
+
+- **Calls per token holder — current period** (`holder_activity`). Counts of the
+  mission's audit entries of the current period grouped by `(token_kind, token_holder)`
+  and decision. **Not a budget**: every token of a mission draws from the same counters
+  (spec §3.2), and the card says so. Each row links to the timeline of that holder and,
+  for the creator, to the Audit page filtered on it.
+- **Timeline filter**: `/missions/<id>/session?holder=member:<user id>` or
+  `?holder=named:<name>` lists the call events made with a token of that holder
+  (`SessionTimelineFilter` kind `holder`). It is a keyset read on the columns
+  `events.token_kind` / `events.token_holder` (migration `0010`, index
+  `events_session_holder_ts`), like the per-label one.
+
+The timeline has a "Token holder" column: the member's email, the token's name with a
+"named token" badge, "—" for an event that is not a call (a `rotation` or a `revocation`
+of one token names its holder in the Detail column instead). The holder of an event is
+read from its details through `parseEventDetails` and resolved to a label by the
+service; the columns only select rows.
 
 ### Agent labels on the session page
 
@@ -296,6 +348,8 @@ Only `audit` and `audit_risks` are purged. Session events and counters are not c
 | `connection-reassigned`                                                 | `ConnectionService.reassign` (operator) — `before`: the previous owner and status                                                                                                                                                                                                                                                                                                                                                                                                                                        | the connection                                                          |
 | `share-created`, `share-revoked`                                        | `ShareService.share` / `revoke` — target and restriction; a replaced share writes `share-revoked` (`after.replaced_by`) then `share-created` (`before`: the previous restriction) ([authority](authority.md))                                                                                                                                                                                                                                                                                                            | the share                                                               |
 | `group-created`, `group-member-added`, `group-member-removed`           | `GroupService` (`create` / `addMember` / `removeMember`), Administration → Groups; `group-member-added` is written only when the membership was actually added (a repeated add writes nothing)                                                                                                                                                                                                                                                                                                                           | the group                                                               |
+| `mission-member-added`, `mission-member-removed`                        | `MissionTeamService.addMember` / `removeMember` (the creator, in the interface) — `after` / `before`: `member_user_id`, `member_email`; a removal also `token_revoked_prefix` ([missions](missions.md), "Members and tokens")                                                                                                                                                                                                                                                                                            | the mission                                                             |
+| `mission-token-issued`, `mission-token-revoked`                         | `MissionTeamService.generateToken` (a member's first token; a later one is `mission-rotated`), `createNamedToken`; `revokeToken` (`after.reason`: `by-holder` / `by-creator`) and `revokeTokensOfDeactivated` (`holder-deactivated`, in the operator's name) — `token_prefix`, `token_kind`, `holder`; never a secret                                                                                                                                                                                                    | the mission                                                             |
 | `mission-issued`, `mission-rotated`, `mission-revoked`                  | `MissionService` (`issue` / `duplicate`, `rotate`, `revoke`), from the interface or from the management door's `issue_mission`, `rotate_mission_token`, `revoke_mission`                                                                                                                                                                                                                                                                                                                                                 | the mission                                                             |
 | `gate-changed`                                                          | `MissionService.setGate` — `before` / `after`: `risk_id`, `gate`, and `open_for_period` (`true` → `false`) when `approval` was asked on a gated risk whose gate was open for the period; nothing when neither the gate nor an opening changed (P2.1, [missions](missions.md))                                                                                                                                                                                                                                            | the mission                                                             |
 | `mission-orphaned`, `mission-restored`                                  | `MissionGrounds` (`watchConnection` / `watchCreator` → `settle(actorId)`), around a share, a revocation, a transfer, a reassignment, a group edit, a sign-in or the deactivation or reactivation of a user — `before` / `after`: `status` and, on the orphaned side, `cause`, `connection_id`, `uncovered`. Written through `AuditRepo.appendUnlessLatest`: when two acts under way at once see the same change, the entry is written once and names the act that settled first                                          | the mission                                                             |
@@ -403,23 +457,26 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
 
 ## Tests
 
-- `src/server/audit/filters.test.ts` (18) — every filter, repeated and blank values,
+- `src/server/audit/filters.test.ts` (20) — every filter, repeated and blank values,
   closed sets, unreadable dates, reversed period, single day, oversized value, cursor
   round trip and refusals, `auditQueryString`, `scopeOf` for the three viewers,
   `withoutArguments`.
-- `src/server/audit/session-event-detail.test.ts` (8) — the Detail column kind by kind:
+- `src/server/audit/session-event-detail.test.ts` (10) — the Detail column kind by kind:
   an approval consumed, the request of a refused call (open, closed, none), a request
   asked / refused / expired, an approval and its deadline, a gate opened and a gate
   edited, credits given back and an expiry moved, a rotation and a revocation, nothing
   for malformed details or a kind of a later version.
-- `tests/integration/audit/audit-query.test.ts` (24) — visibility (creator, connection
+- `tests/integration/audit/audit-query.test.ts` (25) — visibility (creator, connection
   owner, owning group, operator, bootstrap operator, requests of a mission), "a filter
   never widens the scope", the label of the object of an entry for each of the nine
   object types (and `null` for an object that is gone), each filter (the agent label:
-  exact, calls only, inside the scope) and their combination, remaining budget per call,
+  exact, calls only, inside the scope; the token holder: by email, by name, by the exact
+  form, never across kinds, inside the scope) and their combination, remaining budget per call,
   keyset paging (page sizes, no repeat, equal timestamps, concurrent write), no raw
   argument for any viewer, filter options.
-- `tests/integration/audit/mission-session.test.ts` (20) — creator only, before the
+- `tests/integration/audit/mission-session.test.ts` (21) — a member reads the whole
+  session attributed per holder, with no link to answer a request, and loses it when
+  removed; for a non-member, creator only; before the
   first call, counters / remaining / exhausted, past periods, one-off mission, open
   requests by link only, decided request, agent labels, calls per label for the current
   period (allowed, refused, unlabelled, past periods left out, nothing when inactive,
@@ -445,7 +502,7 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   `after` of a resource edit and a failed discovery.
 - `tests/e2e/v5/audit-session.spec.ts` (4, Playwright on the ephemeral instance) — a day
   of calls on the session page (the calls per agent label beside the shared budget, the
-  timeline of one label and back to the whole one) and on the audit page (nine filters
+  timeline of one label and back to the whole one) and on the audit page (ten filters
   in one row, the agent label among them); every column of the audit table on screen at
   1280 px with no sideways scroll (the fingerprint cell wraps; the check is a plain
   test, no longer an expected failure); every column of the session timeline on screen

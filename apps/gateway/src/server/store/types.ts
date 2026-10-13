@@ -19,6 +19,7 @@ import type {
   GroupSource,
   Iso8601,
   MissionStatus,
+  MissionTokenKind,
   Principal,
   RequestKind,
   RequestStatus,
@@ -195,15 +196,44 @@ export interface MissionIssuerRecord {
 export const MISSION_TOKEN_STATUSES = ['active', 'rotated', 'revoked'] as const;
 export type MissionTokenStatus = (typeof MISSION_TOKEN_STATUSES)[number];
 
+/**
+ * Who a token belongs to (spec §0 "Mission token"): the member who generated it, or
+ * the name its creator gave it. The two columns of the row (`holder_user_id`, `name`)
+ * as one value, so a holder is never half of each.
+ */
+export type TokenHolderRecord =
+  | { readonly kind: 'member'; readonly userId: string }
+  | { readonly kind: 'named'; readonly name: string };
+
 export interface MissionTokenRecord {
   readonly id: string;
   readonly missionId: string;
   readonly prefix: string;
+  /** Hash of the secret. The secret itself is stored nowhere. */
   readonly hash: string;
   readonly hashAlg: string;
   readonly status: MissionTokenStatus;
+  readonly kind: MissionTokenKind;
+  readonly holder: TokenHolderRecord;
+  /** The user who generated (member token) or created (named token) it. */
+  readonly createdBy: string;
   readonly createdAt: Iso;
   readonly retiredAt: Iso | null;
+  /** The last call the door authenticated with it, to the minute; `null`: never used. */
+  readonly lastUsedAt: Iso | null;
+}
+
+/**
+ * A user the creator gave access to a mission (spec §0 "Mission member"). The creator
+ * is a member by construction and has no row. One row per (mission, user): a removed
+ * member keeps theirs with `removedAt` set, and adding them again clears it.
+ */
+export interface MissionMemberRecord {
+  readonly missionId: string;
+  readonly userId: string;
+  readonly addedBy: string;
+  readonly addedAt: Iso;
+  readonly removedAt: Iso | null;
 }
 
 // --- sessions -----------------------------------------------------------------------

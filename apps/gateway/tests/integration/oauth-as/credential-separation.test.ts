@@ -16,6 +16,7 @@ import { seedInstance, type SeededInstance } from '../missions/support';
 import {
   ADA,
   bearer,
+  BOB,
   delegate,
   EXECUTION_URL,
   MANAGEMENT_URL,
@@ -129,6 +130,34 @@ describe('the three credentials never cross over', () => {
       expect(String(body.error?.data?.hint)).toContain('execution door');
       // No OAuth challenge: an MCP client must not start a flow for it.
       expect(response.headers.get('www-authenticate')).toBeNull();
+    });
+
+    it('refuses every kind of mission token alike: a member’s own and a named one open the execution door only', async () => {
+      const { team } = instance.root.missions;
+      const added = await team.addMember(seeded.ada, missionId, { email: seeded.bob.email });
+      const member = await team.generateToken(seeded.bob, missionId);
+      const named = await team.createNamedToken(seeded.ada, missionId, 'CI runner');
+      if (!added.ok || !member.ok || !named.ok) throw new Error('the team was not set up');
+      for (const token of [member.token.secret, named.token.secret]) {
+        expect((await rpc(EXECUTION_URL, bearer(token))).response.status).toBe(200);
+        const { response, body } = await rpc(MANAGEMENT_URL, bearer(token));
+        expect(response.status).toBe(403);
+        expect(body.error?.data).toMatchObject({
+          code: 'wrong-credential-kind',
+          presented: 'mission-token',
+          expected: 'delegated-token',
+        });
+      }
+      // Being a member gives no way to manage the mission through the other door either:
+      // Bob's delegated agent reads it, and changes nothing of it.
+      const bobs = await delegate(instance, BOB, instance.browser());
+      const asBob = await instance.root.management.tools.listMyMissions(
+        { userId: bobs.user.id, delegationId: bobs.delegationId, clientId: bobs.clientId },
+        {},
+      );
+      expect(asBob.ok && asBob.data.missions.map((m) => [m.mission_id, m.role])).toEqual([
+        [missionId, 'member'],
+      ]);
     });
 
     it('refuses a web session — as a cookie or as a bearer — with wrong-credential-kind', async () => {

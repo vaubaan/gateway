@@ -89,7 +89,6 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
 
   const tokens = new TokenVerifier({
     missions: deps.missions.service,
-    tokens: deps.store.missions,
     cache: deps.cache,
     rateLimiter: deps.rateLimiter,
   });
@@ -98,6 +97,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     store: deps.store,
     registry: deps.registry,
     tokens,
+    tokenUse: deps.store.missions,
     grounds: deps.grounds,
     webSessions: deps.auth.sessions,
     budget: deps.budget,
@@ -128,8 +128,10 @@ export {
   MCP_SERVER_INFO_NAME,
   SURFACE_RATE_LIMITED_RPC_CODE,
   SURFACE_RATE_WINDOW_MS,
+  TOKEN_LAST_USED_GRANULARITY_SECONDS,
   type DelegatedTokenResolver,
   type ExecutionDoorDeps,
+  type TokenUseRecorder,
 } from './door';
 export { loadMissionContext, missionResourceOf, periodOf } from './mission-context';
 export {
@@ -165,6 +167,7 @@ export {
   type CatalogBudgetLine,
   type CatalogConnection,
   type CatalogResource,
+  type CatalogToken,
   type CatalogTool,
   type MissionCatalog,
 } from './tools';

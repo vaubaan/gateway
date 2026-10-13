@@ -113,6 +113,40 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       rig.mission.id,
     ),
   ),
+  'missions.handlers.addMember': json('user', 201, (rig, headers) =>
+    rig.root.missions.handlers.addMember(
+      post(`/api/missions/${rig.mission.id}/members`, headers, { email: rig.seeded.bob.email }),
+      rig.mission.id,
+    ),
+  ),
+  // Nobody is a member yet: the rightful caller reaches the service, which finds none.
+  'missions.handlers.removeMember': json('user', 404, (rig, headers) =>
+    rig.root.missions.handlers.removeMember(
+      post(`/api/missions/${rig.mission.id}/members/none/remove`, headers, {}),
+      rig.mission.id,
+      'none',
+    ),
+  ),
+  'missions.handlers.generateToken': json('user', 200, (rig, headers) =>
+    rig.root.missions.handlers.generateToken(
+      post(`/api/missions/${rig.mission.id}/tokens/mine`, headers, {}),
+      rig.mission.id,
+    ),
+  ),
+  'missions.handlers.createNamedToken': json('user', 201, (rig, headers) =>
+    rig.root.missions.handlers.createNamedToken(
+      post(`/api/missions/${rig.mission.id}/tokens`, headers, { name: 'CI runner' }),
+      rig.mission.id,
+    ),
+  ),
+  // No such token: the rightful caller reaches the service, which finds none.
+  'missions.handlers.revokeToken': json('user', 404, (rig, headers) =>
+    rig.root.missions.handlers.revokeToken(
+      post(`/api/missions/${rig.mission.id}/tokens/none/revoke`, headers, {}),
+      rig.mission.id,
+      'none',
+    ),
+  ),
   'requests.handlers.decide': json('user', 200, (rig, headers) =>
     rig.root.requests.handlers.decide(
       post(`/api/requests/${rig.claimId}/decide`, headers, { resolution: 'reset-period' }),

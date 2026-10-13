@@ -284,6 +284,14 @@ export interface MissionViewer {
 export interface MissionView {
   readonly mission_id: string;
   readonly name: string;
+  /**
+   * What the user is to this mission: `creator` — they issued it, they alone
+   * change it and answer its requests — or `member` — its creator shared it
+   * with them: they read it and use it as it is, with their own token.
+   */
+  readonly role: 'creator' | 'member';
+  /** Email of the mission's creator; `null` when unknown. The user's own for `creator`. */
+  readonly creator_email: string | null;
   readonly state: MissionStateName;
   /** Set while the mission is orphaned: every call is refused until the authority returns. */
   readonly orphan: OrphanView | null;
@@ -294,7 +302,11 @@ export interface MissionView {
   readonly session: { readonly period_start: string; readonly period_end: string | null } | null;
   /** `null` when the user issued it themselves in the interface. */
   readonly issued_via: IssuedViaView | null;
-  /** Masked prefix of the active token; the secret is never shown again. */
+  /**
+   * Masked prefix of the user's own active token of this mission; `null` when
+   * they have none (a member who has not generated theirs). The secret is
+   * never shown again.
+   */
   readonly token_prefix: string | null;
   readonly connection_ids: readonly string[];
   readonly policy: readonly MissionPolicyView[];
@@ -322,6 +334,8 @@ export function missionView(
   return {
     mission_id: mission.id,
     name: mission.name,
+    role: overview.role,
+    creator_email: overview.creator.email,
     state: state.kind,
     orphan: overview.orphan ? orphanView(overview.orphan) : null,
     created_at: mission.createdAt,

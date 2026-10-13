@@ -14,7 +14,13 @@ import type {
   AuditEntry,
   CallAuditEntry,
 } from '@vaubaan/gateway-core';
-import { isRefusalCode, type RefusalCode, type Slice } from '@vaubaan/shared';
+import {
+  isMissionTokenKind,
+  isRefusalCode,
+  type MissionTokenKind,
+  type RefusalCode,
+  type Slice,
+} from '@vaubaan/shared';
 import { withImmediateTransaction } from '../db.ts';
 import { InvariantError } from '../errors.ts';
 import type { Iso, Principal, RiskId } from '../types.ts';
@@ -105,6 +111,14 @@ export interface AuditSearch {
   readonly decision?: AuditDecision;
   /** Exact agent label (call entries only). Attribution, as declared by the caller. */
   readonly agentLabel?: string;
+  /**
+   * Calls made with a token of these holders (call entries only): a kind, and the
+   * user ids (`member`) or the token names (`named`). An empty list matches nothing.
+   */
+  readonly tokenHolders?: {
+    readonly kind: MissionTokenKind;
+    readonly holders: readonly string[];
+  };
   readonly kind?: 'call' | 'admin';
   /** `ts >= since`. */
   readonly since?: Iso;
@@ -130,6 +144,21 @@ export interface AgentLabelSeen {
  */
 export interface AgentLabelActivity {
   readonly label: string | null;
+  readonly allowed: number;
+  readonly refused: number;
+  readonly lastSeenAt: Iso;
+}
+
+/**
+ * A mission's calls made with the tokens of one holder over a span of time — or, for
+ * `kind: null`, the calls written before tokens had a holder. Counts of audit entries:
+ * who called, authenticated by the token; never a budget (one budget per mission,
+ * however many tokens, spec §3.2).
+ */
+export interface TokenHolderActivity {
+  readonly kind: MissionTokenKind | null;
+  /** A user id (`member`) or a token name (`named`); `null` with `kind: null`. */
+  readonly holder: string | null;
   readonly allowed: number;
   readonly refused: number;
   readonly lastSeenAt: Iso;
@@ -184,6 +213,14 @@ export interface AuditRepo {
     span: { readonly since: Iso; readonly until: Iso | null },
   ): Promise<AgentLabelActivity[]>;
   /**
+   * A mission's call entries in `[since, until)` (`until: null`: no upper bound), counted
+   * per token holder and per decision. Busiest first, then by holder.
+   */
+  tokenHolderActivity(
+    missionId: string,
+    span: { readonly since: Iso; readonly until: Iso | null },
+  ): Promise<TokenHolderActivity[]>;
+  /**
    * Allowed call entries touching `riskId` in `[since, until)` — the audit side of the
    * structural check "session counters agree with the audit" (spec §10).
    */
@@ -199,6 +236,9 @@ interface AuditRow {
   ts: string;
   kind: string;
   mission_id: string | null;
+  token_id: string | null;
+  token_kind: string | null;
+  token_holder: string | null;
   session_id: string | null;
   connection_id: string | null;
   resource_ref: string | null;
@@ -236,6 +276,9 @@ const AUDIT_COLUMNS = [
   'ts',
   'kind',
   'mission_id',
+  'token_id',
+  'token_kind',
+  'token_holder',
   'session_id',
   'connection_id',
   'resource_ref',
@@ -275,6 +318,9 @@ function callParams(id: string, e: CallAuditEntry): SqlParams {
     ts: e.ts,
     kind: 'call',
     mission_id: e.mission_id,
+    token_id: e.token_id,
+    token_kind: e.token_kind,
+    token_holder: e.token_holder,
     session_id: e.session_id,
     connection_id: e.connection_id,
     resource_ref: e.resource_ref,
@@ -428,6 +474,17 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
   if (query.tool) add('tool = ?', query.tool);
   if (query.decision) add('decision = ?', query.decision);
   if (query.agentLabel) add("kind = 'call' AND agent_label = ?", query.agentLabel);
+  if (query.tokenHolders) {
+    const { kind, holders } = query.tokenHolders;
+    if (holders.length === 0) add('1 = 0');
+    else {
+      add(
+        `kind = 'call' AND token_kind = ? AND token_holder IN (${placeholders(holders.length)})`,
+        kind,
+        ...holders,
+      );
+    }
+  }
   if (query.kind) add('kind = ?', query.kind);
   if (query.since) add('ts >= ?', query.since);
   if (query.until) add('ts < ?', query.until);
@@ -498,6 +555,27 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     `${LABEL_ACTIVITY} AND ts < ? GROUP BY agent_label`,
   );
 
+  interface HolderActivityRow {
+    token_kind: string | null;
+    token_holder: string | null;
+    allowed: number;
+    refused: number;
+    last_seen: string;
+  }
+  // Same shape and same two-statement reason as the label activity above.
+  const HOLDER_ACTIVITY = `SELECT token_kind, token_holder,
+            SUM(CASE WHEN decision = 'allowed' THEN 1 ELSE 0 END) AS allowed,
+            SUM(CASE WHEN decision = 'refused' THEN 1 ELSE 0 END) AS refused,
+            MAX(ts) AS last_seen
+     FROM audit
+     WHERE kind = 'call' AND mission_id = ? AND ts >= ?`;
+  const holderActivityOpen = db.prepare<[string, string], HolderActivityRow>(
+    `${HOLDER_ACTIVITY} GROUP BY token_kind, token_holder`,
+  );
+  const holderActivityUntil = db.prepare<[string, string, string], HolderActivityRow>(
+    `${HOLDER_ACTIVITY} AND ts < ? GROUP BY token_kind, token_holder`,
+  );
+
   const latestCallOf = db.prepare<[string, string, string], AuditRow>(
     `SELECT ${COLUMNS} FROM audit
      WHERE kind = 'call' AND mission_id = ? AND tool = ? AND arguments_hash = ?
@@ -545,11 +623,18 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
     if (refusalCode !== null && !isRefusalCode(refusalCode)) {
       throw new InvariantError(`audit.refusal_code: unexpected value '${refusalCode}'`);
     }
+    const tokenKind = row.token_kind;
+    if (tokenKind !== null && !isMissionTokenKind(tokenKind)) {
+      throw new InvariantError(`audit.token_kind: unexpected value '${tokenKind}'`);
+    }
     return {
       id: row.id,
       kind: 'call',
       ts: row.ts,
       mission_id: requireColumn(row.mission_id, 'audit.mission_id'),
+      token_id: row.token_id,
+      token_kind: tokenKind,
+      token_holder: tokenKind === null ? null : row.token_holder,
       session_id: row.session_id,
       connection_id: row.connection_id,
       resource_ref: row.resource_ref,
@@ -699,6 +784,28 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
           (a, b) =>
             b.allowed + b.refused - (a.allowed + a.refused) ||
             (a.label ?? '').localeCompare(b.label ?? ''),
+        );
+    },
+    async tokenHolderActivity(missionId, span) {
+      const rows =
+        span.until === null
+          ? holderActivityOpen.all(missionId, span.since)
+          : holderActivityUntil.all(missionId, span.since, span.until);
+      return rows
+        .map((r) => {
+          const kind = isMissionTokenKind(r.token_kind) ? r.token_kind : null;
+          return {
+            kind,
+            holder: kind === null ? null : r.token_holder,
+            allowed: r.allowed,
+            refused: r.refused,
+            lastSeenAt: r.last_seen,
+          };
+        })
+        .sort(
+          (a, b) =>
+            b.allowed + b.refused - (a.allowed + a.refused) ||
+            (a.holder ?? '').localeCompare(b.holder ?? ''),
         );
     },
     async countAllowedTouches(missionId, riskId, since, until) {

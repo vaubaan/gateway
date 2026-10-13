@@ -5,7 +5,11 @@
  * which the creator edits here after issuance (spec §3.5), token prefix with
  * Rotate, the
  * bootstrap kit with the secret masked (spec §4.2, §4.4), and the link to the
- * mission's session page.
+ * mission's session page, and the mission's members and tokens (`TeamSection`).
+ *
+ * The creator and the members of a mission read this page (spec §0 "Mission
+ * member"). A member reads it as it is: no Duplicate / Rotate / Revoke, no gate
+ * control — what they can do is in "Members and tokens": their own token.
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -43,6 +47,7 @@ import styles from '../missions.module.css';
 import { StateBadge } from '../state-badge';
 import { GateControl } from './gate-control';
 import { MissionActions } from './mission-actions';
+import { TeamSection } from './team-section';
 
 export const dynamic = 'force-dynamic';
 
@@ -57,6 +62,8 @@ export default async function MissionPage({ params }: Props) {
   const detail = await session.root.missions.service.get(session.user, id);
   if (!detail) notFound();
   const { mission, state, token, orphan, issuedVia } = detail;
+  const isCreator = detail.role === 'creator';
+  const team = await session.root.missions.team.team(session.user, id);
   // The service's own rule (`gateEditBlockedBy`): the control shows when `setGate` would act.
   const gatesEditable = detail.gates_editable;
   const orphanExplanation = orphan && explainOrphan(orphan, detail.connections);
@@ -78,14 +85,29 @@ export default async function MissionPage({ params }: Props) {
           <Link href={`/missions/${mission.id}/session`} className={styles.secondaryLink}>
             Session
           </Link>
-          <MissionActions
-            missionId={mission.id}
-            name={mission.name}
-            active={state.kind === 'active'}
-            revocable={state.kind !== 'revoked'}
-          />
+          {isCreator && (
+            <MissionActions
+              missionId={mission.id}
+              name={mission.name}
+              active={state.kind === 'active'}
+              revocable={state.kind !== 'revoked'}
+            />
+          )}
         </div>
       </div>
+
+      {!isCreator && (
+        <div data-testid="shared-with-me">
+          <Banner tone="info" title="Shared with you">
+            <p>
+              {detail.creator.email ?? 'Its creator'} created this mission and added you as a
+              member. You use it as it is — same resources, same policy, same budget as every other
+              holder — with your own token, below. You cannot change it; its requests are answered
+              by its creator alone.
+            </p>
+          </Banner>
+        </div>
+      )}
 
       {orphanExplanation && (
         <Banner
@@ -101,7 +123,7 @@ export default async function MissionPage({ params }: Props) {
       <Card>
         <CardBody>
           <dl className={styles.facts}>
-            <dt>Token</dt>
+            <dt>Your token</dt>
             <dd>
               {token ? (
                 <>
@@ -114,6 +136,12 @@ export default async function MissionPage({ params }: Props) {
                 'no active token'
               )}
             </dd>
+            {!isCreator && (
+              <>
+                <dt>Creator</dt>
+                <dd>{detail.creator.email ?? 'unknown'}</dd>
+              </>
+            )}
             <dt>Period</dt>
             <dd>{reloadPhrase(detail.period)}</dd>
             <dt>Expiry</dt>
@@ -231,6 +259,8 @@ export default async function MissionPage({ params }: Props) {
           </Tbody>
         </Table>
       </Card>
+
+      {team && <TeamSection team={team} />}
 
       {detail.kit && state.kind === 'active' && (
         <Card>
