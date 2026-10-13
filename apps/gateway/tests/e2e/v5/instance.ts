@@ -28,7 +28,13 @@ export function localOrigin(): string {
   return `http://127.0.0.1:${instancePort()}`;
 }
 
-/** Who signs in through the simulated IdP. */
+/**
+ * The users of the simulated IdP. The IdP is shared by every spec, so each spec
+ * names the user it needs in its own `beforeEach` (`signInAs`) and none relies
+ * on what another one left behind.
+ *
+ * Ada owns the seeded connections (GitHub, Supabase, Vercel, Gmail).
+ */
 export const E2E_USER = { sub: 'idp|ada', email: 'ada@example.com', name: 'Ada' } as const;
 /** A second user of the same IdP, who created nothing. */
 export const E2E_OTHER_USER = { sub: 'idp|bob', email: 'bob@example.com', name: 'Bob' } as const;
@@ -37,4 +43,21 @@ export const E2E_AUDIT_USER = {
   sub: 'idp|grace',
   email: 'grace@example.com',
   name: 'Grace',
+} as const;
+/** Who the cutover smoke signs in as: they start with no connection and no mission. */
+export const E2E_CUTOVER_USER = {
+  sub: 'idp|margaret',
+  email: 'margaret@example.com',
+  name: 'Margaret',
+} as const;
+
+/**
+ * The mocked GitHub behind the instance (`RootDeps.providerFetch`): one
+ * installation of the company's App, reaching two repositories. Nothing here
+ * is a real account; the launcher answers every provider request itself.
+ */
+export const MOCK_GITHUB = {
+  installationId: '4242',
+  repositories: ['acme/app', 'acme/docs'],
+  branches: [{ name: 'main' }, { name: 'feature/billing' }],
 } as const;

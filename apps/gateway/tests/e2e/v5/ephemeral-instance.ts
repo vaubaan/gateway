@@ -3,44 +3,53 @@
  * "integration on an ephemeral instance with embedded store and simulated
  * IdP"). One process:
  *
- *   - the real composition root, built here with the `:memory:` store, a
- *     registry of real plugins and P1.1's in-process `FakeIdp` as the relying
- *     party's `fetch`, and published on `globalThis` exactly as production
- *     does — so the Next server started below serves the built app on this
- *     root (`getRoot()` returns the promise already there);
- *   - connections and resources seeded straight through the repositories;
+ *   - the real composition root, built here with the `:memory:` store, the
+ *     plugins the image ships, P1.1's in-process `FakeIdp` as the relying
+ *     party's `fetch` and a mocked GitHub as `RootDeps.providerFetch`, and
+ *     published on `globalThis` exactly as production does — so the Next
+ *     server started below serves the built app on this root (`getRoot()`
+ *     returns the promise already there);
+ *   - nothing of its own between a request and the root: the executor's calls
+ *     of every spec arrive over HTTP on `/mcp` and run through
+ *     `root.execution` (the door, the pipeline, `root.budget`), exactly as an
+ *     agent's do;
+ *   - Ada's connections seeded straight through the repositories, her GitHub
+ *     one carrying an installation of the mocked GitHub;
  *   - control endpoints under `/__e2e`, which exist only in this file: the
- *     IdP's consent screen (the browser cannot reach the in-process IdP) and
- *     who signs in next, a token check through `MissionService.verifyToken`,
- *     and the executor's side of "exhaust and claim" — calls recorded
- *     straight through the budget's `SessionService.recordCall`, as the
- *     execution door does — and `seed-day`, a day of calls with their audit
- *     entries on a new mission, for the audit pages.
+ *     consent screens the browser cannot reach (the simulated IdP's, the
+ *     mocked GitHub's installation page), who signs in next, a token check
+ *     through `MissionService.verifyToken`, `small-mission` (a mission of Ada
+ *     with a two-action quota and its token), `upstream` (what the mocked
+ *     provider received) and `seed-day` — the one fixture written below the
+ *     door: a day of calls recorded through `root.budget` and the audit
+ *     writer, with gated and exhausted risks, for the audit pages.
  *
  * Run by Playwright's `webServer` (see `playwright.config.ts` next to this
  * file) after `next build`. Never part of the image.
  */
+import { generateKeyPairSync, randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { githubCredential } from '@vaubaan/plugin-github';
+import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
 import nextModule from 'next';
 
-import { budgetMissionOf, SessionService } from '../../../src/server/budget';
 import { getRoot, type GatewayRoot } from '../../../src/server/compose/root';
-import { SlidingWindowRateLimiter } from '../../../src/server/rate-limit';
+import { serializeSecret } from '../../../src/server/connections';
+import { seedConnection } from '../../../src/server/missions/testing';
 import type { UserRecord } from '../../../src/server/store/types';
-import { auditRigOn, seedDayOfWork } from '../../integration/audit/support';
+import { seedDayOfWork, type AuditRig } from '../../integration/audit/support';
 import { FakeIdp } from '../../integration/auth/fake-idp';
 import { seedInstance, testRootDeps } from '../../integration/missions/support';
-import { seedConnection } from '../../../src/server/missions/testing';
 import {
   CONTROL_PREFIX,
   E2E_AUDIT_USER,
-  E2E_USER,
   IDP_ISSUER,
   instancePort,
+  MOCK_GITHUB,
   PUBLIC_URL,
 } from './instance';
 
@@ -63,78 +72,177 @@ async function readBody(req: IncomingMessage): Promise<string> {
   return Buffer.concat(chunks).toString('utf8');
 }
 
-/** The risk the executor of "exhaust and claim" spends, and its quota. */
-const EXHAUST_RISK = 'github.read-code';
-const EXHAUST_QUOTA = 2;
+/* ------------------------------------------------------------------------ */
+/* The mocked GitHub                                                         */
+/* ------------------------------------------------------------------------ */
+
+const random = (bytes = 24): string => randomBytes(bytes).toString('hex');
 
 /**
- * The executor's side of spec §7.6, without the execution door: a mission of
- * `creator` with a two-action quota, called until the budget refuses.
+ * The company's GitHub App, as the operator would mount it
+ * (`providers.github.*`). The key pair and the secrets are generated per run:
+ * no credential of this file exists anywhere else.
  */
-function executor(root: GatewayRoot, creator: UserRecord, githubConnectionId: string) {
-  const budget = new SessionService({
-    sessions: root.store.sessions,
-    requests: root.store.requests,
-    rateWindows: new SlidingWindowRateLimiter(),
-    requestUrl: root.requests.requestUrl,
-    requestExpirySeconds: root.config.requests.expirySeconds,
-  });
+const GITHUB_APP = {
+  appId: '123',
+  slug: 'acme-gateway',
+  clientId: 'Iv1.e2e0000000000000',
+  clientSecret: random(),
+  privateKey: generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+  }).privateKey,
+};
+/** What GitHub hands the gateway; neither may ever reach a browser or an executor. */
+const INSTALLATION_TOKEN = `ghs_${random()}`;
+const USER_TOKEN = `ghu_${random()}`;
 
-  async function call(missionId: string) {
-    const mission = await root.store.missions.getById(missionId);
-    if (!mission) throw new Error(`no mission ${missionId}`);
-    return budget.recordCall({
-      mission: budgetMissionOf(mission),
-      tool: 'github__get_file_contents',
-      args: { repo: 'acme/app', path: 'README.md' },
-      risks_touched: [EXHAUST_RISK],
-      agent_label: 'e2e-agent',
-      now: new Date(),
-    });
-  }
+const verification = githubCredential.userVerification;
+if (!verification) throw new Error('the github plugin no longer verifies installations');
+/** Every endpoint below is read off the plugin's own credential spec. */
+const GITHUB_API = new URL(verification.installationsUrl).origin;
+const GITHUB_INSTALL_PAGE = githubCredential.installUrl({ app_slug: GITHUB_APP.slug });
 
+function githubEnv(): Record<string, string> {
   return {
-    async exhaust(name: string) {
-      const issued = await root.missions.service.issue(creator, {
-        name,
-        connections: [
+    VAUBAAN_PROVIDER_GITHUB_APP_ID: GITHUB_APP.appId,
+    VAUBAAN_PROVIDER_GITHUB_APP_SLUG: GITHUB_APP.slug,
+    VAUBAAN_PROVIDER_GITHUB_PRIVATE_KEY: GITHUB_APP.privateKey,
+    VAUBAAN_PROVIDER_GITHUB_CLIENT_ID: GITHUB_APP.clientId,
+    VAUBAAN_PROVIDER_GITHUB_CLIENT_SECRET: GITHUB_APP.clientSecret,
+  };
+}
+
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * GitHub's side of the connect flow and of the calls: the token endpoint of
+ * the user authorization, the installations that user can reach, the
+ * installation token, the repositories of the installation, and two read
+ * endpoints. Any other request rejects (`mockFetch`): nothing reaches a
+ * network.
+ */
+function mockedGithub(): MockFetch {
+  const api = escapeRegExp(GITHUB_API);
+  return mockFetch([
+    {
+      method: 'POST',
+      url: verification!.tokenUrl,
+      body: { access_token: USER_TOKEN, token_type: 'bearer' },
+    },
+    {
+      method: 'GET',
+      url: (url) => url.startsWith(`${verification!.installationsUrl}?`),
+      respond: (call) => ({
+        installations:
+          new URL(call.url).searchParams.get('page') === '1'
+            ? [{ id: Number(MOCK_GITHUB.installationId) }]
+            : [],
+      }),
+    },
+    {
+      method: 'POST',
+      url: `${GITHUB_API}/app/installations/${MOCK_GITHUB.installationId}/access_tokens`,
+      status: 201,
+      respond: () => ({
+        token: INSTALLATION_TOKEN,
+        expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+        permissions: { contents: 'read', metadata: 'read' },
+      }),
+    },
+    {
+      method: 'GET',
+      url: (url) => url.startsWith(`${GITHUB_API}/installation/repositories?`),
+      body: {
+        total_count: MOCK_GITHUB.repositories.length,
+        repositories: MOCK_GITHUB.repositories.map((fullName) => ({
+          full_name: fullName,
+          default_branch: 'main',
+          private: true,
+          archived: false,
+        })),
+      },
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/repos/[^/]+/[^/]+/branches(\\?|$)`),
+      body: MOCK_GITHUB.branches,
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/repos/[^/]+/[^/]+/contents/`),
+      respond: (call) => {
+        const path = new URL(call.url).pathname.split('/contents/')[1] ?? '';
+        return {
+          type: 'file',
+          name: path.split('/').pop(),
+          path,
+          encoding: 'base64',
+          content: Buffer.from('# mocked file\n').toString('base64'),
+        };
+      },
+    },
+  ]);
+}
+
+/**
+ * The installation page of the mocked GitHub: the user "installs the App and
+ * authorizes", and GitHub sends the browser back with the installation id, a
+ * single-use code and the `state` the gateway gave.
+ */
+function githubInstallCallback(pageUrl: URL): string | null {
+  if (`${pageUrl.origin}${pageUrl.pathname}` !== GITHUB_INSTALL_PAGE) return null;
+  const callback = new URL(`${PUBLIC_URL}/connections/callback/github`);
+  callback.searchParams.set(githubCredential.installationIdParam, MOCK_GITHUB.installationId);
+  callback.searchParams.set('setup_action', 'install');
+  callback.searchParams.set(verification!.codeParam, random(10));
+  const state = pageUrl.searchParams.get('state');
+  if (state) callback.searchParams.set('state', state);
+  return callback.href;
+}
+
+/* ------------------------------------------------------------------------ */
+/* Fixtures                                                                  */
+/* ------------------------------------------------------------------------ */
+
+/** The risk the executor of "exhaust and claim" spends, and its quota. */
+const SMALL_RISK = 'github.read-code';
+const SMALL_QUOTA = 2;
+
+/** A mission of `creator` on their GitHub connection with a two-action quota, and its token. */
+async function issueSmallMission(
+  root: GatewayRoot,
+  creator: UserRecord,
+  githubConnectionId: string,
+  name: string,
+): Promise<{ mission_id: string; token: string }> {
+  const issued = await root.missions.service.issue(creator, {
+    name,
+    connections: [
+      {
+        connection_id: githubConnectionId,
+        policy: [
           {
-            connection_id: githubConnectionId,
-            policy: [
-              {
-                risk_id: EXHAUST_RISK,
-                quota: EXHAUST_QUOTA,
-                rate_limit: { max: 60, window_seconds: 60 },
-                gate: 'auto',
-              },
-              {
-                risk_id: 'github.read-meta',
-                quota: 10,
-                rate_limit: { max: 60, window_seconds: 60 },
-                gate: 'auto',
-              },
-            ],
+            risk_id: SMALL_RISK,
+            quota: SMALL_QUOTA,
+            rate_limit: { max: 60, window_seconds: 60 },
+            gate: 'auto',
+          },
+          {
+            risk_id: 'github.read-meta',
+            quota: 10,
+            rate_limit: { max: 60, window_seconds: 60 },
+            gate: 'auto',
           },
         ],
-        period: { kind: 'recurring', length_seconds: 86_400 },
-        expires_at: null,
-      });
-      if (!issued.ok) throw new Error(`mission "${name}" was not issued`);
-      for (let i = 0; i <= EXHAUST_QUOTA; i += 1) {
-        const result = await call(issued.mission.id);
-        if (result.outcome === 'refused') {
-          return { mission_id: issued.mission.id, refusal: result.refusal };
-        }
-      }
-      throw new Error('the budget never refused');
-    },
-    async replay(missionId: string) {
-      const result = await call(missionId);
-      return result.outcome === 'allowed'
-        ? { outcome: result.outcome, refusal: null }
-        : { outcome: result.outcome, refusal: result.refusal };
-    },
-  };
+      },
+    ],
+    period: { kind: 'recurring', length_seconds: 86_400 },
+    expires_at: null,
+  });
+  if (!issued.ok) throw new Error(`mission "${name}" was not issued`);
+  return { mission_id: issued.mission.id, token: issued.token.secret };
 }
 
 async function main(): Promise<void> {
@@ -145,12 +253,18 @@ async function main(): Promise<void> {
   }
   const port = instancePort();
   const idp = new FakeIdp({ issuer: IDP_ISSUER, ...CLIENT });
-  idp.nextClaims = { ...E2E_USER, groups: [] };
+  // No default user: the IdP has no claims to hand out until a spec says who
+  // signs in (`idp/next-user`), so a spec that forgets to fails at its sign-in.
+  const github = mockedGithub();
 
   // Build the root where production code looks for it (`globalThis`), before
   // Next boots: the app's own `getRoot()` then finds it already there.
   const root = await getRoot(
-    testRootDeps({ publicUrl: PUBLIC_URL, deps: { oidc: { fetch: idp.fetch } } }),
+    testRootDeps({
+      publicUrl: PUBLIC_URL,
+      env: githubEnv(),
+      deps: { oidc: { fetch: idp.fetch }, providerFetch: github },
+    }),
   );
   await root.auth.idp.save({
     issuer: idp.issuer.href,
@@ -160,7 +274,16 @@ async function main(): Promise<void> {
     allowedEmailDomains: [],
   });
   const seeded = await seedInstance(root);
-  const agent = executor(root, seeded.ada, seeded.github.connection.id);
+  // Ada's GitHub connection is an installation of the mocked GitHub, so her
+  // missions' calls go all the way through the door to the mocked provider.
+  await root.store.connections.reconnect(
+    seeded.github.connection.id,
+    serializeSecret({
+      kind: 'app-install',
+      installationId: MOCK_GITHUB.installationId,
+      metadata: {},
+    }),
+  );
 
   const next = (
     typeof nextModule === 'function' ? nextModule : (nextModule as { default: unknown }).default
@@ -191,14 +314,41 @@ async function main(): Promise<void> {
         sendJson(res, 200, { ok: true });
         return;
       }
-      if (url.pathname === `${CONTROL_PREFIX}/exhaust` && req.method === 'POST') {
-        const { name } = JSON.parse(await readBody(req)) as { name: string };
-        sendJson(res, 200, await agent.exhaust(name));
+      if (url.pathname === `${CONTROL_PREFIX}/provider-pages`) {
+        // The provider pages a browser is sent to during a connect flow.
+        sendJson(res, 200, { pages: [GITHUB_INSTALL_PAGE] });
         return;
       }
-      if (url.pathname === `${CONTROL_PREFIX}/replay` && req.method === 'POST') {
-        const { mission_id: missionId } = JSON.parse(await readBody(req)) as { mission_id: string };
-        sendJson(res, 200, await agent.replay(missionId));
+      if (url.pathname === `${CONTROL_PREFIX}/provider-page`) {
+        // The user's step on such a page: where the provider sends them back.
+        const callback = githubInstallCallback(new URL(url.searchParams.get('url') ?? ''));
+        if (callback) sendJson(res, 200, { callback });
+        else sendJson(res, 404, { error: 'not a page of a mocked provider' });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/upstream`) {
+        // What the mocked provider received, and whether each request carried
+        // the installation token the gateway minted. The token itself is
+        // handed over so a spec can check it never reached the executor.
+        sendJson(res, 200, {
+          installation_token: INSTALLATION_TOKEN,
+          calls: github.calls.map((call) => ({
+            method: call.method,
+            url: call.url,
+            with_installation_token: (call.headers.authorization ?? '').endsWith(
+              INSTALLATION_TOKEN,
+            ),
+          })),
+        });
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/small-mission` && req.method === 'POST') {
+        const { name } = JSON.parse(await readBody(req)) as { name: string };
+        sendJson(
+          res,
+          200,
+          await issueSmallMission(root, seeded.ada, seeded.github.connection.id, name),
+        );
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/verify-token` && req.method === 'POST') {
@@ -219,13 +369,19 @@ async function main(): Promise<void> {
           email: E2E_AUDIT_USER.email,
           displayName: E2E_AUDIT_USER.name,
         });
-        const github = await seedConnection(root.store, {
+        const connection = await seedConnection(root.store, {
           provider: 'github',
           owner: { kind: 'user', id: user.id },
           displayName: 'grace-org',
           resources: [{ ref: 'grace/app' }],
         });
-        const rig = auditRigOn(root, { ...seeded, ada: user, github });
+        // Recorded below the door, through the root's own budget: the day
+        // holds gated and refused calls no mocked provider could answer.
+        const rig: AuditRig = {
+          root,
+          seeded: { ...seeded, ada: user, github: connection },
+          budget: root.budget,
+        };
         sendJson(res, 200, await seedDayOfWork(rig));
         return;
       }

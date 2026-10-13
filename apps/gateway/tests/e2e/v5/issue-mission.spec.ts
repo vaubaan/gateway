@@ -10,7 +10,7 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 
-import { checkToken, routeToInstance } from './browser';
+import { checkToken, routeToInstance, signInAs } from './browser';
 import { E2E_USER } from './instance';
 
 const TOKEN = /vbn_live_[A-Za-z0-9]{8}_[A-Za-z0-9]{32}/;
@@ -21,8 +21,9 @@ async function snap(page: Page, name: string): Promise<void> {
   if (dir) await page.screenshot({ path: `${dir}/${name}.png`, fullPage: true });
 }
 
-test.beforeEach(async ({ context }) => {
+test.beforeEach(async ({ context, request }) => {
   await routeToInstance(context);
+  await signInAs(request, E2E_USER);
 });
 
 /** `/missions` behind the IdP: the round trip through the simulated consent screen. */
