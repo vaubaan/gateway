@@ -26,23 +26,9 @@ amended-by:
 > the contract in P1.2 ; nothing in `plugins/<provider>` changes here.
 >
 > **Amended on 2026-10-13 — streamed results** (feature P2.7, spec §4.1
-> "Streaming"). `ExecuteContext` gains an optional `emitPart(part:
-McpToolContent): Promise<void>` and the SDK a module `streaming.ts`
-> (`streamToolResult`, `textParts`, `appendPart`). The change is additive :
-> `execute` still returns one complete `McpToolResult`, no shipped plugin is
-> touched, a plugin that ignores `emitPart` behaves as before. _Why a sink in
-> the context and not a streamed return type_ : MCP answers a `tools/call`
-> with exactly one message, so the host needs the complete result in every
-> case ; a second return type (`AsyncIterable`) would have widened `execute`
-> for all eleven plugins and their tests to express what a callback already
-> does, and would have left the host to assemble a result the plugin knows
-> better how to build. _What the host guarantees_ : `emitPart` is only
-> reachable from an allowed, counted call ; after a first part the call is
-> never retried ; `emitPart` rejects once the caller is gone. Evidence that
-> the process shape of [[docker-image-and-config-format]] carries the event
-> stream unbuffered (Next 16 standalone, the reference Caddyfile) and the
-> limits are in the handbook `execution-door`, "Streaming". No separate ADR
-> was written : the transport supports streaming without any change to it.
+> "Streaming") : `ExecuteContext` gains an optional `emitPart` and the SDK a
+> module `streaming.ts`. See "Amendment 2026-10-13 — streamed results" at the
+> end of this document.
 >
 > **Amended on 2026-10-13** by [[plugin-catalog-path-and-standalone-tracing]]
 > (D4 : the catalog is located with `catalogPathNextTo(import.meta.url)`, not
@@ -431,3 +417,79 @@ Quarantined in `legacy-v4.ts` with a deletion rule instead.
   `plugins/_template/`.
 - Plan : `.vaubaan/reports/v5-implementation-plan.md` §1.1, §1.2, §1.4,
   §3.7, §4 P0.2, §5.10, §8-Q4 (untracked).
+
+## Amendment 2026-10-13 — streamed results (P2.7)
+
+Adds to D1 (the plugin API) ; changes none of the decisions above. Handbook :
+[execution-door](../handbook/execution-door.md), "Streaming".
+
+### Context
+
+Spec §4.1 ("Streaming") : a tool call is always answered by one complete
+result ; a plugin reading a long upstream response may emit its parts as they
+arrive, and the decision is made before anything leaves. MCP answers a
+`tools/call` with exactly one JSON-RPC message, in the 2025-era protocol and in
+2026-07-28 alike : there is no partial result. What may leave before that
+message is a `notifications/progress` on the call's own event stream, and only
+for a caller that sent `_meta.progressToken`.
+
+### Decision
+
+- **A sink in the context.** `ExecuteContext` gains an optional
+  `emitPart(part: McpToolContent): Promise<void>` ; the SDK adds
+  `streamToolResult`, `textParts` and `appendPart` (`streaming.ts`). `execute`
+  still returns one complete `McpToolResult`. The change is additive : a
+  plugin that ignores `emitPart` behaves as before, and no shipped plugin
+  streams yet.
+- **Parts travel as progress notifications, one complete result closes the
+  call.** Each part leaves the gateway at once as `notifications/progress`
+  (`progress` = parts so far, a text part as `message`) ; the complete result
+  is still sent at the end, and is the only thing a caller without a progress
+  token receives, as one JSON body.
+- **The decision comes first.** `emitPart` is reachable from the upstream
+  stage only, the pipeline's last : mission state, resource, risk and the
+  budget transaction (decrement, `call-allowed` event) are committed before
+  the first byte. A refused call reaches no plugin and is answered by its
+  error alone.
+- **One audit entry, when the stream ends**, with the latency of the whole
+  stream. A stream that breaks after N parts stays `allowed`, records
+  `stream failed after N parts` and keeps its credit consumed
+  ([[atomic-budget-accounting]]).
+- **No replay after a first part.** The refresh-and-retry ladder of
+  [[upstream-credential-cache-and-rejected-credentials]] applies only while
+  nothing was emitted ; a 401 after a part is a stream failure and leaves the
+  connection untouched.
+- **A caller that goes away stops the stream at the next part** : `emitPart`
+  rejects and the entry records it. A call that does not stream is not
+  affected by a disconnect.
+
+### Consequences
+
+- The complete result is held in memory until the end : what is not buffered
+  is the delivery, not the result. A tool whose output does not fit needs
+  pagination, not streaming.
+- A progress notification carries text parts only, is not stored and is not
+  resumable (the door is stateless : no event store, no `Last-Event-ID`). A
+  caller that loses the connection calls again, and that is a new call for
+  the budget.
+- Between the first part and the end of the stream, the record of the
+  decision is the counter and the session event ; a process that dies
+  mid-stream leaves a counted action without its audit entry, which
+  `countersAgreeWithAudit` reports.
+- Nothing changes in the process shape of [[docker-image-and-config-format]] :
+  the Next standalone server and the reference Caddyfile carry the event
+  stream unbuffered as shipped (measured ; handbook `execution-door`, "What
+  the process shape allows").
+
+### Rejected alternatives
+
+- **A streamed return type (`AsyncIterable`) for `execute`.** MCP answers a
+  `tools/call` with exactly one message, so the host needs the complete
+  result in every case ; a second return type would have widened `execute`
+  for all eleven plugins and their tests to express what a callback already
+  does, and would have left the host to assemble a result the plugin knows
+  better how to build.
+- **Replaying a call after a first part** (the retry ladder applied to a
+  stream that failed). The caller would receive the beginning twice.
+- **A change of transport or of process shape for streaming.** Not needed :
+  the transport supports it without any change.
