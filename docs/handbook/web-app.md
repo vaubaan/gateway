@@ -389,7 +389,7 @@ as the Dockerfile does.
 
 ## Tests
 
-Three unit files under `apps/gateway/tests/unit/app/` run without a browser
+Four unit files under `apps/gateway/tests/unit/app/` run without a browser
 (`npx vitest run apps/gateway/tests/unit/app`):
 
 - `app-guard.test.ts` discovers every `page.tsx` and `route.ts` under `(app)`.
@@ -413,7 +413,7 @@ form, [missions](missions.md)).
 `guard-harness.ts` holds what the two guard files share (file discovery, calling
 a page as a function, naming a redirect or a "not found").
 
-`tests/unit/app/build-footer.test.tsx` renders the footer (given stamps, the
+`build-footer.test.tsx`, the fourth, renders the footer (given stamps, the
 stamps of the build, `dev`), and
 `tests/unit/structural/version-single-source.test.ts` checks that the build
 stamps the version of the root `package.json`.

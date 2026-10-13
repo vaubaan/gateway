@@ -144,7 +144,7 @@ plugins/
   _template/                     the starting point for a new plugin
 deploy/                          Dockerfile, Compose file, proxy and example configuration
 docs/                            the five documentation folders, and skills/
-scripts/                         gen-master-key
+scripts/                         gen-master-key, the release scripts
 ```
 
 Where to read first, by task:
