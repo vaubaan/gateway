@@ -278,10 +278,13 @@ function totalsOf(view: View): SummaryItem[] {
   if (totals.refused_last_hour > 0) {
     items.push({ label: NOW.refusedLastHour(totals.refused_last_hour), href: ROUTES.activity });
   }
-  items.push({
-    label: NOW.accounts(totals.accounts, totals.accounts_to_reconnect),
-    href: ROUTES.accounts,
-  });
+  // Someone who works only on what was shared with them owns no account: nothing to count.
+  if (totals.accounts > 0) {
+    items.push({
+      label: NOW.accounts(totals.accounts, totals.accounts_to_reconnect),
+      href: ROUTES.accounts,
+    });
+  }
   return items;
 }
 

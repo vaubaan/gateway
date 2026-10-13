@@ -433,7 +433,7 @@ tester; `bootstrap_token` set, `idp` **not** set in the configuration.
    Deactivate the non-operator user of step 5: the notice says what was
    revoked and left; in that user's window the next navigation lands on
    `/login`, and signing in again at the IdP comes back with "This account
-   was deactivated on this instance by an operator". Reactivate: the user
+   was deactivated on this gateway by an administrator". Reactivate: the user
    signs in again with a new session. The automated counterpart is
    `tests/integration/auth/deactivate-user.test.ts`
    ([integration-tests](./integration-tests.md)).
