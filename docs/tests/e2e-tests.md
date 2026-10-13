@@ -219,7 +219,8 @@ chromium`. It is not part of `npm run ci`.
 The configuration's `webServer` is `ephemeral-instance.ts`: one process that
 builds the **real composition root** (`getRoot(testRootDeps(…))`) with the
 `:memory:` store and the shipped plugins, publishes it where production code
-looks for it, and serves the built app on it (`E2E_V5_PORT`, default 3105).
+looks for it, and serves the built app on it (`E2E_V5_PORT`, default 3105;
+set another port when several checkouts run the suite on one machine).
 Injected through `RootDeps`, and nothing else: P1.1's `FakeIdp` as the relying
 party's `fetch`, and a mocked GitHub as `providerFetch` — the user
 authorization token endpoint, the user's installations, the installation
@@ -234,7 +235,10 @@ runs through `root.execution` and `root.budget`.
 
 Seeded through the repositories: Ada (`E2E_USER`) owns a GitHub, a Supabase, a
 Vercel and a Gmail connection; her GitHub connection is an installation of the
-mocked GitHub. Bob owns nothing. The simulated IdP has **no default user**:
+mocked GitHub. Bob owns nothing. The share spec brings its own cast
+(`E2E_SHARE_OWNER`, `E2E_SHARE_TARGET`, `E2E_OPERATOR`, whose email the
+instance's admin rule names) and its own connections, so it changes nothing
+the other specs read. The simulated IdP has **no default user**:
 each spec names the user it signs in as in its `beforeEach` (`signInAs`), and
 a spec that does not fails at its sign-in.
 

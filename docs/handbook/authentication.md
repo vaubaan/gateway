@@ -98,7 +98,11 @@ sign-in.
 The **admin rule** is `InstanceConfig.admin` (`admin.group` and/or
 `admin.emails`, required by the loader): `isOperator({ email, groupNames },
 rule)` is true for a member of the named IdP group or a listed email
-(lower-cased compare). It is evaluated by `currentAuthority()` from the user's
+(lower-cased compare). Only groups the IdP claimed count (`groups.source =
+'idp'`): membership of a local group, kept by an operator in Administration →
+Groups ([authority](authority.md)), never makes anyone an operator, and a
+local group cannot take the rule's name. It is evaluated by
+`currentAuthority()` from the user's
 rows in `group_members` on **every** `authenticate()`, never from the session
 (spec §10 "authority recomputed from current membership"; integration test
 "removed from the admin group, the next check fails").

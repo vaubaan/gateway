@@ -235,9 +235,25 @@ conditional `UPDATE`s whose `changes` is the answer:
 every row, hidden and stale included. `replaceResources`, the P0.3 sync that deleted the
 refs it was not given (cascading to `mission_resources`), was removed once its last
 callers (test fixtures) moved to `syncDiscoveredResources`. `setCredential` and
-`setStatus` remain, deprecated: `setStatus` is how fixtures produce `unowned` until P2.2
-names that transition, and both are exercised by
+`setStatus` remain, deprecated and used by fixtures only; both are exercised by
 `tests/integration/connections/repository-status.test.ts`.
+
+Ownership and the states that follow from authority (P2.2, handbook
+[authority](authority.md)), all additive, covered by
+`tests/integration/store/ownership-and-orphans.test.ts`:
+
+| Method                                    | What                                                                                                 |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| `connections.markOwnerlessUnowned()`      | `active` → `unowned` for every connection whose owner group has no member; returns the ones changed  |
+| `connections.listOwnerless()`             | `unowned`, or not revoked with an empty owner group                                                  |
+| `connections.assignOwner(id, owner)`      | new owner, `unowned` → `active` in the same transaction; refuses `revoked`                           |
+| `connections.markExpired(id)`             | now from any serving status (`active` or `unowned`)                                                  |
+| `missions.markOrphaned(id)`               | `active` → `orphaned`, `closed_at` set; false when the mission was not `active`                      |
+| `shares.replaceForTarget(input)`          | revokes the active share of the same `(connection, target)` and creates the new one, one transaction |
+| `shares.listActiveForTargets(p, connId?)` | optional connection filter; the statement is compiled once per SQL shape (the door asks it per call) |
+| `groups.createLocal(name)`                | a `local` group, or `null` when any group holds the name                                             |
+
+No migration: the tables and the status values exist since `0001_schema.sql`.
 
 ## Audit
 

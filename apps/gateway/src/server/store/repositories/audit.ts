@@ -303,6 +303,7 @@ function riskRows(e: CallAuditEntry): AuditRiskRow[] {
 }
 
 const REQUESTS_OF_MISSION = 'SELECT id FROM requests WHERE mission_id';
+const SHARES_OF_CONNECTION = 'SELECT id FROM shares WHERE connection_id';
 
 /**
  * The WHERE clause of `search`: the scope first (what the viewer may see at all), then
@@ -332,6 +333,7 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
         OR (object_type = 'mission' AND object_id IN (${ownMissions}))
         OR (object_type = 'connection' AND object_id IN (${ownConnections}))
         OR (object_type = 'request' AND object_id IN (${REQUESTS_OF_MISSION} IN (${ownMissions})))
+        OR (object_type = 'share' AND object_id IN (${SHARES_OF_CONNECTION} IN (${ownConnections})))
       ))
     )`,
     ...creator,
@@ -339,6 +341,7 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
     ...creator,
     ...owners.params,
     ...creator,
+    ...owners.params,
   );
 
   if (query.missionId) {

@@ -139,8 +139,8 @@ authority is recomputed on every request.
 the page in a `Container`:
 
 - the brand link (to `/connections`) and one link per entry of `APP_NAV`:
-  **Connections**, **Missions**, **Requests**, **Audit**. Every principal sees
-  these four links;
+  **Connections**, **Shares received**, **Missions**, **Requests**, **Audit**.
+  Every principal sees these links;
 - **Administration** (`/admin`), only when the principal is the bootstrap
   operator or a user with `isOperator`;
 - on the right: the user's email (or `bootstrap token`), `OperatorBadge`
@@ -157,6 +157,18 @@ Seeing a link is not the authorisation. Each page decides for its principal
 with a session helper: the Connections, Missions and Requests pages render
 `NeedsUser` for the bootstrap operator (`currentUser()`), `/audit` is open to
 both (`requirePrincipal()`) and widens what it shows for an operator.
+
+## One root, several module graphs
+
+The composition root is built once per process, but a page is bundled apart
+from the code that built it (another route, the instrumentation file, the
+launcher of the browser tests). A class a page imports is therefore not
+necessarily the class a service of the root instantiated: `err instanceof
+ShareError` in a page can be false for a `ShareError` the service threw, and
+the page then answers 500 instead of "not found". A page recognises a service
+error by shape — `isShareError(err, code)`, `isConnectError(err, code)`
+(name and code) — and services and handlers, which live in the root's own
+graph, keep `instanceof`.
 
 ## UI primitives — `components/ui/`
 

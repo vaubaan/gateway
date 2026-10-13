@@ -213,8 +213,37 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `docs/handbook/cutover-from-v4.md` is the checklist to tick. A Playwright smoke walks the
   same path on an ephemeral instance — simulated IdP, mocked GitHub, an MCP client on `/mcp` —
   and runs with the other browser tests in a new CI job, `e2e`.
+- **Shares.** The owner of a connection shares it with a user (by email) or a group from
+  the connection page: a target, then a checklist of the provider's risks grouped by
+  severity, folded behind a one-line summary. "Select all" ticks today's risks one by one;
+  what is stored is that list, never "everything", and a risk added to the catalog later is
+  not shared. The target sees it under the new **Shares received** page with the exact
+  restriction, and issues missions within it; several shares of one connection add up.
+  Sharing again to the same target replaces its restriction. Only owners share.
+- **Local groups and ownership.** Administration → Groups lets the operator keep groups for
+  an identity provider that sends none; a user's groups are the IdP's and the local ones
+  together. An owner transfers a connection to a group they belong to: every member, now and
+  later, is a full owner.
+- **Connections without owner.** When the owner group of a connection has no member left the
+  connection is `unowned`: it keeps serving the missions that still have grounds, nobody can
+  share or reconnect it, and the operator names a new owner under Administration →
+  Connections — their only act on connections.
+- **Orphaned missions.** A mission whose creator no longer covers its accepted risks — the
+  share was revoked or narrowed, the connection revoked, the creator left the group that
+  owned or received it, or was removed — becomes `orphaned` and refuses every call with
+  `mission-inactive`. The Audit shows the creator why (`mission-orphaned`: cause,
+  connection, risks no longer covered).
 
 ### Changed
+
+- **A revoked connection orphans its missions.** Calls of a mission that carries a revoked
+  connection now answer `mission-inactive` (`status: orphaned`) instead of
+  `connection-unavailable`; an expired connection still answers `connection-unavailable`.
+- **An unowned connection whose credential is rejected becomes `expired`**, like an owned
+  one, instead of staying `unowned` while serving nothing.
+- **The owner of a connection reads its share entries in the Audit**; the administrative
+  acts gain `connection-reassigned`, `mission-orphaned`, `group-created`,
+  `group-member-added` and `group-member-removed`.
 
 - **`/mcp` accepts mission tokens only (breaking).** A web session or a delegated token is
   refused with `wrong-credential-kind`; a token replaced by rotation is a 401 from the next

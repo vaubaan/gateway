@@ -40,6 +40,9 @@ describe('errors recognised by shape, for the pages', () => {
     expect(isConnectError(fromAnotherGraph('ConnectError', 'not-found'), 'not-found')).toBe(true);
     expect(isConnectError(new ConnectError('connection-revoked'), 'not-found')).toBe(false);
     expect(isConnectError(fromAnotherGraph('ShareError', 'not-found'), 'not-found')).toBe(false);
+    // Without a code: any ConnectError, and nothing else.
+    expect(isConnectError(fromAnotherGraph('ConnectError', 'rate-limited'))).toBe(true);
+    expect(isConnectError(new Error('ConnectError'))).toBe(false);
   });
 
   it('has a sentence and a status for every code', () => {

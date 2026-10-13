@@ -33,7 +33,7 @@ import {
   type PageSearchParams,
 } from '@/lib/connections/session';
 import {
-  ConnectError,
+  isConnectError,
   CONNECTIONS_PATH,
   NEW_CONNECTION_PATH,
   type ConnectionDetail,
@@ -66,7 +66,7 @@ export default async function ConnectOneProviderPage({
     try {
       reconnect = await service.get(actor, reconnectId);
     } catch (err) {
-      if (err instanceof ConnectError) notFound();
+      if (isConnectError(err)) notFound();
       throw err;
     }
     if (reconnect.connection.provider !== provider.id) notFound();

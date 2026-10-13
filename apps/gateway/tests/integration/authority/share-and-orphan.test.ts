@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { ShareError } from '../../../src/server/shares';
 import type { RpcBody } from '../../../src/server/execution/testing';
+import { NO_FILTER } from '../audit/support';
 import {
   authorityRig,
   PROFILE,
@@ -228,6 +229,30 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       'connection-revoked',
     ]);
     expect(inactive(await rig.read(adas)).status).toBe('orphaned');
+  });
+
+  it('shows each side its own half in the Audit: share acts to the owner, the orphaning to the creator', async () => {
+    const { share } = await shareToBob([READ]);
+    const mission = await rig.issueFor(rig.bob, [READ]);
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), share.id);
+
+    const actsSeenBy = async (user: typeof rig.ada, isOperator = false) => {
+      const { entries } = await rig.root.audit.query.search(
+        { kind: 'user', user, groups: [], isOperator },
+        { ...NO_FILTER },
+      );
+      return entries.flatMap((e) => (e.kind === 'admin' ? [`${e.act}:${e.object.id}`] : [])).sort();
+    };
+    // The owner of the connection: what happened to its shares.
+    expect(await actsSeenBy(rig.ada)).toEqual(
+      [`share-created:${share.id}`, `share-revoked:${share.id}`].sort(),
+    );
+    // The creator of the mission: its issuance, and why it stopped.
+    expect(await actsSeenBy(rig.bob)).toEqual(
+      [`mission-issued:${mission.mission.id}`, `mission-orphaned:${mission.mission.id}`].sort(),
+    );
+    // An operator reads every administrative act.
+    expect(await actsSeenBy(rig.operator, true)).toHaveLength(4);
   });
 
   describe('only the owner shares (spec §11.2: no transitive sharing)', () => {
