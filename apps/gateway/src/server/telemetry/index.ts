@@ -1,5 +1,5 @@
 /**
- * Community telemetry (feature P2.5; spec §9, §4.3, §10): the wiring between
+ * Community telemetry (spec §9, §4.3, §10): the wiring between
  * the call pipeline's `TelemetrySink`, the client of `@vaubaan/telemetry`,
  * the operator's toggle and the validation status read back from the
  * collector. Built once by the composition root as `root.telemetry`.

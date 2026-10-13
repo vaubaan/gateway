@@ -5,7 +5,7 @@
  *
  * Wire shapes are snake_case like the shared domain (`MissionPolicyEntry`),
  * because the same draft and preview are exposed as-is on the management door
- * (spec §4.1 bis, plan P2.4). Types only: this file is safe to import from a
+ * (spec §4.1 bis). Types only: this file is safe to import from a
  * client component.
  */
 import type {

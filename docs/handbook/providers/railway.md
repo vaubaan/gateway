@@ -258,7 +258,7 @@ standard RFC 6749 `refresh_token` grant with Basic client authentication
 plus the same `resource=https://mcp.railway.com` indicator, which the host
 performs from `tokenUrl`, `clientAuthMethod` and `resourceIndicator`. The
 plugin therefore declares `refreshable: true` and implements no `refresh`
-(P1.2-align removed `refreshRailwayCredential` and `railwayNeedsRefresh`).
+(the alignment on the v5 SDK removed `refreshRailwayCredential` and `railwayNeedsRefresh`).
 The plugin never persists: the host refreshes and stores the result.
 
 ## Execution

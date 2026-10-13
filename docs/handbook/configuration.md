@@ -124,7 +124,7 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
    - `createEncryptor(config.encryption)` (awaits libsodium);
    - the plugin registry (`@vaubaan/plugin-sdk`'s `PluginRegistry`) from
      `RootDeps.buildRegistry`, by default `buildShippedRegistry`: the
-     ten plugins imported by `compose/shipped-plugins.ts` (P1.4). A
+     ten plugins imported by `compose/shipped-plugins.ts`. A
      plugin that fails `definePlugin` or a duplicate id fails the boot;
    - `checkProviderApps`: every `providers.<id>` must name a registered
      plugin, otherwise a `ConfigError` naming `providers.<id>` and
@@ -247,7 +247,7 @@ wall clock by default, a fixed instant in tests). `GatewayRoot` satisfies
 
 ## Framework
 
-`apps/gateway` runs on **Next.js 16.4.0** with React 19.3.0 (P0.6, from
+`apps/gateway` runs on **Next.js 16.4.0** with React 19.3.0 (from
 15.5.18 / 19.1.1). What the upgrade means for this module:
 
 - `next build` and `next dev` use **Turbopack**; nothing here depends on
@@ -608,9 +608,8 @@ bindings. `silentLogger` is for tests.
 need); the `globalThis` handle of `getRoot()` is per process by design
 (`// single-process only`: every replica builds its own root);
 `GatewayRoot.registry` is the SDK registry itself, so every provider list
-derives from one object; `GatewayRoot.auth` is the authentication module
-(P1.1); `GatewayRoot.providerApps` and `GatewayRoot.connections` are the
-provider-app settings and the connections module (P1.4), which share the
+derives from one object; `GatewayRoot.auth` is the authentication module; `GatewayRoot.providerApps` and `GatewayRoot.connections` are the
+provider-app settings and the connections module, which share the
 root's `SessionStore` (keys `connect:<state>` and `notice:<id>` next to
 `session:` and `login:`) and its `RateLimiter` (key `connect:<userId>`);
 `GatewayRoot.budget` and `GatewayRoot.execution` are the budget's session
@@ -618,15 +617,15 @@ service and the execution door (rate-limit keys `mission:<id>:risk:<id>`,
 `mcp:mission:<id>`, `mcp-verify:<prefix>:<client address>`; cache keys
 `mission-token:<hash>`, `upstream-credential:<connection>:…`);
 `GatewayRoot.authority`, `GatewayRoot.shares` and `GatewayRoot.groups` are
-the authority, share and local-group modules (P2.2); `GatewayRoot.users` is
+the authority, share and local-group modules; `GatewayRoot.users` is
 Administration → Users (the operator's deactivation and reactivation of a
 user);
-`GatewayRoot.telemetry` is community telemetry (P2.5; cache key
+`GatewayRoot.telemetry` is community telemetry (cache key
 `telemetry:plugin-stats`); `GatewayRoot.oauth` is the authorization server
-(P2.3; `SessionStore` key `oauth-consent:<id>`, rate-limit keys
+(`SessionStore` key `oauth-consent:<id>`, rate-limit keys
 `oauth:register:ip:<address>`, `oauth:register`, `oauth:token:ip:<address>`,
 `oauth:token:client:<id>`, `oauth:token:delegation:<id>`, `oauth:client-document:<requester>`) and
-`GatewayRoot.management` is the management door (P2.4; rate-limit keys
+`GatewayRoot.management` is the management door (rate-limit keys
 `mgmt:delegation:<id>` and `mgmt:delegation:<id>:mutations`). The request
 page keys its per-address limit on `request-page:ip:<address>`.
 Features plug their factories through `RootDeps`

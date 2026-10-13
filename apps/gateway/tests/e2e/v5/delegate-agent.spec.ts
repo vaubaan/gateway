@@ -1,6 +1,6 @@
 /**
  * "Have an agent act on my behalf" in a browser, against an ephemeral instance
- * with a simulated IdP (spec §4.1 bis, §4.2 "Delegations", §7.10; plan P2.3
+ * with a simulated IdP (spec §4.1 bis, §4.2 "Delegations", §7.10
  * definition of done).
  *
  * The agent is the official MCP client, pointed at the management door with

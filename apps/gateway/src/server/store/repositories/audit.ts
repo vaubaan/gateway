@@ -2,7 +2,7 @@
  * Audit repository — append, read, and the only legitimate purge path.
  *
  * Spec §6 "immutable audit", §8 (fields, 90-day default retention). Entries are
- * `@vaubaan/gateway-core`'s `AuditEntry` (P0.5). The schema's triggers abort every
+ * `@vaubaan/gateway-core`'s `AuditEntry`. The schema's triggers abort every
  * UPDATE and every DELETE that happens outside a purge window; `purgeOlderThan` opens
  * that window inside its own transaction.
  */

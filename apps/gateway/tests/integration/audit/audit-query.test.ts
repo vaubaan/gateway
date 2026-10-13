@@ -115,7 +115,7 @@ describe('audit search: visibility, filters, paging', () => {
   });
 
   it('the owner of a connection sees the calls made through it by a mission they did not create', async () => {
-    // What a share will allow (P2.2): Ada's mission calls through Bob's connection.
+    // What a share will allow: Ada's mission calls through Bob's connection.
     const bobs = await seedConnection(rig.root.store, {
       provider: 'github',
       owner: { kind: 'user', id: rig.seeded.bob.id },
@@ -547,7 +547,7 @@ describe('audit search: visibility, filters, paging', () => {
     if (refused.result.outcome !== 'refused' || !refused.result.request_id) {
       throw new Error('expected a claim');
     }
-    // What P1.7 will write when the creator answers.
+    // What the request service writes when the creator answers.
     await rig.root.store.auditWriter.write({
       kind: 'admin',
       ts: new Date().toISOString(),

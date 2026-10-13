@@ -338,7 +338,7 @@ describe('preset operator — everything, each command under the risk that names
   });
 
   test('write-data alone cannot make a key go away: no time to live, no move', () => {
-    // Finding B-M1: `EXPIRE k 1` deleted any key for a mission that could only write.
+    // The defect: `EXPIRE k 1` deleted any key for a mission that could only write.
     const db = database('staging');
     const writeOnly = new Set(['upstash-redis.read-data', 'upstash-redis[staging].write-data']);
     const both = new Set([...writeOnly, 'upstash-redis[staging].delete-data']);

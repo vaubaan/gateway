@@ -323,7 +323,7 @@ holder (`{ id, prefix, holder }`):
 | --------- | -------------------------------------------------------------------------- | ------------------------------------------------------- |
 | resources | `createResourceStage({ registry, connections })`                           | `resource-not-in-mission`; rejects a call no one owns   |
 | risks     | `createRiskStage({ registry })`                                            | `risk-not-accepted`; rejects a classifier denial        |
-| budget    | `createBudgetStage({ service: root.budget, missions })` (P1.3)             | `budget-exhausted`, `rate-limited`, `approval-required` |
+| budget    | `createBudgetStage({ service: root.budget, missions })`                    | `budget-exhausted`, `rate-limited`, `approval-required` |
 | upstream  | `createUpstreamStage({ credentials, credentialCache, logger, telemetry })` | `connection-unavailable` (after the allow)              |
 | audit     | `store.auditWriter` (`SqliteAuditWriter`)                                  | —                                                       |
 
@@ -499,7 +499,7 @@ declining the call itself (an unknown tool, an argument it cannot read or
 that the tool does not declare, a target outside the mission) — the SDK's
 `ExecutorRefusal`, turned into that result by `declining()`: it is an
 `allowed` outcome with no `upstream_error`, handed to the agent untouched. All ten shipped plugins
-follow the rule since the Phase 2 cycle-end (`vercel` and `upstash-redis`
+follow the rule (since the second review cycle: `vercel` and `upstash-redis`
 used to return provider failures as results; `cloudflare-dns` used to throw
 its own refusals).
 
@@ -901,7 +901,7 @@ const execution = createExecutionModule({
   logger,
   build,
   delegations: deps.delegatedTokens ?? oauth.verifier, // delegated tokens are refused by kind
-  telemetry: telemetry.sink, // community telemetry (P2.5); inert unless the operator opted in
+  telemetry: telemetry.sink, // community telemetry; inert unless the operator opted in
 });
 ```
 

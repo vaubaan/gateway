@@ -1,10 +1,10 @@
 /**
- * The management MCP door (feature P2.4; spec §4.1 bis, §7.10): the tools an
+ * The management MCP door (spec §4.1 bis, §7.10): the tools an
  * agent holding a delegated token uses to read the user's authority, preview
  * a policy and issue, rotate or revoke missions in the user's name. Built
  * once by the composition root (`compose/management.ts`) as part of
  * `root.management`, behind the admission gate of the authorization server
- * (`oauth-as`, feature P2.3).
+ * (`oauth-as`).
  *
  * What the module is given is the whole of what it can do: see `ports.ts`.
  * Handbook: docs/handbook/management-door.md.

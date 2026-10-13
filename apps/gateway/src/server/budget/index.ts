@@ -1,5 +1,5 @@
 /**
- * Budget, session and decision core (feature P1.3).
+ * Budget, session and decision core.
  *
  * Pure pieces (`decide`, period arithmetic, fingerprint, mission state) and their
  * store-backed executor (`SessionService`), the pipeline's `BudgetStage` adapter and

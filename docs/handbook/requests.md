@@ -492,7 +492,7 @@ The fingerprint is `fingerprintArguments(args)`, the canonical SHA-256 also
 stored as the audit's `arguments_hash` (budget handbook). The tool is part of
 both keys: the same arguments on another tool that touches the same risk are
 another call — another request, and an approval they do not consume. That
-closes the Phase 1 security finding (approvals were keyed without the tool).
+closes a defect of the first key (approvals were keyed without the tool).
 A call whose arguments carry a number JSON has no text for (`1e999`, which
 canonical JSON would write `null`) never opens a request: the pipeline
 rejects it before any stage, so what the approver reads in the sealed copy is

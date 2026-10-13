@@ -2,7 +2,7 @@
  * Sessions, durable counters, events — and the transactional decision primitive.
  *
  * Spec §3.3 and §6 ("authoritative, atomic counting"); plan §3.5. The accounting rules
- * (period arithmetic, quota and rate comparisons, gate handling) belong to feature P1.3
+ * (period arithmetic, quota and rate comparisons, gate handling) belong to the budget module
  * and arrive as the `decide` callback. This module guarantees that reading the
  * counters, deciding, consuming an approval, dropping a request, writing the event and
  * decrementing happen in one `BEGIN IMMEDIATE` transaction: two concurrent calls on the

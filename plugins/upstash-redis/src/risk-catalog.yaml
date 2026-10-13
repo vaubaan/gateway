@@ -27,7 +27,7 @@
 # account-scoped as well.
 #
 # The fallback `upstash-redis.uncategorized-write` counts only when no
-# specific entry matched the write (policy-engine rule, P1.2-SDK) ; presets
+# specific entry matched the write (policy-engine rule) ; presets
 # never carry it. Seen in production, it means a tool classifies to a slice
 # no fine-grained entry covers : add the entry.
 #

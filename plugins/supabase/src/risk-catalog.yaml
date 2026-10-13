@@ -34,7 +34,7 @@
 #     delete.
 #
 # The fallback `supabase.uncategorized-write` counts only when no specific
-# entry matched the write (policy-engine rule, P1.2-SDK) ; presets never
+# entry matched the write (policy-engine rule) ; presets never
 # carry it. Seen in production, it means a tool classifies to a slice no
 # fine-grained entry covers : add the entry.
 #

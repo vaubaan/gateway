@@ -1,6 +1,6 @@
 /**
  * "Issue a mission" in a browser, against an ephemeral instance with a
- * simulated IdP (spec §7.4, §4.2, §4.4; plan P1.5 definition of done).
+ * simulated IdP (spec §7.4, §4.2, §4.4).
  *
  * The signed-in user owns a GitHub, a Supabase and a Vercel connection (and
  * an experimental Gmail one). The first test issues a three-connection

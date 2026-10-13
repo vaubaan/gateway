@@ -4,7 +4,7 @@
  * `memoryStoreDeps` swaps the SQLite file for the store's `:memory:` mode
  * (same schema, same repositories, gone on `close()`); `fakePlugin()` is the
  * smallest plugin `definePlugin` accepts, so registry-dependent behaviour
- * (provider-app check, catalog index) can be exercised before P1.2 ships
+ * (provider-app check, catalog index) can be exercised without
  * real plugins.
  */
 import { definePlugin, type ProviderPlugin } from '@vaubaan/plugin-sdk';

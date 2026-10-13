@@ -202,7 +202,7 @@ and the bare `payment-intent.W` of the immediate charge) since catalog v3 :
 the second used to reach only the fallback. The fallback pattern
 `stripe.[**].W` (`fallback: true`) counts only when no dedicated entry
 matched a write (ADR [[fallback-risk-only-when-uncategorized]]) : no preset
-includes it (P1.2-align removed `stripe[<mode>].uncategorized-write` from
+includes it (the alignment of the plugins on the v5 SDK removed `stripe[<mode>].uncategorized-write` from
 `test-mode-developer` and `finance-operator`), and its appearance in an audit
 log means a catalog entry is missing.
 

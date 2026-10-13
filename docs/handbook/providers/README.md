@@ -11,8 +11,8 @@ tracks:
 # Provider plugin handbooks
 
 One handbook per provider plugin (`plugins/<id>`). Every shipped plugin is on
-the v5 plugin SDK since P1.2 (2026-10-13) and was brought to one consistent
-surface by P1.2-align: catalog loaded with `catalogPathNextTo`, fallback
+the v5 plugin SDK (2026-10-13) and was brought to one consistent
+surface since: catalog loaded with `catalogPathNextTo`, fallback
 entry flagged `fallback: true`, no preset on the fallback, standard `oauth2`
 refresh performed by the host. Each handbook covers the same six subjects, under headings of its own
 (spec [`gateway-risk-model.md`](../../spec/gateway-risk-model.md),

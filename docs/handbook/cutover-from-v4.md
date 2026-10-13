@@ -411,7 +411,7 @@ cutover; each is a default that can be changed, most in one place.
 | The audit's argument hash as the approval fingerprint                   | Done: one canonical SHA-256 of the key-sorted JSON (64 hex).                                                   |
 | Session events and past-period counters under the audit's retention?    | No: `retention_days` purges the audit only; events and counters grow.                                          |
 | Should a one-off mission's period carry an anchor date?                 | No anchor for one-off periods.                                                                                 |
-| Granting an approval                                                    | Done (P2.1): grant, open the gate for the rest of the period, or refuse; the gate is editable after issuance.  |
+| Granting an approval                                                    | Done: grant, open the gate for the rest of the period, or refuse; the gate is editable after issuance.         |
 | A call touching two gated risks                                         | Asks once per gated risk, in turn (one request each); both approvals are consumed by the one replay.           |
 | "Open the gate for the rest of the period" on a one-off mission         | Unavailable: there is no period end to bound it. The creator sets the gate to `auto` on the mission instead.   |
 
@@ -478,7 +478,7 @@ cutover; each is a default that can be changed, most in one place.
 | Refuse `bootstrap_token` once an IdP is configured?                                         | Optional: harmless to leave set, refused once revoked.                                                                                                                                         |
 | Where do non-operators land after sign-in?                                                  | On the page they came from; without one, on `/login`, which shows who is signed in. `/` goes to `/missions`.                                                                                   |
 | How are acts done with the bootstrap token audited?                                         | Under the literal actor `bootstrap`.                                                                                                                                                           |
-| OAuth refresh-token replay on the management door (P2.3)                                    | Built: a replayed refresh token or authorization code revokes the delegation, except the token just rotated, accepted once more within `oauth.refresh_reuse_window_seconds` (30 s by default). |
+| OAuth refresh-token replay on the management door                                           | Built: a replayed refresh token or authorization code revokes the delegation, except the token just rotated, accepted once more within `oauth.refresh_reuse_window_seconds` (30 s by default). |
 
 ### Audit
 

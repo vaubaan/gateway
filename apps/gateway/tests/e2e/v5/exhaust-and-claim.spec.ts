@@ -1,6 +1,6 @@
 /**
  * "Exhaust and claim" in a browser, against an ephemeral instance with a
- * simulated IdP (spec §7.6, §3.4, §4.2 "Request inbox"; plan P1.7 definition
+ * simulated IdP (spec §7.6, §3.4, §4.2 "Request inbox" definition
  * of done).
  *
  * The executor is an MCP client holding the mission token: its calls go over

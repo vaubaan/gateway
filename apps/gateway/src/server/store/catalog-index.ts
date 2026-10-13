@@ -5,7 +5,7 @@
  * `mission_policy` against this index at write time, so that no unknown id, and
  * therefore no wildcard or sentinel, ever reaches a row (spec §10, structural test
  * "every persisted restriction is an enumerated list"). The catalogs themselves are
- * loaded from the plugin registry by the application (P0.2); the store depends only on
+ * loaded from the plugin registry by the application; the store depends only on
  * this interface.
  */
 

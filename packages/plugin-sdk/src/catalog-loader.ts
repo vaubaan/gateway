@@ -214,7 +214,7 @@ export function fallbackIssues(
 
 /**
  * The fallback entry must carry `fallback: true` (ADR fallback-risk-only-
- * when-uncategorized D2, as amended by P1.2-align) : a reader of the YAML
+ * when-uncategorized D2, as amended) : a reader of the YAML
  * sees that the entry behaves differently, and the runtime never depends on
  * the pattern convention. An entry recognised by convention alone (the
  * `<provider>.**.W` pattern or the `<provider>.uncategorized-` id) is
@@ -277,7 +277,7 @@ export function presetWildcardIssues(catalog: RiskCatalog): string[] {
  * risk of this catalog ; an env-qualified entry targets an env-scoped risk
  * and an allowed env ; no duplicate risk within a preset ; never the
  * fallback — it fires only on writes the catalog has not reviewed (ADR
- * fallback-risk-only-when-uncategorized D3, tightened by P1.2-align), so a
+ * fallback-risk-only-when-uncategorized D3, as tightened), so a
  * preset including it would pre-accept exactly those. A mission creator may
  * still accept it by hand at issuance.
  *

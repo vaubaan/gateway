@@ -32,13 +32,13 @@ requests, approvals), §6 (encryption at rest, immutable audit), §8 (audit). De
 apps/gateway/migrations/
   0001_schema.sql                 schema v1 (27 tables + schema_migrations from the runner, 4 triggers)
   0002_audit_risks_purge_guard.sql audit_risks delete guard compares with the purge cutoff (schema version 2)
-  0003_web_sessions.sql           web_sessions: the human web-session rows (schema version 3, P1.1)
+  0003_web_sessions.sql           web_sessions: the human web-session rows (schema version 3)
   0004_connection_resource_curation.sql  connection_resources: metadata, owner metadata, env source,
-                                  renamed / hidden / stale flags (schema version 4, P1.4)
+                                  renamed / hidden / stale flags (schema version 4)
   0005_approval_bound_to_tool.sql approvals: the tool joins the key and the lookup index
-                                  (schema version 5, P2.1)
+                                  (schema version 5)
   0006_oauth_client_decisions.sql oauth_clients / delegations: registration, decision, revoke reason
-                                  (schema version 6, P2.3)
+                                  (schema version 6)
   0007_orphaned_not_stored.sql    missions: stored `orphaned` rows reset to `active`, two triggers
                                   refuse the value (schema version 7, P2.2b)
   0008_events_agent_label.sql     events: the agent label of a call event as a column, backfilled,
@@ -269,10 +269,10 @@ transaction that never yields.
 
 ## Connections and resources
 
-Beyond the P0.3 primitives (`create`, `getById`, `list`, `listOwnedBy`,
+Beyond the first primitives (`create`, `getById`, `list`, `listOwnedBy`,
 `getCredential`, `transferOwner`, `setMetadata`,
 `listResources`, `getResource`, `setResourceEnv`), the repository
-carries the operations the connect flows need (P1.4, handbook
+carries the operations the connect flows need (handbook
 [connections](connections.md)). All are additive; the state changes are single
 conditional `UPDATE`s whose `changes` is the answer:
 
@@ -290,14 +290,14 @@ conditional `UPDATE`s whose `changes` is the answer:
 `setResourceEnv` also sets `env_source = 'owner'`. `ConnectionResourceRecord` exposes
 `envSource`, `metadata` (the effective merge `{ ...discovered, ...owner }`),
 `ownerMetadata`, `displayNameEdited`, `hidden`, `staleSince`; `listResources` returns
-every row, hidden and stale included. `replaceResources`, the P0.3 sync that deleted the
+every row, hidden and stale included. `replaceResources`, the first sync, which deleted the
 refs it was not given (cascading to `mission_resources`), was removed once its last
-callers (test fixtures) moved to `syncDiscoveredResources`. The P0.3 writers that set a
+callers (test fixtures) moved to `syncDiscoveredResources`. The first writers, which set a
 credential, a status or an owner without a condition, which no production code called,
 were removed the same way: every writer left names its transition and carries its
 condition in the statement.
 
-Ownership and the stored state that follows from authority (P2.2, handbook
+Ownership and the stored state that follows from authority (handbook
 [authority](authority.md)), all additive, covered by
 `tests/integration/store/ownership-and-orphans.test.ts`:
 
@@ -325,7 +325,7 @@ every reader derives the state (`MissionGrounds.inspect`, handbook
   (`Exclude<MissionStatus, 'orphaned'>`), and there is no `markOrphaned`;
 - a row is parsed with `STORED_MISSION_STATUSES` (`active`, `expired`, `revoked`): a
   row that carried `orphaned` would be an `InvariantError` at the read, not a silent verdict;
-- migration `0007` resets the rows the P2.2 image wrote (`status = 'active'`,
+- migration `0007` resets the rows an earlier image wrote (`status = 'active'`,
   `closed_at = NULL`; tokens were never retired by an orphaning) and creates
   `missions_orphaned_not_stored_insert` / `_update`, `BEFORE` triggers that abort a
   write of the value. The CHECK of `0001` still lists it: an applied migration is
@@ -398,7 +398,7 @@ service, handbook [missions](missions.md)), and for whom a token may be inserted
 
 ## Audit
 
-`store.audit.append(entry)` takes `@vaubaan/gateway-core`'s `AuditEntry` (P0.5 owns
+`store.audit.append(entry)` takes `@vaubaan/gateway-core`'s `AuditEntry` (gateway-core owns
 the shape, `packages/gateway-core/src/audit.ts`):
 
 - `CallAuditEntry` — `mission_id`, `session_id`, `connection_id`, `resource_ref`,
@@ -424,7 +424,7 @@ per-object advisory lock) for the read and the insert to stay one step.
 
 Reads: `getById(id)` and `list(filter)` with `AuditFilter { missionId?, kind?,
 since?, until?, limit? }` (default limit 1000, ordered by `ts, id`).
-`search(query)` is the Audit page's query (P1.8, handbook [audit](audit.md)): a
+`search(query)` is the Audit page's query (handbook [audit](audit.md)): a
 mandatory `AuditScope` (missions created by one user, connections owned by some
 principals, optionally every administrative entry) applied before the filters
 (`missionId`, `userIds`, `connectionId`, `tool`, `decision`, `agentLabel`, `kind`,
@@ -618,7 +618,7 @@ Additive, for the approval gate (handbook [requests](requests.md), "Approvals"):
 ## The claim decision primitive
 
 `store.requests.decideClaim(id, decidedByUserId, apply)` is the same pattern for the
-creator's answer to a claim (P1.7, handbook [requests](requests.md)): one
+creator's answer to a claim (handbook [requests](requests.md)): one
 `BEGIN IMMEDIATE` transaction holding the check that the request is an open, unexpired
 claim (an overdue one is flipped to `expired` there and reported `not-open`), the
 synchronous `apply(ctx)` callback, and the conditional `UPDATE … WHERE state = 'open'`
@@ -676,7 +676,7 @@ transaction takes the delegation from the code or from the rotated token.
 ## Repository methods at a glance
 
 Every method of the twelve repository interfaces, as declared in `repositories/*.ts`.
-Some P0.3 primitives are called by the store suites and the fixtures only (in production a
+Some early primitives are called by the store suites and the fixtures only (in production a
 request or an approval is born inside a decision transaction and a share through
 `replaceForTarget`); they are listed all the same: the list is the interface.
 

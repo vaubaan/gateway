@@ -76,7 +76,7 @@ describe('the command table — every command sits in exactly one class', () => 
   });
 
   test('no command that gives a key a time to live, or moves data out of a key, is a plain write', () => {
-    // Orchestrator's decision of 2026-10-13 (finding B-M1): a one-second TTL and a
+    // Decision of 2026-10-13: a one-second TTL and a
     // RENAME are deletions in all but name.
     const expiries = ['EXPIRE', 'PEXPIRE', 'HEXPIRE', 'HPEXPIRE', 'SETEX', 'PSETEX', 'GETEX'];
     const absolute = ['EXPIREAT', 'PEXPIREAT', 'HEXPIREAT', 'HPEXPIREAT'];

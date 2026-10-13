@@ -18,7 +18,7 @@ export interface IdpClaimMapping {
   readonly sub: string;
   /** Claim carrying the email address. */
   readonly email: string;
-  /** Claim carrying the group list (array or delimited string, resolved by P1.1). */
+  /** Claim carrying the group list (array or delimited string, resolved at sign-in). */
   readonly groups: string;
 }
 
@@ -44,7 +44,7 @@ export interface AdminRule {
 
 /**
  * The app the company registered at a provider. Which fields a given
- * provider needs is declared by its plugin (`CredentialSpec`, P0.2); the
+ * provider needs is declared by its plugin (`CredentialSpec`); the
  * loader only guarantees the shape and resolves secret references.
  */
 export interface ProviderAppConfig {

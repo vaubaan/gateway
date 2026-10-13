@@ -17,7 +17,7 @@
  *
  * The company registers the app at https://supabase.com/dashboard/org/_/apps
  * with the instance callback URL ; the operator enters the client id and
- * secret in the instance configuration (P1.4).
+ * secret in the instance configuration.
  */
 
 import type { OAuth2CredentialSpec } from '@vaubaan/plugin-sdk';

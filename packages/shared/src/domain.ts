@@ -5,7 +5,7 @@
  *        (authority, budget, session, requests, approvals).
  * ADR  : docs/decisions/pivot-v4-to-v5-on-prem-mission-tokens.md.
  *
- * These are domain values, not storage rows : the store (P0.3) maps them to
+ * These are domain values, not storage rows : the store maps them to
  * its tables behind repository interfaces. Timestamps are ISO-8601 strings.
  * Field names follow the spec's own notation (`accepted_risks`,
  * `expires_at`). The plugin-facing value object `Resource` follows the SDK's

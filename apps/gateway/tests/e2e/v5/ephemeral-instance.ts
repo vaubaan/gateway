@@ -4,7 +4,7 @@
  * IdP"). One process:
  *
  *   - the real composition root, built here with the `:memory:` store, the
- *     plugins the image ships, P1.1's in-process `FakeIdp` as the relying
+ *     plugins the image ships, the in-process `FakeIdp` as the relying
  *     party's `fetch` and a mocked GitHub as `RootDeps.providerFetch`, and
  *     published on `globalThis` exactly as production does;
  *   - the server that ships: the standalone `server.js` of the build

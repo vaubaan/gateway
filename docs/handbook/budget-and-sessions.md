@@ -277,7 +277,7 @@ for `rotation` and `revocation`) build a `NewEvent` (`store/types.ts`) on that u
 compile. Readers (the request timeline, the session view, the structural check below) call
 `parseEventDetails(kind, details)`, the only code that reads stored details: it answers
 `null` for a kind it does not know and for an object that does not have the shape of its
-kind. Since P2.1 every kind has a shape: `approval` `{ request_id, approval_id, tool,
+kind. Every kind has a shape: `approval` `{ request_id, approval_id, tool,
 fingerprint, expires_at }` and `gate-opened` `{ request_id, period_start, period_end }`
 (written by the request service), `gate-changed` `{ gate, gate_before }` (written by the
 missions repository in the transaction that edits the gate), `rotation` `{ token_prefix, token_kind, holder,
@@ -378,7 +378,7 @@ prunes that key to its window on every access. Two faces on one state:
 windowMs, nowMs)` records one action. The budget peeks before `decide()` and pushes
   only on allow, inside the transaction callback, so refusals leave windows intact and
   no interleaving fits between probe and record.
-- `RateLimiter` (composition root port, P0.4) — `take(key, limit, windowMs)` checks and
+- `RateLimiter` (composition root port) — `take(key, limit, windowMs)` checks and
   consumes in one call, for the surface limits of spec §6 (per mission on `/mcp`, per
   user on connect flows, per IP on request pages).
 

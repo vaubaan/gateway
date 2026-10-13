@@ -4,7 +4,7 @@
  * refreshed (spec §2.3 "expired: the provider rejected the credential and
  * refresh failed"; §2.4).
  *
- * Callers (resource discovery here, the execution door in P1.6) use it as
+ * Callers (resource discovery here, the execution door) use it as
  * the refresh persistence hook:
  *
  *   const resolved = await broker.resolve(connectionId);   // refreshes when about to expire

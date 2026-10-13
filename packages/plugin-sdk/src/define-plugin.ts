@@ -286,7 +286,7 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
       if (spec.revocation !== undefined) issues.push(...revocationIssues(spec));
       // `refreshable: true` needs no `refresh()` : the host performs the
       // standard refresh_token grant from the spec (ADR plugin-contract D2 as
-      // amended by P1.2-align) ; `refresh` is an override for non-standard flows.
+      // as amended) ; `refresh` is an override for non-standard flows.
       break;
     case 'app-install':
       if (!Array.isArray(spec.appConfigFields) || spec.appConfigFields.length === 0) {

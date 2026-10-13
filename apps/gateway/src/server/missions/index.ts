@@ -1,5 +1,5 @@
 /**
- * Missions (feature P1.5): authority-bounded issuance, presets, resource
+ * Missions: authority-bounded issuance, presets, resource
  * selection, token mint / rotate / revoke, bootstrap kit; and the members and
  * per-holder tokens of a mission (`team`).
  *

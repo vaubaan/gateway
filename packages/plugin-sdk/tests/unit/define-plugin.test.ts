@@ -322,7 +322,7 @@ describe('definePlugin', () => {
       ]),
     );
     // `refreshable: true` without `refresh()` is fine : the host performs the
-    // standard refresh_token grant from the spec (P1.2-align).
+    // standard refresh_token grant from the spec.
     expect(oauthIssues.filter((m) => /refresh/.test(m))).toEqual([]);
 
     const appInstall: ProviderPlugin = {

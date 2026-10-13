@@ -543,11 +543,11 @@ Measured cost of `inspect` (`tests/integration/authority/door-latency.bench.test
 `:memory:` store, mean over 20 000 calls on a shared development machine;
 `VAUBAAN_BENCH=1 npx vitest run <that file>`):
 
-| Mission grounded on     | P2.2 (`settle`, stored) | P2.2b (`inspect`, derived) | Share of an in-process `tools/call` |
-| ----------------------- | ----------------------- | -------------------------- | ----------------------------------- |
-| owner, user-owned       | 19.2 µs                 | 16.8–18.1 µs               | ~2 %                                |
-| owner through a group   | 21.1 µs                 | 19.3–20.6 µs               | ~3 %                                |
-| a share made to a group | 43.9 µs                 | 42.5–45.3 µs               | ~5 %                                |
+| Mission grounded on     | stored at the act (`settle`, before migration 0007) | derived on read (`inspect`, today) | Share of an in-process `tools/call` |
+| ----------------------- | --------------------------------------------------- | ---------------------------------- | ----------------------------------- |
+| owner, user-owned       | 19.2 µs                                             | 16.8–18.1 µs                       | ~2 %                                |
+| owner through a group   | 21.1 µs                                             | 19.3–20.6 µs                       | ~3 %                                |
+| a share made to a group | 43.9 µs                                             | 42.5–45.3 µs                       | ~5 %                                |
 
 The cheap path is the same (`gapsOf`: one to three indexed reads, no catalog
 enumerated); the orphan path lost its write. The share path compiles its

@@ -159,7 +159,7 @@ export interface MissionContext {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** A delegated token resolved at the management door (spec §0
- *  "Delegation"). Its shape beyond identity is feature P2.3's. */
+ *  "Delegation"). Its shape beyond identity is the authorization server's. */
 export interface DelegationContext {
   readonly delegation_id: string;
   readonly user_id: string;

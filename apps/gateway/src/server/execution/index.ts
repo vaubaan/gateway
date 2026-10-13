@@ -1,5 +1,5 @@
 /**
- * Execution MCP door (feature P1.6; spec §4.1, §2.4, §6, §7.5): the pipeline
+ * Execution MCP door (spec §4.1, §2.4, §6, §7.5): the pipeline
  * of `@vaubaan/gateway-core` with its real stages, the bearer dispatch, the
  * token verifier and the upstream-credential cache, `tools/list`, `tools/call`
  * and the catalog endpoint. Built once by the composition root as
@@ -43,9 +43,9 @@ export interface ExecutionModuleDeps {
   readonly logger: Logger;
   readonly build: BuildInfo;
   readonly clock?: Clock;
-  /** Recognises delegated tokens so they are refused by kind; arrives with P2.3. */
+  /** Recognises delegated tokens so they are refused by kind (the authorization server provides it). */
   readonly delegations?: DelegatedTokenResolver;
-  /** Receives each `plugin.execute` outcome (community telemetry, P2.5); default: nothing. */
+  /** Receives each `plugin.execute` outcome (community telemetry); default: nothing. */
   readonly telemetry?: TelemetrySink;
 }
 

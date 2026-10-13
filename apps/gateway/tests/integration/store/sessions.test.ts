@@ -1,7 +1,7 @@
 /**
  * Sessions and the transactional decision primitive. Spec §3.3, §6 "authoritative,
  * atomic counting", §10 "atomicity on the last credit, several agents concurrent on the
- * same token". The accounting rules themselves are P1.3; here the `decide` callbacks are
+ * same token". The accounting rules themselves are the budget module's; here the `decide` callbacks are
  * minimal stand-ins that compare counters to a quota.
  */
 

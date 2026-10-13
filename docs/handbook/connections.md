@@ -616,7 +616,7 @@ A ref the discovery no longer returns is **not deleted**: `stale_since` is
 set (kept at its first value by later discoveries) and cleared when the
 ref comes back. `ConnectionResourceRecord.metadata` is the effective
 metadata, `{ ...discovered, ...ownerMetadata }` — what `toPluginResource()`
-hands to `classify` / `execute`. The destructive `replaceResources` of P0.3
+hands to `classify` / `execute`. The destructive `replaceResources` of the first store
 (it deleted missing refs and cascaded to mission selections) is gone from the
 repository: fixtures seed resources through `syncDiscoveredResources` too.
 
@@ -787,7 +787,7 @@ ordinary reassignment are in `tests/integration/authority/ownership.test.ts`
 
 Not automated: a browser run against real providers
 ([e2e-tests](../tests/e2e-tests.md#connect-a-provider), "Manual checks
-by feature" → "Connect a provider (P1.4)").
+by feature" → "Connect a provider").
 
 ## How to debug
 

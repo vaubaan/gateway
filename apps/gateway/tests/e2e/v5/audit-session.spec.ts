@@ -1,6 +1,6 @@
 /**
  * The Mission session page and the Audit page in a browser, against an
- * ephemeral instance (spec §4.2, §8; plan P1.8 definition of done: "a day of
+ * ephemeral instance (spec §4.2, §8: "a day of
  * calls per mission with the remaining budget per call").
  *
  * The launcher issues a mission for the signed-in user and leaves a day of

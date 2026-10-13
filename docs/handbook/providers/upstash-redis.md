@@ -134,7 +134,7 @@ import (that is, the gateway boot).
 Edge cases, all on the severe side:
 
 - **Whatever makes data go away is a deletion, at once or later**
-  (orchestrator's decision of 2026-10-13, finding B-M1). `KNOWN_DELETES`
+  (decision of 2026-10-13). `KNOWN_DELETES`
   holds **every expiry**, relative (`EXPIRE`, `PEXPIRE`, `HEXPIRE`,
   `HPEXPIRE`, `SETEX`, `PSETEX`) and absolute (`EXPIREAT`, `PEXPIREAT`,
   `HEXPIREAT`, `HPEXPIREAT`, `GETEX`): the key or the field is gone when the
@@ -211,7 +211,7 @@ staging, prod]`) except `create-database`, which is account-rooted (the
   unqualified risk (`upstash-redis.write-data`) or the misplaced one
   (`upstash-redis[dev].write-data`) and the accepted labels. Reads still pass.
 - The fallback `uncategorized-write` is env-scoped and counts only when no
-  specific entry matched (policy-engine rule, P1.2-SDK); no preset carries it.
+  specific entry matched (policy-engine rule); no preset carries it.
 - Presets: `read-only` (the three reads); `developer` (reads, `[development]`
   and `[staging]` `write-data` and `delete-data`, all `auto`); `operator`
   (everything: `prod` key writes `auto`, `[development].flush-database` and

@@ -36,7 +36,7 @@ modelling rationale (research, edge cases) is preserved in git history
 | SQL tokeniser       | `src/sql-tokens.ts`     | Shared by the two readers : comments and literals removed, statements of tokens, `null` on any construct whose extent it will not guess.                                                                                              |
 | `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context ; target from `resolveProjectRef`, identifiers from `readIdentifiers`.                                               |
 | `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                                                                                                      |
-| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align).                                                                                                                    |
+| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec.                                                                                                                                 |
 
 ## Classification rules
 
@@ -269,7 +269,7 @@ one-line change, reviewed like the catalog.
   (PII) and `read-managed-schemas` (identities, secrets). The three bulk risks (`bulk-row-write`, `storage.bulk-object-write`,
   `auth.bulk-user-write`) are acceptable on `preview` and `staging` only.
 - The fallback `supabase.uncategorized-write` is env-scoped and **counts only
-  when no specific entry matched** the write (policy-engine rule, P1.2-SDK) ;
+  when no specific entry matched** the write (policy-engine rule) ;
   no preset carries it and no tool reaches it today.
 - **`supabase.read-managed-schemas`** (catalog v4, product owner's decision
   of 2026-10-13) is the read of `auth`, `vault`, `storage` internals and
@@ -372,7 +372,7 @@ OAuth Apps) with the instance callback URL, and enters the client id and
 secret in the instance configuration. The host runs the authorization-code
 flow from `supabaseCredential` and the refresh : Supabase's is the standard
 RFC 6749 `refresh_token` grant with Basic client authentication, so the
-plugin declares `refreshable: true` and implements nothing (P1.2-align
+plugin declares `refreshable: true` and implements nothing (the alignment of the plugins on the v5 SDK
 removed `refreshSupabaseCredential` and `shouldRefreshSupabaseCredential`).
 `discoverResources` reads `/organizations` and `/projects` (unpaged upstream,
 capped at `MAX_DISCOVERED_PROJECTS` with a logger warning) and returns

@@ -1,5 +1,5 @@
 /**
- * Requests to the creator (features P1.7 and P2.1): the inbox, the creator's
+ * Requests to the creator: the inbox, the creator's
  * view of a claim or of an approval request, its decision and events, the
  * expiry sweeper, and the one builder of the request URL a refusal carries.
  *

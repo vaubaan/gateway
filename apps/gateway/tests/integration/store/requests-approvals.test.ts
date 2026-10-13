@@ -350,7 +350,7 @@ describe('approvals repository', () => {
   });
 
   it('the same arguments on another tool touching the same risk do not consume it', async () => {
-    // The Phase 1 security finding: the key had no tool.
+    // The defect migration 0005 closed: the key had no tool.
     const approval = await grant();
     expect(await consume({ ...CALL, tool: 'other_tool' })).toBeNull();
     expect((await store.approvals.getByRequest(requestId))?.consumedAt).toBeNull();

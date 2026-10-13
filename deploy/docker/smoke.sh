@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Container smoke test for the gateway image (plan P0.4 DoD; CI job "docker").
+# Container smoke test for the gateway image (CI job "docker").
 #
 #   deploy/docker/smoke.sh <image>
 #

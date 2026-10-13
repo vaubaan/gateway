@@ -2,7 +2,7 @@
  * Audit writer — the store's implementation of `@vaubaan/gateway-core`'s `AuditWriter`.
  *
  * The entry shape (`CallAuditEntry`, `AdminAuditEntry`) and the `write(entry)` contract
- * are owned by gateway-core (feature P0.5); this module persists them through
+ * are owned by gateway-core; this module persists them through
  * `AuditRepo.append`. A rejected `write` propagates: the pipeline treats it as an
  * internal error, so a call never completes without its audit entry.
  */

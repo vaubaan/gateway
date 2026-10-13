@@ -28,7 +28,7 @@ the gateway feeds it parsed objects (`IndexedRiskCatalog`, `Slice[]`,
 `@vaubaan/shared/risk-id`, because the issuance UI bundles this package and
 the barrel drags in `node:crypto` and argon2 through `api-key.ts`.
 
-Rewritten in English at P0.2 (ADR
+Rewritten in English for v5 (ADR
 [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
 D3, D8): the engine resolves environments through an `EnvResolver` over v5
 `Resource`s instead of v4 bindings; the two v4 modules
@@ -337,7 +337,7 @@ field from that caller and from `evaluateCallForToken` first.
 Every denial is built by one `denied(...)` helper and carries
 `code: 'risk-not-accepted'` (the only code this step emits) and a `hint`
 saying what to do (ask the mission creator to re-issue, or restrict the
-operation); the structured refusal body is gateway-core's job (P0.5).
+operation); the structured refusal body is gateway-core's job.
 `evaluateCallSimple(catalog, slices, accepted)` is for tests and
 integration code and runs in the unqualified mode; never on the hot path
 (pre-index at boot).

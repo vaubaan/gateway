@@ -408,7 +408,7 @@ entries only on env-scoped risks and inside`acceptable_in_envs`, no
    it fires only on writes no other entry covers (ADR
    [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md)),
    so a preset including it would pre-accept unreviewed writes; an error
-   since P1.2-align (no plugin needs it).
+   today (no plugin needs it).
 5. `catalogWarnings` → `options.warn` (default `console.warn`):
    `fallbackFlagIssues`, a fallback entry recognised by convention (pattern
    or id) without `fallback: true`. The loader only warns so a third-party
@@ -835,7 +835,7 @@ deletion touches, and `execute` and
   are exact (`presets[1].entries[2].risk_id`). A legacy YAML with a
   top-level `railway:` key fails with `provider: expected a lowercase
 slug` + `risks: expected a non-empty list` + `railway: unknown key`:
-  convert it to `provider:` / `risks:` (P1.2). `exactly one fallback entry
+  convert it to `provider:` / `risks:`. `exactly one fallback entry
   per catalog, found 2`: a second entry matches `<provider>.**.W` or is
   flagged — give it a narrower pattern or `fallback: false`.
   `risks[i].matches: the fallback '…' must match the catch-all write

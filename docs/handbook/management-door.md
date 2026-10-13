@@ -39,9 +39,9 @@ guard), the [store](store.md) (`store.delegations`), the
 [configuration](configuration.md) (`oauth.*`, the `SessionStore` and
 `RateLimiter` ports) and the [audit](audit.md).
 
-The page has two halves. **The authorization server** (feature P2.3):
+The page has two halves. **The authorization server**:
 discovery, clients, consent, tokens, revocation, the admission gate of the
-door, the Delegations page. **The door's tools** (feature P2.4, section
+door, the Delegations page. **The door's tools** (section
 [The door's tools](#the-doors-tools)): what an admitted agent can read,
 preview, issue, rotate and revoke, and what the door is structurally unable
 to do.
@@ -968,17 +968,17 @@ Migration `0006` adds `oauth_clients.registration`,
 `operator_decision`, `decided_at`, `decided_by`, `delegations.revoke_reason`
 and the index `delegations_client`.
 
-Methods P2.3 added: `listClients`, `updateClientDocument`, `decideClient`,
+Methods the authorization server added: `listClients`, `updateClientDocument`, `decideClient`,
 `deleteUnusedClients`, `listForClient`, `revoke(id, reason)`,
 `revokeIfActive(id, reason)` (the delegation when this call revoked it, else
 `null` — what makes an audit entry written once), `activityOf(ids)` (last
 token, latest live expiry), `findCode` and `findRefreshToken` (the row
 whatever its state, with its delegation — what a replay is recognised with),
-`purgeExpired`. P2.4 added `rotateSuccessorOf(previousHash, rotatedSince,
+`purgeExpired`. The management door added `rotateSuccessorOf(previousHash, rotatedSince,
 next)` — the reuse window: the live successor of a token rotated at or after
 `rotatedSince` is rotated in turn, in one transaction; `null` otherwise.
 
-The Phase 2 cycle-end pass made every grant and the operator's `disable` one
+The second review cycle made every grant and the operator's `disable` one
 transaction:
 
 - `redeemCode(codeHash, check, { refresh, access })` — spends the code, runs

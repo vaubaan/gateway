@@ -1,5 +1,5 @@
 /**
- * Audit (feature P1.8): the Audit page's search, the Mission session page's
+ * Audit: the Audit page's search, the Mission session page's
  * view, the retention sweeper. Read-only over the store, apart from the
  * purge.
  * Handbook: docs/handbook/audit.md.

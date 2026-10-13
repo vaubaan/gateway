@@ -1,7 +1,7 @@
 /**
  * Encryptor port — the master-key crypto the store uses for encrypted blobs.
  *
- * The contract is the `Encryptor` of the crypto module (feature P0.4,
+ * The contract is the `Encryptor` of the crypto module (
  * `apps/gateway/src/server/crypto/encryptor.ts`): XChaCha20-Poly1305 with a key derived
  * from the master key per blob and the blob's identifier as associated data, plus a
  * `keyVersion` for rotation. The store depends on the type only; the composition root

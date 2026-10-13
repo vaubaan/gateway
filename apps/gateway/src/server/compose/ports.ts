@@ -7,8 +7,8 @@
  * differ only in the implementations the root is built with
  * (plan §3.1; `_common.md` "keep the hosted/managed path open").
  *
- * The embedded store (`../store`, P0.3) and the plugin registry
- * (`@vaubaan/plugin-sdk`, P0.2) are owned by their own modules; the root
+ * The embedded store (`../store`) and the plugin registry
+ * (`@vaubaan/plugin-sdk`) are owned by their own modules; the root
  * holds them by their real types. This file states what the *host* side
  * needs from the store (liveness, for `/healthz` and shutdown) and the
  * in-memory ports the root still implements itself.
@@ -42,7 +42,7 @@ export interface RateLimiter {
 // `@vaubaan/gateway-core`'s `CacheClient` (TTL in seconds, `del`), re-exported
 // above: the door consumes it through gateway-core, so it has one definition.
 
-/** Opaque web sessions keyed by cookie value (P1.1 decides the record shape). */
+/** Opaque web sessions keyed by cookie value (the record shape is the authentication module's). */
 export interface SessionStore<T = unknown> {
   get(id: string): Promise<T | null>;
   set(id: string, value: T, ttlMs: number): Promise<void>;

@@ -1,5 +1,5 @@
 /**
- * Structural test (spec §8 "one entry … per administrative act"; plan P1.8
+ * Structural test (spec §8 "one entry … per administrative act"
  * "every admin mutation path writes an admin audit entry — the test
  * enumerates the service methods").
  *

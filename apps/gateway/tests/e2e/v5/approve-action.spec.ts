@@ -1,7 +1,7 @@
 /**
  * "Approve an action" in a browser, against an ephemeral instance with a
  * simulated IdP and a mocked GitHub (spec §7.7, §3.5, §4.1 `approval-required`,
- * §4.2 "Request inbox"; plan P2.1).
+ * §4.2 "Request inbox").
  *
  * The mission is issued from the GitHub plugin's `developer` preset as it
  * ships: writing a workflow file is one of its entries gated `approval`. The

@@ -8,7 +8,7 @@
  *
  * Scope: the whole application (`apps/gateway/src`, `next.config.ts`), `deploy/`,
  * `scripts/` and `.github/workflows`. The v4 UI and `lib/`, which the scan used
- * to leave out, were deleted with the v4 application (P1.6).
+ * to leave out, were deleted with the v4 application.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
