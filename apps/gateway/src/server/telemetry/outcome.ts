@@ -9,7 +9,8 @@
  *   - whether a result has `isError: true`;
  *   - the JavaScript class of a thrown value (`instanceof`, never its `name`);
  *   - a numeric HTTP status (`UpstreamAuthError.upstreamStatus`, or a numeric
- *     `status`), kept only when it is an integer from 100 to 599;
+ *     `status` such as `UpstreamHttpError.status`), kept only when it is an
+ *     integer from 100 to 599;
  *   - an error `code` or `name`, compared for equality with the fixed lists
  *     below and then discarded.
  *
@@ -20,12 +21,17 @@
  *                         declined a call its own classifier had let through
  *                         (unknown tool, a target or an argument the executor
  *                         rejects, a tool that is not implemented)
- *                         → `executor_refused`
+ *                         → `executor_refused`. A provider failure is never
+ *                         returned this way: plugins throw it (handbook
+ *                         plugin-sdk, "Errors of `execute`")
  *   upstream-error        the provider, or the way to it, failed
  *                         → `http_<status>`, `network`, `timeout`,
  *                           `credential_rejected` (the connection's credential
  *                           was refused and could not be refreshed),
  *                           `unspecified` (an error with no status)
+ *
+ * A call whose caller went away is never handed to this module (the upstream
+ * stage does not report it): a disconnect is not an outcome of the plugin.
  *   execution-error       the plugin's code failed
  *                         → `type_error`, `range_error`, `reference_error`,
  *                           `syntax_error`, `non_error_throw`
@@ -130,7 +136,8 @@ function classifyThrown(thrown: unknown): Classified {
   if (thrown instanceof ReferenceError) return execution('reference_error');
   if (thrown instanceof SyntaxError) return execution('syntax_error');
   if (!(thrown instanceof Error)) return execution('non_error_throw');
-  // Plugins throw a plain `Error` for a provider failure that is not 401/403.
+  // A provider failure that carries no status (a JSON-RPC error frame, an
+  // unusable answer): plugins throw a plain `Error` for it.
   return upstream('unspecified');
 }
 

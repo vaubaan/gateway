@@ -6,16 +6,23 @@
  *   - the real composition root, built here with the `:memory:` store, the
  *     plugins the image ships, P1.1's in-process `FakeIdp` as the relying
  *     party's `fetch` and a mocked GitHub as `RootDeps.providerFetch`, and
- *     published on `globalThis` exactly as production does — so the Next
- *     server started below serves the built app on this root (`getRoot()`
- *     returns the promise already there);
+ *     published on `globalThis` exactly as production does;
+ *   - the server that ships: the standalone `server.js` of the build
+ *     (`.next/standalone/apps/gateway/server.js`), started in this process
+ *     the way `deploy/docker/Dockerfile` starts it — the static assets and
+ *     `public/` copied beside it, `PORT` and `HOSTNAME` in the environment.
+ *     It is not wrapped: it owns the app's port, and its `getRoot()` returns
+ *     the promise already on `globalThis`. A file the build failed to trace
+ *     into the standalone tree therefore fails the suite;
  *   - nothing of its own between a request and the root: the executor's calls
  *     of every spec arrive over HTTP on `/mcp` and run through
  *     `root.execution` (the door, the pipeline, `root.budget`), exactly as an
  *     agent's do;
  *   - Ada's connections seeded straight through the repositories, her GitHub
  *     one carrying an installation of the mocked GitHub;
- *   - control endpoints under `/__e2e`, which exist only in this file: the
+ *   - control endpoints under `/__e2e`, which exist only in this file and
+ *     listen on a port of their own, the one after the app's (`controlPort`,
+ *     `instance.ts`), since the app's port is the standalone server's: the
  *     consent screens the browser cannot reach (the simulated IdP's, the
  *     mocked GitHub's installation page), who signs in next, a token check
  *     through `MissionService.verifyToken`, `small-mission` (a mission of Ada
@@ -29,17 +36,20 @@
  *     gated and exhausted risks, for the audit pages.
  *
  * Run by Playwright's `webServer` (see `playwright.config.ts` next to this
- * file) after `next build`. Never part of the image.
+ * file) after `next build`, with `tsx`, from the repository's sources: it
+ * needs nothing of `tests/` inside the standalone tree, and the build keeps
+ * the test files out of it (`outputFileTracingExcludes`, `next.config.ts`).
+ * Never part of the image.
  */
 import { generateKeyPairSync, randomBytes } from 'node:crypto';
-import { existsSync } from 'node:fs';
+import { cpSync, existsSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
+import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { githubCredential } from '@vaubaan/plugin-github';
 import { mockFetch, type MockFetch } from '@vaubaan/plugin-sdk/testing';
-import nextModule from 'next';
 
 import { getRoot, type GatewayRoot } from '../../../src/server/compose/root';
 import { serializeSecret } from '../../../src/server/connections';
@@ -50,6 +60,7 @@ import { FakeIdp } from '../../integration/auth/fake-idp';
 import { seedInstance, testRootDeps } from '../../integration/missions/support';
 import {
   CONTROL_PREFIX,
+  controlPort,
   E2E_APPROVER_USER,
   E2E_AUDIT_USER,
   E2E_OPERATOR,
@@ -63,11 +74,11 @@ import {
 
 const CLIENT = { clientId: 'vaubaan-gateway-e2e', clientSecret: 'e2e-client-secret' };
 const APP_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '../../..');
-
-type NextFactory = (options: { dev: boolean; dir: string }) => {
-  prepare(): Promise<void>;
-  getRequestHandler(): (req: IncomingMessage, res: ServerResponse) => Promise<void>;
-};
+/** Where the build writes the app in the standalone tree (the tracing root is the repository). */
+const STANDALONE_APP = resolve(APP_DIR, '.next/standalone/apps/gateway');
+/** What the image runs: `CMD ["node", "apps/gateway/server.js"]`. */
+const STANDALONE_SERVER = resolve(STANDALONE_APP, 'server.js');
+const LOOPBACK = '127.0.0.1';
 
 function sendJson(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -306,9 +317,9 @@ async function issueDeveloperMission(
 }
 
 async function main(): Promise<void> {
-  if (!existsSync(resolve(APP_DIR, '.next/BUILD_ID'))) {
+  if (!existsSync(STANDALONE_SERVER)) {
     throw new Error(
-      `no production build under ${APP_DIR}/.next — run "npm run build" first (npm run test:e2e:v5 does)`,
+      `${STANDALONE_SERVER} is missing — run "npm run build" first (npm run test:e2e:v5 does)`,
     );
   }
   const port = instancePort();
@@ -346,16 +357,10 @@ async function main(): Promise<void> {
     }),
   );
 
-  const next = (
-    typeof nextModule === 'function' ? nextModule : (nextModule as { default: unknown }).default
-  ) as NextFactory;
-  const app = next({ dev: false, dir: APP_DIR });
-  await app.prepare();
-  const handle = app.getRequestHandler();
-
-  const server = createServer((req, res) => {
+  // The control endpoints: the launcher's own listener, beside the app's port.
+  const control = createServer((req, res) => {
     void (async () => {
-      const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+      const url = new URL(req.url ?? '/', `http://${LOOPBACK}:${controlPort()}`);
       if (url.pathname === `${CONTROL_PREFIX}/idp/authorize`) {
         // The consent step of the simulated IdP: answer with the callback URL
         // the IdP would redirect the browser to.
@@ -482,16 +487,39 @@ async function main(): Promise<void> {
         sendJson(res, 200, await seedDayOfWork(rig));
         return;
       }
-      await handle(req, res);
+      sendJson(res, 404, { error: 'not a control endpoint' });
     })().catch((err: unknown) => {
       sendJson(res, 500, { error: err instanceof Error ? err.message : String(err) });
     });
   });
-  server.listen(port, '127.0.0.1', () => {
-    process.stdout.write(`ephemeral instance ready on http://127.0.0.1:${port} as ${PUBLIC_URL}\n`);
+  // Up before the app: Playwright waits for the app's `/healthz`, so a spec never
+  // reaches a control endpoint that is not listening yet.
+  await new Promise<void>((ready, failed) => {
+    control.once('error', failed);
+    control.listen(controlPort(), LOOPBACK, ready);
   });
+
+  // What deploy/docker/Dockerfile copies beside server.js: Next leaves the static
+  // assets and `public/` out of the standalone tree.
+  cpSync(resolve(APP_DIR, '.next/static'), resolve(STANDALONE_APP, '.next/static'), {
+    recursive: true,
+  });
+  cpSync(resolve(APP_DIR, 'public'), resolve(STANDALONE_APP, 'public'), { recursive: true });
+  // The two variables server.js reads, as the image sets them (`ENV PORT`, `ENV
+  // HOSTNAME`). A shell usually exports HOSTNAME as the machine's name: without the
+  // second line the server would listen on that address.
+  process.env.PORT = String(port);
+  process.env.HOSTNAME = LOOPBACK;
+  // The image's own entry point, unmodified. It changes the working directory to its
+  // own; every path of this file is absolute. The root is already where its
+  // `getRoot()` looks.
+  createRequire(import.meta.url)(STANDALONE_SERVER);
+  process.stdout.write(
+    `ephemeral instance: ${STANDALONE_SERVER} on http://${LOOPBACK}:${port} as ${PUBLIC_URL}, ` +
+      `control endpoints on port ${controlPort()}\n`,
+  );
   const stop = (): void => {
-    server.close();
+    control.close();
     void root.close().finally(() => process.exit(0));
   };
   process.on('SIGTERM', stop);

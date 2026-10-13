@@ -15,6 +15,35 @@ import { TOKEN_ENDPOINT_AUTH_METHODS } from '../store/types';
 /** The single scope a delegation carries: managing the user's missions (spec §4.1 bis). */
 export const MANAGEMENT_SCOPE = 'mgmt';
 
+/** What a request is told when it asks for anything else. */
+export const ONLY_SCOPE_MESSAGE = `the only scope of this server is "${MANAGEMENT_SCOPE}"`;
+
+/** The scopes of a space-separated `scope` value (RFC 6749 §3.3). */
+export function scopesOf(raw: string): string[] {
+  return raw.split(/\s+/).filter((scope) => scope !== '');
+}
+
+/**
+ * The rule of an authorization request: the scope asked for **includes** the
+ * management scope (other values are ignored; the delegation carries `mgmt` only).
+ */
+export function asksForManagement(raw: string): boolean {
+  return scopesOf(raw).includes(MANAGEMENT_SCOPE);
+}
+
+/**
+ * The rule of a renewal: the scope asked for **does not widen** the delegation —
+ * it names nothing but the management scope (RFC 6749 §6).
+ */
+export function staysWithinManagement(raw: string): boolean {
+  return scopesOf(raw).every((scope) => scope === MANAGEMENT_SCOPE);
+}
+
+/** Whether the scopes a delegated token carries open the management door. */
+export function carriesManagementScope(scopes: readonly string[]): boolean {
+  return scopes.includes(MANAGEMENT_SCOPE);
+}
+
 /** The management MCP door, the one resource this authorization server protects. */
 export const MANAGEMENT_DOOR_PATH = '/mcp/manage';
 
@@ -70,6 +99,22 @@ export function isManagementResource(endpoints: OAuthEndpoints, presented: strin
   return comparableResource(presented) === comparableResource(endpoints.resource);
 }
 
+/**
+ * RFC 8707: the first `resource` value of a request that is not the management
+ * door, or `null` when every value names it (or none was sent).
+ */
+export function foreignResource(
+  endpoints: OAuthEndpoints,
+  resources: readonly string[],
+): string | null {
+  return resources.find((resource) => !isManagementResource(endpoints, resource)) ?? null;
+}
+
+/** What a request naming another resource is told. */
+export function onlyResourceMessage(endpoints: OAuthEndpoints): string {
+  return `this server only issues tokens for ${endpoints.resource}`;
+}
+
 export interface MetadataOptions {
   readonly policy: ClientRegistrationPolicy;
   readonly metadataDocuments: boolean;
@@ -111,5 +156,24 @@ export function protectedResourceMetadata(endpoints: OAuthEndpoints): Record<str
     scopes_supported: [MANAGEMENT_SCOPE],
     bearer_methods_supported: ['header'],
     resource_name: 'Vaubaan Gateway — mission management',
+  };
+}
+
+/**
+ * RFC 9728 protected resource metadata of the **execution** door (`/mcp`),
+ * served at the path-less well-known URL. That door takes a static bearer, the
+ * mission token, and has no authorization server: an empty
+ * `authorization_servers` tells an MCP client that probes on connect to use
+ * the bearer it was configured with and not to attempt a registration.
+ */
+export function executionResourceMetadata(
+  endpoints: OAuthEndpoints,
+  executionDoorPath: string,
+): Record<string, unknown> {
+  return {
+    // Built on the issuer, like every URL of this file: one base-URL rule.
+    resource: `${endpoints.issuer}${executionDoorPath}`,
+    authorization_servers: [],
+    bearer_methods_supported: ['header'],
   };
 }

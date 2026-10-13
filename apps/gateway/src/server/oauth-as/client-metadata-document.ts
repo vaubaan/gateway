@@ -115,6 +115,8 @@ for (const [network, prefix] of [
   ['2002::', 16],
   ['fc00::', 7],
   ['fe80::', 10],
+  // Site-local, deprecated by RFC 3879 and still routed inside some sites.
+  ['fec0::', 10],
   ['ff00::', 8],
 ] as const) {
   NON_PUBLIC.addSubnet(network, prefix, 'ipv6');

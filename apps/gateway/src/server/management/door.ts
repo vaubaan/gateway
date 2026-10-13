@@ -17,7 +17,8 @@
  *                 `MANAGEMENT_TOOLS` bound to the delegation that was admitted
  *
  * A tool answers with **structured content**: the answer itself, also
- * serialized as text for clients that only read text. A "no" — a draft beyond
+ * serialized as text for clients that only read text, in the shape its
+ * `outputSchema` advertises (`output-schemas.ts`). A "no" — a draft beyond
  * the user's authority, a mission that is not theirs — is a tool error
  * (`isError`) whose structured content is `{ error: { code, message, hint, … } }`,
  * so the model reads it and corrects itself. Only what the door itself rejects
@@ -74,6 +75,17 @@ function json(status: number, body: object, headers: Record<string, string> = {}
   });
 }
 
+/** What `handle` puts under `ACTOR_KEY`; anything else is not an admitted actor. */
+function isManagementActor(value: unknown): value is ManagementActor {
+  if (typeof value !== 'object' || value === null) return false;
+  const actor = value as Record<string, unknown>;
+  return (
+    typeof actor.userId === 'string' &&
+    typeof actor.delegationId === 'string' &&
+    typeof actor.clientId === 'string'
+  );
+}
+
 /** A tool's answer as MCP carries it: structured content, and the same as text. */
 export function toolResultOf(outcome: ToolOutcome<unknown>): CallToolResult {
   if (outcome.ok) {
@@ -102,7 +114,7 @@ export class ManagementDoor {
     // The handler holds nothing between requests; the factory builds one server
     // per request around the actor the gate admitted.
     this.modern = createMcpHandler(
-      ({ authInfo }) => this.buildServer(authInfo?.extra?.[ACTOR_KEY] as ManagementActor),
+      ({ authInfo }) => this.buildServer(authInfo?.extra?.[ACTOR_KEY]),
       {
         legacy: 'reject',
         responseMode: 'auto',
@@ -162,8 +174,10 @@ export class ManagementDoor {
     }
   }
 
-  private buildServer(actor: ManagementActor | undefined): McpServer {
-    if (!actor) throw new Error('management door: MCP server built without an admitted actor');
+  private buildServer(actor: unknown): McpServer {
+    if (!isManagementActor(actor)) {
+      throw new Error('management door: MCP server built without an admitted actor');
+    }
     const server = new McpServer(
       { name: MANAGEMENT_SERVER_INFO_NAME, version: this.deps.build.version },
       { capabilities: { tools: { listChanged: false } }, instructions: MANAGEMENT_INSTRUCTIONS },
@@ -175,12 +189,30 @@ export class ManagementDoor {
           title: tool.title,
           description: tool.description,
           inputSchema: tool.inputSchema,
+          outputSchema: tool.outputSchema,
           annotations: tool.annotations,
         },
         (args: unknown) => this.call(tool, actor, args),
       );
     }
     return server;
+  }
+
+  /**
+   * The SDK validates a successful answer against the advertised schema after
+   * this method returned, and replaces one that does not match by a bare
+   * error. That must never happen (the schemas are loose, and tests parse
+   * every real answer); if it does, this line is the operator's trace: the
+   * tool, and where the answer departs — paths and codes, never a value.
+   */
+  private checkAnswer(tool: ManagementToolDefinition, actor: ManagementActor, data: unknown): void {
+    const parsed = tool.outputSchema.safeParse(data);
+    if (parsed.success) return;
+    this.deps.logger.error('management tool answer does not match its advertised schema', {
+      tool: tool.name,
+      delegation_id: actor.delegationId,
+      mismatches: parsed.error.issues.map((issue) => `${issue.path.join('.')}: ${issue.code}`),
+    });
   }
 
   private async call(
@@ -190,6 +222,7 @@ export class ManagementDoor {
   ): Promise<CallToolResult> {
     try {
       const outcome = await tool.run(this.deps.tools, actor, args);
+      if (outcome.ok) this.checkAnswer(tool, actor, outcome.data);
       // Arguments and answers are never logged: an answer may carry a mission token.
       this.deps.logger.info('tools/call', {
         tool: tool.name,

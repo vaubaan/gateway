@@ -22,17 +22,10 @@ export interface CreateApprovalInput extends ApprovalKey {
 
 export interface ApprovalsRepo {
   create(input: CreateApprovalInput): Promise<ApprovalRecord>;
-  getById(id: string): Promise<ApprovalRecord | null>;
   /** The approval a granted request produced; null when it was refused, or not granted yet. */
   getByRequest(requestId: string): Promise<ApprovalRecord | null>;
   /** Unconsumed, unexpired approvals of the mission. */
   listActive(missionId: string): Promise<ApprovalRecord[]>;
-  /**
-   * Single-use consumption of the approval matching `(mission, risk, tool, fingerprint)`.
-   * Returns the consumed approval, or null when none is valid. Inside a decision
-   * transaction use `DecideContext.consumeApproval` instead.
-   */
-  consume(missionId: string, key: ApprovalKey): Promise<ApprovalRecord | null>;
 }
 
 interface ApprovalRow {
@@ -167,19 +160,12 @@ export function createApprovalsRepo(ctx: RepoContext): ApprovalsRepo {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => insertApprovalSync(ctx, input, now));
     },
-    async getById(id) {
-      return getApprovalRecord(ctx, id);
-    },
     async getByRequest(requestId) {
       const row = byRequest.get(requestId);
       return row ? toRecord(row) : null;
     },
     async listActive(missionId) {
       return active.all(missionId, nowIso(ctx)).map(toRecord);
-    },
-    async consume(missionId, key) {
-      const now = nowIso(ctx);
-      return withImmediateTransaction(db, () => consumeApprovalSync(ctx, missionId, key, now));
     },
   };
 }

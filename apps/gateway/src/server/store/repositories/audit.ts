@@ -8,6 +8,7 @@
  */
 
 import type {
+  AdminAct,
   AdminAuditEntry,
   AuditDecision,
   AuditEntry,
@@ -134,8 +135,30 @@ export interface AgentLabelActivity {
   readonly lastSeenAt: Iso;
 }
 
+/**
+ * When `appendUnlessLatest` holds its entry back: the most recent administrative entry
+ * on the same object whose act is one of `among` carries the same act and was written
+ * at or after `since`.
+ */
+export interface LatestActGuard {
+  /** The acts that alternate on the object (`mission-orphaned` / `mission-restored`). */
+  readonly among: readonly AdminAct[];
+  /**
+   * An equal act older than this does not hold the entry back: it records an earlier
+   * change, not the one being written (an entry purged by retention, or a change no
+   * entry recorded in between, must not suppress a new one).
+   */
+  readonly since: Iso;
+}
+
 export interface AuditRepo {
   append(entry: AuditEntry): Promise<AuditRecord>;
+  /**
+   * `append` for a change two writers may both have observed: the read of the latest
+   * entry and the insert are one transaction, so the change is recorded once. Returns
+   * `null` when the entry was held back (see `LatestActGuard`).
+   */
+  appendUnlessLatest(entry: AdminAuditEntry, guard: LatestActGuard): Promise<AuditRecord | null>;
   getById(id: string): Promise<AuditRecord | null>;
   list(filter?: AuditFilter): Promise<AuditRecord[]>;
   /**
@@ -452,19 +475,27 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
      GROUP BY agent_label ORDER BY last_seen DESC, agent_label`,
   );
 
-  // Plain aggregates and CASE: the same statement on Postgres. `until` is bound twice so
-  // one statement serves a bounded span and an open one.
-  const labelActivityOf = db.prepare<
-    [string, string, string | null, string | null],
-    { label: string | null; allowed: number; refused: number; last_seen: string }
-  >(
-    `SELECT agent_label AS label,
+  // Plain aggregates and CASE. Two statements, a bounded span and an open one, rather
+  // than one with `? IS NULL OR ts < ?`: Postgres cannot infer the type of a parameter
+  // that is only compared to NULL (same reason as `latestCallOf` / `latestRefusedCallOf`
+  // below). On Postgres the driver returns SUM as text: map with `Number()` at the port.
+  interface LabelActivityRow {
+    label: string | null;
+    allowed: number;
+    refused: number;
+    last_seen: string;
+  }
+  const LABEL_ACTIVITY = `SELECT agent_label AS label,
             SUM(CASE WHEN decision = 'allowed' THEN 1 ELSE 0 END) AS allowed,
             SUM(CASE WHEN decision = 'refused' THEN 1 ELSE 0 END) AS refused,
             MAX(ts) AS last_seen
      FROM audit
-     WHERE kind = 'call' AND mission_id = ? AND ts >= ? AND (? IS NULL OR ts < ?)
-     GROUP BY agent_label`,
+     WHERE kind = 'call' AND mission_id = ? AND ts >= ?`;
+  const labelActivityOpen = db.prepare<[string, string], LabelActivityRow>(
+    `${LABEL_ACTIVITY} GROUP BY agent_label`,
+  );
+  const labelActivityUntil = db.prepare<[string, string, string], LabelActivityRow>(
+    `${LABEL_ACTIVITY} AND ts < ? GROUP BY agent_label`,
   );
 
   const latestCallOf = db.prepare<[string, string, string], AuditRow>(
@@ -576,6 +607,29 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
       });
       return requireEntry(id);
     },
+    async appendUnlessLatest(entry, guard) {
+      if (guard.among.length === 0 || !guard.among.includes(entry.act)) {
+        throw new InvariantError('audit: the guarded acts must include the act being written');
+      }
+      const id = ctx.newId();
+      // An `IN` list of bound values and a keyset order: the same statement on Postgres,
+      // where the transaction must be SERIALIZABLE (or hold a per-object advisory lock)
+      // for the read and the insert to stay one step. `ORDER BY ts DESC, id DESC` is
+      // insertion order for the entries one process wrote (`store/ids.ts`).
+      const latest = db.prepare<string[], { act: string; ts: string }>(
+        `SELECT act, ts FROM audit
+         WHERE kind = 'admin' AND object_type = ? AND object_id = ?
+           AND act IN (${placeholders(guard.among.length)})
+         ORDER BY ts DESC, id DESC LIMIT 1`,
+      );
+      const written = withImmediateTransaction(db, () => {
+        const last = latest.get(entry.object.type, entry.object.id, ...guard.among);
+        if (last && last.act === entry.act && last.ts >= guard.since) return false;
+        insert.run(...adminParams(id, entry));
+        return true;
+      });
+      return written ? requireEntry(id) : null;
+    },
     async getById(id) {
       const row = byId.get(id);
       return row ? toRecord(row) : null;
@@ -630,8 +684,11 @@ export function createAuditRepo(ctx: RepoContext): AuditRepo {
         .map((r) => ({ label: r.label, calls: r.calls, lastSeenAt: r.last_seen }));
     },
     async agentLabelActivity(missionId, span) {
-      return labelActivityOf
-        .all(missionId, span.since, span.until, span.until)
+      const rows =
+        span.until === null
+          ? labelActivityOpen.all(missionId, span.since)
+          : labelActivityUntil.all(missionId, span.since, span.until);
+      return rows
         .map((r) => ({
           label: r.label,
           allowed: r.allowed,

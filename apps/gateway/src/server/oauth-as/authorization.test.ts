@@ -333,6 +333,24 @@ describe('AuthorizationService', () => {
       expect(rig.store.db.prepare('SELECT * FROM oauth_codes').all()).toEqual([]);
     });
 
+    it('revokes the delegation when its code cannot be minted: nothing stays active that no client can redeem', async () => {
+      const consentId = await shown();
+      rig.store.db.exec(
+        `CREATE TRIGGER fault BEFORE INSERT ON oauth_codes
+         BEGIN SELECT RAISE(ABORT, 'simulated store fault'); END`,
+      );
+      await expect(rig.authorization.decide(rig.ada, consentId, 'approve')).rejects.toThrow(
+        'simulated store fault',
+      );
+      const delegations = await rig.store.delegations.listForUser(rig.ada.id);
+      expect(delegations.map((d) => d.status)).toEqual(['revoked']);
+      expect(rig.store.db.prepare('SELECT * FROM oauth_codes').all()).toEqual([]);
+      // The consent is spent: the user starts again from the application.
+      expect(await rig.authorization.decide(rig.ada, consentId, 'approve')).toEqual({
+        outcome: 'expired',
+      });
+    });
+
     it('each approval is its own delegation: one consent, one family of tokens', async () => {
       const first = await rig.grant(rig.ada, client);
       const second = await rig.grant(rig.ada, client);

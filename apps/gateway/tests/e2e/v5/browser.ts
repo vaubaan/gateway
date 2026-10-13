@@ -14,7 +14,7 @@
  */
 import type { APIRequestContext, BrowserContext, Route } from '@playwright/test';
 
-import { CONTROL_PREFIX, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
+import { controlUrl, IDP_ISSUER, localOrigin, PUBLIC_URL } from './instance';
 
 /** Headers that describe the browser's connection, not the request. */
 const HOP_HEADERS = new Set(['host', 'connection', 'content-length', 'accept-encoding']);
@@ -91,20 +91,20 @@ export async function routeToInstance(context: BrowserContext): Promise<void> {
   await context.route(`${IDP_ISSUER}/authorize**`, async (route) => {
     const url = new URL(route.request().url());
     const consent = await route.fetch({
-      url: `${localOrigin()}${CONTROL_PREFIX}/idp/authorize${url.search}`,
+      url: `${controlUrl('/idp/authorize')}${url.search}`,
     });
     const { callback } = (await consent.json()) as { callback: string };
     await fulfillRedirect(route, callback, []);
   });
 
   // The provider pages of the connect flows (which ones is the launcher's to say).
-  const listed = await context.request.get(`${localOrigin()}${CONTROL_PREFIX}/provider-pages`);
+  const listed = await context.request.get(controlUrl('/provider-pages'));
   const { pages } = (await listed.json()) as { pages: string[] };
   for (const page of pages) {
     await context.route(`${page}**`, async (route) => {
       const visited = encodeURIComponent(route.request().url());
       const step = await route.fetch({
-        url: `${localOrigin()}${CONTROL_PREFIX}/provider-page?url=${visited}`,
+        url: `${controlUrl('/provider-page')}?url=${visited}`,
       });
       const { callback } = (await step.json()) as { callback: string };
       await fulfillRedirect(route, callback, []);
@@ -120,9 +120,10 @@ export interface TokenCheck {
 
 /** Asks the instance what `MissionService.verifyToken` says of a bearer. */
 export async function checkToken(request: APIRequestContext, token: string): Promise<TokenCheck> {
-  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/verify-token`, {
+  const response = await request.post(controlUrl('/verify-token'), {
     data: { token },
   });
+  if (!response.ok()) throw new Error(`verify-token answered ${response.status()}`);
   return (await response.json()) as TokenCheck;
 }
 
@@ -135,7 +136,7 @@ export async function signInAs(
   request: APIRequestContext,
   user: { readonly sub: string; readonly email: string; readonly name: string },
 ): Promise<void> {
-  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/idp/next-user`, {
+  const response = await request.post(controlUrl('/idp/next-user'), {
     data: user,
   });
   if (!response.ok()) throw new Error(`idp/next-user answered ${response.status()}`);
@@ -156,7 +157,7 @@ export async function issueSmallMission(
   request: APIRequestContext,
   name: string,
 ): Promise<SmallMission> {
-  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/small-mission`, {
+  const response = await request.post(controlUrl('/small-mission'), {
     data: { name },
   });
   if (!response.ok()) throw new Error(`small-mission answered ${response.status()}`);
@@ -172,7 +173,7 @@ export async function issueDeveloperMission(
   request: APIRequestContext,
   name: string,
 ): Promise<SmallMission> {
-  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/developer-mission`, {
+  const response = await request.post(controlUrl('/developer-mission'), {
     data: { name },
   });
   if (!response.ok()) throw new Error(`developer-mission answered ${response.status()}`);
@@ -188,7 +189,7 @@ export async function seedShareScenario(
   request: APIRequestContext,
   connectionName: string,
 ): Promise<{ connection_id: string }> {
-  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/share-scenario`, {
+  const response = await request.post(controlUrl('/share-scenario'), {
     data: { name: connectionName },
   });
   if (!response.ok()) throw new Error(`share-scenario answered ${response.status()}`);
@@ -207,7 +208,7 @@ export interface UpstreamLog {
 
 /** What the mocked provider received since the instance started. */
 export async function upstreamLog(request: APIRequestContext): Promise<UpstreamLog> {
-  const response = await request.get(`${localOrigin()}${CONTROL_PREFIX}/upstream`);
+  const response = await request.get(controlUrl('/upstream'));
   if (!response.ok()) throw new Error(`upstream answered ${response.status()}`);
   return (await response.json()) as UpstreamLog;
 }
@@ -224,7 +225,7 @@ export interface SeededDay {
  * writer): it holds gated and refused calls no mocked provider could answer.
  */
 export async function seedDay(request: APIRequestContext): Promise<SeededDay> {
-  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/seed-day`);
+  const response = await request.post(controlUrl('/seed-day'));
   if (!response.ok()) throw new Error(`seed-day answered ${response.status()}`);
   return (await response.json()) as SeededDay;
 }

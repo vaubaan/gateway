@@ -6,11 +6,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  eventDetailLines,
   eventView,
-  MissionSessionService,
   SESSION_EVENTS_PAGE_SIZE,
+  type SessionEventView,
 } from '../../../src/server/audit';
-import { systemClock } from '../../../src/server/store/clock';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   ARGUMENT_MARKER,
@@ -188,7 +188,12 @@ describe('mission session view', () => {
       throw new Error('expected a claim');
     }
     expect((await view()).open_requests).toHaveLength(1);
-    await rig.root.store.requests.decide(claim.result.request_id, 'refused', rig.seeded.ada.id);
+    const refused = await rig.root.requests.service.decideClaim(
+      rig.seeded.ada,
+      claim.result.request_id,
+      { resolution: 'refuse' },
+    );
+    expect(refused.ok).toBe(true);
     expect((await view()).open_requests).toEqual([]);
   });
 
@@ -350,7 +355,6 @@ describe('mission session view', () => {
         ['call-allowed', 'github__get_file', 'coder'],
       ]);
       expect(coder.next_events).toBeNull();
-      expect(coder.events_scan_limited).toBe(false);
 
       const unlabelled = await filtered({ timeline: { kind: 'unlabelled' } });
       // The request and the rotation carry no label either, but they are not calls.
@@ -365,7 +369,7 @@ describe('mission session view', () => {
       expect(nobody.risks).toEqual(all.risks);
     });
 
-    it('pages a filtered timeline, and says when it stopped looking before the end', async () => {
+    it('pages the calls of one label among thousands of events of other labels, in the timeline’s order', async () => {
       const policy = [{ risk_id: READ, quota: 500, rate_limit: { max: 500, window_seconds: 60 } }];
       const busy = await issueMission(
         rig,
@@ -375,56 +379,155 @@ describe('mission session view', () => {
           connections: [{ connection_id: rig.seeded.github.connection.id, policy }],
         }),
       );
-      const base = Date.now() - 60_000;
-      // Oldest first: 3 calls of `scout`, then 40 unlabelled ones, then 2 of `scout`.
-      const labels = [
-        ...Array<string | null>(3).fill('scout'),
-        ...Array<string | null>(40).fill(null),
-        ...Array<string | null>(2).fill('scout'),
-      ];
-      for (const [i, agentLabel] of labels.entries()) {
-        await seedCall(rig, busy, { now: new Date(base + i * 100), agentLabel });
+      // The session is born with a real call; the bulk goes straight through the
+      // repository, which is what fills the label column.
+      const born = await seedCall(rig, busy, { agentLabel: 'scout' });
+      const sessionId = born.result.session_id;
+      const { sessions } = rig.root.store;
+      const bornEvent = (await sessions.listRecentEvents(sessionId, { limit: 1 }))[0];
+      const call = (label: string | null) =>
+        sessions.recordEvent(sessionId, {
+          kind: 'call-allowed',
+          riskId: READ,
+          details: {
+            tool: 'github__get_file',
+            fingerprint: 'sha256:0',
+            risk_ids: [READ],
+            agent_label: label,
+            remaining: {},
+            approval_ids: [],
+          },
+        });
+      // Oldest first: 1 call of `scout` (above), 2 100 calls of others (more than the
+      // 2 000 events the batch scan used to stop at), then a page and two of `scout`
+      // interleaved with other events.
+      const others = 2100;
+      for (let i = 0; i < others; i++) await call(i % 2 === 0 ? 'other' : null);
+      const recent = SESSION_EVENTS_PAGE_SIZE + 2;
+      const scoutIds: string[] = [bornEvent?.id ?? ''];
+      for (let i = 0; i < recent; i++) {
+        scoutIds.push((await call('scout')).id);
+        await call('other');
+        await sessions.recordEvent(sessionId, { kind: 'rotation', details: { token_prefix: 'x' } });
       }
-      // Looks through 10 events at a time, 20 per page read.
-      const sessions = new MissionSessionService({
-        store: rig.root.store,
-        missions: rig.root.missions.service,
-        clock: systemClock,
-        timelineScan: { batch: 10, limit: 20 },
-      });
+      const newestFirst = [...scoutIds].reverse();
       const scout = { kind: 'label', label: 'scout' } as const;
+      const read = async (before: Parameters<typeof rig.root.audit.sessions.get>[2]) =>
+        (await rig.root.audit.sessions.get(rig.seeded.ada, busy.id, {
+          timeline: scout,
+          ...before,
+        }))!;
 
-      const first = (await sessions.get(rig.seeded.ada, busy.id, { timeline: scout }))!;
-      expect(first.events).toHaveLength(2);
-      expect(first.events_scan_limited).toBe(true);
+      const first = await read({});
+      expect(first.events).toHaveLength(SESSION_EVENTS_PAGE_SIZE);
+      expect(first.events.map((e) => e.id)).toEqual(newestFirst.slice(0, SESSION_EVENTS_PAGE_SIZE));
+      expect(first.events.every((e) => e.agent_label === 'scout')).toBe(true);
       expect(first.next_events).not.toBeNull();
 
-      // Following "Older" resumes where the scan stopped, until the timeline ends.
-      const seen = [...first.events];
-      let cursor = first.next_events;
-      let reads = 1;
-      while (cursor) {
-        const page = (await sessions.get(rig.seeded.ada, busy.id, {
-          timeline: scout,
-          eventsBefore: cursor,
-        }))!;
-        seen.push(...page.events);
-        cursor = page.next_events;
-        reads += 1;
-      }
-      expect(seen).toHaveLength(5);
-      expect(new Set(seen.map((e) => e.id)).size).toBe(5);
-      expect(seen.every((e) => e.agent_label === 'scout')).toBe(true);
-      expect(reads).toBe(3);
+      // "Older" is the rest, the call the session was born with included: nothing is
+      // skipped behind the 2 100 events of other labels, and nothing is listed twice.
+      const second = await read({ eventsBefore: first.next_events });
+      expect(second.events.map((e) => e.id)).toEqual(newestFirst.slice(SESSION_EVENTS_PAGE_SIZE));
+      expect(second.events).toHaveLength(3);
+      expect(second.next_events).toBeNull();
 
-      // With the default bounds the same timeline is one page.
-      const whole = (await rig.root.audit.sessions.get(rig.seeded.ada, busy.id, {
-        timeline: scout,
+      // The unlabelled calls are a filter of their own; the rotations are not calls.
+      const unlabelled = (await rig.root.audit.sessions.get(rig.seeded.ada, busy.id, {
+        timeline: { kind: 'unlabelled' },
       }))!;
-      expect(whole.events).toHaveLength(5);
-      expect(whole.events_scan_limited).toBe(false);
-      expect(whole.next_events).toBeNull();
+      expect(unlabelled.events).toHaveLength(SESSION_EVENTS_PAGE_SIZE);
+      expect(unlabelled.events.every((e) => e.kind === 'call-allowed' && !e.agent_label)).toBe(
+        true,
+      );
     });
+  });
+
+  it('says until when a gate is open, and what each approval and gate event did', async () => {
+    const lines = (event: SessionEventView | undefined, requestOpen = false) =>
+      event ? eventDetailLines(event, { requestOpen }) : null;
+    const merge = (args: Record<string, unknown>) =>
+      seedCall(rig, mission, { tool: 'github__merge_pull_request', risks: [MERGE], args });
+    const asked = async (args: Record<string, unknown>) => {
+      const refused = await merge(args);
+      if (refused.result.outcome !== 'refused' || !refused.result.request_id) {
+        throw new Error('expected an approval request');
+      }
+      return refused.result.request_id;
+    };
+    const gateOf = async () => (await view()).risks.find((r) => r.risk_id === MERGE);
+    const { service: requests } = rig.root.requests;
+
+    // 1. A gated call asks; the creator approves that one call; the replay consumes it.
+    const one = await asked({ pull: 1 });
+    let v = await view();
+    expect(v.events.map((e) => e.kind)).toEqual(['call-refused', 'request']);
+    expect(v.events[0]).toMatchObject({ request_id: one, request_kind: 'approval' });
+    // While the request is open the page links to it: no "closed" line.
+    expect(lines(v.events[0], true)).toEqual([]);
+    expect(lines(v.events[1], true)).toEqual([
+      { text: 'approval request asked', at: null, mono: false },
+    ]);
+    expect((await requests.decideApproval(rig.seeded.ada, one, { resolution: 'grant' })).ok).toBe(
+      true,
+    );
+    v = await view();
+    expect(v.events[0]).toMatchObject({ kind: 'approval', request_id: one });
+    expect(lines(v.events[0])).toEqual([
+      { text: 'one call approved, usable until', at: v.events[0]?.expires_at, mono: false },
+    ]);
+    expect(v.events[0]?.expires_at).not.toBeNull();
+    expect(lines(v.events[1])).toEqual([
+      { text: 'approval request (closed)', at: null, mono: false },
+    ]);
+    expect((await merge({ pull: 1 })).result.outcome).toBe('allowed');
+    v = await view();
+    expect(v.events[0]).toMatchObject({ kind: 'call-allowed', approvals_consumed: 1 });
+    expect(lines(v.events[0])).toEqual([{ text: 'approval consumed', at: null, mono: false }]);
+
+    // 2. Another call asks; the creator refuses it.
+    const two = await asked({ pull: 2 });
+    expect((await requests.decideApproval(rig.seeded.ada, two, { resolution: 'refuse' })).ok).toBe(
+      true,
+    );
+    v = await view();
+    expect(v.events[0]).toMatchObject({ kind: 'request', request_state: 'refused' });
+    expect(lines(v.events[0])).toEqual([
+      { text: 'approval request refused by the creator', at: null, mono: false },
+    ]);
+
+    // 3. A third asks; the creator opens the gate for the rest of the period. The risk
+    //    still reads `approval`, and says until when calls pass.
+    expect(await gateOf()).toMatchObject({ gate: 'approval', gate_open_until: null });
+    const three = await asked({ pull: 3 });
+    expect(
+      (await requests.decideApproval(rig.seeded.ada, three, { resolution: 'open-gate' })).ok,
+    ).toBe(true);
+    v = await view();
+    const periodEnd = v.state.kind === 'active' ? v.state.period.end : null;
+    expect(periodEnd).not.toBeNull();
+    expect(await gateOf()).toMatchObject({ gate: 'approval', gate_open_until: periodEnd });
+    expect(v.events[0]).toMatchObject({ kind: 'gate-opened', risk_ids: [MERGE] });
+    expect(lines(v.events[0])).toEqual([{ text: 'gate open until', at: periodEnd, mono: false }]);
+
+    // 4. An edit of the gate on the mission ends the opening; the timeline says both gates.
+    await rig.root.missions.service.setGate(rig.seeded.ada, mission.id, MERGE, 'auto');
+    await rig.root.missions.service.setGate(rig.seeded.ada, mission.id, MERGE, 'approval');
+    v = await view();
+    expect(await gateOf()).toMatchObject({ gate: 'approval', gate_open_until: null });
+    expect(v.events.slice(0, 2).map((e) => lines(e))).toEqual([
+      [{ text: 'gate set to approval (was auto)', at: null, mono: false }],
+      [{ text: 'gate set to auto (was approval)', at: null, mono: false }],
+    ]);
+
+    // 5. Rotation and revocation say what they did to the tokens.
+    await rig.root.missions.service.rotate(rig.seeded.ada, mission.id);
+    await rig.root.missions.service.revoke(rig.seeded.ada, mission.id);
+    v = await view();
+    expect(lines(v.events[0])).toEqual([{ text: '1 token revoked', at: null, mono: false }]);
+    expect(lines(v.events[1])).toEqual([
+      { text: `token ${v.events[1]?.token_prefix}…`, at: null, mono: true },
+    ]);
+    expect(JSON.stringify(v.events)).not.toContain(ARGUMENT_MARKER);
   });
 
   it('the timeline is newest first and names tool, risks, what is left, the refusal and the request', async () => {
@@ -537,6 +640,12 @@ describe('eventView', () => {
       remaining: { [MERGE]: 1 },
       request_id: null,
       request_kind: null,
+      request_state: null,
+      approvals_consumed: 1,
+      gate: null,
+      gate_before: null,
+      gate_open_until: null,
+      tokens_revoked: null,
       token_prefix: null,
       credits: null,
       dimension: null,
@@ -593,6 +702,12 @@ describe('eventView', () => {
       remaining: null,
       request_id: null,
       request_kind: null,
+      request_state: null,
+      approvals_consumed: 0,
+      gate: null,
+      gate_before: null,
+      gate_open_until: null,
+      tokens_revoked: null,
       token_prefix: null,
       credits: null,
       dimension: null,

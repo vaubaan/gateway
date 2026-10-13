@@ -6,6 +6,8 @@
  *
  *   GET  /.well-known/oauth-authorization-server            RFC 8414 metadata
  *   GET  /.well-known/oauth-protected-resource/mcp/manage   RFC 9728 metadata
+ *   GET  /.well-known/oauth-protected-resource   RFC 9728 metadata of the
+ *                            execution door (`executionResourceMetadataResponse`)
  *   POST /oauth/register     dynamic client registration (RFC 7591)
  *   GET  /oauth/authorize    authorization request → sign-in → consent screen
  *   POST /oauth/authorize/decision   the user's answer (origin-checked, user session)
@@ -40,6 +42,7 @@ import {
 import type { RateLimiter } from '../compose/ports';
 import type { OAuthConfig } from '../config/types';
 import type { Logger } from '../logging';
+import { EXECUTION_DOOR_PATH } from '../missions';
 import {
   type AuthorizationService,
   authorizationResponseUrl,
@@ -51,6 +54,7 @@ import {
   AUTHORIZE_PATH,
   authorizationServerMetadata,
   CONSENT_DECISION_PATH,
+  executionResourceMetadata,
   protectedResourceMetadata,
   type OAuthEndpoints,
 } from './endpoints';
@@ -58,6 +62,7 @@ import {
   AuthorizationPageError,
   AuthorizationRedirectError,
   OAuthProtocolError,
+  slowDown,
   type OAuthErrorCode,
 } from './errors';
 import { CONSENT_FIELD, consentPage, DECISION_FIELD, messagePage } from './pages';
@@ -70,7 +75,12 @@ const LOGIN_ROUTE = '/auth/login';
 
 /** Token and revocation requests per client address and per window. */
 export const TOKEN_REQUESTS_PER_WINDOW = 60;
-/** Token and revocation requests per client, whatever the address. */
+/**
+ * Token requests per **confidential** client, whatever the address, counted
+ * once its secret matched. A public client proves nothing by naming itself
+ * (its `client_id` is public): its renewals are counted per delegation
+ * instead, once its refresh token is recognised (`RENEWALS_PER_DELEGATION`).
+ */
 export const TOKEN_REQUESTS_PER_CLIENT = 120;
 export const TOKEN_WINDOW_MS = 60_000;
 /** Registrations per client address and per window. */
@@ -82,7 +92,6 @@ export const REGISTRATION_INSTANCE_WINDOW_MS = 3_600_000;
 /** A token, revocation or registration request is never larger than this. */
 export const MAX_REQUEST_BYTES = 16 * 1024;
 
-const MS_PER_SECOND = 1000;
 const SEE_OTHER = 303;
 const FORM_TYPE = 'application/x-www-form-urlencoded';
 const JSON_TYPE = 'application/json';
@@ -231,16 +240,46 @@ async function readOAuthForm(request: Request): Promise<URLSearchParams> {
   return form;
 }
 
+/** A discovery document: `GET`/`HEAD` from any origin, never cached; `OPTIONS` is the preflight. */
+function metadata(request: Request, document: Record<string, unknown>): Response {
+  if (request.method === 'OPTIONS') return preflight(request, 'GET, HEAD, OPTIONS');
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    return methodNotAllowed('GET, HEAD, OPTIONS');
+  }
+  const response = json(200, document, { ...CORS, 'Cache-Control': 'no-store' });
+  return request.method === 'HEAD'
+    ? new Response(null, { status: 200, headers: response.headers })
+    : response;
+}
+
+/**
+ * `GET /.well-known/oauth-protected-resource` — the execution door's RFC 9728
+ * document, served like the other two discovery documents (same methods, same
+ * CORS). It reads nothing of the request but its method.
+ */
+export function executionResourceMetadataResponse(
+  endpoints: OAuthEndpoints,
+  request: Request,
+): Response {
+  return metadata(request, executionResourceMetadata(endpoints, EXECUTION_DOOR_PATH));
+}
+
 export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
   const { endpoints, logger } = deps;
 
   /** `null` when the request may go on, else the 429 that stops it. */
   async function limited(key: string, limit: number, windowMs: number): Promise<Response | null> {
     const taken = await deps.rateLimiter.take(key, limit, windowMs);
-    if (taken.allowed) return null;
-    const seconds = Math.max(1, Math.ceil(taken.retryAfterMs / MS_PER_SECOND));
-    return oauthError('slow_down', `too many requests; retry in ${seconds} s`, 429, {
-      'Retry-After': String(seconds),
+    return taken.allowed ? null : refusal(slowDown(taken.retryAfterMs), false);
+  }
+
+  /** The JSON response of a protocol error, with the header its code calls for. */
+  function refusal(err: OAuthProtocolError, basic: boolean): Response {
+    return oauthError(err.code, err.message, err.status, {
+      ...(err.code === 'invalid_client' && basic
+        ? { 'WWW-Authenticate': 'Basic realm="oauth"' }
+        : {}),
+      ...(err.retryAfterSeconds === null ? {} : { 'Retry-After': String(err.retryAfterSeconds) }),
     });
   }
 
@@ -256,26 +295,10 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
     }
     if (err instanceof OAuthProtocolError) {
       logger.warn('oauth request refused', { endpoint, error: err.code, client_id: clientId });
-      return oauthError(
-        err.code,
-        err.message,
-        err.status,
-        err.code === 'invalid_client' && basic ? { 'WWW-Authenticate': 'Basic realm="oauth"' } : {},
-      );
+      return refusal(err, basic);
     }
     logger.error('oauth request failed unexpectedly', { endpoint, client_id: clientId, err });
     return oauthError('server_error', 'the request could not be processed', 500);
-  }
-
-  function metadata(request: Request, document: Record<string, unknown>): Response {
-    if (request.method === 'OPTIONS') return preflight(request, 'GET, HEAD, OPTIONS');
-    if (request.method !== 'GET' && request.method !== 'HEAD') {
-      return methodNotAllowed('GET, HEAD, OPTIONS');
-    }
-    const response = json(200, document, { ...CORS, 'Cache-Control': 'no-store' });
-    return request.method === 'HEAD'
-      ? new Response(null, { status: 200, headers: response.headers })
-      : response;
   }
 
   function bootstrapCannotDelegate(): Response {
@@ -425,11 +448,22 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
       if (typeof consentId !== 'string' || (decision !== 'approve' && decision !== 'deny')) {
         return messagePage(400, 'Invalid request', 'This is not an answer to a consent screen.');
       }
-      const outcome = await deps.authorization.decide(
-        guard.principal.user,
-        consentId,
-        decision satisfies ConsentDecision,
-      );
+      let outcome;
+      try {
+        outcome = await deps.authorization.decide(
+          guard.principal.user,
+          consentId,
+          decision satisfies ConsentDecision,
+        );
+      } catch (err) {
+        // The user is on a consent screen: they read a page, and nothing was granted.
+        logger.error('consent decision failed unexpectedly', { err });
+        return messagePage(
+          500,
+          'Something went wrong',
+          'The delegation could not be recorded. Nothing was granted: start the connection again from your application.',
+        );
+      }
       switch (outcome.outcome) {
         case 'redirect':
           return seeOther(outcome.location);
@@ -465,13 +499,18 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
         clientId = credentials.clientId;
         basic = credentials.via === 'basic';
         const client = await deps.tokens.authenticateClient(credentials);
-        // Keyed on the stored client, never on a string the caller chose.
-        const perClient = await limited(
-          `oauth:token:client:${client.id}`,
-          TOKEN_REQUESTS_PER_CLIENT,
-          TOKEN_WINDOW_MS,
-        );
-        if (perClient) return perClient;
+        // Only a caller that proved it is the client spends the client's budget:
+        // here, one whose secret matched. Keyed on the stored client, never on a
+        // string the caller chose. A public client is limited per delegation, in
+        // the grant, once its refresh token is recognised.
+        if (client.clientSecretHash !== null) {
+          const perClient = await limited(
+            `oauth:token:client:${client.id}`,
+            TOKEN_REQUESTS_PER_CLIENT,
+            TOKEN_WINDOW_MS,
+          );
+          if (perClient) return perClient;
+        }
         const grant = form.get('grant_type');
         if (grant === 'authorization_code') {
           return json(200, await deps.tokens.exchangeCode(client, form), CORS);

@@ -9,7 +9,7 @@
  * (stored in `instance_config`, audited, read-only when the mounted
  * configuration decides); what a report is emitted for; the validation badge.
  */
-import { UpstreamAuthError } from '@vaubaan/shared';
+import { UpstreamAuthError, UpstreamHttpError } from '@vaubaan/shared';
 import { PLUGIN_REPORT_KEYS } from '@vaubaan/telemetry';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -203,6 +203,31 @@ describe('community telemetry', () => {
       });
     });
 
+    it.each([
+      ['with a collector key appended', `${DEFAULT_TELEMETRY_COLLECTOR_URL}?apikey=pk_public`],
+      ['with a trailing slash', `${DEFAULT_TELEMETRY_COLLECTOR_URL}/`],
+    ])('the default URL %s is still the placeholder: zero network calls', async (_name, url) => {
+      const r = await open({
+        VAUBAAN_TELEMETRY_ENABLED: 'true',
+        VAUBAAN_TELEMETRY_COLLECTOR_URL: url,
+      });
+      const { instance } = r;
+      const mission = await r.mission();
+      for (let i = 0; i < 60; i += 1) {
+        await instance.call(mission, 'depot__read_item', { space: 'scratch', item: `i${i}` });
+      }
+      await r.drain();
+      await instance.root.telemetry.stats.refresh();
+      expect(await instance.root.telemetry.stats.statusFor('depot')).toBeNull();
+
+      expect(r.collector).not.toHaveBeenCalled();
+      expect(await instance.root.telemetry.overview()).toMatchObject({
+        client: 'placeholder-collector',
+        placeholderCollector: true,
+        queue: { queued: 0, delivered: 0 },
+      });
+    });
+
     it('enabled by the operator: still zero network calls', async () => {
       const r = await open();
       expect((await r.toggle('true')).headers.get('location')).toBe(TELEMETRY_PAGE);
@@ -358,6 +383,32 @@ describe('community telemetry', () => {
       for (const report of r.reports()) {
         expect(Object.keys(report)).toEqual([...PLUGIN_REPORT_KEYS]);
       }
+    });
+
+    it('a provider failure a plugin throws with its status is an upstream error, in the report and in the audit', async () => {
+      const { r, mission } = await enabled();
+      const { instance } = r;
+      // What the shipped plugins throw for a failed status that is not 401/403.
+      instance.depot.script(async () => {
+        throw new UpstreamHttpError(
+          'depot PATCH /items/7 500: relation "customers" is locked',
+          500,
+        );
+      });
+
+      const body = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
+      expect(body.result?.isError).toBe(true);
+      await r.drain();
+
+      expect(r.reports().map((report) => [report.outcome, report.error_class])).toEqual([
+        ['upstream-error', 'http_500'],
+      ]);
+      const [entry] = await instance.root.store.audit.list({ missionId: mission.mission.id });
+      expect(entry).toMatchObject({
+        decision: 'allowed',
+        // Host-built: the status and the class, never the provider's sentence.
+        upstream_error: 'depot answered HTTP 500 (UpstreamHttpError)',
+      });
     });
 
     it('reports once per call, after the retries: a refreshed credential is a success', async () => {

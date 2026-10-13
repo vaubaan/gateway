@@ -8,8 +8,16 @@ import { createHash } from 'node:crypto';
 import { SetCatalogIndex } from './catalog-index.ts';
 import { ManualClock } from './clock.ts';
 import type { EncryptedBlob, Encryptor } from './encryptor.ts';
+import { InvariantError } from './errors.ts';
 import { openMemoryStore, type Store } from './index.ts';
-import type { RiskId } from './types.ts';
+import type { TokenToIssue } from './repositories/delegations.ts';
+import type {
+  ApprovalRecord,
+  GroupRecord,
+  RefreshTokenRecord,
+  RequestRecord,
+  RiskId,
+} from './types.ts';
 
 const TAG_BYTES = 8;
 
@@ -76,4 +84,111 @@ export function openTestStore(options: TestStoreOptions = {}): TestStore {
     clock,
   });
   return { store, clock, encryptor };
+}
+
+/**
+ * Grants an open approval request the way production does (`RequestService`, resolution
+ * `grant`): the approval is written inside the transaction that decides the request, so
+ * the request is `granted`, its sealed arguments are erased and its approval exists, or
+ * nothing happened.
+ */
+export async function grantApprovalRequest(
+  store: Pick<Store, 'requests'>,
+  requestId: string,
+  decidedByUserId: string,
+  approvalExpiresAt: string,
+): Promise<ApprovalRecord> {
+  const result = await store.requests.decideApproval(requestId, decidedByUserId, (ctx) => {
+    const approval = ctx.createApproval(approvalExpiresAt);
+    return {
+      state: 'granted' as const,
+      decision: {
+        resolution: 'grant',
+        approval_id: approval.id,
+        approval_expires_at: approval.expiresAt,
+      },
+      approval,
+    };
+  });
+  if (result.status !== 'decided') {
+    throw new InvariantError(`request ${requestId} was not open: nothing was granted`);
+  }
+  return result.outcome.approval;
+}
+
+/**
+ * Refuses an open request through the decision primitive of its kind (`decideClaim` or
+ * `decideApproval`), with the decision production stores for a refusal.
+ */
+export async function refuseRequest(
+  store: Pick<Store, 'requests'>,
+  requestId: string,
+  decidedByUserId: string,
+): Promise<RequestRecord> {
+  const request = await store.requests.getById(requestId);
+  if (!request) throw new InvariantError(`request ${requestId} does not exist`);
+  const refuse = () => ({ state: 'refused' as const, decision: { resolution: 'refuse' } });
+  const result =
+    request.kind === 'claim'
+      ? await store.requests.decideClaim(requestId, decidedByUserId, refuse)
+      : await store.requests.decideApproval(requestId, decidedByUserId, refuse);
+  if (result.status !== 'decided') {
+    throw new InvariantError(`request ${requestId} was not open: nothing was refused`);
+  }
+  return result.request;
+}
+
+/**
+ * The first refresh token of a delegation, issued the way production does: the
+ * authorization-code grant (`createCode`, then `redeemCode`), which also spends a code
+ * and writes the first access token. The code is `code:<refresh hash>`; the access token
+ * is `access` or, by default, `access:<refresh hash>` with the refresh token's expiry.
+ */
+export async function issueFirstRefreshToken(
+  store: Pick<Store, 'delegations'>,
+  delegationId: string,
+  refresh: TokenToIssue,
+  access: TokenToIssue = {
+    tokenHash: `access:${refresh.tokenHash}`,
+    expiresAt: refresh.expiresAt,
+  },
+): Promise<RefreshTokenRecord> {
+  const codeHash = `code:${refresh.tokenHash}`;
+  await store.delegations.createCode({
+    delegationId,
+    codeHash,
+    redirectUri: 'http://127.0.0.1/callback',
+    codeChallenge: 'challenge',
+    codeChallengeMethod: 'S256',
+    expiresAt: refresh.expiresAt,
+  });
+  const redeemed = await store.delegations.redeemCode(codeHash, () => null, { refresh, access });
+  const found = await store.delegations.findRefreshToken(refresh.tokenHash);
+  if (redeemed.outcome !== 'issued' || !found) {
+    throw new InvariantError(`the code grant of ${delegationId} ended '${redeemed.outcome}'`);
+  }
+  return found.token;
+}
+
+/**
+ * Makes a connection `unowned` the way production does (spec §2.3): its owner becomes a
+ * group without member, then the sweep that follows every membership removal marks it.
+ * Returns that group, so a test can let a member join afterwards. The sweep is global:
+ * every other active connection whose owner group is empty becomes `unowned` too.
+ */
+export async function makeUnowned(
+  store: Pick<Store, 'connections' | 'groups'>,
+  connectionId: string,
+): Promise<GroupRecord> {
+  const group = await store.groups.createLocal(`ownerless-${connectionId}`);
+  if (!group) throw new InvariantError(`group ownerless-${connectionId} already exists`);
+  await store.connections.transferOwner(connectionId, { kind: 'group', id: group.id });
+  await store.connections.markOwnerlessUnowned();
+  const connection = await store.connections.getById(connectionId);
+  if (connection?.status !== 'unowned') {
+    throw new InvariantError(
+      `connection ${connectionId} is '${connection?.status}', not unowned: only an active connection becomes unowned`,
+    );
+  }
+  return group;
 }

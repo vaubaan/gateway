@@ -38,7 +38,7 @@
 # Risk count : 10 named risks + 1 fallback.
 
 provider: upstash-redis
-catalog_version: 2
+catalog_version: 3
 catalog_date: 2026-10-13
 
 risks:

@@ -637,3 +637,45 @@ describe('loadInstanceConfig — authorization server of the management door', (
     expect(err.message).toContain('open, operator-approved, closed');
   });
 });
+
+describe('loadInstanceConfig — boolean and integer spellings per source', () => {
+  const path = '/config/gateway.yaml';
+  function fromYaml(yaml: string): ReturnType<typeof loadInstanceConfig> {
+    return loadInstanceConfig({
+      env: validEnv({ [CONFIG_FILE_ENV]: path }),
+      readFile: fakeFiles({ [path]: yaml }),
+    });
+  }
+
+  it.each(['yes', 'ON', '1', 'True'])('a variable set to %s is true', (raw) => {
+    const { config } = loadInstanceConfig({ env: validEnv({ VAUBAAN_TELEMETRY_ENABLED: raw }) });
+    expect(config.telemetry).toMatchObject({ enabled: true, enabledSetByConfig: true });
+  });
+
+  it('the file takes a YAML boolean and a YAML number', () => {
+    const { config } = fromYaml('telemetry:\n  enabled: true\nretention_days: 30\n');
+    expect(config.telemetry.enabled).toBe(true);
+    expect(config.retentionDays).toBe(30);
+  });
+
+  it.each(['yes', '"true"', 'on'])('the file refuses the boolean spelling %s', (raw) => {
+    const err = failure(
+      { ...validEnv({ [CONFIG_FILE_ENV]: path }) },
+      {
+        [path]: `telemetry:\n  enabled: ${raw}\n`,
+      },
+    );
+    expect(paths(err)).toEqual(['telemetry.enabled']);
+    expect(formatIssue(err.issues[0]!)).toContain('expected true or false');
+  });
+
+  it('the file refuses a quoted integer', () => {
+    const err = failure(
+      { ...validEnv({ [CONFIG_FILE_ENV]: path }) },
+      {
+        [path]: 'retention_days: "30"\n',
+      },
+    );
+    expect(paths(err)).toEqual(['retention_days']);
+  });
+});

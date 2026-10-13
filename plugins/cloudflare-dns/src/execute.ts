@@ -18,11 +18,18 @@
  *     the record is apex, wildcard, MX or NS, or cannot be read back, the
  *     call is refused before the PATCH / DELETE ;
  *   - `list_zones` is filtered to the mission's zones ;
- *   - 401 / 403 from Cloudflare → `UpstreamAuthError`.
+ *   - a provider failure is **thrown** : 401 / 403 from Cloudflare →
+ *     `UpstreamAuthError`, any other failed status → `UpstreamHttpError`.
+ *     The host records it as `upstream_error` in the audit ;
+ *   - what this executor declines itself (an unknown tool, a zone outside
+ *     the mission, a malformed identifier, a critical record declared as an
+ *     ordinary one) is an `ExecutorRefusal`, returned as an `isError`
+ *     result : nothing failed at the provider.
  */
 
 import {
   UpstreamAuthError,
+  UpstreamHttpError,
   expectCredentialKind,
   type ConnectionContext,
   type ExecuteContext,
@@ -49,6 +56,18 @@ const DISCOVERY_PAGE_SIZE = 50;
 /** Credential field holding the API token. */
 export const API_TOKEN_FIELD = 'api_token';
 
+/**
+ * A call this executor declines itself : nothing failed at the provider. The
+ * only error `executeCloudflareDns` turns into an `isError` result ; everything
+ * else it lets through, so the host records a provider failure as one.
+ */
+class ExecutorRefusal extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ExecutorRefusal';
+  }
+}
+
 type HttpMethod = 'GET' | 'POST' | 'PATCH' | 'DELETE';
 type Args = Readonly<Record<string, unknown>>;
 
@@ -65,7 +84,9 @@ interface Route {
 /** One path segment. Refuses anything `pathIdent` refuses : `encodeURIComponent` would let `..` through. */
 function segment(value: string): string {
   if (pathIdent(value) === null) {
-    throw new Error('cloudflare-dns: refusing to build a request path from an unsafe identifier');
+    throw new ExecutorRefusal(
+      'cloudflare-dns: refusing to build a request path from an unsafe identifier',
+    );
   }
   return encodeURIComponent(value);
 }
@@ -145,16 +166,30 @@ export async function executeCloudflareDns(
   args: Args,
 ): Promise<McpToolResult> {
   const route = ROUTES[tool];
-  if (!route) return { content: [{ type: 'text', text: `unknown tool '${tool}'` }], isError: true };
+  if (!route) return errorResult(`unknown tool '${tool}'`);
   const headers = bearerHeaders(tokenOf(ctx));
+  try {
+    return await executeRoute(ctx, headers, route, tool, args);
+  } catch (e) {
+    if (e instanceof ExecutorRefusal) return errorResult(e.message);
+    throw e;
+  }
+}
 
+async function executeRoute(
+  ctx: ExecuteContext,
+  headers: Record<string, string>,
+  route: Route,
+  tool: string,
+  args: Args,
+): Promise<McpToolResult> {
   if (tool === 'cloudflare_dns__list_zones') {
     const payload = await callCloudflareApi(ctx.fetch, headers, route, '/zones', args, ctx.signal);
     return textResult(filterZonesToMission(payload, ctx.resources));
   }
 
   const target = resolveZoneResource(args, ctx.resources);
-  if ('denied' in target) throw new Error(`cloudflare-dns: ${target.denied}`);
+  if ('denied' in target) throw new ExecutorRefusal(`cloudflare-dns: ${target.denied}`);
   const zone = target.resource;
   const { zone_id: _zone, record_id, ...rest } = args;
   const record = route.record ? recordIdArg(record_id) : '';
@@ -234,7 +269,7 @@ function tokenOf(ctx: ConnectionContext): string {
 function recordIdArg(value: unknown): string {
   const recordId = pathIdent(value);
   if (recordId === null) {
-    throw new Error('cloudflare-dns: record_id: missing or malformed identifier');
+    throw new ExecutorRefusal('cloudflare-dns: record_id: missing or malformed identifier');
   }
   return recordId;
 }
@@ -287,12 +322,16 @@ async function assertDeclaredSensitivity(
   const type = current.result?.type ?? '';
   const name = current.result?.name ?? '';
   if (isCriticalRecord(type, name, zoneName)) {
-    throw new Error(
+    throw new ExecutorRefusal(
       `cloudflare-dns: the record is a critical record (${type} ${name}) but the call ` +
         `declared an ordinary one (${String(args.type)} ${String(args.name)}) ; name the ` +
         'record as it is so the change is classified as a critical record write',
     );
   }
+}
+
+function errorResult(message: string): McpToolResult {
+  return { content: [{ type: 'text', text: message }], isError: true };
 }
 
 function textResult(payload: unknown): McpToolResult {
@@ -354,7 +393,7 @@ async function callCloudflareApi(
   if (!res.ok) {
     const message = `Cloudflare API ${route.method} ${path} ${res.status}: ${text.slice(0, 500)}`;
     if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(message, res.status);
-    throw new Error(message);
+    throw new UpstreamHttpError(message, res.status);
   }
   if (!text) return {};
   try {

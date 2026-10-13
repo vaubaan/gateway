@@ -82,7 +82,13 @@ export interface AuditAdminView {
   readonly object: {
     readonly type: AdminObjectType;
     readonly id: string;
-    /** Mission name or connection display name, when the object still exists. */
+    /**
+     * The name of the object when it still exists (`objectLabel`): a mission or
+     * group name, a connection's display name, a client's declared name, "the
+     * connection → who it is shared with" for a share, "claim on <mission>" for
+     * a request. `null` for an object that is gone, and for `instance-config`,
+     * whose id is its name.
+     */
     readonly label: string | null;
   };
   readonly before: unknown;
@@ -104,7 +110,17 @@ export interface AuditFilterOptions {
 }
 
 export interface AuditQueryDeps {
-  readonly store: Pick<Store, 'audit' | 'missions' | 'connections' | 'users'>;
+  readonly store: Pick<
+    Store,
+    | 'audit'
+    | 'missions'
+    | 'connections'
+    | 'users'
+    | 'shares'
+    | 'groups'
+    | 'delegations'
+    | 'requests'
+  >;
 }
 
 /** The store scope of a viewer. Exported for the tests of the rule itself. */
@@ -215,6 +231,7 @@ class NameCache {
   private readonly missions = new Map<string, Promise<AuditMissionRef>>();
   private readonly connections = new Map<string, Promise<AuditConnectionRef>>();
   private readonly emails = new Map<string, Promise<string | null>>();
+  private readonly labels = new Map<string, Promise<string | null>>();
 
   constructor(private readonly store: AuditQueryDeps['store']) {}
 
@@ -243,6 +260,56 @@ class NameCache {
         ? null
         : ((await this.store.users.getById(userId))?.email ?? null),
     );
+  }
+
+  group(id: string): Promise<string | null> {
+    return memo(
+      this.labels,
+      `group:${id}`,
+      async () => (await this.store.groups.getById(id))?.name ?? null,
+    );
+  }
+
+  /** The declared name of an OAuth client, by its row id (`oauth_clients.id`). */
+  client(id: string): Promise<string | null> {
+    return memo(
+      this.labels,
+      `oauth-client:${id}`,
+      async () => (await this.store.delegations.getClient(id))?.name ?? null,
+    );
+  }
+
+  /** "<connection> → <the user's email or the group's name>". */
+  share(id: string): Promise<string | null> {
+    return memo(this.labels, `share:${id}`, async () => {
+      const share = await this.store.shares.getById(id);
+      if (!share) return null;
+      const connection = (await this.connection(share.connectionId)).display_name;
+      const target =
+        share.target.kind === 'user'
+          ? await this.email(share.target.id)
+          : await this.group(share.target.id);
+      return `${connection ?? share.connectionId} → ${target ?? share.target.id}`;
+    });
+  }
+
+  /** "claim on <mission>", "approval request on <mission>". */
+  request(id: string): Promise<string | null> {
+    return memo(this.labels, `request:${id}`, async () => {
+      const request = await this.store.requests.getById(id);
+      if (!request) return null;
+      const kind = request.kind === 'approval' ? 'approval request' : request.kind;
+      const mission = (await this.mission(request.missionId)).name;
+      return `${kind} on ${mission ?? request.missionId}`;
+    });
+  }
+
+  /** The name of the client the delegation was given to. */
+  delegation(id: string): Promise<string | null> {
+    return memo(this.labels, `delegation:${id}`, async () => {
+      const delegation = await this.store.delegations.getById(id);
+      return delegation ? this.client(delegation.clientId) : null;
+    });
   }
 }
 
@@ -299,9 +366,28 @@ async function objectLabel(
   object: { readonly type: AdminObjectType; readonly id: string },
   names: NameCache,
 ): Promise<string | null> {
-  if (object.type === 'mission') return (await names.mission(object.id)).name;
-  if (object.type === 'connection') return (await names.connection(object.id)).display_name;
-  return null;
+  // One case per object type and no `default`: a new type does not compile until it
+  // says what names it. The scope is the store's: a label only names an object whose
+  // entry the viewer was already given.
+  switch (object.type) {
+    case 'mission':
+      return (await names.mission(object.id)).name;
+    case 'connection':
+      return (await names.connection(object.id)).display_name;
+    case 'share':
+      return names.share(object.id);
+    case 'group':
+      return names.group(object.id);
+    case 'oauth-client':
+      return names.client(object.id);
+    case 'request':
+      return names.request(object.id);
+    case 'delegation':
+      return names.delegation(object.id);
+    case 'instance-config':
+      // The id is the name: `idp`, `telemetry`, `bootstrap`, `provider-app:<id>`.
+      return null;
+  }
 }
 
 async function actorView(userId: string, names: NameCache): Promise<AuditAdminView['actor']> {

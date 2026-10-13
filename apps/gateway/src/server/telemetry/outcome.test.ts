@@ -1,5 +1,5 @@
 import { refuse, UpstreamFailureError, UpstreamRefusalError } from '@vaubaan/gateway-core';
-import { UpstreamAuthError } from '@vaubaan/shared';
+import { UpstreamAuthError, UpstreamHttpError } from '@vaubaan/shared';
 import { describe, expect, it } from 'vitest';
 
 import type { PluginExecution, PluginOutcome } from '../execution/telemetry-sink';
@@ -40,6 +40,8 @@ describe('classifyOutcome', () => {
   it.each([
     ['UpstreamAuthError 401', new UpstreamAuthError(`bad token ${SECRET}`, 401), 'http_401'],
     ['UpstreamAuthError 403', new UpstreamAuthError('forbidden', 403), 'http_403'],
+    ['UpstreamHttpError 500', new UpstreamHttpError(`boom ${SECRET}`, 500), 'http_500'],
+    ['UpstreamHttpError 404', new UpstreamHttpError('no such item', 404), 'http_404'],
     ['an error with a numeric status', withProps(new Error(SECRET), { status: 422 }), 'http_422'],
     ['a rate limit', withProps(new Error('slow down'), { status: 429 }), 'http_429'],
     [

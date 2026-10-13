@@ -140,6 +140,9 @@ opens a new request. `rate-limited` opens nothing (the agent only has to wait).
 receive it. Several agents on one token share the counters (spec §3.2, §7.9); the
 integration test checks that three labels consume one budget.
 
+What counts as a label, and what happens to a value that is not one, is the amendment
+"the agent label is checked, not repaired" at the end of this document.
+
 ## Consequences
 
 - `apps/gateway/src/server/budget/` holds the pure core (`decide`, `currentPeriod`,
@@ -264,3 +267,48 @@ path opens it (the store's `getArguments` checks state and expiry).
 - **`hashArguments` (16 hex, order-sensitive) as the approval fingerprint.** Order
   sensitivity would make a faithful replay through another serializer ask again, and 16
   hex characters are a weak binding for a single-use grant.
+
+## Amendment 2026-10-13 — the agent label is checked, not repaired (P2.7)
+
+Adds to "The agent label never reaches the decision", which stands. Handbook:
+[execution-door](../handbook/execution-door.md), "Agent label".
+
+### Context
+
+Spec §7.9: several agents present the same mission token, each may set its agent label
+so that the session and the audit tell who did what, and the budget is shared. The label
+is attribution only; nothing proves it. In Phase 1 the door repaired what it received: a
+value was cleaned up and cut at 120 characters, so the audit could show a label the
+caller never sent.
+
+### Decision
+
+- **A strict shape.** A label is 1 to 64 characters: ASCII letters and digits plus
+  `. _ - : / @ +`, the first character a letter or a digit; surrounding whitespace is
+  trimmed. The two constants (`AGENT_LABEL_MAX_LENGTH`, `AGENT_LABEL_PUNCTUATION`) live
+  with the bootstrap kit, which prints them: agents are told exactly what is checked.
+- **Two carriers, the per-call one first.** `params._meta.agent` of the `tools/call`,
+  then the HTTP header `X-Vaubaan-Agent`. A carrier that holds nothing, or a value that
+  is rejected, leaves the place to the next one.
+- **A value that is not a label is dropped, never repaired, never refused.** The call
+  proceeds exactly as if no label had been sent, and the door logs the carrier, the
+  reason (`not-a-string`, `too-long`, `invalid-character`) and the length — never the
+  value.
+
+### Consequences
+
+- An `agent_label` in the audit or on a session event is always, character for
+  character, what the caller sent.
+- A caller whose label is malformed loses its attribution, not its action; the only
+  trace is the door's log line.
+- Behaviour change against Phase 1: labels longer than 64 characters, or carrying a
+  character outside the list, used to be stored in a repaired form and are now absent.
+
+### Rejected alternatives
+
+- **Repairing the value** (what Phase 1 did). An attribution the gateway rewrote is no
+  longer what the caller said about itself.
+- **Refusing the call.** Nothing decides on a label: it must never be the cause of a
+  refusal.
+- **Reserving a share of the budget per label.** The budget is shared by the agents of
+  a mission (spec §7.9), and a label is not an identity: any agent can claim any name.

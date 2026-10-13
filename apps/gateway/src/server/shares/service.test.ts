@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   authorityRig,
@@ -161,6 +161,52 @@ describe('ShareService', () => {
       await rig.root.connections.service.revoke(ada, rig.connection.id);
       await expect(share(toBob([READ]))).rejects.toMatchObject({ code: 'connection-revoked' });
     });
+
+    it('refuses to share an unowned connection, even for a member who joined the emptied owner group again', async () => {
+      const admins = await rig.root.groups.service.create(rig.operator.id, 'depot-admins');
+      await rig.root.groups.service.addMember(rig.operator.id, admins.id, 'ada@example.com');
+      await rig.root.connections.service.transfer(
+        await rig.actor(rig.ada),
+        rig.connection.id,
+        admins.id,
+      );
+      await rig.root.groups.service.removeMember(rig.operator.id, admins.id, rig.ada.id);
+      await rig.root.groups.service.addMember(rig.operator.id, admins.id, 'ada@example.com');
+      // Ada is a member of the owner group again; the connection stays `unowned`
+      // until the operator reassigns it (spec §2.3).
+      expect((await rig.root.store.connections.getById(rig.connection.id))?.status).toBe('unowned');
+      await expect(
+        rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, toBob([READ])),
+      ).rejects.toMatchObject({ code: 'connection-unowned', status: 409 });
+      expect(await stored()).toEqual([]);
+    });
+
+    it('refuses a connection whose provider has no registered plugin', async () => {
+      // A plugin removed from the build after the connection was made: simulated in the registry.
+      const get = vi.spyOn(rig.root.registry, 'get').mockImplementation(() => undefined);
+      try {
+        await expect(share(toBob([READ]))).rejects.toMatchObject({ code: 'provider-unknown' });
+      } finally {
+        get.mockRestore();
+      }
+      expect(await stored()).toEqual([]);
+    });
+
+    it('settles a share even when its own entry cannot be written', async () => {
+      const { share: granted } = await share(toBob([READ]));
+      const mission = await rig.issueFor(rig.bob, [READ]);
+      await rig.root.shares.service.revoke(ada, granted.id);
+      expect(await rig.statusOf(mission)).toBe('orphaned');
+
+      vi.spyOn(rig.root.store.auditWriter, 'write').mockRejectedValueOnce(new Error('audit down'));
+      await expect(share(toBob([READ]))).rejects.toThrow('audit down');
+      // The share is stored and the mission it grounds again has its entry.
+      expect(await rig.statusOf(mission)).toBe('active');
+      expect(await rig.adminEntries('share-created')).toHaveLength(1);
+      expect(await rig.adminEntries('mission-restored')).toMatchObject([
+        { user_id: rig.ada.id, object: { id: mission.mission.id } },
+      ]);
+    });
   });
 
   describe('revoke', () => {
@@ -179,6 +225,44 @@ describe('ShareService', () => {
       await expect(rig.root.shares.service.revoke(ada, 'nope')).rejects.toMatchObject({
         code: 'not-found',
       });
+    });
+
+    it('answers not-found for a share that is not of the connection the route names', async () => {
+      const { share: granted } = await share(toBob([READ]));
+      await expect(
+        rig.root.shares.service.revoke(ada, granted.id, 'another-connection'),
+      ).rejects.toMatchObject({ code: 'not-found' });
+      expect((await stored())[0]?.status).toBe('active');
+      const revoked = await rig.root.shares.service.revoke(ada, granted.id, rig.connection.id);
+      expect(revoked.share.status).toBe('revoked');
+    });
+
+    it('answers like a repeat when another revocation won between the read and the write', async () => {
+      const { share: granted } = await share(toBob([READ]));
+      const { shares } = rig.root.store;
+      const getById = vi.spyOn(shares, 'getById');
+      // The first read still sees the share active; the other revocation lands right after.
+      getById.mockImplementationOnce(async (id) => {
+        getById.mockRestore();
+        const seen = await shares.getById(id);
+        await shares.revoke(id);
+        return seen;
+      });
+      const outcome = await rig.root.shares.service.revoke(ada, granted.id);
+      expect(outcome).toMatchObject({ share: { status: 'revoked' }, orphaned: 0 });
+      // The entry belongs to the act that revoked; this one wrote none.
+      expect(await rig.adminEntries('share-revoked')).toEqual([]);
+    });
+
+    it('settles a revocation even when its own entry cannot be written', async () => {
+      const { share: granted } = await share(toBob([READ]));
+      const mission = await rig.issueFor(rig.bob, [READ]);
+      vi.spyOn(rig.root.store.auditWriter, 'write').mockRejectedValueOnce(new Error('audit down'));
+      await expect(rig.root.shares.service.revoke(ada, granted.id)).rejects.toThrow('audit down');
+      expect((await stored())[0]?.status).toBe('revoked');
+      expect(await rig.adminEntries('mission-orphaned')).toMatchObject([
+        { user_id: rig.ada.id, object: { id: mission.mission.id } },
+      ]);
     });
   });
 

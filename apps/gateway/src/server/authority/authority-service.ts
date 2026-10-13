@@ -28,7 +28,7 @@ import type { GroupsRepo } from '../store/repositories/groups';
 import type { SharesRepo } from '../store/repositories/shares';
 import type { UsersRepo } from '../store/repositories/users';
 import type { ConnectionRecord, Principal } from '../store/types';
-import { fullCatalogRiskIds } from './catalog-authority';
+import { fullCatalogRiskIds, uncoveredRisks } from './catalog-authority';
 
 /** Why the user holds this authority. */
 export type AuthorityBasis = 'owner' | 'share' | 'none';
@@ -117,7 +117,8 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
     const shared = await this.sharedOn(connection, principals);
     if (shared === null) return none;
     // A risk the catalog dropped since the share was made cannot be accepted any more.
-    return { ...base, basis: 'share', riskIds: catalog.filter((id) => shared.has(id)) };
+    const held = new Set(shared);
+    return { ...base, basis: 'share', riskIds: catalog.filter((id) => held.has(id)) };
   }
 
   async connectionsOf(user: AuthoritySubject): Promise<ConnectionRecord[]> {
@@ -161,7 +162,7 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
       if (riskIds.length === 0) continue;
       if (await this.owns(connection, user, principals)) continue;
       const shared = await this.sharedOn(connection, principals);
-      const uncovered = shared === null ? riskIds : riskIds.filter((id) => !shared.has(id));
+      const uncovered = shared === null ? riskIds : uncoveredRisks({ riskIds: shared }, riskIds);
       if (uncovered.length === 0) continue;
       gaps.push({
         connectionId: connection.id,
@@ -204,18 +205,9 @@ export class ConnectionAuthorityService implements AuthorityService, AuthorityRe
   private async sharedOn(
     connection: ConnectionRecord,
     principals: Principals,
-  ): Promise<Set<RiskId> | null> {
+  ): Promise<RiskId[] | null> {
     const shares = await this.deps.shares.listActiveForTargets(await principals(), connection.id);
     if (shares.length === 0) return null;
-    return new Set(shares.flatMap((share) => share.restriction));
+    return shares.flatMap((share) => share.restriction);
   }
-}
-
-/** The ids of `requested` the authority does not cover, in request order (spec §3.1 "Monotonicity"). */
-export function uncoveredRisks(
-  authority: Pick<ConnectionAuthority, 'riskIds'>,
-  requested: readonly RiskId[],
-): RiskId[] {
-  const held = new Set(authority.riskIds);
-  return requested.filter((id) => !held.has(id));
 }

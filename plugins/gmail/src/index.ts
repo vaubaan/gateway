@@ -59,7 +59,7 @@ export const gmailCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 export const gmailPlugin: ProviderPlugin = definePlugin({
   id: GMAIL_PLUGIN_ID,
   displayName: 'Gmail',
-  version: '0.1.0',
+  version: '0.2.0',
   description:
     'Experimental, classifier-only : identity-zoned risks for reading, drafting and labelling in a Gmail mailbox. No tool is executable yet.',
   docsUrl:

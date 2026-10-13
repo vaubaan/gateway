@@ -49,8 +49,11 @@
  * Telemetry (spec §9): the final outcome of a call that reached
  * `plugin.execute` is handed, once, to the injected `TelemetrySink`
  * (`telemetry-sink.ts`; a no-op unless the composition root wires the
- * telemetry module). A call the broker stopped before the plugin ran is not
- * a plugin outcome and is not reported.
+ * telemetry module). Two calls are not reported: one the broker stopped
+ * before the plugin ran, and one whose caller went away (a streamed call
+ * stopped by `CallerGoneError`, or any failure met after the call's signal
+ * was aborted). Neither is an outcome of the plugin; the audit entry still
+ * says what happened.
  */
 import {
   isUnavailableConnectionStatus,
@@ -103,8 +106,9 @@ function isHttpStatus(value: unknown): value is number {
 }
 
 /**
- * The HTTP status a failure carries: `UpstreamAuthError.upstreamStatus` (the
- * plugin contract), or the numeric `status` HTTP clients put on their errors.
+ * The HTTP status a failure carries: `UpstreamAuthError.upstreamStatus` or
+ * `UpstreamHttpError.status` (the plugin contract), or the numeric `status`
+ * HTTP clients put on their errors.
  */
 function httpStatusOf(err: unknown): number | null {
   if (err instanceof UpstreamAuthError) {
@@ -303,7 +307,9 @@ export function createUpstreamStage(deps: UpstreamStageDeps): UpstreamStage {
         report(call, { ok: true, result });
         return result;
       } catch (err) {
-        report(call, { ok: false, error: err });
+        // The caller left: not an outcome of the plugin, nothing to report (spec §9).
+        const callerGone = err instanceof CallerGoneError || call.signal?.aborted === true;
+        if (!callerGone) report(call, { ok: false, error: err });
         if (err instanceof UpstreamRefusalError) throw err;
         throw asUpstreamFailure(err, target.connection.provider, relay.count);
       }

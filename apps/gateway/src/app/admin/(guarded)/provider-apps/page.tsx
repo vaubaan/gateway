@@ -28,10 +28,9 @@ import {
   Stack,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { firstParam, type PageSearchParams } from '@/lib/connections/session';
+import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import {
   ACCEPT_UNVERIFIED_ACTION,
-  NOTICE_PARAM,
   PROVIDER_APPS_PAGE,
   REFUSE_UNVERIFIED_ACTION,
 } from '@/server/connections';
@@ -46,10 +45,7 @@ export default async function ProviderAppsPage({
 }) {
   const { root, principal } = await requireOperator();
   const params = await searchParams;
-  const notice = await root.connections.notices.take(
-    principal.sessionId,
-    firstParam(params[NOTICE_PARAM]),
-  );
+  const notice = await takeNotice(root, principal.sessionId, params);
   const apps = await root.providerApps.list();
   const withApp = apps.filter((a) => a.needsApp);
   const withoutApp = apps.filter((a) => !a.needsApp);

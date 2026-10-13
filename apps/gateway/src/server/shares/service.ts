@@ -24,13 +24,20 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { RiskId } from '@vaubaan/shared';
 
-import { findActiveUserByEmail, principalLabel, type MissionGrounds } from '../authority';
-import { ConnectError, type Actor, type ConnectionService } from '../connections';
+import {
+  findActiveUserByEmail,
+  fullCatalogRiskIds,
+  principalLabel,
+  type GroundsShift,
+  type MissionGrounds,
+} from '../authority';
+import { ConnectError, ownerActRefusal, type Actor, type ConnectionService } from '../connections';
 import type { Logger } from '../logging';
 import { enumerateCatalog } from '../missions/catalog-view';
 import type { CatalogRisk } from '../missions/model';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
+import { InvariantError } from '../store/errors';
 import type {
   ConnectionRecord,
   ConnectionResourceRecord,
@@ -38,7 +45,7 @@ import type {
   Principal,
   ShareRecord,
 } from '../store/types';
-import { ShareError } from './errors';
+import { ShareError, type ShareErrorCode } from './errors';
 import type { EnvLabelling } from './restriction';
 
 /** Who a share is made to, as the owner names them: a user by email, or a group. */
@@ -68,6 +75,25 @@ export interface ShareContext {
   readonly labelling: EnvLabelling;
   /** The active shares of the connection. */
   readonly shares: readonly ShareView[];
+  /** Why `share` would refuse this connection whatever is asked; `null` when it can be shared. */
+  readonly unshareable: UnshareableReason | null;
+}
+
+/** The two refusals of `share` that depend on the connection alone. */
+export type UnshareableReason = Extract<
+  ShareErrorCode,
+  'connection-revoked' | 'connection-unowned'
+>;
+
+/**
+ * Why nobody shares this connection (spec §2.3), or `null`. The connection's own rule
+ * (`ownerActRefusal`) under the share codes: `share` refuses on it and the Share
+ * dialog reads it from `ShareContext.unshareable`.
+ */
+export function unshareableReason(
+  connection: Pick<ConnectionRecord, 'status'>,
+): UnshareableReason | null {
+  return ownerActRefusal(connection);
 }
 
 export interface ShareOutcome {
@@ -134,6 +160,7 @@ export class ShareService {
       groups: await this.deps.store.groups.list(),
       labelling: labellingOf(detail.resources, typeof registered?.plugin.envOf === 'function'),
       shares: await Promise.all(shares.map((share) => this.view(share))),
+      unshareable: unshareableReason(connection),
     };
   }
 
@@ -144,8 +171,8 @@ export class ShareService {
    */
   async share(actor: Actor, connectionId: string, input: ShareInput): Promise<ShareOutcome> {
     const { connection } = await this.owned(actor, connectionId);
-    if (connection.status === 'revoked') throw new ShareError('connection-revoked');
-    if (connection.status === 'unowned') throw new ShareError('connection-unowned');
+    const unshareable = unshareableReason(connection);
+    if (unshareable) throw new ShareError(unshareable);
     const restriction = this.restrictionOf(connection, input.riskIds);
     const target = await this.targetOf(connection, input.target);
 
@@ -156,24 +183,31 @@ export class ShareService {
       restriction,
       createdByUserId: actor.user.id,
     });
-    if (replaced) await this.auditRevoked(actor, replaced, { replaced_by: created.id });
-    await this.deps.audit.write({
-      kind: 'admin',
-      ts: this.nowIso(),
-      user_id: actor.user.id,
-      act: 'share-created',
-      object: { type: 'share', id: created.id },
-      before: replaced ? { share_id: replaced.id, restriction: replaced.restriction } : null,
-      after: {
-        connection_id: connection.id,
-        target: created.target,
-        restriction: created.restriction,
-      },
-      delegated_client_id: null,
-    });
+    // The share is stored: what it did to the missions is settled whether or not its
+    // own entries could be written (the failure, if any, still reaches the caller).
     // A replacement may have narrowed the restriction under missions already issued;
     // a share made again may ground missions that an earlier revocation orphaned.
-    const { orphaned, restored } = await watch.settle(actor.user.id);
+    let settled: GroundsShift;
+    try {
+      if (replaced) await this.auditRevoked(actor, replaced, { replaced_by: created.id });
+      await this.deps.audit.write({
+        kind: 'admin',
+        ts: this.nowIso(),
+        user_id: actor.user.id,
+        act: 'share-created',
+        object: { type: 'share', id: created.id },
+        before: replaced ? { share_id: replaced.id, restriction: replaced.restriction } : null,
+        after: {
+          connection_id: connection.id,
+          target: created.target,
+          restriction: created.restriction,
+        },
+        delegated_client_id: null,
+      });
+    } finally {
+      settled = await watch.settle(actor.user.id);
+    }
+    const { orphaned, restored } = settled;
     this.deps.logger.info('connection shared', {
       connection_id: connection.id,
       share_id: created.id,
@@ -196,17 +230,38 @@ export class ShareService {
    * Terminal for the share (spec §2.3). The missions it grounded read
    * `orphaned` until a new share covers them again.
    */
-  async revoke(actor: Actor, shareId: string): Promise<RevokeOutcome> {
+  async revoke(actor: Actor, shareId: string, onConnectionId?: string): Promise<RevokeOutcome> {
     const share = await this.deps.store.shares.getById(shareId);
     if (!share) throw new ShareError('not-found');
+    // A route names the connection in its URL: a share of another connection is not there.
+    if (onConnectionId !== undefined && share.connectionId !== onConnectionId) {
+      throw new ShareError('not-found');
+    }
     await this.owned(actor, share.connectionId);
     const targetLabel = await principalLabel(this.deps.store, share.target);
     if (share.status === 'revoked') return { share, targetLabel, orphaned: 0 };
 
     const watch = await this.deps.grounds.watchConnection(share.connectionId);
-    const revoked = await this.deps.store.shares.revoke(share.id);
-    await this.auditRevoked(actor, share, null);
-    const { orphaned } = await watch.settle(actor.user.id);
+    let revoked: ShareRecord;
+    try {
+      revoked = await this.deps.store.shares.revoke(share.id);
+    } catch (err) {
+      // Another revocation won between the read above and the conditional UPDATE: the
+      // share is revoked, by the act that wrote its entry. Same answer as a repeat.
+      const current =
+        err instanceof InvariantError ? await this.deps.store.shares.getById(share.id) : null;
+      if (current?.status !== 'revoked') throw err;
+      return { share: current, targetLabel, orphaned: 0 };
+    }
+    // The revocation is stored: the missions it orphaned are settled whether or not
+    // its own entry could be written (the failure, if any, still reaches the caller).
+    let settled: GroundsShift;
+    try {
+      await this.auditRevoked(actor, share, null);
+    } finally {
+      settled = await watch.settle(actor.user.id);
+    }
+    const { orphaned } = settled;
     this.deps.logger.info('share revoked', {
       connection_id: share.connectionId,
       share_id: share.id,
@@ -262,7 +317,9 @@ export class ShareService {
     if (!registered) throw new ShareError('provider-unknown');
     const asked = [...new Set(riskIds)];
     if (asked.length === 0) throw new ShareError('restriction-empty');
-    const catalog = enumerateCatalog(registered.plugin.catalog).map((risk) => risk.risk_id);
+    // The authority's own enumeration: what a share may carry and what an authority
+    // may return are one list (`authorityOf` filters a share by the same function).
+    const catalog = fullCatalogRiskIds(registered.plugin.catalog);
     const known = new Set(catalog);
     const unknown = asked.filter((id) => !known.has(id));
     if (unknown.length > 0) throw new ShareError('risk-unknown', unknown.join(', '));

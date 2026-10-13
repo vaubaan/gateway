@@ -26,6 +26,7 @@ import {
   Thead,
   Tr,
 } from '@/components/ui';
+import { GateBadge } from '@/components/risk/RiskBadges';
 import { currentUser } from '@/lib/auth/session';
 import { maskedToken } from '@/server/missions';
 import { explainOrphan } from '@/server/missions/orphan-reason';
@@ -50,9 +51,8 @@ export default async function MissionPage({ params }: Props) {
   const detail = await session.root.missions.service.get(session.user, id);
   if (!detail) notFound();
   const { mission, state, token, orphan, issuedVia } = detail;
-  // A revoked or orphaned mission refuses every call: its gates are not edited. `orphaned`
-  // is derived on this very read, so the control is back as soon as the authority is.
-  const gatesEditable = mission.status !== 'revoked' && mission.status !== 'orphaned';
+  // The service's own rule (`gateEditBlockedBy`): the control shows when `setGate` would act.
+  const gatesEditable = detail.gates_editable;
   const orphanExplanation = orphan && explainOrphan(orphan, detail.connections);
 
   return (
@@ -187,7 +187,7 @@ export default async function MissionPage({ params }: Props) {
                 </Td>
                 <Td>
                   <div className={styles.gateCell} data-testid={`gate-${entry.risk_id}`}>
-                    {entry.gate === 'approval' ? <Badge tone="warning">approval</Badge> : 'auto'}
+                    <GateBadge gate={entry.gate} />
                     {entry.gate_open_until && (
                       <span className={styles.muted}>
                         open until <LocalDate ts={entry.gate_open_until} />

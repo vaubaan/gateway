@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { MEMORY_PATH, openDb } from '../../../src/server/store/db.ts';
-import { InvariantError, type Store } from '../../../src/server/store/index.ts';
+import type { Store } from '../../../src/server/store/index.ts';
 import { loadMigrations, runMigrations } from '../../../src/server/store/migrate.ts';
 import { STORED_MISSION_STATUSES } from '../../../src/server/store/repositories/enums.ts';
 import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
@@ -80,28 +80,39 @@ describe('ownership and orphan states in the store', () => {
       expect((await store.connections.listOwnerless()).map((c) => c.id)).toEqual([unowned.id]);
     });
 
-    it('assignOwner gives an owner and makes an unowned connection active again, keeping its credential', async () => {
+    it('assignOwnerlessTo gives an owner and makes an unowned connection active again, keeping its credential', async () => {
       const c = await connect(byGroup);
       await store.connections.markOwnerlessUnowned();
-      const reassigned = await store.connections.assignOwner(c.id, { kind: 'user', id: bob });
-      expect(reassigned).toMatchObject({ status: 'active', owner: { kind: 'user', id: bob } });
+      const reassigned = await store.connections.assignOwnerlessTo(c.id, { kind: 'user', id: bob });
+      expect(reassigned).toMatchObject({
+        outcome: 'assigned',
+        previous: { status: 'unowned', owner: byGroup },
+        connection: { status: 'active', owner: { kind: 'user', id: bob } },
+      });
       expect(await store.connections.getCredential(c.id)).toBe('secret');
       expect(await store.connections.listOwnerless()).toEqual([]);
     });
 
-    it('assignOwner leaves an expired connection expired and refuses a revoked one', async () => {
+    it('assignOwnerlessTo leaves an expired connection expired and never touches a revoked one', async () => {
       const expired = await connect(byGroup);
       await store.connections.markExpired(expired.id);
       expect(
-        await store.connections.assignOwner(expired.id, { kind: 'user', id: bob }),
-      ).toMatchObject({ status: 'expired', owner: { kind: 'user', id: bob } });
+        await store.connections.assignOwnerlessTo(expired.id, { kind: 'user', id: bob }),
+      ).toMatchObject({
+        outcome: 'assigned',
+        connection: { status: 'expired', owner: { kind: 'user', id: bob } },
+      });
 
+      // A revoked connection is not ownerless, whatever its owner group holds.
       const revoked = await connect(byGroup);
       await store.connections.revoke(revoked.id);
-      await expect(
-        store.connections.assignOwner(revoked.id, { kind: 'user', id: bob }),
-      ).rejects.toBeInstanceOf(InvariantError);
-      expect((await store.connections.getById(revoked.id))?.owner).toEqual(byGroup);
+      expect(
+        await store.connections.assignOwnerlessTo(revoked.id, { kind: 'user', id: bob }),
+      ).toEqual({ outcome: 'not-ownerless' });
+      expect(await store.connections.getById(revoked.id)).toMatchObject({
+        status: 'revoked',
+        owner: byGroup,
+      });
     });
 
     it('markExpired expires a serving connection, unowned included, and never a revoked one', async () => {

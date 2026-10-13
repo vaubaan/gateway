@@ -8,8 +8,14 @@
  * Rules :
  *   - `fetch` comes from the context, never from the global : tests inject
  *     `mockFetch`, the host injects a fetch with its own timeouts and proxy.
- *   - 401 / 403 from the provider → `UpstreamAuthError`, so the host can try
- *     `refresh` and otherwise mark the connection `expired`.
+ *   - a provider failure is thrown, never returned : 401 / 403 →
+ *     `UpstreamAuthError` (on a 401 the host tries `refresh` and otherwise
+ *     marks the connection `expired`), any other failed status →
+ *     `UpstreamHttpError` ; a network error is left to propagate. The host
+ *     records it as `upstream_error` in the audit.
+ *   - `isError: true` is returned only for what this executor declines
+ *     itself (an unknown tool, a workspace outside the mission) : nothing
+ *     failed at the provider.
  *   - the provider's public API base is a constant of the plugin : it is a
  *     fact about the provider, not configuration of the instance.
  *   - the workspace is resolved by the classifier's own `resolveWorkspace` :
@@ -20,6 +26,7 @@
 
 import {
   UpstreamAuthError,
+  UpstreamHttpError,
   expectCredentialKind,
   type ConnectionContext,
   type ExecuteContext,
@@ -44,7 +51,8 @@ export async function executeTemplate(
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
   const resolved = resolveWorkspace(args, ctx.resources);
-  if ('denied' in resolved) throw new Error(resolved.denied);
+  // Declined here, before any request : a result the agent reads, not an upstream failure.
+  if ('denied' in resolved) return refused(resolved.denied);
   const workspace = encodeURIComponent(resolved.ref);
   switch (tool) {
     case TOOL.listWidgets:
@@ -69,7 +77,7 @@ export async function executeTemplate(
         ),
       );
     default:
-      return { content: [{ type: 'text', text: `unknown tool '${tool}'` }], isError: true };
+      return refused(`unknown tool '${tool}'`);
   }
 }
 
@@ -118,8 +126,18 @@ async function request(
       res.status,
     );
   }
-  if (!res.ok) throw new Error(`${PROVIDER_ID} ${method} ${path} failed with HTTP ${res.status}`);
+  if (!res.ok) {
+    throw new UpstreamHttpError(
+      `${PROVIDER_ID} ${method} ${path} failed with HTTP ${res.status}`,
+      res.status,
+    );
+  }
   return await res.json();
+}
+
+/** What the executor declines itself. A provider failure is thrown instead. */
+function refused(message: string): McpToolResult {
+  return { content: [{ type: 'text', text: message }], isError: true };
 }
 
 function text(payload: unknown): McpToolResult {

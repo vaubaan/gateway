@@ -17,6 +17,7 @@ import {
   type Store,
 } from '../../../src/server/store/index.ts';
 import {
+  grantApprovalRequest,
   openTestStore,
   StubEncryptor,
   TEST_RISK_IDS,
@@ -77,7 +78,7 @@ describe('sessions repository', () => {
     expect(result.session.createdAt).toBe(t.clock.now().toISOString());
     const again = await store.sessions.getOrCreate(missionId);
     expect(again).toEqual(result.session);
-    expect(await store.sessions.getById(again.id)).toEqual(again);
+    expect(await store.sessions.getByMission(missionId)).toEqual(again);
   });
 
   it('N concurrent decisions on a quota of 1 produce exactly one allow', async () => {
@@ -224,14 +225,23 @@ describe('sessions repository', () => {
       arguments: { pr: 42 },
       expiresAt: '2026-10-13T10:00:00.000Z',
     });
-    await store.requests.decide(request.id, 'granted', creator);
-    const approval = await store.approvals.create({
-      missionId,
+    // Granted the way production grants: the approval is born in the decision transaction,
+    // bound to the request's own risk, tool and fingerprint.
+    const approval = await grantApprovalRequest(
+      store,
+      request.id,
+      creator,
+      '2026-10-13T09:30:00.000Z',
+    );
+    expect(approval).toMatchObject({
       requestId: request.id,
       riskId: MERGE,
       tool: 'github__merge_pull_request',
       fingerprint: 'fp-1',
-      expiresAt: '2026-10-13T09:30:00.000Z',
+    });
+    expect(await store.requests.getById(request.id)).toMatchObject({
+      state: 'granted',
+      hasArguments: false,
     });
 
     const decide = (ctx: DecideContext) => {
@@ -257,7 +267,7 @@ describe('sessions repository', () => {
     );
     expect(replay.outcome.allow).toBe(false);
     expect(replay.counters.get(MERGE)).toBe(1);
-    expect((await store.approvals.getById(approval.id))?.consumedAt).toBe(
+    expect((await store.approvals.getByRequest(request.id))?.consumedAt).toBe(
       t.clock.now().toISOString(),
     );
   });
@@ -295,19 +305,35 @@ describe('sessions repository', () => {
     expect(events[0]?.details).toEqual({ requestId: result.outcome.requestId });
   });
 
-  it('resets counters for a period (granted claim) and lists events since a timestamp', async () => {
+  it('a granted claim resets the counters of the period, and events are listed since a timestamp', async () => {
     const r = await store.sessions.decideAndDecrement(
       { missionId, riskIds: [READ, WRITE], periodStart: PERIOD },
       quotaDecider({ [READ]: 10, [WRITE]: 1 }),
     );
-    expect(await store.sessions.resetCounters(r.session.id, PERIOD, WRITE)).toBe(1);
+    // The reset production performs: inside the transaction that decides a claim.
+    const claim = await store.requests.create({
+      missionId,
+      sessionId: r.session.id,
+      kind: 'claim',
+      riskId: WRITE,
+      expiresAt: '2026-10-14T09:00:00.000Z',
+    });
+    const decided = await store.requests.decideClaim(claim.id, creator, (ctx) => ({
+      state: 'granted' as const,
+      decision: { resolution: 'reset-period' },
+      before: ctx.resetCounters(PERIOD),
+    }));
+    if (decided.status !== 'decided') throw new Error('expected an open claim');
+    expect([...decided.outcome.before]).toEqual([
+      [READ, 1],
+      [WRITE, 1],
+    ]);
     expect(
       (await store.sessions.counters(r.session.id, PERIOD)).map((c) => [c.riskId, c.consumed]),
     ).toEqual([
-      [READ, 1],
+      [READ, 0],
       [WRITE, 0],
     ]);
-    expect(await store.sessions.resetCounters(r.session.id, PERIOD)).toBe(2);
 
     t.clock.advance(5000);
     const later = await store.sessions.recordEvent(r.session.id, {

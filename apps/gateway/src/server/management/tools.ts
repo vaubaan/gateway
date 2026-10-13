@@ -32,7 +32,6 @@ import {
   missionDetailView,
   missionView,
   previewView,
-  uncoveredOfPreview,
   type CatalogView,
   type ConnectionView,
   type MissionDetailView,
@@ -40,7 +39,6 @@ import {
   type MissionView,
   type OrphanView,
   type PreviewView,
-  type UncoveredView,
 } from './views';
 
 /** Mutations (issue, rotate, revoke) one delegation may perform per window. */
@@ -48,6 +46,10 @@ export const MANAGEMENT_MUTATIONS_PER_WINDOW = 60;
 export const MANAGEMENT_MUTATION_WINDOW_MS = 3_600_000;
 const MS_PER_SECOND = 1000;
 
+/**
+ * Every code a tool refuses with. `tools.test.ts` holds this list to the table
+ * of the handbook, so a code added here is documented or the build fails.
+ */
 export const MANAGEMENT_REFUSAL_CODES = [
   'draft-refused',
   'mission-not-found',
@@ -157,10 +159,9 @@ function tokenView(token: { secret: string; prefix: string }): RevealedTokenView
   };
 }
 
-function draftRefusal(
-  preview: PreviewView,
-  uncovered: readonly UncoveredView[],
-): ManagementRefusal {
+/** The refusal of a draft: its preview, whose uncovered list is the one it shows. */
+function draftRefusal(preview: PreviewView): ManagementRefusal {
+  const { uncovered } = preview;
   const beyond = uncovered.length > 0;
   return {
     code: 'draft-refused',
@@ -303,7 +304,7 @@ export class ManagementTools {
     const checked = await this.deps.missions.preview(user, draft);
     if (!checked.ok) {
       this.log('issue_mission', actor, 'draft-refused');
-      return refused(draftRefusal(previewView(checked), uncoveredOfPreview(checked)));
+      return refused(draftRefusal(previewView(checked)));
     }
     const limited = await this.takeMutation(actor);
     if (limited) return refused(limited);
@@ -316,7 +317,7 @@ export class ManagementTools {
         throw new Error(`management door: unexpected issuance outcome "${result.reason}"`);
       }
       this.log('issue_mission', actor, 'draft-refused');
-      return refused(draftRefusal(previewView(result.preview), uncoveredOfPreview(result.preview)));
+      return refused(draftRefusal(previewView(result.preview)));
     }
     this.log('issue_mission', actor, 'issued', result.mission.id);
     const preview = previewView(result.preview);

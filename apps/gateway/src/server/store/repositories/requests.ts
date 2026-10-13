@@ -5,6 +5,7 @@ import type {
   ApprovalRecord,
   EventRecord,
   Iso,
+  MissionStatus,
   NewEvent,
   RequestKind,
   RequestRecord,
@@ -20,7 +21,7 @@ import {
   toJson,
   type RepoContext,
 } from './context.ts';
-import { REQUEST_KINDS, REQUEST_STATES } from './enums.ts';
+import { REQUEST_KINDS, REQUEST_STATES, STORED_MISSION_STATUSES } from './enums.ts';
 import { createSessionPrimitives, type RiskEventQuery } from './sessions.ts';
 
 /**
@@ -56,6 +57,17 @@ export interface InsertRequestInput extends RequestInput {
 }
 
 /**
+ * The fields of the request's mission a decision is checked against, as the store
+ * holds them inside the decision's transaction: a rule checked on them and the write
+ * that follows see the same row. `status` is the stored one, never `orphaned` (that
+ * verdict is derived by the caller, before the transaction).
+ */
+export interface StoredMissionFacts {
+  readonly status: Exclude<MissionStatus, 'orphaned'>;
+  readonly expiresAt: Iso | null;
+}
+
+/**
  * What the `apply` callback of `decideClaim` sees and may do, all inside the open
  * transaction. The rules (which resolution, which amount, which date) belong to the
  * `RequestService`; this context only makes their effects atomic with the decision.
@@ -63,6 +75,8 @@ export interface InsertRequestInput extends RequestInput {
 export interface ClaimDecisionContext {
   /** The claim, still `open` and unexpired at `now`. */
   readonly request: RequestRecord;
+  /** The claim's mission as stored, read inside this transaction. */
+  readonly mission: StoredMissionFacts;
   /** The mission's session; null only when the session row was deleted since. */
   readonly session: SessionRecord | null;
   readonly now: Iso;
@@ -101,6 +115,8 @@ export type ClaimDecisionResult<R extends ClaimDecisionOutcome> = RequestDecisio
 export interface ApprovalDecisionContext {
   /** The approval request, still `open` and unexpired at `now`. */
   readonly request: RequestRecord;
+  /** The request's mission as stored, read inside this transaction. */
+  readonly mission: StoredMissionFacts;
   /** The mission's session; null only when the session row was deleted since. */
   readonly session: SessionRecord | null;
   readonly now: Iso;
@@ -129,13 +145,6 @@ export interface RequestsRepo {
    * sweeper has not erased the blob yet.
    */
   getArguments(id: string): Promise<unknown>;
-  /** Grants or refuses an open request and erases the argument blob. */
-  decide(
-    id: string,
-    state: 'granted' | 'refused',
-    decidedByUserId: string,
-    decision?: Record<string, unknown> | null,
-  ): Promise<RequestRecord>;
   /**
    * Decides an open claim and applies the creator's resolution in one `BEGIN IMMEDIATE`
    * transaction: the state change, the counter / expiry effects done through the
@@ -159,11 +168,10 @@ export interface RequestsRepo {
     decidedByUserId: string,
     apply: (ctx: ApprovalDecisionContext) => R,
   ): Promise<RequestDecisionResult<R>>;
-  /** Sweeper: flips open requests past their expiry to `expired` and erases blobs. */
-  expireOpen(): Promise<number>;
   /**
-   * Same flip as `expireOpen`, returning the expired requests and recording one
-   * `request` event (`state: 'expired'`) per request on its mission's session.
+   * Sweeper: flips open requests past their expiry to `expired`, erases their sealed
+   * arguments, and records one `request` event (`state: 'expired'`) per request on its
+   * mission's session. Returns the expired requests.
    */
   sweepExpired(): Promise<RequestRecord[]>;
 }
@@ -336,11 +344,6 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
        args_blob = NULL, key_version = NULL
      WHERE id = ? AND state = 'open'`,
   );
-  const expire = db.prepare<[string]>(
-    `UPDATE requests SET state = 'expired', args_blob = NULL, key_version = NULL
-     WHERE state = 'open' AND expires_at <= ?`,
-  );
-
   const overdue = db.prepare<[string], RequestRow>(
     `SELECT ${COLUMNS} FROM requests r WHERE r.state = 'open' AND r.expires_at <= ? ORDER BY r.created_at`,
   );
@@ -357,6 +360,19 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
        closed_at = CASE WHEN status = 'expired' THEN NULL ELSE closed_at END
      WHERE id = ?`,
   );
+
+  const missionFacts = db.prepare<[string], { status: string; expires_at: string | null }>(
+    'SELECT status, expires_at FROM missions WHERE id = ?',
+  );
+
+  /** The mission of a request as the store holds it now. In-transaction. */
+  function missionFactsSync(missionId: string): StoredMissionFacts {
+    const row = requireRow(missionFacts.get(missionId), 'mission', missionId);
+    return {
+      status: parseEnum(STORED_MISSION_STATUSES, row.status, 'missions.status'),
+      expiresAt: row.expires_at,
+    };
+  }
 
   /** Flips one overdue request and leaves its trace on the session. In-transaction. */
   function expireSync(request: RequestRecord, now: Iso): RequestRecord {
@@ -389,6 +405,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       );
     return {
       request,
+      mission: missionFactsSync(request.missionId),
       session,
       now,
       counters: read,
@@ -421,6 +438,7 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
     }
     return {
       request,
+      mission: missionFactsSync(request.missionId),
       session,
       now,
       createApproval(expiresAt) {
@@ -508,17 +526,6 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       );
       return text === null ? null : (JSON.parse(text) as unknown);
     },
-    async decide(id, state, decidedByUserId, decision = null) {
-      // One conditional UPDATE decides; the re-read only chooses the error. Atomic on any
-      // driver, not just the synchronous one.
-      const changed = decideOpen.run(state, nowIso(ctx), decidedByUserId, toJson(decision), id);
-      const current = getRequestRecord(ctx, id);
-      if (!current) throw new NotFoundError('request', id);
-      if (changed.changes === 0) {
-        throw new InvariantError(`request ${id} is already ${current.state}`);
-      }
-      return current;
-    },
     async decideClaim(id, decidedByUserId, apply) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () =>
@@ -534,9 +541,6 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
           apply(approvalContext(request, session, now)),
         ),
       );
-    },
-    async expireOpen() {
-      return expire.run(nowIso(ctx)).changes;
     },
     async sweepExpired() {
       const now = nowIso(ctx);

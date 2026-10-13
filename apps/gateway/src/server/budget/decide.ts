@@ -23,6 +23,7 @@
 
 import type { MissionPolicy, MissionPolicyEntry, RateLimit, RiskId } from '@vaubaan/shared';
 import { BudgetInvariantError } from './errors.ts';
+import { effectiveGate } from './gates.ts';
 import type { CurrentPeriod } from './period.ts';
 
 /** What the rate window of one risk looks like at decision time. */
@@ -136,14 +137,6 @@ function rateLimitedRefusal(entry: MissionPolicyEntry, probe: RateProbe): Refuse
       retry_after_seconds: Math.max(1, probe.retry_after_seconds),
     },
   };
-}
-
-/** Gate that applies to the risk now: `approval` unless the creator opened it. */
-function effectiveGate(
-  entry: MissionPolicyEntry,
-  openedGates: ReadonlySet<RiskId>,
-): 'auto' | 'approval' {
-  return entry.gate === 'approval' && !openedGates.has(entry.risk_id) ? 'approval' : 'auto';
 }
 
 export function decide(input: DecideInput): BudgetOutcome {

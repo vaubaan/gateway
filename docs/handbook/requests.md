@@ -15,6 +15,7 @@ tracks:
   - apps/gateway/src/server/budget/consistency.ts
   - apps/gateway/src/server/budget/gates.ts
   - apps/gateway/tests/integration/requests/
+  - apps/gateway/tests/integration/authority/share-and-orphan.test.ts
   - apps/gateway/tests/integration/execution/approval-door.test.ts
   - apps/gateway/tests/integration/store/approval-decisions.test.ts
   - apps/gateway/tests/e2e/v5/exhaust-and-claim.spec.ts
@@ -53,7 +54,7 @@ apps/gateway/src/server/requests/        host-agnostic, never imports `next`
   url.ts              REQUEST_PATH_PREFIX (/r), INBOX_PATH (/requests), requestPath(), inboxRequestPath(), requestUrl(), requestUrlBuilder()
   state.ts            nextState(), effectiveState(), isDecidable(), isTerminal()                    (pure)
   claim.ts            ClaimDecision, ClaimSituation, claimOptions(), checkClaimDecision(),
-                      parseClaimDecision(), formatUtc()                                             (pure, browser-safe)
+                      parseClaimDecision(), formatUtc(), orphanedProblem()                          (pure, browser-safe)
   approval.ts         ApprovalDecision, ApprovalSituation, approvalOptions(), checkApprovalDecision(),
                       parseApprovalDecision(), formatDelay()                                        (pure, browser-safe)
   events.ts           describeEvent(), eventLineOf() — one line per session event                   (pure)
@@ -85,8 +86,9 @@ come from the same constant (`REQUEST_PATH_PREFIX`). The id is
 `encodeURIComponent`-ed.
 
 The composition root builds the `SessionService` (`compose/root.ts`) with
-`requestUrl: requests.requestUrl` and
-`requestExpirySeconds: config.requests.expirySeconds`, and hands it to the
+`requestUrl: requests.requestUrl`,
+`requestExpirySeconds: config.requests.expirySeconds` and
+`approvalValiditySeconds: config.approvals.expirySeconds`, and hands it to the
 execution door as `budget`.
 
 ## Access rule
@@ -130,9 +132,14 @@ creator from answering.
 
 **Bearers.** Step 2 applies to the three routes, even when a valid session
 cookie comes with the header: an executor that also holds its human's cookie
-still cannot claim for itself through its HTTP client. `presented` is
-`mission-token` when the value has the `vbn_live_` shape, `bearer` otherwise;
-nothing is verified or looked up.
+still cannot claim for itself through its HTTP client. `presented` and
+`expected` are `BearerKind`s (`@vaubaan/gateway-core`), the vocabulary of the
+two MCP doors. Nothing is verified or looked up, so the kind is read from the
+shape (`bearerKindByShape`): `mission-token` for a value of the `vbn_live_`
+shape, `delegated-token` for one of the `vbn_dat_` shape
+(`isAccessTokenShaped`, `oauth-as/secrets.ts`). A value of neither shape has
+no kind: `presented` is left out rather than invented, and the answer is the
+same 403.
 
 ## The service
 
@@ -140,6 +147,7 @@ nothing is verified or looked up.
 const requests = new RequestService({
   store,
   registry,
+  grounds, // root.authority.grounds — derives `orphaned` on every mission read (required)
   publicUrl,
   approvalValiditySeconds, // config.approvals.expirySeconds
   clock,
@@ -187,7 +195,8 @@ in this order, each with a one-line `consequence` and `unavailable`
 (`ClaimProblem | null`); `checkClaimDecision(situation, decision)` applies the
 same rules to a decision. `ClaimSituation` is read at decision time: mission
 state, expiry, current period end, the risk's quota and what it consumed in
-the current period.
+the current period, and the request's own expiry (`request_expires_at`, for
+the sentence of an orphaned mission).
 
 | Resolution      | Effect                                                                                | Refused when                                                                                        |
 | --------------- | ------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
@@ -199,11 +208,54 @@ the current period.
 `orphaned` is derived, never stored ([authority](authority.md)): `own()`
 reads the mission through `grounds.derive` (`RequestServiceDeps.grounds`,
 required) on every view and every decision. A request of an orphaned mission
-therefore shows its options unavailable (`mission-closed`, with a sentence
-that says the request can be granted once the authority is back), takes a
-refusal only, and is decidable again — the same request, if it has not
-expired — as soon as the creator's authority returns. The same holds for an
-approval request.
+therefore shows its options unavailable (`mission-closed`), takes a refusal
+only, and is decidable again — the same request, if it has not expired — as
+soon as the creator's authority returns. The same holds for an approval
+request.
+
+#### A request on an orphaned mission still expires
+
+The sweeper expires the open requests of an orphaned mission on the normal
+`requests.expiry` delay, like any other. This is a decision, not an oversight
+(ADR
+[request-expiry-on-orphaned-missions](../decisions/request-expiry-on-orphaned-missions.md)):
+
+- **The sealed arguments live as long as the request and no longer** (spec
+  §3.5). Pausing the request's clock while the mission is orphaned would hold
+  the arguments of an approval request for an unbounded time — and for ever on
+  a revoked connection, whose missions never come back.
+- **A status filter in the sweep's SQL would be the one reader that bypasses
+  the derived `orphaned`.** The store holds `active` for an orphaned mission;
+  `sweepExpired` reads no mission at all.
+- **Nothing is lost.** Once the authority is back, the executor's next refused
+  call opens a new request (`request-not-open` on the old one).
+
+What the creator reads says so. `orphanedProblem(request_expires_at)`
+(`claim.ts`, used by both kinds) is the sentence of every unavailable option:
+"The mission is orphaned: the authority behind it is missing, so every call is
+refused whatever you decide. The request can be granted once that authority is
+back, until it expires (`<request expiry, UTC>`); after that, the executor's
+next refused call opens a new one." A revoked mission gets no such promise.
+
+Left as it is: the session event of the expiry. The sweep writes `request`
+`{ request_id, request_kind, state: 'expired' }` for every request, and the
+timeline renders it "The claim expired unanswered" (`events.ts`), which for a
+request on an orphaned mission reads as if the creator had not answered while
+they could only refuse. Saying otherwise needs a field on
+`RequestClosedEventDetails` (`@vaubaan/shared`) that the sweep would set from
+the verdict `MissionGrounds` derives for each expiring request; the sweep's
+SQL would still not filter on a status. It is not a change of the request
+service alone: the event is written by `RequestsRepo.sweepExpired()` inside
+its own synchronous transaction, which also selects the overdue requests, so
+the verdicts would have to be derived before that transaction, for requests
+it has not selected yet, and passed into the repository.
+
+The executor is told the same thing as the creator. The `mission-inactive`
+refusal of an orphaned mission (`INACTIVE_MISSION_NEXT_STEP.orphaned`,
+`@vaubaan/gateway-core`), the bootstrap kit (`REFUSAL_GUIDANCE`) and
+`/agent-bootstrap.md` end on: "A request opened before the mission was
+orphaned can be granted only until it expires; after that, your next refused
+call opens a new one."
 
 No resolution edits `mission_policy`: the next period starts from the
 mission's quota. The period is the one current **when the creator decides**
@@ -218,13 +270,27 @@ offset — what a `datetime-local` field posts — is read as UTC.
 2. `store.requests.decideClaim(id, userId, apply)` runs in one
    `BEGIN IMMEDIATE` transaction (store primitive, below): the request must
    still be open and unexpired — an overdue one is flipped to `expired` right
-   there and the answer is `not-open`; `apply` reads the counters **inside**
-   the transaction, re-checks the decision (`ClaimProblemError` rolls
+   there and the answer is `not-open`; `apply` reads the counters and the
+   mission's stored status and expiry (`ctx.mission`) **inside** the
+   transaction, re-checks the decision (`ClaimProblemError` rolls
    everything back), applies the effect and records the event; then the
    conditional `UPDATE … WHERE state = 'open'` stores state, `decided_at`,
    `decided_by_user_id` and `decision_json`.
 3. After commit: an admin audit entry (object `{ type: 'request', id }`) and
    a log line.
+
+**What the decision is checked against.** `own()` runs before the transaction
+(it derives `orphaned` through asynchronous repositories, which the
+synchronous `apply` cannot call). The mission fields a rule reads are
+therefore taken again inside it: `decidedMissionOf(mission, ctx.mission)`
+keeps the policy and the `orphaned` verdict `own()` read and replaces the
+status and the expiry by the row's, as of the transaction. Two
+`extend-expiry` decisions on two claims of one mission are each checked
+against the stored expiry, so the second cannot move it backwards
+(`invalid-expiry`); a mission revoked between the read and the write takes no
+reset, no extension and no approval (`mission-closed`). The `orphaned` verdict
+itself stays a read of the instant before the transaction, and the policy
+(quota, gate) is the one `own()` read.
 
 | Resolution      | Request state | Session event                                                                               | Audit act         |
 | --------------- | ------------- | ------------------------------------------------------------------------------------------- | ----------------- |
@@ -328,6 +394,8 @@ Additive, in `store/repositories/requests.ts` and `sessions.ts`:
 - `RequestsRepo.decideClaim(id, decidedByUserId, apply)` →
   `{ status: 'decided', request, outcome } | { status: 'not-open', request }`.
   `apply(ctx)` is synchronous and gets a `ClaimDecisionContext`: `request`,
+  `mission` (`StoredMissionFacts { status, expiresAt }`, the mission row read
+  inside the transaction; the status is the stored one, never `orphaned`),
   `session`, `now`, `counters(periodStart)`, `resetCounters(periodStart)`
   (returns what each counter held), `creditCounter(periodStart, riskId,
 amount)` (one conditional `UPDATE … WHERE consumed >= amount`; `false` and
@@ -335,7 +403,8 @@ amount)` (one conditional `UPDATE … WHERE consumed >= amount`; `false` and
   `setMissionExpiry(iso)`, `recordEvent(event)`. Not a claim →
   `InvariantError`; unknown id → `NotFoundError`.
 - `RequestsRepo.decideApproval(id, decidedByUserId, apply)` → the same result
-  shape. `apply(ctx)` gets an `ApprovalDecisionContext`: `request`, `session`,
+  shape. `apply(ctx)` gets an `ApprovalDecisionContext`: `request`, `mission`
+  (the same `StoredMissionFacts`), `session`,
   `now`, `createApproval(expiresAt)` (bound to the request's own mission,
   risk, tool and fingerprint), `riskEvents(query)`, `recordEvent(event)`. Not
   an approval request → `InvariantError`. Both primitives share one frame
@@ -354,8 +423,8 @@ tool, fingerprint)`.
 - `DecideContext.riskEvents({ kinds, riskIds, since })` and the same method on
   `SessionPrimitives`: the session's events about some risks, oldest first.
 - `AuditRepo.latestCall({ missionId, tool, argumentsHash, refusalCode? })`.
-- `RequestsRepo.sweepExpired()` → the expired `RequestRecord[]` (the older
-  `expireOpen()` still returns a bare count and records no event).
+- `RequestsRepo.sweepExpired()` → the expired `RequestRecord[]`, one `request`
+  event (`state: 'expired'`) recorded per request.
 - `SessionsRepo.listEvents(sessionId, { kinds?, order?: 'asc' | 'desc', since?, limit? })`.
 
 ## Approvals
@@ -399,16 +468,16 @@ that delay. A replay before the decision gets the same request back.
 
 `view()` returns, for the creator only:
 
-| Field      | Content                                                                                                                                                                                                                                                                    |
-| ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `request`  | the summary (with `tool`)                                                                                                                                                                                                                                                  |
-| `mission`  | `{ id, name, state, expires_at }`                                                                                                                                                                                                                                          |
-| `period`   | the current period                                                                                                                                                                                                                                                         |
-| `call`     | `tool`, `fingerprint`, `arguments` (**in clear**, while the request is open; `null` + `arguments_erased: true` afterwards), `slices` (wire form, `serializeSlice`), `risks` (every risk the call touches: label, quota, consumed, remaining, and `gate` as it applies now) |
-| `gate`     | `{ policy, open_until }`: the risk's gate in the mission's policy (`null` when the risk left it) and the end of the period it is open for                                                                                                                                  |
-| `approval` | once granted: `{ id, expires_at, consumed_at, state: 'usable' \| 'consumed' \| 'expired' }`                                                                                                                                                                                |
-| `events`   | the last session events                                                                                                                                                                                                                                                    |
-| `options`  | the three actions with their consequence; empty once the request is not open                                                                                                                                                                                               |
+| Field      | Content                                                                                                                                                                                                                                                                                                                                                         |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `request`  | the summary (with `tool`)                                                                                                                                                                                                                                                                                                                                       |
+| `mission`  | `{ id, name, state, expires_at }`                                                                                                                                                                                                                                                                                                                               |
+| `period`   | the current period                                                                                                                                                                                                                                                                                                                                              |
+| `call`     | `tool`, `fingerprint`, `arguments` (**in clear**, while the request is open; `null` + `arguments_erased: true` afterwards), `slices` (wire form, `serializeSlice`), `risks` (every risk the call touches: label, quota, consumed, remaining, and `gate` as it applies now: `effectiveGate` of `budget/gates.ts`, the function the budget decides the call with) |
+| `gate`     | `{ policy, open_until }`: the risk's gate in the mission's policy (`null` when the risk left it) and the end of the period it is open for                                                                                                                                                                                                                       |
+| `approval` | once granted: `{ id, expires_at, consumed_at, state: 'usable' \| 'consumed' \| 'expired' }`                                                                                                                                                                                                                                                                     |
+| `events`   | the last session events                                                                                                                                                                                                                                                                                                                                         |
+| `options`  | the three actions with their consequence; empty once the request is not open                                                                                                                                                                                                                                                                                    |
 
 The slices and the touched risks come from the audit: the pipeline wrote the
 entry of the refused call, and `AuditRepo.latestCall({ missionId, tool,
@@ -451,7 +520,8 @@ replay goes through `decide()` again, quota and rate first.
 2. `store.requests.decideApproval(id, userId, apply)` runs in one
    `BEGIN IMMEDIATE` transaction: the request must still be open and unexpired
    (an overdue one is flipped to `expired` there, its blob erased, and the
-   answer is `not-open`); `apply` reads the session's gate events **inside**
+   answer is `not-open`); `apply` reads the session's gate events and the
+   mission's stored status and expiry (`ctx.mission`, as for a claim) **inside**
    the transaction, re-checks the decision (`ApprovalProblemError` rolls
    everything back and leaves the arguments sealed), writes the approval or
    the event; then the conditional `UPDATE … WHERE state = 'open'` stores the
@@ -511,7 +581,13 @@ it once the request is decided.
   one key. Set it to the address or CIDR of the TLS terminator.
 - **`request-not-open`** — already decided, or past `expires_at`
   (`requests.state`, `decided_at`, `decision_json`). The executor's next
-  refused call opens a new claim.
+  refused call opens a new claim. A request whose mission was orphaned for
+  longer than `requests.expiry` is in that case: it expired while only a
+  refusal could be recorded ("A request on an orphaned mission still
+  expires").
+- **`invalid-expiry` on a date later than the one the page showed** — another
+  decision extended the expiry further in the meantime: the check reads the
+  stored expiry inside the transaction.
 - **`invalid-amount` on a quota extension** — the amount exceeds what the
   risk consumed in the _current_ period (`session_counters`); after a
   rollover that is 0 and the option is unavailable.
@@ -535,15 +611,19 @@ it once the request is decided.
 ## Tests
 
 - Unit, beside the code: `state.test.ts` (9, with the URL builder),
-  `claim.test.ts` (37), `approval.test.ts` (27: the three options, their
-  rules per mission state and gate, the parser, `formatDelay`),
+  `claim.test.ts` (38), `approval.test.ts` (28: the three options, their
+  rules per mission state and gate, the sentence of an orphaned mission, the
+  parser, `formatDelay`),
   `client-ip.test.ts` (2: the page uses the shared client-address rule,
   itself tested in `src/server/http/client-ip.test.ts`, 11), `events.test.ts`
   (6), `sweeper.test.ts` (4). The gate openings are
   `tests/unit/server/budget/gates.test.ts` (9).
 - Integration, `tests/integration/requests/`: `request-service.test.ts`
-  (30, `:memory:` store with a manual clock), `request-handlers.test.ts`
-  (13, the real root), `approval.test.ts` (42, `:memory:` store with a manual
+  (34, `:memory:` store with a manual clock; the mission checked as the store
+  holds it at the decision: two extensions of the expiry, a mission revoked
+  since it was read), `request-handlers.test.ts`
+  (14, the real root; a delegated token named `delegated-token`, a bearer of
+  no known shape with no `presented`), `approval.test.ts` (42, `:memory:` store with a manual
   clock: refusal → grant → identical replay → second replay refused; one byte
   or another tool asks again; single use; expiry; whole refusal; erasure read
   from the row on decision and on expiry; the gate opened and bounded to the
@@ -557,6 +637,11 @@ it once the request is decided.
 - Through the real door: `tests/integration/execution/approval-door.test.ts`
   (7: the GitHub plugin's `developer` preset as shipped, a workflow file
   write approved over `/mcp`).
+- A request on an orphaned mission, on the real root:
+  `tests/integration/authority/share-and-orphan.test.ts` — a claim and an
+  approval request: orphaned, past `requests.expiry`, swept, `expired`, the
+  sealed arguments erased, the authority back, `not-open`, and the replay
+  opens a new request that is granted.
 - Browser, `tests/e2e/v5/exhaust-and-claim.spec.ts` (1) and
   `approve-action.spec.ts` (1).
 

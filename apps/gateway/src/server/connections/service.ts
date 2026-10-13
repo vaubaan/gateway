@@ -189,6 +189,21 @@ export type NewOwner =
   | { readonly kind: 'user'; readonly email: string }
   | { readonly kind: 'group'; readonly groupId: string };
 
+/**
+ * Why this connection takes no owner act (share, transfer, reconnect), or `null` when it
+ * does (spec §2.3): revocation is final, and nobody acts on a connection without owner
+ * until the operator reassigns one. The one statement of the rule: the service's own
+ * refusals, the shares service and the pages (through `transferTargets` and
+ * `ShareContext.unshareable`) all read it here.
+ */
+export function ownerActRefusal(
+  connection: Pick<ConnectionRecord, 'status'>,
+): 'connection-revoked' | 'connection-unowned' | null {
+  if (connection.status === 'revoked') return 'connection-revoked';
+  if (connection.status === 'unowned') return 'connection-unowned';
+  return null;
+}
+
 export interface ConnectionServiceDeps {
   /** The three repositories the service reads and writes; never the raw handle. */
   readonly store: Pick<Store, 'connections' | 'users' | 'groups'>;
@@ -832,8 +847,13 @@ export class ConnectionService {
     if (connection.status === 'revoked') return connection;
     const watch = await this.deps.grounds.watchConnection(connection.id);
     const revoked = await this.deps.store.connections.revoke(connection.id);
-    await this.audit(actor.user.id, 'connection-revoked', revoked, { status: connection.status });
-    await watch.settle(actor.user.id);
+    // Settled whatever happens to the act's own entry: the revocation is committed, and
+    // the entries that say which missions stopped serving must not depend on it.
+    try {
+      await this.audit(actor.user.id, 'connection-revoked', revoked, { status: connection.status });
+    } finally {
+      await watch.settle(actor.user.id);
+    }
     this.deps.logger.info('connection revoked', {
       connection_id: revoked.id,
       provider: revoked.provider,
@@ -847,9 +867,11 @@ export class ConnectionService {
   /**
    * The groups the actor may hand this connection to: the ones they belong to
    * now, the current owner group excepted (spec §11.2: never a group one is
-   * not a member of).
+   * not a member of). None for a connection that takes no owner act, which
+   * `transfer` refuses.
    */
   transferTargets(actor: Actor, connection: ConnectionRecord): GroupRecord[] {
+    if (ownerActRefusal(connection)) return [];
     return actor.groups.filter(
       (g) => !(connection.owner.kind === 'group' && connection.owner.id === g.id),
     );
@@ -864,8 +886,8 @@ export class ConnectionService {
    */
   async transfer(actor: Actor, connectionId: string, groupId: string): Promise<ConnectionRecord> {
     const connection = await this.requireOwned(actor, connectionId);
-    if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
-    if (connection.status === 'unowned') throw new ConnectError('connection-unowned');
+    const refusal = ownerActRefusal(connection);
+    if (refusal) throw new ConnectError(refusal);
     const group = actor.groups.find((g) => g.id === groupId);
     if (!group) throw new ConnectError('transfer-not-member');
     if (connection.owner.kind === 'group' && connection.owner.id === group.id) return connection;
@@ -875,10 +897,13 @@ export class ConnectionService {
       kind: 'group',
       id: group.id,
     });
-    await this.audit(actor.user.id, 'connection-transferred', transferred, {
-      owner: connection.owner,
-    });
-    await watch.settle(actor.user.id);
+    try {
+      await this.audit(actor.user.id, 'connection-transferred', transferred, {
+        owner: connection.owner,
+      });
+    } finally {
+      await watch.settle(actor.user.id);
+    }
     this.deps.logger.info('connection transferred', {
       connection_id: transferred.id,
       group_id: group.id,
@@ -901,32 +926,69 @@ export class ConnectionService {
    * credential, no share, no mission. The missions the emptied owner group
    * had left orphaned serve again when their creator is the new owner, or a
    * member of the new owner group.
+   *
+   * The rule "only a connection that has no owner left" is enforced by the
+   * write itself (`ConnectionsRepo.assignOwnerlessTo`, one transaction with
+   * the "new owner group has a member" check). The reads before it only
+   * choose which refusal is named first; a member who joins the owner group,
+   * or the last one who leaves the new group, while this method awaits is
+   * seen by the write and the reassignment is refused.
    */
   async reassign(
     operatorId: string,
     connectionId: string,
     newOwner: NewOwner,
   ): Promise<ConnectionRecord> {
-    const ownerless = await this.deps.store.connections.listOwnerless();
-    const connection = ownerless.find((c) => c.id === connectionId);
-    if (!connection) {
-      const exists = await this.deps.store.connections.getById(connectionId);
-      throw new ConnectError(exists ? 'not-ownerless' : 'not-found');
-    }
+    const { connections } = this.deps.store;
+    const seen = await connections.getById(connectionId);
+    if (!seen) throw new ConnectError('not-found');
+    if (!(await this.looksOwnerless(seen))) throw new ConnectError('not-ownerless');
     const owner = await this.resolveNewOwner(newOwner);
-    const watch = await this.deps.grounds.watchConnection(connection.id);
-    const reassigned = await this.deps.store.connections.assignOwner(connection.id, owner);
-    await this.audit(operatorId, 'connection-reassigned', reassigned, {
-      owner: connection.owner,
-      status: connection.status,
-    });
-    await watch.settle(operatorId);
+    const watch = await this.deps.grounds.watchConnection(seen.id);
+    const result = await connections.assignOwnerlessTo(seen.id, owner);
+    // Refused at the write: nothing changed, so there is nothing to settle.
+    if (result.outcome !== 'assigned') throw new ConnectError(result.outcome);
+    const { previous, connection: reassigned } = result;
+    try {
+      await this.audit(operatorId, 'connection-reassigned', reassigned, {
+        owner: previous.owner,
+        status: previous.status,
+      });
+    } finally {
+      await watch.settle(operatorId);
+    }
     this.deps.logger.info('connection reassigned by the operator', {
       connection_id: reassigned.id,
       owner_kind: owner.kind,
       owner_id: owner.id,
     });
     return reassigned;
+  }
+
+  /**
+   * Operator: the groups `reassign` would accept as the new owner — the ones that
+   * have a member (an empty group would leave the connection ownerless again).
+   * A reading for the form; the write checks again in its own transaction.
+   */
+  async reassignTargets(): Promise<GroupRecord[]> {
+    const groups = await this.deps.store.groups.list();
+    const accepted = await Promise.all(groups.map((group) => this.canOwn(group)));
+    return groups.filter((_, index) => accepted[index]);
+  }
+
+  /** A group can be named owner while it has a member. */
+  private async canOwn(group: GroupRecord): Promise<boolean> {
+    return (await this.deps.store.groups.memberCount(group.id)) > 0;
+  }
+
+  /**
+   * The repository's ownerless predicate, read outside any transaction: good
+   * enough to name the refusal, never to authorize the write.
+   */
+  private async looksOwnerless(connection: ConnectionRecord): Promise<boolean> {
+    if (connection.status === 'unowned') return true;
+    if (connection.status === 'revoked' || connection.owner.kind !== 'group') return false;
+    return (await this.deps.store.groups.memberCount(connection.owner.id)) === 0;
   }
 
   private async resolveNewOwner(newOwner: NewOwner): Promise<Principal> {
@@ -936,7 +998,7 @@ export class ConnectionService {
       return { kind: 'user', id: lookup.user.id };
     }
     const group = await this.deps.store.groups.getById(newOwner.groupId);
-    if (!group || (await this.deps.store.groups.memberCount(group.id)) === 0) {
+    if (!group || !(await this.canOwn(group))) {
       throw new ConnectError('owner-group-empty');
     }
     return { kind: 'group', id: group.id };
@@ -986,9 +1048,9 @@ export class ConnectionService {
   ): Promise<ConnectionRecord> {
     const connection = await this.requireOwned(actor, connectionId);
     if (connection.provider !== providerId) throw new ConnectError('provider-mismatch');
-    if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
     // Spec §2.3: nobody reconnects an unowned connection until an owner is reassigned.
-    if (connection.status === 'unowned') throw new ConnectError('connection-unowned');
+    const refusal = ownerActRefusal(connection);
+    if (refusal) throw new ConnectError(refusal);
     return connection;
   }
 

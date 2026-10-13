@@ -19,6 +19,8 @@
  *   4. a user session                            → sign-in redirect / 401
  *   5. the user is the mission's creator         → 403, with no detail
  */
+import type { BearerKind } from '@vaubaan/gateway-core';
+
 import {
   guardMutation,
   guardSession,
@@ -29,6 +31,7 @@ import {
 } from '../auth';
 import type { RateLimiter } from '../compose/ports';
 import { prefixOfBearer } from '../missions/token';
+import { isAccessTokenShaped } from '../oauth-as/secrets';
 import type { ApprovalProblemCode } from './approval';
 import type { ClaimProblemCode } from './claim';
 import type { DecideResult, RequestService } from './request-service';
@@ -127,6 +130,16 @@ function wantsForm(request: Request): boolean {
 }
 
 /** Form fields as a plain object; fields left blank are absent. */
+/**
+ * The kind of a presented bearer, by its shape only: this surface refuses every
+ * bearer and verifies none. A value of neither shape has no kind.
+ */
+function bearerKindByShape(bearer: string): BearerKind | null {
+  if (prefixOfBearer(bearer)) return 'mission-token';
+  if (isAccessTokenShaped(bearer.trim())) return 'delegated-token';
+  return null;
+}
+
 function fieldsOf(form: FormData): Record<string, string> {
   const fields: Record<string, string> = {};
   for (const [name, value] of form.entries()) {
@@ -154,11 +167,13 @@ export function createRequestHandlers(deps: RequestHandlerDeps): RequestHandlers
   function bearerRefusal(request: Request): Response | null {
     const authorization = request.headers.get('authorization');
     if (authorization === null) return null;
-    const bearer = authorization.replace(/^bearer\s+/i, '');
+    const presented = bearerKindByShape(authorization.replace(/^bearer\s+/i, ''));
+    const expected: BearerKind = 'human-session';
     return json(403, {
       error: 'wrong-credential-kind',
-      presented: prefixOfBearer(bearer) ? 'mission-token' : 'bearer',
-      expected: 'human-session',
+      // Omitted for a value of no known shape: no kind is invented for it.
+      ...(presented ? { presented } : {}),
+      expected,
       message:
         'Requests are read and decided in a human session of the mission creator. A mission token or a delegated token cannot open this surface: give the URL to the human as is.',
     });

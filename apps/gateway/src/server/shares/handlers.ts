@@ -115,7 +115,7 @@ export function createShareHandlers(deps: ShareHandlerDeps): ShareHandlers {
       if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
       const { principal } = guard;
       try {
-        const outcome = await deps.shares.revoke(actorOf(principal), shareId);
+        const outcome = await deps.shares.revoke(actorOf(principal), shareId, connectionId);
         const lines = [`${outcome.targetLabel} can no longer issue missions on this connection.`];
         lines.push(
           outcome.orphaned > 0

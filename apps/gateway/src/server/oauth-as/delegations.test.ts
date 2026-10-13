@@ -1,10 +1,18 @@
-import { OAuthError } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { silentLogger } from '../logging';
 import type { OAuthClientRecord } from '../store/types';
+import { ClientRegistry } from './clients';
+import { endDelegation } from './delegations';
 import { mintAccessToken } from './secrets';
-import { openOAuthRig, type OAuthRig } from './testing';
-import { DELEGATION_AUTH_INFO_KEY } from './verifier';
+import {
+  DEFAULT_TEST_OAUTH,
+  LOOPBACK_REDIRECT,
+  openOAuthRig,
+  WEB_REDIRECT,
+  type OAuthRig,
+} from './testing';
+import { DelegatedTokenVerifier } from './verifier';
 
 describe('DelegationService', () => {
   let rig: OAuthRig;
@@ -216,23 +224,130 @@ describe('DelegatedTokenVerifier', () => {
     expect(await rig.verifier.resolve(removed.tokens.access_token)).toBeNull();
   });
 
-  it('speaks the MCP SDK verifier contract: AuthInfo for a live token, invalid_token otherwise', async () => {
-    const { tokens, delegationId } = await rig.issue(rig.ada, client);
-    const info = await rig.verifier.verifyAccessToken(tokens.access_token);
-    expect(info).toMatchObject({
-      clientId: client.clientId,
-      scopes: ['mgmt'],
-      expiresAt: Math.floor((rig.clock.now().getTime() + 900_000) / 1000),
-      resourceMetadataUrl: rig.endpoints.resourceMetadataUrl,
-    });
-    expect(info.resource?.href).toBe(rig.endpoints.resource);
-    expect(info.extra?.[DELEGATION_AUTH_INFO_KEY]).toMatchObject({
-      delegation_id: delegationId,
-      user_id: rig.ada.id,
+  describe('the client’s status is evaluated at every verification', () => {
+    /** The same store read under another registration policy: what a restart with a new configuration sees. */
+    function verifierUnder(
+      registration: Partial<typeof DEFAULT_TEST_OAUTH.clientRegistration>,
+    ): DelegatedTokenVerifier {
+      const clients = new ClientRegistry({
+        repo: rig.store.delegations,
+        config: { ...DEFAULT_TEST_OAUTH.clientRegistration, ...registration },
+        audit: rig.audit,
+        rateLimiter: { take: async () => ({ allowed: true, remaining: 1, retryAfterMs: 0 }) },
+        clock: rig.clock,
+        logger: silentLogger,
+      });
+      return new DelegatedTokenVerifier({
+        repo: rig.store.delegations,
+        users: rig.store.users,
+        clients,
+      });
+    }
+
+    it('a tightened policy applies to tokens already issued: the delegation is active, the token is worth nothing', async () => {
+      const { tokens, delegationId } = await rig.issue(rig.ada, client);
+      expect(await rig.verifier.resolve(tokens.access_token)).not.toBeNull();
+
+      for (const registration of [{ policy: 'closed' as const }, { autoApproveLoopback: false }]) {
+        expect(await verifierUnder(registration).resolve(tokens.access_token)).toBeNull();
+      }
+      // Nothing was revoked: relaxing the policy again restores the token.
+      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({ status: 'active' });
+      expect(await verifierUnder({ policy: 'open' }).resolve(tokens.access_token)).not.toBeNull();
     });
 
-    const err = await rig.verifier.verifyAccessToken(mintAccessToken()).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(OAuthError);
-    expect((err as OAuthError).code).toBe('invalid_token');
+    it('an operator’s approval holds whatever the policy becomes', async () => {
+      const { tokens } = await rig.issue(rig.ada, client);
+      await rig.clients.decide('operator-1', client.id, 'approved');
+      expect(await verifierUnder({ policy: 'closed' }).resolve(tokens.access_token)).not.toBeNull();
+    });
+
+    it('a client marked disabled is refused even while one of its delegations is still active', async () => {
+      const { tokens, delegationId } = await rig.issue(rig.ada, client);
+      // The decision alone, as a store that failed between the two writes would have left it.
+      await rig.store.delegations.decideClient(client.id, 'disabled', 'operator-1');
+      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({ status: 'active' });
+      expect(await rig.verifier.resolve(tokens.access_token)).toBeNull();
+    });
+
+    it('a client whose redirect URIs left the loopback interface goes back to pending, and its tokens with it', async () => {
+      const { tokens } = await rig.issue(rig.ada, client);
+      await rig.store.delegations.updateClientDocument(client.id, {
+        name: client.name,
+        redirectUris: [LOOPBACK_REDIRECT, WEB_REDIRECT],
+        clientUri: null,
+        metadataExpiresAt: rig.clock.now().toISOString(),
+      });
+      expect(await rig.verifier.resolve(tokens.access_token)).toBeNull();
+    });
+  });
+
+  describe('endDelegation: one function revokes and leaves the entry', () => {
+    const deps = () => ({
+      repo: rig.store.delegations,
+      audit: rig.audit,
+      clock: rig.clock,
+      logger: silentLogger,
+    });
+
+    it('names the delegating user when somebody else acts, and the client when the act came through it', async () => {
+      const byOperator = await rig.issue(rig.ada, client);
+      const byClient = await rig.issue(rig.bob, client);
+      rig.audit.entries.length = 0;
+
+      await endDelegation(deps(), byOperator.delegationId, {
+        reason: 'operator',
+        actorId: 'operator-1',
+        viaClient: false,
+      });
+      await endDelegation(deps(), byClient.delegationId, {
+        reason: 'client',
+        actorId: rig.bob.id,
+        viaClient: true,
+      });
+      expect(rig.audit.admin).toEqual([
+        {
+          kind: 'admin',
+          ts: rig.clock.now().toISOString(),
+          user_id: 'operator-1',
+          act: 'delegation-revoked',
+          object: { type: 'delegation', id: byOperator.delegationId },
+          before: { status: 'active' },
+          after: {
+            status: 'revoked',
+            reason: 'operator',
+            delegating_user_id: rig.ada.id,
+            client_id: client.clientId,
+            client_name: client.name,
+          },
+          delegated_client_id: null,
+        },
+        {
+          kind: 'admin',
+          ts: rig.clock.now().toISOString(),
+          user_id: rig.bob.id,
+          act: 'delegation-revoked',
+          object: { type: 'delegation', id: byClient.delegationId },
+          before: { status: 'active' },
+          after: {
+            status: 'revoked',
+            reason: 'client',
+            client_id: client.clientId,
+            client_name: client.name,
+          },
+          delegated_client_id: client.clientId,
+        },
+      ]);
+    });
+
+    it('answers null and writes nothing for a delegation already revoked, or unknown', async () => {
+      const { delegationId } = await rig.issue(rig.ada, client);
+      const by = { reason: 'user', actorId: rig.ada.id, viaClient: false } as const;
+      expect(await endDelegation(deps(), delegationId, by)).toMatchObject({ status: 'revoked' });
+      rig.audit.entries.length = 0;
+      expect(await endDelegation(deps(), delegationId, by)).toBeNull();
+      expect(await endDelegation(deps(), 'no-such-delegation', by)).toBeNull();
+      expect(rig.audit.entries).toEqual([]);
+    });
   });
 });

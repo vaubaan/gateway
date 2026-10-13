@@ -28,6 +28,7 @@
 
 import {
   UpstreamAuthError,
+  UpstreamHttpError,
   expectCredentialKind,
   type ConnectionContext,
   type ExecuteContext,
@@ -172,7 +173,7 @@ async function mgmtFetch(
     const body = await res.text();
     const msg = `Supabase ${path} → ${res.status}: ${body.slice(0, 300)}`;
     if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new Error(msg);
+    throw new UpstreamHttpError(msg, res.status);
   }
   if (res.status === 204) return null;
   return res.json();
@@ -418,7 +419,7 @@ async function dataApiFetch(
     const body = await res.text();
     const msg = `Supabase data-plane ${path} → ${res.status}: ${body.slice(0, 300)}`;
     if (res.status === 401 || res.status === 403) throw new UpstreamAuthError(msg, res.status);
-    throw new Error(msg);
+    throw new UpstreamHttpError(msg, res.status);
   }
   if (res.status === 204) return null;
   const contentType = res.headers.get('content-type') ?? '';

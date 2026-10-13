@@ -36,7 +36,6 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   whole stream, and records a stream that broke midway or whose caller went away. Works
   through the standalone image and the reference Caddy configuration as shipped. No
   shipped plugin streams yet.
-
 - **Delegation: an agent acts on a user's behalf.** The instance is an OAuth authorization
   server for its management MCP door, `/mcp/manage`: an MCP client such as Claude Code
   discovers it (RFC 9728 and RFC 8414 metadata), registers itself, and sends the user to
@@ -80,7 +79,6 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   and a mission token or a web session at `/mcp/manage` answer `wrong-credential-kind`,
   naming the door that accepts them; a delegated token opens neither the interface nor a
   request.
-
 - **Approval gate.** A call touching a risk gated `approval` is refused `approval-required`
   with the URL of an approval request, how long a granted approval stays usable and the
   instruction to replay identically. The mission's creator — and nobody else, operators
@@ -94,17 +92,18 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **Gates are editable after issuance.** On the mission page the creator switches the gate of
   an accepted risk between `auto` and `approval`; the edit applies to the next call, is
   audited (`gate-changed`) and ends an opening granted earlier in the period.
-
 - **Execution MCP door.** `POST /mcp` takes a mission token: `tools/list` shows the tools of
   the providers the mission holds a connection and an accepted risk for; `tools/call` checks
   mission state, resources, `risks_touched ⊆ accepted_risks`, budget, rate and gate, calls the
   provider with a credential decrypted for that call only, and writes one audit entry, allowed
   or refused. Stateless Streamable HTTP on `@modelcontextprotocol/server` 2.3 (2025-era and
-  2026-07-28 clients), plain JSON, rate limited per mission (`mcp.rate_limit_per_minute`, 600).
-- **Mission catalog and agent labels.** `GET /mcp/catalog` returns the tool surface, what the
-  mission can call, its resources with their environment labels and what is left of each
-  risk's quota. Agents may label their calls for the audit with the `X-Vaubaan-Agent` header
-  or `_meta.agent` per call.
+  2026-07-28 clients), plain JSON — an event stream only for a call that asked for progress
+  (see "Streamed tool results") —, rate limited per mission (`mcp.rate_limit_per_minute`, 600).
+- **Mission catalog.** `GET /mcp/catalog` returns the tool surface, what the mission can
+  call, its resources with their environment labels and what is left of each risk's quota.
+- **Agent labels.** An agent may label its calls with the `X-Vaubaan-Agent` header or, per
+  call, with `_meta.agent`; the label is attribution in the audit and the session, never a
+  credential and never a budget.
 - **OIDC sign-in and web sessions.** Any OpenID Connect provider signs humans in
   (`openid-client` 6.8: discovery, PKCE S256, state and nonce, configurable `sub` / `email` /
   `groups` claims, optional allowed email domains); IdP groups are replaced on every sign-in,
@@ -162,11 +161,8 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   give back up to what was consumed on the risk, extend the expiry, or refuse; the decision is
   audited, the token does not change and the agent replays its call. "Requests" lists what
   awaits you, with a count; unanswered requests expire after `requests.expiry` (default 24 h).
-- **Approval requests.** A call on a risk gated `approval` is refused with
-  `approval-required` and drops a request in the creator's inbox. Approval requests are listed
-  but cannot be decided yet.
 - **Audit search and retention.** `/audit` searches by mission, user, connection, tool,
-  decision and period, newest first, with keyset paging. A user sees the entries about their
+  decision, agent label and period, newest first, with keyset paging. A user sees the entries about their
   missions and the connections they or their groups own; an operator also sees every
   administrative entry; nobody sees arguments, only their hash. Entries older than
   `retention_days` (default 90) are purged at boot and then hourly. Every mutation leaves an
@@ -188,7 +184,7 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   Connections pages show whether the plugin version in use is validated by the community;
   nothing is shown, and nothing is fetched, otherwise.
 - **Embedded SQLite store.** `better-sqlite3` with `STRICT` tables and WAL, forward-only
-  migrations applied at boot (schema version 4), an append-only audit enforced by triggers,
+  migrations applied at boot (schema version 8), an append-only audit enforced by triggers,
   encrypted credential blobs and a `:memory:` mode for tests. The runner refuses a database
   newer than the image, and the instance fails fast naming `store.path` when the database
   cannot be opened.
@@ -312,6 +308,20 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   mission page says why the mission is orphaned and whether it can come back; the Audit
   shows the creator the acts that orphaned and restored it (`mission-orphaned`,
   `mission-restored`: who, cause, connection, risks not covered).
+- **Output schemas on the management tools.** Each of the seven tools of `/mcp/manage`
+  advertises an `outputSchema` in `tools/list`, so an MCP client can validate the structured
+  answers. The schemas name what an answer always carries and accept additional keys; a
+  refusal stays a tool error with its `{ error }` content.
+- **The Mission session page says what gate and approval events did.** It shows until when
+  a gate opened for the period stays open, until when an approved call can be replayed, both
+  values of an edited gate, and the request a refused call pointed to. The Audit page names
+  the object of every administrative entry — shares, groups, OAuth clients, delegations and
+  requests included — instead of showing a bare id.
+- **`UpstreamHttpError` in `@vaubaan/plugin-sdk`.** A plugin throws it for a provider
+  answer that is a failure and not a credential problem (a 4xx other than 401 / 403, a 5xx);
+  the host reads its `status` for the audit summary and the telemetry class, and the message
+  goes to the agent only. `plugins/_template` and `plugins/README.md` show the rule: provider
+  failures are thrown, executor refusals are `isError` results.
 
 ### Changed
 
@@ -321,7 +331,6 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   cleaned up and cut at 120 characters. When a call carries both `_meta.agent` and the
   `X-Vaubaan-Agent` header, `_meta.agent` wins, as before. A label never changes what is
   allowed or counted.
-
 - **A revoked connection orphans its missions.** Calls of a mission that carries a revoked
   connection now answer `mission-inactive` (`status: orphaned`) instead of
   `connection-unavailable`; an expired connection still answers `connection-unavailable`.
@@ -332,10 +341,57 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `group-created`, `group-member-added` and `group-member-removed`.
 - **A mission that is not revoked can always be revoked from its page**, an orphaned or
   expired one included; "Rotate token" stays on active missions only.
-- **Schema version 7.** Migration `0007` resets the missions an earlier v5 image had stored
+- **Schema migration `0007`.** It resets the missions an earlier v5 image had stored
   as `orphaned` to `active` — they read orphaned again at once if their authority is still
   missing — and makes the database refuse that value from then on.
-
+- **The timeline of one agent label is read whole (schema migration `0008`).** The label of
+  a call event is now a column of the session events, filled for the events an earlier image
+  stored. The Mission session page pages the calls of one label, or the unlabelled ones,
+  however many events of other labels lie in between; it used to stop looking after a
+  bounded number of events, and said so.
+- **Requests on an orphaned mission expire on the normal delay.** A claim or an approval
+  request opened before its mission was orphaned is not held until the authority returns:
+  the request page says until when it can still be granted, and the `mission-inactive` hint,
+  the bootstrap kit and `/agent-bootstrap.md` tell the agent that its next refused call
+  opens a new one after that.
+- **Token grants are all-or-nothing.** A code exchange or a renewal at `/oauth/token` is one
+  transaction. When the store fails in the middle, the client reads `server_error` (500) and
+  nothing is half-written: the authorization code is not spent and the presented refresh
+  token is still the valid one, so the same request can be sent again and is not treated as
+  a replay. Disabling an OAuth client and revoking its delegations is one transaction too.
+- **`/.well-known/oauth-protected-resource` answers like the other discovery documents**:
+  `GET`, `HEAD` and `OPTIONS` with CORS. The path-less document describes the execution
+  door (no authorization server, the bearer in the header).
+- **A delegated token presented on a request page is named for what it is.** The refusal of
+  `/r/*` and `/api/requests/*` says `presented: "delegated-token"`; a bearer of no known
+  shape is refused without a `presented` field instead of being called `bearer`.
+- **`mission-orphaned` and `mission-restored` are written once.** When two acts under way at
+  the same time observe the same change, the Audit holds one entry, naming the act that
+  settled first. The missions an
+  act orphans or restores are recorded even when the act's own entry could not be written.
+  Adding a user who is already a member of a group writes no `group-member-added` entry.
+- **Revoking a share through the wrong connection is "not found".** The route names the
+  connection; a share of another connection is not revoked through it, and a revocation
+  that lost a race with another one answers like a repeated revocation.
+- **Shipped plugins throw provider failures.** Vercel and Upstash Redis returned a failed
+  provider call as an error result, which telemetry counted as a refusal by the executor;
+  they now throw it with its HTTP status, like the other plugins, so the audit summary and
+  the telemetry class read `upstream-error` / `http_<status>`. What an executor declines by
+  itself (malformed arguments, a record it will not touch) stays an error result. Railway,
+  Resend, Stripe and Supabase attach the status to the failures they already threw.
+- **Plugin versions.** GitHub, Vercel, Supabase, Railway, SSH, Cloudflare DNS and Upstash
+  Redis are `2.0.0`; Stripe is `0.3.0`; Resend and Gmail are `0.2.0` — bumped for the
+  stricter classifiers of this release and reported as `plugin_version` by telemetry. The
+  catalogs are at `catalog_version` 4 (Stripe), 3 (GitHub, Railway, Resend, SSH, Upstash
+  Redis, Gmail) and 2 (Vercel, Supabase, Cloudflare DNS). A plugin's `version` in
+  `src/index.ts` and in its `package.json` are bumped together.
+- **Pages state the rules their services apply.** Whether a connection can be shared,
+  transferred or reassigned, and whether a mission's gates can be edited, is read from the
+  service that enforces it; a page no longer offers an act the service would refuse (the
+  operator's reassignment list holds only groups that have a member).
+- **Browser tests run the server that ships.** `npm run test:e2e` builds the application and
+  starts the standalone `server.js` of that build, the file the image runs (13 tests). The
+  standalone output carries no test file.
 - **`/mcp` accepts mission tokens only (breaking).** A web session or a delegated token is
   refused with `wrong-credential-kind`; a token replaced by rotation is a 401 from the next
   call and a revoked mission answers `mission-inactive`, because the door re-reads the token
@@ -420,6 +476,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **Superseded store and session code.** The `src/server/session/` module, replaced by the
   store's `webSessions` repository, and `ConnectionsRepo.replaceResources`, replaced by the
   resource sync that keeps owner edits.
+- **Repository methods only tests called.** `RequestsRepo.decide` and `expireOpen`,
+  `ConnectionsRepo.setStatus`, `setCredential` and `assignOwner`, `ApprovalsRepo.consume` and
+  `getById`, `SessionsRepo.getById` and `resetCounters`, `DelegationsRepo.consumeCode`,
+  `createRefreshToken` and `revokeRefreshToken`, and the unused MCP SDK verifier contract of
+  the delegated-token verifier (`verifyAccessToken`, `DELEGATION_AUTH_INFO_KEY`). Every state
+  change of the store now goes through a method that carries its condition in the same
+  transaction.
 
 ### Security
 
@@ -436,6 +499,30 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 - **The admin rule counts IdP-claimed groups only.** A local group — which an operator can
   now create and fill in Administration — never makes its members operators, and cannot take
   the name of the admin rule's group.
+- **The management door checks the client on every request.** A delegated token stops
+  working as soon as its client is disabled by an operator, or is no longer approved under
+  the registration policy (a tightened policy, redirect URIs that left the loopback
+  interface) — although the delegation is still listed and its token has not expired.
+- **Token-endpoint limits are spent only by a caller that proved something.** The per-client
+  limit applies to confidential clients, once their secret matched; the renewals of a public
+  client are limited per delegation (120 per minute), once the refresh token is recognised
+  as that client's. Knowing a `client_id` is no longer enough to exhaust a client's budget,
+  and a replayed refresh token revokes its family even when the budget is spent.
+- **A request is decided on the mission as stored at that instant.** The decision of a claim
+  or an approval request reads the mission's status and expiry inside its own transaction: a
+  mission revoked while the page was open takes no reset, no extension and no approval, and
+  an expiry cannot be moved backwards by a decision made on a stale page.
+- **The operator reassigns only a connection that is ownerless at the write.** The check and
+  the new owner are one transaction: a connection whose owner group regained a member in the
+  meantime is not taken from it, and a new owner group that lost its last member is refused.
+- **Client ID Metadata Documents are not fetched from `fec0::/10`.** The deprecated
+  site-local IPv6 range joins the private, loopback and link-local ranges the fetcher
+  refuses.
+- **No telemetry reaches the placeholder collector, whatever is appended to its URL.** The
+  built-in collector URL is recognised by origin and path: with a collector key, another
+  query, a fragment or a trailing slash added it is still the placeholder and nothing is
+  sent. A call its caller abandoned is not reported at all: a disconnect is not an outcome
+  of the provider.
 - **Pages no longer answer 500 for a connection that is not yours.** A page could fail to
   recognise the "not found" a service threw and render an error instead of a 404.
 - **An approval is bound to the tool it was read for.** Approvals were keyed by mission, risk

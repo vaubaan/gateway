@@ -15,7 +15,7 @@ only.
 | File                    | Role                                                                                                                           |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `src/index.ts`          | `definePlugin({...})` — default export `upstashRedisPlugin`.                                                                   |
-| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 2`. Loaded at boot by the SDK; the only catalog artefact.                |
+| `src/risk-catalog.yaml` | 10 risks + fallback, three presets, `catalog_version: 3`. Loaded at boot by the SDK; the only catalog artefact.                |
 | `src/data-model.ts`     | One plane `cache`, 6 entities; `database` is the env-scopable entity (the resource).                                           |
 | `src/tools.ts`          | 21 custom tools: 6 management (Management API) + 15 data (per-database REST).                                                  |
 | `src/classify.ts`       | `(tool, args, resources) → slices`. Pure. Database resolution against the mission's resources; the command table of `execute`. |

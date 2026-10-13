@@ -30,3 +30,17 @@ export function explicitRiskIdsOf(entry: RiskEntry): RiskId[] {
 export function fullCatalogRiskIds(catalog: RiskCatalog): RiskId[] {
   return catalog.risks.flatMap(explicitRiskIdsOf);
 }
+
+/**
+ * The ids of `requested` an authority does not cover, in request order (spec §3.1
+ * "Monotonicity"). The one spelling of "asked minus held": issuance sorts a draft's
+ * lines with it (`missions/preview.ts`) and the re-check of a mission's grounds
+ * names what a share no longer covers with it (`AuthorityRecheck.gapsOf`).
+ */
+export function uncoveredRisks(
+  authority: { readonly riskIds: readonly RiskId[] },
+  requested: readonly RiskId[],
+): RiskId[] {
+  const held = new Set(authority.riskIds);
+  return requested.filter((id) => !held.has(id));
+}

@@ -9,8 +9,10 @@
  */
 import { isEnvScopedEntry, isFallbackEntry, resolveVector } from '@vaubaan/policy-engine';
 import type { Preset, RiskCatalog, RiskEntry, RiskId, RiskVector } from '@vaubaan/shared';
-import { formatRiskId, parseRiskId } from '@vaubaan/shared/risk-id';
+import { parseRiskId } from '@vaubaan/shared/risk-id';
 
+// The file, not the barrel: `catalog-authority.ts` is pure and browser-safe, the barrel is not.
+import { explicitRiskIdsOf } from '../authority/catalog-authority';
 import type { CatalogRisk, IssuanceConnection, IssuanceResource, SeverityLevel } from './model';
 
 /**
@@ -55,12 +57,9 @@ export function severityLevel(score: number): SeverityLevel {
   return 'low';
 }
 
-function riskOf(entry: RiskEntry, provider: string, env: string | null): CatalogRisk {
-  const parsed = parseRiskId(entry.id);
-  const riskId =
-    env !== null && parsed
-      ? formatRiskId({ provider: parsed.provider, env, name: parsed.name })
-      : entry.id;
+/** The display row of one explicit id of `entry` (an id `explicitRiskIdsOf(entry)` returned). */
+function riskOf(entry: RiskEntry, provider: string, riskId: RiskId): CatalogRisk {
+  const env = isEnvScopedEntry(entry) ? (parseRiskId(riskId)?.env ?? null) : null;
   const severity = severityOf(resolveVector(entry, env));
   return {
     risk_id: riskId,
@@ -78,14 +77,14 @@ function riskOf(entry: RiskEntry, provider: string, env: string | null): Catalog
 
 /**
  * The catalog as explicit ids, catalog order: one row per account-scoped
- * entry, one row per acceptable environment of an env-scoped entry. Same
- * enumeration as `fullCatalogRiskIds` (authority), with the display fields.
+ * entry, one row per acceptable environment of an env-scoped entry. A
+ * projection of the authority's enumeration (`explicitRiskIdsOf`, spec §3.1
+ * "Enumeration"), with the display fields: the ids a page shows and the ids
+ * an authority holds are one list by construction.
  */
 export function enumerateCatalog(catalog: RiskCatalog): CatalogRisk[] {
   return catalog.risks.flatMap((entry) =>
-    isEnvScopedEntry(entry)
-      ? (entry.acceptable_in_envs ?? []).map((env) => riskOf(entry, catalog.provider, env))
-      : [riskOf(entry, catalog.provider, null)],
+    explicitRiskIdsOf(entry).map((riskId) => riskOf(entry, catalog.provider, riskId)),
   );
 }
 

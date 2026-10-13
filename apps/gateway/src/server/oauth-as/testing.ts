@@ -109,11 +109,12 @@ export async function openOAuthRig(options: OAuthRigOptions = {}): Promise<OAuth
   const now = (): number => clock.now().getTime();
   const logger = silentLogger;
 
+  const rateLimiter = new MemoryRateLimiter(now);
   const clients = new ClientRegistry({
     repo: store.delegations,
     config: config.clientRegistration,
     audit,
-    rateLimiter: new MemoryRateLimiter(now),
+    rateLimiter,
     clock,
     logger,
     fetchDocument: options.fetchDocument,
@@ -132,6 +133,7 @@ export async function openOAuthRig(options: OAuthRigOptions = {}): Promise<OAuth
     users: store.users,
     clients,
     audit,
+    rateLimiter,
     endpoints,
     config,
     clock,
@@ -148,7 +150,7 @@ export async function openOAuthRig(options: OAuthRigOptions = {}): Promise<OAuth
   const verifier = new DelegatedTokenVerifier({
     repo: store.delegations,
     users: store.users,
-    endpoints,
+    clients,
   });
   const ada = await store.users.upsertFromIdp({ subject: 'idp|ada', email: 'ada@example.com' });
   const bob = await store.users.upsertFromIdp({ subject: 'idp|bob', email: 'bob@example.com' });

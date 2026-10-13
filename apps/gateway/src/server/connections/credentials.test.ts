@@ -7,6 +7,7 @@ import type { ConnectionContext, CredentialSecret, OAuth2Secret } from '@vaubaan
 import type { MockRoute } from '@vaubaan/plugin-sdk/testing';
 import { describe, expect, it } from 'vitest';
 
+import { makeUnowned } from '../store/testing';
 import { parseSecret, serializeSecret } from './credential-codec';
 import { REFRESH_SKEW_MS } from './credentials';
 import { ConnectionUnavailableError, ProviderUnreachableError } from './errors';
@@ -125,7 +126,7 @@ describe('resolve', () => {
   it('serves an unowned connection: missions keep running (spec §2.3)', async () => {
     const h = await configured(oauthHarness([refreshed(2)]));
     const id = await seed(h, 'oauthco', secret());
-    await h.store.connections.setStatus(id, 'unowned');
+    await makeUnowned(h.store, id);
 
     const resolved = await h.broker.resolve(id);
     expect(resolved.connection.status).toBe('unowned');
@@ -216,7 +217,7 @@ describe('refresh', () => {
   it('forces a refresh on an unowned connection and keeps it unowned', async () => {
     const h = await configured(oauthHarness([refreshed(2)]));
     const id = await seed(h, 'oauthco', secret());
-    await h.store.connections.setStatus(id, 'unowned');
+    await makeUnowned(h.store, id);
     const resolved = await h.broker.refresh(id);
     expect(resolved.credential).toMatchObject({ accessToken: 'at-2', refreshToken: 'rt-2' });
     expect(resolved.connection.status).toBe('unowned');
@@ -232,7 +233,7 @@ describe('refresh', () => {
       ]),
     );
     const id = await seed(h, 'oauthco', secret());
-    await h.store.connections.setStatus(id, 'unowned');
+    await makeUnowned(h.store, id);
     await expect(h.broker.refresh(id)).rejects.toBeInstanceOf(UpstreamAuthError);
     expect((await h.store.connections.getById(id))!.status).toBe('expired');
     expect(parseSecret((await h.store.connections.getCredential(id))!)).toEqual(secret());

@@ -14,18 +14,11 @@ import { Button, DangerConfirm } from '@/components/ui';
 import type { BootstrapKit } from '@/server/missions/bootstrap-kit';
 
 import { RevealDialog } from '../bootstrap-kit-view';
+import { messageOf } from '../message-of';
 import styles from '../missions.module.css';
 
 function isRotated(body: unknown): body is { kit: BootstrapKit } {
   return typeof body === 'object' && body !== null && 'kit' in body;
-}
-
-function messageOf(body: unknown, status: number): string {
-  if (typeof body === 'object' && body !== null && 'message' in body) {
-    const { message } = body;
-    if (typeof message === 'string') return message;
-  }
-  return `The instance answered ${status}.`;
 }
 
 export function MissionActions({

@@ -3,7 +3,8 @@
  *
  * The upstream stage hands the sink the final outcome of every call that
  * reached `plugin.execute` — once per call, after the retry ladder, whatever
- * the outcome. The sink is injected (`UpstreamStageDeps.telemetry`); the
+ * the outcome, except a call its caller abandoned (a disconnect is not an
+ * outcome of the plugin). The sink is injected (`UpstreamStageDeps.telemetry`); the
  * default does nothing, so the pipeline has no dependency on the telemetry
  * module and behaves the same with or without it.
  *

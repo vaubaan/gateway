@@ -142,6 +142,7 @@ describe('management door — hard deny, by imports', () => {
       'definitions.ts',
       'door.ts',
       'index.ts',
+      'output-schemas.ts',
       'ports.ts',
       'tools.ts',
       'views.ts',

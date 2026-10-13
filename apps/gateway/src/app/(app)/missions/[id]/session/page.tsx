@@ -1,9 +1,10 @@
 /**
  * `/missions/<id>/session` — the mission's session (spec §4.2, §3.3): counters
- * per risk and per period with what is left, gate per risk, open requests (by
- * link), the calls of the current period per agent label, and the event
- * timeline — whole, or the calls of one label (`?agent=<label>`,
- * `?unlabelled=1`).
+ * per risk and per period with what is left, gate per risk (and until when
+ * the creator opened it), open requests (by link), the calls of the current
+ * period per agent label, and the event timeline — whole, or the calls of one
+ * label (`?agent=<label>`, `?unlabelled=1`). What the Detail column says of an
+ * event is `eventDetailLines` (`@/server/audit`).
  *
  * An agent label is what a caller declared about itself (spec §0, §7.9): the
  * page says so wherever it shows one. The per-label counts are counts of
@@ -16,6 +17,7 @@ import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import {
   Badge,
+  type BadgeTone,
   Card,
   CardBody,
   CardHeader,
@@ -28,12 +30,16 @@ import {
   Thead,
   Tr,
 } from '@/components/ui';
+import { GateBadge } from '@/components/risk/RiskBadges';
 import { currentUser } from '@/lib/auth/session';
+import type { SessionEventKind } from '@vaubaan/shared';
 import {
   ALL_EVENTS,
   AUDIT_PARAMS,
   decodeCursor,
   encodeCursor,
+  eventDetailLines,
+  isSessionEventKind,
   type MissionSessionView,
   type SessionEventView,
   type SessionTimelineFilter,
@@ -182,8 +188,13 @@ export default async function MissionSessionPage({ params, searchParams }: Props
                 <Td>
                   {risk.rate_limit.max} per {risk.rate_limit.window_seconds}s
                 </Td>
-                <Td>
-                  {risk.gate === 'approval' ? <Badge tone="warning">approval</Badge> : 'auto'}
+                <Td data-testid={`gate-${risk.risk_id}`}>
+                  <GateBadge gate={risk.gate} />
+                  {risk.gate_open_until && (
+                    <div className={styles.muted}>
+                      open until <LocalDate ts={risk.gate_open_until} />
+                    </div>
+                  )}
                 </Td>
               </Tr>
             ))}
@@ -343,7 +354,7 @@ export default async function MissionSessionPage({ params, searchParams }: Props
         )}
       </Card>
 
-      <Card data-testid="timeline">
+      <Card data-testid="timeline" className={styles.wide}>
         <CardHeader>
           <CardTitle>Timeline</CardTitle>
         </CardHeader>
@@ -367,7 +378,7 @@ export default async function MissionSessionPage({ params, searchParams }: Props
             {filter.kind === 'all' ? 'No event yet.' : 'No call matches on this page.'}
           </div>
         ) : (
-          <div className={styles.scroll}>
+          <div className={styles.scroll} data-testid="timeline-table">
             <Table>
               <Thead>
                 <Tr>
@@ -392,7 +403,6 @@ export default async function MissionSessionPage({ params, searchParams }: Props
       <div className={styles.pager}>
         <span>
           {view.events.length} {view.events.length === 1 ? 'event' : 'events'}, newest first
-          {view.events_scan_limited && ' — older events were not searched yet: follow “Older”'}
         </span>
         <span>
           {cursor && <Link href={`${sessionPath}${sessionQuery(filter, null)}`}>Newest</Link>}
@@ -424,14 +434,23 @@ function PeriodLine({ state }: { state: MissionSessionView['state'] }) {
   );
 }
 
-const EVENT_TONE: Record<string, 'success' | 'danger' | 'warning' | 'info' | 'neutral'> = {
+const EVENT_TONE: Readonly<Record<SessionEventKind, BadgeTone>> = {
   'call-allowed': 'success',
   'call-refused': 'danger',
   request: 'warning',
   reset: 'info',
   extension: 'info',
+  approval: 'info',
+  'gate-opened': 'info',
+  'gate-changed': 'neutral',
+  rotation: 'neutral',
   revocation: 'danger',
 };
+
+/** A kind written by a later version has no tone of its own. */
+function toneOf(kind: string): BadgeTone {
+  return isSessionEventKind(kind) ? EVENT_TONE[kind] : 'neutral';
+}
 
 function EventRow({
   event,
@@ -447,7 +466,7 @@ function EventRow({
         <LocalDate ts={event.ts} />
       </Td>
       <Td>
-        <Badge tone={EVENT_TONE[event.kind] ?? 'neutral'}>{event.kind}</Badge>
+        <Badge tone={toneOf(event.kind)}>{event.kind}</Badge>
         {event.refusal_code && (
           <div className={`${styles.mono} ${styles.nowrap}`}>{event.refusal_code}</div>
         )}
@@ -459,7 +478,7 @@ function EventRow({
         ) : (
           <div className={styles.risks}>
             {event.risk_ids.map((risk) => (
-              <span key={risk} className={`${styles.mono} ${styles.nowrap}`}>
+              <span key={risk} className={`${styles.mono} ${styles.wraps}`}>
                 {risk}
                 {event.remaining?.[risk] !== undefined && ` → ${event.remaining[risk]}`}
               </span>
@@ -468,27 +487,19 @@ function EventRow({
         )}
       </Td>
       <Td>{event.agent_label ?? event.actor_email ?? '—'}</Td>
-      <Td>
-        {request && (
-          <Link href={request.path} className={styles.nowrap}>
-            open {request.kind}
-          </Link>
-        )}
-        {!request && event.request_id && (
-          <span className={styles.muted}>{event.request_kind ?? 'request'} (closed)</span>
-        )}
-        {event.token_prefix && <span className={styles.mono}>token {event.token_prefix}…</span>}
-        {event.credits &&
-          Object.entries(event.credits).map(([risk, given]) => (
-            <div key={risk} className={`${styles.mono} ${styles.nowrap}`}>
-              {risk} +{given} given back
-            </div>
-          ))}
-        {event.dimension === 'expiry' && event.expires_at && (
-          <div className={styles.muted}>
-            expiry moved to <LocalDate ts={event.expires_at} />
+      <Td className={styles.detail} data-testid="event-detail">
+        {eventDetailLines(event, { requestOpen: request !== undefined }).map((line) => (
+          <div key={line.text} className={line.mono ? styles.mono : styles.muted}>
+            {line.text}
+            {line.at && (
+              <>
+                {' '}
+                <LocalDate ts={line.at} />
+              </>
+            )}
           </div>
-        )}
+        ))}
+        {request && <Link href={request.path}>open {request.kind}</Link>}
       </Td>
     </Tr>
   );

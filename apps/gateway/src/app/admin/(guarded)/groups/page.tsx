@@ -18,8 +18,7 @@ import {
   Stack,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { firstParam, type PageSearchParams } from '@/lib/connections/session';
-import { NOTICE_PARAM } from '@/server/connections';
+import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import { GROUP_NAME_MAX_LENGTH, GROUPS_PAGE, type GroupView } from '@/server/groups';
 
 export const dynamic = 'force-dynamic';
@@ -27,10 +26,7 @@ export const dynamic = 'force-dynamic';
 export default async function GroupsPage({ searchParams }: { searchParams: PageSearchParams }) {
   const { root, principal } = await requireOperator();
   const params = await searchParams;
-  const notice = await root.connections.notices.take(
-    principal.sessionId,
-    firstParam(params[NOTICE_PARAM]),
-  );
+  const notice = await takeNotice(root, principal.sessionId, params);
   const groups = await root.groups.service.list();
   const local = groups.filter((view) => view.group.source === 'local');
   const fromIdp = groups.filter((view) => view.group.source === 'idp');

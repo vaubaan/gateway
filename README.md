@@ -27,12 +27,18 @@ is a separate step. The last v4 SaaS release is tag
 - **Structured refusals** tell the agent why a call was refused and where a
   human can grant more; the human answers from an inbox, never from the
   agent's terminal.
-- **One door for agents.** `POST /mcp` (MCP Streamable HTTP, stateless)
-  with `Authorization: Bearer <mission token>`: `tools/list`, `tools/call`,
-  and `GET /mcp/catalog` for the resources and the remaining budget. The
-  human interface (`/connections`, `/missions`, `/requests`, `/audit`,
-  `/admin`) opens
-  with a browser session only; neither credential opens the other surface.
+- **Two doors for agents, three credentials that never cross.** The
+  execution door, `POST /mcp` (MCP Streamable HTTP, stateless) with
+  `Authorization: Bearer <mission token>`: `tools/list`, `tools/call`, and
+  `GET /mcp/catalog` for the resources and the remaining budget. The
+  management door, `POST /mcp/manage`, for an agent a user authorized
+  through OAuth (the instance is its own authorization server): it lists the
+  user's connections and missions, previews a policy and issues, rotates or
+  revokes a mission within the user's authority — it executes nothing and
+  grants nothing. The human interface (`/connections`, `/shares`,
+  `/missions`, `/requests`, `/audit`, `/delegations`, `/admin`) opens with a
+  browser session only. A mission token, a delegated token and a session
+  each open their own surface and are refused by kind on the others.
 
 The full picture is in the spec; the reasoning is in the pivot ADR.
 
@@ -73,7 +79,7 @@ configuration key): [`deploy/README.md`](deploy/README.md).
 | Tests     | [`docs/tests/`](docs/tests/)                                                                                                                                                                                              |
 | Workflow  | [`docs/workflow/coding-workflow.md`](docs/workflow/coding-workflow.md)                                                                                                                                                    |
 
-Handbooks: [configuration](docs/handbook/configuration.md), [store](docs/handbook/store.md), [authentication](docs/handbook/authentication.md), [connections](docs/handbook/connections.md), [missions](docs/handbook/missions.md), [authority](docs/handbook/authority.md), [budget-and-sessions](docs/handbook/budget-and-sessions.md), [execution-door](docs/handbook/execution-door.md), [management-door](docs/handbook/management-door.md), [requests](docs/handbook/requests.md), [audit](docs/handbook/audit.md), [web-app](docs/handbook/web-app.md), [gateway-core](docs/handbook/gateway-core.md), [policy-engine](docs/handbook/policy-engine.md), [plugin-sdk](docs/handbook/plugin-sdk.md), [telemetry](docs/handbook/telemetry.md), and one per provider under [providers](docs/handbook/providers/README.md).
+Handbooks: [configuration](docs/handbook/configuration.md), [store](docs/handbook/store.md), [authentication](docs/handbook/authentication.md), [connections](docs/handbook/connections.md), [missions](docs/handbook/missions.md), [authority](docs/handbook/authority.md), [budget-and-sessions](docs/handbook/budget-and-sessions.md), [execution-door](docs/handbook/execution-door.md), [management-door](docs/handbook/management-door.md), [requests](docs/handbook/requests.md), [audit](docs/handbook/audit.md), [web-app](docs/handbook/web-app.md), [gateway-core](docs/handbook/gateway-core.md), [policy-engine](docs/handbook/policy-engine.md), [plugin-sdk](docs/handbook/plugin-sdk.md), [telemetry](docs/handbook/telemetry.md), [cutover-from-v4](docs/handbook/cutover-from-v4.md), and one per provider under [providers](docs/handbook/providers/README.md). Writing a plugin: [`plugins/README.md`](plugins/README.md).
 
 Contributing: [`CONTRIBUTING.md`](CONTRIBUTING.md). Security:
 [`SECURITY.md`](SECURITY.md). Changes: [`CHANGELOG.md`](CHANGELOG.md).

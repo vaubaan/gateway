@@ -43,7 +43,7 @@ application.
 | `slice-matcher.ts`  | Predicates `matches` / `covers` / `intersects` between slice patterns.                                                                                                                      | `risk-evaluator`, lints                                                  |
 | `risk-evaluator.ts` | `indexCatalog` (parse every `matches` once, unique ids) + `risksTouchedBy[All]` for executed slices + fallback detection (`isFallbackEntry`, `fallbackEntriesOf`, `hasFallbackRisk`).       | `risk-runtime`, `risk-policy`, SDK catalog loader, registry and test kit |
 | `risk-policy.ts`    | `checkAcceptableInEnv` (issuance-time structural restriction) + `prepareCatalog` (boot checks, injectable `warn`).                                                                          | SDK catalog loader and registry, issuance                                |
-| `budget.ts`         | `budgetIssues` — the one rule for a quota, a rate limit and a gate (spec §3.2), with `isValidBudget`, `ratePerMinute`, `exceedsRateCeiling`.                                                | SDK catalog loader and `presetIssues`; the issuance preview (to wire)    |
+| `budget.ts`         | `budgetIssues` — the one rule for a quota, a rate limit and a gate (spec §3.2), with `isValidBudget`, `ratePerMinute`, `exceedsRateCeiling`.                                                | SDK catalog loader and `presetIssues`; the issuance preview              |
 | `qualify.ts`        | Env-qualify a `RiskId` (`provider.name` → `provider[env].name`) and back; `EnvResolver` + `resourceEnvResolver` + `envResolverFor` (plugin `envOf` first, then the label); `resolveVector`. | `risk-runtime`, issuance UI, SDK                                         |
 | `risk-runtime.ts`   | `evaluateCall` — the pure risk step of the call decision: strict-fail if `risks_touched ⊄ accepted`.                                                                                        | gateway-core `risk-gateway.ts` (with `envResolver`)                      |
 
@@ -199,10 +199,10 @@ pure function shared by every place a budget is judged:
 
 Callers: the SDK's YAML loader (`presetEntryFrom`) and `presetIssues`, which
 `definePlugin`, the registry and the test kit run on every catalog,
-including one written in TypeScript. The issuance preview of the
-application (`apps/gateway/src/server/missions/preview.ts`, `budgetProblem`)
-still carries its own copy of the rule; it is meant to delegate to
-`budgetIssues` and `exceedsRateCeiling`. The module is browser-safe: the
+including one written in TypeScript; and the issuance preview of the
+application (`apps/gateway/src/server/missions/preview.ts`, `budgetProblem`),
+which words the first `budgetIssues` field for the creator and adds the
+catalog's ceiling through `exceedsRateCeiling`. The module is browser-safe: the
 gate set comes from the subpath `@vaubaan/shared/domain`.
 
 ### `qualify.ts`

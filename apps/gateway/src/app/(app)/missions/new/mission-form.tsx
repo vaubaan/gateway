@@ -26,6 +26,7 @@ import type {
 import { defaultResources, previewDraft } from '@/server/missions/preview';
 
 import { RevealDialog } from '../bootstrap-kit-view';
+import { messageOf } from '../message-of';
 import styles from '../missions.module.css';
 import {
   applyPreset,
@@ -158,7 +159,7 @@ export function MissionForm({
       } else if (res.status === 422 && isRefusedBody(body)) {
         setServerIssues(body.preview.issues);
       } else {
-        setError(messageOf(body) ?? `The instance answered ${res.status}.`);
+        setError(problemsOf(body) ?? messageOf(body, res.status));
       }
     } catch {
       setError('The instance could not be reached.');
@@ -209,7 +210,7 @@ export function MissionForm({
         setServerIssues([]);
         setProposalReport(body.preview);
       } else {
-        setError(messageOf(body) ?? `The instance answered ${res.status}.`);
+        setError(problemsOf(body) ?? messageOf(body, res.status));
       }
     } catch {
       setError('The instance could not be reached.');
@@ -650,8 +651,8 @@ function isPreviewBody(body: unknown): body is { preview: MissionPreview } {
   return isRefusedBody(body) && Array.isArray(body.preview.resolved);
 }
 
-function messageOf(body: unknown): string | null {
-  if (!isRecord(body)) return null;
-  if (Array.isArray(body.problems)) return body.problems.map(String).join('; ');
-  return typeof body.message === 'string' ? body.message : null;
+/** A refused draft lists its problems; any other refusal states one message. */
+function problemsOf(body: unknown): string | null {
+  if (isRecord(body) && Array.isArray(body.problems)) return body.problems.map(String).join('; ');
+  return null;
 }

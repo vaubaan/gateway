@@ -19,15 +19,9 @@ import {
 } from './form-state';
 import styles from '../missions.module.css';
 
-import { Badge, Input, Select, type BadgeTone } from '@/components/ui';
-import type { CatalogRisk, IssuanceConnection, SeverityLevel } from '@/server/missions/model';
-
-const LEVEL_TONE: Record<SeverityLevel, BadgeTone> = {
-  low: 'neutral',
-  medium: 'info',
-  high: 'warning',
-  critical: 'danger',
-};
+import { SeverityBadge } from '@/components/risk/RiskBadges';
+import { Badge, Input, Select } from '@/components/ui';
+import type { CatalogRisk, IssuanceConnection } from '@/server/missions/model';
 
 export function RiskDetail({
   connection,
@@ -102,7 +96,7 @@ export function RiskDetail({
                 />
                 <span className={styles.riskText}>
                   <span>
-                    {risk.label} <Badge tone={LEVEL_TONE[risk.level]}>{risk.level}</Badge>
+                    {risk.label} <SeverityBadge level={risk.level} />
                     {risk.env && <Badge mono>{risk.env}</Badge>}
                     {risk.fallback && <Badge tone="warning">fallback</Badge>}
                     {risk.deprecated && <Badge tone="warning">deprecated</Badge>}

@@ -35,7 +35,7 @@ A JSON array of reports, at most 50 per request. One report:
 ```json
 {
   "plugin": "github",
-  "plugin_version": "1.0.0",
+  "plugin_version": "2.0.0",
   "gateway_version": "2.0.0",
   "tool": "github__get_file_contents",
   "outcome": "upstream-error",
@@ -131,7 +131,7 @@ shows nothing when the collector does not answer.
    # insert: 201 with an empty body
    curl -i "$COLLECTOR/plugin_reports" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" \
      -H 'Content-Type: application/json' -H 'Prefer: return=minimal' \
-     -d '[{"plugin":"github","plugin_version":"1.0.0","gateway_version":"dev","tool":"github__get_file_contents","outcome":"success","error_class":null}]'
+     -d '[{"plugin":"github","plugin_version":"2.0.0","gateway_version":"dev","tool":"github__get_file_contents","outcome":"success","error_class":null}]'
    # read back: refused (401 or 403, "permission denied")
    curl -i "$COLLECTOR/plugin_reports" -H "apikey: $KEY"
    # aggregates: 200

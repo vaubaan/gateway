@@ -1,6 +1,6 @@
 {
   "name": "@vaubaan/plugin-upstash-redis",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "description": "Vaubaan Gateway provider plugin for Upstash Redis — databases through the Management API, key-value data through the per-database REST endpoint",

@@ -6,7 +6,12 @@
  * the real services.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { BOOTSTRAP_ACTOR_ID, BOOTSTRAP_ACTOR_LABEL } from '@vaubaan/gateway-core';
+import {
+  BOOTSTRAP_ACTOR_ID,
+  BOOTSTRAP_ACTOR_LABEL,
+  type AdminAct,
+  type AdminObjectType,
+} from '@vaubaan/gateway-core';
 
 import {
   ARGUMENTS_NOT_SHOWN,
@@ -21,6 +26,7 @@ import type { MissionRecord } from '../../../src/server/store/types';
 import {
   ARGUMENT_MARKER,
   issueMission,
+  MERGE,
   NO_FILTER,
   openAuditRig,
   PR,
@@ -171,6 +177,116 @@ describe('audit search: visibility, filters, paging', () => {
       actor: { email: 'ops@example.com', label: 'ops@example.com' },
       object: { type: 'instance-config', id: 'idp', label: null },
     });
+  });
+
+  it('names the object of every administrative entry, whatever its type', async () => {
+    const { store } = rig.root;
+    const connection = rig.seeded.github.connection;
+    const group = await store.groups.createLocal('Platform');
+    if (!group) throw new Error('expected a group');
+    const toUser = await store.shares.create({
+      connectionId: connection.id,
+      target: { kind: 'user', id: rig.seeded.bob.id },
+      restriction: [READ],
+      createdByUserId: rig.seeded.ada.id,
+    });
+    const toGroup = await store.shares.create({
+      connectionId: connection.id,
+      target: { kind: 'group', id: group.id },
+      restriction: [READ],
+      createdByUserId: rig.seeded.ada.id,
+    });
+    const client = await store.delegations.registerClient({
+      clientId: 'client-public-id',
+      name: 'Desk Agent',
+      redirectUris: ['http://127.0.0.1/callback'],
+    });
+    const delegation = await store.delegations.create({
+      userId: rig.seeded.ada.id,
+      clientId: client.id,
+      scope: 'missions',
+    });
+    for (let i = 0; i < 2; i++) await seedCall(rig, mission, { risks: [PR] });
+    const claim = await seedCall(rig, mission, { risks: [PR] });
+    const approval = await seedCall(rig, mission, {
+      tool: 'github__merge_pull_request',
+      risks: [MERGE],
+    });
+    if (claim.result.outcome !== 'refused' || approval.result.outcome !== 'refused') {
+      throw new Error('expected two refusals');
+    }
+
+    // One entry per object type, with the act a real writer uses for it.
+    const objects: readonly (readonly [AdminAct, AdminObjectType, string])[] = [
+      ['mission-rotated', 'mission', mission.id],
+      ['resource-edited', 'connection', connection.id],
+      ['share-created', 'share', toUser.id],
+      ['share-revoked', 'share', toGroup.id],
+      ['group-created', 'group', group.id],
+      ['oauth-client-approved', 'oauth-client', client.id],
+      ['delegation-revoked', 'delegation', delegation.id],
+      ['request-refused', 'request', claim.result.request_id ?? ''],
+      ['approval-granted', 'request', approval.result.request_id ?? ''],
+      ['config-changed', 'instance-config', 'telemetry'],
+      // Objects that are gone, or were never created: the id, no label.
+      ['share-revoked', 'share', 'no-such-share'],
+      ['group-created', 'group', 'no-such-group'],
+      ['oauth-client-disabled', 'oauth-client', 'no-such-client'],
+      ['delegation-revoked', 'delegation', 'no-such-delegation'],
+      ['request-refused', 'request', 'no-such-request'],
+      ['connection-revoked', 'connection', 'not-created:github'],
+    ];
+    const base = Date.now() + 1000;
+    for (const [i, [act, type, id]] of objects.entries()) {
+      await store.auditWriter.write({
+        kind: 'admin',
+        ts: new Date(base + i).toISOString(),
+        user_id: rig.operator.id,
+        act,
+        object: { type, id },
+        before: null,
+        after: null,
+        delegated_client_id: null,
+      });
+    }
+
+    const entries = await search(userViewer(rig.operator, true), { kind: 'admin' });
+    const labels = entries
+      .flatMap((e) => (e.kind === 'admin' ? [e] : []))
+      .filter((e) => Date.parse(e.ts) >= base)
+      .reverse()
+      .map((e) => [e.object.type, e.object.label]);
+    expect(labels).toEqual([
+      ['mission', 'Ship the billing page'],
+      ['connection', connection.displayName],
+      ['share', `${connection.displayName} → bob@example.com`],
+      ['share', `${connection.displayName} → Platform`],
+      ['group', 'Platform'],
+      ['oauth-client', 'Desk Agent'],
+      ['delegation', 'Desk Agent'],
+      ['request', 'claim on Ship the billing page'],
+      ['request', 'approval request on Ship the billing page'],
+      ['instance-config', null],
+      ['share', null],
+      ['group', null],
+      ['oauth-client', null],
+      ['delegation', null],
+      ['request', null],
+      ['connection', null],
+    ]);
+    // Every object type has a row above: a type added to the union must be added here.
+    const covered = new Set(objects.map(([, type]) => type));
+    const every: Record<AdminObjectType, true> = {
+      connection: true,
+      share: true,
+      mission: true,
+      request: true,
+      delegation: true,
+      group: true,
+      'oauth-client': true,
+      'instance-config': true,
+    };
+    expect([...covered].sort()).toEqual(Object.keys(every).sort());
   });
 
   it('names the bootstrap operator instead of showing its actor id', async () => {

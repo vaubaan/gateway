@@ -9,7 +9,13 @@
  * arguments stay there. An event shows the fields named below and nothing
  * else of its details, read through `parseEventDetails` (`@vaubaan/shared`):
  * an event whose stored details do not have the shape of its kind is listed
- * with its kind, time, risk and actor, and no detail.
+ * with its kind, time, risk and actor, and no detail. What the Detail column
+ * says of each kind is `eventDetailLines` (`session-event-detail.ts`).
+ *
+ * The gate of a risk is two facts: the mission's own `gate`, and
+ * `gate_open_until` when the creator opened it "for the rest of the period"
+ * (spec §3.5). Both are on the risk row: `approval` alone would be wrong while
+ * calls pass.
  *
  * The counters are the store's, as they stand: a granted claim (period reset,
  * quota extension) lowers them, so "counted" can go down during a period. The
@@ -27,15 +33,16 @@
  *     is one call) nor bound anyone;
  *   - a timeline filter: the call events of one label, or the unlabelled ones.
  *     Events that are not calls (requests, resets, rotations…) carry no label
- *     and are left out of a filtered timeline. The label lives in the event's
- *     details, not in a column, so the filter reads the timeline in batches
- *     and keeps the matches; it stops after `SESSION_FILTER_SCAN_LIMIT`
- *     events and says so (`events_scan_limited`), the next page resuming
- *     where it stopped.
+ *     and are left out of a filtered timeline. The repository filters on the
+ *     `events.agent_label` column (migration 0008): a filtered page is one
+ *     indexed read, paged by the same keyset as the whole timeline.
  */
 import {
   parseEventDetails,
+  type Gate,
   type MissionPolicyEntry,
+  type RequestClosedState,
+  type RequestKind,
   type RiskId,
   type SessionEventDetails,
 } from '@vaubaan/shared';
@@ -52,10 +59,6 @@ import type { EventRecord, RequestRecord, SessionCounterRecord } from '../store/
 export const SESSION_EVENTS_PAGE_SIZE = 100;
 /** How many past periods the counters table shows, newest first. */
 export const PAST_PERIODS_SHOWN = 7;
-/** How many events one read of a filtered timeline fetches. */
-export const SESSION_FILTER_SCAN_BATCH = 200;
-/** How many events a filtered page looks through before it stops and says so. */
-export const SESSION_FILTER_SCAN_LIMIT = 2000;
 
 /** Which events of the timeline are listed. */
 export type SessionTimelineFilter =
@@ -78,6 +81,11 @@ export interface SessionRiskRow extends MissionPolicyEntry {
   /** Actions left this period; `null` when the mission is not active. */
   readonly remaining: number | null;
   readonly exhausted: boolean;
+  /**
+   * End of the period the creator opened this risk's gate for: until then calls
+   * pass without asking although `gate` reads `approval`. `null` otherwise.
+   */
+  readonly gate_open_until: string | null;
 }
 
 export interface SessionPeriodRow {
@@ -102,13 +110,31 @@ export interface SessionEventView {
   /** Remaining quota per touched risk after an allowed call. */
   readonly remaining: Readonly<Record<RiskId, number>> | null;
   readonly request_id: string | null;
-  readonly request_kind: string | null;
+  /**
+   * The kind of the request `request_id` names. A refused call does not store
+   * it: it follows from the refusal code (`requestKindOfRefusal`).
+   */
+  readonly request_kind: RequestKind | null;
+  /** How a `request` event closed (refused, expired); `null` for the dropped one. */
+  readonly request_state: RequestClosedState | null;
+  /** How many approvals an allowed call consumed. */
+  readonly approvals_consumed: number;
+  /** The gate a `gate-changed` event set, and the one it replaced. */
+  readonly gate: Gate | null;
+  readonly gate_before: Gate | null;
+  /** End of the period a `gate-opened` event opened the gate for. */
+  readonly gate_open_until: string | null;
+  /** How many tokens a `revocation` retired. */
+  readonly tokens_revoked: number | null;
   readonly token_prefix: string | null;
   /** Actions a granted claim gave back, per risk (`reset`, quota `extension`). */
   readonly credits: Readonly<Record<RiskId, number>> | null;
   /** What an `extension` extended: `quota` or `expiry`. */
   readonly dimension: string | null;
-  /** The mission's new expiry after an expiry `extension`. */
+  /**
+   * The mission's new expiry after an expiry `extension`; for an `approval`,
+   * the instant before which the approved call must be replayed.
+   */
   readonly expires_at: string | null;
 }
 
@@ -143,11 +169,6 @@ export interface MissionSessionView {
   readonly next_events: AuditCursor | null;
   /** The filter `events` was read with. */
   readonly timeline_filter: SessionTimelineFilter;
-  /**
-   * A filtered page that stopped looking before it was full: older matching
-   * events may exist, and `next_events` resumes where the scan stopped.
-   */
-  readonly events_scan_limited: boolean;
   readonly open_requests: readonly SessionOpenRequest[];
   /** Every label seen on the mission's calls still in the audit, most recent first. */
   readonly agent_labels: readonly AgentLabelSeen[];
@@ -162,8 +183,6 @@ export interface MissionSessionDeps {
   readonly store: Pick<Store, 'sessions' | 'requests' | 'audit' | 'users'>;
   readonly missions: Pick<MissionService, 'get'>;
   readonly clock: Clock;
-  /** Bounds of a filtered timeline read; default `SESSION_FILTER_SCAN_*`. Tests shrink them. */
-  readonly timelineScan?: { readonly batch: number; readonly limit: number };
 }
 
 export class MissionSessionService {
@@ -185,7 +204,7 @@ export class MissionSessionService {
     const filter = options.timeline ?? ALL_EVENTS;
     const timeline: TimelinePage = session
       ? await this.timelinePage(session.id, filter, options.eventsBefore ?? null)
-      : { shown: [], next: null, scanLimited: false };
+      : { shown: [], next: null };
     const now = this.deps.clock.now();
     const requests = await store.requests.listForMission(missionId);
     const period = detail.state.kind === 'active' ? detail.state.period : null;
@@ -202,7 +221,6 @@ export class MissionSessionService {
       events: await this.eventViews(timeline.shown),
       next_events: timeline.next,
       timeline_filter: filter,
-      events_scan_limited: timeline.scanLimited,
       open_requests: requests
         .filter((r) => isDecidable(r, now))
         .map((r) => ({
@@ -224,70 +242,20 @@ export class MissionSessionService {
     filter: SessionTimelineFilter,
     before: AuditCursor | null,
   ): Promise<TimelinePage> {
-    const { sessions } = this.deps.store;
-    if (filter.kind === 'all') {
-      // One more than the page: its presence says there is an older page.
-      const page = await sessions.listRecentEvents(sessionId, {
-        limit: SESSION_EVENTS_PAGE_SIZE + 1,
-        ...(before ? { before } : {}),
-      });
-      const shown = page.slice(0, SESSION_EVENTS_PAGE_SIZE);
-      const last = shown.at(-1);
-      return {
-        shown,
-        next: page.length > SESSION_EVENTS_PAGE_SIZE && last ? positionOf(last) : null,
-        scanLimited: false,
-      };
-    }
-
-    const scan = this.scan();
-    const shown: EventRecord[] = [];
-    let position = before;
-    let scanned = 0;
-    while (scanned < scan.limit) {
-      const batch = await sessions.listRecentEvents(sessionId, {
-        limit: scan.batch,
-        ...(position ? { before: position } : {}),
-      });
-      for (const event of batch) {
-        scanned += 1;
-        position = positionOf(event);
-        if (!matchesTimelineFilter(event, filter)) continue;
-        shown.push(event);
-        // The page is full: the next one resumes after its last event.
-        if (shown.length === SESSION_EVENTS_PAGE_SIZE) {
-          const more = await this.hasOlderMatch(sessionId, filter, position);
-          return { shown, next: more ? position : null, scanLimited: false };
-        }
-      }
-      // A short batch is the end of the timeline.
-      if (batch.length < scan.batch) return { shown, next: null, scanLimited: false };
-    }
-    return { shown, next: position, scanLimited: true };
-  }
-
-  private scan(): { readonly batch: number; readonly limit: number } {
-    return (
-      this.deps.timelineScan ?? {
-        batch: SESSION_FILTER_SCAN_BATCH,
-        limit: SESSION_FILTER_SCAN_LIMIT,
-      }
-    );
-  }
-
-  /** Is there a matching event older than `position`, within one batch? Else: maybe. */
-  private async hasOlderMatch(
-    sessionId: string,
-    filter: SessionTimelineFilter,
-    position: AuditCursor,
-  ): Promise<boolean> {
-    const { batch: size } = this.scan();
-    const batch = await this.deps.store.sessions.listRecentEvents(sessionId, {
-      limit: size,
-      before: position,
+    // One more than the page: its presence says there is an older page.
+    const page = await this.deps.store.sessions.listRecentEvents(sessionId, {
+      limit: SESSION_EVENTS_PAGE_SIZE + 1,
+      ...(before ? { before } : {}),
+      ...(filter.kind === 'all'
+        ? {}
+        : { calls: { agentLabel: filter.kind === 'label' ? filter.label : null } }),
     });
-    // A full batch without a match does not prove there is none further: offer the page.
-    return batch.some((event) => matchesTimelineFilter(event, filter)) || batch.length === size;
+    const shown = page.slice(0, SESSION_EVENTS_PAGE_SIZE);
+    const last = shown.at(-1);
+    return {
+      shown,
+      next: page.length > SESSION_EVENTS_PAGE_SIZE && last ? positionOf(last) : null,
+    };
   }
 
   private async eventViews(events: readonly EventRecord[]): Promise<SessionEventView[]> {
@@ -312,7 +280,6 @@ export class MissionSessionService {
 interface TimelinePage {
   readonly shown: readonly EventRecord[];
   readonly next: AuditCursor | null;
-  readonly scanLimited: boolean;
 }
 
 const positionOf = (event: EventRecord): AuditCursor => ({ ts: event.ts, id: event.id });
@@ -324,26 +291,6 @@ function labelActivityView(activity: AgentLabelActivity): SessionLabelActivity {
     refused: activity.refused,
     last_seen_at: activity.lastSeenAt,
   };
-}
-
-/**
- * The label a call event carried: a string, `null` for a call without one,
- * `undefined` for an event that is not a call (or whose details cannot be
- * read as one).
- */
-export function callLabelOf(event: EventRecord): string | null | undefined {
-  const parsed = parseEventDetails(event.kind, event.details);
-  if (!parsed || (parsed.kind !== 'call-allowed' && parsed.kind !== 'call-refused')) {
-    return undefined;
-  }
-  return parsed.details.agent_label || null;
-}
-
-export function matchesTimelineFilter(event: EventRecord, filter: SessionTimelineFilter): boolean {
-  if (filter.kind === 'all') return true;
-  const label = callLabelOf(event);
-  if (label === undefined) return false;
-  return filter.kind === 'unlabelled' ? label === null : label === filter.label;
 }
 
 function riskRows(
@@ -367,6 +314,7 @@ function riskRows(
     consumed: active ? (consumed.get(entry.risk_id) ?? 0) : null,
     remaining: active ? (active.remaining[entry.risk_id] ?? null) : null,
     exhausted: active ? active.exhausted.includes(entry.risk_id) : false,
+    gate_open_until: entry.gate_open_until,
   }));
 }
 
@@ -406,6 +354,12 @@ const NO_DETAIL = {
   remaining: null,
   request_id: null,
   request_kind: null,
+  request_state: null,
+  approvals_consumed: 0,
+  gate: null,
+  gate_before: null,
+  gate_open_until: null,
+  tokens_revoked: null,
   token_prefix: null,
   credits: null,
   dimension: null,
@@ -428,6 +382,7 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
         tool: parsed.details.tool || null,
         agent_label: parsed.details.agent_label || null,
         remaining: countsOrNull(parsed.details.remaining),
+        approvals_consumed: parsed.details.approval_ids.length,
       };
     case 'call-refused':
       return {
@@ -436,12 +391,16 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
         agent_label: parsed.details.agent_label || null,
         refusal_code: parsed.details.refusal_code,
         request_id: parsed.details.request_id,
+        request_kind: parsed.details.request_id
+          ? requestKindOfRefusal(parsed.details.refusal_code)
+          : null,
       };
     case 'request':
       return {
         ...NO_DETAIL,
         request_id: parsed.details.request_id,
         request_kind: parsed.details.request_kind,
+        request_state: 'state' in parsed.details ? parsed.details.state : null,
         tool: 'tool' in parsed.details ? parsed.details.tool || null : null,
       };
     case 'reset':
@@ -468,17 +427,39 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
       return {
         ...NO_DETAIL,
         request_id: parsed.details.request_id,
+        request_kind: 'approval',
         tool: parsed.details.tool || null,
+        expires_at: parsed.details.expires_at,
       };
     case 'gate-opened':
-      return { ...NO_DETAIL, request_id: parsed.details.request_id };
+      return {
+        ...NO_DETAIL,
+        request_id: parsed.details.request_id,
+        request_kind: 'approval',
+        gate_open_until: parsed.details.period_end,
+      };
     case 'gate-changed':
-      return NO_DETAIL;
+      return {
+        ...NO_DETAIL,
+        gate: parsed.details.gate,
+        gate_before: parsed.details.gate_before,
+      };
     case 'rotation':
       return { ...NO_DETAIL, token_prefix: parsed.details.token_prefix };
     case 'revocation':
-      return NO_DETAIL;
+      return { ...NO_DETAIL, tokens_revoked: parsed.details.tokens_revoked };
   }
+}
+
+/**
+ * The kind of request a refused call points to. The budget drops a claim on
+ * `budget-exhausted` and an approval request on `approval-required`
+ * (`SessionService.requestFor`, `server/budget`); no other refusal carries a request.
+ */
+function requestKindOfRefusal(code: string): RequestKind | null {
+  if (code === 'budget-exhausted') return 'claim';
+  if (code === 'approval-required') return 'approval';
+  return null;
 }
 
 /** The risk of the event's own column, then those a call event lists. */

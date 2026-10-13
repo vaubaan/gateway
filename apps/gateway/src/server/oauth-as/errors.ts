@@ -38,11 +38,27 @@ export class OAuthProtocolError extends Error {
     readonly code: OAuthErrorCode,
     description: string,
     status?: number,
+    /** Set on a `slow_down`: the `Retry-After` of the response, in seconds. */
+    readonly retryAfterSeconds: number | null = null,
   ) {
     super(description);
     this.name = 'OAuthProtocolError';
     this.status = status ?? (code === 'invalid_client' ? UNAUTHORIZED : BAD_REQUEST);
   }
+}
+
+const TOO_MANY_REQUESTS = 429;
+const MS_PER_SECOND = 1000;
+
+/** The `slow_down` of an exhausted rate limit (429 with `Retry-After`). */
+export function slowDown(retryAfterMs: number): OAuthProtocolError {
+  const seconds = Math.max(1, Math.ceil(retryAfterMs / MS_PER_SECOND));
+  return new OAuthProtocolError(
+    'slow_down',
+    `too many requests; retry in ${seconds} s`,
+    TOO_MANY_REQUESTS,
+    seconds,
+  );
 }
 
 export class AuthorizationPageError extends Error {

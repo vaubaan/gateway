@@ -46,7 +46,7 @@ export interface TelemetryClientOptions {
   readonly isEnabled: () => boolean;
   /** The collector URL in use (instance configuration). */
   readonly collectorUrl: URL;
-  /** The placeholder default: while the URL in use equals it, nothing is sent. */
+  /** The placeholder default: while the URL in use points at it (same origin and path), nothing is sent. */
   readonly placeholderUrl: URL;
   readonly fetch: typeof fetch;
   readonly logger: TelemetryLogger;
@@ -82,9 +82,19 @@ export function collectorHeaders(key: string | null): Record<string, string> {
   return headers;
 }
 
-/** True while the collector URL in use is the placeholder default (no collector behind it). */
+/** Where a URL points, whatever it carries: origin and path, trailing slashes dropped. */
+function locationOf(url: URL): string {
+  return `${url.origin}${url.pathname.replace(/\/+$/, '')}`;
+}
+
+/**
+ * True while the collector URL in use points at the placeholder default (no
+ * collector behind it). Compared by origin and path, never by the full text:
+ * the default with a key or any other query appended, a fragment, or a
+ * trailing slash is still the placeholder, and nothing is sent to it.
+ */
 export function isPlaceholderCollector(collectorUrl: URL, placeholderUrl: URL): boolean {
-  return collectorUrl.href === placeholderUrl.href;
+  return locationOf(collectorUrl) === locationOf(placeholderUrl);
 }
 
 export class TelemetryClient {
@@ -92,6 +102,8 @@ export class TelemetryClient {
   private readonly endpoint: CollectorEndpoint;
   private readonly placeholder: boolean;
   private readonly sendTimeoutMs: number;
+  // single-process only: "once per process" log latches. Per-process by nature (each
+  // process warns once); nothing to share, so no interface replaces them.
   private placeholderLogged = false;
   private rejectionLogged = false;
 

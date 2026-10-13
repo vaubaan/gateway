@@ -332,6 +332,42 @@ describe('ClientRegistry', () => {
       });
     });
 
+    it('disabling interrupted by a store fault changes nothing: the client is not disabled, its delegations live, nothing is audited', async () => {
+      rig = await openOAuthRig();
+      const client = await rig.registerClient();
+      const ada = await rig.issue(rig.ada, client);
+      const bob = await rig.issue(rig.bob, client);
+      rig.audit.entries.length = 0;
+      rig.store.db.exec(
+        `CREATE TRIGGER fault BEFORE UPDATE ON oauth_refresh_tokens
+         BEGIN SELECT RAISE(ABORT, 'simulated store fault'); END`,
+      );
+
+      await expect(rig.clients.decide('operator-1', client.id, 'disabled')).rejects.toThrow(
+        'simulated store fault',
+      );
+      const after = await rig.clients.get(client.id);
+      expect(after?.operatorDecision).toBeNull();
+      expect(rig.clients.statusOf(after!)).toBe('approved');
+      for (const held of [ada, bob]) {
+        expect(await rig.store.delegations.getById(held.delegationId)).toMatchObject({
+          status: 'active',
+        });
+        expect(await rig.verifier.resolve(held.tokens.access_token)).not.toBeNull();
+      }
+      expect(rig.audit.entries).toEqual([]);
+
+      // Once the store is back, the same decision goes through whole.
+      rig.store.db.exec('DROP TRIGGER fault');
+      const decided = await rig.clients.decide('operator-1', client.id, 'disabled');
+      expect(decided?.revoked).toHaveLength(2);
+      expect(rig.audit.admin.map((entry) => entry.act).sort()).toEqual([
+        'delegation-revoked',
+        'delegation-revoked',
+        'oauth-client-disabled',
+      ]);
+    });
+
     it('a disabled client stays disabled whatever the policy says', async () => {
       rig = await openOAuthRig({ registration: { policy: 'open' } });
       const client = await rig.registerClient();

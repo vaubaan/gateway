@@ -9,6 +9,7 @@ import { BOOTSTRAP_ACTOR_LABEL } from '@vaubaan/gateway-core';
 import type { Principal } from '@/server/auth';
 import { Badge, Button, Card, CardBody } from '@/components/ui';
 import styles from './auth.module.css';
+import { isOperatorPrincipal } from './principal';
 
 export function OperatorBadge({ principal }: { principal: Principal }) {
   if (principal.kind === 'bootstrap') return <Badge tone="warning">{BOOTSTRAP_ACTOR_LABEL}</Badge>;
@@ -52,9 +53,7 @@ export function PrincipalCard({ principal }: { principal: Principal }) {
           <div className={styles.actions}>
             <OperatorBadge principal={principal} />
             {principal.kind === 'user' && <Link href="/connections">Connections</Link>}
-            {(principal.kind === 'bootstrap' || principal.isOperator) && (
-              <Link href="/admin">Administration</Link>
-            )}
+            {isOperatorPrincipal(principal) && <Link href="/admin">Administration</Link>}
             <SignOutButton />
           </div>
         </div>

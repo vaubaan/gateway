@@ -11,7 +11,13 @@ import {
   REFRESH_TOKEN_PREFIX,
 } from './secrets';
 import { openOAuthRig, pkcePair, WEB_REDIRECT, type Granted, type OAuthRig } from './testing';
-import { clientCredentialsOf, PURGE_GRACE_MS, PURGE_INTERVAL_MS } from './token-service';
+import {
+  clientCredentialsOf,
+  PURGE_GRACE_MS,
+  PURGE_INTERVAL_MS,
+  RENEWAL_WINDOW_MS,
+  RENEWALS_PER_DELEGATION,
+} from './token-service';
 
 /** Longer than any reuse window the configuration accepts. */
 const AFTER_REUSE_WINDOW_MS = 61_000;
@@ -51,6 +57,30 @@ describe('TokenService', () => {
   }
 
   const revocations = () => rig.audit.admin.filter((entry) => entry.act === 'delegation-revoked');
+
+  /** Every insert into `table` fails until `heal()`: a store fault in the middle of a grant. */
+  function breakInserts(on: OAuthRig, table: string): () => void {
+    on.store.db.exec(
+      `CREATE TRIGGER fault_${table} BEFORE INSERT ON ${table}
+       BEGIN SELECT RAISE(ABORT, 'simulated store fault'); END`,
+    );
+    return () => on.store.db.exec(`DROP TRIGGER fault_${table}`);
+  }
+
+  /** What a store fault looks like to the caller: an error, and never an OAuth refusal. */
+  async function storeFault(run: () => Promise<unknown>): Promise<void> {
+    const err: unknown = await run().then(
+      () => null,
+      (thrown: unknown) => thrown,
+    );
+    expect(err).toBeInstanceOf(Error);
+    expect(err).not.toBeInstanceOf(OAuthProtocolError);
+    expect((err as Error).message).toContain('simulated store fault');
+  }
+
+  function rows<T>(on: OAuthRig, sql: string): T[] {
+    return on.store.db.prepare<[], T>(sql).all();
+  }
 
   describe('authorization-code grant', () => {
     it('exchanges the code for an opaque access token and a refresh token', async () => {
@@ -228,6 +258,163 @@ describe('TokenService', () => {
       rig.store.db.prepare("UPDATE users SET status = 'removed' WHERE id = ?").run(rig.ada.id);
       const err = await refusal(() => rig.tokens.exchangeCode(client, codeForm(granted)));
       expect(err.code).toBe('invalid_grant');
+    });
+  });
+
+  describe('a grant is one transaction: a write that fails leaves nothing behind', () => {
+    it.each(['oauth_refresh_tokens', 'oauth_access_tokens'])(
+      'code exchange, %s cannot be written: the code is unspent, no token exists, the same request then succeeds',
+      async (table) => {
+        const granted = await rig.grant(rig.ada, client);
+        const heal = breakInserts(rig, table);
+        await storeFault(() => rig.tokens.exchangeCode(client, codeForm(granted)));
+
+        expect(rows(rig, 'SELECT consumed_at FROM oauth_codes')).toEqual([{ consumed_at: null }]);
+        expect(rows(rig, 'SELECT id FROM oauth_refresh_tokens')).toEqual([]);
+        expect(rows(rig, 'SELECT id FROM oauth_access_tokens')).toEqual([]);
+        expect(await rig.store.delegations.getById(granted.delegationId)).toMatchObject({
+          status: 'active',
+        });
+        expect(revocations()).toEqual([]);
+
+        heal();
+        const tokens = await rig.tokens.exchangeCode(client, codeForm(granted));
+        expect(await rig.verifier.resolve(tokens.access_token)).not.toBeNull();
+      },
+    );
+
+    it('a check that fails still spends the code, although nothing was written', async () => {
+      const granted = await rig.grant(rig.ada, client);
+      const err = await refusal(() =>
+        rig.tokens.exchangeCode(client, codeForm(granted, { code_verifier: pkcePair().verifier })),
+      );
+      expect(err.code).toBe('invalid_grant');
+      expect(
+        rows<{ consumed_at: string | null }>(rig, 'SELECT consumed_at FROM oauth_codes'),
+      ).toEqual([{ consumed_at: rig.clock.now().toISOString() }]);
+      expect(rows(rig, 'SELECT id FROM oauth_refresh_tokens')).toEqual([]);
+      expect(rows(rig, 'SELECT id FROM oauth_access_tokens')).toEqual([]);
+    });
+
+    it('renewal, the access token cannot be written: the presented refresh token is still the live head, and the retry is not a replay — even with no reuse window', async () => {
+      await rig.close();
+      rig = await openOAuthRig({ ttl: { refreshReuseWindowSeconds: 0 } });
+      client = await rig.registerClient();
+      const { tokens, delegationId } = await rig.issue(rig.ada, client);
+      const before = rows(rig, 'SELECT id, revoked_at, replaced_by_id FROM oauth_refresh_tokens');
+
+      const heal = breakInserts(rig, 'oauth_access_tokens');
+      await storeFault(() => rig.tokens.refresh(client, refreshForm(tokens.refresh_token)));
+
+      // The rotation was rolled back with the insert that failed.
+      expect(rows(rig, 'SELECT id, revoked_at, replaced_by_id FROM oauth_refresh_tokens')).toEqual(
+        before,
+      );
+      expect(before).toHaveLength(1);
+      expect(before).toMatchObject([{ revoked_at: null, replaced_by_id: null }]);
+      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({ status: 'active' });
+      expect(await rig.verifier.resolve(tokens.access_token)).not.toBeNull();
+      expect(revocations()).toEqual([]);
+
+      heal();
+      const renewed = await rig.tokens.refresh(client, refreshForm(tokens.refresh_token));
+      expect(await rig.verifier.resolve(renewed.access_token)).not.toBeNull();
+      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({ status: 'active' });
+    });
+
+    it('reuse window, the access token cannot be written: the head is not rotated, and the token is answered once the store is back', async () => {
+      const { tokens, delegationId } = await rig.issue(rig.ada, client);
+      const first = await rig.tokens.refresh(client, refreshForm(tokens.refresh_token));
+      const before = rows(
+        rig,
+        'SELECT id, revoked_at, replaced_by_id FROM oauth_refresh_tokens ORDER BY id',
+      );
+
+      const heal = breakInserts(rig, 'oauth_access_tokens');
+      await storeFault(() => rig.tokens.refresh(client, refreshForm(tokens.refresh_token)));
+      expect(
+        rows(rig, 'SELECT id, revoked_at, replaced_by_id FROM oauth_refresh_tokens ORDER BY id'),
+      ).toEqual(before);
+      expect(revocations()).toEqual([]);
+
+      heal();
+      // Still the token rotated last, still inside the window: a new pair.
+      const again = await rig.tokens.refresh(client, refreshForm(tokens.refresh_token));
+      expect(again.refresh_token).not.toBe(first.refresh_token);
+      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({ status: 'active' });
+    });
+  });
+
+  describe('renewals are counted per delegation, once the refresh token is recognised', () => {
+    /** Renews `times` times in a row, each time with the token the previous renewal returned. */
+    async function renewChain(refreshToken: string, times: number): Promise<string> {
+      let current = refreshToken;
+      for (let i = 0; i < times; i += 1) {
+        current = (await rig.tokens.refresh(client, refreshForm(current))).refresh_token;
+      }
+      return current;
+    }
+
+    it('the budget of one delegation stops its renewals and changes nothing; it comes back with the window', async () => {
+      const { tokens, delegationId } = await rig.issue(rig.ada, client);
+      const head = await renewChain(tokens.refresh_token, RENEWALS_PER_DELEGATION);
+
+      const err = await refusal(() => rig.tokens.refresh(client, refreshForm(head)));
+      expect(err).toMatchObject({ code: 'slow_down', status: 429 });
+      expect(err.retryAfterSeconds).toBeGreaterThan(0);
+      // Refused before any write: the head is still the head, the family lives.
+      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({ status: 'active' });
+      expect(revocations()).toEqual([]);
+
+      rig.clock.advance(RENEWAL_WINDOW_MS);
+      await expect(rig.tokens.refresh(client, refreshForm(head))).resolves.toMatchObject({
+        token_type: 'Bearer',
+      });
+    });
+
+    it('another delegation of the same client is not held back', async () => {
+      const spent = await rig.issue(rig.ada, client);
+      const head = await renewChain(spent.tokens.refresh_token, RENEWALS_PER_DELEGATION);
+      await expect(rig.tokens.refresh(client, refreshForm(head))).rejects.toMatchObject({
+        code: 'slow_down',
+      });
+
+      const other = await rig.issue(rig.bob, client);
+      await expect(
+        rig.tokens.refresh(client, refreshForm(other.tokens.refresh_token)),
+      ).resolves.toBeTruthy();
+    });
+
+    it('a caller that proves nothing spends nothing: unknown and foreign refresh tokens do not touch the budget', async () => {
+      const { tokens } = await rig.issue(rig.ada, client);
+      const stranger = await rig.registerClient();
+      for (let i = 0; i < RENEWALS_PER_DELEGATION + 5; i += 1) {
+        await refusal(() => rig.tokens.refresh(client, refreshForm(mintRefreshToken())));
+        // The right token under another client id: recognised as not theirs.
+        await refusal(() => rig.tokens.refresh(stranger, refreshForm(tokens.refresh_token)));
+      }
+      await expect(
+        rig.tokens.refresh(client, refreshForm(tokens.refresh_token)),
+      ).resolves.toBeTruthy();
+    });
+
+    it('a replay is never rate-limited: it revokes the family although the budget is spent', async () => {
+      const { tokens, delegationId } = await rig.issue(rig.ada, client);
+      const head = await renewChain(tokens.refresh_token, RENEWALS_PER_DELEGATION);
+      // The budget is spent: the live head itself is told to slow down…
+      await expect(rig.tokens.refresh(client, refreshForm(head))).rejects.toMatchObject({
+        code: 'slow_down',
+      });
+
+      // …and the first generation, presented in that same window, is still a replay.
+      const err = await refusal(() =>
+        rig.tokens.refresh(client, refreshForm(tokens.refresh_token)),
+      );
+      expect(err.code).toBe('invalid_grant');
+      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({
+        status: 'revoked',
+        revokeReason: 'refresh-token-replay',
+      });
     });
   });
 
@@ -789,6 +976,21 @@ describe('TokenService', () => {
         ),
       ).toThrow(OAuthProtocolError);
       expect(() => clientCredentialsOf(new Headers(), rig.form({}))).toThrow(/client_id/);
+      // RFC 6749 §2.3.1: both parts are form-urlencoded before the base64 —
+      // `%XX` escapes and `+` for a space are decoded, a literal `+` is `%2B`.
+      const raw = (pair: string) =>
+        new Headers({ authorization: `Basic ${Buffer.from(pair).toString('base64')}` });
+      expect(clientCredentialsOf(raw('my+client%3A1:p%2Bs+s%25'), rig.form({}))).toEqual({
+        clientId: 'my client:1',
+        clientSecret: 'p+s s%',
+        via: 'basic',
+      });
+      // The header names the client; a `client_id` repeated in the body is not a second credential.
+      expect(clientCredentialsOf(basic('abc', 's'), rig.form({ client_id: 'other' }))).toEqual({
+        clientId: 'abc',
+        clientSecret: 's',
+        via: 'basic',
+      });
       // A bearer in the header is not a client credential.
       expect(
         clientCredentialsOf(

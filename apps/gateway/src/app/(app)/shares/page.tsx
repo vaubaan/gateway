@@ -9,30 +9,12 @@ import Link from 'next/link';
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import styles from '@/components/connections/connections.module.css';
 import { StateBadge } from '@/components/connections/parts';
-import {
-  Badge,
-  Card,
-  Stack,
-  Table,
-  Tbody,
-  Td,
-  Th,
-  Thead,
-  Tr,
-  type BadgeTone,
-} from '@/components/ui';
+import { SeverityBadge } from '@/components/risk/RiskBadges';
+import { Card, Stack, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
 import { currentActor } from '@/lib/connections/session';
-import type { SeverityLevel } from '@/server/missions/model';
 import type { ReceivedShare } from '@/server/shares';
 
 export const dynamic = 'force-dynamic';
-
-const LEVEL_TONE: Record<SeverityLevel, BadgeTone> = {
-  low: 'neutral',
-  medium: 'info',
-  high: 'warning',
-  critical: 'danger',
-};
 
 export default async function SharesReceivedPage() {
   const session = await currentActor();
@@ -107,7 +89,7 @@ function ReceivedRow({ item }: { item: ReceivedShare }) {
             {item.risks.map((risk) => (
               <span key={risk.risk_id} className={styles.badges}>
                 {risk.known ? risk.label : 'No longer in the catalog'}
-                {risk.level && <Badge tone={LEVEL_TONE[risk.level]}>{risk.level}</Badge>}
+                {risk.level && <SeverityBadge level={risk.level} />}
                 <code className={styles.mono}>{risk.risk_id}</code>
               </span>
             ))}

@@ -9,10 +9,10 @@
  */
 import type { RiskId } from '@vaubaan/shared';
 
-import type { CatalogRisk, SeverityLevel } from '../missions/model';
+import { SEVERITY_LEVELS, type CatalogRisk, type SeverityLevel } from '../missions/model';
 
 /** Most severe first: the order of the checklist's groups. */
-export const SEVERITY_ORDER: readonly SeverityLevel[] = ['critical', 'high', 'medium', 'low'];
+export const SEVERITY_ORDER: readonly SeverityLevel[] = [...SEVERITY_LEVELS].reverse();
 
 export interface SeverityGroup {
   readonly level: SeverityLevel;
@@ -83,9 +83,7 @@ export function envNotes(
   if (labelling.derivesEnv) return [];
   const envs = [
     ...new Set(
-      risks
-        .filter((risk) => risk.env !== null && selected.has(risk.risk_id))
-        .map((risk) => risk.env as string),
+      risks.flatMap((risk) => (risk.env !== null && selected.has(risk.risk_id) ? [risk.env] : [])),
     ),
   ];
   if (envs.length === 0) return [];

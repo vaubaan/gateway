@@ -150,6 +150,14 @@ environment.
   checks the fail-fast exit (within 60 seconds), the https rule,
   `/healthz`, secret redaction, native addons, the non-root user and that
   no env file is shipped.
+- **Management door**: the instance is also the OAuth authorization server of
+  `/mcp/manage` (handbook
+  [management-door](../docs/handbook/management-door.md)). Defaults: access
+  tokens 15 minutes, refresh tokens 30 days, client registration
+  `operator-approved` with loopback-only clients (CLI agents) approved
+  automatically, Client ID Metadata Documents off. The `oauth.*` keys
+  (`VAUBAAN_OAUTH_*`) change them; an operator approves or disables clients on
+  Administration → OAuth clients. Nothing to configure on the proxy.
 
 ## Community telemetry (optional)
 

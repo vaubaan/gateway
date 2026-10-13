@@ -23,6 +23,10 @@ extends:
 > replacement) moved with them. Each moved file is `status: legacy`, has no
 > `tracks:` and opens with the legacy banner. The body below is unchanged.
 
+> **Amendment 2026-10-13 (Phase 2 cycle-end)** — where the amendment of an
+> ADR goes. See "Amendment 2026-10-13 — the form of an amendment" at the end
+> of this document.
+
 > Fixes the mechanics by which the v4 documentation (French, written for
 > the multi-tenant SaaS) is marked historical without being rewritten,
 > translated or deleted, so that wikilinks keep resolving and the doc
@@ -142,3 +146,44 @@ invalidates every `tracks:` path in the handbooks.
 - **Add a new `v4` status value in every frontmatter.** Redundant with
   the banner and with the existing `superseded` vocabulary; one more
   value for the tooling to learn. Rejected.
+
+## Amendment 2026-10-13 — the form of an amendment (Phase 2 cycle-end)
+
+Adds to "Frontmatter and banners"; changes none of the decisions above.
+
+### Context
+
+The v5 ADRs are amended in place rather than superseded when a feature
+refines them. By the end of Phase 2 the amendments sat in three different
+places: between `## Consequences` and `## Rejected alternatives`, after
+`## Rejected alternatives`, and as notes in the header, above `## Context`. A
+header note is outside the four sections an ADR must have, and one of them
+had grown into a decision with its reasons and no rejected alternative of its
+own.
+
+### Decision
+
+An amendment written from now on is a section
+`## Amendment <date> — <subject>` placed **after `## Rejected alternatives`**,
+at the end of the document, with its own `### Context`, `### Decision`,
+`### Consequences` and `### Rejected alternatives`. The header carries a
+one-line pointer to it, and the decision it refines says so where it stands.
+An amendment that only records "amended by ADR X" stays a header note with a
+wikilink: the decision is in X.
+
+### Consequences
+
+- The four sections of the original ADR read as they were accepted; what
+  changed since is below them, dated.
+- The amendments written at the Phase 2 cycle-end follow the rule
+  ([[plugin-contract-and-credential-spec]], streamed results;
+  [[atomic-budget-accounting]], the agent label). The amendments written
+  before it are left where they are.
+
+### Rejected alternatives
+
+- **Moving the existing amendments to the new place.** It rewrites accepted
+  documents for their layout alone; none of them is malformed.
+- **A new ADR for every refinement.** A reader of the amended decision would
+  not learn that it changed; the cases that deserve their own ADR are
+  written as one and linked from the header.

@@ -33,7 +33,7 @@
 # point `replaced_by` at its successor.
 
 provider: resend
-catalog_version: 2
+catalog_version: 3
 catalog_date: 2026-10-13
 
 risks:

@@ -50,7 +50,7 @@ plugins/stripe/src/
   classify.ts         classifyStripe — pure, (tool, args, resources) → slices | denied
   execute.ts          executeStripe, discoverStripeResources, STRIPE_API_BASE
   data-model.ts       plane `billing`, 22 entities, `mode` envScopable
-  risk-catalog.yaml   16 risks + fallback, 3 presets, catalog_version 3
+  risk-catalog.yaml   16 risks + fallback, 3 presets, catalog_version 4
   index.ts            definePlugin(...) → stripePlugin (default export)
 ```
 
@@ -233,5 +233,5 @@ resource resolution, execute, discovery, credential, presets),
 risk on `cancel_at*` / `auto_advance`, PII overlay, mode resolution, the
 three presets on test and live), `execute.test.ts` (23 : REST routing,
 form-encoding and declared-only forwarding through `stripePlugin.execute`),
-`risk-catalog.test.ts` (20 : invariants, catalog v3, exact risk sets, no
+`risk-catalog.test.ts` (20 : invariants, catalog v4, exact risk sets, no
 preset on the fallback), `data-model.test.ts` (8).

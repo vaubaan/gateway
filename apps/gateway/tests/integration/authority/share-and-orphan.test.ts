@@ -9,8 +9,9 @@
  * token serves again, with its session and counters (feature P2.2b).
  */
 import { REFUSAL_RPC_CODE } from '@vaubaan/gateway-core';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { formatUtc } from '../../../src/server/requests';
 import { ShareError } from '../../../src/server/shares';
 import { line, type RpcBody } from '../../../src/server/execution/testing';
 import { NO_FILTER } from '../audit/support';
@@ -549,5 +550,164 @@ describe('share → issue within the restriction → exceed → revoke → orpha
       );
       expect(outcome.share.createdByUserId).toBe(rig.operator.id);
     });
+  });
+});
+
+/**
+ * A request does not wait for the authority (handbook requests, "A request on an
+ * orphaned mission still expires"): its clock keeps running while the mission reads
+ * `orphaned`, the sweeper expires it on the normal `requests.expiry` delay and erases
+ * its sealed arguments, and once the authority is back the executor's next refused
+ * call opens a new one.
+ */
+describe('a request on an orphaned mission still expires on the normal delay', () => {
+  const EXPIRY_MS = 10 * 60_000;
+  let rig: AuthorityRig;
+
+  beforeEach(async () => {
+    // The instance runs on the system clock: only `Date` is faked, timers stay real.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-13T09:00:00.000Z') });
+    rig = await authorityRig({ env: { VAUBAAN_REQUEST_EXPIRY: '10m' } });
+  });
+  afterEach(async () => {
+    await rig.close();
+    vi.useRealTimers();
+  });
+
+  const shareToBob = async (riskIds: readonly string[]) =>
+    rig.root.shares.service.share(await rig.actor(rig.ada), rig.connection.id, {
+      target: { kind: 'user', email: 'bob@example.com' },
+      riskIds,
+    });
+  const requestEvents = async (missionId: string) => {
+    const session = await rig.root.store.sessions.getByMission(missionId);
+    if (!session) return [];
+    return (await rig.root.store.sessions.listEvents(session.id, { kinds: ['request'] })).map(
+      (event) => event.details,
+    );
+  };
+
+  it('a claim: orphaned, swept past its expiry, not-open once the authority is back, and the replay opens a new one', async () => {
+    const first = await shareToBob([READ]);
+    const mission = await rig.issueFor(rig.bob, [READ], 'Tight', (id) => line(id, 1));
+    expect((await rig.read(mission)).result).toBeDefined();
+    expect((await rig.read(mission)).error?.data?.code).toBe('budget-exhausted');
+    const [claim] = await rig.root.requests.service.inbox(rig.bob);
+    if (!claim) throw new Error('expected an open claim');
+
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+    // The page states the limit: the request can be granted until it expires.
+    const viewed = await rig.root.requests.service.view(rig.bob, claim.id);
+    if (viewed.outcome !== 'ok' || viewed.view.kind !== 'claim') throw new Error('claim view');
+    expect(viewed.view.mission.state).toBe('orphaned');
+    expect(
+      viewed.view.options.find((o) => o.resolution === 'reset-period')?.unavailable?.message,
+    ).toContain(`until it expires (${formatUtc(claim.expires_at)})`);
+
+    // Nothing pauses the request: the sweeper expires it on the normal delay.
+    vi.setSystemTime(Date.now() + EXPIRY_MS - 1_000);
+    expect(await rig.root.requests.service.sweep()).toBe(0);
+    vi.setSystemTime(Date.now() + 2_000);
+    expect(await rig.statusOf(mission)).toBe('orphaned');
+    expect(await rig.root.requests.service.sweep()).toBe(1);
+    expect((await rig.root.store.requests.getById(claim.id))?.state).toBe('expired');
+    expect(await requestEvents(mission.mission.id)).toContainEqual({
+      request_id: claim.id,
+      request_kind: 'claim',
+      state: 'expired',
+    });
+
+    // The authority is back: the expired claim is not granted any more…
+    expect(await shareToBob([READ])).toMatchObject({ restored: 1 });
+    expect(
+      await rig.root.requests.service.decide(rig.bob, claim.id, { resolution: 'reset-period' }),
+    ).toEqual({ ok: false, reason: 'not-open', state: 'expired' });
+    expect(await rig.root.requests.service.inbox(rig.bob)).toEqual([]);
+
+    // …and the executor's next refused call opens a new one, which is.
+    expect((await rig.read(mission)).error?.data?.code).toBe('budget-exhausted');
+    const [again] = await rig.root.requests.service.inbox(rig.bob);
+    expect(again?.id).toBeDefined();
+    expect(again?.id).not.toBe(claim.id);
+    expect(
+      await rig.root.requests.service.decide(rig.bob, again?.id ?? '', {
+        resolution: 'reset-period',
+      }),
+    ).toMatchObject({ ok: true });
+    expect((await rig.read(mission)).result).toBeDefined();
+  });
+
+  it('an approval request: its sealed arguments are erased at the expiry, never held until the authority returns', async () => {
+    const first = await shareToBob([PURGE]);
+    const mission = await rig.issueFor(rig.bob, [PURGE], 'Gated', (id) =>
+      line(id, 5, { gate: 'approval' }),
+    );
+    const purge = () => rig.call(mission, 'depot__purge', { space: 'scratch' });
+    const blobOf = (id: string) =>
+      rig.root.store.db
+        .prepare<
+          [string],
+          { args_blob: Buffer | null }
+        >('SELECT args_blob FROM requests WHERE id = ?')
+        .get(id)?.args_blob;
+
+    expect((await purge()).error?.data?.code).toBe('approval-required');
+    const [request] = await rig.root.requests.service.inbox(rig.bob);
+    if (!request) throw new Error('expected an open approval request');
+    expect(blobOf(request.id)).toBeInstanceOf(Buffer);
+
+    await rig.root.shares.service.revoke(await rig.actor(rig.ada), first.share.id);
+    expect((await purge()).error?.data).toMatchObject({
+      code: 'mission-inactive',
+      status: 'orphaned',
+    });
+    // While orphaned and open: only a refusal can be recorded, and the page says until when.
+    const viewed = await rig.root.requests.service.view(rig.bob, request.id);
+    if (viewed.outcome !== 'ok' || viewed.view.kind !== 'approval')
+      throw new Error('approval view');
+    expect(viewed.view.mission.state).toBe('orphaned');
+    expect(viewed.view.call.arguments).toEqual({ space: 'scratch' });
+    expect(viewed.view.options.filter((o) => !o.unavailable).map((o) => o.resolution)).toEqual([
+      'refuse',
+    ]);
+    expect(
+      viewed.view.options.find((o) => o.resolution === 'grant')?.unavailable?.message,
+    ).toContain(`until it expires (${formatUtc(request.expires_at)})`);
+    expect(
+      await rig.root.requests.service.decide(rig.bob, request.id, { resolution: 'grant' }),
+    ).toMatchObject({ ok: false, reason: 'invalid', problem: { code: 'mission-closed' } });
+    expect(blobOf(request.id)).toBeInstanceOf(Buffer);
+
+    // Past the expiry the sweeper erases the arguments, orphaned mission or not (spec §3.5).
+    vi.setSystemTime(Date.now() + EXPIRY_MS + 1_000);
+    expect(await rig.statusOf(mission)).toBe('orphaned');
+    expect(await rig.root.requests.service.sweep()).toBe(1);
+    expect(await rig.root.store.requests.getById(request.id)).toMatchObject({
+      state: 'expired',
+      hasArguments: false,
+    });
+    expect(blobOf(request.id)).toBeNull();
+    expect(await requestEvents(mission.mission.id)).toContainEqual({
+      request_id: request.id,
+      request_kind: 'approval',
+      state: 'expired',
+    });
+
+    // The authority is back: nothing is left to grant on the expired request…
+    expect(await shareToBob([PURGE])).toMatchObject({ restored: 1 });
+    expect(
+      await rig.root.requests.service.decide(rig.bob, request.id, { resolution: 'grant' }),
+    ).toEqual({ ok: false, reason: 'not-open', state: 'expired' });
+    expect(await rig.root.store.approvals.getByRequest(request.id)).toBeNull();
+
+    // …the replay is refused again and opens a new request, which is granted and consumed.
+    expect((await purge()).error?.data?.code).toBe('approval-required');
+    const [again] = await rig.root.requests.service.inbox(rig.bob);
+    expect(again?.id).toBeDefined();
+    expect(again?.id).not.toBe(request.id);
+    expect(
+      await rig.root.requests.service.decide(rig.bob, again?.id ?? '', { resolution: 'grant' }),
+    ).toMatchObject({ ok: true });
+    expect((await purge()).result).toBeDefined();
   });
 });

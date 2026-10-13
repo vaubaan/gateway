@@ -255,7 +255,7 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
   });
   const pending = new PendingConnectStore(sessions);
   const authority = createAuthorityModule({
-    store: { ...test.store, auditWriter: audit },
+    store: test.store,
     registry,
     logger: silentLogger,
     clock: test.clock,

@@ -20,18 +20,18 @@ modelling rationale (research, edge cases) is preserved in git history
 
 ## Shape
 
-| Member              | Where                   | Facts                                                                                                                                                    |
-| ------------------- | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id` / `version`    | `src/index.ts`          | `supabase`, `1.0.0`. Default export `supabasePlugin`.                                                                                                    |
-| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                           |
-| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`).                                |
-| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 1` (the only shipped catalog still at 1), 24 risks + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import. |
-| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                                 |
-| `classify`          | `src/classify.ts`       | Pure ; identifiers validated, missing identifiers denied. Exports `resolveProjectRef`, the one project resolution `execute` shares.                      |
-| migration reading   | `src/migration-sql.ts`  | Pure allow-list reader of the SQL of `apply_migration` : the write classes it takes, every class when a statement is not recognised.                     |
-| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context ; target from `resolveProjectRef`.      |
-| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                         |
-| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align).                                       |
+| Member              | Where                   | Facts                                                                                                                                               |
+| ------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` / `version`    | `src/index.ts`          | `supabase`, `2.0.0`. Default export `supabasePlugin`.                                                                                               |
+| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                      |
+| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`).                           |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 2`, 24 risks + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import.                                  |
+| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                            |
+| `classify`          | `src/classify.ts`       | Pure ; identifiers validated, missing identifiers denied. Exports `resolveProjectRef`, the one project resolution `execute` shares.                 |
+| migration reading   | `src/migration-sql.ts`  | Pure allow-list reader of the SQL of `apply_migration` : the write classes it takes, every class when a statement is not recognised.                |
+| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context ; target from `resolveProjectRef`. |
+| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                    |
+| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align).                                  |
 
 ## Classification rules
 

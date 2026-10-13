@@ -42,6 +42,14 @@ function workspaceDependencies(): string[] {
 
 const commitSha = resolveCommitSha();
 
+/** Files of this directory that no trace may carry into the standalone output. */
+const NEVER_SHIPPED = [
+  './tests/**',
+  './src/**/*.test.ts',
+  './src/**/*.test.tsx',
+  './tsconfig.tsbuildinfo',
+];
+
 const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_COMMIT_SHA: commitSha,
@@ -81,6 +89,17 @@ const nextConfig: NextConfig = {
       '../../plugins/*/src/**/*.yaml',
     ],
   },
+  // Tests never ship. `catalogPathNextTo` (`packages/plugin-sdk/src/catalog-path.ts`)
+  // joins a path computed at run time, which makes Turbopack trace the whole
+  // application directory into every entry that reaches the plugins ("Dynamic
+  // filesystem access causes tracing of the whole project"): without this list the
+  // standalone tree, which the image copies whole, carried `tests/**` and every
+  // `*.test.ts` beside the sources. Paths are relative to this directory; `/*`
+  // matches every route. Turbopack applies this option to route traces only: the
+  // trace of the boot hook (`src/instrumentation.ts`) is not a route's and no key
+  // reaches it, so it is cleaned at the source or not at all (handbook web-app,
+  // "What the standalone output carries").
+  outputFileTracingExcludes: { '/*': NEVER_SHIPPED },
   // Same build id on every replica of one image (hosted deployments need it).
   generateBuildId: () => commitSha,
   // The TLS terminator compresses (see deploy/caddy/Caddyfile); keeping Next's

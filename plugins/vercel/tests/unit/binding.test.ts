@@ -143,6 +143,15 @@ describe('executeVercel — a deployment-addressed tool runs only on a deploymen
     ).rejects.toMatchObject({ name: 'UpstreamAuthError', upstreamStatus: 401 });
   });
 
+  test('a lookup the provider fails (5xx) is an upstream failure, thrown ; nothing is forwarded', async () => {
+    const lookup = /\/v13\/deployments\/dpl_x\?/;
+    const broken = mockFetch([{ method: 'GET', url: lookup, status: 503, body: {} }, mcpRoute]);
+    await expect(
+      vercelPlugin.execute(ctx(broken), 'vercel__get_deployment', { idOrUrl: 'dpl_x' }),
+    ).rejects.toMatchObject({ name: 'UpstreamHttpError', status: 503 });
+    expect(broken.calls.filter(isMcpCall)).toHaveLength(0);
+  });
+
   test.each([
     ['vercel__get_deployment', {}],
     ['vercel__get_deployment', { idOrUrl: ['dpl_x'] }],

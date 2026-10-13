@@ -227,7 +227,21 @@ export interface MissionDetailRisk extends MissionPolicyEntry {
   readonly gate_open_until: Iso8601 | null;
 }
 
+/**
+ * The statuses on which a mission's gates are not edited: it refuses every call
+ * (spec §2.3). `status` is the derived one, so the edit is open again as soon as an
+ * orphaned mission's authority is back. `setGate` refuses on it and the mission page
+ * reads it from `MissionDetail.gates_editable`.
+ */
+export function gateEditBlockedBy(
+  mission: Pick<MissionRecord, 'status'>,
+): 'revoked' | 'orphaned' | null {
+  return mission.status === 'revoked' || mission.status === 'orphaned' ? mission.status : null;
+}
+
 export interface MissionDetail extends MissionOverview {
+  /** Whether `setGate` would take an edit now. */
+  readonly gates_editable: boolean;
   readonly connections: readonly MissionDetailConnection[];
   readonly policy: readonly MissionDetailRisk[];
   readonly period: DraftPeriod;
@@ -587,9 +601,8 @@ export class MissionService {
     const mission = await this.ownMission(user, missionId);
     if (!mission) return { ok: false, reason: 'not-found' };
     if (!isGate(gate)) return { ok: false, reason: 'invalid-gate' };
-    if (mission.status === 'revoked' || mission.status === 'orphaned') {
-      return { ok: false, reason: 'inactive', state: mission.status };
-    }
+    const blocked = gateEditBlockedBy(mission);
+    if (blocked) return { ok: false, reason: 'inactive', state: blocked };
     const changed = await this.deps.store.missions.setGate(mission.id, riskId, gate, user.id);
     if (!changed) return { ok: false, reason: 'risk-not-in-policy' };
     const { previous } = changed;
@@ -684,6 +697,7 @@ export class MissionService {
     });
     return {
       ...overview,
+      gates_editable: gateEditBlockedBy(overview.mission) === null,
       connections,
       policy,
       period: statedPeriodOf(mission),

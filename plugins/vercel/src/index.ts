@@ -45,7 +45,7 @@ export const vercelCatalog = loadCatalogFile(VERCEL_CATALOG_PATH);
 export const vercelPlugin = definePlugin({
   id: 'vercel',
   displayName: 'Vercel',
-  version: '1.0.0',
+  version: '2.0.0',
   description:
     'Runtime hosting plane — projects, deployments, logs, env vars, custom domains, firewall, preview comments.',
   docsUrl:

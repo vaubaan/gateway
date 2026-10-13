@@ -64,7 +64,7 @@ packages/plugin-sdk/
   tests/
     fixtures/acme/      a tiny valid plugin (risk-catalog.yaml + acme-plugin.ts) used by the tests
     unit/               catalog-loader (31), catalog-path (4), env-of (3), registry (10),
-                        define-plugin (24), testing-kit (14)
+                        define-plugin (24), testing-kit (14), streaming (9)
 ```
 
 Dependencies: `@vaubaan/shared`, `@vaubaan/policy-engine`, `js-yaml`.
@@ -89,22 +89,22 @@ flowchart LR
 
 ### `ProviderPlugin` (`plugin.ts`)
 
-| Member                                               | Pure? | Notes                                                                                                                                                                                                                                                        |
-| ---------------------------------------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `id`                                                 | —     | Provider slug; also the first segment of every slice and the tool prefix (`cloudflare-dns` → `cloudflare_dns__`).                                                                                                                                            |
-| `displayName`, `version`, `description?`, `docsUrl?` | —     | `version` is semver and goes into telemetry (a version that is not semver is never reported).                                                                                                                                                                |
-| `experimental?`                                      | —     | `true` for a plugin the host registers but keeps out of the default connect / issuance flows, listing none of its tools (gmail). `labels()` carries it as a boolean.                                                                                         |
-| `tools`                                              | —     | `McpToolDeclaration[]`. Every name starts with the prefix; names unique. May be empty (experimental, classifier-only plugin).                                                                                                                                |
-| `dataModel`                                          | —     | `DataModel` of the risk-model spec §2; `validateDataModel` runs in `definePlugin`.                                                                                                                                                                           |
-| `catalog`                                            | —     | `RiskCatalog` with `presets`; loaded from YAML, see below.                                                                                                                                                                                                   |
-| `credential`                                         | —     | `CredentialSpec`, see below.                                                                                                                                                                                                                                 |
-| `classify(tool, args, resources)`                    | yes   | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection; used to derive the env and default refs. The gateway core's `Classifier` is this member plus `envOf` (`Pick<ProviderPlugin, 'classify' \| 'envOf'>`). |
-| `execute(ctx, tool, args)`                           | no    | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?, credentialCache?, emitPart?. Throws `UpstreamAuthError` on 401/403.                                                                              |
-| `discoverResources(ctx)`                             | no    | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                                            |
-| `envOf?(slice, resources)`                           | yes   | The environment a slice carries in itself (Vercel's `env[prod]` segment, the only shipped plugin declaring it); `undefined` defers to the resource label. See "Environment resolution".                                                                      |
-| `refresh?(ctx)`                                      | no    | Override for a non-standard refresh only (re-minted installation token…). A standard `oauth2` credential is refreshed by the host from the spec (`tokenUrl`, `clientAuthMethod`, `resourceIndicator`): `refreshable: true` needs no `refresh`.               |
-| `normalizeForCaps?(args, caps)`                      | yes   | Scope caps. **Reserved: the v5.0 host never calls it** ([ADR](../decisions/scope-caps-not-enforced-in-v5-0.md)).                                                                                                                                             |
-| `normalizeArgs?(args, resources)`                    | yes   | Only called when `PluginHostFlags.argNormalization` is on. **Default off** (plan §8-Q4).                                                                                                                                                                     |
+| Member                                               | Pure? | Notes                                                                                                                                                                                                                                                                                                                                  |
+| ---------------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                                                 | —     | Provider slug; also the first segment of every slice and the tool prefix (`cloudflare-dns` → `cloudflare_dns__`).                                                                                                                                                                                                                      |
+| `displayName`, `version`, `description?`, `docsUrl?` | —     | `version` is semver and goes into telemetry (a version that is not semver is never reported).                                                                                                                                                                                                                                          |
+| `experimental?`                                      | —     | `true` for a plugin the host registers but keeps out of the default connect / issuance flows, listing none of its tools (gmail). `labels()` carries it as a boolean.                                                                                                                                                                   |
+| `tools`                                              | —     | `McpToolDeclaration[]`. Every name starts with the prefix; names unique. May be empty (experimental, classifier-only plugin).                                                                                                                                                                                                          |
+| `dataModel`                                          | —     | `DataModel` of the risk-model spec §2; `validateDataModel` runs in `definePlugin`.                                                                                                                                                                                                                                                     |
+| `catalog`                                            | —     | `RiskCatalog` with `presets`; loaded from YAML, see below.                                                                                                                                                                                                                                                                             |
+| `credential`                                         | —     | `CredentialSpec`, see below.                                                                                                                                                                                                                                                                                                           |
+| `classify(tool, args, resources)`                    | yes   | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection; used to derive the env and default refs. The gateway core's `Classifier` is this member plus `envOf` (`Pick<ProviderPlugin, 'classify' \| 'envOf'>`).                                                                           |
+| `execute(ctx, tool, args)`                           | no    | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?, credentialCache?, emitPart?. Throws every provider failure (`UpstreamAuthError` on 401/403, `UpstreamHttpError` on another failed status); returns `isError` only for what it declines itself — see "Errors of `execute`". |
+| `discoverResources(ctx)`                             | no    | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                                                                                                                      |
+| `envOf?(slice, resources)`                           | yes   | The environment a slice carries in itself (Vercel's `env[prod]` segment, the only shipped plugin declaring it); `undefined` defers to the resource label. See "Environment resolution".                                                                                                                                                |
+| `refresh?(ctx)`                                      | no    | Override for a non-standard refresh only (re-minted installation token…). A standard `oauth2` credential is refreshed by the host from the spec (`tokenUrl`, `clientAuthMethod`, `resourceIndicator`): `refreshable: true` needs no `refresh`.                                                                                         |
+| `normalizeForCaps?(args, caps)`                      | yes   | Scope caps. **Reserved: the v5.0 host never calls it** ([ADR](../decisions/scope-caps-not-enforced-in-v5-0.md)).                                                                                                                                                                                                                       |
+| `normalizeArgs?(args, resources)`                    | yes   | Only called when `PluginHostFlags.argNormalization` is on. **Default off** (plan §8-Q4).                                                                                                                                                                                                                                               |
 
 `definePlugin(def)` validates (`pluginIssues`) and `Object.freeze`s. Issues
 are aggregated into one `PluginDefinitionError` so a contributor fixes a
@@ -152,7 +152,7 @@ gets the complete result alone.
 async execute(ctx, tool, args) {
   const response = await ctx.fetch(url, { headers }); // open the provider's response first
   if (response.status === 401) throw new UpstreamAuthError('…', 401);
-  if (!response.ok || !response.body) throw new Error(`… answered ${response.status}`);
+  if (!response.ok || !response.body) throw new UpstreamHttpError('…', response.status);
   return streamToolResult(ctx, textParts(response.body));
 }
 ```
@@ -176,11 +176,40 @@ what the caller receives, the audit entry, the limits — is
 "Streamed results" of
 [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md).
 
-`UpstreamAuthError` carries the provider's status. The execution door treats
-only a 401 as a rejected credential (refresh, retry, then the connection is
-`expired`); a 403 is reported as a failed call and changes nothing. A plugin
-must therefore raise 401 only when the provider says the credential itself
-is invalid.
+#### Errors of `execute`
+
+One rule, two channels: **a provider failure is thrown; what the executor
+declines itself is returned.**
+
+| What happened                                                                                          | The plugin                                   | Audit entry (`allowed`)                             | Telemetry                                   |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------- | --------------------------------------------------- | ------------------------------------------- |
+| the provider answered 401 or 403                                                                       | throws `UpstreamAuthError(message, status)`  | `<provider> answered HTTP 403 (UpstreamAuthError)`  | `upstream-error` / `http_<status>`          |
+| the provider answered any other failed status                                                          | throws `UpstreamHttpError(message, status)`  | `<provider> answered HTTP 500 (UpstreamHttpError)`  | `upstream-error` / `http_<status>`          |
+| the provider failed without a status (a JSON-RPC error frame, an unusable answer)                      | throws an `Error`                            | `<provider> call failed (Error)`                    | `upstream-error` / `unspecified`            |
+| the network failed, the call timed out                                                                 | lets the error of `ctx.fetch` propagate      | `<provider> call failed (<class>)`                  | `upstream-error` / `network` or `timeout`   |
+| the executor declines the call: unknown tool, an argument it cannot read, a target outside the mission | returns `{ content: [text], isError: true }` | no `upstream_error`: nothing failed at the provider | `classification-error` / `executor_refused` |
+
+`UpstreamAuthError` and `UpstreamHttpError` live in `@vaubaan/shared`
+(`mcp.ts`) and are re-exported by the SDK. Both carry the provider's status
+(`upstreamStatus`, `status`): the host reads it for the audit summary and the
+telemetry class, and never stores the message, which goes to the agent only
+(`Upstream error: <message>`).
+
+Never catch a provider failure into an `isError` result: the audit entry of
+a `PATCH` the provider answered with 500 would read `allowed` with no
+`upstream_error`, as if the write had gone through, and telemetry would
+count a failing provider as a classifier defect. The agent loses nothing
+when a plugin throws — the door answers it an `isError` result carrying the
+plugin's sentence. The pattern the shipped plugins use when refusals are
+raised deep in the executor: a private `class ExecutorRefusal extends Error`
+and, at the entry point, `catch (e) { if (e instanceof ExecutorRefusal)
+return errorResult(e.message); throw e; }` (`plugins/vercel`,
+`plugins/upstash-redis`, `plugins/cloudflare-dns`).
+
+The execution door treats only a 401 as a rejected credential (refresh,
+retry, then the connection is `expired`); a 403 is reported as a failed call
+and changes nothing. A plugin must therefore raise 401 only when the
+provider says the credential itself is invalid.
 
 ### `CredentialSpec` and `CredentialSecret` (`credential.ts`)
 
@@ -268,7 +297,7 @@ policy engine are imported, not re-implemented: `fallbackEntriesOf` /
 `fallbackRiskPrefix` / `hasCatchAllWritePattern` for the mandatory
 fallback, `isEnvScopedEntry` / `isAcceptableInEnv` for env-qualified preset
 entries, `budgetIssues` / `isValidBudget` for the budget of a preset entry
-(the same function the application's issuance preview is meant to call).
+(the same function the application's issuance preview calls, `budgetProblem` in `missions/preview.ts`).
 Pipeline:
 
 1. `js-yaml` `load` with `CORE_SCHEMA` (YAML 1.2 core: no implicit date
@@ -485,7 +514,8 @@ metadata? }`, `ConnectionResource`, `Credential` (encrypted envelope),
   `PROVIDER_ID_PATTERN`, `ENV_LABEL_PATTERN`.
 - `refusal.ts` — `REFUSAL_CODES` (8), `RefusalCode`, `isRefusalCode`.
 - `mcp.ts` — `toolPrefixFor`, `splitToolName`, `McpToolDeclaration`,
-  `McpToolResult`, `McpToolContent`, `UpstreamAuthError`, JSON-RPC types.
+  `McpToolResult`, `McpToolContent`, `UpstreamAuthError`, `UpstreamHttpError`,
+  JSON-RPC types.
 - `data-model.ts` — `DataModel`, `DataModelPlane`, `DataModelEntity`,
   `DataModelCardinality`, `validateDataModel` (run by `definePlugin`).
 
@@ -527,12 +557,13 @@ The classifier shows the conventions every plugin follows:
   to a broad slice.
 
 `execute.ts` resolves the workspace with the same `resolveWorkspace` (a
-refusal throws before any request), so the call runs on the workspace the
-slice named. It shows the injected `fetch`, the bearer read from the
-`api-key` secret by `API_KEY_FIELD` (a credential without it is refused,
-never sent as `Bearer undefined`), the `UpstreamAuthError` on 401/403, and
-`discoverResources` checking the provider's answer with a type guard
-(`isWorkspaceDtoList`) instead of a cast.
+refusal is an `isError` result, returned before any request), so the call
+runs on the workspace the slice named. It shows the injected `fetch`, the
+bearer read from the `api-key` secret by `API_KEY_FIELD` (a credential
+without it is refused, never sent as `Bearer undefined`), the two thrown
+provider failures (`UpstreamAuthError` on 401/403, `UpstreamHttpError` on
+another failed status), and `discoverResources` checking the provider's
+answer with a type guard (`isWorkspaceDtoList`) instead of a cast.
 
 ## How to debug
 
@@ -608,6 +639,6 @@ fallback: true on it`** — add the flag to the catch-all entry; the kit's
   [`providers/README.md`](./providers/README.md) (index of the
   per-provider handbooks).
 - Guide: [`plugins/README.md`](../../plugins/README.md).
-- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 104 tests;
+- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 113 tests;
   `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts` after
   a `next build`.

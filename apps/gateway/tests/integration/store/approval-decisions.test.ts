@@ -15,7 +15,7 @@ import {
   type RequestRecord,
   type Store,
 } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { openTestStore, refuseRequest, type TestStore } from '../../../src/server/store/testing.ts';
 
 const READ = 'github.code-read';
 const WRITE = 'github.write-feature-branch';
@@ -200,7 +200,7 @@ describe('store: the approval gate', () => {
 
     it('a request already decided is not decided again, and apply does not run', async () => {
       const request = await approvalRequest();
-      await store.requests.decide(request.id, 'refused', creator);
+      await refuseRequest(store, request.id, creator);
       let ran = false;
       const result = await store.requests.decideApproval(request.id, creator, () => {
         ran = true;

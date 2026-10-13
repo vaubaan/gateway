@@ -41,7 +41,7 @@ instance uses apps the company owns, never the ones the v4 operator held.
       and 443 reachable. **TLS in front is not optional**: `public_url` must be
       https or the container exits with code 78 (`public_url: must use https`).
       `deploy/compose.yaml` ships Caddy, which obtains the certificate; with
-      another reverse proxy, forward `X-Forwarded-Host` / `X-Forwarded-Proto`,
+      another reverse proxy, append the client address to `X-Forwarded-For`,
       do not buffer responses, and list the proxy in `trusted_proxies`
       ([deploy/README](../../deploy/README.md)).
 - [ ] An image built from a tagged commit on which the CI job `e2e` (the
@@ -137,7 +137,7 @@ have a v4 connection for today") and the list of missions to issue.
 
 ## 2. Known limits at M1
 
-What Phase 1 ships differs from v4 and from the full spec in ways that will
+What the instance ships differs from v4 and from the full spec in ways that will
 show during the day. None of these is an unexpected refusal; all of them are
 listed again, as questions, in the [appendix](#appendix--decisions-to-confirm).
 
@@ -179,10 +179,9 @@ listed again, as questions, in the [appendix](#appendix--decisions-to-confirm).
   5, consumed 5 → at most 5 more), and "Reset the period" resets every risk of
   the mission. A larger quota means a new mission: there is no edit screen,
   "Duplicate" pre-fills the form, and the duplicate has its own token.
-- **Not built yet**: shares between users (Phase 2), the management door for
-  an agent that prepares a mission (P2.3), a connection owned by a group that
-  lost its owner (`unowned`) serving calls, the stateless caps of the catalogs
-  (items or bytes per call).
+- **Not built**: the stateless caps of the catalogs (items or bytes per call).
+  No shipped catalog declares one any more and the door applies none
+  ([scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md)).
 - **A provider 403 is a failed call**, not a dead credential: only a 401
   triggers the refresh and, if that is rejected, turns the connection
   `expired`.
@@ -388,14 +387,14 @@ cutover; each is a default that can be changed, most in one place.
 
 ### Execution door
 
-| Question                                                                                                 | Current behaviour                                                                                                          |
-| -------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Is a provider 403 acceptable as a plain failed call?                                                     | Yes: only a 401 triggers refresh → retry → `expired`. A dead API key whose provider answers 403 is never marked `expired`. |
-| Should plugins declare the risks each tool can touch, so `tools/list` filters per tool as the spec says? | No declaration exists; the list is filtered per provider.                                                                  |
-| CORS on `/mcp` for browser-based MCP clients (Inspector)?                                                | None; a foreign `Origin` is refused.                                                                                       |
-| Surface rate limit per mission                                                                           | 600 requests per minute, all agents together (`mcp.rate_limit_per_minute`).                                                |
-| An `unowned` connection serving calls (spec §2)                                                          | Yes: it serves until its credential dies (then `expired`); the operator reassigns an owner ([authority](authority.md)).    |
-| Stateless caps of the catalogs (items / bytes per call)                                                  | Declared by some catalogs, not enforced by the door.                                                                       |
+| Question                                                                                                 | Current behaviour                                                                                                                                                        |
+| -------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Is a provider 403 acceptable as a plain failed call?                                                     | Yes: only a 401 triggers refresh → retry → `expired`. A dead API key whose provider answers 403 is never marked `expired`.                                               |
+| Should plugins declare the risks each tool can touch, so `tools/list` filters per tool as the spec says? | No declaration exists; the list is filtered per provider.                                                                                                                |
+| CORS on `/mcp` for browser-based MCP clients (Inspector)?                                                | None; a foreign `Origin` is refused.                                                                                                                                     |
+| Surface rate limit per mission                                                                           | 600 requests per minute, all agents together (`mcp.rate_limit_per_minute`).                                                                                              |
+| An `unowned` connection serving calls (spec §2)                                                          | Yes: it serves until its credential dies (then `expired`); the operator reassigns an owner ([authority](authority.md)).                                                  |
+| Stateless caps of the catalogs (items / bytes per call)                                                  | Declared by no shipped catalog (a structural test refuses them) and not enforced by the door; `infra_limits.calls_per_minute_max` is the one limit applied, at issuance. |
 
 ### Budget, claims and approvals
 
@@ -468,14 +467,14 @@ cutover; each is a default that can be changed, most in one place.
 
 ### Identity and administration
 
-| Question                                                                                    | Current behaviour                                                                                            |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| Entra ID groups are object ids: recommend emails, or document the app registration setting? | This page recommends `admin.emails` for Entra.                                                               |
-| A manual "revoke the bootstrap token now" button?                                           | None: the token is revoked by the first IdP sign-in of a user matching the admin rule.                       |
-| Refuse `bootstrap_token` once an IdP is configured?                                         | Optional: harmless to leave set, refused once revoked.                                                       |
-| Where do non-operators land after sign-in?                                                  | On the page they came from; without one, on `/login`, which shows who is signed in. `/` goes to `/missions`. |
-| How are acts done with the bootstrap token audited?                                         | Under the literal actor `bootstrap`.                                                                         |
-| OAuth refresh-token replay on the management door (P2.3)                                    | Not built; the decision (revoke the token family, or answer nothing) is open.                                |
+| Question                                                                                    | Current behaviour                                                                                                                                                                              |
+| ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Entra ID groups are object ids: recommend emails, or document the app registration setting? | This page recommends `admin.emails` for Entra.                                                                                                                                                 |
+| A manual "revoke the bootstrap token now" button?                                           | None: the token is revoked by the first IdP sign-in of a user matching the admin rule.                                                                                                         |
+| Refuse `bootstrap_token` once an IdP is configured?                                         | Optional: harmless to leave set, refused once revoked.                                                                                                                                         |
+| Where do non-operators land after sign-in?                                                  | On the page they came from; without one, on `/login`, which shows who is signed in. `/` goes to `/missions`.                                                                                   |
+| How are acts done with the bootstrap token audited?                                         | Under the literal actor `bootstrap`.                                                                                                                                                           |
+| OAuth refresh-token replay on the management door (P2.3)                                    | Built: a replayed refresh token or authorization code revokes the delegation, except the token just rotated, accepted once more within `oauth.refresh_reuse_window_seconds` (30 s by default). |
 
 ### Audit
 

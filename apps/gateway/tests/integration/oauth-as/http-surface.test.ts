@@ -10,7 +10,9 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import {
   MAX_REQUEST_BYTES,
+  REGISTRATIONS_PER_INSTANCE,
   REGISTRATIONS_PER_WINDOW,
+  TOKEN_REQUESTS_PER_CLIENT,
   TOKEN_REQUESTS_PER_WINDOW,
 } from '../../../src/server/oauth-as';
 import { pkcePair } from '../../../src/server/oauth-as/testing';
@@ -22,6 +24,7 @@ import {
   BOB,
   consentIdOf,
   delegate,
+  EXECUTION_URL,
   LOOPBACK_REDIRECT,
   MANAGEMENT_URL,
   openInstance,
@@ -59,6 +62,7 @@ describe('authorization server over HTTP', () => {
     it.each([
       ['/.well-known/oauth-authorization-server', 'issuer', PUBLIC_URL],
       ['/.well-known/oauth-protected-resource/mcp/manage', 'resource', MANAGEMENT_URL],
+      ['/.well-known/oauth-protected-resource', 'resource', EXECUTION_URL],
     ])('%s is public JSON, readable from any origin', async (path, field, value) => {
       const response = await instance.fetch(`${PUBLIC_URL}${path}`, {
         headers: { origin: FOREIGN_ORIGIN },
@@ -84,6 +88,16 @@ describe('authorization server over HTTP', () => {
 
       const post = await instance.fetch(`${PUBLIC_URL}${path}`, { method: 'POST' });
       expect(post.status).toBe(405);
+    });
+
+    it('the path-less resource document is the execution door’s: no authorization server, the bearer goes in the header', async () => {
+      const response = await instance.fetch(`${PUBLIC_URL}/.well-known/oauth-protected-resource`);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await response.json()).toEqual({
+        resource: EXECUTION_URL,
+        authorization_servers: [],
+        bearer_methods_supported: ['header'],
+      });
     });
 
     it('point at each other: the resource names the issuer the server metadata declares', async () => {
@@ -191,6 +205,30 @@ describe('authorization server over HTTP', () => {
         (await post(JSON.stringify(PUBLIC_CLIENT_METADATA), from('203.0.113.10'))).status,
       ).toBe(201);
       expect(await instance.root.oauth.clients.list()).toHaveLength(REGISTRATIONS_PER_WINDOW + 1);
+    });
+  });
+
+  describe('POST /oauth/register, the whole instance', () => {
+    it('accepts a bounded number of registrations per hour, whatever the addresses', async () => {
+      instance = await openInstance({ env: { VAUBAAN_TRUSTED_PROXIES: '10.0.0.1' } });
+      const post = (index: number): Promise<Response> =>
+        instance.fetch(`${PUBLIC_URL}/oauth/register`, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            // A new address every few requests: no per-address window ever fills.
+            'x-forwarded-for': `198.51.100.${Math.floor(index / 10)}, 10.0.0.1`,
+          },
+          body: JSON.stringify(PUBLIC_CLIENT_METADATA),
+        });
+      for (let i = 0; i < REGISTRATIONS_PER_INSTANCE; i += 1) {
+        expect((await post(i)).status, `registration ${i}`).toBe(201);
+      }
+      const limited = await post(REGISTRATIONS_PER_INSTANCE);
+      expect(limited.status).toBe(429);
+      expect((await oauthError(limited)).error).toBe('slow_down');
+      expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+      expect(await instance.root.oauth.clients.list()).toHaveLength(REGISTRATIONS_PER_INSTANCE);
     });
   });
 
@@ -311,6 +349,31 @@ describe('authorization server over HTTP', () => {
         action: 'delete',
       });
       expect(invalid.status).toBe(400);
+    });
+
+    it('the door reads the client’s status at every call: a client that is no longer approved is refused although its delegation and its token are live', async () => {
+      instance = await openInstance();
+      const delegated = await delegate(instance);
+      const door = () => toolsList(instance, MANAGEMENT_URL, bearer(delegated.tokens.access_token));
+      expect((await door()).status).toBe(200);
+
+      // The decision alone, without the revocation the registry performs with it.
+      const row = await instance.root.store.delegations.getClientByClientId(delegated.clientId);
+      await instance.root.store.delegations.decideClient(row?.id ?? '', 'disabled', 'operator-1');
+      expect(await instance.root.store.delegations.getById(delegated.delegationId)).toMatchObject({
+        status: 'active',
+      });
+
+      const refused = await door();
+      expect(refused.status).toBe(401);
+      expect(refused.headers.get('www-authenticate')).toContain('error="invalid_token"');
+      // The execution door does not know the token either: it is nobody's credential now.
+      expect(
+        (await toolsList(instance, EXECUTION_URL, bearer(delegated.tokens.access_token))).status,
+      ).toBeGreaterThanOrEqual(400);
+
+      await instance.root.store.delegations.decideClient(row?.id ?? '', 'approved', 'operator-1');
+      expect((await door()).status).toBe(200);
     });
   });
 
@@ -470,6 +533,27 @@ describe('authorization server over HTTP', () => {
       expect(again.status).toBe(400);
       expect(again.headers.get('location')).toBeNull();
       expect(await again.text()).toContain('This request expired');
+    });
+
+    it('a failure while the delegation is recorded is a page, logged, and nothing is granted', async () => {
+      const browser = instance.browser();
+      const page = await browser.navigate(authorizationUrl(clientId, pkcePair()).href, ADA);
+      instance.root.store.db.exec(
+        `CREATE TRIGGER fault BEFORE INSERT ON oauth_codes
+         BEGIN SELECT RAISE(ABORT, 'simulated store fault'); END`,
+      );
+      const response = await browser.answerConsent(page, 'approve');
+      expect(response.status).toBe(500);
+      expect(response.headers.get('location')).toBeNull();
+      expect(response.headers.get('content-type')).toContain('text/html');
+      const html = await response.text();
+      expect(html).toContain('Nothing was granted');
+      expect(html).not.toContain('simulated store fault');
+      expect(instance.logs.join('\n')).toContain('consent decision failed unexpectedly');
+      const delegations = await instance.root.store.delegations.listForClient(
+        (await instance.root.store.delegations.getClientByClientId(clientId))?.id ?? '',
+      );
+      expect(delegations.map((d) => d.status)).toEqual(['revoked']);
     });
 
     it('cannot be answered from another user’s session', async () => {
@@ -773,6 +857,78 @@ describe('authorization server over HTTP', () => {
       expect(limited.status).toBe(429);
       expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
       expect((await attempt('203.0.113.10')).status).toBe(401);
+    });
+
+    it('a public client’s budget cannot be spent by somebody who only knows its id', async () => {
+      const delegated = await delegate(instance);
+      const from = (index: number) => ({
+        'x-forwarded-for': `198.51.100.${Math.floor(index / 50)}, 10.0.0.1`,
+      });
+      // More junk than any per-client or per-delegation limit, from several addresses.
+      for (let i = 0; i < TOKEN_REQUESTS_PER_CLIENT + 30; i += 1) {
+        const junk = await tokenRequest(
+          instance,
+          {
+            grant_type: 'refresh_token',
+            client_id: delegated.clientId,
+            refresh_token: `vbn_drt_${'A'.repeat(43)}`,
+          },
+          from(i),
+        );
+        expect(junk.status, `request ${i}`).toBe(400);
+      }
+      const renewal = await tokenRequest(
+        instance,
+        {
+          grant_type: 'refresh_token',
+          client_id: delegated.clientId,
+          refresh_token: delegated.tokens.refresh_token,
+        },
+        { 'x-forwarded-for': '203.0.113.200, 10.0.0.1' },
+      );
+      expect(renewal.status).toBe(200);
+    });
+
+    it('a confidential client is limited per client once its secret matched; a wrong secret spends nothing of it', async () => {
+      const open = await openInstance({
+        env: {
+          VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY: 'open',
+          VAUBAAN_TRUSTED_PROXIES: '10.0.0.1',
+        },
+      });
+      try {
+        const client = await register(open, {
+          client_name: 'Hosted agent',
+          redirect_uris: [WEB_REDIRECT],
+          token_endpoint_auth_method: 'client_secret_post',
+        });
+        const attempt = (index: number, secret: string): Promise<Response> =>
+          tokenRequest(
+            open,
+            {
+              grant_type: 'refresh_token',
+              client_id: client.client_id,
+              client_secret: secret,
+              refresh_token: `vbn_drt_${'A'.repeat(43)}`,
+            },
+            { 'x-forwarded-for': `198.51.100.${Math.floor(index / 50)}, 10.0.0.1` },
+          );
+        // Whoever does not hold the secret is stopped at authentication, before the budget.
+        for (let i = 0; i < TOKEN_REQUESTS_PER_CLIENT + 10; i += 1) {
+          expect((await attempt(i, 'vbn_dcs_wrong')).status, `wrong secret ${i}`).toBe(401);
+        }
+        const secret = client.client_secret ?? '';
+        const offset = TOKEN_REQUESTS_PER_CLIENT + 50;
+        for (let i = 0; i < TOKEN_REQUESTS_PER_CLIENT; i += 1) {
+          expect((await attempt(offset + i, secret)).status, `authenticated ${i}`).toBe(400);
+        }
+        const limited = await attempt(offset + TOKEN_REQUESTS_PER_CLIENT + 50, secret);
+        expect(limited.status).toBe(429);
+        expect((await oauthError(limited)).error).toBe('slow_down');
+        expect(Number(limited.headers.get('retry-after'))).toBeGreaterThan(0);
+      } finally {
+        await open.close();
+      }
     });
 
     it('answers a preflight and refuses GET', async () => {

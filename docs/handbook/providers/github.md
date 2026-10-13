@@ -96,8 +96,8 @@ PAT path.
 
 | File                      | Role                                                                                                                                                      |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/index.ts`            | `definePlugin` → `githubPlugin` v1.0.0.                                                                                                                   |
-| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets, `catalog_version: 2`.                                                                                                     |
+| `src/index.ts`            | `definePlugin` → `githubPlugin` v2.0.0.                                                                                                                   |
+| `src/risk-catalog.yaml`   | 14 risks + fallback, 3 presets, `catalog_version: 3`.                                                                                                     |
 | `src/data-model.ts`       | Plane `repo`, 16 entities; `branch` is `envScopable`.                                                                                                     |
 | `src/tools.ts`            | 26 tools. Retired by risk-model §7.2 #1 and not declared: `dispatch_workflow`, `cancel_workflow_run`, `rerun_workflow_run`.                               |
 | `src/classify.ts`         | `classifyGithub(tool, args, resources)`; the refusal wording (`repositoryNotSelectedMessage`), `declaredMergeBase`, `readFileEntries`, `isCanonicalPath`. |

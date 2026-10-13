@@ -143,6 +143,10 @@ When a refusal carries a URL (`claim_url`, `approval_url`), give that URL to
 the human as is: only the mission's creator, signed in to the instance, can
 answer it.
 
+A request opened before a mission was orphaned can be granted only until it
+expires. After that, your next refused call opens a new one: hand the new URL
+to the human.
+
 ## 6. Proposing a mission
 
 You cannot enlarge your own mission. You can _propose_ one: a JSON draft the

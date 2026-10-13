@@ -193,6 +193,26 @@ test('the audit table shows every column at 1280 px', async ({ page, request }) 
   expect(table.content).toBeLessThanOrEqual(table.box);
 });
 
+test('the session timeline shows every column at 1280 px', async ({ page, request }) => {
+  // Five of the six columns hold values that do not wrap (dates, tool names, risk
+  // ids); the card takes the width of the window (`.wide`) and the Detail cell
+  // wraps (`.detail`), so the last column stays on screen at this width.
+  const day = await seedDay(request);
+  await signIn(page);
+  await page.goto(`/missions/${day.mission_id}/session`);
+  const timeline = page.getByTestId('timeline');
+  await expect(timeline.locator('tbody tr').first()).toBeVisible();
+  const table = await page
+    .getByTestId('timeline-table')
+    .evaluate((el) => ({ content: el.scrollWidth, box: el.clientWidth }));
+  expect(table.content).toBeLessThanOrEqual(table.box);
+  // The Detail cell of the last column ends inside the window.
+  const detail = await timeline.getByTestId('event-detail').first().boundingBox();
+  expect(detail).not.toBeNull();
+  expect((detail?.x ?? 0) + (detail?.width ?? 0)).toBeLessThanOrEqual(1280);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
+});
+
 test('the session of a mission that is not yours does not exist', async ({ page }) => {
   await signIn(page);
   const response = await page.goto('/missions/no-such-mission/session');

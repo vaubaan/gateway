@@ -40,7 +40,9 @@ describe('the route table of the authorization-server tests', () => {
 
   it('contains every route that delegates to the authorization server or the management door', () => {
     const delegating = routeFiles(APP).filter((file) =>
-      /\.(?:oauth|management)\.handlers\./.test(readFileSync(join(APP, file), 'utf8')),
+      /\.(?:oauth|management)\.(?:handlers|discovery)\./.test(
+        readFileSync(join(APP, file), 'utf8'),
+      ),
     );
     expect(delegating.sort()).toEqual(
       ROUTES.filter((route) => /^(?:oauth|management)\./.test(route.delegatesTo))
@@ -68,6 +70,7 @@ describe('the route table of the authorization-server tests', () => {
     for (const file of [
       '.well-known/oauth-authorization-server/route.ts',
       '.well-known/oauth-protected-resource/mcp/manage/route.ts',
+      '.well-known/oauth-protected-resource/route.ts',
     ]) {
       expect(methodsOf(file)).toEqual(['GET', 'HEAD', 'OPTIONS']);
     }

@@ -28,8 +28,10 @@ test), §4.3 (opt-in and collector URL), §8 (the toggle is audited). Decision:
 collector itself: [`deploy/collector/README.md`](../../deploy/collector/README.md).
 
 **Off at installation.** And even when enabled, **nothing leaves the instance
-while `telemetry.collector_url` is the placeholder default** — no collector
-exists behind it yet.
+while `telemetry.collector_url` points at the placeholder default** — no
+collector exists behind it yet. "Points at" is origin and path: the default
+with a key or any other query appended, a fragment or a trailing slash is
+still the placeholder.
 
 ## Layout
 
@@ -90,7 +92,7 @@ exported constants.
 | a result, `isError` not `true`                                                                                                        | `success`              | `null`                                                            |
 | a result with `isError: true`                                                                                                         | `classification-error` | `executor_refused`                                                |
 | `UpstreamRefusalError` (credential refused for good, connection revoked)                                                              | `upstream-error`       | `credential_rejected`                                             |
-| `UpstreamAuthError`, or any object with a numeric `status` 100–599                                                                    | `upstream-error`       | `http_<status>`                                                   |
+| `UpstreamAuthError`, `UpstreamHttpError`, or any object with a numeric `status` 100–599                                               | `upstream-error`       | `http_<status>`                                                   |
 | `code` / `name` of a timeout (`ETIMEDOUT`, `UND_ERR_*_TIMEOUT`, `AbortError`, `TimeoutError`), also down the `cause` chain (3 levels) | `upstream-error`       | `timeout`                                                         |
 | a network `code` (`ECONNREFUSED`, `ENOTFOUND`, …) or `TypeError('fetch failed')`                                                      | `upstream-error`       | `network`                                                         |
 | `TypeError` / `RangeError` / `ReferenceError` / `SyntaxError`                                                                         | `execution-error`      | `type_error` / `range_error` / `reference_error` / `syntax_error` |
@@ -107,11 +109,16 @@ ends as `unspecified`.
 tool is not in `plugin.tools`, or when a declared value does not fit the
 report's shapes (a plugin whose `version` is not semver is never reported).
 
-Known imprecision: a plugin that returns `isError: true` for a provider
-failure (today `plugins/vercel` and `plugins/upstash-redis` catch non-auth
-errors into an error result) is reported `classification-error`. All
-non-success outcomes weigh the same in the collector's success rate; only
-the label is coarse.
+The table relies on the plugin contract ([plugin-sdk](plugin-sdk.md),
+"Errors of `execute`"): a provider failure is **thrown** (`UpstreamAuthError`
+on 401/403, `UpstreamHttpError` on another failed status, a network error as
+it comes), and `isError: true` is returned only for what the executor
+declines itself. The ten shipped plugins follow it, so a provider 5xx is
+`upstream-error` / `http_5xx`, never `classification-error`. Still coarse: a
+provider failure that carries no status (a JSON-RPC error frame of a
+rewrapped MCP server, an unusable answer) is `unspecified`, and a rewrapped
+MCP tool whose **upstream** answers `isError: true` is passed through and
+counted `executor_refused`.
 
 ## The hook in the pipeline
 
@@ -137,6 +144,17 @@ error it is about to wrap. Consequences:
   refresh is one `success`);
 - no report when the credential broker failed before the plugin ran (nothing
   in the `WeakMap`), nor for a call refused at an earlier stage;
+- a streamed call (handbook [execution-door](execution-door.md), "Streaming")
+  is still one report, made when the stream has ended. After a first part the
+  retry ladder is closed, so a 401 met midway is reported `http_401`, and a
+  stream the provider breaks is `upstream-error`;
+- **no report for a call its caller abandoned**: when the error is
+  `CallerGoneError` (a stream stopped because the caller went away), or the
+  call's signal is aborted at the moment the plugin fails, `execute()` skips
+  `report`. A disconnect is not an outcome of the plugin, the report
+  vocabulary has no word for it, and counting it would lower the success
+  rate of a plugin that works. The audit entry is unchanged (`<provider>
+stream stopped after N parts: the caller was gone`);
 - a sink that throws is caught and logged by class name; it cannot fail a call.
 
 The event carries no mission, connection, resource or argument. The module's
@@ -150,10 +168,12 @@ errors without logging them (they may carry provider text).
 before every batch:
 
 1. `isEnabled()` false → `state: 'disabled'`, nothing queued;
-2. the collector URL equals the placeholder (`isPlaceholderCollector`, compared
-   as normalized URLs) → `state: 'placeholder-collector'`, nothing queued, one
-   `warn` per process: "telemetry is enabled but the collector URL is still the
-   placeholder default: nothing is sent…";
+2. the collector URL points at the placeholder (`isPlaceholderCollector`:
+   same origin and same path, trailing slashes dropped; the query — the
+   `apikey` included — and the fragment are ignored, so the default URL with
+   a key appended never sends) → `state: 'placeholder-collector'`, nothing
+   queued, one `warn` per process: "telemetry is enabled but the collector
+   URL is still the placeholder default: nothing is sent…";
 3. otherwise `state: 'sending'`: the report is queued.
 
 A closed gate empties the queue, so a report recorded while telemetry was on
@@ -164,11 +184,11 @@ never leaves after it was switched off (`settings.onChange` also calls
 first; batches of 50; a flush 60 s after the first queued report, or at once
 when a batch is full; one request in flight. `send` answers:
 
-| Collector                                    | Result      | Queue                                                                                                    |
-| -------------------------------------------- | ----------- | -------------------------------------------------------------------------------------------------------- |
-| 2xx                                          | `delivered` | batch removed                                                                                            |
-| network error, timeout (10 s), 408, 429, 5xx | `retry`     | batch kept; next attempt after `30 s × 2^(failures−1)`, capped at 1 h, shortened by up to 20 % at random |
-| any other status                             | `rejected`  | batch dropped, one `warn` with the status                                                                |
+| Collector                                    | Result      | Queue                                                                                                                  |
+| -------------------------------------------- | ----------- | ---------------------------------------------------------------------------------------------------------------------- |
+| 2xx                                          | `delivered` | batch removed                                                                                                          |
+| network error, timeout (10 s), 408, 429, 5xx | `retry`     | batch kept; next attempt after `30 s × 2^(failures−1)`, capped at 1 h, shortened by up to 20 % at random               |
+| any other status                             | `rejected`  | batch dropped; a `warn` with the status for the first refused batch of the process, later ones only counted as dropped |
 
 The timer is `unref`'d and stopped by `root.close()`. Nothing is persisted.
 The queue is `// single-process only`: each replica of a hosted deployment
@@ -202,7 +222,9 @@ and re-reads the store in the background when its view is older than
 `POST /api/admin/telemetry` (`handlers.ts`), form field `enabled=true|false`:
 operator only, origin-checked (`guardMutation`). A change writes one
 `config-changed` entry on `instance-config:telemetry` with `before` / `after`
-`{ enabled, source }`; a toggle to the current value writes none. Refusals
+`{ enabled, source }`; a toggle that changes neither `enabled` nor `source`
+writes none (a first explicit `false` over the default does: `source` goes
+from `default` to `admin`). Refusals
 redirect to `/admin/telemetry?problem=locked|invalid`.
 
 ## Admin → Telemetry
@@ -256,7 +278,8 @@ says, set `telemetry.enabled: false`.
 - **"Enabled" but nothing arrives** → Admin → Telemetry, "Sending": `no — no
 collector is configured` means the URL is still the placeholder (boot log
   line `telemetry` has `collector: "placeholder (nothing is sent)"`; one
-  `warn` appears at the first report).
+  `warn` appears at the first report). Appending a key or a slash to the
+  default URL does not make it a collector: it is compared by origin and path.
 - **Queued grows, sent stays 0** → the collector is unreachable or answers
   408/429/5xx; `debug` log `telemetry: the collector could not be reached`.
   Retries back off up to one hour.
@@ -276,7 +299,9 @@ statistics unavailable` names a failure.
 
 - `packages/telemetry/src/report.test.ts`, `queue.test.ts`, `client.test.ts`
   — shape and vocabularies; batching, overflow, backoff, single flight;
-  disabled → zero calls; placeholder → zero calls and one warning; headers.
+  disabled → zero calls; placeholder → zero calls and one warning, also with
+  a key, another query, trailing slashes or a fragment appended (another
+  path, host, port or scheme is not the placeholder); headers.
 - `apps/gateway/src/server/telemetry/outcome.test.ts`, `settings.test.ts`,
   `stats.test.ts` — the classification table, precedence, the reader.
 - `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts` — spec
@@ -287,8 +312,12 @@ statistics unavailable` names a failure.
 - `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts` —
   SQL, README and report type agree.
 - `apps/gateway/tests/integration/telemetry/telemetry.test.ts` — default and
-  placeholder silence on a real root, the toggle and its audit entry, what is
-  reported, the badge.
+  placeholder silence on a real root (the default URL with a key or a
+  trailing slash included), the toggle and its audit entry, what is reported
+  (a provider failure thrown with its status is `upstream-error` /
+  `http_500`, with `upstream_error` in the audit), the badge.
+- `apps/gateway/tests/integration/execution/streaming.test.ts` — no report
+  for a call its caller abandoned, one for a stream the provider broke.
 - `apps/gateway/tests/integration/audit/admin-mutations.test.ts` —
   `TelemetrySettingsService.setEnabled` classified as a mutation writing
   `config-changed`.

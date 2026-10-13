@@ -24,7 +24,9 @@ unchanged), [connections](connections.md) (the connect flows),
 [management-door](management-door.md), [configuration](configuration.md)
 (the composition root and its injection points). The browser tests' ephemeral
 instance ([e2e-tests](../tests/e2e-tests.md)) is the same construction for a
-robot; the demo is the one for a human.
+robot; the demo is the one for a human. One difference: the browser tests
+start the standalone `server.js` the image ships, the demo serves the built
+application through `next({ dev: false })` (step 5 below).
 
 **It is not an instance.** Anybody who reaches the listener signs in as
 anybody, without a password. It is a development tool, never deployed: see
@@ -314,7 +316,8 @@ unmodified.
 ## References
 
 - Decision: [local-demo-mode](../decisions/local-demo-mode.md).
-- The same construction for the browser tests:
+- The same construction for the browser tests (which start the standalone
+  `server.js` instead of `next()`):
   `apps/gateway/tests/e2e/v5/ephemeral-instance.ts`,
   [e2e-tests](../tests/e2e-tests.md).
 - Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2 (the pages), §10

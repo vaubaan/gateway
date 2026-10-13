@@ -36,7 +36,7 @@ packages/gateway-core/   pipeline, decisions, refusals, audit       @vaubaan/gat
 packages/telemetry/      opt-in telemetry report, queue, client     @vaubaan/telemetry
 plugins/<provider>/      one provider plugin per folder             @vaubaan/plugin-<provider>
 plugins/_template/       scaffold for a new plugin                  @vaubaan/plugin-template
-deploy/                  Dockerfile, compose, Caddy, example config
+deploy/                  Dockerfile, compose, Caddy, example config, telemetry collector SQL
 docs/                    spec, decisions, handbook, tests, workflow
 scripts/                 gen-master-key.mjs (npm run gen-master-key)
 ```

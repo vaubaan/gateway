@@ -296,6 +296,9 @@ export class ExecutionDoor {
           // A token replaced by rotation no longer authenticates. A token retired
           // by the revocation of its mission still identifies that mission, so the
           // caller is told `mission-inactive` rather than "unknown bearer".
+          // The status read on the next line is the STORED one, on purpose: the
+          // question is whether the store still holds the mission active, asked
+          // before the derivation (`grounds.inspect`) below.
           const dead = verified.outcome === 'retired' && verified.mission.status === 'active';
           if (dead || (verified.outcome === 'retired' && verified.reason === 'rotated')) {
             return null;

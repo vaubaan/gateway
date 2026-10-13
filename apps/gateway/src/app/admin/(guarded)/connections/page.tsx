@@ -19,12 +19,8 @@ import {
   Stack,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
-import { firstParam, type PageSearchParams } from '@/lib/connections/session';
-import {
-  NOTICE_PARAM,
-  OWNERLESS_CONNECTIONS_PAGE,
-  type ConnectionView,
-} from '@/server/connections';
+import { takeNotice, type PageSearchParams } from '@/lib/connections/session';
+import { OWNERLESS_CONNECTIONS_PAGE, type ConnectionView } from '@/server/connections';
 
 export const dynamic = 'force-dynamic';
 
@@ -35,14 +31,10 @@ export default async function OwnerlessConnectionsPage({
 }) {
   const { root, principal } = await requireOperator();
   const params = await searchParams;
-  const notice = await root.connections.notices.take(
-    principal.sessionId,
-    firstParam(params[NOTICE_PARAM]),
-  );
+  const notice = await takeNotice(root, principal.sessionId, params);
   const ownerless = await root.connections.service.listOwnerless();
-  const groups = (await root.groups.service.list())
-    .filter((view) => view.members.length > 0)
-    .map((view) => ({ id: view.group.id, name: view.group.name }));
+  // The groups `reassign` accepts, as the service states them.
+  const groups = await root.connections.service.reassignTargets();
 
   return (
     <Stack gap="var(--space-6)">

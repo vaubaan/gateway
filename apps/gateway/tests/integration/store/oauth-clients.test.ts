@@ -7,7 +7,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import {
+  issueFirstRefreshToken,
+  openTestStore,
+  type TestStore,
+} from '../../../src/server/store/testing.ts';
 
 const LOOPBACK = 'http://127.0.0.1/callback';
 const DAY_MS = 86_400_000;
@@ -200,11 +204,7 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
       const c = await client('c');
       const quiet = await store.delegations.create({ userId: user, clientId: c.id, scope: 'mgmt' });
       const busy = await store.delegations.create({ userId: user, clientId: c.id, scope: 'mgmt' });
-      await store.delegations.createRefreshToken({
-        delegationId: busy.id,
-        tokenHash: 'r1',
-        expiresAt: at(30 * DAY_MS),
-      });
+      await issueFirstRefreshToken(store, busy.id, { tokenHash: 'r1', expiresAt: at(30 * DAY_MS) });
       t.clock.advance(5000);
       const access = await store.delegations.createAccessToken({
         delegationId: busy.id,
@@ -241,7 +241,11 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
         expiresAt: at(60_000),
       });
       expect((await store.delegations.findCode('code'))?.token.consumedAt).toBeNull();
-      await store.delegations.consumeCode('code');
+      const redeemed = await store.delegations.redeemCode('code', () => null, {
+        refresh: { tokenHash: 'r1', expiresAt: at(DAY_MS) },
+        access: { tokenHash: 'a1', expiresAt: at(60_000) },
+      });
+      expect(redeemed.outcome).toBe('issued');
       const found = await store.delegations.findCode('code');
       expect(found?.token.consumedAt).toBe(t.clock.now().toISOString());
       expect(found?.delegation.id).toBe(d.id);
@@ -251,11 +255,7 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
     it('finds a refresh token after it was rotated, linked to its successor', async () => {
       const c = await client('c');
       const d = await store.delegations.create({ userId: user, clientId: c.id, scope: 'mgmt' });
-      await store.delegations.createRefreshToken({
-        delegationId: d.id,
-        tokenHash: 'r1',
-        expiresAt: at(DAY_MS),
-      });
+      await issueFirstRefreshToken(store, d.id, { tokenHash: 'r1', expiresAt: at(DAY_MS) });
       const next = await store.delegations.rotateRefreshToken('r1', {
         tokenHash: 'r2',
         expiresAt: at(DAY_MS),
@@ -304,18 +304,17 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
     it('keeps a rotated refresh token while its successor lives, so a replay is still seen', async () => {
       const c = await client('c');
       const d = await store.delegations.create({ userId: user, clientId: c.id, scope: 'mgmt' });
-      await store.delegations.createRefreshToken({
-        delegationId: d.id,
-        tokenHash: 'r1',
-        expiresAt: at(DAY_MS),
-      });
+      await issueFirstRefreshToken(store, d.id, { tokenHash: 'r1', expiresAt: at(DAY_MS) });
       await store.delegations.rotateRefreshToken('r1', {
         tokenHash: 'r2',
         expiresAt: at(10 * DAY_MS),
       });
       t.clock.advance(3 * DAY_MS);
-      // r1 expired two days ago, r2 is live: both stay.
-      expect(await store.delegations.purgeExpired(at(-DAY_MS))).toBe(0);
+      // r1 expired two days ago, r2 is live: both stay. What goes is the spent code and
+      // the first access token of the grant, expired with r1.
+      expect(await store.delegations.purgeExpired(at(-DAY_MS))).toBe(2);
+      expect(count('oauth_codes') + count('oauth_access_tokens')).toBe(0);
+      expect(count('oauth_refresh_tokens')).toBe(2);
       expect((await store.delegations.findRefreshToken('r1'))?.token.replacedById).not.toBeNull();
 
       t.clock.advance(10 * DAY_MS);
@@ -328,11 +327,7 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
       const c = await client('c');
       const d = await store.delegations.create({ userId: user, clientId: c.id, scope: 'mgmt' });
       // The refresh lifetime was shortened between the two: the successor expires first.
-      await store.delegations.createRefreshToken({
-        delegationId: d.id,
-        tokenHash: 'r1',
-        expiresAt: at(30 * DAY_MS),
-      });
+      await issueFirstRefreshToken(store, d.id, { tokenHash: 'r1', expiresAt: at(30 * DAY_MS) });
       await store.delegations.rotateRefreshToken('r1', {
         tokenHash: 'r2',
         expiresAt: at(DAY_MS),

@@ -45,16 +45,17 @@ apps/gateway/src/server/provider-apps/      host-agnostic, never imports `next`
   service.ts           ProviderAppsService: file-or-store values, sealed secrets, host/plugin views
 apps/gateway/src/server/connections/        host-agnostic, never imports `next`
   index.ts             createConnectionsModule(deps) → root.connections; barrel
-  service.ts           ConnectionService: start/complete, discover, updateResource, revoke, views
+  service.ts           ConnectionService: start/complete, discover, updateResource, revoke, transferTargets/transfer, listOwnerless/reassign, views
   credentials.ts       CredentialBroker: resolve() / refresh() — the refresh persistence hook
   oauth2.ts            authorization URL, code exchange, refresh_token grant, OAuth2TokenError
   install-verification.ts  verifyInstallation(): binds an app installation to the authorizing user
   pending.ts           PendingConnectStore (single-use state), NoticeStore (one-time notices)
+  notice-redirect.ts   createNoticeRedirect(): 303 to a path of the instance with a one-time ?notice=<id> (shares, local groups, reassignment)
   credential-codec.ts  serializeSecret / parseSecret: CredentialSecret ⇄ the sealed text
   ssh-keypair.ts       generateEd25519KeyPair(): OpenSSH private key + authorized_keys line
   input.ts             field validation, resolveReturnTo, env label, editable metadata lists
   mapping.ts           connectionSummaryOf(), connectionOwnerOf(): record → shown shapes
-  handlers.ts          Request → Response handlers of the six endpoints
+  handlers.ts          Request → Response handlers of the eight endpoints (transfer and reassign: handbook authority)
   errors.ts            ConnectError (closed codes + UI sentences), ConnectionUnavailableError,
                        ProviderUnreachableError
   testing.ts           fixturePlugin(), one spec per kind, connectionsHarness() — tests only
@@ -75,13 +76,20 @@ apps/gateway/src/app/(app)/connections/
   [id]/discover/route.ts             POST /connections/<id>/discover
   [id]/revoke/route.ts               POST /connections/<id>/revoke
   [id]/resources/[resourceId]/route.ts  POST /connections/<id>/resources/<resourceId>
+  [id]/transfer/route.ts             POST /connections/<id>/transfer          (handbook authority)
+  [id]/share/page.tsx                /connections/<id>/share                  the Share dialog (handbook authority)
+  [id]/shares/route.ts               POST /connections/<id>/shares            → root.shares.handlers.share
+  [id]/shares/[shareId]/revoke/route.ts  POST /connections/<id>/shares/<shareId>/revoke → root.shares.handlers.revoke
+apps/gateway/src/app/admin/(guarded)/connections/
+  [id]/reassign/route.ts             POST /admin/connections/<id>/reassign    → connections.handlers.reassign (handbook authority)
 apps/gateway/src/app/admin/(guarded)/provider-apps/
   page.tsx                           /admin/provider-apps
   [provider]/route.ts                POST /admin/provider-apps/<provider>
 ```
 
-Route handlers are one-line adapters over `root.connections.handlers`; pages
-call `currentActor()` / `adminDecision()` and render. `currentActor()` answers
+Route handlers are one-line adapters over `root.connections.handlers` (the
+two share routes over `root.shares.handlers`); pages
+call `currentActor()` / `requireOperator()` and render. `currentActor()` answers
 `null` for the bootstrap operator, and every Connections page then renders
 `NeedsUser` (`@/components/auth/NeedsUser`): a connection belongs to an
 identified user. Everything that decides
@@ -299,7 +307,9 @@ metadata })`. The credential text is the JSON `CredentialSecret`, sealed by
 `token-exchange-failed`, `installation-not-verified` (403),
 `installation-unverifiable` (409), `credential-rejected`,
 `provider-unreachable`, `not-found`, `connection-revoked`,
-`connection-unowned`, `provider-mismatch`, `label-read-only`.
+`connection-unowned`, `provider-mismatch`, `label-read-only`, and the four
+of ownership (handbook [authority](authority.md)): `transfer-not-member`
+(403), `not-ownerless` (409), `owner-unknown`, `owner-group-empty`.
 A connection of another owner is reported exactly like a missing one
 (`not-found`).
 
@@ -377,6 +387,39 @@ gives it an owner again — all three, with shares, are in
 [authority](authority.md). The same `owns` check serves a user owner and a
 group owner.
 
+`ownerActRefusal(connection)` (`service.ts`) states once why a connection
+takes no owner act — share, transfer, reconnect: `connection-revoked`,
+`connection-unowned`, or `null` when it does. The service's refusals, the
+shares service and the pages (through `transferTargets` and
+`ShareContext.unshareable`) read it there. `reassignTargets()` is the
+matching reading for the operator's form: the groups `reassign` would accept
+as the new owner, the ones that have a member.
+
+`reassign` holds its rule at the write. The operator only reassigns a
+connection that has no owner left (spec §2.3), and that is decided by
+`ConnectionsRepo.assignOwnerlessTo(id, owner)` inside one
+`BEGIN IMMEDIATE` transaction: the connection must be ownerless at that
+instant (`unowned`, or not revoked with an owner group that has no member —
+the predicate of `listOwnerless`), a new owner group must have a member at
+that instant, and only then is the owner written. It answers
+`{ outcome: 'assigned', previous, connection }`, `not-ownerless` or
+`owner-group-empty`; the service maps the last two to the `ConnectError` of
+the same code. The reads the service makes before it (`getById`,
+`looksOwnerless`, `resolveNewOwner`) only choose which refusal is named
+first: a member who joins the owner group of an expired connection, or the
+last member who leaves the new group, while the service awaits is seen by
+the write, and nothing is written. The `before` of the
+`connection-reassigned` entry is the owner and the status read inside that
+transaction.
+
+`revoke`, `transfer` and `reassign` watch the missions of the connection
+across the act (`grounds.watchConnection` → `settle`) and settle in a
+`finally`: when the audit entry of the act itself cannot be written, the
+method still rejects, but the `mission-orphaned` / `mission-restored`
+entries of the missions that changed are written first — the act is
+committed by then, and the audit must say why those missions stopped
+serving.
+
 `mapping.ts` is the one place a `ConnectionRecord` becomes a shape shown
 elsewhere: `connectionSummaryOf(record)` gives `{ id, provider,
 display_name, status }`, and `connectionOwnerOf(store, record)` gives the
@@ -388,15 +431,15 @@ silent cast.
 
 ## Connection states
 
-| Transition            | Where                                                                                           |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| → `active`            | `connections.create` (connect), `connections.reconnect` (reconnect)                             |
-| `active` → `expired`  | `connections.markExpired`, called by the broker when a refresh is rejected by the provider      |
-| `active` → `unowned`  | `connections.markOwnerlessUnowned`, after a membership removal emptied the owner group          |
-| `unowned` → `active`  | `connections.assignOwner` (the operator's reassignment)                                         |
-| `unowned` → `expired` | `connections.markExpired`: a dead credential stops an unowned connection too                    |
-| `expired` → `active`  | `connections.reconnect`                                                                         |
-| → `revoked`           | `connections.revoke`: terminal, `revoked_at` set, `credential_blob` / `key_version` set to NULL |
+| Transition            | Where                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------- |
+| → `active`            | `connections.create` (connect), `connections.reconnect` (reconnect)                                   |
+| `active` → `expired`  | `connections.markExpired`, called by the broker when a refresh is rejected by the provider            |
+| `active` → `unowned`  | `connections.markOwnerlessUnowned`, after a membership removal emptied the owner group                |
+| `unowned` → `active`  | `connections.assignOwnerlessTo` (the operator's reassignment; refuses a connection that has an owner) |
+| `unowned` → `expired` | `connections.markExpired`: a dead credential stops an unowned connection too                          |
+| `expired` → `active`  | `connections.reconnect`                                                                               |
+| → `revoked`           | `connections.revoke`: terminal, `revoked_at` set, `credential_blob` / `key_version` set to NULL       |
 
 Which statuses serve calls is decided in one place,
 `isUnavailableConnectionStatus` of `@vaubaan/gateway-core`: `expired` and
@@ -418,16 +461,23 @@ late callback racing a revocation never brings a revoked connection back. An
 other (ADR orphaned-missions-and-ownerless-connections §3); it stays in the
 operator's list of ownerless connections, and its new owner reconnects it.
 
-`setCredential` and `setStatus` are deprecated leftovers of P0.3 with no
-production caller; they refuse (`InvariantError`) to take a connection out
-of `revoked`. `setStatus` is what older test fixtures use to produce `unowned`;
-`setCredential` is only called by the test that proves this refusal.
-`ConnectionService.revoke` is idempotent and audited (`connection-revoked`).
+The repository has no generic status or credential setter: every writer
+names its transition (`reconnect`, `refreshCredential`, `markExpired`,
+`markOwnerlessUnowned`, `assignOwnerlessTo`, `revoke`). A test that needs an
+`unowned` connection goes through `makeUnowned(store, id)` of
+`store/testing.ts`, which does what production does: an owner group without
+member, then `markOwnerlessUnowned()`.
+`ConnectionService.revoke` is idempotent and audited (`connection-revoked`);
+it watches the missions of the connection across the act
+(`grounds.watchConnection` → `settle`, handbook [authority](authority.md)).
 It does not withdraw the grant at the provider; the notice says so.
-Missions on an `expired` or `revoked` connection are refused by the
-execution door (`connection-unavailable`; handbook
-[execution-door](execution-door.md)), which reads the status through
-`CredentialBroker.resolve` (`execution/upstream-stage.ts`).
+Missions that carry a `revoked` connection are `orphaned` from then on and
+stay so: the execution door derives it on every request
+(`MissionGrounds.inspect`, cause `connection-revoked`) and refuses every
+call of the mission with `mission-inactive`. Calls on an `expired`
+connection are refused with `connection-unavailable` (handbook
+[execution-door](execution-door.md)) by the upstream stage, which reads the
+status through `CredentialBroker.resolve` (`execution/upstream-stage.ts`).
 
 ## Credentials and refresh — `CredentialBroker`
 
@@ -563,11 +613,18 @@ plugin` badge, hidden checkbox, Save — inputs reach their per-row form
   "Revoke" (`RevokeConnection`: type the connection name, then a form POST).
   An `unowned` connection has no "Reconnect" action (the server refuses it,
   `connection-unowned`); the page says so instead.
+  The owner also gets a **Shares** card (target, the restriction as a folded
+  list of risk ids, date, Revoke, and — unless the connection is `revoked`
+  or `unowned` — Edit and a "Share" link to `/connections/<id>/share`) and,
+  when they belong to a group other than the current owner
+  (`ConnectionService.transferTargets`) and the connection is neither
+  `revoked` nor `unowned`, an **Ownership** card whose form posts `group_id`
+  to `/connections/<id>/transfer` (handbook [authority](authority.md)).
 - **Shell.** `app/(app)/layout.tsx` renders `AppShell` for a web session
   (`currentPrincipal()`, a user or the bootstrap operator) and redirects
   anyone else to `/login`. `APP_NAV` in `AppShell.tsx` is the list of pages
-  in the bar (Connections, Missions, Requests, Audit); operators also get the
-  Administration link.
+  in the bar (Connections, Shares received, Missions, Requests, Audit,
+  Delegations); operators also get the Administration link.
 - **Notices.** A handler never puts a message in a URL: it stores a
   `Notice { tone, title, lines }` in the `NoticeStore` (`notice:<id>`,
   5 min, readable once, only by the web session it was written for) and
@@ -640,10 +697,21 @@ a body that is not a form is 400 on `saveProviderApp`, `connect` and
 `updateResource` and writes nothing. The guard of every mutating handler is
 covered by `tests/unit/server/auth/mutation-guard.test.ts` (handbook
 [authentication](authentication.md)).
-`tests/integration/connections/repository-status.test.ts` (9): `revoked` is
-terminal through `setCredential` and `setStatus` too, and an `unowned`
-connection has its refreshed credential persisted, is not reconnected and
-can still be revoked.
+`tests/integration/connections/repository-status.test.ts` (6): `revoked` is
+terminal for every credential and status writer (`reconnect`,
+`refreshCredential`, `markExpired`, a transfer; revoking again keeps the first
+date), and an `unowned` connection has its refreshed credential persisted, is
+not reconnected and can still be revoked.
+`tests/integration/connections/reassign-and-settle.test.ts` (5), on the real
+root: a reassignment is refused `not-ownerless` when a member joined the
+owner group of an expired connection between the service's check and its
+write, and `owner-group-empty` when the new owner group lost its last member
+meanwhile (nothing written, no entry); the `before` of
+`connection-reassigned` is what the write read; `assignOwnerlessTo` writes
+nothing on an owned or a revoked connection; a revocation whose own audit
+entry fails still writes `mission-orphaned`. Transfer, `unowned` and the
+ordinary reassignment are in `tests/integration/authority/ownership.test.ts`
+(handbook [authority](authority.md)).
 
 Not automated: a browser run against real providers
 ([e2e-tests](../tests/e2e-tests.md#connect-a-provider-p14), "Manual checks

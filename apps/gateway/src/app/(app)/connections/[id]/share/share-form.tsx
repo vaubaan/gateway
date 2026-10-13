@@ -10,8 +10,9 @@
  */
 import { useMemo, useState } from 'react';
 
-import { Badge, Banner, Button, Field, Input, Select, type BadgeTone } from '@/components/ui';
-import type { CatalogRisk, SeverityLevel } from '@/server/missions/model';
+import { SeverityBadge } from '@/components/risk/RiskBadges';
+import { Badge, Banner, Button, Field, Input, Select } from '@/components/ui';
+import type { CatalogRisk } from '@/server/missions/model';
 import {
   envNotes,
   groupBySeverity,
@@ -21,13 +22,6 @@ import {
 } from '@/server/shares/restriction';
 
 import styles from './share.module.css';
-
-const LEVEL_TONE: Record<SeverityLevel, BadgeTone> = {
-  low: 'neutral',
-  medium: 'info',
-  high: 'warning',
-  critical: 'danger',
-};
 
 export interface ShareFormInitial {
   readonly targetKind: 'user' | 'group';
@@ -147,7 +141,7 @@ export function ShareForm({
           {bySeverity.map((group) => (
             <section key={group.level} aria-label={`${group.level} risks`}>
               <h3 className={styles.level}>
-                <Badge tone={LEVEL_TONE[group.level]}>{group.level}</Badge>
+                <SeverityBadge level={group.level} />
                 <span className={styles.muted}>
                   {group.risks.filter((risk) => selected.has(risk.risk_id)).length} of{' '}
                   {group.risks.length}

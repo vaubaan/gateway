@@ -100,6 +100,8 @@ describe('addresses a document may be fetched from', () => {
     ['IPv6 unspecified', '::'],
     ['IPv6 unique-local', 'fd12:3456:789a::1'],
     ['IPv6 link-local', 'fe80::1'],
+    ['IPv6 site-local (deprecated), first address', 'fec0::1'],
+    ['IPv6 site-local (deprecated), last address', 'feff:ffff:ffff:ffff:ffff:ffff:ffff:ffff'],
     ['IPv6 multicast', 'ff02::1'],
     ['IPv6 documentation', '2001:db8::1'],
     ['NAT64 of a private address', '64:ff9b::a00:1'],
