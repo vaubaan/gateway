@@ -21,7 +21,7 @@ tracks:
 ADR [[plugin-contract-and-credential-spec]] ; spec
 [`vaubaan-gateway.md`](../../spec/vaubaan-gateway.md) §0, §3.1, §3.2, §5 and
 [`gateway-risk-model.md`](../../spec/gateway-risk-model.md) §2, §4, §7 ; the
-provider's own v4 spec [`resend.md`](../../spec/resend.md) (zones, catalog
+provider's own spec [`resend.md`](../../spec/resend.md) (zones, catalog
 rationale). Contributor-facing details (fields, tool list, preset table) :
 [`plugins/resend/README.md`](../../../plugins/resend/README.md).
 

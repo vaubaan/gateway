@@ -5,6 +5,10 @@ date: 2026-10-13
 last_synced: 2026-10-13
 tracks:
   - apps/gateway/src/app/layout.tsx
+  - apps/gateway/src/app/page.tsx
+  - apps/gateway/src/app/(public)/layout.tsx
+  - apps/gateway/src/app/(app)/layout.tsx
+  - apps/gateway/src/app/admin/(guarded)/layout.tsx
   - apps/gateway/src/app/globals.css
   - apps/gateway/src/app/icon.svg
   - apps/gateway/src/app/apple-icon.png
@@ -13,12 +17,17 @@ tracks:
   - apps/gateway/src/components/shell/
   - apps/gateway/src/components/LocalDate.tsx
   - apps/gateway/src/components/auth/NeedsUser.tsx
+  - apps/gateway/src/components/auth/PrincipalCard.tsx
   - apps/gateway/src/components/auth/principal.ts
+  - apps/gateway/src/components/connections/
   - apps/gateway/src/components/risk/
+  - apps/gateway/src/components/telemetry/ValidationBadge.tsx
   - apps/gateway/src/app/(app)/missions/message-of.ts
+  - apps/gateway/src/app/(app)/missions/state-badge.tsx
   - apps/gateway/src/lib/auth/session.ts
   - apps/gateway/src/lib/connections/session.ts
   - apps/gateway/next.config.ts
+  - apps/gateway/tests/unit/app/
 ---
 
 # Web app — route map, layouts, shell, UI primitives
@@ -53,47 +62,62 @@ endpoints behind them, and the agent-facing MCP door from the same process.
   (`POST /api/missions/<id>/gate`).
 - **Everything that decides lives under `src/server/`**, host-agnostic (it
   never imports `next`). A `route.ts` is a one-line adapter:
-  `(await getRoot()).<module>.handlers.<name>(request, …)`.
+  `(await getRoot()).<module>.handlers.<name>(request, …)`. Three routes have
+  another shape: `healthz/route.ts` (`healthHandler(() => getRoot())`),
+  `.well-known/oauth-protected-resource/route.ts`
+  (`oauth.discovery.executionResource(request)`) and
+  `agent-bootstrap.md/route.ts`, which reads no root and serves the
+  `content.md` next to it (the only `force-static` route).
+- **There is no `middleware.ts`** (and no `proxy.ts`): nothing runs in front of
+  the routes, each page and each handler authenticates itself.
 
 ## Route map
 
-| Route                                                                                                                       | File under `apps/gateway/src/app/`                                   | Handbook                              |
-| --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------- |
-| `/`                                                                                                                         | `page.tsx`                                                           | [authentication](authentication.md)   |
-| `/login`                                                                                                                    | `(public)/login/page.tsx`, `(public)/layout.tsx`                     | [authentication](authentication.md)   |
-| `GET /auth/login`, `GET /auth/callback`                                                                                     | `auth/login/route.ts`, `auth/callback/route.ts`                      | [authentication](authentication.md)   |
-| `POST /logout`                                                                                                              | `logout/route.ts`                                                    | [authentication](authentication.md)   |
-| `/admin/bootstrap`, `POST /api/auth/bootstrap`                                                                              | `admin/bootstrap/page.tsx`, `api/auth/bootstrap/route.ts`            | [authentication](authentication.md)   |
-| `/admin`, `/admin/identity-provider`                                                                                        | `admin/(guarded)/**`                                                 | [authentication](authentication.md)   |
-| `POST /api/admin/identity-provider`                                                                                         | `api/admin/identity-provider/route.ts`                               | [authentication](authentication.md)   |
-| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                                                              | `admin/(guarded)/provider-apps/**`                                   | [connections](connections.md)         |
-| `/admin/telemetry`, `POST /api/admin/telemetry`                                                                             | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts` | [telemetry](telemetry.md)             |
-| `/connections`, `/connections/new`, `/connections/new/<provider>`, `/connections/<id>`                                      | `(app)/connections/**/page.tsx`                                      | [connections](connections.md)         |
-| `/connections/<id>/share`, `POST /connections/<id>/shares`, `…/shares/<id>/revoke`, `…/transfer`                            | `(app)/connections/[id]/share/`, `shares/`, `transfer/`              | [authority](authority.md)             |
-| `/shares`                                                                                                                   | `(app)/shares/page.tsx`                                              | [authority](authority.md)             |
-| `/admin/groups`, `POST /admin/groups/create`, `…/<id>/members[/<userId>/remove]`                                            | `admin/(guarded)/groups/**`                                          | [authority](authority.md)             |
-| `/admin/connections`, `POST /admin/connections/<id>/reassign`                                                               | `admin/(guarded)/connections/**`                                     | [authority](authority.md)             |
-| `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`                                              | `(app)/connections/connect/`, `(app)/connections/callback/`          | [connections](connections.md)         |
-| `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                                                     | `(app)/connections/[id]/**/route.ts`                                 | [connections](connections.md)         |
-| `/missions`, `/missions/new`, `/missions/<id>`                                                                              | `(app)/missions/**/page.tsx`                                         | [missions](missions.md)               |
-| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`, `/gate`                              | `api/missions/**/route.ts`                                           | [missions](missions.md)               |
-| `GET /agent-bootstrap.md`                                                                                                   | `agent-bootstrap.md/route.ts`                                        | [missions](missions.md)               |
-| `/missions/<id>/session`                                                                                                    | `(app)/missions/[id]/session/page.tsx`                               | [audit](audit.md)                     |
-| `/audit`                                                                                                                    | `(app)/audit/page.tsx`                                               | [audit](audit.md)                     |
-| `/requests`, `/requests/<id>`                                                                                               | `(app)/requests/**/page.tsx`                                         | [requests](requests.md)               |
-| `GET /r/<id>`                                                                                                               | `r/[id]/route.ts`                                                    | [requests](requests.md)               |
-| `GET /api/requests`, `POST /api/requests/<id>/decide`                                                                       | `api/requests/**/route.ts`                                           | [requests](requests.md)               |
-| `GET, POST, DELETE /mcp`, `GET /mcp/catalog`                                                                                | `mcp/route.ts`, `mcp/catalog/route.ts`                               | [execution-door](execution-door.md)   |
-| `GET /.well-known/oauth-protected-resource`                                                                                 | `.well-known/oauth-protected-resource/route.ts`                      | [execution-door](execution-door.md)   |
-| `GET /.well-known/oauth-authorization-server`, `GET /.well-known/oauth-protected-resource/mcp/manage`                       | `.well-known/**/route.ts`                                            | [management-door](management-door.md) |
-| `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/authorize/decision`, `POST /oauth/token`, `POST /oauth/revoke` | `oauth/**/route.ts`                                                  | [management-door](management-door.md) |
-| `GET, POST, DELETE /mcp/manage`                                                                                             | `mcp/manage/route.ts`                                                | [management-door](management-door.md) |
-| `/delegations`, `POST /delegations/<id>/revoke`                                                                             | `(app)/delegations/**`                                               | [management-door](management-door.md) |
-| `/admin/oauth-clients`, `POST /admin/oauth-clients/<id>`                                                                    | `admin/(guarded)/oauth-clients/**`                                   | [management-door](management-door.md) |
-| `GET /healthz`                                                                                                              | `healthz/route.ts`                                                   | [configuration](configuration.md)     |
+| Route                                                                                                                       | File under `apps/gateway/src/app/`                                                                            | Handbook                              |
+| --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| `/`                                                                                                                         | `page.tsx`                                                                                                    | [authentication](authentication.md)   |
+| `/login`                                                                                                                    | `(public)/login/page.tsx`, `(public)/layout.tsx`                                                              | [authentication](authentication.md)   |
+| `GET /auth/login`, `GET /auth/callback`                                                                                     | `auth/login/route.ts`, `auth/callback/route.ts`                                                               | [authentication](authentication.md)   |
+| `POST /logout`                                                                                                              | `logout/route.ts`                                                                                             | [authentication](authentication.md)   |
+| `/admin/bootstrap`, `POST /api/auth/bootstrap`                                                                              | `admin/bootstrap/page.tsx`, `api/auth/bootstrap/route.ts`                                                     | [authentication](authentication.md)   |
+| `/admin`, `/admin/identity-provider`                                                                                        | `admin/(guarded)/page.tsx`, `admin/(guarded)/identity-provider/page.tsx`, `admin/(guarded)/layout.tsx`        | [authentication](authentication.md)   |
+| `POST /api/admin/identity-provider`                                                                                         | `api/admin/identity-provider/route.ts`                                                                        | [authentication](authentication.md)   |
+| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                                                              | `admin/(guarded)/provider-apps/**`                                                                            | [connections](connections.md)         |
+| `/admin/telemetry`, `POST /api/admin/telemetry`                                                                             | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts`                                          | [telemetry](telemetry.md)             |
+| `/connections`, `/connections/new`, `/connections/new/<provider>`, `/connections/<id>`                                      | `(app)/connections/**/page.tsx`                                                                               | [connections](connections.md)         |
+| `/connections/<id>/share`, `POST /connections/<id>/shares`, `…/shares/<id>/revoke`, `…/transfer`                            | `(app)/connections/[id]/share/`, `shares/`, `transfer/`                                                       | [authority](authority.md)             |
+| `/shares`                                                                                                                   | `(app)/shares/page.tsx`                                                                                       | [authority](authority.md)             |
+| `/admin/groups`, `POST /admin/groups/create`, `…/<id>/members[/<userId>/remove]`                                            | `admin/(guarded)/groups/**`                                                                                   | [authority](authority.md)             |
+| `/admin/connections`, `POST /admin/connections/<id>/reassign`                                                               | `admin/(guarded)/connections/**`                                                                              | [authority](authority.md)             |
+| `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`                                              | `(app)/connections/connect/`, `(app)/connections/callback/`                                                   | [connections](connections.md)         |
+| `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                                                     | `(app)/connections/[id]/**/route.ts`                                                                          | [connections](connections.md)         |
+| `/missions`, `/missions/new`, `/missions/<id>`                                                                              | `(app)/missions/page.tsx`, `(app)/missions/new/page.tsx`, `(app)/missions/[id]/page.tsx`                      | [missions](missions.md)               |
+| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`, `/gate`                              | `api/missions/**/route.ts`                                                                                    | [missions](missions.md)               |
+| `GET /agent-bootstrap.md`                                                                                                   | `agent-bootstrap.md/route.ts`                                                                                 | [missions](missions.md)               |
+| `/missions/<id>/session`                                                                                                    | `(app)/missions/[id]/session/page.tsx`                                                                        | [audit](audit.md)                     |
+| `/audit`                                                                                                                    | `(app)/audit/page.tsx`                                                                                        | [audit](audit.md)                     |
+| `/requests`, `/requests/<id>`                                                                                               | `(app)/requests/**/page.tsx`                                                                                  | [requests](requests.md)               |
+| `GET /r/<id>`                                                                                                               | `r/[id]/route.ts`                                                                                             | [requests](requests.md)               |
+| `GET /api/requests`, `POST /api/requests/<id>/decide`                                                                       | `api/requests/**/route.ts`                                                                                    | [requests](requests.md)               |
+| `GET, POST, DELETE /mcp`, `GET /mcp/catalog`                                                                                | `mcp/route.ts`, `mcp/catalog/route.ts`                                                                        | [execution-door](execution-door.md)   |
+| `GET /.well-known/oauth-protected-resource`                                                                                 | `.well-known/oauth-protected-resource/route.ts`                                                               | [execution-door](execution-door.md)   |
+| `GET /.well-known/oauth-authorization-server`, `GET /.well-known/oauth-protected-resource/mcp/manage`                       | `.well-known/oauth-authorization-server/route.ts`, `.well-known/oauth-protected-resource/mcp/manage/route.ts` | [management-door](management-door.md) |
+| `POST /oauth/register`, `GET /oauth/authorize`, `POST /oauth/authorize/decision`, `POST /oauth/token`, `POST /oauth/revoke` | `oauth/**/route.ts`                                                                                           | [management-door](management-door.md) |
+| `GET, POST, DELETE /mcp/manage`                                                                                             | `mcp/manage/route.ts`                                                                                         | [management-door](management-door.md) |
+| `/delegations`, `POST /delegations/<id>/revoke`                                                                             | `(app)/delegations/**`                                                                                        | [management-door](management-door.md) |
+| `/admin/oauth-clients`, `POST /admin/oauth-clients/<id>`                                                                    | `admin/(guarded)/oauth-clients/**`                                                                            | [management-door](management-door.md) |
+| `GET /healthz`                                                                                                              | `healthz/route.ts`                                                                                            | [configuration](configuration.md)     |
 
 There is no landing page: `/` redirects a visitor with a session to `/missions`
 and anyone else to `/login`.
+
+The table names the method a caller uses. The three `.well-known` routes also
+export `HEAD` and `OPTIONS`, and `POST /oauth/register`, `/oauth/token` and
+`/oauth/revoke` also export `OPTIONS`, on the same handler
+([management-door](management-door.md)). A segment that holds only a
+`route.ts` has no page: `/connections/<id>/shares`, `/connections/connect/…`,
+`/delegations/<id>/revoke` and the `admin/(guarded)` mutations answer `POST`
+only.
 
 ## Layouts
 
@@ -112,9 +136,12 @@ and anyone else to `/login`.
   the page inside a `Container`.
 - **`(app)/layout.tsx`** — the human surface: `currentPrincipal()`; no
   principal → `redirect('/login')`; otherwise `<AppShell principal>`.
-- **`admin/(guarded)/layout.tsx`** — the Administration bar (Identity provider,
-  Provider apps, Groups, Connections, Telemetry, OAuth clients) and the "Not an
-  operator" explanation; rules in [authentication](authentication.md).
+- **`admin/(guarded)/layout.tsx`** — the Administration bar (the brand link
+  "Vaubaan · Administration" to `/admin`, then Identity provider, Provider apps,
+  Groups, Connections, Telemetry, OAuth clients; the same account block as the
+  shell on the right) and the "Not an operator" explanation; rules in
+  [authentication](authentication.md). The bar has no link back to the
+  application bar.
   `/admin/bootstrap` is outside it.
 
 A layout is navigation, never the authorization boundary: the App Router can
@@ -166,7 +193,8 @@ the page in a `Container`, then the build footer:
   **Delegations**. Every principal sees these links;
 - **Administration** (`/admin`), only when `isOperatorPrincipal(principal)`
   (`components/auth/principal.ts`): the bootstrap operator or a user with
-  `isOperator`. `PrincipalCard` and the Audit page's sentence read the same
+  `isOperator`. `PrincipalCard` (the account card of `/login` for a visitor
+  who already has a session) and the Audit page's sentence read the same
   function;
 - on the right: the user's email (or `bootstrap token`), `OperatorBadge`
   (`Operator` / `User` / "Bootstrap operator") and `SignOutButton`, both from
@@ -230,18 +258,18 @@ allowed.
 Imported from `@/components/ui` (`index.ts`). Styles are CSS modules next to
 each file and use the tokens only.
 
-| Export                                        | What it is                                                                                    |
-| --------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `Button`                                      | `<button>` with `variant` (`primary`, `secondary`, `ghost`, `danger`) and `size` (`sm`, `md`) |
-| `Input`, `Textarea`, `Select`                 | styled form controls, refs forwarded                                                          |
-| `Field`                                       | a labelled field with `label`, `htmlFor`, `hint` and `error` (the error replaces the hint)    |
-| `Card`, `CardHeader`, `CardTitle`, `CardBody` | the bordered panel and its parts                                                              |
-| `Badge`                                       | inline status, `tone`: `neutral`, `info`, `success`, `warning`, `danger` (`BadgeTone`)        |
-| `Banner`                                      | block message with an optional `title`, same tones (default `info`)                           |
-| `Table`, `Thead`, `Tbody`, `Tr`, `Th`, `Td`   | styled table elements                                                                         |
-| `Container`, `Stack`                          | page column (`.vbn-container`), vertical flex with a `gap`                                    |
-| `Code`                                        | inline `<code>`                                                                               |
-| `DangerConfirm`                               | client modal: the user types `phrase` before Confirm enables; Escape or the backdrop cancels  |
+| Export                                        | What it is                                                                                                                                                                       |
+| --------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Button`                                      | `<button>` with `variant` (`primary`, `secondary`, `ghost`, `danger`; default `secondary`), `size` (`sm`, `md`; default `md`) and `loading` (disables the button), ref forwarded |
+| `Input`, `Textarea`, `Select`                 | styled form controls, refs forwarded                                                                                                                                             |
+| `Field`                                       | a labelled field with `label`, `htmlFor`, `hint` and `error` (the error replaces the hint)                                                                                       |
+| `Card`, `CardHeader`, `CardTitle`, `CardBody` | the bordered panel and its parts                                                                                                                                                 |
+| `Badge`                                       | inline status, `tone`: `neutral` (default), `info`, `success`, `warning`, `danger` (`BadgeTone`); `mono` for the monospace face                                                  |
+| `Banner`                                      | block message with an optional `title`, same tones (default `info`)                                                                                                              |
+| `Table`, `Thead`, `Tbody`, `Tr`, `Th`, `Td`   | styled table elements                                                                                                                                                            |
+| `Container`, `Stack`                          | page column (`.vbn-container`), vertical flex with a `gap`                                                                                                                       |
+| `Code`                                        | inline `<code>`                                                                                                                                                                  |
+| `DangerConfirm`                               | client modal: the user types `phrase` before Confirm enables; Escape or the backdrop cancels (not while `busy`). Used by the mission actions and `RevokeConnection`              |
 
 **Labels are bound to their controls.** A `Field` that holds one control
 takes `htmlFor`, the `id` of that control, and renders a real
@@ -270,9 +298,32 @@ Three display helpers are shared by the pages that used to carry a copy each:
 
 `components/LocalDate.tsx` (client) renders a timestamp: the ISO form on the
 server, the browser's locale after hydration, without a hydration mismatch.
-`dateOnly` drops the time. The Missions, session, Requests, Audit, Delegations
-and Administration pages use it; the Connections and Shares received pages
-still print the UTC day (`iso.slice(0, 10)`).
+`dateOnly` drops the time. The Missions list, the mission page, its session
+page, the Requests pages, Audit, Delegations and three Administration pages
+(`/admin`, `/admin/bootstrap`, `/admin/oauth-clients`) use it; the Connections
+list, the connection page and Shares received still print the UTC day
+(`iso.slice(0, 10)`).
+
+The other shared components belong to one feature and are described in its
+handbook:
+
+- `components/connections/parts.tsx` (server): `StateBadge({ status })` for a
+  connection status, `ExperimentalBadge`, `NoticeBanner({ notice })` for the
+  one-time notice a redirect left, `credentialKindLabel(kind)` and
+  `CredentialFieldInputs` with `credentialFieldId`
+  ([connections](connections.md));
+- `components/connections/RevokeConnection.tsx` (client): the Revoke button of
+  a connection, a `DangerConfirm` whose phrase is the connection name and
+  whose confirmation submits a plain POST form;
+- `components/telemetry/ValidationBadge.tsx`: the community validation status
+  on the Connections list and the connection page, nothing when there is no
+  status ([telemetry](telemetry.md));
+- `app/(app)/missions/state-badge.tsx`: `StateBadge({ state })` for a mission
+  state, with the count of exhausted risks on an active mission
+  ([missions](missions.md));
+- `components/auth/PrincipalCard.tsx`: `PrincipalCard`, `OperatorBadge` and
+  `SignOutButton` (a plain `POST /logout` form)
+  ([authentication](authentication.md)).
 
 ## What the standalone output carries
 
@@ -354,8 +405,10 @@ Three unit files under `apps/gateway/tests/unit/app/` run without a browser
   `renderToStaticMarkup`: label bound by `for`/`id`, group role without
   `htmlFor`, unique ids when two lists share a page.
 
-Two helpers have a unit file beside them: `components/auth/principal.test.ts`
-and `app/(app)/missions/message-of.test.ts`.
+Three helpers have a unit file beside them:
+`components/auth/principal.test.ts`, `app/(app)/missions/message-of.test.ts`
+and `app/(app)/missions/new/form-state.test.ts` (the state of the mission
+form, [missions](missions.md)).
 
 `guard-harness.ts` holds what the two guard files share (file discovery, calling
 a page as a function, naming a redirect or a "not found").
