@@ -327,17 +327,36 @@ describe('execution door: the call pipeline', () => {
       expect(instance.depot.calls).toHaveLength(1);
     });
 
-    it('connection-unavailable: a revoked connection, its name and the owner to contact', async () => {
+    it('connection-unavailable: an expired connection, its name and the owner to contact', async () => {
       const mission = await instance.issue({ policy: [line(READ)] });
-      await instance.root.store.connections.revoke(instance.connection.id);
+      await instance.root.store.connections.markExpired(instance.connection.id);
 
       const body = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
 
       const refusal = refusalOf(body, 'connection-unavailable');
       expect(refusal.connection).toEqual({ id: instance.connection.id, name: 'Depot main' });
-      expect(refusal.status).toBe('revoked');
+      expect(refusal.status).toBe('expired');
       expect(refusal.owner).toEqual({ kind: 'user', display: 'ada@example.com' });
       expect(refusal.hint).toContain('ada@example.com');
+      expect(instance.depot.calls).toHaveLength(0);
+      expect(await consumed(mission, READ)).toBe(0);
+    });
+
+    it('mission-inactive: a revoked connection orphans the missions that carry it (spec §7.8)', async () => {
+      const mission = await instance.issue({ policy: [line(READ)] });
+      // Revoked behind the services' back: the door's own re-check must see it.
+      await instance.root.store.connections.revoke(instance.connection.id);
+
+      const body = await instance.call(mission, 'depot__read_item', { space: 'scratch' });
+
+      const refusal = refusalOf(body, 'mission-inactive');
+      expect(refusal.status).toBe('orphaned');
+      expect(typeof refusal.reason).toBe('string');
+      expect(refusal.hint).toContain('orphaned');
+      expect((await instance.root.store.missions.getById(mission.mission.id))?.status).toBe(
+        'orphaned',
+      );
+      expect((await callEntries(mission))[0]?.refusal_code).toBe('mission-inactive');
       expect(instance.depot.calls).toHaveLength(0);
       expect(await consumed(mission, READ)).toBe(0);
     });

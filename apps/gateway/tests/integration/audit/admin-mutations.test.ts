@@ -4,7 +4,8 @@
  * enumerates the service methods").
  *
  * The public methods of every class under `server/{connections,
- * provider-apps,missions,auth,requests,telemetry}` are read from the source with the TypeScript
+ * provider-apps,missions,auth,requests,telemetry,authority,shares,groups}` are read from
+ * the source with the TypeScript
  * parser and each must be classified below as a read, a mutation or an
  * exemption with its reason. A method added tomorrow fails the first test
  * until it is classified; a mutation is then driven on an ephemeral instance
@@ -36,10 +37,25 @@ import {
   UNVERIFIED_APP_INSTALL_SPEC,
 } from '../../../src/server/connections/testing';
 import { silentLogger } from '../../../src/server/logging';
-import type { ConnectionRecord, MissionRecord, UserRecord } from '../../../src/server/store/types';
+import type {
+  ConnectionRecord,
+  GroupRecord,
+  MissionRecord,
+  UserRecord,
+} from '../../../src/server/store/types';
 
 const SERVER = resolve(dirname(fileURLToPath(import.meta.url)), '../../../src/server');
-const SCANNED = ['connections', 'provider-apps', 'missions', 'auth', 'requests', 'telemetry'];
+const SCANNED = [
+  'connections',
+  'provider-apps',
+  'missions',
+  'auth',
+  'requests',
+  'telemetry',
+  'authority',
+  'shares',
+  'groups',
+];
 const PUBLIC_URL = 'https://gateway.example.com';
 const OPERATOR_EMAIL = 'ops@example.com';
 
@@ -102,6 +118,12 @@ interface Rig {
   claim(): Promise<string>;
   /** An open approval request on a mission of Alice: a call refused on a risk she gated. */
   approvalRequest(): Promise<string>;
+  /** A user who signed in once: the target of a share, a member to add. */
+  bob(): Promise<UserRecord>;
+  /** A mission of Alice whose connection was revoked behind the services' back. */
+  ungrounded(): Promise<MissionRecord>;
+  /** A connection of Alice, transferred to a local group that then lost its only member. */
+  ownerless(): Promise<ConnectionRecord>;
 }
 
 async function openRig(): Promise<Rig> {
@@ -222,6 +244,26 @@ async function openRig(): Promise<Rig> {
       }
       return refused.request_id;
     },
+    bob() {
+      return root.store.users.upsertFromIdp({ subject: 'idp|bob', email: 'bob@example.com' });
+    },
+    async ungrounded() {
+      const mission = await rig.issue();
+      const [carried] = mission.connections;
+      if (!carried) throw new Error('expected a connection');
+      await root.store.connections.revoke(carried.connectionId);
+      return mission;
+    },
+    async ownerless() {
+      const connection = await rig.connectByKey();
+      const group = await root.store.groups.getOrCreate('key-admins', 'local');
+      await root.store.groups.addMember(group.id, aliceUser.id);
+      await root.store.connections.transferOwner(connection.id, { kind: 'group', id: group.id });
+      await root.store.groups.removeMember(group.id, aliceUser.id);
+      const [unowned] = await root.store.connections.markOwnerlessUnowned();
+      if (!unowned) throw new Error('expected the connection to lose its owner');
+      return unowned;
+    },
   };
   return rig;
 }
@@ -255,6 +297,8 @@ const exempt = (why: string): Rule => ({ kind: 'exempt', why });
 
 const SESSION_STATE =
   'web session and transient per-session state (sign-in, notices, pending flows): not an administrative act of spec §8';
+const DOOR_SETTLE =
+  'performed by the execution door while it authenticates a call, with no human actor: an administrative entry always names a user (spec §8); the transition is in the instance log and the call that met it is audited as `mission-inactive`';
 const SYSTEM_REFRESH =
   'performed by the gateway during a call or a discovery, with no human actor: an administrative entry always names a user (spec §8); the outcome is in the call entry and the instance log';
 
@@ -322,6 +366,36 @@ const RULES: Readonly<Record<string, Rule>> = {
     drive: (rig, connection: ConnectionRecord) =>
       rig.root.connections.service.revoke(rig.alice, connection.id),
     writes: { act: 'connection-revoked', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.transferTargets': READ,
+  'ConnectionService.listOwnerless': READ,
+  'ConnectionService.transfer': {
+    kind: 'mutation',
+    target: connections,
+    prepare: async (rig) => {
+      const connection = await rig.connectByKey();
+      const group = await rig.root.store.groups.getOrCreate('key-admins', 'local');
+      await rig.root.store.groups.addMember(group.id, rig.alice.user.id);
+      return { connection, group };
+    },
+    drive: (rig, prepared: { connection: ConnectionRecord; group: GroupRecord }) =>
+      rig.root.connections.service.transfer(
+        { user: rig.alice.user, groups: [prepared.group] },
+        prepared.connection.id,
+        prepared.group.id,
+      ),
+    writes: { act: 'connection-transferred', object: 'connection', actor: 'alice' },
+  },
+  'ConnectionService.reassign': {
+    kind: 'mutation',
+    target: connections,
+    prepare: (rig) => rig.ownerless(),
+    drive: (rig, connection: ConnectionRecord) =>
+      rig.root.connections.service.reassign(rig.operator.id, connection.id, {
+        kind: 'user',
+        email: rig.alice.user.email,
+      }),
+    writes: { act: 'connection-reassigned', object: 'connection', actor: 'operator' },
   },
   'CredentialBroker.resolve': READ,
   'CredentialBroker.contextOf': READ,
@@ -447,6 +521,100 @@ const RULES: Readonly<Record<string, Rule>> = {
         'approval',
       ),
     writes: { act: 'gate-changed', object: 'mission', actor: 'alice' },
+  },
+
+  // ── authority ─────────────────────────────────────────────────────────────
+  'ConnectionAuthorityService.authorityOf': READ,
+  'ConnectionAuthorityService.connectionsOf': READ,
+  'ConnectionAuthorityService.gapsOf': READ,
+  'MissionGrounds.check': READ,
+  'MissionGrounds.settle': exempt(DOOR_SETTLE),
+  'MissionGrounds.sweepConnection': {
+    kind: 'mutation',
+    target: (root) => root.authority.grounds,
+    prepare: (rig) => rig.ungrounded(),
+    drive: (rig, mission: MissionRecord) =>
+      rig.root.authority.grounds.sweepConnection(
+        mission.connections[0]?.connectionId ?? '',
+        rig.alice.user.id,
+      ),
+    writes: { act: 'mission-orphaned', object: 'mission', actor: 'alice' },
+  },
+  'MissionGrounds.sweepCreator': {
+    kind: 'mutation',
+    target: (root) => root.authority.grounds,
+    prepare: (rig) => rig.ungrounded(),
+    drive: (rig) => rig.root.authority.grounds.sweepCreator(rig.alice.user.id, rig.operator.id),
+    writes: { act: 'mission-orphaned', object: 'mission', actor: 'operator' },
+  },
+  'MembershipSettler.afterRemoval': {
+    kind: 'mutation',
+    target: (root) => root.authority.membership,
+    prepare: (rig) => rig.ungrounded(),
+    drive: (rig) => rig.root.authority.membership.afterRemoval(rig.alice.user.id, rig.operator.id),
+    writes: { act: 'mission-orphaned', object: 'mission', actor: 'operator' },
+  },
+
+  // ── shares ────────────────────────────────────────────────────────────────
+  'ShareService.contextFor': READ,
+  'ShareService.received': READ,
+  'ShareService.share': {
+    kind: 'mutation',
+    target: (root) => root.shares.service,
+    prepare: async (rig) => {
+      await rig.bob();
+      return rig.connectByKey();
+    },
+    drive: (rig, connection: ConnectionRecord) =>
+      rig.root.shares.service.share(rig.alice, connection.id, {
+        target: { kind: 'user', email: 'bob@example.com' },
+        riskIds: ['keyco.read-things'],
+      }),
+    writes: { act: 'share-created', object: 'share', actor: 'alice' },
+  },
+  'ShareService.revoke': {
+    kind: 'mutation',
+    target: (root) => root.shares.service,
+    prepare: async (rig) => {
+      await rig.bob();
+      const connection = await rig.connectByKey();
+      const { share } = await rig.root.shares.service.share(rig.alice, connection.id, {
+        target: { kind: 'user', email: 'bob@example.com' },
+        riskIds: ['keyco.read-things'],
+      });
+      return share.id;
+    },
+    drive: (rig, shareId: string) => rig.root.shares.service.revoke(rig.alice, shareId),
+    writes: { act: 'share-revoked', object: 'share', actor: 'alice' },
+  },
+
+  // ── local groups (the caller authorizes: operator only) ───────────────────
+  'GroupService.list': READ,
+  'GroupService.create': {
+    kind: 'mutation',
+    target: (root) => root.groups.service,
+    drive: (rig) => rig.root.groups.service.create(rig.operator.id, 'platform'),
+    writes: { act: 'group-created', object: 'group', actor: 'operator' },
+  },
+  'GroupService.addMember': {
+    kind: 'mutation',
+    target: (root) => root.groups.service,
+    prepare: (rig) => rig.root.groups.service.create(rig.operator.id, 'platform'),
+    drive: (rig, group: GroupRecord) =>
+      rig.root.groups.service.addMember(rig.operator.id, group.id, rig.alice.user.email),
+    writes: { act: 'group-member-added', object: 'group', actor: 'operator' },
+  },
+  'GroupService.removeMember': {
+    kind: 'mutation',
+    target: (root) => root.groups.service,
+    prepare: async (rig) => {
+      const group = await rig.root.groups.service.create(rig.operator.id, 'platform');
+      await rig.root.groups.service.addMember(rig.operator.id, group.id, rig.alice.user.email);
+      return group;
+    },
+    drive: (rig, group: GroupRecord) =>
+      rig.root.groups.service.removeMember(rig.operator.id, group.id, rig.alice.user.id),
+    writes: { act: 'group-member-removed', object: 'group', actor: 'operator' },
   },
 
   // ── requests ──────────────────────────────────────────────────────────────
@@ -602,16 +770,26 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'config-changed',
       'connection-created',
       'connection-created',
+      'connection-reassigned',
       'connection-revoked',
+      'connection-transferred',
       'gate-changed',
+      'group-created',
+      'group-member-added',
+      'group-member-removed',
       'mission-issued',
       'mission-issued',
+      'mission-orphaned',
+      'mission-orphaned',
+      'mission-orphaned',
       'mission-revoked',
       'mission-rotated',
       'period-reset',
       'request-refused',
       'resource-edited',
       'resources-discovered',
+      'share-created',
+      'share-revoked',
     ]);
   });
 

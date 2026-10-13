@@ -7,6 +7,11 @@ import { userColumns, userRowToRecord, type UserRow } from './users.ts';
 
 export interface GroupsRepo {
   getOrCreate(name: string, source: GroupSource): Promise<GroupRecord>;
+  /**
+   * Creates a local group (operator-kept). Returns `null` when the name is already held,
+   * by a local group or by one the IdP claimed: a name designates one group.
+   */
+  createLocal(name: string): Promise<GroupRecord | null>;
   getById(id: string): Promise<GroupRecord | null>;
   getByName(name: string): Promise<GroupRecord | null>;
   list(): Promise<GroupRecord[]>;
@@ -91,6 +96,11 @@ export function createGroupsRepo(ctx: RepoContext): GroupsRepo {
     async getOrCreate(name, source) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => getOrCreateSync(name, source, now));
+    },
+    async createLocal(name) {
+      const id = ctx.newId();
+      const created = insertIfAbsent.run(id, name, 'local', nowIso(ctx)).changes > 0;
+      return created ? requireGroup(id) : null;
     },
     async syncIdpMemberships(userId, names) {
       const now = nowIso(ctx);

@@ -14,8 +14,10 @@
  *   api-key      start(): the form values, checked by a first discovery
  *   ssh-key      start(): an ed25519 key pair generated here, public key shown
  *
- * A connection is created under the name of the user who connected it
- * (owner = user; groups arrive with P2.2 behind the same `Principal`). Its
+ * A connection is created under the name of the user who connected it. An
+ * owner may transfer it to a group they belong to (`transfer`); when that
+ * group empties the connection is `unowned` and the operator hands it to a new
+ * owner (`reassign`, the operator's only act on the domain — spec §2.3). Its
  * credential is the serialized `CredentialSecret`, sealed by the store with
  * the connection id as associated data. Resources are discovered by the
  * plugin at connect time and merged by `syncDiscoveredResources`, which
@@ -36,6 +38,7 @@ import type {
 } from '@vaubaan/plugin-sdk';
 import type { AuditWriter } from '@vaubaan/gateway-core';
 
+import { findActiveUserByEmail, type MissionGrounds } from '../authority';
 import type { RateLimiter } from '../compose/ports';
 import type { Logger } from '../logging';
 import {
@@ -52,6 +55,7 @@ import type {
   ConnectionResourceRecord,
   DiscoveredResource,
   GroupRecord,
+  Principal,
   UserRecord,
 } from '../store/types';
 import { serializeSecret } from './credential-codec';
@@ -180,12 +184,19 @@ export interface ResourcePatch {
   readonly metadata?: Readonly<Record<string, string>>;
 }
 
+/** Who the operator hands an ownerless connection to: a user by email, or a group. */
+export type NewOwner =
+  | { readonly kind: 'user'; readonly email: string }
+  | { readonly kind: 'group'; readonly groupId: string };
+
 export interface ConnectionServiceDeps {
   /** The three repositories the service reads and writes; never the raw handle. */
   readonly store: Pick<Store, 'connections' | 'users' | 'groups'>;
   readonly registry: PluginRegistry;
   readonly providerApps: ProviderAppsService;
   readonly broker: CredentialBroker;
+  /** Re-checks the missions of a connection after an act that may have removed an authority. */
+  readonly grounds: Pick<MissionGrounds, 'sweepConnection'>;
   readonly pending: PendingConnectStore;
   readonly rateLimiter: RateLimiter;
   readonly audit: AuditWriter;
@@ -683,7 +694,7 @@ export class ConnectionService {
         credentialExpiresAt: expiresAt,
         metadata,
       });
-      await this.audit(actor, 'connection-created', created, null);
+      await this.audit(actor.user.id, 'connection-created', created, null);
       return created;
     }
     // Ownership is checked again: a redirect flow may complete minutes after it started.
@@ -700,7 +711,7 @@ export class ConnectionService {
       ...(previous?.metadata ?? {}),
       ...metadata,
     });
-    await this.audit(actor, 'connection-reconnected', reconnected, null);
+    await this.audit(actor.user.id, 'connection-reconnected', reconnected, null);
     return reconnected;
   }
 
@@ -811,18 +822,117 @@ export class ConnectionService {
 
   // ── Revoke ────────────────────────────────────────────────────────────────
 
-  /** Terminal. The sealed credential is erased; the provider-side grant is not revoked. */
+  /**
+   * Terminal. The sealed credential is erased; the provider-side grant is not
+   * revoked. The missions that carry the connection become `orphaned` (spec §7.8).
+   */
   async revoke(actor: Actor, connectionId: string): Promise<ConnectionRecord> {
     const connection = await this.requireOwned(actor, connectionId);
     if (connection.status === 'revoked') return connection;
     const revoked = await this.deps.store.connections.revoke(connection.id);
-    await this.audit(actor, 'connection-revoked', revoked, { status: connection.status });
+    await this.audit(actor.user.id, 'connection-revoked', revoked, { status: connection.status });
+    await this.deps.grounds.sweepConnection(revoked.id, actor.user.id);
     this.deps.logger.info('connection revoked', {
       connection_id: revoked.id,
       provider: revoked.provider,
       user_id: actor.user.id,
     });
     return revoked;
+  }
+
+  // ── Ownership ─────────────────────────────────────────────────────────────
+
+  /**
+   * The groups the actor may hand this connection to: the ones they belong to
+   * now, the current owner group excepted (spec §11.2: never a group one is
+   * not a member of).
+   */
+  transferTargets(actor: Actor, connection: ConnectionRecord): GroupRecord[] {
+    return actor.groups.filter(
+      (g) => !(connection.owner.kind === 'group' && connection.owner.id === g.id),
+    );
+  }
+
+  /**
+   * Transfers ownership to a group the actor belongs to (spec §7.2): every
+   * current and future member of that group is then a full owner. Shares of
+   * the connection are kept. Members of a previous owner group who are not in
+   * the new one lose their authority: their missions are re-checked.
+   */
+  async transfer(actor: Actor, connectionId: string, groupId: string): Promise<ConnectionRecord> {
+    const connection = await this.requireOwned(actor, connectionId);
+    if (connection.status === 'revoked') throw new ConnectError('connection-revoked');
+    if (connection.status === 'unowned') throw new ConnectError('connection-unowned');
+    const group = actor.groups.find((g) => g.id === groupId);
+    if (!group) throw new ConnectError('transfer-not-member');
+    if (connection.owner.kind === 'group' && connection.owner.id === group.id) return connection;
+
+    const transferred = await this.deps.store.connections.transferOwner(connection.id, {
+      kind: 'group',
+      id: group.id,
+    });
+    await this.audit(actor.user.id, 'connection-transferred', transferred, {
+      owner: connection.owner,
+    });
+    await this.deps.grounds.sweepConnection(transferred.id, actor.user.id);
+    this.deps.logger.info('connection transferred', {
+      connection_id: transferred.id,
+      group_id: group.id,
+      user_id: actor.user.id,
+    });
+    return transferred;
+  }
+
+  /** Operator: the connections nobody owns any more (`unowned`, or expired with an empty owner group). */
+  async listOwnerless(): Promise<ConnectionView[]> {
+    const ownerless = await this.deps.store.connections.listOwnerless();
+    return Promise.all(ownerless.map((c) => this.view(c)));
+  }
+
+  /**
+   * Operator only (the caller authorizes; `operatorId` is the audit actor):
+   * gives an ownerless connection a new owner. An `unowned` connection is
+   * `active` again; an `expired` one stays `expired` until its new owner
+   * reconnects. Nothing else of the connection is reachable from here: no
+   * credential, no share, no mission.
+   */
+  async reassign(
+    operatorId: string,
+    connectionId: string,
+    newOwner: NewOwner,
+  ): Promise<ConnectionRecord> {
+    const ownerless = await this.deps.store.connections.listOwnerless();
+    const connection = ownerless.find((c) => c.id === connectionId);
+    if (!connection) {
+      const exists = await this.deps.store.connections.getById(connectionId);
+      throw new ConnectError(exists ? 'not-ownerless' : 'not-found');
+    }
+    const owner = await this.resolveNewOwner(newOwner);
+    const reassigned = await this.deps.store.connections.assignOwner(connection.id, owner);
+    await this.audit(operatorId, 'connection-reassigned', reassigned, {
+      owner: connection.owner,
+      status: connection.status,
+    });
+    await this.deps.grounds.sweepConnection(reassigned.id, operatorId);
+    this.deps.logger.info('connection reassigned by the operator', {
+      connection_id: reassigned.id,
+      owner_kind: owner.kind,
+      owner_id: owner.id,
+    });
+    return reassigned;
+  }
+
+  private async resolveNewOwner(newOwner: NewOwner): Promise<Principal> {
+    if (newOwner.kind === 'user') {
+      const lookup = await findActiveUserByEmail(this.deps.store.users, newOwner.email);
+      if (!lookup.found) throw new ConnectError('owner-unknown');
+      return { kind: 'user', id: lookup.user.id };
+    }
+    const group = await this.deps.store.groups.getById(newOwner.groupId);
+    if (!group || (await this.deps.store.groups.memberCount(group.id)) === 0) {
+      throw new ConnectError('owner-group-empty');
+    }
+    return { kind: 'group', id: group.id };
   }
 
   // ── Internals ─────────────────────────────────────────────────────────────
@@ -969,15 +1079,20 @@ export class ConnectionService {
   }
 
   private async audit(
-    actor: Actor,
-    act: 'connection-created' | 'connection-reconnected' | 'connection-revoked',
+    actorId: string,
+    act:
+      | 'connection-created'
+      | 'connection-reconnected'
+      | 'connection-revoked'
+      | 'connection-transferred'
+      | 'connection-reassigned',
     connection: ConnectionRecord,
     before: unknown,
   ): Promise<void> {
     await this.deps.audit.write({
       kind: 'admin',
       ts: this.nowIso(),
-      user_id: actor.user.id,
+      user_id: actorId,
       act,
       object: { type: 'connection', id: connection.id },
       before,

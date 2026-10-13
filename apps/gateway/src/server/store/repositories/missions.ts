@@ -45,6 +45,12 @@ export interface MissionsRepo {
   listForCreator(userId: string): Promise<MissionRecord[]>;
   listForConnection(connectionId: string): Promise<MissionRecord[]>;
   setStatus(id: string, status: MissionStatus): Promise<MissionRecord>;
+  /**
+   * `active` → `orphaned` (spec §2.3): the authority behind the mission vanished.
+   * Conditional, so it never overwrites `revoked` or `expired`. Returns false when the
+   * mission was not `active`.
+   */
+  markOrphaned(id: string): Promise<boolean>;
   setExpiresAt(id: string, expiresAt: Iso | null): Promise<MissionRecord>;
   /** The creator enlarges or shrinks the mission; the whole policy is replaced atomically. */
   replacePolicy(id: string, policy: readonly MissionPolicyEntry[]): Promise<MissionRecord>;
@@ -238,6 +244,10 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const setStatusStmt = db.prepare<[string, string | null, string, string]>(
     'UPDATE missions SET status = ?, closed_at = COALESCE(?, closed_at), updated_at = ? WHERE id = ?',
   );
+  const markOrphanedStmt = db.prepare<[string, string, string]>(
+    `UPDATE missions SET status = 'orphaned', closed_at = COALESCE(closed_at, ?), updated_at = ?
+     WHERE id = ? AND status = 'active'`,
+  );
   const setExpiry = db.prepare<[string | null, string, string]>(
     'UPDATE missions SET expires_at = ?, updated_at = ? WHERE id = ?',
   );
@@ -350,6 +360,10 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
       const result = setStatusStmt.run(status, terminal ? now : null, now, id);
       if (result.changes === 0) throw new NotFoundError('mission', id);
       return requireMission(id);
+    },
+    async markOrphaned(id) {
+      const now = nowIso(ctx);
+      return markOrphanedStmt.run(now, now, id).changes > 0;
     },
     async setExpiresAt(id, expiresAt) {
       const result = setExpiry.run(expiresAt, nowIso(ctx), id);

@@ -11,6 +11,10 @@
  *   bearer        `Authorization: Bearer <mission token>`; missing, unknown or
  *                 rotated → 401; a web session or a delegated token → 403
  *                 `wrong-credential-kind` (spec §6 "none crosses over")
+ *   grounds       the creator's authority over the mission, re-read from the
+ *                 store on every request (spec §2.3 "orphaned", §10): a mission
+ *                 whose grounds vanished is turned `orphaned` here and every
+ *                 call is then refused `mission-inactive`
  *   surface rate  requests per minute per mission (spec §6) → 429
  *   protocol      the MCP SDK (`@modelcontextprotocol/server`, v2): 2026-07-28
  *                 requests through `createMcpHandler` (stateless, JSON, upgraded
@@ -57,6 +61,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import type { JsonRpcError } from '@vaubaan/shared';
 
 import { SESSION_COOKIE, type SessionService as WebSessionService } from '../auth';
+import type { MissionGrounds } from '../authority';
 import { budgetMissionOf, type SessionService } from '../budget';
 import type { BuildInfo } from '../compose/root';
 import type { RateLimiter } from '../compose/ports';
@@ -98,6 +103,8 @@ export interface ExecutionDoorDeps {
   readonly store: Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
   readonly registry: PluginRegistry;
   readonly tokens: TokenVerifier;
+  /** Is the mission still grounded in its creator's current authority? Never optional. */
+  readonly grounds: Pick<MissionGrounds, 'settle'>;
   readonly webSessions: Pick<WebSessionService, 'read'>;
   readonly budget: Pick<SessionService, 'stateOf'>;
   readonly pipeline: CallPipeline;
@@ -268,12 +275,11 @@ export class ExecutionDoor {
           if (dead || (verified.outcome === 'retired' && verified.reason === 'rotated')) {
             return null;
           }
-          const context = await loadMissionContext(
-            this.deps.store,
-            verified.mission,
-            verified.token,
-          );
-          this.missionsByContext.set(context, verified.mission);
+          // Authority is never snapshotted in a mission: the creator's is re-read
+          // here, and a mission it no longer grounds is `orphaned` from this call on.
+          const mission = await this.deps.grounds.settle(verified.mission);
+          const context = await loadMissionContext(this.deps.store, mission, verified.token);
+          this.missionsByContext.set(context, mission);
           return { kind: 'mission-token', context };
         }
 

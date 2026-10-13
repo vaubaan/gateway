@@ -10,7 +10,7 @@
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth';
-import { OwnerAuthorityService, type AuthorityService } from '../authority';
+import { ConnectionAuthorityService, type AuthorityService } from '../authority';
 import type { SessionService } from '../budget';
 import type { InstanceConfig } from '../config';
 import type { Logger } from '../logging';
@@ -32,7 +32,7 @@ export interface MissionsModuleDeps {
   readonly registry: PluginRegistry;
   readonly authenticator: Authenticator;
   readonly logger: Logger;
-  /** Defaults to the owner-only authority; P2.2 injects the share-aware one. */
+  /** Defaults to a `ConnectionAuthorityService` over the store; the root injects its own. */
   readonly authority?: AuthorityService;
   readonly clock?: Clock;
   readonly mint?: TokenMinter;
@@ -43,10 +43,12 @@ export interface MissionsModuleDeps {
 export function createMissionsModule(deps: MissionsModuleDeps): MissionsModule {
   const authority =
     deps.authority ??
-    new OwnerAuthorityService({
+    new ConnectionAuthorityService({
       registry: deps.registry,
+      users: deps.store.users,
       groups: deps.store.groups,
       connections: deps.store.connections,
+      shares: deps.store.shares,
     });
   const service = new MissionService({
     store: deps.store,

@@ -30,6 +30,13 @@ export interface LoginDeps {
   readonly bootstrap: BootstrapService;
   readonly logger: Logger;
   readonly clock?: Clock;
+  /**
+   * Called once the sign-in has replaced the user's IdP-sourced memberships:
+   * the stored states a lost membership held (an `unowned` connection, an
+   * `orphaned` mission) are settled there. A failure is logged and does not
+   * fail the sign-in: every authority check reads the new memberships anyway.
+   */
+  readonly membershipsSynced?: (user: UserRecord) => Promise<void>;
 }
 
 /** The user's authority right now, from the store (never from the session). */
@@ -74,6 +81,14 @@ export async function completeLogin(
     displayName: claims.displayName,
   });
   await syncIdpGroups(deps.store, user.id, claims.groups, deps.logger);
+  try {
+    await deps.membershipsSynced?.(user);
+  } catch (err) {
+    deps.logger.error('could not settle the memberships changed by a sign-in', {
+      user_id: user.id,
+      err,
+    });
+  }
   const authority = await currentAuthority(deps.store, user, deps.adminRule);
 
   let bootstrapRevoked = false;

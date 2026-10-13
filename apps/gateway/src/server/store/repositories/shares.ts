@@ -24,8 +24,23 @@ export interface SharesRepo {
   create(input: CreateShareInput): Promise<ShareRecord>;
   getById(id: string): Promise<ShareRecord | null>;
   listForConnection(connectionId: string): Promise<ShareRecord[]>;
-  /** Active shares whose target is any of the principals (a user and their groups). */
-  listActiveForTargets(principals: readonly Principal[]): Promise<ShareRecord[]>;
+  /**
+   * Active shares whose target is any of the principals (a user and their groups),
+   * on one connection when `connectionId` is given.
+   */
+  listActiveForTargets(
+    principals: readonly Principal[],
+    connectionId?: string,
+  ): Promise<ShareRecord[]>;
+  /**
+   * The share of a connection to a target, replaced: the active share of the same
+   * `(connection, target)`, if any, is revoked and the new one created, in one
+   * transaction, so a target never holds two active shares of one connection and never
+   * holds none in between.
+   */
+  replaceForTarget(
+    input: CreateShareInput,
+  ): Promise<{ created: ShareRecord; replaced: ShareRecord | null }>;
   revoke(id: string): Promise<ShareRecord>;
 }
 
@@ -84,25 +99,49 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
     return toRecord(row);
   }
 
+  /** Inside a transaction: the share row and one restriction row per risk. */
+  function insertShare(id: string, input: CreateShareInput, risks: readonly RiskId[], now: string) {
+    const target = principalColumns(input.target);
+    insert.run(
+      id,
+      input.connectionId,
+      target.kind,
+      target.userId,
+      target.groupId,
+      input.createdByUserId,
+      now,
+    );
+    for (const riskId of risks) insertRisk.run(id, riskId);
+  }
+
   return {
     async create(input) {
       const unique = [...new Set(input.restriction)];
       assertKnownRiskIds(ctx.catalog, unique);
       const id = ctx.newId();
-      const target = principalColumns(input.target);
-      withImmediateTransaction(db, () => {
-        insert.run(
-          id,
-          input.connectionId,
-          target.kind,
-          target.userId,
-          target.groupId,
-          input.createdByUserId,
-          nowIso(ctx),
-        );
-        for (const riskId of unique) insertRisk.run(id, riskId);
-      });
+      const now = nowIso(ctx);
+      withImmediateTransaction(db, () => insertShare(id, input, unique, now));
       return requireShare(id);
+    },
+    async replaceForTarget(input) {
+      const unique = [...new Set(input.restriction)];
+      assertKnownRiskIds(ctx.catalog, unique);
+      const id = ctx.newId();
+      const now = nowIso(ctx);
+      const pred = principalPredicate([input.target], 'target_user_id', 'target_group_id');
+      const replaced = withImmediateTransaction(db, () => {
+        const previous = db
+          .prepare<string[], ShareRow>(
+            `SELECT ${COLUMNS} FROM shares
+             WHERE status = 'active' AND connection_id = ? AND ${pred.sql} ORDER BY created_at`,
+          )
+          .all(input.connectionId, ...pred.params)
+          .map(toRecord);
+        for (const share of previous) revokeActive.run(now, share.id);
+        insertShare(id, input, unique, now);
+        return previous;
+      });
+      return { created: requireShare(id), replaced: replaced.at(-1) ?? null };
     },
     async getById(id) {
       const row = byId.get(id);
@@ -111,13 +150,15 @@ export function createSharesRepo(ctx: RepoContext): SharesRepo {
     async listForConnection(connectionId) {
       return byConnection.all(connectionId).map(toRecord);
     },
-    async listActiveForTargets(principals) {
+    async listActiveForTargets(principals, connectionId) {
       const pred = principalPredicate(principals, 'target_user_id', 'target_group_id');
+      const onConnection = connectionId === undefined ? '' : ' AND connection_id = ?';
       return db
         .prepare<string[], ShareRow>(
-          `SELECT ${COLUMNS} FROM shares WHERE status = 'active' AND ${pred.sql} ORDER BY created_at`,
+          `SELECT ${COLUMNS} FROM shares
+           WHERE status = 'active' AND ${pred.sql}${onConnection} ORDER BY created_at`,
         )
-        .all(...pred.params)
+        .all(...pred.params, ...(connectionId === undefined ? [] : [connectionId]))
         .map(toRecord);
     },
     async revoke(id) {

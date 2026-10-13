@@ -141,6 +141,56 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       resourceId,
     );
   }),
+  'connections.handlers.transfer': form('user', 303, (rig, headers) =>
+    rig.root.connections.handlers.transfer(
+      post(`/connections/${rig.seeded.github.connection.id}/transfer`, headers, {
+        group_id: 'no-such-group',
+      }),
+      rig.seeded.github.connection.id,
+    ),
+  ),
+  'connections.handlers.reassign': form('operator', 303, (rig, headers) =>
+    rig.root.connections.handlers.reassign(
+      post(`/admin/connections/${rig.seeded.github.connection.id}/reassign`, headers, {
+        owner_kind: 'user',
+        owner_email: OPERATOR_EMAIL,
+      }),
+      rig.seeded.github.connection.id,
+    ),
+  ),
+  'shares.handlers.share': form('user', 303, (rig, headers) =>
+    rig.root.shares.handlers.share(
+      post(`/connections/${rig.seeded.github.connection.id}/shares`, headers, {
+        target_kind: 'user',
+        target_email: OPERATOR_EMAIL,
+        risk: PR,
+      }),
+      rig.seeded.github.connection.id,
+    ),
+  ),
+  'shares.handlers.revoke': form('user', 303, (rig, headers) =>
+    rig.root.shares.handlers.revoke(
+      post(`/connections/${rig.seeded.github.connection.id}/shares/none/revoke`, headers, {}),
+      rig.seeded.github.connection.id,
+      'none',
+    ),
+  ),
+  'groups.handlers.create': form('operator', 303, (rig, headers) =>
+    rig.root.groups.handlers.create(post('/admin/groups/create', headers, { name: 'platform' })),
+  ),
+  'groups.handlers.addMember': form('operator', 303, (rig, headers) =>
+    rig.root.groups.handlers.addMember(
+      post('/admin/groups/none/members', headers, { email: OPERATOR_EMAIL }),
+      'none',
+    ),
+  ),
+  'groups.handlers.removeMember': form('operator', 303, (rig, headers) =>
+    rig.root.groups.handlers.removeMember(
+      post(`/admin/groups/none/members/${rig.seeded.ada.id}/remove`, headers, {}),
+      'none',
+      rig.seeded.ada.id,
+    ),
+  ),
   'connections.handlers.saveProviderApp': form('operator', 303, (rig, headers) =>
     rig.root.connections.handlers.saveProviderApp(
       post('/admin/provider-apps/github', headers, { action: 'clear' }),
@@ -185,7 +235,15 @@ const READS: Readonly<Record<string, string>> = {
   'requests.handlers.inbox': 'GET; reads the caller’s inbox (guardSession)',
 };
 
-const SURFACES = ['auth', 'connections', 'missions', 'requests', 'telemetry'] as const;
+const SURFACES = [
+  'auth',
+  'connections',
+  'missions',
+  'requests',
+  'telemetry',
+  'shares',
+  'groups',
+] as const;
 const GUARDED = Object.entries(MUTATIONS);
 const SESSION_GUARDED = GUARDED.filter(([, m]) => m.role !== 'origin-only');
 

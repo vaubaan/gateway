@@ -8,6 +8,7 @@
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { Authenticator } from '../auth/authenticator';
+import type { MissionGrounds } from '../authority';
 import type { RateLimiter, SessionStore } from '../compose/ports';
 import type { InstanceConfig } from '../config/types';
 import type { Logger } from '../logging';
@@ -27,6 +28,8 @@ export interface ConnectionsModuleDeps {
   readonly sessions: SessionStore;
   readonly rateLimiter: RateLimiter;
   readonly authenticator: Authenticator;
+  /** Orphans the missions of a connection that was revoked, transferred or reassigned. */
+  readonly grounds: Pick<MissionGrounds, 'sweepConnection'>;
   readonly logger: Logger;
   /** Outbound HTTP of the connect flows and of the plugins' discovery (tests inject a mock). */
   readonly fetch?: typeof fetch;
@@ -58,6 +61,7 @@ export function createConnectionsModule(deps: ConnectionsModuleDeps): Connection
     registry: deps.registry,
     providerApps: deps.providerApps,
     broker: credentials,
+    grounds: deps.grounds,
     pending: new PendingConnectStore(deps.sessions),
     rateLimiter: deps.rateLimiter,
     audit: deps.store.auditWriter,
@@ -104,6 +108,7 @@ export {
   METADATA_PREFIX,
   NEW_CONNECTION_PATH,
   NOTICE_PARAM,
+  OWNERLESS_CONNECTIONS_PAGE,
   PROVIDER_APPS_PAGE,
   REFUSE_UNVERIFIED_ACTION,
   type ConnectionHandlers,
@@ -136,6 +141,11 @@ export {
   type OAuth2Client,
 } from './oauth2';
 export {
+  createNoticeRedirect,
+  type NoticeRedirect,
+  type NoticeRedirectDeps,
+} from './notice-redirect';
+export {
   CONNECT_TTL_MS,
   NoticeStore,
   PendingConnectStore,
@@ -157,6 +167,7 @@ export {
   type ConnectionView,
   type DiscoveryRecord,
   type InstallationBinding,
+  type NewOwner,
   type ResourcePatch,
   type StartInput,
   type StartResult,

@@ -9,6 +9,7 @@ import { CallPipeline, type CacheClient } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import type { AuthModule } from '../auth';
+import type { MissionGrounds } from '../authority';
 import { createBudgetStage, type SessionService } from '../budget';
 import type { BuildInfo } from '../compose/root';
 import type { RateLimiter } from '../compose/ports';
@@ -33,6 +34,8 @@ export interface ExecutionModuleDeps {
   readonly auth: Pick<AuthModule, 'sessions'>;
   readonly missions: Pick<MissionsModule, 'service'>;
   readonly connections: Pick<ConnectionsModule, 'credentials'>;
+  /** Re-checks the creator's authority on every request (handbook authority, "The door"). */
+  readonly grounds: Pick<MissionGrounds, 'settle'>;
   /** The budget's session service (quota, rate windows, gate) — one per process. */
   readonly budget: SessionService;
   readonly cache: CacheClient;
@@ -92,6 +95,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
       cache: deps.cache,
       rateLimiter: deps.rateLimiter,
     }),
+    grounds: deps.grounds,
     webSessions: deps.auth.sessions,
     budget: deps.budget,
     pipeline,
