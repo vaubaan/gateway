@@ -1,8 +1,10 @@
 {
   "name": "@vaubaan/plugin-railway",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "private": true,
   "type": "module",
+  "description": "Vaubaan Gateway provider plugin for Railway — rewrap of mcp.railway.com plus GraphQL variable tools, OAuth2 credential with refresh",
+  "license": "Apache-2.0",
   "exports": {
     ".": "./src/index.ts"
   },
@@ -10,9 +12,7 @@
     "type-check": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@vaubaan/plugin-sdk": "*",
     "@vaubaan/shared": "*"
-  },
-  "devDependencies": {
-    "@vaubaan/policy-engine": "*"
   }
 }
