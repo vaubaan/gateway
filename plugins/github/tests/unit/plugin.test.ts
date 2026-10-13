@@ -201,13 +201,35 @@ describe('github credential spec — app-install', () => {
   test('declares the company app settings and the installation callback parameter', () => {
     expect(githubCredential.kind).toBe('app-install');
     expect(githubCredential.installationIdParam).toBe('installation_id');
-    expect(githubCredential.appConfigFields.map((f) => f.name)).toEqual([
-      'app_id',
-      'private_key',
-      'app_slug',
+    expect(githubCredential.appConfigFields.map((f) => [f.name, f.secret])).toEqual([
+      ['app_id', false],
+      ['private_key', true],
+      ['app_slug', false],
+      ['client_id', false],
+      ['client_secret', true],
     ]);
-    expect(githubCredential.appConfigFields.find((f) => f.name === 'private_key')?.secret).toBe(
-      true,
+  });
+
+  test('declares how the host binds an installation to the installing GitHub user', () => {
+    // "Request user authorization (OAuth) during installation" : the callback carries
+    // `code` ; the host exchanges it and reads GET /user/installations (100 per page).
+    expect(githubCredential.userVerification).toEqual({
+      codeParam: 'code',
+      tokenUrl: 'https://github.com/login/oauth/access_token',
+      clientAuthMethod: 'client_secret_post',
+      installationsUrl: 'https://api.github.com/user/installations',
+      installationsHeaders: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'vaubaan-gateway',
+        'X-GitHub-Api-Version': '2022-11-28',
+      },
+      installationsListField: 'installations',
+      installationIdField: 'id',
+      pagination: { pageParam: 'page', perPageParam: 'per_page', perPage: 100 },
+    });
+    // Declarative only : the plugin exposes no code path that takes the client secret.
+    expect(Object.values(githubCredential.userVerification ?? {})).not.toContainEqual(
+      expect.any(Function),
     );
   });
 

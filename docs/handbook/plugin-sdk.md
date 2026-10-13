@@ -106,8 +106,36 @@ broken definition in one pass.
 | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
 | `api-key`     | `fields` (≥ 1 with `secret: true`), `createUrl?`                                                                                                                   | `{ fields: Record<name, value>, metadata }`                          |
 | `oauth2`      | `authorizationUrl`, `tokenUrl` (https), `scopes`, `pkce`, `resourceIndicator?`, `clientAuthMethod`, `refreshable`, `extraAuthorizationParams?`, `appConfigFields?` | `{ accessToken, refreshToken, expiresAt, scopes, metadata }`         |
-| `app-install` | `appConfigFields` (app id, private key…), `installUrl(appConfig)`, `installationIdParam`                                                                           | `{ installationId, metadata }` + `ctx.appConfig` for the private key |
+| `app-install` | `appConfigFields` (app id, private key…), `installUrl(appConfig)`, `installationIdParam`, `userVerification?`                                                      | `{ installationId, metadata }` + `ctx.appConfig` for the private key |
 | `ssh-key`     | `algorithm: 'ed25519'`, `fields` (host, port, user)                                                                                                                | `{ privateKeyPem, publicKey, fields, metadata }`                     |
+
+**`userVerification` (`app-install`).** The installation id on the
+callback is a claim the browser makes; this block tells the host how to
+check it against the identity of the human who performed the installation.
+It is data only — the plugin runs none of it and never sees the client
+secret or the user token:
+
+| Member                    | Meaning                                                                                        |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| `codeParam`               | callback query parameter carrying the authorization code (`code`); not `state`, not the id one |
+| `tokenUrl`                | https token endpoint the host exchanges the code at                                            |
+| `clientAuthMethod`        | `client_secret_basic` or `client_secret_post` (`AppInstallClientAuthMethod`)                   |
+| `installationsUrl`        | https endpoint listing the installations the user token can reach (GET, Bearer)                |
+| `installationsHeaders?`   | static headers of that call (API version, `Accept`); never `Authorization`                     |
+| `installationsListField?` | property of the JSON response holding the list; omitted when the body is the list              |
+| `installationIdField`     | property of each item holding the id (string or number)                                        |
+| `pagination?`             | `{ pageParam, perPageParam, perPage }` (pages from 1; `perPage` 1…1000)                        |
+
+The provider's app must be set to ask the installing user to authorize it
+(GitHub: "Request user authorization (OAuth) during installation"), so the
+authorization request is implicit in the install redirect. A spec that
+declares the block must list `CLIENT_ID_FIELD` (`client_id`, non-secret) and
+`CLIENT_SECRET_FIELD` (`client_secret`, secret) — both exported by the SDK —
+as required `appConfigFields`; `definePlugin` reports each malformed member
+by path. A spec **without** the block is valid, but the host refuses to
+connect it unless the operator explicitly accepts unverified installations
+for that provider ([connections](connections.md), "Installation binding").
+`ctx.appConfig` never contains `client_secret`, for any kind.
 
 The host runs each flow generically — the authorization-code dance **and**
 the standard `refresh_token` grant (client authentication per
