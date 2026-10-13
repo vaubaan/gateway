@@ -197,11 +197,13 @@ export type {
 } from './repositories/requests.ts';
 export type { ApprovalKey, ApprovalsRepo, CreateApprovalInput } from './repositories/approvals.ts';
 export type {
+  ClientDocumentUpdate,
   CreateCodeInput,
   CreateDelegationInput,
   CreateTokenInput,
   DelegationsRepo,
   RegisterClientInput,
+  WithDelegation,
 } from './repositories/delegations.ts';
 export { DEFAULT_AUDIT_RETENTION_DAYS } from './repositories/audit.ts';
 export type {

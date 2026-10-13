@@ -2,28 +2,54 @@
  * Delegations — OAuth clients, consents (delegations), authorization codes, refresh and
  * access tokens of the management door (spec §4.1 bis, §6 "short, traceable delegated
  * tokens"). Secrets are stored hashed by the caller; the store never sees a clear token.
+ *
+ * One delegation is one consent and one family of tokens: revoking it revokes every
+ * refresh and access token issued under it, in one transaction.
  */
 
 import { withImmediateTransaction } from '../db.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
 import {
+  CLIENT_OPERATOR_DECISIONS,
+  CLIENT_REGISTRATIONS,
   CODE_CHALLENGE_METHODS,
+  DELEGATION_REVOKE_REASONS,
   DELEGATION_STATUSES,
+  TOKEN_ENDPOINT_AUTH_METHODS,
   type AccessTokenRecord,
+  type ClientOperatorDecision,
+  type ClientRegistration,
   type CodeChallengeMethod,
+  type DelegationActivity,
   type DelegationRecord,
+  type DelegationRevokeReason,
   type Iso,
   type OAuthClientRecord,
   type OAuthCodeRecord,
   type RefreshTokenRecord,
+  type TokenEndpointAuthMethod,
 } from '../types.ts';
-import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
+import { nowIso, parseEnum, placeholders, requireRow, type RepoContext } from './context.ts';
 
 export interface RegisterClientInput {
   readonly clientId: string;
   readonly name: string;
   readonly clientSecretHash?: string | null;
   readonly redirectUris: readonly string[];
+  /** Defaults to `dynamic`. */
+  readonly registration?: ClientRegistration;
+  /** Defaults to `none` (a public client). */
+  readonly tokenEndpointAuthMethod?: TokenEndpointAuthMethod;
+  readonly clientUri?: string | null;
+  readonly metadataExpiresAt?: Iso | null;
+}
+
+/** What a re-fetched Client ID Metadata Document may change of its client. */
+export interface ClientDocumentUpdate {
+  readonly name: string;
+  readonly redirectUris: readonly string[];
+  readonly clientUri: string | null;
+  readonly metadataExpiresAt: Iso;
 }
 
 export interface CreateDelegationInput {
@@ -48,22 +74,60 @@ export interface CreateTokenInput {
   readonly expiresAt: Iso;
 }
 
+/** A token or code row with the delegation it belongs to, whatever their state. */
+export interface WithDelegation<T> {
+  readonly token: T;
+  readonly delegation: DelegationRecord;
+}
+
 export interface DelegationsRepo {
   registerClient(input: RegisterClientInput): Promise<OAuthClientRecord>;
   getClient(id: string): Promise<OAuthClientRecord | null>;
   getClientByClientId(clientId: string): Promise<OAuthClientRecord | null>;
+  /** Every client, most recently registered first. */
+  listClients(): Promise<OAuthClientRecord[]>;
+  /** Replaces what a metadata document says of its client: name, redirect URIs, home page. */
+  updateClientDocument(id: string, update: ClientDocumentUpdate): Promise<OAuthClientRecord>;
+  /** Records the operator's decision; it replaces the previous one. */
+  decideClient(
+    id: string,
+    decision: ClientOperatorDecision,
+    decidedBy: string,
+  ): Promise<OAuthClientRecord>;
+  /**
+   * Deletes the clients registered before `createdBefore` that no operator decided
+   * about and that never received a delegation. Returns how many went.
+   */
+  deleteUnusedClients(createdBefore: Iso): Promise<number>;
 
   create(input: CreateDelegationInput): Promise<DelegationRecord>;
   getById(id: string): Promise<DelegationRecord | null>;
   listForUser(userId: string): Promise<DelegationRecord[]>;
-  /** Revokes the consent and every refresh and access token issued under it. */
-  revoke(id: string): Promise<DelegationRecord>;
+  /** The delegations given to one client (`oauth_clients.id`), oldest first. */
+  listForClient(clientId: string): Promise<DelegationRecord[]>;
+  /**
+   * Revokes the consent and every refresh and access token issued under it. The reason
+   * is recorded by the call that actually revokes; revoking again changes nothing.
+   */
+  revoke(id: string, reason?: DelegationRevokeReason): Promise<DelegationRecord>;
+  /**
+   * Same revocation, for a caller that must act once on it (write the audit entry):
+   * the revoked delegation when this call is the one that revoked it, `null` when it
+   * was already revoked or does not exist.
+   */
+  revokeIfActive(id: string, reason: DelegationRevokeReason): Promise<DelegationRecord | null>;
+  /** Token activity of each delegation asked for; absent ids are absent from the map. */
+  activityOf(delegationIds: readonly string[]): Promise<Map<string, DelegationActivity>>;
 
   createCode(input: CreateCodeInput): Promise<OAuthCodeRecord>;
+  /** The code row whatever its state (consumed, expired), with its delegation. */
+  findCode(codeHash: string): Promise<WithDelegation<OAuthCodeRecord> | null>;
   /** Single-use: returns the code once, when unexpired and unconsumed, null otherwise. */
   consumeCode(codeHash: string): Promise<OAuthCodeRecord | null>;
 
   createRefreshToken(input: CreateTokenInput): Promise<RefreshTokenRecord>;
+  /** The refresh token row whatever its state (rotated, revoked, expired), with its delegation. */
+  findRefreshToken(tokenHash: string): Promise<WithDelegation<RefreshTokenRecord> | null>;
   /** Rotation: the presented token must be live; it is revoked and linked to its successor. */
   rotateRefreshToken(
     tokenHash: string,
@@ -77,6 +141,13 @@ export interface DelegationsRepo {
     tokenHash: string,
   ): Promise<{ token: AccessTokenRecord; delegation: DelegationRecord } | null>;
   revokeAccessToken(id: string): Promise<boolean>;
+
+  /**
+   * Deletes the codes and tokens that expired before `expiredBefore`. A rotated refresh
+   * token is kept as long as its successor lives, so its replay is still recognised.
+   * Returns how many rows went.
+   */
+  purgeExpired(expiredBefore: Iso): Promise<number>;
 }
 
 interface ClientRow {
@@ -84,6 +155,13 @@ interface ClientRow {
   client_id: string;
   client_secret_hash: string | null;
   name: string;
+  registration: string;
+  token_endpoint_auth_method: string;
+  client_uri: string | null;
+  metadata_expires_at: string | null;
+  operator_decision: string | null;
+  decided_at: string | null;
+  decided_by: string | null;
   created_at: string;
 }
 
@@ -95,6 +173,7 @@ interface DelegationRow {
   status: string;
   created_at: string;
   revoked_at: string | null;
+  revoke_reason: string | null;
 }
 
 interface CodeRow {
@@ -125,7 +204,17 @@ interface AccessRow {
   revoked_at: string | null;
 }
 
-const DELEGATION_COLUMNS = 'id, user_id, client_id, scope, status, created_at, revoked_at';
+interface ActivityRow {
+  delegation_id: string;
+  last_token_at: string | null;
+  live_until: string | null;
+}
+
+const CLIENT_COLUMNS = `id, client_id, client_secret_hash, name, registration,
+  token_endpoint_auth_method, client_uri, metadata_expires_at, operator_decision, decided_at,
+  decided_by, created_at`;
+const DELEGATION_COLUMNS =
+  'id, user_id, client_id, scope, status, created_at, revoked_at, revoke_reason';
 const CODE_COLUMNS =
   'id, delegation_id, redirect_uri, code_challenge, code_challenge_method, created_at, expires_at, consumed_at';
 const REFRESH_COLUMNS = 'id, delegation_id, created_at, expires_at, revoked_at, replaced_by_id';
@@ -140,6 +229,10 @@ function delegationToRecord(row: DelegationRow): DelegationRecord {
     status: parseEnum(DELEGATION_STATUSES, row.status, 'delegations.status'),
     createdAt: row.created_at,
     revokedAt: row.revoked_at,
+    revokeReason:
+      row.revoke_reason === null
+        ? null
+        : parseEnum(DELEGATION_REVOKE_REASONS, row.revoke_reason, 'delegations.revoke_reason'),
   };
 }
 
@@ -184,32 +277,58 @@ function accessToRecord(row: AccessRow): AccessTokenRecord {
 export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
   const { db } = ctx;
   const clientById = db.prepare<[string], ClientRow>(
-    'SELECT id, client_id, client_secret_hash, name, created_at FROM oauth_clients WHERE id = ?',
+    `SELECT ${CLIENT_COLUMNS} FROM oauth_clients WHERE id = ?`,
   );
   const clientByClientId = db.prepare<[string], ClientRow>(
-    'SELECT id, client_id, client_secret_hash, name, created_at FROM oauth_clients WHERE client_id = ?',
+    `SELECT ${CLIENT_COLUMNS} FROM oauth_clients WHERE client_id = ?`,
   );
-  const insertClient = db.prepare<[string, string, string | null, string, string]>(
-    'INSERT INTO oauth_clients (id, client_id, client_secret_hash, name, created_at) VALUES (?, ?, ?, ?, ?)',
+  const allClients = db.prepare<[], ClientRow>(
+    `SELECT ${CLIENT_COLUMNS} FROM oauth_clients ORDER BY created_at DESC, id DESC`,
+  );
+  const insertClient = db.prepare<
+    [string, string, string | null, string, string, string, string | null, string | null, string]
+  >(
+    `INSERT INTO oauth_clients (id, client_id, client_secret_hash, name, registration,
+       token_endpoint_auth_method, client_uri, metadata_expires_at, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  );
+  const updateClientDocumentStmt = db.prepare<[string, string | null, string, string]>(
+    'UPDATE oauth_clients SET name = ?, client_uri = ?, metadata_expires_at = ? WHERE id = ?',
+  );
+  const decideClientStmt = db.prepare<[string, string, string, string]>(
+    'UPDATE oauth_clients SET operator_decision = ?, decided_at = ?, decided_by = ? WHERE id = ?',
   );
   const insertRedirect = db.prepare<[string, string]>(
     'INSERT INTO oauth_client_redirect_uris (client_id, uri) VALUES (?, ?)',
   );
+  const deleteRedirects = db.prepare<[string]>(
+    'DELETE FROM oauth_client_redirect_uris WHERE client_id = ?',
+  );
   const redirectsOf = db.prepare<[string], { uri: string }>(
     'SELECT uri FROM oauth_client_redirect_uris WHERE client_id = ? ORDER BY uri',
+  );
+  // The redirect URIs go with their client (ON DELETE CASCADE).
+  const deleteUnusedClientsStmt = db.prepare<[string]>(
+    `DELETE FROM oauth_clients
+     WHERE created_at < ? AND operator_decision IS NULL
+       AND id NOT IN (SELECT client_id FROM delegations)`,
   );
   const delegationById = db.prepare<[string], DelegationRow>(
     `SELECT ${DELEGATION_COLUMNS} FROM delegations WHERE id = ?`,
   );
   const delegationsOfUser = db.prepare<[string], DelegationRow>(
-    `SELECT ${DELEGATION_COLUMNS} FROM delegations WHERE user_id = ? ORDER BY created_at`,
+    `SELECT ${DELEGATION_COLUMNS} FROM delegations WHERE user_id = ? ORDER BY created_at, id`,
+  );
+  const delegationsOfClient = db.prepare<[string], DelegationRow>(
+    `SELECT ${DELEGATION_COLUMNS} FROM delegations WHERE client_id = ? ORDER BY created_at, id`,
   );
   const insertDelegation = db.prepare<[string, string, string, string, string]>(
     `INSERT INTO delegations (id, user_id, client_id, scope, status, created_at)
      VALUES (?, ?, ?, ?, 'active', ?)`,
   );
-  const revokeDelegation = db.prepare<[string, string]>(
-    `UPDATE delegations SET status = 'revoked', revoked_at = ? WHERE id = ? AND status = 'active'`,
+  const revokeDelegation = db.prepare<[string, string | null, string]>(
+    `UPDATE delegations SET status = 'revoked', revoked_at = ?, revoke_reason = ?
+     WHERE id = ? AND status = 'active'`,
   );
   const revokeRefreshOfDelegation = db.prepare<[string, string]>(
     'UPDATE oauth_refresh_tokens SET revoked_at = ? WHERE delegation_id = ? AND revoked_at IS NULL',
@@ -225,6 +344,9 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
   const codeById = db.prepare<[string], CodeRow>(
     `SELECT ${CODE_COLUMNS} FROM oauth_codes WHERE id = ?`,
   );
+  const codeByHash = db.prepare<[string], CodeRow>(
+    `SELECT ${CODE_COLUMNS} FROM oauth_codes WHERE code_hash = ?`,
+  );
   const liveCodeByHash = db.prepare<[string, string], CodeRow>(
     `SELECT ${CODE_COLUMNS} FROM oauth_codes WHERE code_hash = ? AND consumed_at IS NULL AND expires_at > ?`,
   );
@@ -237,6 +359,9 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
   );
   const refreshById = db.prepare<[string], RefreshRow>(
     `SELECT ${REFRESH_COLUMNS} FROM oauth_refresh_tokens WHERE id = ?`,
+  );
+  const refreshByHash = db.prepare<[string], RefreshRow>(
+    `SELECT ${REFRESH_COLUMNS} FROM oauth_refresh_tokens WHERE token_hash = ?`,
   );
   const liveRefreshByHash = db.prepare<
     [string, string],
@@ -268,6 +393,24 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
   const revokeAccess = db.prepare<[string, string]>(
     'UPDATE oauth_access_tokens SET revoked_at = ? WHERE id = ? AND revoked_at IS NULL',
   );
+  const purgeCodes = db.prepare<[string]>('DELETE FROM oauth_codes WHERE expires_at < ?');
+  const purgeAccess = db.prepare<[string]>('DELETE FROM oauth_access_tokens WHERE expires_at < ?');
+  // A rotated token points at its successor: it stays while that successor lives, and a
+  // successor stays while a surviving token still points at it.
+  const purgeRefresh = db.prepare<[string, string, string]>(
+    `DELETE FROM oauth_refresh_tokens
+     WHERE expires_at < ?
+       AND (replaced_by_id IS NULL
+            OR replaced_by_id NOT IN (SELECT id FROM oauth_refresh_tokens WHERE expires_at >= ?))
+       AND id NOT IN (SELECT replaced_by_id FROM oauth_refresh_tokens
+                      WHERE replaced_by_id IS NOT NULL AND expires_at >= ?)`,
+  );
+  // The successor of a token deleted above may itself be deleted: unlink first.
+  const unlinkPurgedSuccessors = db.prepare<[string, string]>(
+    `UPDATE oauth_refresh_tokens SET replaced_by_id = NULL
+     WHERE replaced_by_id IN (SELECT id FROM oauth_refresh_tokens WHERE expires_at < ?)
+       AND expires_at < ?`,
+  );
 
   function clientToRecord(row: ClientRow): OAuthClientRecord {
     return {
@@ -276,8 +419,32 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
       name: row.name,
       clientSecretHash: row.client_secret_hash,
       redirectUris: redirectsOf.all(row.id).map((r) => r.uri),
+      registration: parseEnum(CLIENT_REGISTRATIONS, row.registration, 'oauth_clients.registration'),
+      tokenEndpointAuthMethod: parseEnum(
+        TOKEN_ENDPOINT_AUTH_METHODS,
+        row.token_endpoint_auth_method,
+        'oauth_clients.token_endpoint_auth_method',
+      ),
+      clientUri: row.client_uri,
+      metadataExpiresAt: row.metadata_expires_at,
+      operatorDecision:
+        row.operator_decision === null
+          ? null
+          : parseEnum(
+              CLIENT_OPERATOR_DECISIONS,
+              row.operator_decision,
+              'oauth_clients.operator_decision',
+            ),
+      decidedAt: row.decided_at,
+      decidedBy: row.decided_by,
       createdAt: row.created_at,
     };
+  }
+
+  function requireClient(id: string): OAuthClientRecord {
+    const row = clientById.get(id);
+    if (!row) throw new NotFoundError('oauth_client', id);
+    return clientToRecord(row);
   }
 
   function requireDelegation(id: string): DelegationRecord {
@@ -294,11 +461,16 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
     return delegation;
   }
 
+  function requireRedirectUris(uris: readonly string[]): readonly string[] {
+    if (uris.length === 0) {
+      throw new InvariantError('an OAuth client registers at least one redirect URI');
+    }
+    return [...new Set(uris)];
+  }
+
   return {
     async registerClient(input) {
-      if (input.redirectUris.length === 0) {
-        throw new InvariantError('an OAuth client registers at least one redirect URI');
-      }
+      const redirectUris = requireRedirectUris(input.redirectUris);
       const id = ctx.newId();
       withImmediateTransaction(db, () => {
         insertClient.run(
@@ -306,9 +478,13 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
           input.clientId,
           input.clientSecretHash ?? null,
           input.name,
+          input.registration ?? 'dynamic',
+          input.tokenEndpointAuthMethod ?? 'none',
+          input.clientUri ?? null,
+          input.metadataExpiresAt ?? null,
           nowIso(ctx),
         );
-        for (const uri of new Set(input.redirectUris)) insertRedirect.run(id, uri);
+        for (const uri of redirectUris) insertRedirect.run(id, uri);
       });
       return clientToRecord(requireRow(clientById.get(id), 'oauth_client', id));
     },
@@ -319,6 +495,27 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
     async getClientByClientId(clientId) {
       const row = clientByClientId.get(clientId);
       return row ? clientToRecord(row) : null;
+    },
+    async listClients() {
+      return allClients.all().map(clientToRecord);
+    },
+    async updateClientDocument(id, update) {
+      const redirectUris = requireRedirectUris(update.redirectUris);
+      requireClient(id);
+      withImmediateTransaction(db, () => {
+        updateClientDocumentStmt.run(update.name, update.clientUri, update.metadataExpiresAt, id);
+        deleteRedirects.run(id);
+        for (const uri of redirectUris) insertRedirect.run(id, uri);
+      });
+      return requireClient(id);
+    },
+    async decideClient(id, decision, decidedBy) {
+      requireClient(id);
+      decideClientStmt.run(decision, nowIso(ctx), decidedBy, id);
+      return requireClient(id);
+    },
+    async deleteUnusedClients(createdBefore) {
+      return deleteUnusedClientsStmt.run(createdBefore).changes;
     },
 
     async create(input) {
@@ -333,15 +530,57 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
     async listForUser(userId) {
       return delegationsOfUser.all(userId).map(delegationToRecord);
     },
-    async revoke(id) {
+    async listForClient(clientId) {
+      return delegationsOfClient.all(clientId).map(delegationToRecord);
+    },
+    async revoke(id, reason) {
       requireDelegation(id);
       const now = nowIso(ctx);
       withImmediateTransaction(db, () => {
-        revokeDelegation.run(now, id);
+        revokeDelegation.run(now, reason ?? null, id);
         revokeRefreshOfDelegation.run(now, id);
         revokeAccessOfDelegation.run(now, id);
       });
       return requireDelegation(id);
+    },
+    async revokeIfActive(id, reason) {
+      const now = nowIso(ctx);
+      const revoked = withImmediateTransaction(db, () => {
+        if (revokeDelegation.run(now, reason, id).changes === 0) return false;
+        revokeRefreshOfDelegation.run(now, id);
+        revokeAccessOfDelegation.run(now, id);
+        return true;
+      });
+      return revoked ? requireDelegation(id) : null;
+    },
+    async activityOf(delegationIds) {
+      const out = new Map<string, DelegationActivity>();
+      const ids = [...new Set(delegationIds)];
+      if (ids.length === 0) return out;
+      const list = placeholders(ids.length);
+      // Both token tables as one set of (delegation, created, live-until) rows.
+      const rows = db
+        .prepare<string[], ActivityRow>(
+          `SELECT delegation_id, MAX(created_at) AS last_token_at, MAX(live_until) AS live_until
+           FROM (
+             SELECT delegation_id, created_at,
+               CASE WHEN revoked_at IS NULL THEN expires_at END AS live_until
+             FROM oauth_refresh_tokens WHERE delegation_id IN (${list})
+             UNION ALL
+             SELECT delegation_id, created_at,
+               CASE WHEN revoked_at IS NULL THEN expires_at END AS live_until
+             FROM oauth_access_tokens WHERE delegation_id IN (${list})
+           ) AS tokens
+           GROUP BY delegation_id`,
+        )
+        .all(...ids, ...ids);
+      for (const row of rows) {
+        out.set(row.delegation_id, {
+          lastTokenAt: row.last_token_at,
+          liveUntil: row.live_until,
+        });
+      }
+      return out;
     },
 
     async createCode(input) {
@@ -359,6 +598,11 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
       );
       return codeToRecord(requireRow(codeById.get(id), 'oauth_code', id));
     },
+    async findCode(codeHash) {
+      const row = codeByHash.get(codeHash);
+      if (!row) return null;
+      return { token: codeToRecord(row), delegation: requireDelegation(row.delegation_id) };
+    },
     async consumeCode(codeHash) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () => {
@@ -375,6 +619,11 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
       const id = ctx.newId();
       insertRefresh.run(id, input.delegationId, input.tokenHash, nowIso(ctx), input.expiresAt);
       return refreshToRecord(requireRow(refreshById.get(id), 'oauth_refresh_token', id));
+    },
+    async findRefreshToken(tokenHash) {
+      const row = refreshByHash.get(tokenHash);
+      if (!row) return null;
+      return { token: refreshToRecord(row), delegation: requireDelegation(row.delegation_id) };
     },
     async rotateRefreshToken(tokenHash, next) {
       const now = nowIso(ctx);
@@ -405,6 +654,16 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
     },
     async revokeAccessToken(id) {
       return revokeAccess.run(nowIso(ctx), id).changes > 0;
+    },
+
+    async purgeExpired(expiredBefore) {
+      return withImmediateTransaction(db, () => {
+        let purged = purgeCodes.run(expiredBefore).changes;
+        purged += purgeAccess.run(expiredBefore).changes;
+        unlinkPurgedSuccessors.run(expiredBefore, expiredBefore);
+        purged += purgeRefresh.run(expiredBefore, expiredBefore, expiredBefore).changes;
+        return purged;
+      });
     },
   };
 }

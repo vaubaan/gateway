@@ -80,6 +80,8 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'group-created': true,
   'group-member-added': true,
   'group-member-removed': true,
+  'oauth-client-approved': true,
+  'oauth-client-disabled': true,
   'config-changed': true,
 });
 
@@ -90,5 +92,6 @@ export const ADMIN_OBJECT_TYPES = membersOf<AdminObjectType>({
   request: true,
   delegation: true,
   group: true,
+  'oauth-client': true,
   'instance-config': true,
 });
