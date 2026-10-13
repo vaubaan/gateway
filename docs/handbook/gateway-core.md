@@ -314,7 +314,14 @@ path as on the others, with the provider called once and no entry carrying
 `upstream_error`.
 
 `CallRequest` carries `tool`, `args`, the optional `agent_label` and the
-`client` origin (`ClientOrigin { ip, user_agent }`). `CallTarget` is the
+`client` origin (`ClientOrigin { ip, user_agent }`), plus two optional
+members for streaming: `onPart(part)`, which receives each part of a result
+the provider delivers progressively, and `signal`, aborted when the caller is
+gone. The pipeline itself reads neither: only the upstream stage — the last
+one, after every check and the budget decrement — calls `onPart`, and the
+audit entry is still written once, when the forward ends, so its
+`upstream_latency_ms` covers the whole stream ([execution-door](execution-door.md),
+"Streaming"). No stage reads `agent_label`: it is copied to the entry. `CallTarget` is the
 resolved
 `{ connection, resource | null }`.
 

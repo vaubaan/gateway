@@ -112,12 +112,12 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/service.test.ts`                     |       33 |
 | `apps/gateway/src/server/connections/shipped-providers.test.ts`           |        5 |
 | `apps/gateway/src/server/crypto/aead.test.ts`                             |       12 |
-| `apps/gateway/src/server/execution/execution.test.ts`                     |       21 |
+| `apps/gateway/src/server/execution/execution.test.ts`                     |       24 |
 | `apps/gateway/src/server/groups/service.test.ts`                          |       13 |
 | `apps/gateway/src/server/http/client-ip.test.ts`                          |       11 |
 | `apps/gateway/src/server/http/healthz.test.ts`                            |        4 |
 | `apps/gateway/src/server/logging/logging.test.ts`                         |        6 |
-| `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                  |        9 |
+| `apps/gateway/src/server/missions/bootstrap-kit.test.ts`                  |       13 |
 | `apps/gateway/src/server/missions/catalog-view.test.ts`                   |       11 |
 | `apps/gateway/src/server/missions/preview.test.ts`                        |       44 |
 | `apps/gateway/src/server/missions/orphan-reason.test.ts`                  |        4 |
@@ -147,8 +147,8 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/telemetry/settings.test.ts`                      |        7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                         |       11 |
 | `apps/gateway/tests/integration/audit/admin-mutations.test.ts`            |       40 |
-| `apps/gateway/tests/integration/audit/audit-query.test.ts`                |       22 |
-| `apps/gateway/tests/integration/audit/mission-session.test.ts`            |       15 |
+| `apps/gateway/tests/integration/audit/audit-query.test.ts`                |       23 |
+| `apps/gateway/tests/integration/audit/mission-session.test.ts`            |       19 |
 | `apps/gateway/tests/integration/audit/retention.test.ts`                  |       10 |
 | `apps/gateway/tests/integration/auth/oidc-login.test.ts`                  |       16 |
 | `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`     |        1 |
@@ -160,10 +160,12 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/compose/boot.test.ts`                     |        4 |
 | `apps/gateway/tests/integration/connections/connect-flow.test.ts`         |        6 |
 | `apps/gateway/tests/integration/connections/repository-status.test.ts`    |        9 |
+| `apps/gateway/tests/integration/execution/agent-label.test.ts`            |        6 |
 | `apps/gateway/tests/integration/execution/approval-door.test.ts`          |        7 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`      |        4 |
 | `apps/gateway/tests/integration/execution/door-http.test.ts`              |       19 |
 | `apps/gateway/tests/integration/execution/pipeline.test.ts`               |       23 |
+| `apps/gateway/tests/integration/execution/streaming.test.ts`              |       10 |
 | `apps/gateway/tests/integration/missions/gate.test.ts`                    |       17 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`        |        8 |
 | `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`       |       28 |
@@ -178,7 +180,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/standalone-native-addons.test.ts`         |        3 |
 | `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts`       |        2 |
 | `apps/gateway/tests/integration/store/approval-decisions.test.ts`         |       16 |
-| `apps/gateway/tests/integration/store/audit.test.ts`                      |       13 |
+| `apps/gateway/tests/integration/store/audit.test.ts`                      |       15 |
 | `apps/gateway/tests/integration/store/config.test.ts`                     |        7 |
 | `apps/gateway/tests/integration/store/connections-shares.test.ts`         |       13 |
 | `apps/gateway/tests/integration/store/corrupt-rows.test.ts`               |       14 |
@@ -223,6 +225,7 @@ this table says where each requirement lives, and what is not written yet.
 | `packages/plugin-sdk/tests/unit/define-plugin.test.ts`                    |       24 |
 | `packages/plugin-sdk/tests/unit/env-of.test.ts`                           |        3 |
 | `packages/plugin-sdk/tests/unit/registry.test.ts`                         |       10 |
+| `packages/plugin-sdk/tests/unit/streaming.test.ts`                        |        9 |
 | `packages/plugin-sdk/tests/unit/testing-kit.test.ts`                      |       14 |
 | `packages/policy-engine/tests/unit/budget.test.ts`                        |       25 |
 | `packages/policy-engine/tests/unit/qualify.test.ts`                       |       29 |
@@ -296,7 +299,7 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/plugin.test.ts`                                |       33 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                          |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                              |       99 |
-| **TOTAL** (`npm run test`, 2026-10-13, after a build; 209 files)          | **5222** |
+| **TOTAL** (`npm run test`, 2026-10-13, after a build; 216 files)          | **5353** |
 
 After a build one test is skipped: the latency measurement of the authority
 re-check (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without `.next/standalone` the five
@@ -435,6 +438,14 @@ npx vitest run packages/policy-engine     # one package
   the fallback flag: a catch-all recognised by convention only fails);
   `mockFetch` (routes by method / URL / predicate, recorded calls, `times`,
   unmatched request rejects).
+- **`streaming.test.ts`** (9) — **streamed results**: `appendPart` merges
+  consecutive text parts and keeps every other boundary; `streamToolResult`
+  returns the complete result without a sink, hands each part to the sink in
+  order **before reading the next one**, propagates a provider failure after
+  the parts already sent, and ends the iteration when the sink rejects (the
+  provider is released); `textParts` yields one part per chunk, decodes a
+  character split across two chunks, cancels the body on an early exit and
+  throws when the body errors midway.
 - **`catalog-path.test.ts`** — `catalogPathNextTo`: default file name,
   `URL` input, the fixture resolving to a readable file, the two Turbopack
   rewrite shapes raising the named error.
@@ -1046,7 +1057,11 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   two writers on one file serialize under `BEGIN IMMEDIATE` (second gets
   `SQLITE_BUSY` while the lock is held, succeeds after commit);
   `VACUUM INTO` backup is a readable single file with no `-wal`.
-- **`integration/store/audit.test.ts`** (13) — gateway-core
+- **`integration/store/audit.test.ts`** (15) — `agentLabelActivity`: a
+  mission's calls of a span per agent label and decision, the unlabelled
+  ones apart, `since` inclusive and `until` exclusive, an open span, another
+  mission and administrative entries left out; `search` by agent label
+  matches no administrative entry. And: gateway-core
   `CallAuditEntry` round-trips through `audit` + `audit_risks` rows
   (accepted snapshot, touched, remaining budget), a touched-but-not-accepted
   risk is kept, `AdminAuditEntry` round-trips, **`UPDATE` aborts**
@@ -1459,9 +1474,13 @@ Unit, co-located (109):
 - **`summary.test.ts`** (8) — the three lines (can / cannot / quantities) for a
   recurring and a one-off mission, the empty form, label truncation, period and
   expiry phrases.
-- **`bootstrap-kit.test.ts`** (9) — the secret only in the env snippet; MCP
+- **`bootstrap-kit.test.ts`** (13) — the secret only in the env snippet; MCP
   configuration with the instance URL and `${VAUBAAN_MISSION_TOKEN}`; the agent
-  block (connections, refs, risks, budget); one line per refusal code and "never
+  block (connections, refs, risks, budget); **sub-agents and agent labels**
+  (the same configuration and token, never one per agent; both carriers and
+  which one wins; the shape printed from the constants the door checks;
+  "attribution only", "not an identity"), in the kit and in
+  `/agent-bootstrap.md`; one line per refusal code and "never
   work around"; the `curl … tools/list` check; masked prefix on a revisited
   page; sub-path of the public URL; `/agent-bootstrap.md` documents every
   refusal code and names no instance.
@@ -1522,9 +1541,10 @@ issued token are in "Scenarios — Execution door".
 ## Scenarios — Execution door
 
 > Covers: handbook [[execution-door]]. Spec: `vaubaan-gateway.md` §4.1
-> (discovery, call, the eight refusals, catalog), §2.4, §3.1 (resource
-> selection), §3.3 and §10 (counters agree with the audit), §6 (three
-> credentials, surface rate limit, no secret in logs), §8.
+> (discovery, call, the eight refusals, catalog, streaming), §2.4, §3.1
+> (resource selection), §3.2 and §7.9 (one budget per mission, however many
+> agents; the agent label), §3.3 and §10 (counters agree with the audit), §6
+> (three credentials, surface rate limit, no secret in logs), §8.
 
 Ephemeral instance: the real composition root on the `:memory:` store
 (`executionInstance()` in `src/server/execution/testing.ts`), a scripted
@@ -1533,8 +1553,12 @@ account-level tool, an env-scoped risk, a risk to gate, an `execute` and a
 `refresh` the test scripts), missions issued through `MissionService.issue`,
 calls sent as JSON-RPC to `root.execution.handlers.mcp`.
 
-- **`src/server/execution/execution.test.ts`** (21) — agent label (header,
-  `_meta.agent` wins, sanitised and bounded); client address (ignored
+- **`src/server/execution/execution.test.ts`** (24) — agent label (header,
+  `_meta.agent` wins; the accepted shape up to 64 characters, trimmed;
+  absent, empty and blank hold nothing; too long, a character outside the
+  list, a non-string are **rejected with their reason, never repaired**; the
+  carrier read and what was dropped on the way, the header not examined once
+  `_meta.agent` gave the label); client address (ignored
   without `trusted_proxies`, right-most untrusted hop, CIDR, IPv6, malformed
   chain, a hop with a port or in brackets, an invalid `trusted_proxies`
   entry skipped — the one rule of `http/client-ip`); `citedRefs` over
@@ -1608,6 +1632,51 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   - **no secret in logs**: the token secret, the installation token, the
     App key, the client secret and the arguments never appear; the prefix
     and a 64-hex `arguments_hash` do.
+- **`integration/execution/agent-label.test.ts`** (6) — **the label has no
+  effect on authorization or budget**, over the door's HTTP handler:
+  - **two labels and no label share one counter**: three calls on a quota of
+    three under `planner`, `coder` and no label; the fourth is
+    `budget-exhausted` whoever asks, including a label that never called;
+    one session, one counter row; the labels are on the audit entries and
+    the `call-allowed` events only;
+  - **the same decision with any label, with none, and with a forged one**
+    (the creator's email, another mission's id, `admin`): the accepted tool
+    is allowed and the unaccepted one refused `risk-not-accepted` each time,
+    the entries differ by the label alone, the mission the forged label
+    named is untouched;
+  - **a value that is not a label is dropped, logged, and the call served**:
+    too long, a space, markup, an object, a number → no error, the entry has
+    no label, the counter moves, one `agent label dropped` line each with
+    carrier, reason and length, and **the value itself in no log line**;
+  - `_meta.agent` wins over the header; a rejected or blank `_meta.agent`
+    falls back to the header; the header is trimmed;
+  - the official MCP client in both protocol eras labels a connection by
+    header and one call by `_meta`, the three calls drawing from one quota.
+- **`integration/execution/streaming.test.ts`** (10) — **streaming, spec
+  §4.1 "the decision is made before the stream starts"**; a scripted plugin
+  emits the parts of its result through the SDK's `streamToolResult`:
+  - **a part reaches the caller while the plugin is still blocked on its
+    provider**, as `notifications/progress` on an SSE answer; at that moment
+    **the counter is already incremented and the `call-allowed` event
+    written**, and the audit entry is not written yet; when the stream ends
+    the entry is `allowed` with an `upstream_latency_ms` that covers the
+    whole stream;
+  - the official MCP client in both protocol eras receives the parts through
+    `onprogress` (the first one before the provider delivers the second),
+    then the complete result;
+  - a provider's chunked response body forwarded chunk by chunk
+    (`textParts`); a caller without a progress token gets one JSON body with
+    the same result;
+  - **a refused call** (risk not accepted; budget exhausted) **is answered by
+    its error alone**, no progress frame, no plugin call, nothing counted;
+  - **a stream that breaks midway**: the parts already sent, then `isError`
+    naming how many; the entry `allowed` with `upstream_error: 'depot stream
+failed after 2 parts (Error)'` — not the provider's sentence — the credit
+    consumed, one execution;
+  - a 401 after a first part is **not** retried and leaves the connection
+    `active`; a 401 before any part still is;
+  - **the caller goes away**: the stream stops at the next part and the
+    entry says `stream stopped after 1 part: the caller was gone`.
 - **`integration/execution/counters-vs-audit.test.ts`** (4) — **structural,
   spec §10**: 240 calls per seed (three seeds; allowed, refused on every
   dimension, rejected, failing upstream, a 401 repaired by a refresh, bursts
@@ -2051,8 +2120,8 @@ for a call touching two gated risks (they ask in turn, by decision).
 
 > Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §3.3 (the
 > session), §4.2 ("Mission session", "Audit"), §6 ("immutable audit", "no
-> secret in logs"), §8 (one entry per call and per administrative act,
-> fields, retention). Handbook [[audit]].
+> secret in logs"), §7.9 (several agents: who did what), §8 (one entry per
+> call and per administrative act, fields, retention). Handbook [[audit]].
 
 Suites under `apps/gateway/tests/integration/audit/` run on the real composition root with the
 `:memory:` store and the shipped plugins (`support.ts`). They seed calls the way `CallPipeline`
@@ -2066,7 +2135,10 @@ itself are asserted in "Scenarios — Execution door".
   period ignored; a single day is `[00:00, next 00:00)` UTC; oversized value refused;
   cursor round trip and every malformed cursor refused; `auditQueryString`; `scopeOf` for
   a user, an operator and the bootstrap operator; `withoutArguments`.
-- **`audit-query.test.ts`** (22) — **visibility**: a creator sees the calls and acts of their
+- **`audit-query.test.ts`** (23) — **by agent label**: exact and
+  case-sensitive, call entries only (no administrative entry), narrowed by
+  the other filters, and never a way into someone else's audit (the scope
+  comes first). **Visibility**: a creator sees the calls and acts of their
   missions, another user none; a connection's owner sees the calls made through it by a
   mission they did not create; a member of the owning group sees it, a non-member does
   not; an operator sees every administrative entry and still not other people's calls;
@@ -2078,7 +2150,15 @@ itself are asserted in "Scenarios — Execution door".
   not shift the next page. **No raw arguments**: the argument marker reaches no viewer's
   page; arguments wrongly put in an administrative entry are replaced by `[not shown]`.
   The bootstrap operator is named ("Bootstrap operator") instead of shown by its actor id.
-- **`mission-session.test.ts`** (15) — creator only (another user, an operator and an unknown
+- **`mission-session.test.ts`** (19) — **agent labels**: the calls of the
+  current period per label, allowed and refused, the unlabelled ones apart,
+  **beside counters that stay per risk and per mission**; calls of past
+  periods left out and nothing for a mission that is not active; the
+  timeline filtered to one label, or to unlabelled calls (requests and
+  rotations are not calls and drop out), with the budget and the per-label
+  counts unchanged by the filter; a filtered timeline read through a bounded
+  scan that says when it stopped early and resumes on "Older" without
+  repeating or skipping. And: creator only (another user, an operator and an unknown
   id get `null`); before the first call (no session, full budget, gate per risk, catalog
   labels); counted / left / exhausted per risk; past periods kept apart and yesterday's
   exhaustion gone; one-off mission; **open requests by link only** (kind, risk, dates,

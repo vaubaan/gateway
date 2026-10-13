@@ -566,10 +566,17 @@ After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
 '<public_url>/mcp', headers: { Authorization: 'Bearer
 ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    secret;
-3. `agent_instructions` — a Markdown block: how an agent labels itself for
-   the audit (`X-Vaubaan-Agent: <label>` header or `_meta.agent` on one call,
-   `AGENT_LABEL_HEADER` / `AGENT_LABEL_META_KEY`; handbook
-   [execution-door](execution-door.md)), connections and resource refs (with
+3. `agent_instructions` — a Markdown block: a section "Sub-agents and agent
+   labels" (`agentLabelGuidance`, spec §7.9) — an orchestrator hands its
+   sub-agents this MCP configuration as is, same endpoint and same token,
+   never a token per agent; each agent names itself with the header
+   `X-Vaubaan-Agent: <label>` in its own copy of the configuration, or with
+   `_meta.agent` on each `tools/call` when one process sends the calls of
+   several agents (the per-call value wins); the shape of a label, printed
+   from `AGENT_LABEL_MAX_LENGTH` and `AGENT_LABEL_PUNCTUATION`, the constants
+   the execution door builds its check from; "attribution only … not an
+   identity" (handbook [execution-door](execution-door.md), "Agent label") —
+   then connections and resource refs (with
    env labels), accepted risks with quota per period, rate limit and gate,
    reload and expiry, "the budget is shared, not multiplied", then one line per
    refusal code from `REFUSAL_GUIDANCE` (a `Record<RefusalCode, string>`, so a
@@ -608,7 +615,7 @@ and resources are read through the store repositories only
 
 Unit, beside the code (109): `authority/authority-service.test.ts` (7),
 `missions/preview.test.ts` (44), `catalog-view.test.ts` (11), `summary.test.ts`
-(8), `bootstrap-kit.test.ts` (9), `token.test.ts` (8, with the draft schema),
+(8), `bootstrap-kit.test.ts` (13), `token.test.ts` (8, with the draft schema),
 `app/(app)/missions/new/form-state.test.ts` (22).
 
 Integration, `tests/integration/missions/` (53) on the real root over

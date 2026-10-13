@@ -25,6 +25,25 @@ amended-by:
 > plugin versioning rule. Implemented by feature P0.2. Plugins migrate to
 > the contract in P1.2 ; nothing in `plugins/<provider>` changes here.
 >
+> **Amended on 2026-10-13 — streamed results** (feature P2.7, spec §4.1
+> "Streaming"). `ExecuteContext` gains an optional `emitPart(part:
+McpToolContent): Promise<void>` and the SDK a module `streaming.ts`
+> (`streamToolResult`, `textParts`, `appendPart`). The change is additive :
+> `execute` still returns one complete `McpToolResult`, no shipped plugin is
+> touched, a plugin that ignores `emitPart` behaves as before. _Why a sink in
+> the context and not a streamed return type_ : MCP answers a `tools/call`
+> with exactly one message, so the host needs the complete result in every
+> case ; a second return type (`AsyncIterable`) would have widened `execute`
+> for all eleven plugins and their tests to express what a callback already
+> does, and would have left the host to assemble a result the plugin knows
+> better how to build. _What the host guarantees_ : `emitPart` is only
+> reachable from an allowed, counted call ; after a first part the call is
+> never retried ; `emitPart` rejects once the caller is gone. Evidence that
+> the process shape of [[docker-image-and-config-format]] carries the event
+> stream unbuffered (Next 16 standalone, the reference Caddyfile) and the
+> limits are in the handbook `execution-door`, "Streaming". No separate ADR
+> was written : the transport supports streaming without any change to it.
+>
 > **Amended on 2026-10-13** by [[plugin-catalog-path-and-standalone-tracing]]
 > (D4 : the catalog is located with `catalogPathNextTo(import.meta.url)`, not
 > `new URL(…, import.meta.url)`) and [[fallback-risk-only-when-uncategorized]]

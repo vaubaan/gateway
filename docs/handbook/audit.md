@@ -19,7 +19,8 @@ tracks:
 How what happened is made visible: the Audit page's search, the Mission session page,
 the retention sweeper, and the rule that every administrative mutation leaves an entry.
 Spec: [vaubaan-gateway](../spec/vaubaan-gateway.md) §4.2 ("Mission session", "Audit"),
-§6 ("Immutable audit", "No secret in logs"), §8 (fields, retention), §3.3 (the session).
+§6 ("Immutable audit", "No secret in logs"), §8 (fields, retention), §3.3 (the session),
+§7.9 (several agents: "the session and the audit tell who did what").
 The entry shapes and the writer contract are gateway-core's
 ([gateway-core](gateway-core.md), `packages/gateway-core/src/audit.ts`); the tables, the
 append-only triggers and the purge path are the store's ([store](store.md)); the session,
@@ -95,8 +96,8 @@ missions. The statement is plain `IN` subqueries over `missions`, `connections` 
 ## Filters and paging (`filters.ts`)
 
 `parseAuditQuery(searchParams)` → `{ filters, cursor, raw, problems }`. Query parameters
-(`AUDIT_PARAMS`): `mission`, `user`, `connection`, `tool`, `decision`, `kind`, `from`,
-`to`, `cursor`.
+(`AUDIT_PARAMS`): `mission`, `user`, `connection`, `tool`, `decision`, `agent`, `kind`,
+`from`, `to`, `cursor`.
 
 | Filter       | Matches                                                                                   |
 | ------------ | ----------------------------------------------------------------------------------------- |
@@ -105,6 +106,7 @@ missions. The statement is plain `IN` subqueries over `missions`, `connections` 
 | `connection` | calls through the connection and acts on it                                               |
 | `tool`       | exact tool name (calls only)                                                              |
 | `decision`   | `allowed` \| `refused` (calls only: administrative entries drop out)                      |
+| `agent`      | exact agent label, case-sensitive (calls only): what the caller declared, not an identity |
 | `kind`       | `call` \| `admin`                                                                         |
 | `from`, `to` | a day `YYYY-MM-DD` read as UTC, or a full ISO instant; `to` includes its day              |
 
@@ -131,7 +133,12 @@ following pages, and entries with the same timestamp are neither repeated nor sk
   `UPSTREAM_ERROR_SUMMARY_MAX_LENGTH` (200) characters. It is one of:
   `<provider id> answered HTTP <status> (<error class>)` when the error carries a status,
   `<provider id> call failed (<error class>)` when it does not, or
-  `connection-unavailable: <connection status>` when the credential was rejected for good.
+  `connection-unavailable: <connection status>` when the credential was rejected for good,
+  `<provider id> stream failed after <N> parts[, HTTP <status>] (<error class>)` when a
+  streamed result broke after N parts had been delivered, or
+  `<provider id> stream stopped after <N> parts: the caller was gone`
+  ([execution-door](execution-door.md), "Streaming"). `upstream_latency_ms` of a streamed
+  call covers the whole stream: the entry is written when it ends.
   The error class is the error's `name` when it is identifier-shaped, `Error` otherwise.
   The provider's message goes to the agent that made the call, in the tool result, and is
   stored nowhere ([execution door](execution-door.md), "Upstream stage").
@@ -160,15 +167,17 @@ following pages, and entries with the same timestamp are neither repeated nor sk
 mission that does not exist or is not the user's (the same answer, as on the mission
 detail page: it goes through `MissionService.get`), otherwise:
 
-| Field           | Content                                                                                                                                           |
-| --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `state`         | `deriveMissionState` (active with its current period, expired, revoked, orphaned)                                                                 |
-| `session`       | `{ id, created_at }`, or `null` until the first call                                                                                              |
-| `risks`         | one row per accepted risk: catalog label and severity `level`, `quota`, `consumed` and `remaining` this period, `exhausted`, `rate_limit`, `gate` |
-| `periods`       | the counters per period, newest first: the current one (listed even before its first action) then up to `PAST_PERIODS_SHOWN` (7) past ones        |
-| `events`        | the timeline, newest first, `SESSION_EVENTS_PAGE_SIZE` (100) per page, keyset-paged with `next_events` (`SessionsRepo.listRecentEvents`)          |
-| `open_requests` | requests in state `open` whose expiry is in the future, with their `path`                                                                         |
-| `agent_labels`  | distinct `agent_label` of the mission's call entries with call count and last seen (`AuditRepo.agentLabels`)                                      |
+| Field                                    | Content                                                                                                                                                                                                                  |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `state`                                  | `deriveMissionState` (active with its current period, expired, revoked, orphaned)                                                                                                                                        |
+| `session`                                | `{ id, created_at }`, or `null` until the first call                                                                                                                                                                     |
+| `risks`                                  | one row per accepted risk: catalog label and severity `level`, `quota`, `consumed` and `remaining` this period, `exhausted`, `rate_limit`, `gate`                                                                        |
+| `periods`                                | the counters per period, newest first: the current one (listed even before its first action) then up to `PAST_PERIODS_SHOWN` (7) past ones                                                                               |
+| `events`                                 | the timeline, newest first, `SESSION_EVENTS_PAGE_SIZE` (100) per page, keyset-paged with `next_events` (`SessionsRepo.listRecentEvents`)                                                                                 |
+| `open_requests`                          | requests in state `open` whose expiry is in the future, with their `path`                                                                                                                                                |
+| `agent_labels`                           | distinct `agent_label` of the mission's call entries with call count and last seen (`AuditRepo.agentLabels`)                                                                                                             |
+| `label_activity`                         | the calls of the **current period** per agent label — `allowed`, `refused`, `last_seen_at`, the unlabelled calls as `label: null` — busiest first; empty when the mission is not active (`AuditRepo.agentLabelActivity`) |
+| `timeline_filter`, `events_scan_limited` | the filter `events` was read with, and whether a filtered page stopped looking before the end (below)                                                                                                                    |
 
 `consumed` and `remaining` are read from `session_counters` as they stand, never
 recomputed from the audit: a granted claim (period reset, quota extension —
@@ -182,6 +191,39 @@ risk, actor and, for the first two, their request; an approval also names its to
 For a mission that is not active, `consumed` / `remaining` are `null` and the stored
 periods are listed as past (the 8 most recent). The mission detail page links to the session page; the session
 page links to the audit filtered on the mission.
+
+### Agent labels on the session page
+
+A label is what a caller declared about itself (handbook
+[execution-door](execution-door.md), "Agent label"): attribution, never an identity, with
+no effect on what is allowed or counted. The page says so where it shows one, and both
+reads below are informational.
+
+- **Calls per agent label — current period** (`label_activity`). Counts of audit entries
+  of the mission with `ts` in the current period (`[period.start, period.end)`, open-ended
+  for a one-off mission), grouped by `agent_label` and decision. It is **not a budget**:
+  the quota is per risk and shared by every agent (spec §3.2), a call touching two risks
+  is one call here and two decrements there, and a granted claim lowers a counter without
+  removing a call. The card states it, and the budget table above it is unchanged by any
+  filter. Each row links to the timeline of that label and to the Audit page filtered on
+  it.
+- **Timeline filter**: `/missions/<id>/session?agent=<label>` lists the call events
+  (`call-allowed`, `call-refused`) that carried that label, `?unlabelled=1` those that
+  carried none (`SessionTimelineFilter`: `all` | `label` | `unlabelled`). Requests,
+  resets, rotations and the other events carry no label and are left out of a filtered
+  timeline; "Show the whole timeline" brings them back.
+
+The label of an event lives in its details (`details_json`), not in a column, and
+filtering on a JSON field is not portable SQL. A filtered page is therefore read in
+batches of `SESSION_FILTER_SCAN_BATCH` (200) events through the same keyset as the plain
+timeline, keeping the matches (`matchesTimelineFilter`, over `parseEventDetails`), until
+it holds `SESSION_EVENTS_PAGE_SIZE` of them, reaches the end, or has looked through
+`SESSION_FILTER_SCAN_LIMIT` (2000) events. In the last case the view says so
+(`events_scan_limited`, shown as "older events were not searched yet") and `next_events`
+is where the scan stopped, so "Older" resumes there: nothing is skipped, a sparse label
+on a long timeline just takes several pages. `MissionSessionDeps.timelineScan` overrides
+the two bounds (tests). If this page becomes hot, the remedy is an `agent_label` column
+on `events` with a migration, not a larger scan.
 
 ## Retention (`retention.ts`)
 
@@ -277,15 +319,19 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   closed sets, unreadable dates, reversed period, single day, oversized value, cursor
   round trip and refusals, `auditQueryString`, `scopeOf` for the three viewers,
   `withoutArguments`.
-- `tests/integration/audit/audit-query.test.ts` (22) — visibility (creator, connection
+- `tests/integration/audit/audit-query.test.ts` (23) — visibility (creator, connection
   owner, owning group, operator, bootstrap operator, requests of a mission), "a filter
-  never widens the scope", each filter and their combination, remaining budget per call,
+  never widens the scope", each filter (the agent label: exact, calls only, inside the
+  scope) and their combination, remaining budget per call,
   keyset paging (page sizes, no repeat, equal timestamps, concurrent write), no raw
   argument for any viewer, filter options.
-- `tests/integration/audit/mission-session.test.ts` (15) — creator only, before the
+- `tests/integration/audit/mission-session.test.ts` (19) — creator only, before the
   first call, counters / remaining / exhausted, past periods, one-off mission, open
-  requests by link only, decided request, agent labels, timeline content and paging,
-  revoked mission, `eventView`.
+  requests by link only, decided request, agent labels, calls per label for the current
+  period (allowed, refused, unlabelled, past periods left out, nothing when inactive,
+  the counters unchanged), the timeline filtered by label and to unlabelled calls, a
+  filtered timeline paged through a bounded scan, timeline content and paging, revoked
+  mission, `eventView`.
 - `tests/integration/audit/retention.test.ts` (10) — purge of entries older than N days
   and of nothing else (other tables untouched, boundary kept), triggers still forbidding
   update and delete, idempotence, configured days, scheduling (boot sweep, interval,

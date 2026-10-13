@@ -1,5 +1,5 @@
 ---
-title: Execution door — /mcp, the call pipeline's stages, the catalog
+title: Execution door — /mcp, the call pipeline's stages, the agent label, streaming, the catalog
 status: current
 date: 2026-10-13
 last_synced: 2026-10-13
@@ -12,12 +12,15 @@ tracks:
   - apps/gateway/tests/integration/execution/
   - apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts
   - apps/gateway/tests/manual/seed-demo.ts
+  - apps/gateway/tests/manual/streaming-check.ts
   - packages/gateway-core/src/pipeline.ts
   - packages/gateway-core/src/fingerprint.ts
   - packages/gateway-core/src/errors.ts
   - packages/gateway-core/tests/unit/pipeline.test.ts
   - apps/gateway/src/server/missions/bootstrap-kit.ts
   - packages/plugin-sdk/src/plugin.ts
+  - packages/plugin-sdk/src/streaming.ts
+  - deploy/caddy/Caddyfile
   - plugins/github/src/token-cache.ts
   - plugins/github/tests/unit/token-cache.test.ts
 ---
@@ -26,8 +29,9 @@ tracks:
 
 How an agent holding a mission token lists and calls tools: the HTTP surface,
 the bearer dispatch, the stages that fill gateway-core's `CallPipeline`, the two
-caches, the catalog endpoint. Spec:
-[vaubaan-gateway](../spec/vaubaan-gateway.md) §4.1 (execution surface), §2.4
+caches, the agent label, streaming, the catalog endpoint. Spec:
+[vaubaan-gateway](../spec/vaubaan-gateway.md) §0 and §7.9 (agent label),
+§4.1 (execution surface, streaming), §2.4
 (no credential to the executor), §3.1 (resource selection), §6 (three
 credentials, surface rate limit, no secret in logs), §7.5, §8 (audit).
 Decisions:
@@ -55,7 +59,7 @@ apps/gateway/src/server/execution/      host-agnostic, never imports `next`
   telemetry-sink.ts   TelemetrySink port, NOOP_TELEMETRY_SINK   → the one hook of community telemetry
   credential-cache.ts ConnectionCredentialCache                 — ExecuteContext.credentialCache
   tools.ts            callableProviders(), callableTools(), buildCatalog()
-  request-meta.ts     agentLabelOf(), cleanAgentLabel(), clientOriginOf() — over ../http/client-ip.ts
+  request-meta.ts     readAgentLabel(), parseAgentLabel(), agentLabelOf(), clientOriginOf() — over ../http/client-ip.ts
   testing.ts          depotPlugin(), executionInstance() — tests only
   execution.test.ts   unit tests of the pure and in-memory parts
 apps/gateway/src/app/mcp/route.ts           GET | POST | DELETE /mcp   → root.execution.handlers.mcp
@@ -63,11 +67,14 @@ apps/gateway/src/app/mcp/catalog/route.ts   GET /mcp/catalog           → root.
 apps/gateway/src/app/.well-known/oauth-protected-resource/route.ts   RFC 9728: static bearer, no authorization server
 apps/gateway/tests/integration/execution/   pipeline, door over HTTP, counters vs audit
 apps/gateway/tests/manual/seed-demo.ts      seeds a local instance for the manual check
+apps/gateway/tests/manual/streaming-check.ts   streaming through the standalone server: `serve`, `probe`
+packages/plugin-sdk/src/streaming.ts        ToolResultPartSink, streamToolResult(), textParts(), appendPart()
 ```
 
 Dependency of the door on the protocol: `@modelcontextprotocol/server` 2.3.1
 (`createMcpHandler`, `isLegacyRequest`, `Server`,
-`WebStandardStreamableHTTPServerTransport`, `ProtocolError`). The v1 package
+`WebStandardStreamableHTTPServerTransport`, `legacyStatelessFallback`,
+`ProtocolError`). The v1 package
 `@modelcontextprotocol/sdk` is gone. `@modelcontextprotocol/client` is a dev
 dependency: the integration test drives the door with the official client.
 
@@ -85,9 +92,11 @@ POST /mcp
                     is stored (handbook authority)
   mission context loadMissionContext (store reads, no cache)
   surface rate    rateLimiter.take('mcp:mission:<id>', mcp.rate_limit_per_minute, 60 s) → 429 (-32002), Retry-After
-  protocol        isLegacyRequest(request) ? stateless JSON transport : createMcpHandler(...).fetch
+  protocol        isLegacyRequest(request)
+                    ? (tools/call with a progressToken ? legacyStatelessFallback (SSE) : stateless JSON transport)
+                    : createMcpHandler(...).fetch
   tools/list      checkMissionActive → callableTools(ctx, registry)
-  tools/call      CallPipeline.execute(ctx, { tool, args, agent_label, client })
+  tools/call      CallPipeline.execute(ctx, { tool, args, agent_label, client, onPart?, signal })
 ```
 
 Everything before "protocol" answers with a JSON-RPC error envelope whose `id`
@@ -289,12 +298,13 @@ does not apply. Decision, removed values and what wiring the stage would take:
 ```
 resolved = credentials.resolve(connectionId)              ConnectionUnavailableError → connection-unavailable
 plugin.execute({ ...credentials.contextOf(resolved),
-                 resources, agentLabel, credentialCache }, tool, args)
-  UpstreamAuthError 401
+                 resources, agentLabel, credentialCache, emitPart }, tool, args)
+  UpstreamAuthError 401, no part emitted yet
     credentialCache.drop(connection) > 0  → execute again with the same credential
     still 401 (or nothing was cached)     → credentials.refresh(connectionId) → execute once more
        refresh rejected (connection now `expired`) → connection-unavailable
   UpstreamAuthError 403, any other error  → UpstreamFailureError { summary, detail, status }
+  any error after a part was emitted      → UpstreamFailureError, never retried (see Streaming)
 ```
 
 Every failure that is not `connection-unavailable` leaves the stage as
@@ -307,7 +317,10 @@ gateway-core's `UpstreamFailureError`, which separates two readers:
   from the provider id, the HTTP status when the error carries one
   (`UpstreamAuthError.upstreamStatus`, or a numeric `status` between 100 and
   599 on the error) and the error's class name:
-  `github answered HTTP 403 (UpstreamAuthError)`, `stripe call failed (Error)`.
+  `github answered HTTP 403 (UpstreamAuthError)`, `stripe call failed (Error)`;
+  for a streamed result, `<provider> stream failed after N parts (…)` or
+  `<provider> stream stopped after N parts: the caller was gone`
+  ([Streaming](#streaming)).
   Never the provider's text: providers echo input in their errors, and the
   audit keeps no trace of the arguments but their hash.
 
@@ -351,7 +364,7 @@ bypassed by `github__mint_install_token`, whose result leaves the gateway.
 
 | Pipeline outcome        | JSON-RPC answer to `tools/call`                                                            |
 | ----------------------- | ------------------------------------------------------------------------------------------ |
-| `allowed`               | `result` = the plugin's `McpToolResult`, untouched                                         |
+| `allowed`               | `result` = the plugin's `McpToolResult`, untouched (after its parts, if it streamed)       |
 | `refused`               | `error { code: -32603, message: 'Vaubaan refused the call: <code>', data: <the refusal> }` |
 | `failed` with a refusal | same (`connection-unavailable`)                                                            |
 | `failed`                | `result { isError: true, content: [{ type: 'text', text: 'Upstream error: <detail>' }] }`  |
@@ -390,11 +403,48 @@ runs it with the GitHub plugin's `developer` preset as shipped.
 
 ### Agent label (`request-meta.ts`)
 
-`agentLabelOf(headers, params._meta)`: `_meta.agent` of the call when it is a
-non-empty string, else the `X-Vaubaan-Agent` header, else `null`. Control
-characters become spaces, the label is trimmed and cut at 120 characters. It
-reaches the audit entry, the session event and `ExecuteContext.agentLabel`;
-nothing decides on it.
+A label is what a caller says about itself, so that the session and the audit
+tell who did what when several agents work on one mission (spec §0, §7.9). It
+is attribution only: **nothing decides on it**, it reserves no share of the
+budget, and it is never an identity — nothing proves it.
+
+**Transport.** Two carriers, read by `readAgentLabel(headers, params._meta)`:
+
+| Carrier                                | Set by                                                        | Precedence |
+| -------------------------------------- | ------------------------------------------------------------- | ---------- |
+| `params._meta.agent` of a `tools/call` | an orchestrator that sends the calls of several agents itself | first      |
+| HTTP header `X-Vaubaan-Agent`          | a sub-agent, once, in its own copy of the MCP configuration   | second     |
+
+The per-call value wins when both are present. A carrier that holds nothing
+(absent, empty, blank) or whose value is rejected leaves the place to the next
+one, so a call whose `_meta.agent` is not a label is attributed to its header.
+
+**Shape.** 1 to `AGENT_LABEL_MAX_LENGTH` (64) characters: ASCII letters and
+digits plus `AGENT_LABEL_PUNCTUATION` (`. _ - : / @ +`), the first character a
+letter or a digit; surrounding whitespace is trimmed. Both constants live in
+`missions/bootstrap-kit.ts`: the door builds its check from them and the kit
+prints them, so agents are told exactly what is checked.
+
+**A value that is not a label is dropped, never refused.** No repair, no
+truncation: the call proceeds as if no label had been sent, and the door logs
+`agent label dropped` (info, component `execution-door`) with `mission_id`,
+`carrier` (`meta` | `header`), `reason` (`not-a-string` | `too-long` |
+`invalid-character`) and `length` — never the value. `parseAgentLabel(raw)`
+is the pure check (`absent` | `label` | `rejected`).
+
+**Where it goes.** `CallRequest.agent_label` → the audit entry
+(`agent_label`), the session event of the call (`call-allowed` /
+`call-refused` details, written by the budget) and `ExecuteContext.agentLabel`
+(a plugin may forward it to its provider as a trace; none does). Read back by
+the Mission session page (calls per label, timeline filter) and the Audit
+page's label filter ([audit](audit.md)).
+
+**What it does not touch.** The pipeline's stages never read it: the mission
+is identified by the token, the counters are keyed by session, risk and
+period, the surface rate limit by mission. Two labels, or none, draw from the
+same counters; a label that names a user, another mission or `admin` is a
+string like any other. `tests/integration/execution/agent-label.test.ts`
+holds this over HTTP.
 
 ### Client address
 
@@ -419,7 +469,7 @@ keys on it; the request page keys its surface rate limit on it
 - **2026-07-28** requests (per-request `_meta` envelope) go to
   `createMcpHandler(factory, { legacy: 'reject', responseMode: 'auto' })`: one
   `Server` per request, a JSON body, upgraded to SSE only if a handler emits a
-  notification before its result (none does today).
+  notification before its result (the progress of a streamed result).
 - **2025-era** requests (`initialize`, bare `tools/list`, what Claude Code
   sends today) are detected with `isLegacyRequest` and served by a fresh
   `Server` over `WebStandardStreamableHTTPServerTransport({ sessionIdGenerator:
@@ -428,11 +478,135 @@ undefined, enableJsonResponse: true })`: stateless, one JSON body per POST.
 - Both legs build the server with `ExecutionDoor.buildServer(scope)`; on the
   modern leg the scope travels in `authInfo.extra` (the `token` field of
   `AuthInfo` is the masked prefix).
-- Plugins return a complete `McpToolResult`; no provider response is streamed
-  through the door today.
+- A 2025-era `tools/call` that carries `_meta.progressToken` is served by
+  `legacyStatelessFallback(factory)` instead — the SDK's own stateless leg,
+  which answers in SSE — so progress notifications have a stream to travel
+  on. See [Streaming](#streaming).
+- Plugins return a complete `McpToolResult`, and may emit its parts on the
+  way (`ExecuteContext.emitPart`).
 - `GET /.well-known/oauth-protected-resource` answers `{ resource:
 <public_url>/mcp, authorization_servers: [], bearer_methods_supported:
 ['header'] }` so clients that probe it use the static bearer.
+
+## Streaming
+
+Spec §4.1: "the gateway forwards streamed responses unmodified; the decision
+is made before the stream starts".
+
+### What MCP allows
+
+A `tools/call` is answered by **one** JSON-RPC message: the protocol
+(2025-era and 2026-07-28 alike) has no partial result. What can leave before
+that message is a `notifications/progress` on the call's own event stream
+(SSE), and only for a caller that asked for it with `_meta.progressToken`. So
+"forwarding a streamed response" means here:
+
+- each part the provider delivers leaves the gateway at once, as a progress
+  notification (`progress` = number of parts so far; a text part travels as
+  `message`), while the plugin keeps reading its provider;
+- the complete result still closes the exchange, because a client reads the
+  result, not the notifications. The content is therefore held in memory
+  until the end, exactly as for a result that was not streamed: what is not
+  buffered is the **delivery**, not the result;
+- a caller that sent no `progressToken` receives the same result as one JSON
+  body, when the provider has finished.
+
+### How it is wired
+
+```
+plugin.execute(ctx, …)
+  ctx.emitPart(part)                 plugin SDK: streamToolResult(ctx, textParts(response.body))
+    → PartRelay.emit                 upstream-stage.ts: counts the part; rejects CallerGoneError
+                                     once call.signal is aborted
+      → CallRequest.onPart(part)     door.ts progressForwarder: mcpReq.notify(notifications/progress)
+                                     (absent when the caller sent no progressToken)
+  returns the complete McpToolResult → pipeline writes the audit entry → the door answers
+```
+
+- **The decision comes first.** `onPart` is called by the upstream stage
+  only, the pipeline's last: mission state, resource, risk and the budget
+  transaction (decrement, `call-allowed` session event) have completed before
+  `plugin.execute` runs. A refused call reaches no plugin and is answered by
+  its error alone.
+- **One audit entry, at the end of the stream.** The audit is append-only and
+  holds one entry per call, written when the forward ends — as for any call.
+  For a streamed call that is the end of the stream: `upstream_latency_ms`
+  covers the whole stream. Between the first part and that write, the record
+  of the decision is the counter and the `call-allowed` session event, both
+  committed before the first byte.
+- **A stream that breaks midway** (the plugin throws after N ≥ 1 parts): the
+  entry stays `decision: allowed` with `upstream_error: '<provider> stream
+failed after N parts[, HTTP <status>] (<error class>)'`; the agent receives
+  the parts already sent, then `isError` with `Upstream error: the stream was
+interrupted after N parts: <the plugin's sentence>`. The credit stays
+  consumed (ADR
+  [atomic-budget-accounting](../decisions/atomic-budget-accounting.md)).
+- **No replay after a first part.** The retry ladder (drop cached
+  credentials, refresh) applies only while nothing was emitted: a retry would
+  deliver the beginning twice. A 401 raised after a part is a stream failure
+  and leaves the connection untouched. Plugins therefore open the provider's
+  response before the first `emitPart`.
+- **A caller that goes away** (disconnect, MCP `notifications/cancelled`):
+  the SDK aborts `mcpReq.signal`, which is `CallRequest.signal`. The relay
+  reads it between two parts — a provider call in flight is never interrupted
+  — and rejects the next `emitPart` with `CallerGoneError`; `streamToolResult`
+  leaves its loop, which cancels the provider's body. The entry records
+  `'<provider> stream stopped after N parts: the caller was gone'`. A call
+  that does not stream is not affected by a disconnect: it completes and is
+  audited as it always was.
+- **Telemetry** receives the outcome once, when the stream has ended.
+
+### On the wire
+
+| Caller                                               | Answer                                                                                                            |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 2026-07-28, with `progressToken`                     | JSON if the handler finishes without emitting; upgraded to SSE at the first notification (`responseMode: 'auto'`) |
+| 2025-era `tools/call` with `progressToken`           | SSE: `asksForProgress(request)` routes it to the SDK's `legacyStatelessFallback` (stateless, same server factory) |
+| anything else (no token, `tools/list`, `initialize`) | one JSON body, as before                                                                                          |
+
+On the 2025-era leg a call that carries a `progressToken` is answered in SSE
+framing even when it is refused: the stream then holds the error and nothing
+else. SSE responses are the SDK's (`Content-Type: text/event-stream`,
+`Cache-Control: no-cache`, `X-Accel-Buffering: no`, a comment-frame keep-alive
+every 15 s).
+
+### What the process shape allows (measured)
+
+The transport is a Next 16 route handler returning the SDK's web-standard
+`Response` from the standalone server (ADR
+[docker-image-and-config-format](../decisions/docker-image-and-config-format.md)).
+Measured on 2026-10-13 with `tests/manual/streaming-check.ts` ("Manual check:
+streaming" below), Next 16.4.0 standalone, Node 22, a stand-in upstream
+sending one chunk every 300 ms:
+
+| Path                                                            | Frames arrive                                             |
+| --------------------------------------------------------------- | --------------------------------------------------------- |
+| standalone `server.js`, direct                                  | one by one, about 300 ms apart                            |
+| the same behind `deploy/caddy/Caddyfile` (Caddy 2.11.7, HTTP/2) | one by one, about 300 ms apart                            |
+| the same Caddyfile without `flush_interval -1`                  | one by one (Caddy flushes `text/event-stream` on its own) |
+
+Nothing had to change in the process shape, in `next.config.ts`
+(`compress: false` was already there) or in the Caddyfile: `encode zstd gzip`
+leaves the event stream uncompressed and `flush_interval -1` is kept as an
+explicit guarantee. A client disconnect reaches the handler through
+`request.signal`, behind the proxy too. Another reverse proxy must be told
+not to buffer (`X-Accel-Buffering: no` covers nginx).
+
+### Limits
+
+- No shipped plugin streams yet: `emitPart` is there for the tools whose
+  provider answers progressively (log tails, long exports).
+- The complete result is held in memory until the end (see above); a tool
+  whose output does not fit there needs pagination, not streaming.
+- A progress notification carries text parts only (`message`); an image or
+  resource part advances `progress` and arrives with the result.
+- Progress notifications are not replayed: the door is stateless, there is no
+  event store and no `Last-Event-ID` resumption. A caller that loses the
+  connection calls again, and that is a new call for the budget.
+- The audit entry of a streamed call is written when the stream ends. A
+  process that dies mid-stream leaves a counted action without its entry —
+  the same window a non-streamed call has while the provider answers, wider
+  by the length of the stream; `countersAgreeWithAudit` reports it.
 
 ## Discovery and catalog (`tools.ts`)
 
@@ -590,9 +764,102 @@ kit's own command and the official MCP client; a session with Claude Code
 against a TLS-terminated instance, with a real connection, remains to be done
 by a human ([e2e-tests](../tests/e2e-tests.md)).
 
+## Manual check: streaming
+
+Done on 2026-10-13. `tests/manual/streaming-check.ts serve` builds the real
+root on the `:memory:` store with the door tests' fixture provider, whose
+`execute` reads a slow chunked response from a local stand-in upstream and
+forwards it with `streamToolResult(ctx, textParts(body))`; it publishes the
+root where `getRoot()` looks and starts the **standalone** `server.js` in the
+same process, so the HTTP server and the route handler are the image's.
+`probe` is the agent's side, in another process.
+
+```console
+$ npm run build --workspace @vaubaan/gateway-app
+$ PORT=39417 HOSTNAME=127.0.0.1 NODE_ENV=production \
+    npx tsx apps/gateway/tests/manual/streaming-check.ts serve &
+standalone server: …/apps/gateway/.next/standalone/apps/gateway/server.js
+stand-in upstream: http://127.0.0.1:37113 (5 chunks, one every 300 ms)
+token: vbn_live_JYUfg9Oq_<secret>
+▲ Next.js 16.4.0
+
+$ npx tsx apps/gateway/tests/manual/streaming-check.ts probe http://127.0.0.1:39417 "$TOKEN"
+1. 2025-era tools/call with a progress token, raw HTTP, http://127.0.0.1:39417
+   HTTP 200, text/event-stream, headers after 419 ms, content-encoding: none
+   +  420 ms  progress 1 "chunk 1 of 5\n"
+   +  707 ms  progress 2 "chunk 2 of 5\n"
+   + 1008 ms  progress 3 "chunk 3 of 5\n"
+   + 1309 ms  progress 4 "chunk 4 of 5\n"
+   + 1610 ms  progress 5 "chunk 5 of 5\n"
+   + 1616 ms  result "chunk 1 of 5\nchunk 2 of 5\nchunk 3 of 5\nchunk 4 of 5\nchunk 5 of 5\n"
+   => 5 progress frames spread over 1190 ms: not buffered
+2. official MCP client (2025-era), onprogress
+   +  323 ms  progress 1 "chunk 1 of 5\n"
+   …
+   + 1519 ms  progress 5 "chunk 5 of 5\n"
+   => 5 progress frames spread over 1196 ms: not buffered
+2. official MCP client (2026-07-28), onprogress
+   +  325 ms  progress 1 "chunk 1 of 5\n"
+   …
+   + 1519 ms  progress 5 "chunk 5 of 5\n"
+   => 5 progress frames spread over 1194 ms: not buffered
+3. a stream the upstream cuts after two chunks
+   +  312 ms  progress 1 "chunk 1 of 5\n"
+   +  616 ms  result (isError) "Upstream error: the stream was interrupted after 1 part: terminated"
+4. a refused call (a risk the mission does not accept) with a progress token
+   +   10 ms  error "Vaubaan refused the call: risk-not-accepted"
+5. no progress token: one JSON body
+   HTTP 200, application/json, body after 1509 ms: "chunk 1 of 5\n…chunk 5 of 5\n"
+6. the caller disconnects after the first frame
+   +  308 ms  progress 1 "chunk 1 of 5\n"
+   aborted by the probe (AbortError)
+
+# the serve process, meanwhile
+audit: allowed label=streaming-probe upstream_latency_ms=1514 upstream_error=-
+audit: allowed label=probe upstream_latency_ms=1507 upstream_error=-
+audit: allowed label=probe upstream_latency_ms=1504 upstream_error=-
+audit: allowed label=streaming-probe upstream_latency_ms=605 upstream_error=depot stream failed after 1 part (TypeError)
+audit: refused (risk-not-accepted) label=streaming-probe upstream_latency_ms=- upstream_error=-
+audit: allowed label=streaming-probe upstream_latency_ms=1501 upstream_error=-
+upstream: the gateway closed the body after 2 chunks
+audit: allowed label=streaming-probe upstream_latency_ms=604 upstream_error=depot stream stopped after 1 part: the caller was gone
+```
+
+In step 3 the stand-in upstream destroys its socket right after writing the
+second chunk, which the gateway's HTTP client did not deliver: one part
+arrived, and the entry says so.
+
+**Through the reference proxy.** The same `serve` process in a container
+(the image's Node, the worktree mounted read-only) and the pinned
+`caddy:2.11.7-alpine` with `deploy/caddy/Caddyfile` unchanged
+(`GATEWAY_DOMAIN=localhost`, Caddy's internal certificate), on one Docker
+network; the probe on the host with `NODE_TLS_REJECT_UNAUTHORIZED=0`:
+
+```console
+$ … streaming-check.ts probe https://localhost:39443 "$TOKEN"
+1. 2025-era tools/call with a progress token, raw HTTP, https://localhost:39443
+   HTTP 200, text/event-stream, headers after 437 ms, content-encoding: none
+   +  438 ms  progress 1 "chunk 1 of 5\n"
+   +  728 ms  progress 2 "chunk 2 of 5\n"
+   + 1029 ms  progress 3 "chunk 3 of 5\n"
+   + 1331 ms  progress 4 "chunk 4 of 5\n"
+   + 1630 ms  progress 5 "chunk 5 of 5\n"
+   => 5 progress frames spread over 1192 ms: not buffered
+…
+6. the caller disconnects after the first frame
+audit: allowed label=streaming-probe upstream_latency_ms=604 upstream_error=depot stream stopped after 1 part: the caller was gone
+```
+
+Steps 2 to 6 gave the same lines as without the proxy; a second run with
+`flush_interval -1` removed from the Caddyfile gave the same timings.
+
+What was **not** done: a streaming call against a real provider (no shipped
+plugin streams), and a run behind a proxy other than Caddy.
+
 ## Tests
 
-- `src/server/execution/execution.test.ts` (21) — agent label, client address
+- `src/server/execution/execution.test.ts` (24) — agent label (shape, absent,
+  rejected with its reason, carrier and what was dropped), client address
   (hop with a port, brackets, spaces, invalid CIDR), `citedRefs`, tool filter,
   verified-token cache (once, state re-read, void proof, single flight,
   throttle, sliding proof, throttle per address), upstream credential cache.
@@ -610,6 +877,21 @@ by a human ([e2e-tests](../tests/e2e-tests.md)).
   argon2 once, verification throttle, a flood of wrong secrets that does not
   lock out the agent (from another address; with a warm proof), surface rate
   limit, logs.
+- `tests/integration/execution/agent-label.test.ts` (6) — two labels and no
+  label share one counter; the same decision with any label, none, or one
+  that claims an identity; a value that is not a label dropped, logged
+  without its value, the call served; `_meta.agent` over the header and the
+  fallback; the official MCP client in both eras.
+- `tests/integration/execution/streaming.test.ts` (10) — a part delivered
+  while the plugin is still blocked, with the credit already counted and no
+  audit entry yet; the official MCP client in both eras (`onprogress`, then
+  the complete result); a provider body forwarded chunk by chunk; one JSON
+  body without a progress token; a refused call answered by its error alone;
+  a stream that breaks midway (entry, latency, credit, no replay); no retry
+  after a part even on a 401, retry before; the caller going away.
+- `packages/plugin-sdk/tests/unit/streaming.test.ts` (9) — `appendPart`,
+  `streamToolResult` (order, failure, the sink rejecting), `textParts`
+  (UTF-8 across chunks, early exit cancels the body, a body that errors).
 - `tests/integration/execution/counters-vs-audit.test.ts` (4) — 240 random
   calls per seed (three seeds) through the door, then
   `countersAgreeWithAudit` with no mismatch; a concurrent burst on a small
@@ -660,6 +942,20 @@ Scenarios in [integration-tests](../tests/integration-tests.md).
 - **GitHub is called with a stale installation token** — entries live at most
   50 min and are dropped on a 401; `root.execution.credentialCache.drop(id)`
   empties a connection's entries by hand.
+- **A call is not attributed to the label the agent set** — the value was
+  dropped: look for `agent label dropped` with the mission id; `reason` says
+  why (a space, a character outside `. _ - : / @ +`, more than 64
+  characters, a non-string `_meta.agent`). A call with both carriers is
+  attributed to `_meta.agent`.
+- **Progress never arrives, only the result** — the caller sent no
+  `_meta.progressToken` (the official client adds one when `onprogress` is
+  passed), the tool's plugin does not call `emitPart`, or a proxy in front
+  buffers: run `tests/manual/streaming-check.ts probe` against the proxy's
+  address, it exits non-zero when the frames arrive together.
+- **`upstream_error: … stream failed after N parts`** — the provider's stream
+  broke after the agent had received N parts; nothing was replayed.
+  `… stream stopped after N parts: the caller was gone` is the agent's side
+  closing the connection or cancelling the request.
 - **Counters and audit disagree** — run `countersAgreeWithAudit` (budget) on
   the store; the entry of an allowed call carries `remaining_budget`.
 
@@ -670,7 +966,13 @@ Scenarios in [integration-tests](../tests/integration-tests.md).
 - **A plugin that derives a per-call credential** — read
   `ctx.credentialCache` in `execute` (absent in discovery), choose a key inside
   the connection, never cache a credential that is a tool's result.
-- **The management door** — `ExecutionModule.tokens` (the `TokenVerifier`) is
+- **A plugin whose provider streams** — open the provider's response first
+  (so a 401 is still retried), then `return streamToolResult(ctx,
+textParts(response.body))`, or call `ctx.emitPart` yourself and await it.
+  Nothing else changes: the tool still returns its whole result
+  ([plugin-sdk](plugin-sdk.md), "Streamed results").
+- **The management door** — it reads no agent label and streams nothing;
+  both belong to this door. `ExecutionModule.tokens` (the `TokenVerifier`) is
   what its admission gate identifies a mission token with, to refuse it by
   kind in turn ([management-door](management-door.md)).
 - **A hosted deployment** — a shared `CacheClient` for the verified tokens is
@@ -679,14 +981,16 @@ Scenarios in [integration-tests](../tests/integration-tests.md).
 
 ## References
 
-- Spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §2.4, §3.1, §3.3, §4.1,
-  §6, §7.5, §8, §10.
+- Spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §0, §2.4, §3.1, §3.2,
+  §3.3, §4.1, §6, §7.5, §7.9, §8, §10, §11.2 ("Agent label").
 - ADRs
   [docker-image-and-config-format](../decisions/docker-image-and-config-format.md),
   [upstream-credential-cache-and-rejected-credentials](../decisions/upstream-credential-cache-and-rejected-credentials.md),
   [atomic-budget-accounting](../decisions/atomic-budget-accounting.md),
   [api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md),
-  [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md).
+  [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md),
+  [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
+  (amendment "Streamed results").
 - Neighbours: [gateway-core](gateway-core.md),
   [budget-and-sessions](budget-and-sessions.md), [connections](connections.md),
   [missions](missions.md), [configuration](configuration.md),

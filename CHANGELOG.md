@@ -11,6 +11,24 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Who did what, when several agents work on one mission.** The Mission session page
+  shows the calls of the current period per agent label — allowed, refused, last call,
+  the unlabelled ones apart — and filters the timeline to one label; the Audit page has
+  an "Agent label" filter. These are counts of calls for information, said so on the
+  page: the budget stays per risk and is shared by every agent of the mission.
+- **The bootstrap kit and `/agent-bootstrap.md` explain sub-agents**: an orchestrator
+  hands them its MCP configuration as is (same token, same budget), and each names itself
+  with the header `X-Vaubaan-Agent` or, per call, with `_meta.agent`.
+- **Streamed tool results.** A plugin whose provider answers progressively can hand the
+  parts of its result to the gateway as they arrive (`ExecuteContext.emitPart`,
+  `streamToolResult`, `textParts` in `@vaubaan/plugin-sdk`); an MCP client that sent a
+  progress token receives each part at once as a progress notification, then the complete
+  result. The decision, the budget decrement and the session event always come before the
+  first byte; the audit entry is written when the stream ends, with the latency of the
+  whole stream, and records a stream that broke midway or whose caller went away. Works
+  through the standalone image and the reference Caddy configuration as shipped. No
+  shipped plugin streams yet.
+
 - **Delegation: an agent acts on a user's behalf.** The instance is an OAuth authorization
   server for its management MCP door, `/mcp/manage`: an MCP client such as Claude Code
   discovers it (RFC 9728 and RFC 8414 metadata), registers itself, and sends the user to
@@ -288,6 +306,13 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   `mission-restored`: who, cause, connection, risks not covered).
 
 ### Changed
+
+- **Agent labels are checked, not repaired.** A label is 1 to 64 characters: letters,
+  digits and `. _ - : / @ +`, starting with a letter or a digit. Anything else is ignored
+  — the call is served without a label and the gateway logs why — where it used to be
+  cleaned up and cut at 120 characters. When a call carries both `_meta.agent` and the
+  `X-Vaubaan-Agent` header, `_meta.agent` wins, as before. A label never changes what is
+  allowed or counted.
 
 - **A revoked connection orphans its missions.** Calls of a mission that carries a revoked
   connection now answer `mission-inactive` (`status: orphaned`) instead of

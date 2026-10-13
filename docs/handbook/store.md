@@ -304,10 +304,14 @@ since?, until?, limit? }` (default limit 1000, ordered by `ts, id`).
 `search(query)` is the Audit page's query (P1.8, handbook [audit](audit.md)): a
 mandatory `AuditScope` (missions created by one user, connections owned by some
 principals, optionally every administrative entry) applied before the filters
-(`missionId`, `userIds`, `connectionId`, `tool`, `decision`, `kind`, `since`, `until`),
+(`missionId`, `userIds`, `connectionId`, `tool`, `decision`, `agentLabel`, `kind`,
+`since`, `until`),
 newest first (`ts DESC, id DESC`), paged by keyset (`before: { ts, id }`, `limit`).
 `agentLabels(missionId)` lists the distinct agent labels of a mission's calls with
-their count and last timestamp. The sessions repository gained the matching
+their count and last timestamp. `agentLabelActivity(missionId, { since, until | null })`
+counts a mission's call entries of a span per agent label and per decision, the
+unlabelled calls as `label: null` (one `GROUP BY` with `SUM(CASE …)`, the same on
+Postgres); it serves the session page's "calls per agent label" and is never a budget. The sessions repository gained the matching
 `listRecentEvents(sessionId, { before?, limit })` (newest first, same keyset).
 
 Immutability is enforced by triggers: every `UPDATE` on `audit`/`audit_risks` aborts;

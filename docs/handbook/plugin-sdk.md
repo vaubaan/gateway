@@ -37,6 +37,7 @@ packages/plugin-sdk/
   src/
     plugin.ts           ProviderPlugin, ClassifyOutcome, ConnectionContext, ExecuteContext, PluginLogger,
                         UpstreamCredentialCache
+    streaming.ts        ToolResultPartSink, PartEmitter, streamToolResult, textParts, appendPart
     credential.ts       CredentialSpec (4 kinds) and the per-kind Spec/Secret interfaces, CredentialSecret,
                         CredentialField, ProviderAppConfig, OAuth2ClientAuthMethod,
                         expectCredentialKind, CredentialKindMismatch,
@@ -98,7 +99,7 @@ flowchart LR
 | `catalog`                                            | —     | `RiskCatalog` with `presets`; loaded from YAML, see below.                                                                                                                                                                                                   |
 | `credential`                                         | —     | `CredentialSpec`, see below.                                                                                                                                                                                                                                 |
 | `classify(tool, args, resources)`                    | yes   | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection; used to derive the env and default refs. The gateway core's `Classifier` is this member plus `envOf` (`Pick<ProviderPlugin, 'classify' \| 'envOf'>`). |
-| `execute(ctx, tool, args)`                           | no    | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?, credentialCache?. Throws `UpstreamAuthError` on 401/403.                                                                                         |
+| `execute(ctx, tool, args)`                           | no    | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?, credentialCache?, emitPart?. Throws `UpstreamAuthError` on 401/403.                                                                              |
 | `discoverResources(ctx)`                             | no    | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                                            |
 | `envOf?(slice, resources)`                           | yes   | The environment a slice carries in itself (Vercel's `env[prod]` segment, the only shipped plugin declaring it); `undefined` defers to the resource label. See "Environment resolution".                                                                      |
 | `refresh?(ctx)`                                      | no    | Override for a non-standard refresh only (re-minted installation token…). A standard `oauth2` credential is refreshed by the host from the spec (`tokenUrl`, `clientAuthMethod`, `resourceIndicator`): `refreshable: true` needs no `refresh`.               |
@@ -135,6 +136,45 @@ receives it; a credential that is the result of a tool is never cached.
 GitHub is the one user (`plugins/github/src/token-cache.ts`); the host side
 is described in [execution-door](execution-door.md), the decision in
 [upstream-credential-cache-and-rejected-credentials](../decisions/upstream-credential-cache-and-rejected-credentials.md).
+
+#### Streamed results (`streaming.ts`)
+
+`ExecuteContext.emitPart` (`ToolResultPartSink = (part: McpToolContent) =>
+Promise<void>`, optional) is for a tool whose provider answers progressively.
+The contract of `execute` does not change — it returns one complete
+`McpToolResult`, because an MCP `tools/call` is answered by one message — but
+each part handed to `emitPart` leaves for the caller at once, as a progress
+notification, while `execute` keeps reading the provider. A plugin that never
+calls it is unaffected; a host that does not provide it (discovery, tests)
+gets the complete result alone.
+
+```ts
+async execute(ctx, tool, args) {
+  const response = await ctx.fetch(url, { headers }); // open the provider's response first
+  if (response.status === 401) throw new UpstreamAuthError('…', 401);
+  if (!response.ok || !response.body) throw new Error(`… answered ${response.status}`);
+  return streamToolResult(ctx, textParts(response.body));
+}
+```
+
+- `streamToolResult(ctx, parts)` hands each part of an
+  `AsyncIterable<McpToolContent>` to `ctx.emitPart`, awaits it, and returns
+  `{ content }` with consecutive text parts merged into one block
+  (`appendPart`).
+- `textParts(body)` turns a `ReadableStream<Uint8Array>` into text parts, one
+  per chunk, decoding UTF-8 across chunk boundaries; ending the iteration
+  early cancels the body.
+
+Rules: open the provider's response **before** the first part (an
+`UpstreamAuthError` thrown before any part is retried by the host; after a
+part nothing is replayed); **await** every `emitPart` (it is the
+backpressure, and it rejects when the caller is gone, which is how a long
+stream stops); **throw** when the provider's stream breaks (the host records
+the call as failed after N parts; the credit stays consumed). The host side —
+what the caller receives, the audit entry, the limits — is
+[execution-door](execution-door.md), "Streaming". Decision: amendment
+"Streamed results" of
+[plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md).
 
 `UpstreamAuthError` carries the provider's status. The execution door treats
 only a 401 as a rejected credential (refresh, retry, then the connection is
