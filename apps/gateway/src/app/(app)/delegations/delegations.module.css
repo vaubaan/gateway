@@ -1,0 +1,42 @@
+/* Delegations page: one card per delegation, in reading order — who holds it,
+   where its access goes, since when, what it issued, then the revocation. */
+
+.muted {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.badges {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  flex-wrap: wrap;
+}
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  font-size: var(--text-sm);
+}
+.facts dt {
+  color: var(--text-muted);
+}
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.sub {
+  font-size: var(--text-sm);
+  font-weight: var(--font-weight-semibold);
+  margin: 0 0 var(--space-2);
+}
+.missions {
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+}
+.empty {
+  padding: var(--space-8) var(--space-4);
+  text-align: center;
+  color: var(--text-muted);
+}

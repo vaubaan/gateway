@@ -29,7 +29,7 @@ describe('buildRoot', () => {
     expect(root.configFile).toBeNull();
     expect(root.encryptor.currentKeyVersion).toBe(1);
     expect(root.store.kind).toBe('memory');
-    expect(root.store.schemaVersion).toBe(5);
+    expect(root.store.schemaVersion).toBe(6);
     expect(root.registry.size).toBe(SHIPPED_PLUGINS.length);
     expect(root.registry.ids).toEqual(SHIPPED_PLUGINS.map((p) => p.id));
     expect(new Set(root.registry.ids).size).toBe(root.registry.size);

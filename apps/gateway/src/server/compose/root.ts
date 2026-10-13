@@ -38,6 +38,13 @@ import { createGroupsModule, type GroupsModule } from '../groups';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { ProviderAppsService } from '../provider-apps';
 import { createMissionsModule, type MissionsModule } from '../missions';
+import {
+  createManagementDoorModule,
+  createOAuthAsModule,
+  type ClientDocumentFetcher,
+  type ManagementDoorModule,
+  type OAuthAsModule,
+} from '../oauth-as';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import { createSharesModule, type SharesModule } from '../shares';
@@ -85,6 +92,10 @@ export interface GatewayRoot {
   readonly execution: ExecutionModule;
   /** Community telemetry: the pipeline's sink, the operator's toggle, the validation status (P2.5). */
   readonly telemetry: TelemetryModule;
+  /** Authorization server of the management door: clients, consent, delegated tokens (P2.3). */
+  readonly oauth: OAuthAsModule;
+  /** `/mcp/manage`: its admission gate, and a placeholder door until P2.4 brings the tools. */
+  readonly management: ManagementDoorModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
   close(): Promise<void>;
@@ -108,10 +119,12 @@ export interface RootDeps {
   readonly oidc?: OidcOptions;
   /** Outbound HTTP of the connect flows and of plugin discovery (tests inject a mock provider). */
   readonly providerFetch?: typeof fetch;
-  /** Recognises delegated tokens at the execution door so they are refused by kind (P2.3 wires the real one). */
+  /** Replaces the authorization server's verifier at the execution door (tests of the door alone). */
   readonly delegatedTokens?: DelegatedTokenResolver;
   /** Outbound HTTP to the telemetry collector (tests assert on it; default: the global `fetch`). */
   readonly telemetryFetch?: typeof fetch;
+  /** Outbound fetch of Client ID Metadata Documents (tests inject a fake; unused unless enabled). */
+  readonly clientDocumentFetch?: ClientDocumentFetcher;
   readonly logWrite?: LoggerOptions['write'];
   readonly build?: BuildInfo;
 }
@@ -220,6 +233,8 @@ type RootModules = Pick<
   | 'budget'
   | 'execution'
   | 'telemetry'
+  | 'oauth'
+  | 'management'
 >;
 
 /**
@@ -330,6 +345,17 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     fetch: deps.telemetryFetch,
   });
   opened.push(() => telemetry.stop());
+  // The authorization server comes before the doors: the execution door refuses
+  // a delegated token by kind, the management door admits nothing else.
+  const oauth = createOAuthAsModule({
+    config,
+    store,
+    sessions,
+    authenticator: auth.authenticator,
+    rateLimiter,
+    logger,
+    fetchClientDocument: deps.clientDocumentFetch,
+  });
   const execution = createExecutionModule({
     config,
     store,
@@ -343,8 +369,16 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     rateLimiter,
     logger,
     build,
-    delegations: deps.delegatedTokens,
+    delegations: deps.delegatedTokens ?? oauth.verifier,
     telemetry: telemetry.sink,
+  });
+  const management = createManagementDoorModule({
+    config,
+    oauth,
+    missionTokens: execution.tokens,
+    webSessions: auth.sessions,
+    build,
+    logger,
   });
 
   return {
@@ -363,6 +397,8 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     budget,
     execution,
     telemetry,
+    oauth,
+    management,
   };
 }
 

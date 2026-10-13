@@ -39,7 +39,9 @@ const PAGES_FOR_ANY_SESSION: readonly string[] = ['audit/page.tsx'];
  * `src/server/connections/handlers.ts` and authenticates before anything
  * else: `connect`, `discover`, `revoke` and `updateResource` through
  * `guardMutation` (origin, then session, then "a user"), `callback` through
- * `guardSession` (a top-level GET from the provider carries no `Origin`). The behaviour is asserted below, route by route.
+ * `guardSession` (a top-level GET from the provider carries no `Origin`).
+ * `oauth.handlers.revokeDelegation` (`src/server/oauth-as/handlers.ts`) goes
+ * through `guardMutation` too. The behaviour is asserted below, route by route.
  */
 const AUTHENTICATING_HANDLERS: readonly string[] = [
   'connections.handlers.connect',
@@ -52,6 +54,7 @@ const AUTHENTICATING_HANDLERS: readonly string[] = [
   'connections.handlers.transfer',
   'shares.handlers.share',
   'shares.handlers.revoke',
+  'oauth.handlers.revokeDelegation',
 ];
 const DELEGATION = /\(await getRoot\(\)\)\.([a-zA-Z]+\.handlers\.[a-zA-Z]+)\(request\b/g;
 

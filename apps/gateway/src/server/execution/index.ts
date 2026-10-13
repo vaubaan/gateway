@@ -59,6 +59,8 @@ export interface ExecutionHandlers {
 export interface ExecutionModule {
   readonly pipeline: CallPipeline;
   readonly credentialCache: ConnectionCredentialCache;
+  /** The verifier of mission tokens: the management door identifies one with it, to refuse it by kind. */
+  readonly tokens: TokenVerifier;
   readonly door: ExecutionDoor;
   readonly handlers: ExecutionHandlers;
 }
@@ -85,16 +87,17 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
     now: () => clock.now(),
   });
 
+  const tokens = new TokenVerifier({
+    missions: deps.missions.service,
+    tokens: deps.store.missions,
+    cache: deps.cache,
+    rateLimiter: deps.rateLimiter,
+  });
   const door = new ExecutionDoor({
     config: deps.config,
     store: deps.store,
     registry: deps.registry,
-    tokens: new TokenVerifier({
-      missions: deps.missions.service,
-      tokens: deps.store.missions,
-      cache: deps.cache,
-      rateLimiter: deps.rateLimiter,
-    }),
+    tokens,
     grounds: deps.grounds,
     webSessions: deps.auth.sessions,
     budget: deps.budget,
@@ -109,6 +112,7 @@ export function createExecutionModule(deps: ExecutionModuleDeps): ExecutionModul
   return {
     pipeline,
     credentialCache,
+    tokens,
     door,
     handlers: {
       mcp: (request) => door.handleMcp(request),

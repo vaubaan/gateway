@@ -4,9 +4,10 @@
  *
  * The table below names every handler of the human surfaces. Two
  * structural tests keep it complete: a handler added to a module must be
- * classified (a mutation with its role, or a read with the reason), and a
- * route file that exports a mutating HTTP method may only delegate to a
- * handler classified as a mutation. Each mutation is then driven over the
+ * classified (a mutation with its role, a read with the reason, or an OAuth
+ * protocol endpoint that reads no session at all), and a route file that
+ * exports a mutating HTTP method may only delegate to a handler classified as
+ * a mutation, to a protocol endpoint or to an MCP door. Each mutation is then driven over the
  * real composition root (`:memory:` store) with a request that a rightful
  * caller gets through, and refused for each way the guard refuses, with
  * every table of the store compared before and after.
@@ -42,6 +43,12 @@ interface Rig extends AuditRig {
   readonly mission: MissionRecord;
   /** An open claim on `mission`, addressed to Ada. */
   readonly claimId: string;
+  /** A consent screen shown to Ada and not answered yet. */
+  readonly consentId: string;
+  /** A delegation Ada gave to the registered OAuth client. */
+  readonly delegationId: string;
+  /** `oauth_clients.id` of that client. */
+  readonly oauthClientId: string;
 }
 
 /** `user`: an identified user. `operator`: the admin rule. `origin-only`: no session is required. */
@@ -215,6 +222,23 @@ const MUTATIONS: Readonly<Record<string, Mutation>> = {
       post('/api/admin/telemetry', headers, { enabled: 'true' }),
     ),
   ),
+  'oauth.handlers.decide': form('user', 303, (rig, headers) =>
+    rig.root.oauth.handlers.decide(
+      post('/oauth/authorize/decision', headers, { consent: rig.consentId, decision: 'approve' }),
+    ),
+  ),
+  'oauth.handlers.revokeDelegation': form('user', 303, (rig, headers) =>
+    rig.root.oauth.handlers.revokeDelegation(
+      post(`/delegations/${rig.delegationId}/revoke`, headers, {}),
+      rig.delegationId,
+    ),
+  ),
+  'oauth.handlers.decideClient': form('operator', 303, (rig, headers) =>
+    rig.root.oauth.handlers.decideClient(
+      post(`/admin/oauth-clients/${rig.oauthClientId}`, headers, { action: 'disable' }),
+      rig.oauthClientId,
+    ),
+  ),
   'auth.handlers.logout': form('origin-only', 303, (rig, headers) =>
     rig.root.auth.handlers.logout(post('/logout', headers, {})),
   ),
@@ -233,6 +257,22 @@ const READS: Readonly<Record<string, string>> = {
     'GET from the provider; protected by the single-use state bound to the user (guardSession)',
   'requests.handlers.open': 'GET; redirects or refuses, rate-limited (guardSession)',
   'requests.handlers.inbox': 'GET; reads the caller’s inbox (guardSession)',
+  'oauth.handlers.authorize':
+    'GET; shows the consent screen and stores what it showed, bound to the signed-in user',
+  'oauth.handlers.authorizationServerMetadata': 'GET; public discovery document (RFC 8414)',
+  'oauth.handlers.protectedResourceMetadata': 'GET; public discovery document (RFC 9728)',
+};
+
+/**
+ * Endpoints OAuth clients call, not browsers on behalf of a session: they read
+ * no cookie, so there is no ambient authority for another origin to ride. What
+ * authenticates each request is what it carries (handbook management-door);
+ * `tests/integration/oauth-as` asserts that a session cookie changes nothing.
+ */
+const PROTOCOL_ENDPOINTS: Readonly<Record<string, string>> = {
+  'oauth.handlers.register': 'RFC 7591; unauthenticated by design, policy and rate limit apply',
+  'oauth.handlers.token': 'RFC 6749; authenticated by the code or refresh token and the client',
+  'oauth.handlers.revoke': 'RFC 7009; authenticated by the client and the token itself',
 };
 
 const SURFACES = [
@@ -243,6 +283,7 @@ const SURFACES = [
   'telemetry',
   'shares',
   'groups',
+  'oauth',
 ] as const;
 const GUARDED = Object.entries(MUTATIONS);
 const SESSION_GUARDED = GUARDED.filter(([, m]) => m.role !== 'origin-only');
@@ -296,8 +337,12 @@ async function refusalOf(response: Response): Promise<{ status: number; error: u
 
 const MUTATING_METHOD = /export (?:async function|const) (POST|PUT|PATCH|DELETE)\b/;
 const DELEGATION = /\(await getRoot\(\)\)\.([a-zA-Z]+\.handlers\.[a-zA-Z]+)\(/g;
-/** The execution door authenticates a mission token, not a web session (handbook execution-door). */
-const BEARER_DOORS = /^execution\.handlers\./;
+/**
+ * The MCP doors authenticate a bearer, not a web session: a mission token at
+ * the execution door (handbook execution-door), a delegated token at the
+ * management door (handbook management-door).
+ */
+const BEARER_DOORS = /^(?:execution|management)\.handlers\./;
 
 function routeFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
@@ -339,7 +384,31 @@ describe('the mutation guard covers every mutating handler', () => {
     if (refused.result.outcome !== 'refused' || !refused.result.request_id) {
       throw new Error('expected the third pull request to open a claim');
     }
-    rig = { ...base, operator, mission, claimId: refused.result.request_id };
+    const oauthClient = await root.store.delegations.registerClient({
+      clientId: 'vbn_client_guard',
+      name: 'Guard test client',
+      redirectUris: ['http://127.0.0.1/callback'],
+    });
+    const delegation = await root.store.delegations.create({
+      userId: seeded.ada.id,
+      clientId: oauthClient.id,
+      scope: 'mgmt',
+    });
+    const consentId = await root.oauth.authorization.createPending(seeded.ada, {
+      client: oauthClient,
+      redirectUri: 'http://127.0.0.1/callback',
+      state: 'guard-state',
+      codeChallenge: 'E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM',
+    });
+    rig = {
+      ...base,
+      operator,
+      mission,
+      claimId: refused.result.request_id,
+      consentId,
+      delegationId: delegation.id,
+      oauthClientId: oauthClient.id,
+    };
   });
   afterEach(async () => {
     await rig.root.close();
@@ -349,7 +418,11 @@ describe('the mutation guard covers every mutating handler', () => {
     const handlers = SURFACES.flatMap((surface) =>
       Object.keys(rig.root[surface].handlers).map((name) => `${surface}.handlers.${name}`),
     );
-    const classified = [...Object.keys(MUTATIONS), ...Object.keys(READS)];
+    const classified = [
+      ...Object.keys(MUTATIONS),
+      ...Object.keys(READS),
+      ...Object.keys(PROTOCOL_ENDPOINTS),
+    ];
     expect(handlers.sort()).toEqual(classified.sort());
   });
 
@@ -360,9 +433,42 @@ describe('the mutation guard covers every mutating handler', () => {
   it.each(MUTATING_ROUTES)('$name delegates to a guarded mutation only', ({ source }) => {
     const delegations = [...source.matchAll(DELEGATION)]
       .map((match) => match[1] ?? '')
-      .filter((delegation) => !BEARER_DOORS.test(delegation));
+      .filter(
+        (delegation) => !BEARER_DOORS.test(delegation) && !(delegation in PROTOCOL_ENDPOINTS),
+      );
     for (const delegation of delegations) expect(Object.keys(MUTATIONS)).toContain(delegation);
-    if (delegations.length === 0) expect(source).toMatch(/\.execution\.handlers\./);
+    if (delegations.length === 0) {
+      expect(source).toMatch(
+        /\.(?:execution|management)\.handlers\.|\.oauth\.handlers\.(?:register|token|revoke)\(/,
+      );
+    }
+  });
+
+  describe.each(Object.keys(PROTOCOL_ENDPOINTS))('%s', (name) => {
+    const method = name.slice(name.lastIndexOf('.') + 1) as 'register' | 'token' | 'revoke';
+    const request = (headers: Record<string, string>): Request =>
+      new Request(`${PUBLIC_URL}/oauth/${method}`, {
+        method: 'POST',
+        headers:
+          method === 'register'
+            ? { 'content-type': JSON_TYPE, ...headers }
+            : { 'content-type': FORM_TYPE, ...headers },
+        // Well-formed, and naming nothing that exists: refused on its content alone.
+        body: method === 'register' ? '{}' : 'client_id=vbn_client_unknown&token=x&grant_type=x',
+      });
+
+    it('reads no session: an operator’s cookie changes nothing, from any origin', async () => {
+      const cookie = await userCookie(rig.root, rig.operator);
+      const before = contentOf(rig.root);
+      const bare = await rig.root.oauth.handlers[method](request({}));
+      const withSession = await rig.root.oauth.handlers[method](
+        request({ cookie, origin: FOREIGN_ORIGIN }),
+      );
+      expect(bare.status).toBeGreaterThanOrEqual(400);
+      expect(withSession.status).toBe(bare.status);
+      expect(await withSession.json()).toEqual(await bare.json());
+      expect(contentOf(rig.root)).toBe(before);
+    });
   });
 
   describe.each(GUARDED)('%s', (_name, mutation) => {
