@@ -153,8 +153,13 @@ export type SetGateResult =
       readonly mission: MissionRecord;
       readonly risk_id: RiskId;
       readonly gate: Gate;
-      /** The gate before the edit; equal to `gate` when nothing changed. */
+      /** The gate before the edit; equal to `gate` when the stored gate did not move. */
       readonly previous: Gate;
+      /**
+       * `approval` was asked on a risk already gated whose gate the creator had
+       * opened for the period: the opening is over (the stored gate did not move).
+       */
+      readonly opening_closed: boolean;
     }
   | { readonly ok: false; readonly reason: 'not-found' }
   | { readonly ok: false; readonly reason: 'invalid-gate' }
@@ -617,27 +622,46 @@ export class MissionService {
     if (!isGate(gate)) return { ok: false, reason: 'invalid-gate' };
     const blocked = gateEditBlockedBy(mission);
     if (blocked) return { ok: false, reason: 'inactive', state: blocked };
-    const changed = await this.deps.store.missions.setGate(mission.id, riskId, gate, user.id);
+    // "Ask me again" on a risk that is gated but open for the period must end the
+    // opening: the stored gate would not move, so the store is told what was found.
+    const openNow =
+      gate === 'approval' &&
+      (await this.openGatesOf(mission, await this.stateOf(mission))).has(riskId);
+    const changed = await this.deps.store.missions.setGate(mission.id, riskId, gate, user.id, {
+      closeOpening: openNow,
+    });
     if (!changed) return { ok: false, reason: 'risk-not-in-policy' };
-    const { previous } = changed;
-    if (previous !== gate) {
+    const { previous, openingClosed } = changed;
+    if (previous !== gate || openingClosed) {
       await this.deps.store.auditWriter.write({
         kind: 'admin',
         ts: toIso(this.deps.clock.now()),
         user_id: user.id,
         act: 'gate-changed',
         object: { type: 'mission', id: mission.id },
-        before: { risk_id: riskId, gate: previous },
-        after: { risk_id: riskId, gate },
+        before: {
+          risk_id: riskId,
+          gate: previous,
+          ...(openingClosed ? { open_for_period: true } : {}),
+        },
+        after: { risk_id: riskId, gate, ...(openingClosed ? { open_for_period: false } : {}) },
         delegated_client_id: null,
       });
       this.deps.logger.info('mission gate changed', {
         mission_id: mission.id,
         risk_id: riskId,
         gate,
+        opening_closed: openingClosed,
       });
     }
-    return { ok: true, mission: changed.mission, risk_id: riskId, gate, previous };
+    return {
+      ok: true,
+      mission: changed.mission,
+      risk_id: riskId,
+      gate,
+      previous,
+      opening_closed: openingClosed,
+    };
   }
 
   /** Session events exist only once the session does (born on the first call). */

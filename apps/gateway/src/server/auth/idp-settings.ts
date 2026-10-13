@@ -89,9 +89,21 @@ export class IdpSettingsService {
     const issuer = parseIssuer(input.issuer, this.options.allowInsecureIssuer === true, problems);
     const clientId = input.clientId.trim();
     if (clientId.length === 0) problems.push('client id is required');
+    const given = input.clientSecret?.trim() || null;
     const existingSecret = await this.config.getSecret(IDP_CONFIG_KEYS.clientSecret);
-    const clientSecret = input.clientSecret?.trim() || existingSecret;
-    if (!clientSecret) problems.push('client secret is required');
+    // A blank field keeps the stored secret — for the identity provider it was given
+    // for. Under another issuer it would be sent to that issuer's token endpoint.
+    const storedIssuer = await this.config.get(IDP_CONFIG_KEYS.issuer);
+    const issuerChanged =
+      issuer !== null && storedIssuer !== null && !sameIssuer(issuer, storedIssuer);
+    const clientSecret = given ?? (issuerChanged ? null : existingSecret);
+    if (!clientSecret) {
+      problems.push(
+        issuerChanged && existingSecret
+          ? 'client secret is required when the issuer changes: the stored secret belongs to the previous identity provider'
+          : 'client secret is required',
+      );
+    }
     const claims = normalizeClaims(input.claims, problems);
     const allowedEmailDomains = normalizeDomains(input.allowedEmailDomains, problems);
     if (problems.length > 0 || !issuer || !clientSecret) throw new IdpSettingsError(problems);
@@ -138,6 +150,15 @@ export class IdpSettingsService {
       },
       allowedEmailDomains: parseDomainsJson(domainsRaw),
     };
+  }
+}
+
+/** The same issuer when the URL parser normalises both to the same text (scheme and host case, default port). */
+function sameIssuer(issuer: URL, storedRaw: string): boolean {
+  try {
+    return new URL(storedRaw).href === issuer.href;
+  } catch {
+    return false;
   }
 }
 

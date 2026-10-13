@@ -178,6 +178,43 @@ describe('editing a gate after issuance', () => {
     expect(await gateEdits()).toEqual([]);
   });
 
+  it('asking for `approval` on a risk whose gate is open for the period closes the opening: one entry, one event', async () => {
+    const asked = await call(MERGE);
+    if (asked.outcome !== 'refused' || !asked.request_id) throw new Error('expected a request');
+    await rig.root.requests.service.decide(rig.seeded.ada, asked.request_id, {
+      resolution: 'open-gate',
+    });
+    expect((await call(MERGE, { n: 2 })).outcome).toBe('allowed');
+
+    // The stored gate is already `approval`: the answer used to be 200 with the opening left.
+    const result = await service().setGate(rig.seeded.ada, mission.id, MERGE, 'approval');
+    expect(result).toMatchObject({
+      ok: true,
+      gate: 'approval',
+      previous: 'approval',
+      opening_closed: true,
+    });
+    expect(await call(MERGE, { n: 3 })).toMatchObject({
+      outcome: 'refused',
+      refusal: { code: 'approval-required' },
+    });
+    const detail = await service().get(rig.seeded.ada, mission.id);
+    expect(detail?.policy.find((r) => r.risk_id === MERGE)?.gate_open_until).toBeNull();
+    expect(await gateEdits()).toMatchObject([
+      {
+        user_id: rig.seeded.ada.id,
+        before: { risk_id: MERGE, gate: 'approval', open_for_period: true },
+        after: { risk_id: MERGE, gate: 'approval', open_for_period: false },
+      },
+    ]);
+    expect((await events()).filter((e) => e.kind === 'gate-changed')).toHaveLength(1);
+
+    // Asked again, there is nothing left to close: nothing is written.
+    const again = await service().setGate(rig.seeded.ada, mission.id, MERGE, 'approval');
+    expect(again).toMatchObject({ ok: true, opening_closed: false });
+    expect(await gateEdits()).toHaveLength(1);
+  });
+
   it('the mission detail shows the gate, and until when an opening holds', async () => {
     const asked = await call(MERGE);
     if (asked.outcome !== 'refused' || !asked.request_id) throw new Error('expected a request');
