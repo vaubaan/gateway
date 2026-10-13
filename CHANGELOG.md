@@ -11,6 +11,32 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
 
 ### Added
 
+- **Delegation: an agent acts on a user's behalf.** The instance is an OAuth authorization
+  server for its management MCP door, `/mcp/manage`: an MCP client such as Claude Code
+  discovers it (RFC 9728 and RFC 8414 metadata), registers itself, and sends the user to
+  sign in and to a consent screen that names the application as a claim, the single scope
+  `mgmt`, what it covers and never covers, and where the access goes. Authorization code
+  with PKCE `S256` only; opaque access tokens (`oauth.access_token_ttl`, 15 minutes, at
+  most 1 hour) and single-use rotating refresh tokens (`oauth.refresh_token_ttl`, 30 days),
+  stored as digests; `/oauth/token`, `/oauth/revoke`. A refresh token or an authorization
+  code presented twice revokes the whole delegation, with an audit entry. The door itself
+  lists no tool yet.
+- **Delegations page.** A user sees the applications they authorized, where each sends its
+  access, the missions it issued, and revokes one in a click; a revocation by the gateway
+  says why. Grants and revocations are audited under the user's name and visible in their
+  audit.
+- **OAuth clients and the registration policy.** `oauth.client_registration.policy` is
+  `open`, `operator-approved` (default) or `closed`. Under the default a client that can
+  only return to the user's own machine (a loopback redirect URI — command-line and desktop
+  agents) needs no approval (`auto_approve_loopback`, default true); any other waits for an
+  operator under Administration → OAuth clients, where a client can also be disabled, which
+  revokes its delegations. Client ID Metadata Documents are supported and off by default
+  (`oauth.client_registration.metadata_documents`).
+- **The three credentials are refused by kind at both doors.** A delegated token at `/mcp`
+  and a mission token or a web session at `/mcp/manage` answer `wrong-credential-kind`,
+  naming the door that accepts them; a delegated token opens neither the interface nor a
+  request.
+
 - **Approval gate.** A call touching a risk gated `approval` is refused `approval-required`
   with the URL of an approval request, how long a granted approval stays usable and the
   instruction to replay identically. The mission's creator — and nobody else, operators

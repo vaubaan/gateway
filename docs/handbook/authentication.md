@@ -303,7 +303,10 @@ redirect or a page). `guardSession` is steps 2 and 3 alone, for the reads
 handler of the four modules: a handler added without being classified (a
 mutation with its role, or a read with the reason) fails it, and so does a
 `route.ts` exporting `POST` / `PUT` / `PATCH` / `DELETE` that delegates to
-anything but a classified mutation or the execution door.
+anything but a classified mutation, an MCP door (execution, management) or
+an OAuth protocol endpoint (`/oauth/token`, `/oauth/register`,
+`/oauth/revoke`: they read no session, which the same test asserts —
+handbook [management-door](management-door.md)).
 
 ## Who is behind a request
 

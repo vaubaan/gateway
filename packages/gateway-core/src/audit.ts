@@ -114,11 +114,19 @@ export type AdminAct =
   | 'approval-granted'
   | 'request-refused'
   | 'delegation-granted'
+  /** A delegation ended: by its user, by its client, by an operator disabling
+   *  the client, or by the instance on a replayed refresh token or
+   *  authorization code (`after.reason` says which). */
   | 'delegation-revoked'
   /** Local groups, kept by the operator (spec §0 "Group", §11.2). Object: the group. */
   | 'group-created'
   | 'group-member-added'
   | 'group-member-removed'
+  /** An operator allowed a registered OAuth client of the management door to
+   *  ask users for a delegation. Object: the client. */
+  | 'oauth-client-approved'
+  /** An operator barred an OAuth client; its delegations are revoked with it. */
+  | 'oauth-client-disabled'
   | 'config-changed';
 
 export type AdminObjectType =
@@ -128,6 +136,7 @@ export type AdminObjectType =
   | 'request'
   | 'delegation'
   | 'group'
+  | 'oauth-client'
   | 'instance-config';
 
 /**

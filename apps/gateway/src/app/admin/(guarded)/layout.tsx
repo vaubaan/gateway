@@ -48,6 +48,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <Link href="/admin/groups">Groups</Link>
           <Link href="/admin/connections">Connections</Link>
           <Link href="/admin/telemetry">Telemetry</Link>
+          <Link href="/admin/oauth-clients">OAuth clients</Link>
         </nav>
         <div className={styles.actions}>
           <span className={styles.muted}>{who}</span>

@@ -325,6 +325,8 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
   const creator = scope.missionCreatorUserId === null ? [] : [scope.missionCreatorUserId];
   const ownMissions = `SELECT id FROM missions WHERE ${creator.length ? 'creator_user_id = ?' : '1 = 0'}`;
   const ownConnections = `SELECT id FROM connections WHERE ${owners.sql}`;
+  // The delegations the viewer gave: granted and revoked under their name (spec §4.1 bis).
+  const ownDelegations = `SELECT id FROM delegations WHERE ${creator.length ? 'user_id = ?' : '1 = 0'}`;
   add(
     `(
       (kind = 'call' AND (mission_id IN (${ownMissions}) OR connection_id IN (${ownConnections})))
@@ -334,6 +336,7 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
         OR (object_type = 'connection' AND object_id IN (${ownConnections}))
         OR (object_type = 'request' AND object_id IN (${REQUESTS_OF_MISSION} IN (${ownMissions})))
         OR (object_type = 'share' AND object_id IN (${SHARES_OF_CONNECTION} IN (${ownConnections})))
+        OR (object_type = 'delegation' AND object_id IN (${ownDelegations}))
       ))
     )`,
     ...creator,
@@ -342,6 +345,7 @@ function searchStatement(query: AuditSearch): { sql: string; params: (string | n
     ...owners.params,
     ...creator,
     ...owners.params,
+    ...creator,
   );
 
   if (query.missionId) {

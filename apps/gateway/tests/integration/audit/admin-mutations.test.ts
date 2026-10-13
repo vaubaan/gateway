@@ -4,8 +4,8 @@
  * enumerates the service methods").
  *
  * The public methods of every class under `server/{connections,
- * provider-apps,missions,auth,requests,telemetry,authority,shares,groups}` are read from
- * the source with the TypeScript
+ * provider-apps,missions,auth,requests,telemetry,authority,shares,groups,oauth-as}` are
+ * read from the source with the TypeScript
  * parser and each must be classified below as a read, a mutation or an
  * exemption with its reason. A method added tomorrow fails the first test
  * until it is classified; a mutation is then driven on an ephemeral instance
@@ -37,10 +37,13 @@ import {
   UNVERIFIED_APP_INSTALL_SPEC,
 } from '../../../src/server/connections/testing';
 import { silentLogger } from '../../../src/server/logging';
+import type { TokenResponse } from '../../../src/server/oauth-as';
+import { pkcePair } from '../../../src/server/oauth-as/testing';
 import type {
   ConnectionRecord,
   GroupRecord,
   MissionRecord,
+  OAuthClientRecord,
   UserRecord,
 } from '../../../src/server/store/types';
 
@@ -55,9 +58,11 @@ const SCANNED = [
   'authority',
   'shares',
   'groups',
+  'oauth-as',
 ];
 const PUBLIC_URL = 'https://gateway.example.com';
 const OPERATOR_EMAIL = 'ops@example.com';
+const OAUTH_REDIRECT = 'http://127.0.0.1:43210/callback';
 
 // ── The enumeration: public methods of every class, from the source ─────────
 
@@ -124,6 +129,12 @@ interface Rig {
   ungrounded(): Promise<MissionRecord>;
   /** A connection of Alice, transferred to a local group that then lost its only member. */
   ownerless(): Promise<ConnectionRecord>;
+  /** An OAuth client of the management door, redirecting to `redirectUri`. */
+  oauthClient(redirectUri?: string): Promise<OAuthClientRecord>;
+  /** A consent screen shown to Alice for `client`, not answered yet. */
+  consent(client: OAuthClientRecord): Promise<{ consentId: string; verifier: string }>;
+  /** A delegation of Alice to a fresh client, with its first tokens. */
+  delegation(): Promise<{ client: OAuthClientRecord; id: string; tokens: TokenResponse }>;
 }
 
 async function openRig(): Promise<Rig> {
@@ -264,6 +275,38 @@ async function openRig(): Promise<Rig> {
       if (!unowned) throw new Error('expected the connection to lose its owner');
       return unowned;
     },
+    async oauthClient(redirectUri = OAUTH_REDIRECT) {
+      const registered = await root.oauth.clients.register({
+        client_name: 'Test agent',
+        redirect_uris: [redirectUri],
+        token_endpoint_auth_method: 'none',
+      });
+      return registered.client;
+    },
+    async consent(client) {
+      const pkce = pkcePair();
+      const consentId = await root.oauth.authorization.createPending(alice.user, {
+        client,
+        redirectUri: client.redirectUris[0] ?? OAUTH_REDIRECT,
+        state: null,
+        codeChallenge: pkce.challenge,
+      });
+      return { consentId, verifier: pkce.verifier };
+    },
+    async delegation() {
+      const client = await rig.oauthClient();
+      const { consentId, verifier } = await rig.consent(client);
+      const outcome = await root.oauth.authorization.decide(alice.user, consentId, 'approve');
+      if (outcome.outcome !== 'redirect' || !outcome.delegationId) {
+        throw new Error('expected the consent to be granted');
+      }
+      const code = new URL(outcome.location).searchParams.get('code') ?? '';
+      const tokens = await root.oauth.tokens.exchangeCode(
+        client,
+        new URLSearchParams({ grant_type: 'authorization_code', code, code_verifier: verifier }),
+      );
+      return { client, id: outcome.delegationId, tokens };
+    },
   };
   return rig;
 }
@@ -301,6 +344,9 @@ const DOOR_SETTLE =
   'performed by the execution door while it authenticates a call, with no human actor: an administrative entry always names a user (spec §8); the transition is in the instance log and the call that met it is audited as `mission-inactive`';
 const SYSTEM_REFRESH =
   'performed by the gateway during a call or a discovery, with no human actor: an administrative entry always names a user (spec §8); the outcome is in the call entry and the instance log';
+
+const OAUTH_PROTOCOL =
+  'performed by an OAuth client at a protocol endpoint, with no human actor: registering a client or exchanging a code grants nothing a user did not already consent to (`delegation-granted`); a replayed code or refresh token revokes the delegation and writes `delegation-revoked` (src/server/oauth-as/token-service.test.ts)';
 
 const connections = (root: GatewayRoot) => root.connections.service;
 const missions = (root: GatewayRoot) => root.missions.service;
@@ -733,6 +779,68 @@ const RULES: Readonly<Record<string, Rule>> = {
   'PluginStatsReader.refresh': exempt(
     'refreshes the cached copy of the public plugin statistics read from the collector: nothing of the instance is created, changed or revoked',
   ),
+  // ── authorization server of the management door ───────────────────────────
+  'ClientRegistry.statusOf': READ,
+  'ClientRegistry.view': READ,
+  'ClientRegistry.find': READ,
+  'ClientRegistry.get': READ,
+  'ClientRegistry.list': READ,
+  'ClientRegistry.register': exempt(OAUTH_PROTOCOL),
+  'ClientRegistry.resolveDocumentClient': exempt(
+    'stores what a public Client ID Metadata Document says of its client; whether that client may ask users for anything stays the policy’s and the operator’s decision',
+  ),
+  'ClientRegistry.decide': {
+    kind: 'mutation',
+    target: (root) => root.oauth.clients,
+    // A client that redirects to a server waits for the operator.
+    prepare: (rig) => rig.oauthClient('https://agent.example.net/oauth/callback'),
+    drive: async (rig, client: OAuthClientRecord) =>
+      rig.root.oauth.handlers.decideClient(
+        await rig.operatorPost(`/admin/oauth-clients/${client.id}`, { action: 'approve' }),
+        client.id,
+      ),
+    writes: { act: 'oauth-client-approved', object: 'oauth-client', actor: 'operator' },
+  },
+  'AuthorizationService.needsDocument': READ,
+  'AuthorizationService.resolveClient': READ,
+  'AuthorizationService.validate': READ,
+  'AuthorizationService.createPending': exempt(SESSION_STATE),
+  'AuthorizationService.decide': {
+    kind: 'mutation',
+    target: (root) => root.oauth.authorization,
+    prepare: async (rig) => rig.consent(await rig.oauthClient()),
+    drive: (rig, shown: { consentId: string }) =>
+      rig.root.oauth.authorization.decide(rig.alice.user, shown.consentId, 'approve'),
+    writes: { act: 'delegation-granted', object: 'delegation', actor: 'alice' },
+  },
+  'TokenService.authenticateClient': READ,
+  'TokenService.exchangeCode': exempt(OAUTH_PROTOCOL),
+  'TokenService.refresh': exempt(OAUTH_PROTOCOL),
+  'TokenService.revoke': {
+    kind: 'mutation',
+    target: (root) => root.oauth.tokens,
+    prepare: (rig) => rig.delegation(),
+    // The client signs out: its refresh token ends the delegation, in the user's name.
+    drive: (rig, held: { client: OAuthClientRecord; tokens: TokenResponse }) =>
+      rig.root.oauth.tokens.revoke(
+        held.client,
+        new URLSearchParams({ token: held.tokens.refresh_token }),
+      ),
+    writes: { act: 'delegation-revoked', object: 'delegation', actor: 'alice' },
+  },
+  'DelegationService.listFor': READ,
+  'DelegationService.revoke': {
+    kind: 'mutation',
+    target: (root) => root.oauth.delegations,
+    prepare: (rig) => rig.delegation(),
+    drive: (rig, held: { id: string }) =>
+      rig.root.oauth.delegations.revoke(rig.alice.user, held.id),
+    writes: { act: 'delegation-revoked', object: 'delegation', actor: 'alice' },
+  },
+  'DelegatedTokenVerifier.resolve': READ,
+  'DelegatedTokenVerifier.verifyAccessToken': READ,
+  'ManagementGate.admit': READ,
+  'ManagementDoorPlaceholder.handle': READ,
 };
 
 const MUTATIONS = Object.entries(RULES).flatMap(([name, rule]) =>
@@ -773,6 +881,9 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'connection-reassigned',
       'connection-revoked',
       'connection-transferred',
+      'delegation-granted',
+      'delegation-revoked',
+      'delegation-revoked',
       'gate-changed',
       'group-created',
       'group-member-added',
@@ -784,6 +895,7 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'mission-orphaned',
       'mission-revoked',
       'mission-rotated',
+      'oauth-client-approved',
       'period-reset',
       'request-refused',
       'resource-edited',

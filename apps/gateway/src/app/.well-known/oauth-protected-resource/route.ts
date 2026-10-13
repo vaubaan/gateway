@@ -7,8 +7,8 @@
  * (Claude Code among them) do not send the configured `Authorization` header
  * when the probe is a 404. Answering 200 with an empty `authorization_servers`
  * tells them to use the bearer they were given and not to attempt a
- * registration. The management door (P2.3) will publish its own metadata under
- * its own path.
+ * registration. The management door publishes its own metadata under its own
+ * path (`./mcp/manage/route.ts`), where an MCP client looks first.
  */
 import { getRoot } from '@/server/compose';
 import { EXECUTION_DOOR_PATH } from '@/server/missions';

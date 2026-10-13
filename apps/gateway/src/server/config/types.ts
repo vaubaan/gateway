@@ -101,6 +101,41 @@ export interface TelemetryConfig {
   readonly collectorUrl: URL;
 }
 
+/**
+ * Who may become an OAuth client of the management door (spec §4.1 bis; ADR
+ * management-door-authorization-server):
+ *
+ * - `open`: any client that registers may ask users for a delegation at once;
+ * - `operator-approved`: a client waits for an operator's approval, except, when
+ *   `autoApproveLoopback` is set, a client that can only redirect to the loopback
+ *   interface of the user's own machine;
+ * - `closed`: nothing registers; only the clients an operator approved are usable.
+ */
+export const CLIENT_REGISTRATION_POLICIES = ['open', 'operator-approved', 'closed'] as const;
+export type ClientRegistrationPolicy = (typeof CLIENT_REGISTRATION_POLICIES)[number];
+
+export function isClientRegistrationPolicy(raw: string): raw is ClientRegistrationPolicy {
+  return (CLIENT_REGISTRATION_POLICIES as readonly string[]).includes(raw);
+}
+
+/** The authorization server of the management door (spec §4.1 bis, §6). */
+export interface OAuthConfig {
+  /** Lifetime of a delegated access token: short (spec §6), at most one hour. */
+  readonly accessTokenTtlSeconds: number;
+  /** Lifetime of a refresh token; each rotation starts it again. */
+  readonly refreshTokenTtlSeconds: number;
+  readonly clientRegistration: {
+    readonly policy: ClientRegistrationPolicy;
+    /** Under `operator-approved`: loopback-only clients need no approval. */
+    readonly autoApproveLoopback: boolean;
+    /**
+     * Accept `client_id`s that are https URLs of Client ID Metadata Documents. The
+     * instance then fetches documents from the internet on a signed-in user's request.
+     */
+    readonly metadataDocuments: boolean;
+  };
+}
+
 export interface InstanceConfig {
   /** Public origin of the instance, always https, no trailing slash. */
   readonly publicUrl: URL;
@@ -120,6 +155,8 @@ export interface InstanceConfig {
   readonly approvals: { readonly expirySeconds: number };
   /** Surface rate limit of the execution door: requests per minute, per mission (spec §6). */
   readonly mcp: { readonly rateLimitPerMinute: number };
+  /** Authorization server of the management door: token lifetimes, who may register. */
+  readonly oauth: OAuthConfig;
   readonly log: { readonly level: LogLevel };
 }
 

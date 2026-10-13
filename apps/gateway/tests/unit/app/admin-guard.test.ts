@@ -128,6 +128,7 @@ describe('the Administration surface authorizes in every page and route', () => 
         'connections/page.tsx',
         'groups/page.tsx',
         'identity-provider/page.tsx',
+        'oauth-clients/page.tsx',
         'page.tsx',
         'provider-apps/page.tsx',
         'telemetry/page.tsx',

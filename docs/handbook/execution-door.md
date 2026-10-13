@@ -111,9 +111,12 @@ to the request's own id.
   | a web session id as bearer                                  | same                                                                               |
   | a bearer the `DelegatedTokenResolver` recognises            | 403 `wrong-credential-kind`, `presented: delegated-token`                          |
 
-  `DelegatedTokenResolver` is `ExecutionModuleDeps.delegations` /
-  `RootDeps.delegatedTokens`; nothing provides one until the management door
-  exists (P2.3), so a delegated token is today an unknown bearer (401). The
+  `DelegatedTokenResolver` is `ExecutionModuleDeps.delegations`: the root
+  wires the authorization server's `DelegatedTokenVerifier`
+  (`root.oauth.verifier`, handbook [management-door](management-door.md));
+  `RootDeps.delegatedTokens` replaces it in tests of the door alone. Only a
+  live delegated access token is recognised: a revoked or expired one, or a
+  refresh token, is an unknown bearer (401). The
   hint of the refusal names where the presented kind is accepted
   (`ACCEPTED_AT` in gateway-core's `errors.ts`).
 
@@ -492,7 +495,7 @@ const execution = createExecutionModule({
   rateLimiter,
   logger,
   build,
-  delegations: deps.delegatedTokens, // undefined until the management door (P2.3)
+  delegations: deps.delegatedTokens ?? oauth.verifier, // delegated tokens are refused by kind
   telemetry: telemetry.sink, // community telemetry (P2.5); inert unless the operator opted in
 });
 ```
@@ -655,8 +658,9 @@ Scenarios in [integration-tests](../tests/integration-tests.md).
 - **A plugin that derives a per-call credential** — read
   `ctx.credentialCache` in `execute` (absent in discovery), choose a key inside
   the connection, never cache a credential that is a tool's result.
-- **The management door (P2.3)** — provide a `DelegatedTokenResolver` to the
-  root so delegated tokens are refused here by kind.
+- **The management door** — `ExecutionModule.tokens` (the `TokenVerifier`) is
+  what its admission gate identifies a mission token with, to refuse it by
+  kind in turn ([management-door](management-door.md)).
 - **A hosted deployment** — a shared `CacheClient` for the verified tokens is
   safe (it holds token ids). Upstream credentials must stay per replica or go
   to a cache that encrypts its values.

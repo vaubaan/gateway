@@ -65,8 +65,10 @@ the keyset position, so a filter can only narrow what the scope allows:
 - an **administrative** entry is visible when `allAdmin`, or its object is such a mission
   (`object_type = 'mission'`), such a connection (`'connection'`), a request of such a
   mission (`'request'`, resolved through `requests.mission_id`), or a share of such a
-  connection (`'share'`, resolved through `shares.connection_id`). Entries about a group
-  (`'group'`) are the operator's.
+  connection (`'share'`, resolved through `shares.connection_id`), or a delegation the
+  viewer gave (`'delegation'`, through `delegations.user_id`) — so a user finds in their
+  audit a delegation of theirs that an operator or the gateway revoked. Entries about a
+  group (`'group'`) or an OAuth client (`'oauth-client'`) are the operator's.
 
 So the owner of a connection reads its `share-created` / `share-revoked` /
 `connection-transferred` / `connection-reassigned` entries, and the creator of a mission
@@ -188,17 +190,20 @@ Only `audit` and `audit_risks` are purged. Session events and counters are not c
 
 ## Administrative entries: who writes what
 
-| Act                                                                     | Written by                                                                                                                                                              | Object                                                     |
-| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
-| `connection-created`, `connection-reconnected`, `connection-revoked`    | `ConnectionService` (`start` / `complete` / `revoke`)                                                                                                                   | the connection                                             |
-| `connection-refused`                                                    | `ConnectionService` (installation not bound to the user)                                                                                                                | the connection, or `not-created:<provider>`                |
-| `resources-discovered`                                                  | `ConnectionService.discover` — outcome, count, error; success and failure                                                                                               | the connection                                             |
-| `resource-edited`                                                       | `ConnectionService.updateResource` — `before` / `after`: `resource_id`, `ref`, `display_name`, `env`, `hidden`, `owner_metadata`; nothing when the save changed nothing | the connection                                             |
-| `mission-issued`, `mission-rotated`, `mission-revoked`                  | `MissionService` (`issue` / `duplicate`, `rotate`, `revoke`)                                                                                                            | the mission                                                |
-| `gate-changed`                                                          | `MissionService.setGate` — `before` / `after`: `risk_id`, `gate`; nothing when the gate did not change (P2.1, [missions](missions.md))                                  | the mission                                                |
-| `period-reset`, `budget-extended`, `expiry-extended`, `request-refused` | `RequestService.decideClaim` (P1.7, [requests](requests.md))                                                                                                            | the request                                                |
-| `approval-granted`, `gate-opened`, `request-refused`                    | `RequestService.decideApproval` — `after`: `mission_id`, `risk_id`, `tool`, `fingerprint`, the resolution and its approval or period; never the arguments (P2.1)        | the request                                                |
-| `config-changed`                                                        | the Administration handlers (`saveProviderApp`, `saveIdpSettings`) and `completeLogin` when the first operator sign-in revokes the bootstrap token                      | `instance-config`: `provider-app:<id>`, `idp`, `bootstrap` |
+| Act                                                                     | Written by                                                                                                                                                                                                                                                                            | Object                                                     |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `connection-created`, `connection-reconnected`, `connection-revoked`    | `ConnectionService` (`start` / `complete` / `revoke`)                                                                                                                                                                                                                                 | the connection                                             |
+| `connection-refused`                                                    | `ConnectionService` (installation not bound to the user)                                                                                                                                                                                                                              | the connection, or `not-created:<provider>`                |
+| `resources-discovered`                                                  | `ConnectionService.discover` — outcome, count, error; success and failure                                                                                                                                                                                                             | the connection                                             |
+| `resource-edited`                                                       | `ConnectionService.updateResource` — `before` / `after`: `resource_id`, `ref`, `display_name`, `env`, `hidden`, `owner_metadata`; nothing when the save changed nothing                                                                                                               | the connection                                             |
+| `mission-issued`, `mission-rotated`, `mission-revoked`                  | `MissionService` (`issue` / `duplicate`, `rotate`, `revoke`)                                                                                                                                                                                                                          | the mission                                                |
+| `gate-changed`                                                          | `MissionService.setGate` — `before` / `after`: `risk_id`, `gate`; nothing when the gate did not change (P2.1, [missions](missions.md))                                                                                                                                                | the mission                                                |
+| `period-reset`, `budget-extended`, `expiry-extended`, `request-refused` | `RequestService.decideClaim` (P1.7, [requests](requests.md))                                                                                                                                                                                                                          | the request                                                |
+| `approval-granted`, `gate-opened`, `request-refused`                    | `RequestService.decideApproval` — `after`: `mission_id`, `risk_id`, `tool`, `fingerprint`, the resolution and its approval or period; never the arguments (P2.1)                                                                                                                      | the request                                                |
+| `delegation-granted`                                                    | `AuthorizationService.decide` — the user approved a consent screen; `after`: `client_id`, `client_name`, `scope`, `redirect_uri`, `resource` (P2.3, [management-door](management-door.md))                                                                                            | the delegation                                             |
+| `delegation-revoked`                                                    | `DelegationService.revoke` (the user), `TokenService` (the client signed out, or a refresh token or code was replayed), `ClientRegistry.decide` (an operator disabled the client) — `after.reason`: `user`, `client`, `refresh-token-replay`, `authorization-code-replay`, `operator` | the delegation                                             |
+| `oauth-client-approved`, `oauth-client-disabled`                        | `ClientRegistry.decide` (Administration → OAuth clients) — `before` / `after`: the status, the client id, name and redirect URIs                                                                                                                                                      | the OAuth client (`oauth-client`)                          |
+| `config-changed`                                                        | the Administration handlers (`saveProviderApp`, `saveIdpSettings`) and `completeLogin` when the first operator sign-in revokes the bootstrap token                                                                                                                                    | `instance-config`: `provider-app:<id>`, `idp`, `bootstrap` |
 
 A resource edit and a discovery name the **connection** as their object so that the
 connection filter and the owner's visibility find them with no join; the resource is in
@@ -215,8 +220,8 @@ whose row is gone).
 
 The structural test `tests/integration/audit/admin-mutations.test.ts` reads, with the
 TypeScript parser, the public methods of every class under
-`server/{connections,provider-apps,missions,auth,requests,authority,shares,groups}`; each
-must appear in its
+`server/{connections,provider-apps,missions,auth,requests,telemetry,authority,shares,groups,oauth-as}`;
+each must appear in its
 `RULES` table
 as a read, a mutation (with the driver that performs it and the entry it must leave) or
 an exemption with its reason. Adding a public method to one of those services fails the

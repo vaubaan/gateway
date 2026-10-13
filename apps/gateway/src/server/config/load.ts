@@ -22,14 +22,18 @@ import {
 import { DEFAULT_TELEMETRY_COLLECTOR_URL } from './telemetry-default';
 import {
   type AdminRule,
+  CLIENT_REGISTRATION_POLICIES,
+  type ClientRegistrationPolicy,
   type EncryptionConfig,
   type IdpConfig,
   type InstanceConfig,
   LOG_LEVELS,
   type LogLevel,
+  type OAuthConfig,
   PROVIDER_APP_FIELD_PROPERTY,
   PROVIDER_APP_FIELDS,
   type ProviderAppConfig,
+  isClientRegistrationPolicy,
   isLogLevel,
   isProviderAppField,
 } from './types';
@@ -47,6 +51,11 @@ const DEFAULTS = {
   requestExpiry: '24h',
   approvalExpiry: '10m',
   mcpRateLimitPerMinute: 600,
+  oauthAccessTokenTtl: '15m',
+  oauthRefreshTokenTtl: '30d',
+  oauthClientRegistrationPolicy: 'operator-approved',
+  oauthAutoApproveLoopback: true,
+  oauthMetadataDocuments: false,
 } as const;
 
 export interface LoadOptions {
@@ -210,6 +219,7 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
   const requestExpiry = r.duration('requests.expiry', DEFAULTS.requestExpiry);
   const approvalExpiry = r.duration('approvals.expiry', DEFAULTS.approvalExpiry);
   const mcpRateLimit = r.int('mcp.rate_limit_per_minute', DEFAULTS.mcpRateLimitPerMinute);
+  const oauth = readOAuth(r);
   const level = readLogLevel(r);
 
   if (issues.items.length > before) return null;
@@ -233,6 +243,7 @@ function validate(raw: RawTree, issues: IssueList): InstanceConfig | null {
     requests: { expirySeconds: requestExpiry },
     approvals: { expirySeconds: approvalExpiry },
     mcp: { rateLimitPerMinute: mcpRateLimit },
+    oauth,
     log: { level },
   };
 }
@@ -277,6 +288,64 @@ function readBootstrapToken(r: Reader, idp: IdpConfig | null): string | null {
     );
   }
   return bootstrapToken;
+}
+
+/** A delegated token is short-lived (spec §6): the access token never outlives this. */
+export const MAX_OAUTH_ACCESS_TOKEN_TTL_SECONDS = 3_600;
+
+/**
+ * The authorization server of the management door. The access token is capped
+ * (a longer one is not "short-lived"), and a refresh token that expired before
+ * the access token it renews would be useless.
+ */
+function readOAuth(r: Reader): OAuthConfig {
+  const accessTokenTtlSeconds = r.duration('oauth.access_token_ttl', DEFAULTS.oauthAccessTokenTtl);
+  const refreshTokenTtlSeconds = r.duration(
+    'oauth.refresh_token_ttl',
+    DEFAULTS.oauthRefreshTokenTtl,
+  );
+  if (accessTokenTtlSeconds > MAX_OAUTH_ACCESS_TOKEN_TTL_SECONDS) {
+    r.issues.add(
+      'oauth.access_token_ttl',
+      'must be at most 1h: a delegated token is short-lived and renewed with its refresh token',
+      envNamesFor('oauth.access_token_ttl'),
+    );
+  }
+  if (refreshTokenTtlSeconds <= accessTokenTtlSeconds) {
+    r.issues.add(
+      'oauth.refresh_token_ttl',
+      'must be longer than oauth.access_token_ttl',
+      envNamesFor('oauth.refresh_token_ttl'),
+    );
+  }
+  return {
+    accessTokenTtlSeconds,
+    refreshTokenTtlSeconds,
+    clientRegistration: {
+      policy: readClientRegistrationPolicy(r),
+      autoApproveLoopback: r.bool(
+        'oauth.client_registration.auto_approve_loopback',
+        DEFAULTS.oauthAutoApproveLoopback,
+      ),
+      metadataDocuments: r.bool(
+        'oauth.client_registration.metadata_documents',
+        DEFAULTS.oauthMetadataDocuments,
+      ),
+    },
+  };
+}
+
+function readClientRegistrationPolicy(r: Reader): ClientRegistrationPolicy {
+  const path = 'oauth.client_registration.policy';
+  const fallback: ClientRegistrationPolicy = DEFAULTS.oauthClientRegistrationPolicy;
+  const policy = r.string(path, { fallback }) ?? fallback;
+  if (isClientRegistrationPolicy(policy)) return policy;
+  r.issues.add(
+    path,
+    `expected one of ${CLIENT_REGISTRATION_POLICIES.join(', ')}, got "${policy}"`,
+    envNamesFor(path),
+  );
+  return fallback;
 }
 
 function readLogLevel(r: Reader): LogLevel {

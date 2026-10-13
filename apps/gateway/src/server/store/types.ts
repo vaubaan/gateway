@@ -272,6 +272,22 @@ export interface ApprovalRecord {
 
 // --- delegations --------------------------------------------------------------------
 
+/** How a client came to exist: RFC 7591 registration, or a Client ID Metadata Document. */
+export const CLIENT_REGISTRATIONS = ['dynamic', 'metadata-document'] as const;
+export type ClientRegistration = (typeof CLIENT_REGISTRATIONS)[number];
+
+/** How a client authenticates at the token endpoint. `none`: a public client (PKCE only). */
+export const TOKEN_ENDPOINT_AUTH_METHODS = [
+  'none',
+  'client_secret_basic',
+  'client_secret_post',
+] as const;
+export type TokenEndpointAuthMethod = (typeof TOKEN_ENDPOINT_AUTH_METHODS)[number];
+
+/** What an operator decided about a client; `null` while the registration policy decides. */
+export const CLIENT_OPERATOR_DECISIONS = ['approved', 'disabled'] as const;
+export type ClientOperatorDecision = (typeof CLIENT_OPERATOR_DECISIONS)[number];
+
 export interface OAuthClientRecord {
   readonly id: string;
   readonly clientId: string;
@@ -279,11 +295,34 @@ export interface OAuthClientRecord {
   /** Null for public (PKCE-only) clients. */
   readonly clientSecretHash: string | null;
   readonly redirectUris: readonly string[];
+  readonly registration: ClientRegistration;
+  readonly tokenEndpointAuthMethod: TokenEndpointAuthMethod;
+  readonly clientUri: string | null;
+  /** Metadata-document clients only: when the document must be fetched again. */
+  readonly metadataExpiresAt: Iso | null;
+  readonly operatorDecision: ClientOperatorDecision | null;
+  readonly decidedAt: Iso | null;
+  /** The operator who decided: a user id, or the bootstrap actor. */
+  readonly decidedBy: string | null;
   readonly createdAt: Iso;
 }
 
 export const DELEGATION_STATUSES = ['active', 'revoked'] as const;
 export type DelegationStatus = (typeof DELEGATION_STATUSES)[number];
+
+/**
+ * Who ended a delegation. `refresh-token-replay` and `authorization-code-replay` are
+ * the instance itself: a single-use credential came back, so the whole family goes
+ * (RFC 9700).
+ */
+export const DELEGATION_REVOKE_REASONS = [
+  'user',
+  'client',
+  'operator',
+  'refresh-token-replay',
+  'authorization-code-replay',
+] as const;
+export type DelegationRevokeReason = (typeof DELEGATION_REVOKE_REASONS)[number];
 
 export interface DelegationRecord {
   readonly id: string;
@@ -294,6 +333,16 @@ export interface DelegationRecord {
   readonly status: DelegationStatus;
   readonly createdAt: Iso;
   readonly revokedAt: Iso | null;
+  /** Null while active, and for a delegation revoked before the reason was recorded. */
+  readonly revokeReason: DelegationRevokeReason | null;
+}
+
+/** When a delegation last received a token, and until when one of its tokens is live. */
+export interface DelegationActivity {
+  /** Creation time of its most recent refresh or access token; null when it has none. */
+  readonly lastTokenAt: Iso | null;
+  /** Latest expiry among its unrevoked tokens; null when none is left. */
+  readonly liveUntil: Iso | null;
 }
 
 export const CODE_CHALLENGE_METHODS = ['S256'] as const;

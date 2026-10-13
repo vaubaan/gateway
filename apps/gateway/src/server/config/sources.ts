@@ -60,6 +60,23 @@ export const KEYS: readonly KeySpec[] = [
   { path: 'requests.expiry', env: 'VAUBAAN_REQUEST_EXPIRY', kind: 'string' },
   { path: 'approvals.expiry', env: 'VAUBAAN_APPROVAL_EXPIRY', kind: 'string' },
   { path: 'mcp.rate_limit_per_minute', env: 'VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE', kind: 'int' },
+  { path: 'oauth.access_token_ttl', env: 'VAUBAAN_OAUTH_ACCESS_TOKEN_TTL', kind: 'string' },
+  { path: 'oauth.refresh_token_ttl', env: 'VAUBAAN_OAUTH_REFRESH_TOKEN_TTL', kind: 'string' },
+  {
+    path: 'oauth.client_registration.policy',
+    env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY',
+    kind: 'string',
+  },
+  {
+    path: 'oauth.client_registration.auto_approve_loopback',
+    env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK',
+    kind: 'bool',
+  },
+  {
+    path: 'oauth.client_registration.metadata_documents',
+    env: 'VAUBAAN_OAUTH_CLIENT_REGISTRATION_METADATA_DOCUMENTS',
+    kind: 'bool',
+  },
   { path: 'log.level', env: 'VAUBAAN_LOG_LEVEL', kind: 'string' },
 ];
 
