@@ -97,18 +97,18 @@ The three bulk risks (`bulk-row-write`, `storage.bulk-object-write`,
 bulk write on a prod project is refused structurally, whatever the policy.
 Reads are account-scoped except `auth.read-users` (PII).
 
-The evaluator never drops the fallback : it co-fires on **every** write. A
-preset or a policy that allows writes must therefore carry the env-qualified
-fallback (`supabase[staging].uncategorized-write`), bounded by its own
-quota and gate.
+The fallback counts only when no specific entry matched the write
+(policy-engine rule, P1.2-SDK). Presets never carry it ; a creator who
+accepts it for an environment accepts every uncategorized write there, which
+should stay the exception.
 
 ## Presets
 
-| Preset               | Intent                                                                                                        | Writes                                                                                                         |
-| -------------------- | ------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `read-only-analyst`  | Query data and schema, list buckets and objects. No PII user listing.                                         | none                                                                                                           |
-| `staging-developer`  | One token per code project : reads everywhere, every write on `staging` projects only.                        | all write risks on `[staging]`, including the fallback ; `gate: auto`                                          |
-| `migration-operator` | Schema migrations : free on `staging` ; each prod migration, RLS change or uncategorized prod write is gated. | `[staging]` auto ; `[prod].migration-write`, `[prod].policy-write`, `[prod].uncategorized-write` on `approval` |
+| Preset               | Intent                                                                                 | Writes                                                                           |
+| -------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| `read-only-analyst`  | Query data and schema, list buckets and objects. No PII user listing.                  | none                                                                             |
+| `staging-developer`  | One token per code project : reads everywhere, every write on `staging` projects only. | every categorised write risk on `[staging]` ; `gate: auto`                       |
+| `migration-operator` | Schema migrations : free on `staging` ; each prod migration or RLS change is gated.    | `[staging]` auto ; `[prod].migration-write`, `[prod].policy-write` on `approval` |
 
 Presets are UI sugar : the persisted policy is always the explicit list of
 risk ids, quotas, rate limits and gates (spec §3.2). The numbers are

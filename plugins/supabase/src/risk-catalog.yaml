@@ -22,10 +22,10 @@
 # Bulk writes are structurally not grantable on prod (`acceptable_in_envs`
 # excludes it). Reads stay account-scoped except `auth.read-users` (PII).
 #
-# The fallback `supabase.uncategorized-write` co-fires on EVERY write (the
-# evaluator never drops it), so a preset that allows writes must carry the
-# env-qualified fallback too. Seen alone in production, it means a tool
-# classifies to a slice no fine-grained entry covers : add the entry.
+# The fallback `supabase.uncategorized-write` counts only when no specific
+# entry matched the write (policy-engine rule, P1.2-SDK) ; presets never
+# carry it. Seen in production, it means a tool classifies to a slice no
+# fine-grained entry covers : add the entry.
 #
 # Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
 # Removing or renaming a risk : forbidden — mark it `deprecated: true` and
@@ -424,16 +424,16 @@ risks:
     acceptable_in_envs: [preview, staging, prod]
 
   # ───────────────────────────────────────────────────────────────────────
-  # Fallback — must exist. Co-fires on every write.
+  # Fallback — must exist. Counts only when no specific entry matched.
   # ───────────────────────────────────────────────────────────────────────
 
   - id: supabase.uncategorized-write
     label: Uncategorized Supabase write
     reason: >-
       Catch-all for writes without a dedicated entry. A mission accepting it
-      for an environment accepts every write of the provider there ; the
-      budget and the gate bound it. A tool firing only this risk is a
-      catalog bug.
+      for an environment accepts every uncategorized write of the provider
+      there ; the budget and the gate bound it. A tool firing only this risk
+      is a catalog bug.
     matches: supabase.**.W
     vector:
       reversibility: costly
@@ -528,14 +528,10 @@ presets:
         quota: 50
         rate_limit: { max: 10, window_seconds: 60 }
         gate: auto
-      - risk_id: supabase[staging].uncategorized-write
-        quota: 500
-        rate_limit: { max: 60, window_seconds: 60 }
-        gate: auto
 
   - id: migration-operator
     label: Migration operator
-    description: Apply schema migrations. Free on staging ; each prod migration, RLS change or uncategorized prod write waits for approval. Bulk row writes stay staging-only.
+    description: Apply schema migrations. Free on staging ; each prod migration or RLS change waits for approval. Bulk row writes stay staging-only.
     entries:
       - risk_id: supabase.read-data
         quota: 2000
@@ -553,19 +549,11 @@ presets:
         quota: 50
         rate_limit: { max: 10, window_seconds: 60 }
         gate: auto
-      - risk_id: supabase[staging].uncategorized-write
-        quota: 100
-        rate_limit: { max: 20, window_seconds: 60 }
-        gate: auto
       - risk_id: supabase[prod].migration-write
         quota: 20
         rate_limit: { max: 2, window_seconds: 60 }
         gate: approval
       - risk_id: supabase[prod].policy-write
         quota: 10
-        rate_limit: { max: 2, window_seconds: 60 }
-        gate: approval
-      - risk_id: supabase[prod].uncategorized-write
-        quota: 20
         rate_limit: { max: 2, window_seconds: 60 }
         gate: approval

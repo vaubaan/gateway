@@ -10,7 +10,7 @@
  * the module is first imported (that is, at gateway boot).
  */
 
-import { dirname, resolve } from 'node:path';
+import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { definePlugin, loadCatalogFile } from '@vaubaan/plugin-sdk';
@@ -30,7 +30,7 @@ import { supabaseTools } from './tools.ts';
 // app (Turbopack) rewrites that idiom into a `/_next/static/media/...` asset
 // path, which `readFileSync` cannot open. Removed with the v4 app in P1.6.
 export const supabaseCatalog = loadCatalogFile(
-  resolve(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml'),
+  join(dirname(fileURLToPath(import.meta.url)), 'risk-catalog.yaml'),
 );
 
 export const supabasePlugin = definePlugin({
