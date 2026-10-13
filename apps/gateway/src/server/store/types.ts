@@ -1,0 +1,271 @@
+/**
+ * Store-level record types — the shapes the repositories read and write.
+ *
+ * Spec: docs/spec/vaubaan-gateway.md §2.1–2.3. These are persistence records, not the
+ * gateway's domain model: `@vaubaan/shared` (reshaped by P0.2 in parallel) owns the
+ * domain types, and the store depends on it only for `RiskId`.
+ */
+
+import type { RiskId } from '@vaubaan/shared';
+
+export type { RiskId };
+
+/** ISO-8601 UTC timestamp, e.g. `2026-10-13T09:00:00.000Z`. Lexicographically sortable. */
+export type Iso = string;
+
+export type PrincipalKind = 'user' | 'group';
+
+/** A user or a group, when a rule applies to both alike (owner, share target). */
+export interface Principal {
+  readonly kind: PrincipalKind;
+  readonly id: string;
+}
+
+// --- identities ---------------------------------------------------------------------
+
+export type UserStatus = 'active' | 'removed';
+
+export interface UserRecord {
+  readonly id: string;
+  readonly subject: string;
+  readonly email: string;
+  readonly displayName: string | null;
+  readonly status: UserStatus;
+  readonly createdAt: Iso;
+  readonly lastLoginAt: Iso | null;
+  readonly removedAt: Iso | null;
+}
+
+export type GroupSource = 'idp' | 'local';
+
+export interface GroupRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly source: GroupSource;
+  readonly createdAt: Iso;
+}
+
+// --- connections, resources, shares -------------------------------------------------
+
+export type ConnectionStatus = 'active' | 'expired' | 'revoked' | 'unowned';
+
+export interface ConnectionRecord {
+  readonly id: string;
+  readonly provider: string;
+  readonly owner: Principal;
+  readonly displayName: string;
+  readonly status: ConnectionStatus;
+  /** Master-key version the credential blob was sealed with; null when no credential. */
+  readonly keyVersion: number | null;
+  readonly credentialExpiresAt: Iso | null;
+  readonly metadata: Record<string, unknown> | null;
+  readonly createdAt: Iso;
+  readonly updatedAt: Iso;
+  readonly revokedAt: Iso | null;
+}
+
+export interface ConnectionResourceRecord {
+  readonly id: string;
+  readonly connectionId: string;
+  readonly ref: string;
+  readonly env: string | null;
+  readonly displayName: string;
+  readonly discoveredAt: Iso;
+}
+
+export interface DiscoveredResource {
+  readonly ref: string;
+  readonly displayName: string;
+  /** Environment label; omitted keeps the label an owner already set. */
+  readonly env?: string | null;
+}
+
+export type ShareStatus = 'active' | 'revoked';
+
+export interface ShareRecord {
+  readonly id: string;
+  readonly connectionId: string;
+  readonly target: Principal;
+  /** Explicit enumeration, one row per risk in the store. Never a wildcard. */
+  readonly restriction: readonly RiskId[];
+  readonly status: ShareStatus;
+  readonly createdByUserId: string;
+  readonly createdAt: Iso;
+  readonly revokedAt: Iso | null;
+}
+
+// --- missions -----------------------------------------------------------------------
+
+/** `exhausted` is per risk and derived from counters; it is never a stored status. */
+export type MissionStatus = 'active' | 'expired' | 'orphaned' | 'revoked';
+
+export type Gate = 'auto' | 'approval';
+
+export interface MissionPolicyEntry {
+  readonly riskId: RiskId;
+  /** Actions per period. Always a number: no infinite budget (spec §3.2). */
+  readonly quota: number;
+  /** Actions per sliding window of `rateWindowSeconds`. */
+  readonly rateLimit: number;
+  readonly rateWindowSeconds: number;
+  readonly gate: Gate;
+}
+
+export type ResourceScope = 'all' | 'selected';
+
+export interface MissionConnection {
+  readonly connectionId: string;
+  readonly resourceScope: ResourceScope;
+  /** Selected resource ids; empty when `resourceScope` is `all`. */
+  readonly resourceIds: readonly string[];
+}
+
+export interface MissionRecord {
+  readonly id: string;
+  readonly name: string;
+  readonly creatorUserId: string;
+  readonly status: MissionStatus;
+  readonly periodAnchor: Iso;
+  /** Period length; null for a one-off mission with a single period. */
+  readonly periodSeconds: number | null;
+  readonly expiresAt: Iso | null;
+  /** Set when the mission was issued through the management door. */
+  readonly delegationId: string | null;
+  readonly createdAt: Iso;
+  readonly updatedAt: Iso;
+  readonly closedAt: Iso | null;
+  readonly connections: readonly MissionConnection[];
+  readonly policy: readonly MissionPolicyEntry[];
+}
+
+export type MissionTokenStatus = 'active' | 'rotated' | 'revoked';
+
+export interface MissionTokenRecord {
+  readonly id: string;
+  readonly missionId: string;
+  readonly prefix: string;
+  readonly hash: string;
+  readonly hashAlg: string;
+  readonly status: MissionTokenStatus;
+  readonly createdAt: Iso;
+  readonly retiredAt: Iso | null;
+}
+
+// --- sessions -----------------------------------------------------------------------
+
+export interface SessionRecord {
+  readonly id: string;
+  readonly missionId: string;
+  readonly createdAt: Iso;
+}
+
+export interface SessionCounterRecord {
+  readonly sessionId: string;
+  readonly riskId: RiskId;
+  readonly periodStart: Iso;
+  readonly consumed: number;
+}
+
+export interface EventRecord {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly ts: Iso;
+  readonly kind: string;
+  readonly riskId: RiskId | null;
+  readonly actorUserId: string | null;
+  readonly details: Record<string, unknown> | null;
+}
+
+export interface NewEvent {
+  readonly kind: string;
+  readonly riskId?: RiskId | null;
+  readonly actorUserId?: string | null;
+  readonly details?: Record<string, unknown> | null;
+}
+
+// --- requests and approvals ---------------------------------------------------------
+
+export type RequestKind = 'claim' | 'approval';
+export type RequestState = 'open' | 'granted' | 'refused' | 'expired';
+
+export interface RequestRecord {
+  readonly id: string;
+  readonly missionId: string;
+  readonly sessionId: string | null;
+  readonly kind: RequestKind;
+  readonly state: RequestState;
+  readonly riskId: RiskId;
+  readonly tool: string | null;
+  readonly fingerprint: string | null;
+  /** True while the encrypted arguments are still held (open approval request). */
+  readonly hasArguments: boolean;
+  readonly createdAt: Iso;
+  readonly expiresAt: Iso;
+  readonly decidedAt: Iso | null;
+  readonly decidedByUserId: string | null;
+  readonly decision: Record<string, unknown> | null;
+}
+
+export interface ApprovalRecord {
+  readonly id: string;
+  readonly missionId: string;
+  readonly requestId: string;
+  readonly riskId: RiskId;
+  readonly fingerprint: string;
+  readonly createdAt: Iso;
+  readonly expiresAt: Iso;
+  readonly consumedAt: Iso | null;
+}
+
+// --- delegations --------------------------------------------------------------------
+
+export interface OAuthClientRecord {
+  readonly id: string;
+  readonly clientId: string;
+  readonly name: string;
+  /** Null for public (PKCE-only) clients. */
+  readonly clientSecretHash: string | null;
+  readonly redirectUris: readonly string[];
+  readonly createdAt: Iso;
+}
+
+export type DelegationStatus = 'active' | 'revoked';
+
+export interface DelegationRecord {
+  readonly id: string;
+  readonly userId: string;
+  /** `oauth_clients.id`, not the public `client_id`. */
+  readonly clientId: string;
+  readonly scope: string;
+  readonly status: DelegationStatus;
+  readonly createdAt: Iso;
+  readonly revokedAt: Iso | null;
+}
+
+export interface OAuthCodeRecord {
+  readonly id: string;
+  readonly delegationId: string;
+  readonly redirectUri: string;
+  readonly codeChallenge: string;
+  readonly codeChallengeMethod: 'S256';
+  readonly createdAt: Iso;
+  readonly expiresAt: Iso;
+  readonly consumedAt: Iso | null;
+}
+
+export interface RefreshTokenRecord {
+  readonly id: string;
+  readonly delegationId: string;
+  readonly createdAt: Iso;
+  readonly expiresAt: Iso;
+  readonly revokedAt: Iso | null;
+  readonly replacedById: string | null;
+}
+
+export interface AccessTokenRecord {
+  readonly id: string;
+  readonly delegationId: string;
+  readonly createdAt: Iso;
+  readonly expiresAt: Iso;
+  readonly revokedAt: Iso | null;
+}

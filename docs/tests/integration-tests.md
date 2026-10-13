@@ -17,6 +17,7 @@ tracks:
   - apps/gateway/tests/
   - apps/gateway/src/lib/bash/
   - apps/gateway/src/server/
+  - apps/gateway/migrations/
   - packages/shared/src/
 ---
 
@@ -98,7 +99,18 @@ en absence des creds env vars.
 | `packages/shared/src/api-key.test.ts`                             |                    6 |
 | `packages/shared/src/risk-id.test.ts`                             |                   20 |
 | `packages/shared/src/mcp.test.ts`                                 |                   10 |
-| **TOTAL (full suite, `npm run test`, 2026-10-13)**                | **1547 (3 skipped)** |
+| `apps/gateway/tests/unit/server/store/ids.test.ts`                |                    6 |
+| `apps/gateway/tests/unit/server/store/migrate.test.ts`            |                    8 |
+| `apps/gateway/tests/integration/store/schema.test.ts`             |                    6 |
+| `apps/gateway/tests/integration/store/audit.test.ts`              |                   12 |
+| `apps/gateway/tests/integration/store/identities.test.ts`         |                    7 |
+| `apps/gateway/tests/integration/store/connections-shares.test.ts` |                   11 |
+| `apps/gateway/tests/integration/store/missions.test.ts`           |                    8 |
+| `apps/gateway/tests/integration/store/sessions.test.ts`           |                    9 |
+| `apps/gateway/tests/integration/store/requests-approvals.test.ts` |                    8 |
+| `apps/gateway/tests/integration/store/delegations.test.ts`        |                    7 |
+| `apps/gateway/tests/integration/store/config.test.ts`             |                    4 |
+| **TOTAL** (`npm run test`, 2026-10-13, incl. suites not listed)   | **1658 (3 skipped)** |
 
 ## Run
 
@@ -456,6 +468,99 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > per-connection scheme; `apps/gateway/src/lib/crypto/index.ts` is now a
 > shim over it. ADR [[per-org-encryption-app-level]] is legacy.
 
+## Scenarios — Store (v5, embedded SQLite)
+
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §2, §3.3,
+> §3.5, §6 ("encryption at rest", "authoritative, atomic counting",
+> "immutable audit"), §8, §10 (structural tests). Handbook [[store]]. ADR
+> [[embedded-store-sqlite-and-migrations]]. Every suite runs on an
+> ephemeral `:memory:` store with the real `0001_schema.sql`, a
+> `ManualClock`, a `StubEncryptor` and a five-id `SetCatalogIndex`
+> (`apps/gateway/src/server/store/testing.ts`); the two file-based cases
+> use a temp directory.
+
+- **`unit/server/store/ids.test.ts`** (6) — UUIDv7 canonical form and
+  version/variant bits, embedded millisecond timestamp, ordering across
+  milliseconds, strict monotonicity of 5k ids within one process (counter
+  in `rand_a`), 10k uniqueness, rejection of non-v7 ids.
+- **`unit/server/store/migrate.test.ts`** (8) — `NNNN_name.sql` loading
+  and ordering, malformed file name rejected, duplicate version rejected,
+  idempotent re-run, incremental apply of a new file, checksum
+  immutability of an applied file (boot refused), full rollback of a
+  failing file (nothing recorded, no table left), shipped `0001_schema`.
+- **`integration/store/schema.test.ts`** (6) — the 28 tables of the plan
+  exist; every table is `STRICT`; the store satisfies the composition root's
+  `Store` port (`kind`, `ping()`, `close()`); boot against an empty file sets WAL,
+  `foreign_keys`, `synchronous=NORMAL` and reopens without re-migrating;
+  two writers on one file serialize under `BEGIN IMMEDIATE` (second gets
+  `SQLITE_BUSY` while the lock is held, succeeds after commit);
+  `VACUUM INTO` backup is a readable single file with no `-wal`.
+- **`integration/store/audit.test.ts`** (12) — gateway-core
+  `CallAuditEntry` round-trips through `audit` + `audit_risks` rows
+  (accepted snapshot, touched, remaining budget), a touched-but-not-accepted
+  risk is kept, `AdminAuditEntry` round-trips, **`UPDATE` aborts**
+  (decision, latency, risk rows), **`DELETE` aborts** outside the purge
+  path, `purgeOlderThan` removes only older rows and closes the window,
+  a recent row cannot be deleted even inside a window, retention default
+  90 days from the clock, filters (mission, kind, range, limit),
+  `countAllowedTouches` for the counters-vs-audit check, schema `CHECK`s
+  refuse incomplete entries, `SqliteAuditWriter` implements gateway-core's
+  `AuditWriter` and propagates failures.
+- **`integration/store/identities.test.ts`** (7) — users: upsert from
+  IdP creates then refreshes (email, last login), lookups, removal and
+  reactivation; groups: `getOrCreate` idempotent, atomic membership
+  replacement and `groupsOf`, single add/remove, FK rejection of a
+  non-user member.
+- **`integration/store/connections-shares.test.ts`** (11) — connection
+  credential sealed with the connection id as associated data and
+  unreadable under another id; ciphertext never on the record; group
+  ownership, transfer, `unowned`, revocation; reconnection reactivates;
+  list filters and `listOwnedBy`; resource sync by ref keeping ids and
+  owner env labels. Shares: restriction stored as rows, **unknown or
+  wildcard risk ids refused by the catalog check** (`*`, `github.*`,
+  unknown, empty) and **by the schema `CHECK`** when bypassed, empty
+  restriction allowed, active-for-targets listing and revocation.
+- **`integration/store/missions.test.ts`** (8) — creation with
+  connections and policy rows, resource selection per connection,
+  inconsistent selections refused (`selected` without resources, `all`
+  with resources, resource of another connection, no connection), policy
+  validation (catalog, non-negative integer quota and rate, positive
+  window, duplicates), atomic `replacePolicy`, status and expiry
+  transitions, token issuance and rotation (`active` → `rotated`,
+  revoke), schema-level single active token and unique prefix.
+- **`integration/store/sessions.test.ts`** (9) — session born on first
+  call and never recreated; **N=50 concurrent `decideAndDecrement` on
+  quota 1 → exactly one allow**, 49 refusals, one counter at 1; a call
+  touching N risks decrements N counters and a refusal none; new period
+  starts at zero; a thrown decider rolls back the session creation;
+  in-transaction approval consumption is single-use; request drop and
+  extra events from inside the refusal transaction; `resetCounters` and
+  `listEvents` since/limit; **structural check**: `session_counters`
+  consumed == allowed audit touches after a mixed run.
+- **`integration/store/requests-approvals.test.ts`** (8) — approval
+  request arguments sealed with `request:<id>` as associated data and
+  readable only through `getArguments`; approval requires tool and
+  fingerprint; decision erases the blob and a second decision is refused;
+  sweeper expires open requests and erases blobs; inbox lists only the
+  creator's open requests. Approvals: single-use and bound to the exact
+  fingerprint and risk, expiry, one approval per request.
+- **`integration/store/delegations.test.ts`** (7) — public client with
+  de-duplicated redirect URIs, consent listing, single-use and expiring
+  codes, refresh-token rotation chain (`revoked_at`, `replaced_by_id`),
+  access token found only while live and delegation active, delegation
+  revocation cascades to tokens, mission issued by delegation records
+  the delegation id.
+- **`integration/store/config.test.ts`** (4) — clear values overwrite,
+  secrets sealed with `instance_config:<key>` and `key_version` stamped,
+  a key is a value or a secret never both, delete.
+
+> **Not covered here, by design.** The accounting rules (period
+> arithmetic, quota/rate comparison, gate handling) are feature P1.3 and
+> will test their own `decide` callback against this primitive. The real
+> `Encryptor` (XChaCha20-Poly1305, per-blob KDF, `apps/gateway/src/server/crypto/`)
+> has its own suite; the store's stub only reproduces the port's
+> associated-data and key-version contract.
+
 ## Hors-scope ces tests
 
 - **E2E avec vrais clouds** (Playwright) → cf.
@@ -489,7 +594,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   (v4 risk-based, source de vérité du modèle d'autorisation).
 - Handbooks liés : [[policy-engine]], [[mcp-gateway]], [[github-provider]],
   [[vercel-provider]], [[railway-provider]], [[bash-provider]],
-  [[escalation]], [[web-app]].
+  [[escalation]], [[web-app]], [[store]].
 - Workflow CI : [`../workflow/coding-workflow.md`](../workflow/coding-workflow.md)
   — `npm run ci` lance type-check + lint + format:check + test (cette suite) + build.
 - E2E (Playwright) : [`./e2e-tests.md`](./e2e-tests.md).

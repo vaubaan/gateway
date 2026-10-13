@@ -125,10 +125,27 @@ Locally: `npm run docker:build && npm run docker:smoke`.
 
 ## Database migrations
 
-The Supabase migrations workflow was removed with P0.1 (2026-10-13). v5
-uses an embedded store whose forward-only migrations run at process boot;
-the mechanism is specified by feature P0.3 of the v5 plan and will be
-documented here when it lands.
+The Supabase migrations workflow was removed with P0.1 (2026-10-13). Since
+P0.3 the schema is owned by the application and applied **at process boot**
+by an in-house forward-only runner (ADR
+[embedded-store-sqlite-and-migrations](../decisions/embedded-store-sqlite-and-migrations.md),
+handbook [store](../handbook/store.md)). Nothing runs in CI for migrations;
+the rules for contributors are:
+
+- A schema change is a **new file** `apps/gateway/migrations/NNNN_name.sql`
+  (four-digit, strictly increasing, lowercase slug). Never edit an applied
+  file: the runner records a SHA-256 checksum and refuses to boot on a
+  mismatch.
+- Portable SQL only; mark the unavoidable SQLite-specific spots with a
+  `-- sqlite:` comment (today: `STRICT`, `RAISE(ABORT)`), so a Postgres port
+  can grep them.
+- The migration tests (`apps/gateway/tests/unit/server/store/migrate.test.ts`,
+  `apps/gateway/tests/integration/store/schema.test.ts`) run with the
+  regular `npm run test`; the schema test lists every table and asserts
+  they are all `STRICT`, so a new table updates that list.
+- Operators never run migrations: starting the new image migrates the
+  volume; a rollback to an older image against a newer schema fails fast
+  naming the migration.
 
 ## Local CI gate
 

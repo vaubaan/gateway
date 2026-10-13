@@ -1,0 +1,243 @@
+/**
+ * Requests (claims and approval requests with encrypted arguments) and approvals
+ * (single-use, short-lived, bound to the exact fingerprint). Spec §3.4, §3.5, plan §3.6.
+ */
+
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { InvariantError, type Store } from '../../../src/server/store/index.ts';
+import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+
+const MERGE = 'github.merge-protected';
+
+describe('requests repository', () => {
+  let t: TestStore;
+  let store: Store;
+  let creator: string;
+  let other: string;
+  let missionId: string;
+
+  beforeEach(async () => {
+    t = openTestStore();
+    store = t.store;
+    creator = (await store.users.upsertFromIdp({ subject: 'c', email: 'c@x' })).id;
+    other = (await store.users.upsertFromIdp({ subject: 'o', email: 'o@x' })).id;
+    const connection = await store.connections.create({
+      provider: 'github',
+      owner: { kind: 'user', id: creator },
+      displayName: 'gh',
+      credential: null,
+    });
+    missionId = (
+      await store.missions.create({
+        name: 'm',
+        creatorUserId: creator,
+        periodSeconds: null,
+        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        policy: [
+          { riskId: MERGE, quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' },
+        ],
+      })
+    ).id;
+  });
+  afterEach(() => store.close());
+
+  it('stores approval-request arguments encrypted with the request id as associated data', async () => {
+    const request = await store.requests.create({
+      missionId,
+      kind: 'approval',
+      riskId: MERGE,
+      tool: 'github__merge_pull_request',
+      fingerprint: 'fp',
+      arguments: { owner: 'acme', repo: 'a', pull_number: 7 },
+      expiresAt: '2026-10-13T10:00:00.000Z',
+    });
+    expect(request).toMatchObject({ kind: 'approval', state: 'open', hasArguments: true });
+    expect(t.encryptor.sealCalls).toEqual([{ associatedData: `request:${request.id}` }]);
+    expect(await store.requests.getArguments(request.id)).toEqual({
+      owner: 'acme',
+      repo: 'a',
+      pull_number: 7,
+    });
+    const raw = store.db
+      .prepare<
+        [string],
+        { args_blob: Buffer; key_version: number }
+      >('SELECT args_blob, key_version FROM requests WHERE id = ?')
+      .get(request.id);
+    expect(raw?.key_version).toBe(1);
+    expect(raw?.args_blob.toString('utf8')).not.toBe(
+      JSON.stringify({ owner: 'acme', repo: 'a', pull_number: 7 }),
+    );
+  });
+
+  it('an approval request requires a tool and a fingerprint', async () => {
+    await expect(
+      store.requests.create({
+        missionId,
+        kind: 'approval',
+        riskId: MERGE,
+        expiresAt: '2026-10-13T10:00:00.000Z',
+      }),
+    ).rejects.toThrow(InvariantError);
+  });
+
+  it('erases the arguments on decision and refuses a second decision', async () => {
+    const request = await store.requests.create({
+      missionId,
+      kind: 'approval',
+      riskId: MERGE,
+      tool: 't',
+      fingerprint: 'fp',
+      arguments: { a: 1 },
+      expiresAt: '2026-10-13T10:00:00.000Z',
+    });
+    const granted = await store.requests.decide(request.id, 'granted', creator, {
+      approvalTtlSeconds: 300,
+    });
+    expect(granted).toMatchObject({
+      state: 'granted',
+      hasArguments: false,
+      decidedByUserId: creator,
+      decidedAt: t.clock.now().toISOString(),
+      decision: { approvalTtlSeconds: 300 },
+    });
+    expect(await store.requests.getArguments(request.id)).toBeNull();
+    await expect(store.requests.decide(request.id, 'refused', creator)).rejects.toThrow(
+      /already granted/,
+    );
+  });
+
+  it('the sweeper expires open requests past their expiry and erases their blobs', async () => {
+    const stale = await store.requests.create({
+      missionId,
+      kind: 'approval',
+      riskId: MERGE,
+      tool: 't',
+      fingerprint: 'fp',
+      arguments: { a: 1 },
+      expiresAt: '2026-10-13T09:30:00.000Z',
+    });
+    const fresh = await store.requests.create({
+      missionId,
+      kind: 'claim',
+      riskId: MERGE,
+      expiresAt: '2026-10-14T09:00:00.000Z',
+    });
+    t.clock.set('2026-10-13T09:30:00.000Z');
+    expect(await store.requests.expireOpen()).toBe(1);
+    expect(await store.requests.getById(stale.id)).toMatchObject({
+      state: 'expired',
+      hasArguments: false,
+    });
+    expect(await store.requests.getById(fresh.id)).toMatchObject({ state: 'open' });
+    expect((await store.requests.listForMission(missionId)).map((r) => r.id)).toEqual([
+      stale.id,
+      fresh.id,
+    ]);
+  });
+
+  it('the inbox lists only the creator’s open requests', async () => {
+    const r = await store.requests.create({
+      missionId,
+      kind: 'claim',
+      riskId: MERGE,
+      expiresAt: '2026-10-14T09:00:00.000Z',
+    });
+    expect((await store.requests.listOpenForCreator(creator)).map((x) => x.id)).toEqual([r.id]);
+    expect(await store.requests.listOpenForCreator(other)).toEqual([]);
+    await store.requests.decide(r.id, 'refused', creator);
+    expect(await store.requests.listOpenForCreator(creator)).toEqual([]);
+    await expect(store.requests.getArguments('missing')).rejects.toThrow(/not found/);
+  });
+});
+
+describe('approvals repository', () => {
+  let t: TestStore;
+  let store: Store;
+  let missionId: string;
+  let requestId: string;
+
+  beforeEach(async () => {
+    t = openTestStore();
+    store = t.store;
+    const creator = (await store.users.upsertFromIdp({ subject: 'c', email: 'c@x' })).id;
+    const connection = await store.connections.create({
+      provider: 'github',
+      owner: { kind: 'user', id: creator },
+      displayName: 'gh',
+      credential: null,
+    });
+    missionId = (
+      await store.missions.create({
+        name: 'm',
+        creatorUserId: creator,
+        periodSeconds: null,
+        connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+        policy: [
+          { riskId: MERGE, quota: 5, rateLimit: 1, rateWindowSeconds: 60, gate: 'approval' },
+        ],
+      })
+    ).id;
+    requestId = (
+      await store.requests.create({
+        missionId,
+        kind: 'approval',
+        riskId: MERGE,
+        tool: 't',
+        fingerprint: 'fp',
+        expiresAt: '2026-10-13T10:00:00.000Z',
+      })
+    ).id;
+  });
+  afterEach(() => store.close());
+
+  it('is single-use and bound to the exact fingerprint', async () => {
+    const approval = await store.approvals.create({
+      missionId,
+      requestId,
+      riskId: MERGE,
+      fingerprint: 'fp',
+      expiresAt: '2026-10-13T09:10:00.000Z',
+    });
+    expect((await store.approvals.listActive(missionId)).map((a) => a.id)).toEqual([approval.id]);
+    expect(await store.approvals.consume(missionId, MERGE, 'fp-different')).toBeNull();
+    expect(await store.approvals.consume(missionId, 'github.code-read', 'fp')).toBeNull();
+    const consumed = await store.approvals.consume(missionId, MERGE, 'fp');
+    expect(consumed?.id).toBe(approval.id);
+    expect(consumed?.consumedAt).toBe(t.clock.now().toISOString());
+    expect(await store.approvals.consume(missionId, MERGE, 'fp')).toBeNull();
+    expect(await store.approvals.listActive(missionId)).toEqual([]);
+  });
+
+  it('expires', async () => {
+    await store.approvals.create({
+      missionId,
+      requestId,
+      riskId: MERGE,
+      fingerprint: 'fp',
+      expiresAt: '2026-10-13T09:10:00.000Z',
+    });
+    t.clock.set('2026-10-13T09:10:00.000Z');
+    expect(await store.approvals.consume(missionId, MERGE, 'fp')).toBeNull();
+    expect(await store.approvals.listActive(missionId)).toEqual([]);
+  });
+
+  it('one approval per request', async () => {
+    await store.approvals.create({
+      missionId,
+      requestId,
+      riskId: MERGE,
+      fingerprint: 'fp',
+      expiresAt: '2026-10-13T09:10:00.000Z',
+    });
+    await expect(
+      store.approvals.create({
+        missionId,
+        requestId,
+        riskId: MERGE,
+        fingerprint: 'fp',
+        expiresAt: '2026-10-13T09:10:00.000Z',
+      }),
+    ).rejects.toThrow(/UNIQUE/);
+  });
+});
