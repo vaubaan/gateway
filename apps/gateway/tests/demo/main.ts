@@ -18,7 +18,7 @@ import { hostname } from 'node:os';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { buildIsFresh, sourceDigest, writeBuildStamp } from './build-stamp';
+import { buildIsFresh, readBuildStamp, sourceDigest, writeBuildStamp } from './build-stamp';
 import { BUILD_DIR, hasBuild, startDemo, type RunningDemo } from './demo-instance';
 import { assertDemoAllowed, demoPort, DemoRefusal } from './guards';
 import { DEMO_BANNER, tourText } from './tour';
@@ -72,10 +72,13 @@ function ensureBuild(env: NodeJS.ProcessEnv): void {
     say('The web application is already built from these sources.');
     return;
   }
+  const stamp = hasBuild() ? readBuildStamp(BUILD_DIR) : null;
   say(
-    hasBuild()
+    stamp !== null
       ? 'The sources changed since the last build: building the web application…'
-      : 'Building the web application…',
+      : hasBuild()
+        ? 'The existing build was not made by the demo (no stamp): building the web application…'
+        : 'Building the web application…',
   );
   build();
   writeBuildStamp(BUILD_DIR, digest);
