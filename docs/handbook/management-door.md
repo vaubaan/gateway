@@ -58,7 +58,7 @@ apps/gateway/src/server/oauth-as/        host-agnostic, never imports `next`
   authorization.ts            AuthorizationService: client + redirect URI, request validation, pending consent, the answer
   token-service.ts            TokenService: client authentication, code grant, refresh rotation, replay, revocation, sweep
   delegations.ts              DelegationService: a user's delegations with client and missions; revoke. endDelegation(): the one revoke-and-audit
-  verifier.ts                 DelegatedTokenVerifier: resolve(bearer) / verifyAccessToken(token)
+  verifier.ts                 DelegatedTokenVerifier: resolve(bearer)
   management-gate.ts          ManagementGate.admit(request): the resource-server check of /mcp/manage
   pages.ts                    the consent screen and the message pages, as self-contained HTML
   handlers.ts                 Request → Response handlers of the nine endpoints; the execution door's discovery document
@@ -570,12 +570,9 @@ token must have the access-token shape, a live row, an active delegation, an
 **active user** and a **client that is `approved` as of now**
 (`ClientRegistry.statusOf`, see
 [Registration policy and operator decisions](#registration-policy-and-operator-decisions)).
-It reads the store at every call: no cache.
-`verifyAccessToken(token)` is the same answer in the MCP SDK's
-`OAuthTokenVerifier` contract (`AuthInfo` with the delegation under
-`extra['vaubaan.delegation']`, or an `invalid_token` `OAuthError`); nothing in
-the application calls it — the door goes through `ManagementGate.admit`, which
-is the path that checks the scope.
+It reads the store at every call: no cache. It is the only verification of a
+delegated bearer: the door goes through `ManagementGate.admit`, which is the
+path that checks the scope.
 
 The same verifier is wired into the **execution** door as its
 `DelegatedTokenResolver` (`compose/root.ts`), which is how `/mcp` refuses a
@@ -891,9 +888,12 @@ since, next, access?)` — with `access`, the access token of the renewal is
 - `disableClient(id, decidedBy)` → `{ client, revoked }` — the decision and
   the revocation (reason `operator`) of every active delegation of the
   client, with their tokens.
-- `createCode`, `createRefreshToken`, `createAccessToken` check that the
-  delegation is active and insert in one transaction (on a synchronous driver
-  the two statements could not interleave; on another they could).
+- `createCode` and `createAccessToken` check that the delegation is active
+  and insert in one transaction (on a synchronous driver the two statements
+  could not interleave; on another they could).
+- `consumeCode(hash)` and `createRefreshToken(input)` are gone: a code is
+  spent and the first refresh token written by `redeemCode` only, a later one
+  by a rotation.
 - `revokeRefreshToken(id)` is gone: nothing revokes one refresh token alone
   (a rotation replaces it, a revocation ends the family).
 

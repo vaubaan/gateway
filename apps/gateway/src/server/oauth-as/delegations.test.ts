@@ -1,4 +1,3 @@
-import { OAuthError } from '@modelcontextprotocol/server';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import { silentLogger } from '../logging';
@@ -13,7 +12,7 @@ import {
   WEB_REDIRECT,
   type OAuthRig,
 } from './testing';
-import { DELEGATION_AUTH_INFO_KEY, DelegatedTokenVerifier } from './verifier';
+import { DelegatedTokenVerifier } from './verifier';
 
 describe('DelegationService', () => {
   let rig: OAuthRig;
@@ -242,7 +241,6 @@ describe('DelegatedTokenVerifier', () => {
         repo: rig.store.delegations,
         users: rig.store.users,
         clients,
-        endpoints: rig.endpoints,
       });
     }
 
@@ -270,9 +268,6 @@ describe('DelegatedTokenVerifier', () => {
       await rig.store.delegations.decideClient(client.id, 'disabled', 'operator-1');
       expect(await rig.store.delegations.getById(delegationId)).toMatchObject({ status: 'active' });
       expect(await rig.verifier.resolve(tokens.access_token)).toBeNull();
-      await expect(rig.verifier.verifyAccessToken(tokens.access_token)).rejects.toBeInstanceOf(
-        OAuthError,
-      );
     });
 
     it('a client whose redirect URIs left the loopback interface goes back to pending, and its tokens with it', async () => {
@@ -354,25 +349,5 @@ describe('DelegatedTokenVerifier', () => {
       expect(await endDelegation(deps(), 'no-such-delegation', by)).toBeNull();
       expect(rig.audit.entries).toEqual([]);
     });
-  });
-
-  it('speaks the MCP SDK verifier contract: AuthInfo for a live token, invalid_token otherwise', async () => {
-    const { tokens, delegationId } = await rig.issue(rig.ada, client);
-    const info = await rig.verifier.verifyAccessToken(tokens.access_token);
-    expect(info).toMatchObject({
-      clientId: client.clientId,
-      scopes: ['mgmt'],
-      expiresAt: Math.floor((rig.clock.now().getTime() + 900_000) / 1000),
-      resourceMetadataUrl: rig.endpoints.resourceMetadataUrl,
-    });
-    expect(info.resource?.href).toBe(rig.endpoints.resource);
-    expect(info.extra?.[DELEGATION_AUTH_INFO_KEY]).toMatchObject({
-      delegation_id: delegationId,
-      user_id: rig.ada.id,
-    });
-
-    const err = await rig.verifier.verifyAccessToken(mintAccessToken()).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(OAuthError);
-    expect((err as OAuthError).code).toBe('invalid_token');
   });
 });

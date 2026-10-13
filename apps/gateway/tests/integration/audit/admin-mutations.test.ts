@@ -879,7 +879,6 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'delegation-revoked', object: 'delegation', actor: 'alice' },
   },
   'DelegatedTokenVerifier.resolve': READ,
-  'DelegatedTokenVerifier.verifyAccessToken': READ,
   'ManagementGate.admit': READ,
   // ── management door: an agent acting for the user, under a delegation ─────
   'ManagementDoor.handle': READ,

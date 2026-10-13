@@ -13,31 +13,24 @@
  * Two consumers, one answer:
  *
  * - the management door authenticates its callers with it, through
- *   `ManagementGate` (`verifyAccessToken` is the same answer in the MCP SDK's
- *   `OAuthTokenVerifier` contract, for a host that uses `requireBearerAuth`);
+ *   `ManagementGate.admit`, which is also where the scope is checked;
  * - the execution door recognises a delegated token with it so as to refuse
  *   it by kind (`wrong-credential-kind`) rather than as an unknown bearer
  *   (`resolve` is its `DelegatedTokenResolver` contract).
  */
-import { OAuthError, OAuthErrorCode, type AuthInfo } from '@modelcontextprotocol/server';
 import type { DelegationContext } from '@vaubaan/gateway-core';
 
 import type { DelegationsRepo } from '../store/repositories/delegations';
 import type { UsersRepo } from '../store/repositories/users';
 import type { ClientRegistry } from './clients';
-import { scopesOf, type OAuthEndpoints } from './endpoints';
+import { scopesOf } from './endpoints';
 import { digestOf, isAccessTokenShaped } from './secrets';
-
-const MS_PER_SECOND = 1000;
-/** Key under which the delegation rides `AuthInfo.extra` to the door's handlers. */
-export const DELEGATION_AUTH_INFO_KEY = 'vaubaan.delegation';
 
 export interface DelegatedTokenVerifierDeps {
   readonly repo: Pick<DelegationsRepo, 'findActiveAccessToken' | 'getClient'>;
   readonly users: Pick<UsersRepo, 'getById'>;
   /** What the operator and the registration policy say of a client, now. */
   readonly clients: Pick<ClientRegistry, 'statusOf'>;
-  readonly endpoints: OAuthEndpoints;
 }
 
 export class DelegatedTokenVerifier {
@@ -66,28 +59,6 @@ export class DelegatedTokenVerifier {
       client_id: client.clientId,
       scopes: scopesOf(delegation.scope),
       expires_at: found.token.expiresAt,
-    };
-  }
-
-  /**
-   * The MCP SDK's verifier contract: the `AuthInfo` of a valid token, with the
-   * delegation under `extra[DELEGATION_AUTH_INFO_KEY]`, or an `invalid_token`
-   * `OAuthError` (which the SDK's helpers turn into a 401 challenge). The
-   * `token` field never carries the bearer further than the caller already had it.
-   */
-  async verifyAccessToken(token: string): Promise<AuthInfo> {
-    const delegation = await this.resolve(token);
-    if (!delegation) {
-      throw new OAuthError(OAuthErrorCode.InvalidToken, 'unknown, expired or revoked token');
-    }
-    return {
-      token,
-      clientId: delegation.client_id,
-      scopes: [...delegation.scopes],
-      expiresAt: Math.floor(Date.parse(delegation.expires_at) / MS_PER_SECOND),
-      resource: new URL(this.deps.endpoints.resource),
-      resourceMetadataUrl: this.deps.endpoints.resourceMetadataUrl,
-      extra: { [DELEGATION_AUTH_INFO_KEY]: delegation },
     };
   }
 }

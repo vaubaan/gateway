@@ -116,7 +116,6 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
     repo: store.delegations,
     users: store.users,
     clients,
-    endpoints,
   });
   const handlers = createOAuthHandlers({
     publicUrl: config.publicUrl,
@@ -270,4 +269,4 @@ export {
   type ClientCredentials,
   type TokenResponse,
 } from './token-service';
-export { DELEGATION_AUTH_INFO_KEY, DelegatedTokenVerifier } from './verifier';
+export { DelegatedTokenVerifier } from './verifier';
