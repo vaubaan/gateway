@@ -74,6 +74,12 @@ export async function executeTemplate(
       }
       return text(await request(ctx, 'PATCH', `${widgets}/${id}`, { name: args.name }));
     }
+    case TOOL.deleteWidget: {
+      const id = pathIdent(args.widget_id);
+      if (!id) return refused(MALFORMED_WIDGET_ID);
+      await request(ctx, 'DELETE', `${widgets}/${id}`);
+      return text({ deleted: id });
+    }
     default:
       return refused(`unknown tool '${tool}'`);
   }
@@ -136,6 +142,8 @@ async function request(
       res.status,
     );
   }
+  // A success without content (the answer to a DELETE) is not JSON.
+  if (res.status === 204) return null;
   return await res.json();
 }
 

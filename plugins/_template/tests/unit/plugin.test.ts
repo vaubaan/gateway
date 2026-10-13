@@ -7,6 +7,9 @@ import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'vitest';
 
+// Test-only : which risks a slice touches. A plugin's sources import the SDK alone.
+import { risksTouchedBy } from '@vaubaan/policy-engine';
+
 import {
   catalogPathNextTo,
   parseSlice,
@@ -61,6 +64,7 @@ describe('template plugin — structural kit', () => {
           { args: { workspace: 'ws-stg', widget_id: 'w1', name: 'x' } },
           { args: { widget_id: 'w1', name: 'x' }, resources: [staging, prod], expectDenied: true },
         ],
+        [TOOL.deleteWidget]: [{ args: { workspace: 'ws-stg', widget_id: 'w1' } }],
       },
       { resources: [staging] },
     );
@@ -69,7 +73,7 @@ describe('template plugin — structural kit', () => {
     // Expectations are derived from the catalog : every named risk is touched.
     const risks = templateCatalog.catalog.risks;
     expect(report.risksTouched).toEqual(risks.filter((r) => !r.fallback).map((r) => r.id));
-    expect(report.risksTouched).toHaveLength(2);
+    expect(report.risksTouched).toHaveLength(3);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
   });
@@ -161,6 +165,22 @@ describe('classifyTemplate', () => {
   test('update → write slice on the exact widget', () => {
     expect(slices(TOOL.updateWidget, { workspace: 'ws-stg', widget_id: 'w7', name: 'n' })).toEqual([
       `${PROVIDER_ID}.workspace[ws-stg].widget[w7].W`,
+    ]);
+  });
+
+  test('delete → the verb leaf, which touches the delete risk and the write risk', () => {
+    const [slice] = slices(TOOL.deleteWidget, { workspace: 'ws-stg', widget_id: 'w7' });
+    expect(slice).toBe(`${PROVIDER_ID}.workspace[ws-stg].widget[w7].delete.W`);
+    // A slice may touch several risks ; the mission must accept each of them.
+    const touched = risksTouchedBy(parseSlice(slice!), templateCatalog.indexed);
+    expect([...touched].sort()).toEqual([
+      `${PROVIDER_ID}.widget-delete`,
+      `${PROVIDER_ID}.widget-write`,
+    ]);
+    // An ordinary write does not touch the delete risk.
+    const [write] = slices(TOOL.updateWidget, { workspace: 'ws-stg', widget_id: 'w7', name: 'n' });
+    expect(risksTouchedBy(parseSlice(write!), templateCatalog.indexed)).toEqual([
+      `${PROVIDER_ID}.widget-write`,
     ]);
   });
 
@@ -262,6 +282,18 @@ describe('executeTemplate with mockFetch', () => {
     expect(fetch.calls[0]!.json).toEqual({ name: 'New' });
   });
 
+  test('DELETE : a 204 without content becomes a confirmation', async () => {
+    const fetch = mockFetch([{ method: 'DELETE', url: /widgets\/w1$/, status: 204 }]);
+    const result = await templatePlugin.execute(ctx(fetch), TOOL.deleteWidget, {
+      workspace: 'ws-stg',
+      widget_id: 'w1',
+    });
+    expect(result.isError).toBeUndefined();
+    expect(result.content).toEqual([
+      { type: 'text', text: JSON.stringify({ deleted: 'w1' }, null, 2) },
+    ]);
+  });
+
   test('a provider failure is thrown : 401 as UpstreamAuthError, another status as UpstreamHttpError', async () => {
     const fetch = mockFetch([{ url: /widgets$/, status: 401, body: { error: 'nope' } }]);
     await expect(
@@ -316,7 +348,7 @@ describe('executeTemplate with mockFetch', () => {
 
   test("execute applies the classifier's identifier check : nothing is sent for an unsafe id", async () => {
     const fetch = mockFetch([]);
-    for (const tool of [TOOL.getWidget, TOOL.updateWidget]) {
+    for (const tool of [TOOL.getWidget, TOOL.updateWidget, TOOL.deleteWidget]) {
       const result = await templatePlugin.execute(ctx(fetch), tool, {
         workspace: 'ws-stg',
         widget_id: '..',

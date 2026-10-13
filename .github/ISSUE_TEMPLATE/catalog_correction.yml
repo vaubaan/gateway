@@ -1,0 +1,88 @@
+name: Catalog correction
+description: A risk of a provider plugin is wrong, missing or misdescribed, or a call is classified wrongly.
+title: '[catalog] '
+labels: ['catalog']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A plugin's risk catalog (`plugins/<provider>/src/risk-catalog.yaml`) and its classifier decide what a mission lets an agent do.
+
+        **Stop if the problem lets a mission do more than it accepted** (a write classified as a read, a call that escapes its resource, a dangerous call no risk covers). That is a vulnerability: report it privately as `SECURITY.md` says, not here.
+
+        This form is for everything else: a call refused that should not be, a risk that is too broad or too narrow to be useful, a wrong severity, a misleading label, a preset that does not fit real work.
+  - type: input
+    id: provider
+    attributes:
+      label: Plugin
+      description: The folder name under `plugins/`.
+      placeholder: github
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Plugin version and catalog version
+      description: '`version` in `plugins/<provider>/src/index.ts` and `catalog_version` in its `risk-catalog.yaml`, or the commit you read.'
+      placeholder: plugin 2.0.0, catalog 2 / abc1234
+    validations:
+      required: true
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is wrong
+      multiple: true
+      options:
+        - A call is refused or needs a risk it should not need (classified too strictly)
+        - A risk groups operations that deserve separate decisions (too broad)
+        - A risk is missing for an operation that is only covered by the fallback
+        - The vector of a risk is wrong (reversibility, blast, data, cost, visibility, persistence)
+        - A label, a reason or a description is wrong or unclear
+        - A preset does not fit real work (risks, quotas, rate limits, gates)
+        - The environments a risk is acceptable in are wrong
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: today
+    attributes:
+      label: What happens today
+      description: The tool and its arguments (redacted), the risk ids the call touches or the refusal you got, or the catalog entry as it is written.
+      placeholder: |
+        Tool: github__create_branch { owner, repo, branch: "feature/x" }
+        Touches: github.branch-write
+        Entry: matches 'github.repo[**].branch[**].W'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What it should be
+      description: The classification, entry, vector or preset you propose, and why. A risk id is never renamed or deleted; propose a new entry and a deprecation instead.
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Provider documentation
+      description: Link to the provider's documentation of the operation. A catalog is never changed from memory.
+    validations:
+      required: true
+  - type: dropdown
+    id: contribution
+    attributes:
+      label: Are you offering to make the change?
+      options:
+        - 'Yes, I will open a PR'
+        - 'Yes, with guidance'
+        - 'No, this is a report'
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: This does not let a mission do more than it accepted (otherwise I am using private vulnerability reporting).
+          required: true
+        - label: I read the plugin's handbook under `docs/handbook/providers/`, including its "Edge cases" section.

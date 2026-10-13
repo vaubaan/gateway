@@ -13,8 +13,10 @@ host…). It is one folder, `plugins/<provider>`, named
 6. **executes** the call with the credential the gateway hands it.
 
 This page is the step-by-step guide to write one, test it and submit it. It
-assumes you have never seen the project. Follow the steps in order; each ends
-with a command you can run.
+assumes you have never seen the project. Follow the steps in order. Steps 1, 3, 8 and 10
+end with a command that checks your work; between steps 4 and 8 the copied
+tests are broken on purpose, and `npx tsc -p plugins/<id> --noEmit` is the
+check to run after each file.
 
 - Shipped plugins: `cloudflare-dns`, `github`, `gmail` (experimental),
   `railway`, `resend`, `ssh`, `stripe`, `supabase`, `upstash-redis`, `vercel`.
@@ -45,9 +47,21 @@ Five words used on every line below:
 | **Preset**   | A ready-made list of risks with a budget for each, offered when a mission is issued. A shortcut of the form only: the mission stores the explicit list.                                                                            |
 | **Mission**  | What an agent works under: a set of resources, and for each accepted risk a quota, a rate limit and a gate (`auto` or `approval`). A call touching a risk the mission did not accept is refused.                                   |
 
-A slice is written `<provider>.<entity>[<id>].<entity>[<id>]….<R|W>`. In a
-catalog pattern, `[*]` stands for one segment and `[**]` for any depth;
-`[a,b]` is a list. There is no regular expression.
+A slice is written `<provider>.<entity>[<id>].<entity>[<id>]….<R|W>`:
+
+| Form                                        | Meaning                                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `acme.workspace[ws-1].widget[w-7].W`        | A write on one widget.                                                                |
+| `acme.workspace[ws-1].widget[*].R`          | A read of every widget of the workspace (a list). The entity is declared `unbounded`. |
+| `acme.workspace[ws-1].widget.W`             | A write on the collection, without an id: a creation.                                 |
+| `acme.workspace[ws-1].widget[w-7].delete.W` | A **verb leaf**: an operation that deserves its own risk among the writes (step 2).   |
+
+In a catalog pattern, `[*]` stands for one identifier and `[**]` for any
+identifier and anything below it; `[a,b]` is a list. There is no regular
+expression. A slice can match the patterns of **several risks**: it then
+touches all of them, and the mission must have accepted every one. One
+counter is decremented per risk, and if any of them is gated `approval` the
+whole call waits for the approval.
 
 ## Step 0 — Propose the plugin
 
@@ -70,8 +84,8 @@ prefix with `-` turned into `_` (`cloudflare_dns__`).
 cp -r plugins/_template plugins/acme
 ```
 
-Then give the copy its identity. The id is written in **three** places and
-derived everywhere else:
+Then give the copy its identity. Inside the plugin folder the id is written
+in **three** places and derived everywhere else:
 
 | Where                                | Change                                                                                                                |
 | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
@@ -81,8 +95,10 @@ derived everywhere else:
 
 Rename the exported symbols too (`templatePlugin` → `acmePlugin`,
 `classifyTemplate` → `classifyAcme`, `TEMPLATE_API_BASE` → `ACME_API_BASE`…)
-and set `displayName`, `description` and the API base URL. This lists what is
-left:
+and set `displayName`, `description` and the API base URL. **Change nothing
+else yet**: the workspaces and widgets of the imaginary provider stay until
+you replace them file by file in steps 2 to 8. This lists what is left of
+the scaffold; it must print nothing by the end of step 9:
 
 ```bash
 grep -rniE 'template|widget|example\.com' plugins/acme
@@ -96,10 +112,15 @@ npx vitest run plugins/acme      # the template's tests, under your id
 ```
 
 `npm install` must be run once after the copy: until then nothing can import
-`@vaubaan/plugin-acme`. Commit the `package-lock.json` change it makes.
+`@vaubaan/plugin-acme`. Commit the `package-lock.json` change it makes (a few
+lines naming your plugin). It also prints an audit summary of the existing
+dependencies; ignore it, and do not run `npm audit fix`, which would rewrite
+the lockfile.
 
-Never write the provider id or a tool name as a string literal outside
-`identity.ts` and the YAML: every other file imports `PROVIDER_ID` and `TOOL`.
+In the code, never write the provider id or a tool name as a string literal
+outside `identity.ts` and the YAML: every other file imports `PROVIDER_ID`
+and `TOOL`. (The id also appears, later, in your two documents and in the
+registration of step 10.)
 
 ## Step 2 — Data model (`src/data-model.ts`)
 
@@ -136,10 +157,27 @@ export const acmeDataModel: DataModel = {
 
 - The root entity is normally your **resource**: what `discoverResources`
   returns (step 6) and what a mission selects.
+- `cardinalities` says how a slice may name the entity: `one` (a single
+  identifier, or no identifier), `bounded` (an explicit list `[a,b]`),
+  `unbounded` (`[*]`, all of them).
+- **Verb leaves.** A slice ends in `R` or `W` and nothing else. To give an
+  operation its own risk among the writes — a deletion, a publication, a
+  transfer — declare a leaf entity under the entity it acts on
+  (`{ name: 'delete', parent: 'widget', cardinalities: ['one'] }`), emit
+  `…widget[<id>].delete.W` from the classifier, and match it in the catalog.
+  The template does this for `delete_widget`.
 - Mark at most the entities that carry an environment with `envScopable`.
   Leave it out when the provider has no notion of environment (DNS).
 - Every slice of the classifier and every `matches` pattern of the catalog
-  walks this graph. `definePlugin` validates it at import.
+  must use these entities, in this order. `definePlugin` checks that the
+  model is consistent (every `parent` exists); **nothing checks your slices
+  and patterns against it**. A slice naming an entity you did not declare is
+  accepted and falls to the fallback, so the model is what the reviewer
+  compares your classifier with.
+
+```bash
+npx tsc -p plugins/acme --noEmit   # the check to run after each file of steps 2 to 7
+```
 
 ## Step 3 — Risk catalog and presets (`src/risk-catalog.yaml`)
 
@@ -183,6 +221,21 @@ risks:
     vector_overrides: # optional: what changes in one environment
       prod: { reversibility: costly, visibility: public }
 
+  - id: acme.widget-delete # its own decision, through the verb leaf of step 2
+    label: 'Delete a widget'
+    reason: 'A deleted widget cannot be restored.'
+    matches: 'acme.workspace[**].widget[**].delete.W'
+    acceptable_in_envs: [staging, prod]
+    vector:
+      {
+        reversibility: irreversible,
+        blast: single,
+        data: data,
+        cost: free,
+        visibility: team,
+        persistence: session,
+      }
+
   - id: acme.uncategorized-write # the fallback: mandatory, exactly one
     label: 'Uncategorized write'
     reason: 'Catch-all for writes without a dedicated entry.'
@@ -215,6 +268,10 @@ presets:
         quota: 20
         rate_limit: { max: 5, window_seconds: 60 }
         gate: approval
+      - risk_id: acme[prod].widget-delete
+        quota: 5
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
 ```
 
 Rules, all enforced when the file is loaded (at gateway boot and in tests):
@@ -222,6 +279,13 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
 - **Ids.** `<provider>.<name>`, lowercase with dashes. An id is never renamed
   and never deleted, because missions store it: mark the entry
   `deprecated: true` with `replaced_by: <id>` instead.
+- **Overlapping patterns add up.** `widget[**].W` also matches
+  `widget[w-7].delete.W`, so a deletion touches `widget-write` **and**
+  `widget-delete`: a mission needs both, and one of them gated `approval` is
+  enough for the call to wait. This is how the shipped catalogs layer risks
+  ("any write" plus "a dangerous write"). When you want two risks that do not
+  add up, give them patterns that do not overlap. The template's test shows
+  how to assert which risks a slice touches.
 - **Reads need an entry too.** A slice no entry matches is refused at
   runtime, and the fallback only catches writes.
 - **The fallback.** Exactly one entry named `<provider>.uncategorized-…`,
@@ -249,7 +313,8 @@ Rules, all enforced when the file is loaded (at gateway boot and in tests):
   provider needs is refused by your classifier.
 - Unknown keys are refused, so a typo never silently disables a rule.
 
-Check the file alone, before writing the classifier:
+Check the file alone, before writing the classifier (the filter is the title
+of the first test of the template; keep that title):
 
 ```bash
 npx vitest run plugins/acme -t 'well-formed'
@@ -257,13 +322,16 @@ npx vitest run plugins/acme -t 'well-formed'
 
 A failure lists every problem with its path
 (`presets[0].entries[2].risk_id 'acme.nope' is not a risk of the 'acme' catalog`).
+This checks the catalog against its own rules only. Whether it covers what
+your tools really do is checked in step 8, by `assertCatalogCoverage`.
 
 ## Step 4 — Tools and classifier (`src/tools.ts`, `src/classify.ts`)
 
 **Tools.** Declare the tool names once in `identity.ts` (`TOOL`), built with
 `toolPrefixFor(PROVIDER_ID)` as `<prefix><verb>_<noun>`; `tools.ts` gives each
 a description and a JSON input schema. Every tool that acts on a resource
-takes the resource ref as an explicit argument.
+takes the resource's `ref` (the identifier `discoverResources` returns,
+step 6) as an explicit argument.
 
 **Classifier.** `classify(tool, args, resources)` returns
 `{ slices: Slice[] }` or `{ denied: string }`. `resources` are the mission's
@@ -400,7 +468,9 @@ return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w
   (Stripe's live and test modes): the environment is the owner's label.
 - **The provider's answer is untrusted.** Check it with a type guard, never
   cast it; refuse a payload you do not recognise.
-- Follow the provider's pagination, with a ceiling you state.
+- Follow the provider's pagination up to a ceiling, a named constant of the
+  plugin that the README states ("at most 500 zones"). When the endpoint is
+  not paginated, say so in the README.
 
 ## Step 7 — Execution (`execute` in `src/execute.ts`), and streaming
 
@@ -425,6 +495,8 @@ It runs only after the gateway allowed the call and counted it.
   would say the call went through.
 - The provider's base URL is a constant of the plugin: it is a fact about the
   provider, not configuration of the instance.
+- A success without content (a 204 after a `DELETE`) is not JSON: return a
+  confirmation of your own, as the template does.
 
 The full table is in the SDK handbook,
 ["Errors of `execute`"](../docs/handbook/plugin-sdk.md#errors-of-execute).
@@ -517,7 +589,23 @@ expect(report.risksUntouched).toEqual([]); // or the entries you knowingly leave
 `assertCatalogCoverage` fails when a tool has no sample, when a sample is
 refused without `expectDenied` (or the reverse), and when a slice matches no
 risk of the catalog. `fallbackHits` lists the samples only the fallback
-covered: add the missing catalog entry.
+covered: add the missing catalog entry. Coverage looks at which risks a slice
+matches, not at the environment: samples on one resource are enough, and an
+env-scoped risk counts as touched whatever the label.
+
+`mockFetch(routes)` returns a `fetch` that answers from a list of routes and
+records what it was asked:
+
+```ts
+const fetch = mockFetch([
+  { method: 'GET', url: `${ACME_API_BASE}/workspaces`, body: [{ id: 'ws-1', name: 'One' }] },
+  { method: 'PATCH', url: /widgets\/w1$/, respond: (call) => ({ renamed: call.json }) },
+  { method: 'DELETE', url: /widgets\/w1$/, status: 204 },
+  { url: /widgets$/, status: 503, body: { error: 'down' }, times: 1 },
+]);
+// url: an exact string, a RegExp or a predicate; status defaults to 200; an object body is sent as JSON.
+fetch.calls[0]; // { method, url, headers (lower-cased names), body, json }
+```
 
 Then write, in the same folder:
 
@@ -582,9 +670,23 @@ by the fallback. "Edge cases" argues each classification that is not obvious:
 it is the section a security reviewer reads. `tracks:` lists the files the
 handbook describes; the project's drift check compares the two.
 
+`tracks:` may list folders, as above, or individual files.
+
 Add your plugin's row to the index table in
 [`docs/handbook/providers/README.md`](../docs/handbook/providers/README.md),
-and set `docsUrl` in `definePlugin` to the handbook's URL.
+in alphabetical order, with its seven columns (plugin, handbook, planes,
+number of risks "+ fallback", presets, credential kind, notes), and correct
+the count of plugins in the sentence above the table. Optionally set
+`docsUrl` in `definePlugin` to the handbook's address in the repository,
+`https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/<id>.md`.
+
+Hand-written Markdown tables rarely pass the format check; let Prettier
+align them, then check that nothing is left of the scaffold:
+
+```bash
+npx prettier --write plugins/acme docs/handbook/providers
+grep -rniE 'template|widget|example\.com' plugins/acme
+```
 
 ## Step 10 — Register the plugin
 
@@ -595,7 +697,8 @@ gateway until it is registered. One list holds the providers; everything else
 1. `apps/gateway/package.json`: add `"@vaubaan/plugin-acme": "*"` to
    `dependencies`, then run `npm install`.
 2. `apps/gateway/src/server/compose/shipped-plugins.ts`: one import of the
-   default export, one entry in `SHIPPED_PLUGINS`.
+   default export, placed in alphabetical order of the package names, and
+   one entry at the end of `SHIPPED_PLUGINS`.
 3. For an `oauth2` or `app-install` plugin: its app settings in
    `deploy/config/gateway.example.yaml` and `deploy/config/.env.example`.
 
@@ -607,6 +710,9 @@ issuance flows until it is proven.
 ```bash
 npm run ci                         # type-check, lint, format check, build, tests
 ```
+
+The gate stops at its first failing stage, so a formatting complaint hides
+the build and the tests. Fix it (`npm run format`) and run the gate again.
 
 ## Step 11 — Version, changelog, pull request
 
@@ -627,8 +733,15 @@ change of the catalog's content: an entry, a pattern, a vector, a limit, a
 preset, a label, a reason. Not for a YAML comment.
 
 **Changelog** — one entry in the root [`CHANGELOG.md`](../CHANGELOG.md) under
-`[Unreleased]`, naming the plugin and its version. Plugins have no changelog
-of their own.
+`## [Unreleased]`, in `### Added` for a new plugin (`### Changed` or
+`### Security` for a change), naming the plugin and its version:
+
+```markdown
+- **Acme plugin** (`@vaubaan/plugin-acme` 0.1.0): workspaces and widgets, API key, presets
+  `reader` and `developer`.
+```
+
+Plugins have no changelog of their own.
 
 **Pull request** — one plugin per pull request, with the
 [template checklist](../.github/PULL_REQUEST_TEMPLATE.md) answered. In the

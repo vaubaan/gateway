@@ -65,6 +65,13 @@ export function classifyTemplate(
       if (!id) return { denied: MALFORMED_WIDGET_ID };
       return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[${id}].W`)] };
     }
+    case TOOL.deleteWidget: {
+      const id = pathIdent(args.widget_id);
+      if (!id) return { denied: MALFORMED_WIDGET_ID };
+      // The verb leaf : this slice touches `widget-delete` AND `widget-write`
+      // (whose pattern `widget[**].W` covers it), so a mission needs both.
+      return { slices: [parseSlice(`${PROVIDER_ID}.workspace[${ws}].widget[${id}].delete.W`)] };
+    }
     default:
       return { denied: `unknown tool '${tool}'` };
   }

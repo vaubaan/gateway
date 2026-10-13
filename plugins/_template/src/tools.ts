@@ -13,7 +13,7 @@ import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
 import { TOOL } from './identity.ts';
 
 const workspaceArg = {
-  workspace: { type: 'string', description: 'Workspace ref, as listed in the mission catalog.' },
+  workspace: { type: 'string', description: 'Workspace id, one of the workspaces of the mission.' },
 };
 
 export const templateTools: readonly McpToolDeclaration[] = [
@@ -38,6 +38,15 @@ export const templateTools: readonly McpToolDeclaration[] = [
       type: 'object',
       properties: { ...workspaceArg, widget_id: { type: 'string' }, name: { type: 'string' } },
       required: ['workspace', 'widget_id', 'name'],
+    },
+  },
+  {
+    name: TOOL.deleteWidget,
+    description: 'Delete a widget. Cannot be undone.',
+    inputSchema: {
+      type: 'object',
+      properties: { ...workspaceArg, widget_id: { type: 'string' } },
+      required: ['workspace', 'widget_id'],
     },
   },
 ];
