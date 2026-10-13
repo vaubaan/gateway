@@ -31,12 +31,6 @@ export {
   checkColumnBudget,
   DEFAULT_COLUMN_BUDGET,
   DETAIL_COLUMN_BUDGET,
-  Table,
-  Tbody,
-  Td,
-  Th,
-  Thead,
-  Tr,
   type Column,
   type DataTableProps,
   type RowGroup,
@@ -45,16 +39,7 @@ export {
 export { Meter, meterState, NEAR_LIMIT, type MeterState } from './Meter.tsx';
 
 // Marks: state, who, what
-export {
-  StatusMark,
-  Dot,
-  Tag,
-  EnvTag,
-  Badge,
-  toneOfBadge,
-  type BadgeTone,
-  type Tone,
-} from './Badge.tsx';
+export { StatusMark, Dot, Tag, EnvTag, toneOfBadge, type BadgeTone, type Tone } from './Badge.tsx';
 export {
   Avatar,
   AvatarStack,
@@ -96,7 +81,7 @@ export {
   type ModelNode,
   type StepState,
 } from './States.tsx';
-export { Callout, Banner } from './Callout.tsx';
+export { Callout } from './Callout.tsx';
 
 // Actions and overlays
 export {
@@ -119,7 +104,6 @@ export { CopyButton } from './CopyButton.tsx';
 
 // Details on demand, and narrowing a list
 export { Disclosure, DetailScope, DetailToggle, DetailOnly, useRemembered } from './Disclosure.tsx';
-export { Help, HelpButton, useHelp } from './Help.tsx';
 export { TabList, TabPanel, type TabItem } from './Tabs.tsx';
 export { Segmented, FilterChips, SearchField, type FilterOption } from './Filter.tsx';
 
@@ -130,12 +114,6 @@ export { Code, CodeBlock, CodeTone } from './Code.tsx';
 // Added with the pages (R2c): accounts, activity, settings
 export { PickGrid, PickCard } from './Pick.tsx';
 export { ConfirmSubmit } from './ConfirmSubmit.tsx';
-
-// Kept for the pages written before the redesign (handbook web-app, "Legacy primitives")
-export { Slug } from './Slug.tsx';
-export { Glyph, type GlyphName } from './Glyph.tsx';
-export { KindLegend } from './KindLegend.tsx';
-export { ITEM_KINDS, ITEM_KIND_WORDS, type ItemKind } from './kinds.ts';
 
 // What is running, the inbox and one open request (the home, "Waiting for you")
 export { RunList, RunRow } from './Running.tsx';

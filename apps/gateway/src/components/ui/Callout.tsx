@@ -8,14 +8,11 @@
  * `neutral` — a fact worth setting apart; `info` — where to go next;
  * `warn` — needs you; `bad` — stopped, refused, failed; `ok` — done (rare:
  * the absence of a problem needs no box).
- *
- * `Banner` is the same component under the name older pages import.
  */
 import type { Tone } from '@/lib/vocabulary';
 
 import { toneOfBadge, type BadgeTone } from './Badge.tsx';
 import styles from './Callout.module.css';
-import { Glyph, type GlyphName } from './Glyph.tsx';
 import { Icon, type IconName } from './Icon.tsx';
 
 const TONE_ICON: Readonly<Record<Tone, IconName | null>> = {
@@ -34,15 +31,12 @@ function toneOf(tone: Tone | BadgeTone): Tone {
 
 export function Callout({
   tone = 'neutral',
-  icon,
   title,
   children,
   action,
   testId,
 }: {
   tone?: Tone | BadgeTone;
-  /** A glyph of the older set, for the notes of the risk model that name one. */
-  icon?: GlyphName;
   title?: React.ReactNode;
   children: React.ReactNode;
   /** One action at the end of the note (a small `Button` or `ButtonLink`). */
@@ -58,9 +52,9 @@ export function Callout({
       data-tone={resolved}
       data-testid={testId}
     >
-      {(icon || toneIcon) && (
+      {toneIcon && (
         <span className={styles.icon}>
-          {icon ? <Glyph name={icon} /> : toneIcon && <Icon name={toneIcon} size={16} />}
+          <Icon name={toneIcon} size={16} />
         </span>
       )}
       <div className={styles.body}>
@@ -69,22 +63,5 @@ export function Callout({
       </div>
       {action && <div className={styles.action}>{action}</div>}
     </div>
-  );
-}
-
-/** The name older pages use for a block message; the same component. */
-export function Banner({
-  tone = 'info',
-  title,
-  children,
-}: {
-  tone?: Tone | BadgeTone;
-  title?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <Callout tone={tone} title={title}>
-      {children}
-    </Callout>
   );
 }

@@ -88,15 +88,15 @@ From another machine, forward the port and open the same URL there:
             ssh -L ${port}:localhost:${port} ${input.host}
 The listener is bound to 127.0.0.1: nothing else on the network reaches it.
 
-Accounts (no password: pick one on the sign-in page; to switch, open the
+People (no password: pick one on the sign-in page; to switch, open the
 side navigation: your name at its foot, then "Sign out")
 ${accounts}
 
-Tokens of three seeded missions of Alice, for the commands below:
+Keys of three seeded missions of Alice, for the commands below:
   export VAUBAAN_MISSION_TOKEN='${seeded.activeMission.token}'
   export VAUBAAN_QUOTA_TOKEN='${seeded.quotaMission.token}'
   export VAUBAAN_APPROVAL_TOKEN='${seeded.approval.mission.token}'
-The named token "${seeded.team.named.name}" of "${seeded.team.mission.name}" (step 11):
+The machine key "${seeded.team.named.name}" of "${seeded.team.mission.name}" (step 11):
   export VAUBAAN_CI_TOKEN='${seeded.team.named.token}'
 
 Things to try
@@ -124,14 +124,14 @@ Things to try
      mission" lists every permission with its limit before anything exists.
   5. Read what follows the creation: the key (shown once), then the kit — the
      MCP client configuration, the instructions for the agent, a curl.
-  6. Call tools/list on /mcp with a mission token (the kit's own command; here
+  6. Call tools/list on /mcp with the key of a mission (the kit's own command; here
      with the seeded mission "${seeded.activeMission.name}"):
      ${toolsListCommand(origin)}
-  7. Exhaust a quota. The mission "${seeded.quotaMission.name}" allows ${SMALL_QUOTA} file reads:
+  7. Reach a limit. The mission "${seeded.quotaMission.name}" allows ${SMALL_QUOTA} file reads:
      ${quotaLoopCommand(origin, seeded)}
      The last answer is a refusal "budget-exhausted" carrying a claim_url. Open
-     it as Alice (or "Waiting for you"), grant a reset or an extension, run the loop again.
-     An older claim is already waiting: ${seeded.openClaimUrl}
+     it as Alice (or "Waiting for you"), reset the count or give back some calls, run the loop
+     again. An older request of the same kind is already waiting: ${seeded.openClaimUrl}
   8. Approve the pending action: "Waiting for you" shows a merge of pull request #128
      with its arguments (${seeded.openApprovalUrl}).
      Approve it, then replay the call with exactly the same arguments:
@@ -143,8 +143,8 @@ Things to try
      mission is stopped and every call with its key is refused. Give access
      again as Alice: the dialog names the mission it brings back — same key,
      same limits.
- 11. Work on a mission as a team. Alice added Bob as a member of
-     "${seeded.team.mission.name}" and created the named token "${seeded.team.named.name}".
+ 11. Work on a mission as a team. Alice added Bob as a teammate on
+     "${seeded.team.mission.name}" and created the machine key "${seeded.team.named.name}".
      Sign in as Bob: Missions -> "Shared with you" -> that mission. He reads it and
      cannot change it. Behind "···", "Replace my key": the dialog says his current
      key stops at once; his new key is shown once, to him, with the kit; Alice
@@ -152,7 +152,7 @@ Things to try
      whose key it is:
      ${whoseTokenCommand(origin, 'VAUBAAN_MISSION_TOKEN')}
      The answer reads "token": { "kind": "member", "holder": "${seeded.team.member.email}" }.
-     The machine's token answers with its name:
+     The machine key answers with its name:
      ${whoseTokenCommand(origin, 'VAUBAAN_CI_TOKEN')}
      Sign in as Alice: "People and keys" lists Bob and "${seeded.team.named.name}" with what
      each key did today; "Everything this mission did" has "Who called", and each

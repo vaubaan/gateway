@@ -115,4 +115,3 @@ export {
   type SessionPeriodRow,
   type SessionRiskRow,
 } from './session-view';
-export { eventDetailLines, isSessionEventKind, type EventDetailLine } from './session-event-detail';

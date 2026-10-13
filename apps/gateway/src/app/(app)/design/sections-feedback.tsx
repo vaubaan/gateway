@@ -24,8 +24,6 @@ import {
   EmptyState,
   Field,
   FilterChips,
-  Glyph,
-  Help,
   Hint,
   Input,
   Lede,
@@ -38,7 +36,6 @@ import {
   Segmented,
   Select,
   Skeleton,
-  Slug,
   StepMark,
   SummaryLine,
   Switch,
@@ -599,34 +596,5 @@ export function FormSections() {
         </Specimen>
       </GallerySection>
     </>
-  );
-}
-
-export function LegacySections() {
-  return (
-    <GallerySection
-      id="legacy"
-      title="Kept for older pages"
-      rule="Used by the pages written before the redesign, restyled through the tokens. A redesigned page uses Mono, KeyMark and Disclosure instead; these go when nothing imports them."
-    >
-      <Specimen name="Slug, glyph, help">
-        {(theme) => (
-          <Pile>
-            <Line>
-              <Slug kind="risk">github.merge-protected</Slug>
-              <Slug kind="tool">github__get_file_contents</Slug>
-              <Slug kind="token">vbn_live_XU2O…</Slug>
-              <Slug kind="mission" mono={false} href="#legacy">
-                Ship the billing page
-              </Slug>
-              <Glyph name="warning" />
-            </Line>
-            <Help id={`design-help-${theme}`} line="One line is always shown.">
-              <p>The rest unfolds here, and stays unfolded for this browser.</p>
-            </Help>
-          </Pile>
-        )}
-      </Specimen>
-    </GallerySection>
   );
 }
