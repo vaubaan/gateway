@@ -104,10 +104,10 @@ export function unqualifyRiskId(qualifiedId: RiskId): RiskId {
  * when it has none (account-rooted slice, unlabelled resource, ambiguity).
  *
  * The runtime depends on this interface, not on a resource list, so the
- * host may resolve environments any way it likes : from the mission's
- * resources (the default, `resourceEnvResolver`), from a plugin hook that
- * derives the env from the arguments (GitHub : the branch), or from a
- * fixture in tests.
+ * host may resolve environments any way it likes : from the plugin's
+ * `envOf` hook composed with the mission's resources (`envResolverFor`,
+ * the default), from the resources alone (`resourceEnvResolver`), or from
+ * a fixture in tests.
  */
 export interface EnvResolver {
   resolveEnv(slice: Slice): string | null;
@@ -151,6 +151,49 @@ export function resourceEnvResolver(resources: ReadonlyArray<Resource>): EnvReso
       }
       if (matching.length === 1) return matching[0]!.env ?? null;
       return null;
+    },
+  };
+}
+
+/**
+ * A plugin-side derivation of the environment of a slice : `env[prod]`
+ * segment for Vercel, the branch for GitHub. Returns `undefined` (or
+ * `null`) when the slice carries no environment of its own, so the
+ * resource label applies. Mirrors `ProviderPlugin.envOf` in the SDK
+ * without importing it (the SDK depends on this package, not the reverse).
+ */
+export type EnvDeriver = (
+  slice: Slice,
+  resources: readonly Resource[],
+) => string | null | undefined;
+
+/**
+ * The composed default resolver (ADR fallback-risk-only-when-uncategorized,
+ * § environment resolution ; spec vaubaan-gateway §0 "Resource" : "for
+ * providers where the environment lives in the arguments, the plugin
+ * derives it") :
+ *
+ *   1. the plugin's `envOf(slice, resources)` when given and non-empty —
+ *      the environment is a slice segment or an argument (Vercel, GitHub) ;
+ *   2. else the owner's label on the matching resource
+ *      (`resourceEnvResolver`) — Supabase, Railway, and Stripe whose
+ *      plugin labels one resource per mode at discovery ;
+ *   3. else `null` : the risk stays unqualified.
+ *
+ * Hosts build it once per call with the plugin's hook :
+ * `envResolverFor(missionResources, plugin.envOf?.bind(plugin))`.
+ */
+export function envResolverFor(
+  resources: ReadonlyArray<Resource>,
+  derive?: EnvDeriver,
+): EnvResolver {
+  const byLabel = resourceEnvResolver(resources);
+  if (!derive) return byLabel;
+  return {
+    resolveEnv(slice: Slice): string | null {
+      const derived = derive(slice, resources);
+      if (typeof derived === 'string' && derived.length > 0) return derived;
+      return byLabel.resolveEnv(slice);
     },
   };
 }

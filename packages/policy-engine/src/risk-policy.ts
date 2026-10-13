@@ -15,7 +15,7 @@ import type { RiskCatalog, RiskEntry } from '@vaubaan/shared';
 import { isRiskId } from '@vaubaan/shared/risk-id';
 
 import { isAcceptableInEnv, isEnvScopedEntry } from './qualify.ts';
-import { indexCatalog, type IndexedRiskCatalog } from './risk-evaluator.ts';
+import { hasFallbackRisk, indexCatalog, type IndexedRiskCatalog } from './risk-evaluator.ts';
 
 /**
  * Acceptance-time guard — refuse to accept a risk at issuance if the
@@ -51,20 +51,10 @@ export interface PrepareCatalogOptions {
   readonly warn?: (message: string) => void;
 }
 
-/** Id prefix of the catch-all entry every catalog should declare. */
-export function fallbackRiskPrefix(provider: string): string {
-  return `${provider}.uncategorized`;
-}
-
-/** True iff the catalog declares at least one `<provider>.uncategorized-*` entry. */
-export function hasFallbackRisk(catalog: RiskCatalog): boolean {
-  const prefix = fallbackRiskPrefix(catalog.provider);
-  return catalog.risks.some((entry) => entry.id.startsWith(prefix));
-}
-
 /** One-call helper combining `indexCatalog` (patterns parsed, ids unique)
- *  + sanity checks (RiskId grammar, fallback risk present). Used at boot by
- *  the plugin SDK's catalog loader and registry. */
+ *  + sanity checks (RiskId grammar, fallback risk present — see
+ *  `isFallbackEntry` in risk-evaluator.ts). Used at boot by the plugin
+ *  SDK's catalog loader and registry. */
 export function prepareCatalog(
   catalog: RiskCatalog,
   options: PrepareCatalogOptions = {},
@@ -79,9 +69,10 @@ export function prepareCatalog(
       );
     }
   }
-  // A catalog SHOULD have a fallback risk. The SDK loader turns this into a
-  // hard error ; here it stays a warning so partial catalogs can be indexed
-  // in tests and tooling.
+  // A catalog SHOULD have a fallback risk (`fallback: true`, or detected by
+  // `isFallbackEntry`). The SDK loader turns this into a hard error ; here
+  // it stays a warning so partial catalogs can be indexed in tests and
+  // tooling.
   if (!hasFallbackRisk(catalog)) {
     warn(
       `[risk-policy] catalog '${catalog.provider}' has no '<provider>.uncategorized-*' fallback ` +

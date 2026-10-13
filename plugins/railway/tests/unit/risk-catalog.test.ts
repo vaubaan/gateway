@@ -179,22 +179,23 @@ describe('railwayRiskCatalog — runtime risksTouchedBy', () => {
     expect(touched).toEqual(['railway.read-account']);
   });
 
-  test('create-project touches create-project + uncategorized-write fallback', () => {
+  // The next three cases were inverted on purpose (ADR fallback-risk-only-when-uncategorized) :
+  // the fallback counts only when no dedicated entry matched the slice.
+  test('create-project touches create-project alone', () => {
     const touched = risksTouchedBy(createProjectSlice(), indexed);
-    expect(touched).toEqual(['railway.create-project', 'railway.uncategorized-write']);
+    expect(touched).toEqual(['railway.create-project']);
   });
 
-  test('agent-session slice touches agent-action + uncategorized-write fallback', () => {
-    // The fallback `railway.**.W` is broad enough to cover account-rooted W.
+  test('agent-session slice touches agent-action alone', () => {
     const touched = risksTouchedBy(agentSessionSlice(), indexed);
-    expect(touched).toEqual(['railway.agent-action', 'railway.uncategorized-write']);
+    expect(touched).toEqual(['railway.agent-action']);
   });
 
-  test('deployment.W (staging env) touches deploy + uncategorized-write', () => {
+  test('deployment.W (staging env) touches deploy alone', () => {
     // Single deploy entry with vector_overrides covers all envs ;
     // env qualification happens at mint time (acceptable_in_envs gate).
     const touched = risksTouchedBy(deploymentWriteSlice('staging'), indexed);
-    expect(touched).toEqual(['railway.deploy', 'railway.uncategorized-write']);
+    expect(touched).toEqual(['railway.deploy']);
   });
 
   test('variable read on prod env touches read-runtime (broad) + read-variables (specific)', () => {

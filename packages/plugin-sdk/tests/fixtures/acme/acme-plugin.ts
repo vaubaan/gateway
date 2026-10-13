@@ -15,6 +15,7 @@ import {
 import { expectCredentialKind } from '../../../src/credential.ts';
 import { definePlugin } from '../../../src/define-plugin.ts';
 import { loadCatalogFile } from '../../../src/catalog-loader.ts';
+import { catalogPathNextTo } from '../../../src/catalog-path.ts';
 import type {
   ClassifyOutcome,
   ConnectionContext,
@@ -24,7 +25,7 @@ import type {
 
 export const ACME_API = 'https://api.acme.test/v1';
 
-export const acmeCatalog = loadCatalogFile(new URL('./risk-catalog.yaml', import.meta.url));
+export const acmeCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const acmeDataModel: DataModel = {
   provider: 'acme',

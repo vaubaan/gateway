@@ -47,8 +47,9 @@ only — never the gateway application.
        matches: '<id>.<entity>[**].<leaf>[**].W' # one pattern or a list
        acceptable_in_envs: [staging, prod] # optional: makes the risk env-scoped
        vector: { reversibility: …, blast: …, data: …, cost: …, visibility: …, persistence: … }
-     - id: <id>.uncategorized-write # mandatory fallback
+     - id: <id>.uncategorized-write # mandatory fallback, exactly one
        matches: '<id>.**.W'
+       fallback: true # touched only by writes no other entry covers
        …
    presets:
      - id: developer
@@ -62,9 +63,12 @@ only — never the gateway application.
    ```
 
    The loader refuses, at boot and in tests: unknown keys, malformed ids,
-   patterns of another provider, a missing fallback, zero presets, a preset
-   entry that is not an explicit risk of this catalog, a deprecated risk in
-   a preset, a non-numeric budget.
+   patterns of another provider, a missing or duplicated fallback, zero
+   presets, a preset entry that is not an explicit risk of this catalog, a
+   deprecated risk in a preset, a non-numeric budget. It warns when a preset
+   includes the fallback: the fallback fires only on writes no dedicated
+   entry covers, so a preset should not pre-accept them (ADR
+   [`fallback-risk-only-when-uncategorized`](../docs/decisions/fallback-risk-only-when-uncategorized.md)).
 
 5. **Tools** — `src/tools.ts`: `McpToolDeclaration[]`, names
    `<prefix>__<verb>_<noun>`, JSON input schemas. Take the resource ref as an
@@ -83,8 +87,18 @@ only — never the gateway application.
    client-auth method, `refreshable` + a `refresh()`), `app-install`
    (operator app settings, install URL), or `ssh-key`. The gateway runs the
    flow; you declare it.
-9. **Wire** — `definePlugin({...})` in `src/index.ts`. It validates the
-   whole definition at import time and lists every problem at once.
+9. **Environment** — if the environment lives in the call rather than on
+   the resource (Vercel's `env[prod]` segment, GitHub's branch), declare
+   `envOf` in `src/index.ts`: `envOf: envFromSliceSegment('env')` for a
+   segment, a custom pure function otherwise. Leave it out when the owner's
+   label on the resource is the environment.
+10. **Wire** — `definePlugin({...})` in `src/index.ts`, with the catalog
+    loaded as `loadCatalogFile(catalogPathNextTo(import.meta.url))` — never
+    `new URL('./risk-catalog.yaml', import.meta.url)`, which the Next.js
+    bundler rewrites (ADR
+    [`plugin-catalog-path-and-standalone-tracing`](../docs/decisions/plugin-catalog-path-and-standalone-tracing.md)).
+    It validates the whole definition at import time and lists every
+    problem at once.
 
 ## Testing a plugin
 
@@ -102,6 +116,8 @@ assertCatalogCoverage(plugin, { '<prefix>__list_x': [{ args: {…} }], … }, { 
 
 - `assertCatalogCoverage` needs one realistic sample call per declared tool
   and checks that every emitted slice is covered by a risk of your catalog.
+  Its report lists `fallbackHits`: samples only the fallback covered, which
+  means a catalog entry is missing.
 - Classifier tests: one case per branch of `classify.ts`, including the
   `denied` paths. A classification error is a security hole (spec §10).
 - `execute` and `discoverResources` run against `mockFetch([...routes])`;

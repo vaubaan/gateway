@@ -172,6 +172,12 @@ export interface RiskEntry {
   /** Hard infra ceilings — never overrideable by a share or a mission.
    *  Optional — absent ≡ no hard ceiling. Cf. ADR scope-caps §D2. */
   readonly infra_limits?: InfraLimits;
+  /** Marks the catalog's catch-all entry (`<provider>.uncategorized-write`).
+   *  The fallback is touched only when no other entry of the catalog matches
+   *  the slice (ADR fallback-risk-only-when-uncategorized). Exactly one per
+   *  catalog ; when the flag is absent the engine detects the fallback by
+   *  its catch-all pattern (`<provider>.**.W`) or its `uncategorized-` id. */
+  readonly fallback?: boolean;
   /** When true, the entry is kept for backward compatibility but should not
    *  be offered in new missions. UI displays a "deprecated" badge. */
   readonly deprecated?: boolean;

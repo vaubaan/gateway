@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'vitest';
 
+import { parseSlice } from '@vaubaan/policy-engine';
 import type { Resource } from '@vaubaan/shared';
 
 import type { ExecuteContext, ProviderPlugin } from '../../src/plugin.ts';
@@ -30,12 +31,37 @@ describe('assertCatalogCoverage', () => {
     const report = assertCatalogCoverage(acmePlugin, samples, { resources: [staging] });
     expect(report.toolsChecked).toBe(2);
     expect(report.samplesChecked).toBe(3);
-    expect(report.risksTouched).toEqual([
-      'acme.read-things',
-      'acme.thing-write',
-      'acme.uncategorized-write',
-    ]);
-    expect(report.risksUntouched).toEqual(['acme.legacy-export']);
+    // The fallback is no longer co-touched by a categorized write (ADR
+    // fallback-risk-only-when-uncategorized) : a complete catalog leaves it
+    // untouched and `fallbackHits` empty.
+    expect(report.risksTouched).toEqual(['acme.read-things', 'acme.thing-write']);
+    expect(report.risksUntouched).toEqual(['acme.legacy-export', 'acme.uncategorized-write']);
+    expect(report.fallbackHits).toEqual([]);
+  });
+
+  test('reports the samples that only the fallback covers', () => {
+    const uncategorized: ProviderPlugin = {
+      ...acmePlugin,
+      tools: [
+        ...acmePlugin.tools,
+        {
+          name: 'acme__purge_space',
+          description: 'Purge a space.',
+          inputSchema: { type: 'object', properties: { space: { type: 'string' } } },
+        },
+      ],
+      classify: (tool, args, resources) =>
+        tool === 'acme__purge_space'
+          ? { slices: [parseSlice(`acme.space[${String(args.space)}].purge.W`)] }
+          : acmePlugin.classify(tool, args, resources),
+    };
+    const report = assertCatalogCoverage(
+      uncategorized,
+      { ...samples, acme__purge_space: [{ args: { space: 'sp-1' } }] },
+      { resources: [staging] },
+    );
+    expect(report.risksTouched).toContain('acme.uncategorized-write');
+    expect(report.fallbackHits).toEqual(["'acme__purge_space' sample #1 slice #1"]);
   });
 
   test('a tool without sample fails', () => {

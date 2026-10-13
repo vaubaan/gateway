@@ -67,7 +67,7 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
 
   if (!plugin.catalog || typeof plugin.catalog !== 'object') {
     issues.push(
-      'catalog: missing — load it with loadCatalogFile(new URL("./risk-catalog.yaml", import.meta.url))',
+      'catalog: missing — load it with loadCatalogFile(catalogPathNextTo(import.meta.url))',
     );
   } else {
     if (plugin.catalog.provider !== plugin.id) {
@@ -81,7 +81,7 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
   for (const fn of ['classify', 'execute', 'discoverResources'] as const) {
     if (typeof plugin[fn] !== 'function') issues.push(`${fn}: expected a function`);
   }
-  for (const fn of ['refresh', 'normalizeForCaps', 'normalizeArgs'] as const) {
+  for (const fn of ['envOf', 'refresh', 'normalizeForCaps', 'normalizeArgs'] as const) {
     if (plugin[fn] !== undefined && typeof plugin[fn] !== 'function')
       issues.push(`${fn}: expected a function when present`);
   }

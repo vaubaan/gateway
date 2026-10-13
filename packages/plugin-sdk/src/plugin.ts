@@ -118,6 +118,19 @@ export interface ProviderPlugin {
   discoverResources(ctx: ConnectionContext): Promise<readonly Resource[]>;
 
   /**
+   * Derive the environment a slice falls under when the provider carries
+   * it in the call itself rather than on the resource : the `env[<label>]`
+   * segment for Vercel, the branch for GitHub (spec vaubaan-gateway §0
+   * "Resource"). Pure. Return `undefined` when the slice carries no
+   * environment of its own ; the host then falls back to the owner's label
+   * on the matching resource (`envResolverFor` in `@vaubaan/policy-engine`).
+   * Absent when the environment always lives on the resource label
+   * (Supabase, Railway, Stripe's per-mode resources). `envFromSliceSegment`
+   * builds the common segment-lookup implementation.
+   */
+  envOf?(slice: Slice, resources: readonly Resource[]): string | undefined;
+
+  /**
    * Obtain a fresh credential from an expired one (OAuth refresh token,
    * re-minted installation token). Absent when the credential kind does not
    * expire. Must not mutate its input.

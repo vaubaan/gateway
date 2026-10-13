@@ -54,6 +54,7 @@ risks:
     label: 'Uncategorized write'
     reason: 'Catch-all. Seen in production, it means the catalog misses an entry.'
     matches: 'acme.**.W'
+    fallback: true
     vector:
       reversibility: costly
       blast: env

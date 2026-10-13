@@ -6,7 +6,9 @@
  *        at least one per plugin, every entry a risk of the same catalog,
  *        never a wildcard).
  * ADR  : docs/decisions/plugin-contract-and-credential-spec.md (YAML loaded
- *        at boot, TypeScript twins retired).
+ *        at boot, TypeScript twins retired) ;
+ *        docs/decisions/fallback-risk-only-when-uncategorized.md (one
+ *        fallback per catalog, presets should not include it).
  *
  * The loader is strict : any structural issue, unknown key, malformed id,
  * duplicate, missing fallback, foreign or wildcard preset entry fails the
@@ -21,7 +23,8 @@ import { fileURLToPath } from 'node:url';
 import { CORE_SCHEMA, YAMLException, load } from 'js-yaml';
 
 import {
-  hasFallbackRisk,
+  fallbackEntriesOf,
+  fallbackRiskPrefix,
   isAcceptableInEnv,
   isEnvScopedEntry,
   prepareCatalog,
@@ -61,6 +64,8 @@ export interface LoadCatalogOptions {
   readonly requireFallback?: boolean;
   /** Fail when the catalog ships no preset. Default true (spec §10). */
   readonly requirePresets?: boolean;
+  /** Receives non-fatal findings (`catalogWarnings`). Defaults to `console.warn`. */
+  readonly warn?: (message: string) => void;
 }
 
 export class CatalogError extends Error {
@@ -126,6 +131,9 @@ export function validateCatalog(doc: unknown, options: LoadCatalogOptions = {}):
   }
   issues.push(...semanticIssues(catalog, options));
   if (issues.length > 0 || !indexed) throw new CatalogError(source, issues);
+  const warn = options.warn ?? ((message: string) => console.warn(message));
+  for (const warning of catalogWarnings(catalog))
+    warn(`[plugin-sdk] catalog '${source}': ${warning}`);
   return { catalog, indexed };
 }
 
@@ -138,14 +146,73 @@ export function semanticIssues(catalog: RiskCatalog, options: LoadCatalogOptions
   const issues: string[] = [];
   const requireFallback = options.requireFallback ?? true;
   const requirePresets = options.requirePresets ?? true;
-  if (requireFallback && !hasFallbackRisk(catalog)) {
-    issues.push(
-      `missing fallback risk: declare a '${catalog.provider}.uncategorized-*' entry matching '${catalog.provider}.**.W' (risk-model spec §4.3)`,
-    );
-  }
+  issues.push(...fallbackIssues(catalog, { requireFallback }));
   issues.push(...wildcardIssues(catalog));
   issues.push(...presetIssues(catalog, { requirePresets }));
   return issues;
+}
+
+/**
+ * Fallback rules (risk-model spec §4.3 ; ADR fallback-risk-only-when-
+ * uncategorized) : exactly one fallback entry — `fallback: true`, or
+ * detected by the catch-all pattern `<provider>.**.W` or the
+ * `<provider>.uncategorized-` id — and that entry is named
+ * `<provider>.uncategorized-*`, so audit logs read the same for every
+ * provider.
+ */
+export function fallbackIssues(
+  catalog: RiskCatalog,
+  options: { readonly requireFallback?: boolean } = {},
+): string[] {
+  const issues: string[] = [];
+  const fallbacks = fallbackEntriesOf(catalog);
+  const prefix = fallbackRiskPrefix(catalog.provider);
+  if (fallbacks.length === 0) {
+    if (options.requireFallback ?? true) {
+      issues.push(
+        `missing fallback risk: declare a '${prefix}-*' entry matching '${catalog.provider}.**.W' with fallback: true (risk-model spec §4.3)`,
+      );
+    }
+    return issues;
+  }
+  if (fallbacks.length > 1) {
+    issues.push(
+      `fallback: exactly one fallback entry per catalog, found ${fallbacks.length} (${fallbacks
+        .map((r) => `'${r.id}'`)
+        .join(
+          ', ',
+        )}) — only one entry may be flagged fallback: true or match '${catalog.provider}.**.W'`,
+    );
+  }
+  for (const entry of fallbacks) {
+    if (!entry.id.startsWith(prefix)) {
+      const i = catalog.risks.indexOf(entry);
+      issues.push(`risks[${i}].id '${entry.id}' is the fallback and must be named '${prefix}-*'`);
+    }
+  }
+  return issues;
+}
+
+/**
+ * Non-fatal findings the loader reports through `warn`. Today : a preset
+ * that includes the fallback. Since the fallback fires only on
+ * uncategorized writes, offering it in a preset pre-accepts the very
+ * writes the catalog has not reviewed (ADR fallback-risk-only-when-
+ * uncategorized) ; a mission creator may still add it by hand.
+ */
+export function catalogWarnings(catalog: RiskCatalog): string[] {
+  const warnings: string[] = [];
+  const fallbackIds = new Set(fallbackEntriesOf(catalog).map((r) => r.id));
+  (catalog.presets ?? []).forEach((preset, p) => {
+    preset.entries.forEach((entry, e) => {
+      if (fallbackIds.has(baseRiskId(entry.risk_id))) {
+        warnings.push(
+          `presets[${p}].entries[${e}].risk_id '${entry.risk_id}' is the fallback — presets should not pre-accept uncategorized writes (preset '${preset.id}')`,
+        );
+      }
+    });
+  });
+  return warnings;
 }
 
 /** Risk ids and preset entries that are patterns or sentinels instead of explicit ids. */
@@ -250,6 +317,7 @@ const RISK_KEYS = new Set([
   'acceptable_in_envs',
   'caps',
   'infra_limits',
+  'fallback',
   'deprecated',
   'replaced_by',
 ]);
@@ -473,6 +541,8 @@ function riskFrom(
       ? capsFrom(raw.infra_limits, `${at}.infra_limits`, issues)
       : undefined;
 
+  if (raw.fallback !== undefined && typeof raw.fallback !== 'boolean')
+    issues.push(`${at}.fallback: expected a boolean`);
   if (raw.deprecated !== undefined && typeof raw.deprecated !== 'boolean')
     issues.push(`${at}.deprecated: expected a boolean`);
   if (
@@ -493,6 +563,7 @@ function riskFrom(
     ...(acceptableInEnvs ? { acceptable_in_envs: acceptableInEnvs } : {}),
     ...(caps ? { caps } : {}),
     ...(infra ? { infra_limits: infra } : {}),
+    ...(raw.fallback !== undefined ? { fallback: raw.fallback as boolean } : {}),
     ...(raw.deprecated !== undefined ? { deprecated: raw.deprecated as boolean } : {}),
     ...(raw.replaced_by !== undefined ? { replaced_by: raw.replaced_by as string } : {}),
   };

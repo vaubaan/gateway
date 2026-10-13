@@ -5,7 +5,7 @@
 # Rules the loader enforces at boot :
 #   - `provider` is the plugin id ; every risk id starts with it ;
 #   - every `matches` pattern parses as a slice of this provider ;
-#   - a `<provider>.uncategorized-*` fallback exists ;
+#   - exactly one `<provider>.uncategorized-*` fallback exists, flagged `fallback: true` ;
 #   - at least one preset ; every preset entry names a risk of THIS catalog,
 #     with an explicit quota, rate limit and gate — never a wildcard.
 #
@@ -52,14 +52,17 @@ risks:
         reversibility: costly
         visibility: public
 
-  # Fallback — must exist. Seen in production, it means a tool classifies to
-  # a slice no fine-grained entry covers : add the entry.
+  # Fallback — must exist, exactly once. It is touched only by writes no
+  # other entry covers, so a preset should not include it. Seen in
+  # production, it means a tool classifies to a slice no fine-grained entry
+  # covers : add the entry.
   - id: template.uncategorized-write
     label: 'Uncategorized write'
     reason: >-
       Catch-all for writes without a dedicated entry. A mission creator
-      accepting it accepts every write of the provider.
+      accepting it accepts the writes this catalog has not reviewed.
     matches: 'template.**.W'
+    fallback: true
     vector:
       reversibility: costly
       blast: env

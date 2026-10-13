@@ -92,11 +92,11 @@ describe('sshRiskCatalog — runtime risksTouchedBy', () => {
     expect(touched).toEqual(['ssh.exec-read', 'ssh.exec-read-secret-files']);
   });
 
-  test('a write slice touches exec-write + uncategorized-write fallback', () => {
-    // Both W-shaped catalog entries have overlapping `matches`
-    // patterns (the env qualification happens at mint, not runtime).
+  test('a write slice touches exec-write alone (the fallback is not co-touched)', () => {
+    // Inverted on purpose (ADR fallback-risk-only-when-uncategorized) : the fallback
+    // counts only when no dedicated entry matched the slice.
     const touched = risksTouchedBy(commandSlice('prod-vps', 'W'), indexed);
-    expect(touched).toEqual(['ssh.exec-write', 'ssh.uncategorized-write']);
+    expect(touched).toEqual(['ssh.exec-write']);
   });
 
   test('multi-slice read (secret-file co-touch) deduplicates risks across slices', () => {

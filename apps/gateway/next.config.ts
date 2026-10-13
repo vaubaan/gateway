@@ -74,6 +74,11 @@ const nextConfig: NextConfig = {
       '../../node_modules/file-uri-to-path/**',
       // The store applies these at boot (apps/gateway/src/server/store/migrate.ts).
       './migrations/*.sql',
+      // Plugins read their risk catalog from disk at import time
+      // (`loadCatalogFile(catalogPathNextTo(import.meta.url))`); nft cannot see a
+      // readFileSync behind a computed path, so every plugin YAML is traced here
+      // (ADR plugin-catalog-path-and-standalone-tracing).
+      '../../plugins/*/src/**/*.yaml',
     ],
   },
   // Same build id on every replica of one image (hosted deployments need it).
