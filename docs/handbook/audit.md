@@ -63,8 +63,15 @@ the keyset position, so a filter can only narrow what the scope allows:
 - a **call** entry is visible when its `mission_id` is a mission the viewer created or its
   `connection_id` is a connection the viewer (or one of their groups) owns;
 - an **administrative** entry is visible when `allAdmin`, or its object is such a mission
-  (`object_type = 'mission'`), such a connection (`'connection'`), or a request of such a
-  mission (`'request'`, resolved through `requests.mission_id`).
+  (`object_type = 'mission'`), such a connection (`'connection'`), a request of such a
+  mission (`'request'`, resolved through `requests.mission_id`), or a share of such a
+  connection (`'share'`, resolved through `shares.connection_id`). Entries about a group
+  (`'group'`) are the operator's.
+
+So the owner of a connection reads its `share-created` / `share-revoked` /
+`connection-transferred` / `connection-reassigned` entries, and the creator of a mission
+reads its `mission-orphaned` entry (cause, connection, uncovered risks —
+[authority](authority.md)).
 
 An operator therefore sees every administrative act but not the calls of other people's
 missions. The statement is plain `IN` subqueries over `missions`, `connections` and
@@ -208,7 +215,8 @@ whose row is gone).
 
 The structural test `tests/integration/audit/admin-mutations.test.ts` reads, with the
 TypeScript parser, the public methods of every class under
-`server/{connections,provider-apps,missions,auth,requests}`; each must appear in its
+`server/{connections,provider-apps,missions,auth,requests,authority,shares,groups}`; each
+must appear in its
 `RULES` table
 as a read, a mutation (with the driver that performs it and the entry it must leave) or
 an exemption with its reason. Adding a public method to one of those services fails the
@@ -261,7 +269,7 @@ const removed = await root.audit.retention.sweep(); // number, or null when the 
   and of nothing else (other tables untouched, boundary kept), triggers still forbidding
   update and delete, idempotence, configured days, scheduling (boot sweep, interval,
   stop, failure logged, shared sweep), wiring in the composition root.
-- `tests/integration/audit/admin-mutations.test.ts` (20) — the structural test above,
+- `tests/integration/audit/admin-mutations.test.ts` (36) — the structural test above,
   plus `before` / `after` of a resource edit and a failed discovery.
 - `tests/e2e/v5/audit-session.spec.ts` (3, Playwright on the ephemeral instance) — a day
   of calls on the session page and on the audit page, filters in one row; every column

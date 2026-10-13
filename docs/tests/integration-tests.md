@@ -68,11 +68,11 @@ this table says where each requirement lives, and what is not written yet.
 | Unit — structured refusals                                               | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door)                                                                                  |
 | Unit — credential separation                                             | [gateway-core](#scenarios--gateway-core), [Execution door](#scenarios--execution-door); the management surface is not built (P2.3)                                      |
 | Integration — connection                                                 | [Connections](#scenarios--connections-resources-provider-apps)                                                                                                          |
-| Integration — share                                                      | [Store](#scenarios--store) (rows and restrictions only); the flow is not built (P2.2)                                                                                   |
+| Integration — share                                                      | [Authority, shares, groups](#scenarios--authority-shares-groups)                                                                                                        |
 | Integration — issuance                                                   | [Missions](#scenarios--missions)                                                                                                                                        |
 | Integration — claim and replay                                           | [Requests](#scenarios--requests), [Execution door](#scenarios--execution-door)                                                                                          |
 | Integration — approval and replay                                        | [Approval gate](#scenarios--approval-gate)                                                                                                                              |
-| Integration — revocation flows, `orphaned` states                        | [Missions](#scenarios--missions), [Budget and sessions](#scenarios--budget-and-sessions), [Connections](#scenarios--connections-resources-provider-apps)                |
+| Integration — revocation flows, `orphaned` states                        | [Authority, shares, groups](#scenarios--authority-shares-groups), [Missions](#scenarios--missions), [Connections](#scenarios--connections-resources-provider-apps)      |
 | Integration — OAuth delegation, issuance by an MCP client                | not written (P2.3)                                                                                                                                                      |
 | Integration — simulated IdP                                              | [Human authentication](#scenarios--human-authentication)                                                                                                                |
 | Structural — telemetry report without forbidden fields                   | [Community telemetry](#scenarios--community-telemetry)                                                                                                                  |
@@ -80,7 +80,7 @@ this table says where each requirement lives, and what is not written yet.
 | Structural — no configuration value hard-coded                           | [Instance configuration](#scenarios--instance-configuration-crypto-composition-root)                                                                                    |
 | Structural — enumerated lists, never a wildcard or a preset reference    | [Plugin SDK](#scenarios--plugin-sdk), [Store](#scenarios--store), [Missions](#scenarios--missions)                                                                      |
 | Structural — every plugin ships a preset of its own catalog              | [Plugin SDK](#scenarios--plugin-sdk), [Provider plugins](#scenarios--provider-plugins)                                                                                  |
-| Structural — authority recomputed from current membership                | [Human authentication](#scenarios--human-authentication), [Missions](#scenarios--missions)                                                                              |
+| Structural — authority recomputed from current membership                | [Authority, shares, groups](#scenarios--authority-shares-groups), [Human authentication](#scenarios--human-authentication)                                              |
 | End to end — the cutover acceptance scenario                             | [`e2e-tests.md`](./e2e-tests.md): manual, with an automated browser smoke before it                                                                                     |
 
 ## Coverage
@@ -97,7 +97,8 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/auth/idp-settings.test.ts`                       |        7 |
 | `apps/gateway/src/server/auth/origin.test.ts`                             |        5 |
 | `apps/gateway/src/server/auth/session-service.test.ts`                    |        7 |
-| `apps/gateway/src/server/authority/authority-service.test.ts`             |        7 |
+| `apps/gateway/src/server/authority/authority-service.test.ts`             |       20 |
+| `apps/gateway/src/server/authority/mission-grounds.test.ts`               |       16 |
 | `apps/gateway/src/server/compose/compose.test.ts`                         |       16 |
 | `apps/gateway/src/server/config/duration.test.ts`                         |        2 |
 | `apps/gateway/src/server/config/load.test.ts`                             |       38 |
@@ -112,6 +113,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/connections/shipped-providers.test.ts`           |        5 |
 | `apps/gateway/src/server/crypto/aead.test.ts`                             |       12 |
 | `apps/gateway/src/server/execution/execution.test.ts`                     |       21 |
+| `apps/gateway/src/server/groups/service.test.ts`                          |       13 |
 | `apps/gateway/src/server/http/client-ip.test.ts`                          |       11 |
 | `apps/gateway/src/server/http/healthz.test.ts`                            |        4 |
 | `apps/gateway/src/server/logging/logging.test.ts`                         |        6 |
@@ -127,14 +129,21 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/src/server/requests/events.test.ts`                         |        6 |
 | `apps/gateway/src/server/requests/state.test.ts`                          |        9 |
 | `apps/gateway/src/server/requests/sweeper.test.ts`                        |        4 |
+| `apps/gateway/src/server/shares/errors.test.ts`                           |        4 |
+| `apps/gateway/src/server/shares/restriction.test.ts`                      |        8 |
+| `apps/gateway/src/server/shares/service.test.ts`                          |       18 |
 | `apps/gateway/src/server/telemetry/outcome.test.ts`                       |       28 |
 | `apps/gateway/src/server/telemetry/settings.test.ts`                      |        7 |
 | `apps/gateway/src/server/telemetry/stats.test.ts`                         |       11 |
-| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`            |       26 |
+| `apps/gateway/tests/integration/audit/admin-mutations.test.ts`            |       36 |
 | `apps/gateway/tests/integration/audit/audit-query.test.ts`                |       22 |
 | `apps/gateway/tests/integration/audit/mission-session.test.ts`            |       15 |
 | `apps/gateway/tests/integration/audit/retention.test.ts`                  |       10 |
 | `apps/gateway/tests/integration/auth/oidc-login.test.ts`                  |       16 |
+| `apps/gateway/tests/integration/authority/door-latency.bench.test.ts`     |        1 |
+| `apps/gateway/tests/integration/authority/handlers.test.ts`               |       11 |
+| `apps/gateway/tests/integration/authority/ownership.test.ts`              |        8 |
+| `apps/gateway/tests/integration/authority/share-and-orphan.test.ts`       |       11 |
 | `apps/gateway/tests/integration/budget/pipeline-consistency.test.ts`      |        6 |
 | `apps/gateway/tests/integration/budget/session-service.test.ts`           |       20 |
 | `apps/gateway/tests/integration/compose/boot.test.ts`                     |        4 |
@@ -143,7 +152,7 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/execution/approval-door.test.ts`          |        7 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`      |        4 |
 | `apps/gateway/tests/integration/execution/door-http.test.ts`              |       19 |
-| `apps/gateway/tests/integration/execution/pipeline.test.ts`               |       22 |
+| `apps/gateway/tests/integration/execution/pipeline.test.ts`               |       23 |
 | `apps/gateway/tests/integration/missions/gate.test.ts`                    |       17 |
 | `apps/gateway/tests/integration/missions/mission-handlers.test.ts`        |        8 |
 | `apps/gateway/tests/integration/missions/mission-lifecycle.test.ts`       |       28 |
@@ -161,15 +170,16 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/store/delegations.test.ts`                |        7 |
 | `apps/gateway/tests/integration/store/identities.test.ts`                 |       10 |
 | `apps/gateway/tests/integration/store/missions.test.ts`                   |        8 |
+| `apps/gateway/tests/integration/store/ownership-and-orphans.test.ts`      |       12 |
 | `apps/gateway/tests/integration/store/requests-approvals.test.ts`         |       10 |
 | `apps/gateway/tests/integration/store/schema.test.ts`                     |        6 |
 | `apps/gateway/tests/integration/store/sessions.test.ts`                   |       11 |
 | `apps/gateway/tests/integration/store/web-sessions.test.ts`               |        8 |
 | `apps/gateway/tests/integration/telemetry/telemetry.test.ts`              |       15 |
-| `apps/gateway/tests/unit/app/admin-guard.test.ts`                         |       29 |
-| `apps/gateway/tests/unit/app/app-guard.test.ts`                           |       80 |
+| `apps/gateway/tests/unit/app/admin-guard.test.ts`                         |       47 |
+| `apps/gateway/tests/unit/app/app-guard.test.ts`                           |      102 |
 | `apps/gateway/tests/unit/app/field.test.tsx`                              |        6 |
-| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`              |      131 |
+| `apps/gateway/tests/unit/server/auth/mutation-guard.test.ts`              |      194 |
 | `apps/gateway/tests/unit/server/budget/decide.test.ts`                    |       15 |
 | `apps/gateway/tests/unit/server/budget/gates.test.ts`                     |        9 |
 | `apps/gateway/tests/unit/server/budget/mission-state.test.ts`             |        7 |
@@ -179,9 +189,10 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/unit/server/store/db.test.ts`                         |        2 |
 | `apps/gateway/tests/unit/server/store/ids.test.ts`                        |        6 |
 | `apps/gateway/tests/unit/server/store/migrate.test.ts`                    |        9 |
+| `apps/gateway/tests/unit/structural/authority-not-snapshotted.test.ts`    |       17 |
 | `apps/gateway/tests/unit/structural/catalog-caps-enforced.test.ts`        |       12 |
 | `apps/gateway/tests/unit/structural/example-config-providers.test.ts`     |       10 |
-| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`          |      226 |
+| `apps/gateway/tests/unit/structural/no-hardcoded-config.test.ts`          |      251 |
 | `apps/gateway/tests/unit/structural/telemetry-collector-schema.test.ts`   |        7 |
 | `apps/gateway/tests/unit/structural/telemetry-report-shape.test.ts`       |        3 |
 | `packages/gateway-core/tests/unit/audit.test.ts`                          |        2 |
@@ -269,9 +280,10 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/plugin.test.ts`                                |       33 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                          |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                              |       99 |
-| **TOTAL** (`npm run test`, 2026-10-13, after a build; 182 files)          | **4415** |
+| **TOTAL** (`npm run test`, 2026-10-13, after a build; 193 files)          | **4686** |
 
-Nothing is skipped after a build. Without `.next/standalone` the five
+After a build one test is skipped: the latency measurement of the authority
+re-check (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without `.next/standalone` the five
 standalone tests (`standalone-native-addons` 3, `standalone-plugin-catalogs` 2) skip; `npm run ci` builds first, so they run there. Each plugin has one
 classifier suite, `classify.test.ts`, on its v5 entry point
 `classify(tool, args, resources)`, and its adapter scenarios in
@@ -1395,11 +1407,9 @@ in "Scenarios — Execution door".
 
 Unit, co-located (109):
 
-- **`src/server/authority/authority-service.test.ts`** (7) — the owner holds
-  the full catalog as an explicit enumeration (env-scoped risks expanded per
-  acceptable env, no wildcard); nobody else holds anything; every _current_
-  member of an owner group is an owner, recomputed on each call; no plugin, no
-  authority; `connectionsOf` (own and through a group); `uncoveredRisks`.
+- **`src/server/authority/authority-service.test.ts`** (20) — see
+  [Authority, shares, groups](#scenarios--authority-shares-groups).
+  `uncoveredRisks` and the explicit enumeration of a catalog stay here.
 - **`src/server/missions/preview.test.ts`** (44) — **monotonicity**: accepted ⊄
   authority → `exceeds-authority` with the uncovered list, the covered part
   still shown; wildcard, sentinel, foreign and out-of-env ids → `unknown-risk`;
@@ -1594,6 +1604,157 @@ calls sent as JSON-RPC to `root.execution.handlers.mcp`.
   per call; one mint per repository scope; never served or stored close to
   expiry; lifetime bounded by what is left; `github__mint_install_token`
   never cached.
+
+## Scenarios — Authority, shares, groups
+
+> Covers: spec [`vaubaan-gateway.md`](../spec/vaubaan-gateway.md) §0 (Group,
+> Principal, Share, Restriction), §2.3 (`unowned`, share states, `orphaned`),
+> §3.1 (monotonicity, enumeration, union of shares, partition per
+> connection), §4.2 (Connections, Shares received, Administration), §7.2,
+> §7.3, §7.8, §10 (structural: authority never from a snapshot), §11.2 (v1
+> assumptions). Handbook [[authority]]. ADR
+> [[orphaned-missions-and-ownerless-connections]].
+
+Unit, beside the code (79):
+
+- **`src/server/authority/authority-service.test.ts`** (20) — **owner**: the
+  full catalog as an explicit enumeration, nobody else anything, every
+  current member of an owner group, no plugin no authority, a removed or
+  unknown user holds nothing even on their own connection. **Union of
+  shares**: exactly the restriction in catalog order; a direct share plus the
+  shares of the user's groups, a group they are not in adding nothing; shares
+  of two connections kept apart (**subset per connection**); a revoked share
+  gone from the next answer; recomputed around two membership changes on one
+  instance; the owner unaffected by shares; `connectionsOf` = owned ∪
+  received, once each. **`gapsOf`** (the re-check): no gap for the owner and
+  **no read of groups or shares for a user-owned connection**; groups read
+  once for several group-owned connections; the uncovered ids per connection
+  with the basis left (`share` or `none`); nothing asked where nothing was
+  accepted; a removed user; a membership change seen on the next check.
+- **`src/server/authority/mission-grounds.test.ts`** (16) — **the `orphaned`
+  derivation**: grounded for the owner and for a covered beneficiary;
+  `authority-lost` naming the connection and the uncovered risks (share
+  narrowed; creator dropped from the owner group); `connection-revoked` even
+  for the owner; **an expired or unowned connection does not orphan**;
+  `creator-removed`; each connection checked against its own partition
+  (`partitionOf`), a share of one connection never covering another.
+  `settle`: grounded untouched; ungrounded → `orphaned` with `closed_at` and
+  **no admin entry**; a non-active mission never touched; a mission revoked
+  between read and write stays `revoked`. Sweeps: `sweepConnection` orphans
+  only the ungrounded missions of that connection and writes
+  `mission-orphaned` naming the actor, cause, connection and uncovered ids;
+  `sweepCreator` only that user's, once. `MembershipSettler.afterRemoval`:
+  the emptied owner group's connection `unowned`, the member's mission
+  orphaned; nothing while the group keeps another member.
+- **`src/server/shares/restriction.test.ts`** (8) — groups by severity, most
+  severe first, every row in one group; **"select all" is an enumerated
+  list** (explicit ids, no wildcard, no fallback, no deprecated entry); the
+  one-line summary; environment notes (none without env-qualified risks, when
+  the plugin derives the env, or when every resource is labelled; the
+  environment no resource carries; the count of unlabelled resources).
+- **`src/server/shares/service.test.ts`** (18) — one row per risk, catalog
+  order, duplicates folded, `share-created` entry; target found whatever the
+  case of the email; share to a group reaching a member who joins later;
+  **refused and nothing stored** for a wildcard, a provider wildcard, the
+  base id of an env-scoped entry, an env the entry is not acceptable in, a
+  risk of another provider, a preset name; empty restriction refused; unknown
+  target, empty email, unknown group, the owner itself; a removed user, an
+  email two users carry; **replacement** (one active share per target, both
+  acts audited, the new restriction only); a revoked connection; revoke
+  terminal, audited once, idempotent; the dialog's context (catalog, groups,
+  active shares, labelling, stale resources ignored); `received` flags a risk
+  the catalog dropped and that risk leaves the authority.
+- **`src/server/shares/errors.test.ts`** (4) — a `ShareError` / `ConnectError`
+  recognised by name and code when thrown by another copy of the class (what
+  a page catches); a sentence and a 4xx status for every code.
+- **`src/server/groups/service.test.ts`** (13) — create (trimmed, audited);
+  empty, too long, control character; a name held by a local or an
+  IdP-sourced group; **the admin rule's group is reserved**, and **a local
+  group of that name makes nobody an operator** (the same group once
+  IdP-sourced does); add by email, idempotent, listed with members; unknown
+  email, unknown group; an IdP-sourced group is never edited; removal
+  audited with what the membership held; owned connections counted;
+  `findActiveUserByEmail` (equality only, case, ambiguous, removed twin).
+
+Integration, real composition root on `:memory:`
+(`apps/gateway/tests/integration/authority/`, 30 + 1 skipped; rig in
+`support.ts`: the execution instance and its Depot plugin, a second user, an
+operator):
+
+- **`share-and-orphan.test.ts`** (11) — **the chain**: before any share the
+  beneficiary's issuance context is empty → the owner shares R1 → "Shares
+  received" shows it with the exact restriction → the beneficiary's context
+  carries R1 → a mission within R1 is issued and a call passes → **a draft
+  beyond R1 is refused with the uncovered list** (`exceeds-authority`,
+  `risk_ids`) → the owner revokes the share → the mission is `orphaned` at
+  once, one `mission-orphaned` entry (actor: the owner; cause, connection,
+  uncovered) → **`tools/call`, `tools/list` and the catalog answer
+  `mission-inactive` / `orphaned`**, the provider is not called → the
+  beneficiary holds nothing, the owner's own mission still runs. Narrowing a
+  share orphans only the missions that exceed it. Union of a direct and a
+  group share, and the operator removing the member orphans what the group
+  half grounded. **Seen by the door when nobody swept** (membership removed
+  straight in the store): refused, stored `orphaned`, no admin entry, the
+  call audited. Orphaned stays orphaned when the authority returns; a new
+  mission works. **An orphaned mission takes no gate edit** (`inactive`),
+  and its creator revokes it. A removed creator. A revoked connection orphans every
+  mission that carries it, the owner's included. Audit visibility: the owner
+  reads the share acts, the creator the orphaning, an operator all. **No
+  transitive sharing**: a beneficiary who shares, lists or revokes reads "not
+  found"; every member of an owner group shares.
+- **`ownership.test.ts`** (8) — transfer to a group of the owner (entry;
+  later members are full owners and issue on the full catalog); transfer to a
+  group one is not in, or by a non-owner, refused; **unowned**: the last
+  member leaves → `unowned`, the share's mission keeps running, the mission
+  grounded on the vanished ownership is orphaned, nobody shares or reads the
+  connection, the operator lists it and reassigns (entry with before/after),
+  the new owner acts and the share never stopped; reassign refused for an
+  owned connection, an unknown one, an unknown user, an empty group; a
+  member coming back does not restore it; **an unowned connection whose
+  credential dies is `expired`, still listed, and stays `expired` after
+  reassignment**. Sign-in through the simulated IdP: a dropped IdP group
+  orphans the missions it grounded (actor: the user), a sign-in that removed
+  the last member of an IdP owner group turns the connection `unowned`,
+  **IdP and local groups merge** and a sign-in never touches a local
+  membership.
+- **`handlers.test.ts`** (11) — the form posts: "select all" arrives as one
+  `risk` field per ticked risk and is stored as that list; share to a group
+  then update; nothing ticked, the literal `all`, a wildcard → back on the
+  dialog, nothing stored; a non-owner reads "does not exist"; revoke tells
+  how many missions were orphaned; transfer to a group of the owner only;
+  Administration: create a group, add and remove a member, reassign the
+  connection left ownerless; the bootstrap operator's acts audited as
+  `bootstrap`; a plain user gets 403 on every operator act, and the operator
+  cannot take an owned connection. Every landing URL carries the opaque
+  notice id only.
+- **`door-latency.bench.test.ts`** (skipped unless `VAUBAAN_BENCH=1`) —
+  prints the mean cost of the door's re-check for the three groundings next
+  to a whole in-process call.
+
+Store (`tests/integration/store/ownership-and-orphans.test.ts`, 12):
+`markOwnerlessUnowned` (exactly the active connections whose owner group is
+empty; idempotent), `listOwnerless`, `assignOwner` (unowned → active with its
+credential; expired stays; revoked refused), `markExpired` from `unowned`;
+`markOrphaned` (conditional, `closed_at`, never over `revoked` / `expired`);
+`replaceForTarget` (atomic, other targets and connections untouched, nothing
+written when a risk is unknown), `listActiveForTargets` with a connection;
+`createLocal`; the IdP / local merge of `groupsOf`.
+
+Structural (`tests/unit/structural/authority-not-snapshotted.test.ts`, 17) —
+**spec §10 "never from a snapshot"**: every class of `server/authority`
+holds its `deps` and no other field; no file of the module imports a cache,
+a session or the auth module, nor keeps a module-level map; then one
+long-lived instance follows membership changes made in the store at
+issuance, in the web session (whose `login.groups` still lists the group),
+in the owner check of the Share dialog, and at the execution door.
+
+Changed elsewhere: `admin-mutations.test.ts` scans `authority`, `shares` and
+`groups` too; `mutation-guard.test.ts` and the two page-guard suites
+cover the new handlers, routes and pages; `pipeline.test.ts` now expects
+`connection-unavailable` for an **expired** connection and
+`mission-inactive` (orphaned) for a revoked one;
+`connections/credentials.test.ts` expects an unowned connection whose refresh
+is rejected to become `expired`.
 
 ## Scenarios — Requests
 
@@ -2033,9 +2194,13 @@ tells an explicit `telemetry.enabled` from an unset one.
 - **A ref the connection never discovered** is rejected with the
   classifier's sentence, not with `resource-not-in-mission`; only the
   rejection is tested.
-- **`unowned` connections** — the state is tested where it is enforced
-  (credential broker, repository, reconnect); nothing puts a connection in
-  that state yet, the transition arrives with shares (P2.2).
+- **Closing an orphaned mission as an owner of the connection** (spec
+  §2.3) is not built; the creator's "Revoke" is tested.
+- **A user removed from the IdP** — `users.status = 'removed'` is honoured
+  (no authority, missions orphaned) and tested through the repository;
+  nothing sets it in production, there is no deprovisioning feed.
+- **The cost of the door's authority re-check** is measured, not asserted
+  (`door-latency.bench.test.ts`, skipped by default).
 - **`ssh__exec` end to end** — `execute` runs over a fake `SshTransport`,
   and the real transport is driven against an in-process ssh server on
   loopback (`host-key-pinning.test.ts`). No test reaches a real host, by

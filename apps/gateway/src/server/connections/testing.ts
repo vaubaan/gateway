@@ -26,6 +26,7 @@ import { mockFetch, type MockFetch, type MockRoute } from '@vaubaan/plugin-sdk/t
 import { parseSlice } from '@vaubaan/policy-engine';
 import { MemoryAuditWriter } from '@vaubaan/gateway-core';
 
+import { createAuthorityModule } from '../authority';
 import { MemoryRateLimiter, MemorySessionStore } from '../compose/memory';
 import type { ProviderAppConfig as FileProviderAppConfig } from '../config/types';
 import { silentLogger } from '../logging';
@@ -253,11 +254,18 @@ export function connectionsHarness(options: HarnessOptions): ConnectionsHarness 
     logger: silentLogger,
   });
   const pending = new PendingConnectStore(sessions);
+  const authority = createAuthorityModule({
+    store: { ...test.store, auditWriter: audit },
+    registry,
+    logger: silentLogger,
+    clock: test.clock,
+  });
   const service = new ConnectionService({
     store: test.store,
     registry,
     providerApps,
     broker,
+    grounds: authority.grounds,
     pending,
     rateLimiter: new MemoryRateLimiter(now),
     audit,

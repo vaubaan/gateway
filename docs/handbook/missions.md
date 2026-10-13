@@ -37,7 +37,8 @@ mission state) and [authentication](authentication.md) (session, origin check).
 ```
 apps/gateway/src/server/authority/
   catalog-authority.ts   explicitRiskIdsOf(), fullCatalogRiskIds()  — a catalog as explicit ids   (pure)
-  authority-service.ts   AuthorityService, OwnerAuthorityService, uncoveredRisks()
+  authority-service.ts   AuthorityService, ConnectionAuthorityService, uncoveredRisks()
+                         (the rest of the module — grounds, shares — is in handbook authority)
 apps/gateway/src/server/missions/
   model.ts               MissionDraft, IssuanceConnection, MissionPreview, PreviewIssue, PreviewNotice… (types)
   catalog-view.ts        enumerateCatalog(), severityOf(), isResolvable(), presetWidth()           (pure)
@@ -87,7 +88,8 @@ bootstrap operator has a session but is not a user: each page then renders
 ## Authority
 
 `AuthorityService.authorityOf(user, connection)` → `{ connectionId, provider,
-basis, riskIds }`. `OwnerAuthorityService` is the only implementation today:
+basis, riskIds }`, implemented by `ConnectionAuthorityService`
+([authority](authority.md) has the whole rule):
 
 - the **owner** — the user who owns the connection, or any _current_ member of
   the group that owns it (`groups.groupsOf`, read on every call) — holds
@@ -95,13 +97,19 @@ basis, riskIds }`. `OwnerAuthorityService` is the only implementation today:
   `acceptable_in_envs` entry of every env-scoped risk
   (`supabase[staging].bulk-row-write`). It is the same set the store's
   `RegistryCatalogIndex` accepts, minus base ids of env-scoped risks;
-- everyone else, and any connection whose provider has no registered plugin,
-  holds `basis: 'none'`, `riskIds: []`.
+- a **beneficiary** holds the union of the restrictions of the active shares
+  of that connection made to them or to one of their current groups
+  (`basis: 'share'`), kept to the ids the catalog still lists;
+- everyone else, a user the IdP removed, and any connection whose provider has
+  no registered plugin, hold `basis: 'none'`, `riskIds: []`.
 
-`connectionsOf(user)` lists the candidates of an issuance (owned connections,
-every status). Shares (P2.2) arrive as a second implementation behind the same
-interface, injected through `MissionsModuleDeps.authority`; nothing in
-`missions/` changes.
+`connectionsOf(user)` lists the candidates of an issuance: owned connections
+and connections shared with the user, every status. The root injects
+`root.authority.service` through `MissionsModuleDeps.authority`; issuance and
+preview are the same for an owner and a beneficiary, the `authority` list of
+each `IssuanceConnection` is what differs. A mission whose creator later loses
+that authority becomes `orphaned` ([authority](authority.md), "Orphaned
+missions"); `MissionService.revoke` closes it like any other.
 
 ## The draft
 

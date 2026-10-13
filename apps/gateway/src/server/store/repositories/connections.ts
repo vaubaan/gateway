@@ -59,11 +59,30 @@ export interface ConnectionsRepo {
    * Sets the status as given. Refused (`InvariantError`) when the connection is `revoked`
    * and the new status is anything else: revocation is terminal. Setting `revoked` does
    * not erase the credential; `revoke` does.
-   * @deprecated No production caller; kept for test fixtures and for the `unowned`
-   * transition until P2.2 gives it a named method. Use `markExpired` and `revoke`.
+   * @deprecated No production caller; kept for test fixtures. Use `markExpired`,
+   * `markOwnerlessUnowned`, `assignOwner` and `revoke`.
    */
   setStatus(id: string, status: ConnectionStatus): Promise<ConnectionRecord>;
   transferOwner(id: string, owner: Principal): Promise<ConnectionRecord>;
+  /**
+   * The operator's reassignment (spec §2.3): gives the connection a new owner and, when it
+   * was `unowned`, makes it `active` again, in one transaction. An `expired` connection
+   * stays `expired` (its new owner reconnects it). Refused (`InvariantError`) for a
+   * `revoked` connection.
+   */
+  assignOwner(id: string, owner: Principal): Promise<ConnectionRecord>;
+  /**
+   * `active` → `unowned` for every connection whose owner group has no member left
+   * (spec §2.3), in one statement. Returns the connections that changed. Called after
+   * every membership removal; a connection that is `expired` stays so.
+   */
+  markOwnerlessUnowned(): Promise<ConnectionRecord[]>;
+  /**
+   * The connections nobody owns any more: `unowned`, or not revoked with an owner group
+   * that has no member (an `expired` one cannot be `unowned` at the same time). What the
+   * operator may reassign.
+   */
+  listOwnerless(): Promise<ConnectionRecord[]>;
   setMetadata(id: string, metadata: Record<string, unknown> | null): Promise<ConnectionRecord>;
   listResources(connectionId: string): Promise<ConnectionResourceRecord[]>;
   getResource(id: string): Promise<ConnectionResourceRecord | null>;
@@ -84,9 +103,11 @@ export interface ConnectionsRepo {
    */
   refreshCredential(id: string, credential: string, expiresAt?: Iso | null): Promise<boolean>;
   /**
-   * The provider rejected the credential and the refresh failed: `active` → `expired`.
-   * Conditional, so it never downgrades a `revoked` connection. Returns false when the
-   * connection was not `active`.
+   * The provider rejected the credential and the refresh failed: a serving connection
+   * (`active` or `unowned`) → `expired`. Conditional, so it never downgrades a `revoked`
+   * connection. An `unowned` connection that expires stays ownerless (`listOwnerless`):
+   * the operator reassigns an owner, who reconnects. Returns false when the connection
+   * was not serving.
    */
   markExpired(id: string): Promise<boolean>;
   /** Terminal revocation: status `revoked`, `revoked_at` set, the credential blob erased. */
@@ -272,8 +293,26 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
        updated_at = ? WHERE id = ? AND status IN (${placeholders(SERVING_STATUSES.length)})`,
   );
-  const markExpiredStmt = db.prepare<[string, string]>(
-    "UPDATE connections SET status = 'expired', updated_at = ? WHERE id = ? AND status = 'active'",
+  const markExpiredStmt = db.prepare<[string, string, ...string[]]>(
+    `UPDATE connections SET status = 'expired', updated_at = ?
+     WHERE id = ? AND status IN (${placeholders(SERVING_STATUSES.length)})`,
+  );
+  const assignOwnerStmt = db.prepare<[string, string | null, string | null, string, string]>(
+    `UPDATE connections SET owner_kind = ?, owner_user_id = ?, owner_group_id = ?,
+       status = CASE WHEN status = 'unowned' THEN 'active' ELSE status END, updated_at = ?
+     WHERE id = ?`,
+  );
+  const NO_MEMBER = `owner_kind = 'group' AND NOT EXISTS (
+       SELECT 1 FROM group_members gm WHERE gm.group_id = connections.owner_group_id)`;
+  const ownerlessActive = db.prepare<[], ConnectionRow>(
+    `SELECT ${COLUMNS} FROM connections WHERE status = 'active' AND ${NO_MEMBER} ORDER BY created_at`,
+  );
+  const markUnownedStmt = db.prepare<[string, string]>(
+    "UPDATE connections SET status = 'unowned', updated_at = ? WHERE id = ? AND status = 'active'",
+  );
+  const ownerless = db.prepare<[], ConnectionRow>(
+    `SELECT ${COLUMNS} FROM connections
+     WHERE status = 'unowned' OR (status <> 'revoked' AND ${NO_MEMBER}) ORDER BY created_at`,
   );
   const revokeStmt = db.prepare<[string, string, string]>(
     `UPDATE connections SET status = 'revoked', revoked_at = COALESCE(revoked_at, ?),
@@ -459,7 +498,33 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       return result.changes > 0;
     },
     async markExpired(id) {
-      return markExpiredStmt.run(nowIso(ctx), id).changes > 0;
+      return markExpiredStmt.run(nowIso(ctx), id, ...SERVING_STATUSES).changes > 0;
+    },
+    async assignOwner(id, owner) {
+      const cols = principalColumns(owner);
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        const current = requireConnection(id);
+        if (current.status === 'revoked') {
+          throw new InvariantError('a revoked connection cannot change owner');
+        }
+        assignOwnerStmt.run(cols.kind, cols.userId, cols.groupId, now, id);
+        return requireConnection(id);
+      });
+    },
+    async markOwnerlessUnowned() {
+      const now = nowIso(ctx);
+      // Read and write in one transaction: a member joining between the two is impossible.
+      return withImmediateTransaction(db, () => {
+        const changed: ConnectionRecord[] = [];
+        for (const row of ownerlessActive.all()) {
+          if (markUnownedStmt.run(now, row.id).changes > 0) changed.push(requireConnection(row.id));
+        }
+        return changed;
+      });
+    },
+    async listOwnerless() {
+      return ownerless.all().map(toRecord);
     },
     async revoke(id) {
       const now = nowIso(ctx);

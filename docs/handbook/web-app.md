@@ -51,31 +51,35 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 
 ## Route map
 
-| Route                                                                                  | File under `apps/gateway/src/app/`                                   | Handbook                            |
-| -------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ----------------------------------- |
-| `/`                                                                                    | `page.tsx`                                                           | [authentication](authentication.md) |
-| `/login`                                                                               | `(public)/login/page.tsx`, `(public)/layout.tsx`                     | [authentication](authentication.md) |
-| `GET /auth/login`, `GET /auth/callback`                                                | `auth/login/route.ts`, `auth/callback/route.ts`                      | [authentication](authentication.md) |
-| `POST /logout`                                                                         | `logout/route.ts`                                                    | [authentication](authentication.md) |
-| `/admin/bootstrap`, `POST /api/auth/bootstrap`                                         | `admin/bootstrap/page.tsx`, `api/auth/bootstrap/route.ts`            | [authentication](authentication.md) |
-| `/admin`, `/admin/identity-provider`                                                   | `admin/(guarded)/**`                                                 | [authentication](authentication.md) |
-| `POST /api/admin/identity-provider`                                                    | `api/admin/identity-provider/route.ts`                               | [authentication](authentication.md) |
-| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                         | `admin/(guarded)/provider-apps/**`                                   | [connections](connections.md)       |
-| `/admin/telemetry`, `POST /api/admin/telemetry`                                        | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts` | [telemetry](telemetry.md)           |
-| `/connections`, `/connections/new`, `/connections/new/<provider>`, `/connections/<id>` | `(app)/connections/**/page.tsx`                                      | [connections](connections.md)       |
-| `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`         | `(app)/connections/connect/`, `(app)/connections/callback/`          | [connections](connections.md)       |
-| `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                | `(app)/connections/[id]/**/route.ts`                                 | [connections](connections.md)       |
-| `/missions`, `/missions/new`, `/missions/<id>`                                         | `(app)/missions/**/page.tsx`                                         | [missions](missions.md)             |
-| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`  | `api/missions/**/route.ts`                                           | [missions](missions.md)             |
-| `GET /agent-bootstrap.md`                                                              | `agent-bootstrap.md/route.ts`                                        | [missions](missions.md)             |
-| `/missions/<id>/session`                                                               | `(app)/missions/[id]/session/page.tsx`                               | [audit](audit.md)                   |
-| `/audit`                                                                               | `(app)/audit/page.tsx`                                               | [audit](audit.md)                   |
-| `/requests`, `/requests/<id>`                                                          | `(app)/requests/**/page.tsx`                                         | [requests](requests.md)             |
-| `GET /r/<id>`                                                                          | `r/[id]/route.ts`                                                    | [requests](requests.md)             |
-| `GET /api/requests`, `POST /api/requests/<id>/decide`                                  | `api/requests/**/route.ts`                                           | [requests](requests.md)             |
-| `GET, POST, DELETE /mcp`, `GET /mcp/catalog`                                           | `mcp/route.ts`, `mcp/catalog/route.ts`                               | [execution-door](execution-door.md) |
-| `GET /.well-known/oauth-protected-resource`                                            | `.well-known/oauth-protected-resource/route.ts`                      | [execution-door](execution-door.md) |
-| `GET /healthz`                                                                         | `healthz/route.ts`                                                   | [configuration](configuration.md)   |
+| Route                                                                                            | File under `apps/gateway/src/app/`                                   | Handbook                            |
+| ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------- | ----------------------------------- |
+| `/`                                                                                              | `page.tsx`                                                           | [authentication](authentication.md) |
+| `/login`                                                                                         | `(public)/login/page.tsx`, `(public)/layout.tsx`                     | [authentication](authentication.md) |
+| `GET /auth/login`, `GET /auth/callback`                                                          | `auth/login/route.ts`, `auth/callback/route.ts`                      | [authentication](authentication.md) |
+| `POST /logout`                                                                                   | `logout/route.ts`                                                    | [authentication](authentication.md) |
+| `/admin/bootstrap`, `POST /api/auth/bootstrap`                                                   | `admin/bootstrap/page.tsx`, `api/auth/bootstrap/route.ts`            | [authentication](authentication.md) |
+| `/admin`, `/admin/identity-provider`                                                             | `admin/(guarded)/**`                                                 | [authentication](authentication.md) |
+| `POST /api/admin/identity-provider`                                                              | `api/admin/identity-provider/route.ts`                               | [authentication](authentication.md) |
+| `/admin/provider-apps`, `POST /admin/provider-apps/<provider>`                                   | `admin/(guarded)/provider-apps/**`                                   | [connections](connections.md)       |
+| `/admin/telemetry`, `POST /api/admin/telemetry`                                                  | `admin/(guarded)/telemetry/page.tsx`, `api/admin/telemetry/route.ts` | [telemetry](telemetry.md)           |
+| `/connections`, `/connections/new`, `/connections/new/<provider>`, `/connections/<id>`           | `(app)/connections/**/page.tsx`                                      | [connections](connections.md)       |
+| `/connections/<id>/share`, `POST /connections/<id>/shares`, `…/shares/<id>/revoke`, `…/transfer` | `(app)/connections/[id]/share/`, `shares/`, `transfer/`              | [authority](authority.md)           |
+| `/shares`                                                                                        | `(app)/shares/page.tsx`                                              | [authority](authority.md)           |
+| `/admin/groups`, `POST /admin/groups/create`, `…/<id>/members[/<userId>/remove]`                 | `admin/(guarded)/groups/**`                                          | [authority](authority.md)           |
+| `/admin/connections`, `POST /admin/connections/<id>/reassign`                                    | `admin/(guarded)/connections/**`                                     | [authority](authority.md)           |
+| `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`                   | `(app)/connections/connect/`, `(app)/connections/callback/`          | [connections](connections.md)       |
+| `POST /connections/<id>/discover`, `/revoke`, `/resources/<resourceId>`                          | `(app)/connections/[id]/**/route.ts`                                 | [connections](connections.md)       |
+| `/missions`, `/missions/new`, `/missions/<id>`                                                   | `(app)/missions/**/page.tsx`                                         | [missions](missions.md)             |
+| `POST /api/missions`, `/api/missions/preview`, `/api/missions/<id>/rotate`, `/revoke`            | `api/missions/**/route.ts`                                           | [missions](missions.md)             |
+| `GET /agent-bootstrap.md`                                                                        | `agent-bootstrap.md/route.ts`                                        | [missions](missions.md)             |
+| `/missions/<id>/session`                                                                         | `(app)/missions/[id]/session/page.tsx`                               | [audit](audit.md)                   |
+| `/audit`                                                                                         | `(app)/audit/page.tsx`                                               | [audit](audit.md)                   |
+| `/requests`, `/requests/<id>`                                                                    | `(app)/requests/**/page.tsx`                                         | [requests](requests.md)             |
+| `GET /r/<id>`                                                                                    | `r/[id]/route.ts`                                                    | [requests](requests.md)             |
+| `GET /api/requests`, `POST /api/requests/<id>/decide`                                            | `api/requests/**/route.ts`                                           | [requests](requests.md)             |
+| `GET, POST, DELETE /mcp`, `GET /mcp/catalog`                                                     | `mcp/route.ts`, `mcp/catalog/route.ts`                               | [execution-door](execution-door.md) |
+| `GET /.well-known/oauth-protected-resource`                                                      | `.well-known/oauth-protected-resource/route.ts`                      | [execution-door](execution-door.md) |
+| `GET /healthz`                                                                                   | `healthz/route.ts`                                                   | [configuration](configuration.md)   |
 
 There is no landing page: `/` redirects a visitor with a session to `/missions`
 and anyone else to `/login`.
@@ -139,8 +143,8 @@ authority is recomputed on every request.
 the page in a `Container`:
 
 - the brand link (to `/connections`) and one link per entry of `APP_NAV`:
-  **Connections**, **Missions**, **Requests**, **Audit**. Every principal sees
-  these four links;
+  **Connections**, **Shares received**, **Missions**, **Requests**, **Audit**.
+  Every principal sees these links;
 - **Administration** (`/admin`), only when the principal is the bootstrap
   operator or a user with `isOperator`;
 - on the right: the user's email (or `bootstrap token`), `OperatorBadge`
@@ -157,6 +161,18 @@ Seeing a link is not the authorisation. Each page decides for its principal
 with a session helper: the Connections, Missions and Requests pages render
 `NeedsUser` for the bootstrap operator (`currentUser()`), `/audit` is open to
 both (`requirePrincipal()`) and widens what it shows for an operator.
+
+## One root, several module graphs
+
+The composition root is built once per process, but a page is bundled apart
+from the code that built it (another route, the instrumentation file, the
+launcher of the browser tests). A class a page imports is therefore not
+necessarily the class a service of the root instantiated: `err instanceof
+ShareError` in a page can be false for a `ShareError` the service threw, and
+the page then answers 500 instead of "not found". A page recognises a service
+error by shape — `isShareError(err, code)`, `isConnectError(err, code)`
+(name and code) — and services and handlers, which live in the root's own
+graph, keep `instanceof`.
 
 ## UI primitives — `components/ui/`
 

@@ -394,7 +394,7 @@ cutover; each is a default that can be changed, most in one place.
 | Should plugins declare the risks each tool can touch, so `tools/list` filters per tool as the spec says? | No declaration exists; the list is filtered per provider.                                                                  |
 | CORS on `/mcp` for browser-based MCP clients (Inspector)?                                                | None; a foreign `Origin` is refused.                                                                                       |
 | Surface rate limit per mission                                                                           | 600 requests per minute, all agents together (`mcp.rate_limit_per_minute`).                                                |
-| An `unowned` connection serving calls (spec §2)                                                          | Not yet: the credential broker resolves `active` connections only (P2.2).                                                  |
+| An `unowned` connection serving calls (spec §2)                                                          | Yes: it serves until its credential dies (then `expired`); the operator reassigns an owner ([authority](authority.md)).    |
 | Stateless caps of the catalogs (items / bytes per call)                                                  | Declared by some catalogs, not enforced by the door.                                                                       |
 
 ### Budget, claims and approvals

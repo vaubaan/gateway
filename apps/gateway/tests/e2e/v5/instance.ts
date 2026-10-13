@@ -58,6 +58,23 @@ export const E2E_CUTOVER_USER = {
 } as const;
 
 /**
+ * The share spec's cast: Hedy owns a GitHub connection of her own, Joan receives a share
+ * of it, and the operator (the instance's admin rule names their email) keeps the local
+ * groups. None of them appears in another spec.
+ */
+export const E2E_SHARE_OWNER = {
+  sub: 'idp|hedy',
+  email: 'hedy@example.com',
+  name: 'Hedy',
+} as const;
+export const E2E_SHARE_TARGET = {
+  sub: 'idp|joan',
+  email: 'joan@example.com',
+  name: 'Joan',
+} as const;
+export const E2E_OPERATOR = { sub: 'idp|ops', email: 'ops@example.com', name: 'Ops' } as const;
+
+/**
  * The mocked GitHub behind the instance (`RootDeps.providerFetch`): one
  * installation of the company's App, reaching two repositories. Nothing here
  * is a real account; the launcher answers every provider request itself.

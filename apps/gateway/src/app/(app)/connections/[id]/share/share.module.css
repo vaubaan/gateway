@@ -1,0 +1,136 @@
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  max-width: 720px;
+}
+
+.target {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.target legend {
+  font-weight: 600;
+  padding: 0;
+  margin-bottom: var(--space-2);
+}
+
+.restriction {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.summary {
+  margin: 0;
+  font-weight: 500;
+}
+
+.fold {
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: var(--space-2) var(--space-4);
+}
+.fold > summary {
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.fold[open] > summary {
+  margin-bottom: var(--space-3);
+}
+
+.tools {
+  display: flex;
+  gap: var(--space-3);
+  align-items: baseline;
+  flex-wrap: wrap;
+  margin-bottom: var(--space-3);
+  font-size: var(--text-sm);
+}
+
+.textButton {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: var(--text-foreground);
+  font-size: var(--text-sm);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  white-space: nowrap;
+}
+
+.muted {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+
+.level {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  margin: var(--space-3) 0 var(--space-1);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.risks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.risk {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  cursor: pointer;
+}
+.risk > span {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
+.riskId {
+  font-family: var(--font-geist-mono, ui-monospace, monospace);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+
+.note {
+  margin: 0;
+}
+.note + .note {
+  margin-top: var(--space-1);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-4);
+  align-items: center;
+}
+
+.restrictionList {
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  font-size: var(--text-sm);
+}
+.restrictionList li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: baseline;
+  flex-wrap: wrap;
+}

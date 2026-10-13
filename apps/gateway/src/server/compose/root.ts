@@ -17,6 +17,7 @@ import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 
 import { createAuditModule, type AuditModule } from '../audit';
 import { createAuthModule, type AuthModule, type OidcOptions } from '../auth';
+import { createAuthorityModule, type AuthorityModule } from '../authority';
 import { SessionService } from '../budget';
 import { createConnectionsModule, type ConnectionsModule } from '../connections';
 import {
@@ -33,11 +34,13 @@ import {
   type DelegatedTokenResolver,
   type ExecutionModule,
 } from '../execution';
+import { createGroupsModule, type GroupsModule } from '../groups';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { ProviderAppsService } from '../provider-apps';
 import { createMissionsModule, type MissionsModule } from '../missions';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
+import { createSharesModule, type SharesModule } from '../shares';
 import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
@@ -64,6 +67,12 @@ export interface GatewayRoot {
   readonly providerApps: ProviderAppsService;
   /** Connect flows, resources, credential broker with the generic OAuth refresh (P1.4). */
   readonly connections: ConnectionsModule;
+  /** Authority: owner or union of shares, mission grounds (`orphaned`), membership settlement (P2.2). */
+  readonly authority: AuthorityModule;
+  /** Shares of a connection to a user or a group, and the shares a user received (P2.2). */
+  readonly shares: SharesModule;
+  /** Local groups kept by the operator (P2.2). */
+  readonly groups: GroupsModule;
   /** Missions: authority, preview / issue / rotate / revoke, bootstrap kit (P1.5). */
   readonly missions: MissionsModule;
   /** Requests to the creator: inbox, claim decisions, expiry sweeper, request URL (P1.7). */
@@ -202,6 +211,9 @@ type RootModules = Pick<
   | 'auth'
   | 'providerApps'
   | 'connections'
+  | 'authority'
+  | 'shares'
+  | 'groups'
   | 'missions'
   | 'requests'
   | 'audit'
@@ -222,12 +234,25 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
   // `web_sessions`) so they survive a restart and are revocable; a hosted
   // deployment injects a shared `SessionStore` instead.
   const sessions: SessionStore = deps.sessions ?? store.webSessions;
-  const auth = createAuthModule({ config, store, sessions, logger, oidc: deps.oidc });
+  // Authority reads the store only, so it is built first: the sign-in settles what a
+  // lost membership held, and every module below checks or sweeps through it.
+  const authority = createAuthorityModule({ store, registry, logger });
+  const auth = createAuthModule({
+    config,
+    store,
+    sessions,
+    logger,
+    oidc: deps.oidc,
+    membershipsSynced: async (user) => {
+      await authority.membership.afterRemoval(user.id, user.id);
+    },
+  });
   const missions = createMissionsModule({
     config,
     store,
     registry,
     authenticator: auth.authenticator,
+    authority: authority.service,
     logger,
   });
 
@@ -246,8 +271,26 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     sessions,
     rateLimiter,
     authenticator: auth.authenticator,
+    grounds: authority.grounds,
     logger,
     fetch: deps.providerFetch,
+  });
+  const shares = createSharesModule({
+    config,
+    store,
+    registry,
+    connections,
+    grounds: authority.grounds,
+    authenticator: auth.authenticator,
+    logger,
+  });
+  const groups = createGroupsModule({
+    config,
+    store,
+    membership: authority.membership,
+    connections,
+    authenticator: auth.authenticator,
+    logger,
   });
   // Starts the expiry sweeper of the inbox.
   const requests = createRequestsModule({
@@ -294,6 +337,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     auth,
     missions,
     connections,
+    grounds: authority.grounds,
     budget,
     cache,
     rateLimiter,
@@ -310,6 +354,9 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     auth,
     providerApps,
     connections,
+    authority,
+    shares,
+    groups,
     missions,
     requests,
     audit,

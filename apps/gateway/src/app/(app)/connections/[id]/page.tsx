@@ -4,6 +4,10 @@
  * resource's display name, environment label and hidden flag inline; the
  * label is read-only when the plugin sets it at discovery. Edits survive
  * "Refresh discovery"; a resource that vanished upstream is marked stale.
+ *
+ * The owner also sees the shares of the connection (target, exact
+ * restriction on demand, revoke, the Share dialog) and may transfer the
+ * ownership to a group they belong to (spec §7.2, §7.3).
  */
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -27,6 +31,7 @@ import {
   CardHeader,
   CardTitle,
   Field,
+  Select,
   Stack,
   Table,
   Tbody,
@@ -38,14 +43,15 @@ import {
 } from '@/components/ui';
 import { currentActor, takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import {
-  ConnectError,
   connectionPath,
   CONNECTIONS_PATH,
   editableMetadataKeys,
+  isConnectError,
   METADATA_PREFIX,
   NEW_CONNECTION_PATH,
   type ConnectionDetail,
 } from '@/server/connections';
+import { sharePath, type ShareView } from '@/server/shares';
 import type { ConnectionResourceRecord } from '@/server/store';
 
 export const dynamic = 'force-dynamic';
@@ -68,7 +74,7 @@ export default async function ConnectionPage({
   try {
     detail = await root.connections.service.get(actor, id);
   } catch (err) {
-    if (err instanceof ConnectError && err.code === 'not-found') notFound();
+    if (isConnectError(err, 'not-found')) notFound();
     throw err;
   }
   const notice = await takeNotice(root, principal.sessionId, await searchParams);
@@ -78,6 +84,10 @@ export default async function ConnectionPage({
   // The server refuses to reconnect an unowned connection (`connection-unowned`).
   const unowned = connection.status === 'unowned';
   const fields = Object.entries(detail.fields);
+  const { shares } = await root.shares.service.contextFor(actor, connection.id);
+  const transferTargets = root.connections.service.transferTargets(actor, connection);
+  // Nobody shares or transfers a connection that is revoked or has no owner (spec §2.3).
+  const ownerActs = !revoked && !unowned;
 
   return (
     <Stack gap="var(--space-6)">
@@ -160,6 +170,70 @@ export default async function ConnectionPage({
         </CardBody>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <CardTitle>Shares</CardTitle>
+          {ownerActs && (
+            <Link href={sharePath(connection.id)} className={styles.linkButton}>
+              Share
+            </Link>
+          )}
+        </CardHeader>
+        {shares.length === 0 ? (
+          <div className={styles.empty}>
+            Not shared. Only its {connection.owner.kind === 'group' ? 'owners' : 'owner'} can issue
+            missions on this connection.
+          </div>
+        ) : (
+          <div className={styles.tableWrap}>
+            <Table>
+              <Thead>
+                <Tr>
+                  <Th>Shared with</Th>
+                  <Th>Restriction</Th>
+                  <Th>Since</Th>
+                  <Th />
+                </Tr>
+              </Thead>
+              <Tbody>
+                {shares.map((view) => (
+                  <ShareRow key={view.share.id} view={view} base={base} editable={ownerActs} />
+                ))}
+              </Tbody>
+            </Table>
+          </div>
+        )}
+      </Card>
+
+      {ownerActs && transferTargets.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Ownership</CardTitle>
+          </CardHeader>
+          <CardBody>
+            <Stack gap="var(--space-3)">
+              <p className={styles.muted}>
+                Transfer this connection to a group you belong to: every member of the group, now
+                and later, becomes a full owner and may share, reconnect, transfer or revoke it.
+                Shares are kept.
+              </p>
+              <form method="post" action={`${base}/transfer`} className={styles.actions}>
+                <Select name="group_id" aria-label="Group to transfer to" required>
+                  {transferTargets.map((group) => (
+                    <option key={group.id} value={group.id}>
+                      {group.name}
+                    </option>
+                  ))}
+                </Select>
+                <Button type="submit" variant="secondary" size="sm">
+                  Transfer
+                </Button>
+              </form>
+            </Stack>
+          </CardBody>
+        </Card>
+      )}
+
       {detail.publicKey && !revoked && (
         <Card>
           <CardHeader>
@@ -221,6 +295,55 @@ export default async function ConnectionPage({
         )}
       </Card>
     </Stack>
+  );
+}
+
+/** One share: its target, the exact restriction on demand, edit and revoke. */
+function ShareRow({ view, base, editable }: { view: ShareView; base: string; editable: boolean }) {
+  const { share } = view;
+  const count = share.restriction.length;
+  return (
+    <Tr>
+      <Td>{view.targetLabel}</Td>
+      <Td>
+        <details className={styles.settings}>
+          <summary>
+            {count} {count === 1 ? 'risk' : 'risks'}
+          </summary>
+          <div className={styles.settingsBody}>
+            {share.restriction.map((riskId) => (
+              <code key={riskId} className={styles.mono}>
+                {riskId}
+              </code>
+            ))}
+          </div>
+        </details>
+      </Td>
+      <Td className={styles.muted}>{day(share.createdAt)}</Td>
+      <Td>
+        <span className={styles.actions}>
+          {editable && (
+            <Link href={`${sharePath(share.connectionId)}?share=${encodeURIComponent(share.id)}`}>
+              Edit
+            </Link>
+          )}
+          <form
+            method="post"
+            action={`${base}/shares/${encodeURIComponent(share.id)}/revoke`}
+            className={styles.inlineForm}
+          >
+            <Button
+              type="submit"
+              variant="secondary"
+              size="sm"
+              aria-label={`Revoke the share to ${view.targetLabel}`}
+            >
+              Revoke
+            </Button>
+          </form>
+        </span>
+      </Td>
+    </Tr>
   );
 }
 

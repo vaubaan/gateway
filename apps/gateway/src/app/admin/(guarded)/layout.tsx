@@ -45,6 +45,8 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           </Link>
           <Link href="/admin/identity-provider">Identity provider</Link>
           <Link href="/admin/provider-apps">Provider apps</Link>
+          <Link href="/admin/groups">Groups</Link>
+          <Link href="/admin/connections">Connections</Link>
           <Link href="/admin/telemetry">Telemetry</Link>
         </nav>
         <div className={styles.actions}>

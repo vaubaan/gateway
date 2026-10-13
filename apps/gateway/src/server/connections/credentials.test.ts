@@ -222,9 +222,10 @@ describe('refresh', () => {
     expect(resolved.connection.status).toBe('unowned');
   });
 
-  it('still throws UpstreamAuthError when the refresh of an unowned connection is rejected', async () => {
-    // Whether a dead credential turns an unowned connection `expired` is not settled by
-    // spec §2.3 (it names `active → expired` only): today the status is left alone.
+  it('expires an unowned connection whose refresh is rejected: it stops serving', async () => {
+    // A serving connection with a dead credential is `expired`, owned or not (handbook
+    // connections, "Status and credential"). It stays ownerless: the operator reassigns
+    // an owner (`listOwnerless`), who reconnects.
     const h = await configured(
       oauthHarness([
         { method: 'POST', url: TOKEN_URL, status: 400, body: { error: 'invalid_grant' } },
@@ -233,8 +234,9 @@ describe('refresh', () => {
     const id = await seed(h, 'oauthco', secret());
     await h.store.connections.setStatus(id, 'unowned');
     await expect(h.broker.refresh(id)).rejects.toBeInstanceOf(UpstreamAuthError);
-    expect((await h.store.connections.getById(id))!.status).toBe('unowned');
+    expect((await h.store.connections.getById(id))!.status).toBe('expired');
     expect(parseSecret((await h.store.connections.getCredential(id))!)).toEqual(secret());
+    await expect(h.broker.resolve(id)).rejects.toBeInstanceOf(ConnectionUnavailableError);
   });
 
   it('leaves the connection active when the provider is merely unreachable', async () => {

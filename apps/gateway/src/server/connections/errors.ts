@@ -24,6 +24,10 @@ export const CONNECT_ERROR_CODES = [
   'connection-unowned',
   'provider-mismatch',
   'label-read-only',
+  'transfer-not-member',
+  'not-ownerless',
+  'owner-unknown',
+  'owner-group-empty',
 ] as const;
 
 export type ConnectErrorCode = (typeof CONNECT_ERROR_CODES)[number];
@@ -52,6 +56,14 @@ export const CONNECT_ERROR_MESSAGES: Readonly<Record<ConnectErrorCode, string>> 
   'provider-mismatch': 'This connection belongs to another provider.',
   'label-read-only':
     'The environment of this resource is set by the provider plugin and cannot be edited.',
+  'transfer-not-member':
+    'A connection can only be transferred to a group you belong to: you would otherwise lose it by mistake.',
+  'not-ownerless':
+    'This connection still has an owner. An operator only reassigns a connection that has none left.',
+  'owner-unknown':
+    'No active user has this email. A user is known to the instance once they have signed in.',
+  'owner-group-empty':
+    'This group does not exist or has no member: the connection would still have no owner.',
 };
 
 const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
@@ -72,9 +84,23 @@ const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
   'connection-unowned': 409,
   'provider-mismatch': 409,
   'label-read-only': 409,
+  'transfer-not-member': 403,
+  'not-ownerless': 409,
+  'owner-unknown': 400,
+  'owner-group-empty': 400,
 };
 
 const MAX_DETAIL_CHARS = 300;
+
+/**
+ * Is this a `ConnectError` (of that code, when one is given)? By shape, not by
+ * `instanceof`, for the pages: a page is bundled apart from the code that built the
+ * composition root, so the class it imports is not the one the service threw.
+ */
+export function isConnectError(err: unknown, code?: ConnectErrorCode): boolean {
+  if (!(err instanceof Error) || err.name !== 'ConnectError' || !('code' in err)) return false;
+  return code === undefined || err.code === code;
+}
 
 export class ConnectError extends Error {
   readonly status: number;

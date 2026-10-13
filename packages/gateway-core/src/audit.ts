@@ -82,6 +82,9 @@ export type AdminAct =
    *  bound to the connecting human (nothing was stored). */
   | 'connection-refused'
   | 'connection-transferred'
+  /** The operator gave an owner to a connection that had none left (spec §2.3:
+   *  "the operator's only act on the domain"). `before` / `after` carry the owner. */
+  | 'connection-reassigned'
   | 'connection-revoked'
   /** The owner ran "refresh discovery": the outcome (count or the provider's
    *  error), never the resource list. Object: the connection. */
@@ -96,6 +99,11 @@ export type AdminAct =
   | 'mission-rotated'
   | 'mission-revoked'
   | 'mission-closed'
+  /** The authority behind a mission vanished (spec §2.3 "orphaned"). The entry
+   *  names the human whose act removed it (the owner who revoked a share or a
+   *  connection, the operator who edited a group, the user whose sign-in
+   *  changed their groups); `after` carries the cause and the uncovered risks. */
+  | 'mission-orphaned'
   | 'budget-extended'
   | 'period-reset'
   | 'expiry-extended'
@@ -107,6 +115,10 @@ export type AdminAct =
   | 'request-refused'
   | 'delegation-granted'
   | 'delegation-revoked'
+  /** Local groups, kept by the operator (spec §0 "Group", §11.2). Object: the group. */
+  | 'group-created'
+  | 'group-member-added'
+  | 'group-member-removed'
   | 'config-changed';
 
 export type AdminObjectType =
@@ -115,6 +127,7 @@ export type AdminObjectType =
   | 'mission'
   | 'request'
   | 'delegation'
+  | 'group'
   | 'instance-config';
 
 /**

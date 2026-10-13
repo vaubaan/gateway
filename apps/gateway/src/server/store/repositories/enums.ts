@@ -57,6 +57,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'connection-reconnected': true,
   'connection-refused': true,
   'connection-transferred': true,
+  'connection-reassigned': true,
   'connection-revoked': true,
   'resources-discovered': true,
   'resource-edited': true,
@@ -66,6 +67,7 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'mission-rotated': true,
   'mission-revoked': true,
   'mission-closed': true,
+  'mission-orphaned': true,
   'budget-extended': true,
   'period-reset': true,
   'expiry-extended': true,
@@ -75,6 +77,9 @@ export const ADMIN_ACTS = membersOf<AdminAct>({
   'request-refused': true,
   'delegation-granted': true,
   'delegation-revoked': true,
+  'group-created': true,
+  'group-member-added': true,
+  'group-member-removed': true,
   'config-changed': true,
 });
 
@@ -84,5 +89,6 @@ export const ADMIN_OBJECT_TYPES = membersOf<AdminObjectType>({
   mission: true,
   request: true,
   delegation: true,
+  group: true,
   'instance-config': true,
 });

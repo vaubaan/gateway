@@ -370,9 +370,12 @@ repository). It does not prove that this account administers it.
 `owns(actor, connection)`: the user owner, or any group of
 `actor.groups` — the groups of the principal as recomputed on this request
 (spec §10 "authority recomputed from current membership"). `listFor` uses
-`connections.listOwnedBy([user, ...groups])`. P1.4 only creates user-owned
-connections; transfer to a group and the transition to `unowned` arrive
-with P2.2 behind the same check.
+`connections.listOwnedBy([user, ...groups])`. A connection is created
+user-owned; `transfer` hands it to a group of the owner, `markOwnerlessUnowned`
+turns it `unowned` when that group empties, and the operator's `reassign`
+gives it an owner again — all three, with shares, are in
+[authority](authority.md). The same `owns` check serves a user owner and a
+group owner.
 
 `mapping.ts` is the one place a `ConnectionRecord` becomes a shape shown
 elsewhere: `connectionSummaryOf(record)` gives `{ id, provider,
@@ -385,12 +388,15 @@ silent cast.
 
 ## Connection states
 
-| Transition           | Where                                                                                           |
-| -------------------- | ----------------------------------------------------------------------------------------------- |
-| → `active`           | `connections.create` (connect), `connections.reconnect` (reconnect)                             |
-| `active` → `expired` | `connections.markExpired`, called by the broker when a refresh is rejected by the provider      |
-| `expired` → `active` | `connections.reconnect`                                                                         |
-| → `revoked`          | `connections.revoke`: terminal, `revoked_at` set, `credential_blob` / `key_version` set to NULL |
+| Transition            | Where                                                                                           |
+| --------------------- | ----------------------------------------------------------------------------------------------- |
+| → `active`            | `connections.create` (connect), `connections.reconnect` (reconnect)                             |
+| `active` → `expired`  | `connections.markExpired`, called by the broker when a refresh is rejected by the provider      |
+| `active` → `unowned`  | `connections.markOwnerlessUnowned`, after a membership removal emptied the owner group          |
+| `unowned` → `active`  | `connections.assignOwner` (the operator's reassignment)                                         |
+| `unowned` → `expired` | `connections.markExpired`: a dead credential stops an unowned connection too                    |
+| `expired` → `active`  | `connections.reconnect`                                                                         |
+| → `revoked`           | `connections.revoke`: terminal, `revoked_at` set, `credential_blob` / `key_version` set to NULL |
 
 Which statuses serve calls is decided in one place,
 `isUnavailableConnectionStatus` of `@vaubaan/gateway-core`: `expired` and
@@ -401,21 +407,20 @@ it:
 | Status    | Broker `resolve` / `refresh` | `refreshCredential` | `reconnect`                    | `markExpired` |
 | --------- | ---------------------------- | ------------------- | ------------------------------ | ------------- |
 | `active`  | serves                       | written             | written                        | → `expired`   |
-| `unowned` | serves                       | written, stays so   | refused (`connection-unowned`) | no effect     |
+| `unowned` | serves                       | written, stays so   | refused (`connection-unowned`) | → `expired`   |
 | `expired` | `ConnectionUnavailableError` | not written         | written, → `active`            | no effect     |
 | `revoked` | `ConnectionUnavailableError` | not written         | refused (`connection-revoked`) | no effect     |
 
-All three are conditional updates (`refreshCredential`: the serving
-statuses; `reconnect`: `active` or `expired`; `markExpired`: `active`), so a
-refresh or a late callback racing a revocation never brings a revoked
-connection back. Nothing sets `unowned` before P2.2. Open point for the
-spec: a rejected refresh leaves an `unowned` connection `unowned`
-(`markExpired` applies to `active` only, as spec §2.3 writes
-`active → expired`); the broker still throws `UpstreamAuthError`.
+All three are conditional updates (`refreshCredential` and `markExpired`:
+the serving statuses; `reconnect`: `active` or `expired`), so a refresh or a
+late callback racing a revocation never brings a revoked connection back. An
+`unowned` connection whose refresh is rejected becomes `expired` like any
+other (ADR orphaned-missions-and-ownerless-connections §3); it stays in the
+operator's list of ownerless connections, and its new owner reconnects it.
 
 `setCredential` and `setStatus` are deprecated leftovers of P0.3 with no
 production caller; they refuse (`InvariantError`) to take a connection out
-of `revoked`. `setStatus` is what test fixtures use to produce `unowned`;
+of `revoked`. `setStatus` is what older test fixtures use to produce `unowned`;
 `setCredential` is only called by the test that proves this refusal.
 `ConnectionService.revoke` is idempotent and audited (`connection-revoked`).
 It does not withdraw the grant at the provider; the notice says so.

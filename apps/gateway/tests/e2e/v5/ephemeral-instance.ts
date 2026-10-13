@@ -21,7 +21,9 @@
  *     through `MissionService.verifyToken`, `small-mission` (a mission of Ada
  *     with a two-action quota and its token), `developer-mission` (a mission
  *     issued from the GitHub plugin's `developer` preset as shipped, for a
- *     user of their own, and its token), `upstream` (what the mocked provider
+ *     user of their own, and its token), `share-scenario` (an owner with a
+ *     GitHub connection of their own, a beneficiary and the operator, for
+ *     the share spec), `upstream` (what the mocked provider
  *     received) and `seed-day` — the one fixture written below the door: a
  *     day of calls recorded through `root.budget` and the audit writer, with
  *     gated and exhausted risks, for the audit pages.
@@ -50,6 +52,9 @@ import {
   CONTROL_PREFIX,
   E2E_APPROVER_USER,
   E2E_AUDIT_USER,
+  E2E_OPERATOR,
+  E2E_SHARE_OWNER,
+  E2E_SHARE_TARGET,
   IDP_ISSUER,
   instancePort,
   MOCK_GITHUB,
@@ -317,7 +322,8 @@ async function main(): Promise<void> {
   const root = await getRoot(
     testRootDeps({
       publicUrl: PUBLIC_URL,
-      env: githubEnv(),
+      // The admin rule names the operator of the share spec.
+      env: { ...githubEnv(), VAUBAAN_ADMIN_EMAILS: E2E_OPERATOR.email },
       deps: { oidc: { fetch: idp.fetch }, providerFetch: github },
     }),
   );
@@ -409,6 +415,37 @@ async function main(): Promise<void> {
       if (url.pathname === `${CONTROL_PREFIX}/developer-mission` && req.method === 'POST') {
         const { name } = JSON.parse(await readBody(req)) as { name: string };
         sendJson(res, 200, await issueDeveloperMission(root, name));
+        return;
+      }
+      if (url.pathname === `${CONTROL_PREFIX}/share-scenario` && req.method === 'POST') {
+        // The cast of the share spec, known to the instance as after a first sign-in,
+        // and a GitHub connection the owner holds in their own name.
+        const { name } = JSON.parse(await readBody(req)) as { name: string };
+        const [owner] = await Promise.all(
+          [E2E_SHARE_OWNER, E2E_SHARE_TARGET, E2E_OPERATOR].map((user) =>
+            root.store.users.upsertFromIdp({
+              subject: user.sub,
+              email: user.email,
+              displayName: user.name,
+            }),
+          ),
+        );
+        if (!owner) throw new Error('the share owner was not created');
+        const { connection } = await seedConnection(root.store, {
+          provider: 'github',
+          owner: { kind: 'user', id: owner.id },
+          displayName: name,
+          resources: MOCK_GITHUB.repositories.map((ref) => ({ ref })),
+        });
+        await root.store.connections.reconnect(
+          connection.id,
+          serializeSecret({
+            kind: 'app-install',
+            installationId: MOCK_GITHUB.installationId,
+            metadata: {},
+          }),
+        );
+        sendJson(res, 200, { connection_id: connection.id });
         return;
       }
       if (url.pathname === `${CONTROL_PREFIX}/verify-token` && req.method === 'POST') {

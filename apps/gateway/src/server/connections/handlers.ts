@@ -7,6 +7,8 @@
  *   GET  /connections/callback/<provider>            the provider's redirect back
  *   POST /connections/<id>/discover                  refresh discovery
  *   POST /connections/<id>/revoke                    revoke (terminal)
+ *   POST /connections/<id>/transfer                  transfer ownership to a group of the owner
+ *   POST /admin/connections/<id>/reassign            give an ownerless connection an owner (operator)
  *   POST /connections/<id>/resources/<resourceId>    owner edits on a resource
  *   POST /admin/provider-apps/<provider>             save / clear the company app, accept or
  *                                                    refuse unverified installations (operator)
@@ -54,6 +56,8 @@ import {
 
 export const NEW_CONNECTION_PATH = `${CONNECTIONS_PATH}/new`;
 export const PROVIDER_APPS_PAGE = '/admin/provider-apps';
+/** Administration → Connections: the connections that have no owner left. */
+export const OWNERLESS_CONNECTIONS_PAGE = '/admin/connections';
 export const NOTICE_PARAM = 'notice';
 /** Form inputs carrying a `CredentialField` value are named `field.<name>`. */
 export const FIELD_PREFIX = 'field.';
@@ -89,6 +93,8 @@ export interface ConnectionHandlers {
   callback(request: Request, providerId: string): Promise<Response>;
   discover(request: Request, connectionId: string): Promise<Response>;
   revoke(request: Request, connectionId: string): Promise<Response>;
+  transfer(request: Request, connectionId: string): Promise<Response>;
+  reassign(request: Request, connectionId: string): Promise<Response>;
   updateResource(request: Request, connectionId: string, resourceId: string): Promise<Response>;
   saveProviderApp(request: Request, providerId: string): Promise<Response>;
 }
@@ -331,7 +337,7 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           tone: 'success',
           title: 'Connection revoked',
           lines: [
-            'The stored credential was erased. Missions that carry this connection now refuse every call.',
+            'The stored credential was erased. Missions that carry this connection are now orphaned and refuse every call.',
             'The authorization granted at the provider is not withdrawn by the gateway: remove it there too if needed.',
           ],
         });
@@ -340,6 +346,64 @@ export function createConnectionHandlers(deps: ConnectionHandlerDeps): Connectio
           who.principal,
           CONNECTIONS_PATH,
           failureNotice(err, 'Not revoked'),
+        );
+      }
+    },
+
+    async transfer(request, connectionId) {
+      const who = await userOf(request);
+      if ('response' in who) return who.response;
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      try {
+        const groupId = stringField(form, 'group_id');
+        await deps.connections.transfer(who.actor, connectionId, groupId);
+        const group = who.actor.groups.find((g) => g.id === groupId);
+        return await redirectWithNotice(who.principal, connectionPath(connectionId), {
+          tone: 'success',
+          title: `Transferred to group ${group?.name ?? ''}`.trimEnd(),
+          lines: [
+            'Every member of this group, now and later, is a full owner: they may share, reconnect, transfer or revoke.',
+            'The shares of this connection are unchanged.',
+          ],
+        });
+      } catch (err) {
+        const missing = err instanceof ConnectError && err.code === 'not-found';
+        return redirectWithNotice(
+          who.principal,
+          missing ? CONNECTIONS_PATH : connectionPath(connectionId),
+          failureNotice(err, 'Not transferred'),
+        );
+      }
+    },
+
+    async reassign(request, connectionId) {
+      const guard = await guardMutation(request, deps, 'operator');
+      if (!guard.ok) return refusalResponse(guard, OPERATOR_REFUSALS);
+      const form = await readForm(request);
+      if (!form) return notAFormResponse();
+      try {
+        const reassigned = await deps.connections.reassign(
+          auditActorId(guard.principal),
+          connectionId,
+          stringField(form, 'owner_kind') === 'group'
+            ? { kind: 'group', groupId: stringField(form, 'owner_group') }
+            : { kind: 'user', email: stringField(form, 'owner_email') },
+        );
+        return await redirectWithNotice(guard.principal, OWNERLESS_CONNECTIONS_PAGE, {
+          tone: 'success',
+          title: `${reassigned.displayName}: owner reassigned`,
+          lines: [
+            reassigned.status === 'expired'
+              ? 'The connection is expired: its new owner must reconnect it.'
+              : 'The connection is active again; its new owner may share, reconnect, transfer or revoke it.',
+          ],
+        });
+      } catch (err) {
+        return redirectWithNotice(
+          guard.principal,
+          OWNERLESS_CONNECTIONS_PAGE,
+          failureNotice(err, 'Not reassigned'),
         );
       }
     },

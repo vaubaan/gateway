@@ -1,0 +1,60 @@
+/**
+ * Local groups (spec §0 "Group", §4.2 Administration, §11.2): the operator's
+ * table of groups for an IdP that provides none, merged with the IdP-sourced
+ * ones at every membership read. Built once by the composition root as
+ * `root.groups`. Handbook: docs/handbook/authority.md.
+ */
+import type { Authenticator } from '../auth/authenticator';
+import type { MembershipSettler } from '../authority';
+import type { InstanceConfig } from '../config/types';
+import type { ConnectionsModule } from '../connections';
+import type { Logger } from '../logging';
+import type { Store } from '../store';
+import { systemClock, type Clock } from '../store/clock';
+import { createGroupHandlers, type GroupHandlers } from './handlers';
+import { GroupService } from './service';
+
+export interface GroupsModuleDeps {
+  readonly config: Pick<InstanceConfig, 'publicUrl' | 'admin'>;
+  readonly store: Store;
+  readonly membership: Pick<MembershipSettler, 'afterRemoval'>;
+  readonly connections: Pick<ConnectionsModule, 'notices'>;
+  readonly authenticator: Authenticator;
+  readonly logger: Logger;
+  readonly clock?: Clock;
+}
+
+export interface GroupsModule {
+  readonly service: GroupService;
+  readonly handlers: GroupHandlers;
+}
+
+export function createGroupsModule(deps: GroupsModuleDeps): GroupsModule {
+  const logger = deps.logger.child({ component: 'groups' });
+  const service = new GroupService({
+    store: deps.store,
+    membership: deps.membership,
+    adminGroup: deps.config.admin.group,
+    audit: deps.store.auditWriter,
+    clock: deps.clock ?? systemClock,
+    logger,
+  });
+  const handlers = createGroupHandlers({
+    publicUrl: deps.config.publicUrl,
+    authenticator: deps.authenticator,
+    groups: service,
+    notices: deps.connections.notices,
+    logger,
+  });
+  return { service, handlers };
+}
+
+export { GROUP_ERROR_CODES, GROUP_ERROR_MESSAGES, GroupError, type GroupErrorCode } from './errors';
+export { createGroupHandlers, GROUPS_PAGE, type GroupHandlers } from './handlers';
+export {
+  GROUP_NAME_MAX_LENGTH,
+  GroupService,
+  type GroupServiceDeps,
+  type GroupView,
+  type MemberRemoval,
+} from './service';

@@ -47,11 +47,21 @@ const AUTHENTICATING_HANDLERS: readonly string[] = [
   'connections.handlers.discover',
   'connections.handlers.revoke',
   'connections.handlers.updateResource',
+  // `transfer` (connections) and the share acts (`src/server/shares/handlers.ts`): `guardMutation`
+  // first, like the others.
+  'connections.handlers.transfer',
+  'shares.handlers.share',
+  'shares.handlers.revoke',
 ];
 const DELEGATION = /\(await getRoot\(\)\)\.([a-zA-Z]+\.handlers\.[a-zA-Z]+)\(request\b/g;
 
 /** Values for every dynamic segment of the surface; none names an existing object. */
-const PARAMS = { id: 'no-such-id', provider: 'no-such-provider', resourceId: 'no-such-resource' };
+const PARAMS = {
+  id: 'no-such-id',
+  provider: 'no-such-provider',
+  resourceId: 'no-such-resource',
+  shareId: 'no-such-share',
+};
 
 function isNeedsUser(outcome: Outcome): boolean {
   if (outcome.kind !== 'returned') return false;
