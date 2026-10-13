@@ -25,8 +25,9 @@ date: 2026-10-13
 > [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md).
 >
 > **Section numbers.** §1 to §4bis, §7, §8, §12 and §14 keep the numbers
-> and subjects of the earlier text, because code, catalogs and other
-> documents cite them. §5, §6, §9, §10, §11, §13, §15 and §16 carry new
+> and subjects of the earlier text at the top level, because code,
+> catalogs and other documents cite them; so do §3.1, §3.3, §4.3 (the
+> mandatory fallback), §4.4 and §7.2. §5, §6, §9, §10, §11, §13, §15 and §16 carry new
 > content: what stood there described mechanisms v5 does not have (§13).
 
 ## 0. The idea — accepted risks, not granted capabilities
@@ -119,8 +120,9 @@ Each entity declares:
 Cardinality is not a field of a slice. When the difference between "one"
 and "many" changes the risk, the plugin makes it visible in the slice
 itself, with a literal marker the catalog can match exactly: Supabase
-emits `row[one]` for a bounded write and `row[bulk]` for an unbounded
-one, and two catalog entries match one each.
+emits `object[one]` for a write on one stored object and `object[bulk]`
+for a write on a whole bucket, and a different catalog entry matches
+each.
 
 A plugin may also emit **virtual leaves**: path segments that are not
 entities but name an act the catalog must tell apart. GitHub emits
@@ -157,14 +159,18 @@ the provider's handbook
 Environment is not an axis beside the data model; it is carried by one of
 its entities, and which one depends on the provider:
 
-| Provider | Carrier of the environment                              |
-| -------- | ------------------------------------------------------- |
-| Supabase | the project (one project per environment)               |
-| Vercel   | the `env` entity under a project (`prod`, `preview`, …) |
-| Railway  | the project, and its native environment entity          |
-| Stripe   | the mode of the account (`test`, `live`)                |
-| SSH      | the host                                                |
-| GitHub   | the branch, in the data model only (see §6)             |
+| Provider       | Carrier of the environment                                       |
+| -------------- | ---------------------------------------------------------------- |
+| Supabase       | the project (one project per environment)                        |
+| Vercel         | the `env` entity under a project (`prod`, `preview`, …)          |
+| Railway        | the `environment` entity, identified by the label of the project |
+| Stripe         | the mode of the account (`test`, `live`)                         |
+| Upstash Redis  | the database                                                     |
+| Resend         | the sending domain, and the segment                              |
+| SSH            | the host                                                         |
+| Gmail          | the mailbox                                                      |
+| GitHub         | the branch, in the data model only (see §6)                      |
+| Cloudflare DNS | none: no entity carries an environment                           |
 
 How a slice gets its environment at call time is §6.
 
@@ -205,7 +211,7 @@ action   ::= 'R' | 'W'
 # emitted by a plugin for one call
 github.repo[acme/api].branch[main].merge-into.W
 github.repo[acme/api].branch[feature/login].file[src/auth.ts].W
-supabase.project[abcd1234].schema[public].table[users].row[bulk].W
+supabase.project[abcd1234].schema[any].table[any].row[bulk].W
 vercel.project[prj_1].env[prod].env-var[API_KEY].W
 
 # patterns of a catalog
@@ -263,7 +269,7 @@ Entries may overlap, and that is deliberate. One slice may touch several
 entries (a broad read risk and a narrower one for sensitive files), and
 all of them must be accepted. Only the fallback behaves differently.
 
-An extract of the GitHub catalog:
+An abridged extract of the GitHub catalog:
 
 ```yaml
 - id: github.feature-branch-write
@@ -391,7 +397,9 @@ production resource is refused (§8).
 
 A catalog ships **at least one preset**: a named list of `RiskId`s of
 that catalog, each with a default quota, rate limit and gate, plus a
-label and a one-line description. A preset pre-fills the policy of a
+label and a one-line description. A preset may name an env-scoped risk
+without an environment; the entry then stands for that risk in each
+environment the mission can reach. A preset pre-fills the policy of a
 mission for one connection; what is stored is always the resulting
 explicit list ([vaubaan-gateway](./vaubaan-gateway.md) §3.2).
 
@@ -427,7 +435,10 @@ nobody may raise.
 - **Speed and volume are bounded by the mission**, per accepted risk: a
   quota per period and a rate limit per sliding window
   ([vaubaan-gateway](./vaubaan-gateway.md) §3.2). The rate limit is the
-  one speed mechanism; there is no second counter.
+  one speed mechanism of the risk model. The gateway also limits the
+  number of requests a mission may send to its endpoint, whatever they
+  touch; that protects the instance and is not part of this model
+  ([vaubaan-gateway](./vaubaan-gateway.md) §6).
 - **One catalog limit is applied:** the per-minute ceiling of
   `infra_limits`. A mission cannot be issued with a rate limit above the
   ceiling of the risk it applies to.
@@ -562,6 +573,10 @@ Rules:
   carry the call alone, exactly where the catalog says it must not go.
 - **No step-up.** The decision does not wait, ask or widen. The mission
   is not modified by a call.
+- **One code.** Every refusal of this step carries the code
+  `risk-not-accepted`, including the two gaps and the environment case;
+  the list of missing risks is empty for a gap. Only the plugin's own
+  refusal carries no code.
 
 The refusal `risk-not-accepted` carries the missing risks, the slices
 executed, and a hint for the agent: ask the mission creator to issue the
@@ -612,7 +627,8 @@ This model stops at "allowed". What v5 adds on top, per accepted risk:
   call counts against none;
 - a **gate**, `auto` or `approval`. Under `approval`, each call must be
   approved by the mission creator before it runs, for these exact
-  arguments.
+  arguments, unless the creator opened the gate for the rest of the
+  period.
 
 These are defined in [vaubaan-gateway](./vaubaan-gateway.md) §3.2 to
 §3.5. They never change which risks a call touches.
@@ -693,7 +709,7 @@ counterpart here: those mechanisms do not exist in v5.
 ## 15. What is checked mechanically
 
 **When a catalog is loaded**, at startup. Any finding stops the gateway,
-listing every problem with its location:
+and the problems found are reported with their location:
 
 - unknown fields; a missing or malformed field;
 - an id that is not `<provider>.<name>` of this provider, a duplicate id,
@@ -728,6 +744,11 @@ does not enforce (§4bis).
   need the plugin to derive the environment from the branch.
 - **Explicit deny.** Not part of v5. The decision still accepts an
   explicit list of denied risks as an input, always empty.
+- **Identifier characters.** The grammar of §3.1 is that of the written
+  form. A plugin builds its slices directly and may put in an identifier
+  a character the written form does not accept (an email address); such a
+  slice matches and is audited, but its written form cannot be read back.
+  The two should be one set.
 
 ---
 

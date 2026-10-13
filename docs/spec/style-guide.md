@@ -113,8 +113,9 @@ of each theme their small differences in lightness.
 
 A status is always used as a **pair** of semantic tokens, background and
 foreground: `accent-warning-bg` with `accent-warning-fg`. In the light
-theme the pair is the lightest step under the darkest; in the dark theme
-the reverse. No component references a family step directly.
+theme the pair is step 50 under step 900; in the dark theme, step 900
+under step 200. Step 600 is defined and not used by any semantic token.
+No component references a family step directly.
 
 **Primary action.** The primary button is the inverse of the page, not
 an accent: near black on a light page, near white on a dark one
@@ -142,10 +143,14 @@ what applies when the attribute is absent. There is no switch (§7.2).
 
 ### 2.4 Typography
 
-| Token       | Family     | Use                                                          |
-| ----------- | ---------- | ------------------------------------------------------------ |
-| `font-sans` | Geist Sans | all interface text                                           |
-| `font-mono` | Geist Mono | technical identifiers: refs, `RiskId`s, slices, tokens, code |
+| Family     | Use                                                          |
+| ---------- | ------------------------------------------------------------ |
+| Geist Sans | all interface text                                           |
+| Geist Mono | technical identifiers: refs, `RiskId`s, slices, tokens, code |
+
+The two families are not tokens of the root style sheet: they are made
+available by the font package as two variables, which the global styles
+and the components reference.
 
 Both families are bundled with the application; the system fonts are the
 fallback.
@@ -233,7 +238,7 @@ globally.
 | **Card**                | raised surface with a hairline; optional header with a title, and a body                                      |
 | **Badge**               | tones `neutral`, `info`, `success`, `warning`, `danger`; an optional monospace form for identifiers           |
 | **Banner**              | same five tones; optional title; in the flow of the page, not dismissible                                     |
-| **Table**               | head on a sunken surface, hairline between rows, row highlight on hover                                       |
+| **Table**               | head on a sunken surface, hairline between rows                                                               |
 | **Code**                | inline technical text in the monospace family                                                                 |
 | **Layout**              | the page container, and a vertical stack with a gap taken from the space scale                                |
 | **Danger confirmation** | a modal for terminal actions: the user types a given phrase before the action is enabled; Escape cancels      |
@@ -309,12 +314,22 @@ Stated so that nobody takes a rule for a fact:
 
 - **Reduced motion** (§5) is not handled.
 - **The small button** is 26 px high, under the 32 px target (§5).
-- **Raw values remain** in component styles: paddings and heights of
-  buttons, badges and table cells are written in pixels rather than with
-  space tokens; the backdrop of the danger confirmation is a raw
-  translucent black; text selection uses primitive grays directly.
+- **Raw values remain.** Paddings, heights and a few font sizes are
+  written in pixels rather than with tokens in the styles of buttons,
+  badges, inputs, banners, code and table cells, and in the style sheets
+  of the missions, audit and connections screens. Modal backdrops are a
+  raw translucent black. Text selection uses primitive grays directly.
+- **A second modal exists inside a screen**: the dialog that reveals a
+  mission token is built by the missions screen, not from a primitive. It
+  does not take focus when it opens and does not close on Escape (§5).
 - **The danger confirmation** takes focus and closes on Escape, but does
-  not trap focus inside itself.
+  not trap focus inside itself; it is styled inline and builds its own
+  text input instead of using the input primitive. The vertical stack is
+  styled inline too (§3.1).
+- **The overlay surface and the shadows are not used**: both modals sit on
+  the raised surface (§2.6).
+- **Table rows do not highlight on hover**: the rule is written and never
+  applies.
 - **No contrast probe and no gallery** (§6).
 - **The dark theme** is defined but not reachable from the interface
   (§2.3).

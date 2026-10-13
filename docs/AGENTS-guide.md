@@ -52,9 +52,12 @@ Rules that follow from it:
 - **A decision gets an ADR.** One file per decision under
   `docs/decisions/<slug>.md`, no number in the name, with frontmatter
   (`title`, `status: accepted`, `date`) and four sections: Context,
-  Decision, Consequences, Rejected alternatives. An ADR is not edited
-  afterwards; a later ADR extends or supersedes it, or a dated amendment is
-  added at its top.
+  Decision, Consequences, Rejected alternatives. A later ADR extends or
+  supersedes an earlier one. A refinement of a current ADR is a dated
+  `## Amendment` section added at its end, after the rejected alternatives,
+  with a one-line pointer at the top
+  ([rule](decisions/legacy-status-of-v4-adrs-and-handbooks.md)). ADRs from
+  before the on-prem version are never edited.
 - **A handbook follows its code.** Each handbook lists the files it
   describes in a `tracks:` list in its frontmatter and carries a
   `last_synced` date. When you change a tracked file, read the handbook and
@@ -75,8 +78,7 @@ linked.
   are explicit lists of `RiskId`. No wildcard, no sentinel, no reference to
   a preset in anything stored. "Select all" in the interface records the
   list as it is at that moment.
-- **Nothing hard-coded.** No URL, secret, project reference or provider
-  name in code. Configuration comes from the environment or the mounted
+- **Nothing hard-coded.** No URL, secret or project reference in code. Configuration comes from the environment or the mounted
   file, through the configuration module; a missing key stops startup with
   a message naming it ([configuration](handbook/configuration.md)).
 - **One list of providers.** Every list of providers is derived from the

@@ -2,16 +2,16 @@
 
 Vaubaan Gateway is a server you install on your own network so that coding
 agents can use your cloud services (GitHub, Supabase, Vercel, Stripe and
-others) through MCP without ever holding a credential. A person issues a
+others) through MCP without being handed your credentials. A person issues a
 **mission**: the resources the agent may touch, the risks they accept, how
 many times and how fast each may be taken, and which actions they want to
 approve one by one. The gateway checks every tool call against the mission,
-runs it with a credential that never leaves the instance, and writes an audit
+runs it with a credential that stays on the instance, and writes an audit
 entry, allowed or refused.
 
 ## Status
 
-**Pre-release.** No version is tagged, no image is published, and the
+**Pre-release.** No version of this code base is tagged, no image is published, and the
 software has not yet been run in production; the first real deployment is
 still to be done ([cutover handbook](docs/handbook/cutover-from-v4.md)).
 Expect breaking changes until a `v2.0.0` tag exists. This code base is
@@ -61,8 +61,9 @@ tour: [demo mode](docs/handbook/demo-mode.md).
 ### Install an instance
 
 Needs Docker with Compose v2, a DNS name pointing at the host, and ports 80
-and 443 reachable (the bundled proxy obtains the TLS certificate). You also
-need an OpenID Connect client at your identity provider.
+and 443 reachable (the bundled proxy obtains the TLS certificate), plus
+Node.js on the host for the key-generation script. You also need an OpenID
+Connect client at your identity provider.
 
 ```bash
 cp deploy/config/.env.example deploy/config/.env
@@ -123,7 +124,7 @@ and configure your identity provider.
 │  stripe, resend, cloudflare-dns,            sessions and counters,       │
 │  upstash-redis, ssh, gmail (experimental)   requests, audit              │
 └──────────────────────────────────────────────────────────────────────────┘
-       │ ephemeral or decrypted credential, never returned to the agent
+       │ ephemeral or decrypted credential, used for the call
        ▼
    provider APIs
 ```
@@ -140,9 +141,14 @@ request is answered. Each is refused by kind at the other two, so an agent
 can neither widen its own mission nor approve its own action.
 
 **Refusals are structured.** `risk-not-accepted`, `budget-exhausted`,
-`approval-required` and the others tell the agent what happened and carry
-the URL where the mission's creator can decide. The gateway never holds a
-call waiting.
+`approval-required` and the others tell the agent what happened and what to
+do. An exhausted budget and an action to approve carry the URL where the
+mission's creator decides. The gateway never holds a call waiting.
+
+**One named exception to "no credential".** A few tools exist to hand the
+agent a short-lived token, such as a GitHub installation token to clone or
+push. Each is a risk of its own in the catalog, refused unless the mission
+accepts it.
 
 **Risks, not scopes.** Each plugin ships a catalog of named risks
 (`github.merge-protected`, `supabase[staging].migration-write`) and presets
