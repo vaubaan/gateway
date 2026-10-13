@@ -505,7 +505,16 @@ export class ConnectionService {
         resources = await this.discoverWith(resolved.plugin, this.deps.broker.contextOf(resolved));
       } catch (err) {
         if (!(err instanceof UpstreamAuthError)) throw err;
-        resolved = await this.deps.broker.refresh(connection.id);
+        try {
+          resolved = await this.deps.broker.refresh(connection.id);
+        } catch (refreshErr) {
+          if (!(refreshErr instanceof UpstreamAuthError)) throw refreshErr;
+          // Keep the provider's own words: they say what is wrong with the credential.
+          throw new UpstreamAuthError(
+            `${err.message} — the credential could not be refreshed, the connection is now expired; reconnect it`,
+            err.upstreamStatus,
+          );
+        }
         resources = await this.discoverWith(resolved.plugin, this.deps.broker.contextOf(resolved));
       }
       return await this.storeDiscovery(connection, resolved.plugin, resources);

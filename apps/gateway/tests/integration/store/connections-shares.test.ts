@@ -165,6 +165,140 @@ describe('connections repository', () => {
     expect(await store.connections.getResource(a.id)).toEqual(second[0]);
     await expect(store.connections.setResourceEnv('missing', null)).rejects.toThrow(/not found/);
   });
+
+  it('merges a discovery without touching owner edits, and never deletes (P1.4)', async () => {
+    const c = await store.connections.create({
+      provider: 'resend',
+      owner: { kind: 'user', id: owner },
+      displayName: 'x',
+      credential: null,
+    });
+    const first = await store.connections.syncDiscoveredResources(c.id, [
+      {
+        ref: 'mail.acme.com',
+        displayName: 'mail.acme.com (pending)',
+        metadata: { kind: 'domain', status: 'pending', internal_domains: [] },
+      },
+      { ref: 'acct:live', displayName: 'Acme (live)', env: 'live' },
+      { ref: 'gone', displayName: 'Gone soon' },
+      { ref: 'gone', displayName: 'listed twice: the first wins' },
+    ]);
+    expect(first.map((r) => [r.ref, r.env, r.envSource, r.hidden, r.staleSince])).toEqual([
+      ['acct:live', 'live', 'plugin', false, null],
+      ['gone', null, 'owner', false, null],
+      ['mail.acme.com', null, 'owner', false, null],
+    ]);
+    const live = first[0]!;
+    const gone = first[1]!;
+    const domain = first[2]!;
+    expect(gone.displayName).toBe('Gone soon');
+    expect(domain.metadata).toEqual({ kind: 'domain', status: 'pending', internal_domains: [] });
+    expect(domain.ownerMetadata).toBeNull();
+
+    await store.connections.setResourceEnv(domain.id, 'prod');
+    await store.connections.setResourceDisplayName(domain.id, 'Transactional');
+    await store.connections.setResourceHidden(gone.id, true);
+    await store.connections.setResourceOwnerMetadata(domain.id, { internal_domains: ['acme.com'] });
+
+    t.clock.advance(60_000);
+    const second = await store.connections.syncDiscoveredResources(c.id, [
+      {
+        ref: 'mail.acme.com',
+        displayName: 'mail.acme.com',
+        metadata: { kind: 'domain', status: 'verified', internal_domains: [] },
+      },
+      { ref: 'acct:live', displayName: 'Acme Inc (live)', env: 'live' },
+    ]);
+    expect(second).toHaveLength(3);
+    expect(second.find((r) => r.id === domain.id)).toMatchObject({
+      env: 'prod',
+      envSource: 'owner',
+      displayName: 'Transactional',
+      displayNameEdited: true,
+      metadata: { kind: 'domain', status: 'verified', internal_domains: ['acme.com'] },
+      ownerMetadata: { internal_domains: ['acme.com'] },
+      discoveredAt: '2026-10-13T09:01:00.000Z',
+      staleSince: null,
+    });
+    expect(second.find((r) => r.id === live.id)).toMatchObject({
+      env: 'live',
+      envSource: 'plugin',
+      displayName: 'Acme Inc (live)',
+    });
+    expect(second.find((r) => r.id === gone.id)).toMatchObject({
+      hidden: true,
+      staleSince: '2026-10-13T09:01:00.000Z',
+      discoveredAt: '2026-10-13T09:00:00.000Z',
+    });
+
+    // The plugin stops labelling: the label stays and becomes the owner's to edit.
+    const third = await store.connections.syncDiscoveredResources(c.id, [
+      { ref: 'acct:live', displayName: 'Acme Inc' },
+      { ref: 'gone', displayName: 'Back again' },
+    ]);
+    expect(third.find((r) => r.id === live.id)).toMatchObject({ env: 'live', envSource: 'owner' });
+    expect(third.find((r) => r.id === gone.id)).toMatchObject({ staleSince: null, hidden: true });
+
+    // Handing the name back to discovery, and clearing the owner metadata.
+    await store.connections.setResourceDisplayName(domain.id, null);
+    await store.connections.setResourceOwnerMetadata(domain.id, null);
+    const fourth = await store.connections.syncDiscoveredResources(c.id, [
+      { ref: 'mail.acme.com', displayName: 'mail.acme.com', metadata: { status: 'verified' } },
+    ]);
+    expect(fourth.find((r) => r.id === domain.id)).toMatchObject({
+      displayName: 'mail.acme.com',
+      displayNameEdited: false,
+      metadata: { status: 'verified' },
+      ownerMetadata: null,
+    });
+    await expect(store.connections.setResourceHidden('missing', true)).rejects.toThrow(/not found/);
+    await expect(store.connections.setResourceDisplayName('missing', 'x')).rejects.toThrow(
+      /not found/,
+    );
+    await expect(store.connections.syncDiscoveredResources('missing', [])).rejects.toThrow(
+      /not found/,
+    );
+  });
+
+  it('refreshes, expires, reconnects and revokes without ever resurrecting a revoked connection (P1.4)', async () => {
+    const c = await store.connections.create({
+      provider: 'supabase',
+      owner: { kind: 'user', id: owner },
+      displayName: 'x',
+      credential: 'token-1',
+    });
+
+    expect(
+      await store.connections.refreshCredential(c.id, 'token-2', '2027-01-01T00:00:00.000Z'),
+    ).toBe(true);
+    expect(await store.connections.getCredential(c.id)).toBe('token-2');
+    expect((await store.connections.getById(c.id))?.credentialExpiresAt).toBe(
+      '2027-01-01T00:00:00.000Z',
+    );
+
+    expect(await store.connections.markExpired(c.id)).toBe(true);
+    expect(await store.connections.markExpired(c.id)).toBe(false);
+    // An expired connection is not refreshed behind the owner's back…
+    expect(await store.connections.refreshCredential(c.id, 'token-3')).toBe(false);
+    expect(await store.connections.getCredential(c.id)).toBe('token-2');
+    // …the owner reconnects it.
+    expect(await store.connections.reconnect(c.id, 'token-4')).toBe(true);
+    expect(await store.connections.getById(c.id)).toMatchObject({ status: 'active' });
+
+    const revoked = await store.connections.revoke(c.id);
+    expect(revoked).toMatchObject({
+      status: 'revoked',
+      keyVersion: null,
+      credentialExpiresAt: null,
+    });
+    expect(revoked.revokedAt).not.toBeNull();
+    expect(await store.connections.getCredential(c.id)).toBeNull();
+    expect(await store.connections.reconnect(c.id, 'token-5')).toBe(false);
+    expect(await store.connections.refreshCredential(c.id, 'token-5')).toBe(false);
+    expect(await store.connections.markExpired(c.id)).toBe(false);
+    expect((await store.connections.getById(c.id))?.status).toBe('revoked');
+    await expect(store.connections.revoke('missing')).rejects.toThrow(/not found/);
+  });
 });
 
 describe('shares repository', () => {
