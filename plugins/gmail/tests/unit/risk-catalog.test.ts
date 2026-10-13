@@ -195,14 +195,14 @@ function syntheticArgsForTool(tool: string): Array<Record<string, unknown>> {
     case 'gmail__search_threads':
       return [
         // discriminating `from:` — fires from-zone[automated].
-        { q: 'from:no-reply@github.com' },
+        { q: 'from:no-reply@vendor.com' },
         // discriminating `from:` internal.
         { q: 'from:colleague@myorg.com' },
         // unknown sender → from-zone[unknown].
         { q: 'from:random@random.io' },
         // not bounded by a positive from: → bulk-marker + from-zone[unknown].
         { q: 'is:unread' },
-        { q: 'from:no-reply@github.com OR newer_than:3650d' },
+        { q: 'from:no-reply@vendor.com OR newer_than:3650d' },
         // sensitive label.
         { q: 'label:LEGAL' },
       ];

@@ -600,7 +600,9 @@ export class MissionService {
       kind: 'admin',
       ts: toIso(this.deps.clock.now()),
       user_id: user.id,
-      act: 'mission-rotated',
+      // The same rule as `MissionTeamService.generateToken`, the other way a creator gets
+      // a token of their own: a first token is issued, a replacement is a rotation.
+      act: previous ? 'mission-rotated' : 'mission-token-issued',
       object: { type: 'mission', id: mission.id },
       before: previous ? { token_prefix: previous.prefix } : null,
       after: { token_prefix: token.prefix, token_kind: 'member', holder: user.id },
