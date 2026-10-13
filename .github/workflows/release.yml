@@ -1,0 +1,393 @@
+name: release
+
+# Publishes a release of the gateway. Policy and procedure:
+# docs/workflow/coding-workflow.md ("Release"); decision: the amendment "Release"
+# of docs/decisions/repository-layout-and-contribution-workflow.md.
+#
+#   push of a tag v2.x.y   the real thing: gates, image for linux/amd64 and
+#                          linux/arm64 on ghcr.io, SBOM, provenance attestation,
+#                          GitHub release with the CHANGELOG.md section as body.
+#   workflow_dispatch      a dry run of the selected ref: same plan, same gates,
+#                          same image build, smoke test and SBOM on both
+#                          architectures. The three jobs that hold a write
+#                          permission (push, publish, release) are skipped, so
+#                          nothing is pushed, attested, tagged or released.
+#
+# Actions are pinned by commit; the comment gives the version. Bump both together.
+
+on:
+  push:
+    tags: ['v2.*.*']
+  workflow_dispatch:
+
+# A release is never cancelled halfway; a second run of the same ref waits.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+# Nothing by default; every job states what it needs.
+permissions: {}
+
+env:
+  # The only event that publishes. Jobs repeat the expression in `if:` because
+  # `env` is not available there.
+  PUBLISH: ${{ github.event_name == 'push' && github.ref_type == 'tag' }}
+  # Pre-releases may be cut from the integration branch until the cutover.
+  RELEASE_BRANCH: main
+  PRERELEASE_BRANCH: v5
+
+jobs:
+  # What is about to ship, decided once: version, pre-release or not, image
+  # tags, release notes. Refuses a tag that does not name the version of
+  # package.json, that is not the highest release, whose CHANGELOG.md section is
+  # missing or still titled "Unreleased", or whose commit is not on a release
+  # branch.
+  plan:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.plan.outputs.version }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
+      image_tags: ${{ steps.plan.outputs.image_tags }}
+      image: ${{ steps.names.outputs.image }}
+      commit: ${{ steps.names.outputs.commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # every tag and both release branches
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22'
+      - name: Plan the release
+        id: plan
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if [ "$PUBLISH" = "true" ]; then
+            git tag --list 'v*' | node scripts/release-plan.mjs --tag "$TAG" --notes-out release-notes.md
+          else
+            node scripts/release-plan.mjs --dry-run --notes-out release-notes.md
+          fi
+      - name: Tagged commit is on a release branch
+        if: env.PUBLISH == 'true'
+        env:
+          PRERELEASE: ${{ steps.plan.outputs.prerelease }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          branches=("$RELEASE_BRANCH")
+          if [ "$PRERELEASE" = "true" ]; then branches+=("$PRERELEASE_BRANCH"); fi
+          for branch in "${branches[@]}"; do
+            if git rev-parse --verify --quiet "refs/remotes/origin/${branch}" >/dev/null \
+              && git merge-base --is-ancestor HEAD "refs/remotes/origin/${branch}"; then
+              echo "The commit of ${TAG} is on ${branch}."
+              exit 0
+            fi
+          done
+          echo "::error title=Release refused::The commit of ${TAG} is on none of: ${branches[*]}. Release tags are cut from ${RELEASE_BRANCH} (pre-releases: also ${PRERELEASE_BRANCH})."
+          exit 1
+      - name: Image name and commit stamp
+        id: names
+        run: |
+          # ghcr.io/<owner>/<repository>, lower case as the registry requires.
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >>"$GITHUB_OUTPUT"
+          # The seven characters /healthz answers (apps/gateway/next.config.ts).
+          echo "commit=${GITHUB_SHA:0:7}" >>"$GITHUB_OUTPUT"
+      - name: Summary
+        env:
+          VERSION: ${{ steps.plan.outputs.version }}
+          PRERELEASE: ${{ steps.plan.outputs.prerelease }}
+          IMAGE_TAGS: ${{ steps.plan.outputs.image_tags }}
+          IMAGE: ${{ steps.names.outputs.image }}
+        run: |
+          {
+            if [ "$PUBLISH" = "true" ]; then echo "## Release ${VERSION}"; else echo "## Dry run of ${VERSION} (nothing is published)"; fi
+            echo
+            echo "- Pre-release: ${PRERELEASE}"
+            echo "- Image: \`${IMAGE}\`, tags: $(echo "$IMAGE_TAGS" | paste -sd' ' -)"
+            echo
+            echo "### Release notes"
+            echo
+            cat release-notes.md
+          } >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-notes
+          path: release-notes.md
+          if-no-files-found: error
+          retention-days: 7
+
+  # The same gates as a pull request, by construction: ci.yml itself (check,
+  # e2e, docker smoke), called on the released commit.
+  gates:
+    needs: plan
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  # The image of the release, built natively on each architecture (no
+  # emulation), then the container smoke test on it: /healthz answers the
+  # version and the commit being released, and argon2 and better-sqlite3 — the
+  # two native addons — load on that architecture. Holds no write permission.
+  image:
+    needs: plan
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            node_arch: x64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            node_arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - name: Build the image (not pushed)
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          push: false
+          load: true
+          tags: vaubaan-gateway:release-${{ matrix.arch }}
+          build-args: |
+            GIT_COMMIT_SHA=${{ github.sha }}
+          provenance: false
+          sbom: false
+          # A release never starts from the layers of another run: no
+          # cache-from. The layers are kept for the `push` job of this run only.
+          cache-to: type=gha,mode=max,scope=release-${{ github.run_id }}-${{ matrix.arch }}
+      - name: Container smoke test
+        env:
+          SMOKE_EXPECT_VERSION: ${{ needs.plan.outputs.version }}
+          SMOKE_EXPECT_COMMIT: ${{ needs.plan.outputs.commit }}
+          SMOKE_EXPECT_ARCH: ${{ matrix.node_arch }}
+        run: deploy/docker/smoke.sh "vaubaan-gateway:release-${{ matrix.arch }}"
+      - name: SBOM of the image (SPDX)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: vaubaan-gateway:release-${{ matrix.arch }}
+          format: spdx-json
+          output-file: vaubaan-gateway-${{ needs.plan.outputs.version }}-linux-${{ matrix.arch }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dry-run-sbom-${{ matrix.arch }}
+          path: vaubaan-gateway-*.spdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # From here on, tags only. Pushes each architecture by digest (no tag yet),
+  # from the layers the `image` job of this run built, with BuildKit's SBOM and
+  # provenance attached; then runs the smoke test again on exactly what the
+  # registry holds. A digest that fails stays untagged.
+  push:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [plan, gates, image]
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+            node_arch: x64
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+            node_arch: arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      packages: write
+    env:
+      IMAGE: ${{ needs.plan.outputs.image }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image labels
+        id: meta
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        with:
+          images: ${{ needs.plan.outputs.image }}
+          flavor: latest=false
+          tags: type=raw,value=${{ needs.plan.outputs.version }}
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          file: deploy/docker/Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_COMMIT_SHA=${{ github.sha }}
+          outputs: type=image,name=${{ needs.plan.outputs.image }},push-by-digest=true,name-canonical=true,push=true
+          provenance: mode=max
+          sbom: true
+          cache-from: type=gha,scope=release-${{ github.run_id }}-${{ matrix.arch }}
+      - name: Container smoke test on the pushed digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          SMOKE_EXPECT_VERSION: ${{ needs.plan.outputs.version }}
+          SMOKE_EXPECT_COMMIT: ${{ needs.plan.outputs.commit }}
+          SMOKE_EXPECT_ARCH: ${{ matrix.node_arch }}
+        run: |
+          docker pull "${IMAGE}@${DIGEST}"
+          deploy/docker/smoke.sh "${IMAGE}@${DIGEST}"
+      - name: SBOM of the pushed image (SPDX)
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ needs.plan.outputs.image }}@${{ steps.build.outputs.digest }}
+          format: spdx-json
+          output-file: vaubaan-gateway-${{ needs.plan.outputs.version }}-linux-${{ matrix.arch }}.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          mkdir -p "${RUNNER_TEMP}/digests"
+          touch "${RUNNER_TEMP}/digests/${DIGEST#sha256:}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          if-no-files-found: error
+          retention-days: 1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-${{ matrix.arch }}
+          path: vaubaan-gateway-*.spdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+  # Assembles the multi-architecture image from the two tested digests under
+  # its version tag, signs a build-provenance attestation for its digest, and
+  # only then moves the aliases of a final release (<major>.<minor>, latest):
+  # `latest` never names an image without an attestation. A version tag never
+  # moves (scripts/release-image-index.sh).
+  publish:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [plan, push]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write # tags the image, stores the attestation next to it
+      id-token: write # the signing certificate of the attestation (Sigstore)
+      attestations: write # records the attestation on the repository
+      artifact-metadata: write # the storage record that links image and attestation
+    outputs:
+      digest: ${{ steps.index.outputs.digest }}
+    env:
+      IMAGE: ${{ needs.plan.outputs.image }}
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: ${{ runner.temp }}/digests
+          pattern: digest-*
+          merge-multiple: true
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Image annotations
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+        env:
+          DOCKER_METADATA_ANNOTATIONS_LEVELS: index
+        with:
+          images: ${{ needs.plan.outputs.image }}
+          flavor: latest=false
+          tags: type=raw,value=${{ needs.plan.outputs.version }}
+      - name: Create the multi-architecture image under its version
+        id: index
+        run: scripts/release-image-index.sh create "$IMAGE" "$VERSION" "${RUNNER_TEMP}/digests"
+      - name: Build-provenance attestation
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ${{ needs.plan.outputs.image }}
+          subject-digest: ${{ steps.index.outputs.digest }}
+          push-to-registry: true
+      - name: Move the aliases of a final release
+        if: needs.plan.outputs.prerelease == 'false'
+        env:
+          DIGEST: ${{ steps.index.outputs.digest }}
+          IMAGE_TAGS: ${{ needs.plan.outputs.image_tags }}
+        run: |
+          aliases=()
+          while IFS= read -r tag; do
+            if [ -n "$tag" ] && [ "$tag" != "$VERSION" ]; then aliases+=("$tag"); fi
+          done <<<"$IMAGE_TAGS"
+          scripts/release-image-index.sh alias "$IMAGE" "$DIGEST" "${aliases[@]}"
+
+  # The GitHub release: body from CHANGELOG.md, the two SBOMs as assets. Runs
+  # last, so a release page never names an image that is not there.
+  release:
+    if: github.event_name == 'push' && github.ref_type == 'tag'
+    needs: [plan, publish]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-notes
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: sbom-*
+          merge-multiple: true
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.plan.outputs.version }}
+          PRERELEASE: ${{ needs.plan.outputs.prerelease }}
+          IMAGE: ${{ needs.plan.outputs.image }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          {
+            echo
+            echo "## Container image"
+            echo
+            echo '```bash'
+            echo "docker pull ${IMAGE}:${VERSION}"
+            echo "gh attestation verify oci://${IMAGE}:${VERSION} --repo ${GITHUB_REPOSITORY}"
+            echo '```'
+            echo
+            echo "Digest \`${DIGEST}\`, for \`linux/amd64\` and \`linux/arm64\`. The SBOM of each architecture (SPDX) is attached below."
+          } >>release-notes.md
+          flags=(--latest)
+          if [ "$PRERELEASE" = "true" ]; then flags=(--prerelease --latest=false); fi
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "Vaubaan Gateway ${VERSION}" \
+            --notes-file release-notes.md \
+            "${flags[@]}" \
+            vaubaan-gateway-*.spdx.json
