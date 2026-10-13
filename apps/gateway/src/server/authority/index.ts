@@ -16,14 +16,7 @@ import { MembershipSettler } from './membership';
 import { MissionGrounds } from './mission-grounds';
 
 export interface AuthorityModuleDeps {
-  readonly store: Pick<
-    Store,
-    'users' | 'groups' | 'connections' | 'shares' | 'missions' | 'audit'
-  > &
-    // Accepted and unused: the grounds entries go to `store.audit` (the idempotent write
-    // reads the trail). Kept so a caller that still hands over its own writer compiles
-    // (`connections/testing.ts`); to drop once that harness passes the store as it is.
-    Partial<Pick<Store, 'auditWriter'>>;
+  readonly store: Pick<Store, 'users' | 'groups' | 'connections' | 'shares' | 'missions' | 'audit'>;
   readonly registry: PluginRegistry;
   readonly logger: Logger;
   readonly clock?: Clock;
