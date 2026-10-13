@@ -692,7 +692,8 @@ describe('previewDraft — notices (never blocking)', () => {
         connection_id: 'conn-acme',
       },
     ]);
-    expect(p.notices[0]?.message).toContain('No environment label on scratch ("Acme main").');
+    // Named as the pages name it (its display name); the ref stays in `resource_refs`.
+    expect(p.notices[0]?.message).toContain('No environment label on Scratch ("Acme main").');
     expect(p.notices[0]?.message).toContain('refused (risk-not-accepted)');
     expect(p.notices[0]?.message).toContain('(staging, prod)');
   });

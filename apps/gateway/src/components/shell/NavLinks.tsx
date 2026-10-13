@@ -17,6 +17,8 @@ export interface NavItem {
   readonly label: string;
   /** Rendered by the server: a count shown after the label. */
   readonly count?: React.ReactNode;
+  /** Current on its own path only, not on the pages under it (an index among siblings). */
+  readonly exact?: boolean;
 }
 
 export function NavLinks({ items }: { items: readonly NavItem[] }) {
@@ -24,7 +26,7 @@ export function NavLinks({ items }: { items: readonly NavItem[] }) {
   return (
     <>
       {items.map((item) => {
-        const current = isCurrentSection(pathname, item.href);
+        const current = item.exact ? pathname === item.href : isCurrentSection(pathname, item.href);
         return (
           <Link
             key={item.href}

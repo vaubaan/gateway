@@ -18,7 +18,11 @@
  *   - Cloudflare DNS — two zones and their records;
  *   - Resend — two sending domains, one segment, emails;
  *   - Upstash Redis — two databases through the Management API, and a few
- *     Redis commands on their REST endpoints.
+ *     Redis commands on their REST endpoints;
+ *   - Vercel — one team and two projects, each with a production and a
+ *     preview deployment and two environment variables: discovery, the
+ *     environment-variable tools of the REST API, the deployment lookup, and
+ *     the rewrapped tools of the remote MCP server answered with canned text.
  *
  * Every provider URL is read off the plugin that calls it (its credential
  * spec or its exported API base), never spelled a second time here.
@@ -30,7 +34,8 @@ import { githubCredential } from '@vaubaan/plugin-github';
 import { RESEND_API_BASE } from '@vaubaan/plugin-resend';
 import { mockFetch, type MockRoute, type RecordedCall } from '@vaubaan/plugin-sdk/testing';
 import { STRIPE_API_BASE } from '@vaubaan/plugin-stripe';
-import { UPSTASH_MANAGEMENT_API } from '@vaubaan/plugin-upstash-redis';
+import { UPSTASH_MANAGEMENT_API, UPSTASH_REST_HOST_SUFFIX } from '@vaubaan/plugin-upstash-redis';
+import { VERCEL_API_BASE, VERCEL_MCP_URL } from '@vaubaan/plugin-vercel';
 
 const random = (bytes = 20): string => randomBytes(bytes).toString('hex');
 const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -600,8 +605,13 @@ export const DEMO_REDIS_DATABASES = [
   { database_id: '7ad1bb0e-a738-4eb6-9f54-e5f1f2a5d4b2', database_name: 'acme-cache-staging' },
 ] as const;
 
-/** REST endpoint of a simulated database: a host under the reserved `.example` TLD. */
-const redisRestUrl = (name: string): string => `https://${name}.upstash.example`;
+/**
+ * REST endpoint of a simulated database. The plugin posts a database token to a host
+ * of Upstash's REST domain and to no other, so the simulated one is named there too;
+ * like every provider URL here it is answered from memory and never dialled.
+ */
+const redisRestHost = (name: string): string => `${name}${UPSTASH_REST_HOST_SUFFIX}`;
+const redisRestUrl = (name: string): string => `https://${redisRestHost(name)}`;
 
 function redisDatabase(database: (typeof DEMO_REDIS_DATABASES)[number]): Record<string, unknown> {
   return {
@@ -610,7 +620,7 @@ function redisDatabase(database: (typeof DEMO_REDIS_DATABASES)[number]): Record<
     region: 'global',
     primary_region: 'eu-west-1',
     read_regions: [],
-    endpoint: `${database.database_name}.upstash.example`,
+    endpoint: redisRestHost(database.database_name),
     rest_url: redisRestUrl(database.database_name),
     rest_token: `demo-rest-${random(12)}`,
     state: 'active',
@@ -680,6 +690,156 @@ function upstashRoutes(): MockRoute[] {
 }
 
 /* ------------------------------------------------------------------------ */
+/* Vercel                                                                    */
+/* ------------------------------------------------------------------------ */
+
+export const DEMO_VERCEL_TEAM = { slug: 'acme', name: 'Acme' } as const;
+
+export const DEMO_VERCEL_PROJECTS = [
+  { id: 'prj_acmeWebStorefront0001', name: 'acme-storefront', framework: 'nextjs' },
+  { id: 'prj_acmeDocsSite00000002', name: 'acme-docs', framework: 'astro' },
+] as const;
+
+type DemoVercelProject = (typeof DEMO_VERCEL_PROJECTS)[number];
+
+/** The two deployments of a project: what is live, and the latest preview. */
+function vercelDeployments(project: DemoVercelProject): Record<string, unknown>[] {
+  const short = project.id.slice(-4);
+  return [
+    {
+      id: `dpl_${short}Production`,
+      name: project.name,
+      url: `${project.name}.vercel.app`,
+      target: 'production',
+      state: 'READY',
+      projectId: project.id,
+      meta: { githubCommitRef: 'main' },
+    },
+    {
+      id: `dpl_${short}Preview`,
+      name: project.name,
+      url: `${project.name}-git-feature-billing-page.vercel.app`,
+      target: 'preview',
+      state: 'READY',
+      projectId: project.id,
+      meta: { githubCommitRef: 'feature/billing-page' },
+    },
+  ];
+}
+
+function vercelEnvVars(project: DemoVercelProject): Record<string, unknown>[] {
+  return [
+    {
+      id: `env_${project.id.slice(-4)}Api`,
+      key: 'API_BASE_URL',
+      type: 'plain',
+      target: ['production'],
+      value: 'https://api.acme.example',
+    },
+    {
+      id: `env_${project.id.slice(-4)}Flag`,
+      key: 'NEXT_PUBLIC_FEATURE_BILLING',
+      type: 'plain',
+      target: ['preview', 'development'],
+      value: 'on',
+    },
+  ];
+}
+
+/** What the remote MCP server answers to one rewrapped tool, as text content. */
+function vercelToolAnswer(name: string, args: Record<string, unknown>): unknown {
+  const project =
+    DEMO_VERCEL_PROJECTS.find((p) => p.id === args.projectId) ?? DEMO_VERCEL_PROJECTS[0];
+  switch (name) {
+    case 'list_teams':
+      return { teams: [{ id: args.teamId ?? 'team_demo', ...DEMO_VERCEL_TEAM }] };
+    case 'list_projects':
+      return { projects: DEMO_VERCEL_PROJECTS };
+    case 'get_project':
+      return { ...project, latestDeployments: vercelDeployments(project) };
+    case 'list_deployments':
+      return { deployments: vercelDeployments(project) };
+    case 'get_deployment':
+      return vercelDeployments(project)[0];
+    case 'get_deployment_build_logs':
+    case 'get_runtime_logs':
+      return { logs: ['Build completed in 41s', 'Ready'] };
+    default:
+      return { simulated: true, tool: name };
+  }
+}
+
+function vercelRoutes(): MockRoute[] {
+  const api = escapeRegExp(VERCEL_API_BASE);
+  const projectOf = (url: string): DemoVercelProject =>
+    DEMO_VERCEL_PROJECTS.find((p) => new URL(url).pathname.includes(`/${p.id}`)) ??
+    DEMO_VERCEL_PROJECTS[0];
+  const deployments = DEMO_VERCEL_PROJECTS.flatMap(vercelDeployments);
+  return [
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/v2/teams/[^/?]+$`),
+      // Whatever team id the connection carries: the demo has one team.
+      respond: (call) => ({
+        id: decodeURIComponent(new URL(call.url).pathname.split('/').pop() ?? ''),
+        ...DEMO_VERCEL_TEAM,
+      }),
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/v10/projects\\?`),
+      body: { projects: DEMO_VERCEL_PROJECTS, pagination: { next: null } },
+    },
+    {
+      method: 'GET',
+      url: new RegExp(`^${api}/v10/projects/[^/?]+/env(\\?|$)`),
+      respond: (call) => ({ envs: vercelEnvVars(projectOf(call.url)) }),
+    },
+    {
+      method: 'POST',
+      url: new RegExp(`^${api}/v10/projects/[^/?]+/env(\\?|$)`),
+      respond: (call) => ({ created: call.json, failed: [] }),
+    },
+    {
+      method: 'DELETE',
+      url: new RegExp(`^${api}/v9/projects/[^/?]+/env/[^/?]+(\\?|$)`),
+      body: {},
+    },
+    {
+      // The lookup that binds a deployment to its project before a tool reads it.
+      method: 'GET',
+      url: new RegExp(`^${api}/v13/deployments/[^/?]+(\\?|$)`),
+      respond: (call) => {
+        const key = decodeURIComponent(new URL(call.url).pathname.split('/').pop() ?? '');
+        return deployments.find((d) => d.id === key || d.url === key) ?? deployments[0];
+      },
+    },
+    {
+      // The remote MCP server: one JSON-RPC exchange, answered as one SSE frame.
+      method: 'POST',
+      url: VERCEL_MCP_URL,
+      headers: { 'Content-Type': 'text/event-stream' },
+      respond: (call) => {
+        const request = call.json as {
+          id?: number;
+          params?: { name?: string; arguments?: Record<string, unknown> };
+        };
+        const answer = vercelToolAnswer(
+          request.params?.name ?? '',
+          request.params?.arguments ?? {},
+        );
+        const frame = {
+          jsonrpc: '2.0',
+          id: request.id ?? null,
+          result: { content: [{ type: 'text', text: JSON.stringify(answer, null, 2) }] },
+        };
+        return `event: message\ndata: ${JSON.stringify(frame)}\n\n`;
+      },
+    },
+  ];
+}
+
+/* ------------------------------------------------------------------------ */
 /* The one `fetch`                                                           */
 /* ------------------------------------------------------------------------ */
 
@@ -715,6 +875,7 @@ export function createDemoProviders(options: DemoProvidersOptions = {}): DemoPro
     ...cloudflareRoutes(),
     ...resendRoutes(),
     ...upstashRoutes(),
+    ...vercelRoutes(),
   ]);
 
   const demoFetch: typeof fetch = async (input, init) => {

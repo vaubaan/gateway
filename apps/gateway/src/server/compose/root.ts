@@ -398,6 +398,7 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     rateLimiter,
     logger,
     fetchClientDocument: deps.clientDocumentFetch,
+    build,
   });
   // After the authorization server: deactivating a user revokes their delegations.
   const users = createUsersModule({

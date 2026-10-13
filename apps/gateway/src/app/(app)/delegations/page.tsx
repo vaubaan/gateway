@@ -3,7 +3,6 @@
  * "Delegations", §4.1 bis): the client holding each delegation, the missions
  * it issued in my name, and its revocation in one click.
  */
-import Link from 'next/link';
 
 import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
@@ -16,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
   Code,
+  Slug,
   Stack,
   type BadgeTone,
 } from '@/components/ui';
@@ -148,7 +148,9 @@ function DelegationCard({ view }: { view: DelegationView }) {
                   <ul className={styles.missions} aria-label="Missions to review">
                     {view.toReview.map((mission) => (
                       <li key={mission.id}>
-                        <Link href={`/missions/${mission.id}`}>{mission.name}</Link>{' '}
+                        <Slug kind="mission" mono={false} href={`/missions/${mission.id}`}>
+                          {mission.name}
+                        </Slug>{' '}
                         <Badge>{mission.status}</Badge>
                       </li>
                     ))}
@@ -171,7 +173,9 @@ function DelegationCard({ view }: { view: DelegationView }) {
               <ul className={styles.missions}>
                 {missions.map((mission) => (
                   <li key={mission.id}>
-                    <Link href={`/missions/${mission.id}`}>{mission.name}</Link>{' '}
+                    <Slug kind="mission" mono={false} href={`/missions/${mission.id}`}>
+                      {mission.name}
+                    </Slug>{' '}
                     <Badge>{mission.status}</Badge>{' '}
                     <span className={styles.muted}>
                       issued in your name <LocalDate ts={mission.createdAt} />

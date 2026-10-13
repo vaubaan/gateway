@@ -46,6 +46,7 @@ import {
   redactDatabases,
   REDACTED_DATABASE_FIELDS,
   UPSTASH_MANAGEMENT_API,
+  UPSTASH_REST_HOST_SUFFIX,
 } from './execute.ts';
 import { upstashRedisTools } from './tools.ts';
 
@@ -77,6 +78,7 @@ export const upstashRedisPlugin = definePlugin({
 export default upstashRedisPlugin;
 
 export {
+  UPSTASH_REST_HOST_SUFFIX,
   basicAuthHeader,
   buildCommand,
   classifyRedisCommands,

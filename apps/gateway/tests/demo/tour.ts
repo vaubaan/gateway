@@ -107,9 +107,10 @@ Things to try
        Cloudflare  API token demo-cloudflare-token-0123456789
        Resend      API key   re_demo_key
        Upstash     email     any address         API key   demo-key
+       Vercel      token     demo-vercel-token   team id   team_demo
        GitHub      opens a simulated installation page: pick an organisation.
-     Any value of the right shape is accepted. Vercel has no simulation:
-     connecting it fails with a message that says so, and nothing is sent.
+     Any value of the right shape is accepted. Supabase and Railway connect
+     through an OAuth app the demo does not configure: the picker says so.
   3. Read what a provider is: Providers -> GitHub. What the plugin connects to,
      then four tabs: its presets side by side against the risks, each risk with
      the reason it is a risk and its six-cell profile, its data model, its

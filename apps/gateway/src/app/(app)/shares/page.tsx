@@ -11,7 +11,8 @@ import styles from '@/components/connections/connections.module.css';
 import { StateBadge } from '@/components/connections/parts';
 import { SeverityBadge } from '@/components/risk/RiskBadges';
 import { RiskIdLink } from '@/components/risk/RiskExplain';
-import { Card, Stack, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
+import { LocalDate } from '@/components/LocalDate';
+import { Card, Slug, Stack, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
 import { currentActor } from '@/lib/connections/session';
 import type { ReceivedShare } from '@/server/shares';
 
@@ -74,7 +75,9 @@ function ReceivedRow({ item }: { item: ReceivedShare }) {
     <Tr>
       <Td>
         <span className={styles.badges}>
-          {item.connection.displayName}
+          <Slug kind="connection" mono={false}>
+            {item.connection.displayName}
+          </Slug>
           <span className={styles.muted}>{item.providerLabel}</span>
           {item.connection.status !== 'active' && <StateBadge status={item.connection.status} />}
         </span>
@@ -97,7 +100,9 @@ function ReceivedRow({ item }: { item: ReceivedShare }) {
           </div>
         </details>
       </Td>
-      <Td className={styles.muted}>{item.share.createdAt.slice(0, 10)}</Td>
+      <Td className={styles.muted}>
+        <LocalDate ts={item.share.createdAt} />
+      </Td>
     </Tr>
   );
 }

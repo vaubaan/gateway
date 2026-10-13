@@ -215,6 +215,8 @@
   font-size: var(--text-xs);
   color: var(--accent-warning-fg);
   display: grid;
+  /* The one column never grows past the form: a long line is cut, not pushed out. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 2px;
 }
 .notices summary {

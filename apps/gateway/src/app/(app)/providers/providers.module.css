@@ -866,18 +866,19 @@
 .panel :is(a, button, summary, [tabindex], tr) {
   scroll-margin-top: calc(var(--bar-height) + var(--space-12));
 }
-/* The description takes what the four other columns leave. */
+/* The description takes what the four other columns leave. The risk column holds a
+   qualified risk id (`github.mint-install-token-clone`) on two lines at most. */
 .colTool {
-  width: 30%;
+  width: 29%;
 }
 .colArgs {
-  width: 17%;
+  width: 16%;
 }
 .colPlane {
-  width: 12%;
+  width: 10%;
 }
 .colRisks {
-  width: 13%;
+  width: 19%;
 }
 .tools .arg {
   white-space: normal;

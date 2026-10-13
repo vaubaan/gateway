@@ -15,6 +15,7 @@ import {
   CardHeader,
   CardTitle,
   Input,
+  Slug,
   Stack,
 } from '@/components/ui';
 import { requireOperator } from '@/lib/auth/session';
@@ -107,7 +108,9 @@ function GroupCard({ view }: { view: GroupView }) {
             <ul aria-label={`Members of ${group.name}`} style={{ margin: 0, paddingLeft: 0 }}>
               {members.map((member) => (
                 <li key={member.id} className={styles.actions} style={{ listStyle: 'none' }}>
-                  <span>{member.email}</span>
+                  <Slug kind="member" mono={false}>
+                    {member.email}
+                  </Slug>
                   {local && (
                     <form
                       method="post"
