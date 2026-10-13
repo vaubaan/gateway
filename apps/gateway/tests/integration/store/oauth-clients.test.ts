@@ -376,7 +376,13 @@ describe('delegations repository — clients, reasons, replay lookups, sweep', (
         });
       }
       const scopeOf = (userId: string | null, allAdmin: boolean) => ({
-        scope: { missionCreatorUserId: userId, connectionOwners: [], allAdmin },
+        scope: {
+          missionCreatorUserId: userId,
+          missionMemberUserId: null,
+          connectionOwners: [],
+          allAdmin,
+          allCalls: false,
+        },
         limit: 10,
       });
       const seenBy = async (userId: string | null, allAdmin = false): Promise<string[]> =>

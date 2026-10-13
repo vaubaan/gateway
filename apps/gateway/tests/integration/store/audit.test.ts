@@ -252,7 +252,13 @@ describe('audit repository', () => {
   });
 
   it('searches call entries by exact agent label', async () => {
-    const scope = { missionCreatorUserId: null, connectionOwners: [], allAdmin: true };
+    const scope = {
+      missionCreatorUserId: null,
+      missionMemberUserId: null,
+      connectionOwners: [],
+      allAdmin: true,
+      allCalls: false,
+    };
     await store.audit.append(adminEntry);
     // Nothing in scope but administrative entries: a label filter matches none of them.
     expect(await store.audit.search({ scope, limit: 10, agentLabel: 'orchestrator' })).toEqual([]);

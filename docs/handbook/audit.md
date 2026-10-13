@@ -49,20 +49,42 @@ apps/gateway/src/app/(app)/
 `root.audit` is the module (`compose/root.ts`). The pages are server components with no
 client code: the filters are a plain `GET` form, paging is a link.
 
-## Who sees what (`scopeOf`, `AuditRepo.search`)
+## Who sees what (`scopeOf`, `standingOn`, `AuditRepo.search`)
 
-`scopeOf(viewer)` turns the person behind the request into the store's `AuditScope`:
+`scopeOf(viewer)` turns the person behind the request into the store's `AuditScope`
+(spec §4.2 "Audit", §8; ADR
+[audit-visibility-members-and-operators](../decisions/audit-visibility-members-and-operators.md)):
 
-| Viewer                       | `missionCreatorUserId` | `connectionOwners`                  | `allAdmin` |
-| ---------------------------- | ---------------------- | ----------------------------------- | ---------- |
-| user                         | their id               | themselves and each of their groups | `false`    |
-| user matching the admin rule | their id               | themselves and each of their groups | `true`     |
-| bootstrap operator           | `null`                 | none                                | `true`     |
+| Viewer                       | `missionCreatorUserId` | `missionMemberUserId` | `connectionOwners`                  | `allAdmin` | `allCalls` |
+| ---------------------------- | ---------------------- | --------------------- | ----------------------------------- | ---------- | ---------- |
+| user                         | their id               | their id              | themselves and each of their groups | `false`    | `false`    |
+| user matching the admin rule | their id               | their id              | themselves and each of their groups | `true`     | `true`     |
+| bootstrap operator           | `null`                 | `null`                | none                                | `true`     | `false`    |
 
-A **member** of a mission is not in this table: the Audit page stays scoped to the
-missions one created and the connections one owns. A member reads the mission's
-**session** ("Mission session view" below), where every call is listed with its holder
-(spec §11.2 "What a member sees").
+- A **member** of a mission reads its entries — calls, acts on it, acts on its requests
+  — for as long as they are a member: the store reads `mission_members` rows whose
+  `removed_at` is null, so a removed member reads none of them, past ones included.
+- An **operator** reads every entry of the instance, calls included.
+- The **bootstrap operator** reads the administrative entries and no call: it is a shared
+  token, not a person, and exists before the first user does.
+
+**Nobody reads arguments.** An entry never holds them. What it holds is their
+fingerprint, an unsalted SHA-256, which can be guessed for low-entropy arguments
+(threat model, A9). `standingOn(viewer, mission, connection)` says what the viewer is
+to an entry they were given:
+
+| Standing      | Who                                                             | Fingerprint                                   |
+| ------------- | --------------------------------------------------------------- | --------------------------------------------- |
+| `responsible` | the creator of the entry's mission, an owner of its connection  | shown                                         |
+| `reader`      | anybody else the scope gave the entry to: a member, an operator | not shown: `arguments_hash: null` in the view |
+
+It is decided entry by entry, from the mission and the connection as they are now, so
+an operator who also created a mission reads the fingerprints of its calls, and a member
+who also owns the connection a call went through reads that call's. For a `reader`,
+`withoutArguments(value, 'reader')` also masks the keys `fingerprint`,
+`arguments_hash` and `arguments_fingerprint` of an administrative entry's `before` /
+`after` (the entries of an approval request carry one). The page prints "fingerprint
+not shown" in the Arguments column.
 
 `AuditViewer` is structurally the `Principal` of `server/auth`, so a page passes
 `currentPrincipal().principal` as is; the groups are the current ones, never a snapshot.
@@ -70,11 +92,13 @@ missions one created and the connections one owns. A member reads the mission's
 `store.audit.search(query)` applies the scope **first**, in SQL, then the filters, then
 the keyset position, so a filter can only narrow what the scope allows:
 
-- a **call** entry is visible when its `mission_id` is a mission the viewer created or its
-  `connection_id` is a connection the viewer (or one of their groups) owns;
-- an **administrative** entry is visible when `allAdmin`, or its object is such a mission
-  (`object_type = 'mission'`), such a connection (`'connection'`), a request of such a
-  mission (`'request'`, resolved through `requests.mission_id`), or a share of such a
+- a **call** entry is visible when `allCalls`, or its `mission_id` is a mission the viewer
+  created or is a current member of, or its `connection_id` is a connection the viewer
+  (or one of their groups) owns;
+- an **administrative** entry is visible when `allAdmin`, or its object is a mission the
+  viewer created or is a member of (`object_type = 'mission'`), a request of such a
+  mission (`'request'`, resolved through `requests.mission_id`), a connection they own
+  (`'connection'`), or a share of such a
   connection (`'share'`, resolved through `shares.connection_id`), or a delegation the
   viewer gave (`'delegation'`, through `delegations.user_id`) — so a user finds in their
   audit a delegation of theirs that an operator or the gateway revoked. Entries about a
@@ -101,10 +125,11 @@ and writes no administrative entry, in either direction: a change no service wat
 visible as refused, then allowed, call entries only. The two acts of one mission
 therefore need not come in pairs.
 
-An operator therefore sees every administrative act but not the calls of other people's
-missions. The statement is plain `IN` subqueries over `missions`, `connections`,
-`requests`, `shares` and `delegations` (`searchStatement` in
-`store/repositories/audit.ts`), the same on Postgres.
+The scope is one predicate, `scopePredicate` in `store/repositories/audit.ts`: plain
+`IN` subqueries over `missions`, `mission_members`, `connections`, `requests`, `shares`
+and `delegations`, the same on Postgres. Each piece carries its own placeholder values
+(`SqlPiece`), so a dimension added to the scope cannot shift the values of another; a
+dimension the scope does not hold is an always-false piece.
 
 ## Filters and paging (`filters.ts`)
 

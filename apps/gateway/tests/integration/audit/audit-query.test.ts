@@ -16,6 +16,7 @@ import {
 import {
   ARGUMENTS_NOT_SHOWN,
   parseAuditQuery,
+  standingOn,
   type AuditCallView,
   type AuditEntryView,
   type AuditFilters,
@@ -25,6 +26,7 @@ import { seedConnection } from '../../../src/server/missions/testing';
 import type { MissionRecord } from '../../../src/server/store/types';
 import {
   ARGUMENT_MARKER,
+  githubDraft,
   issueMission,
   MERGE,
   NO_FILTER,
@@ -49,6 +51,22 @@ describe('audit search: visibility, filters, paging', () => {
   afterEach(async () => {
     await rig.root.close();
   });
+
+  /** A mission Bob creates on a GitHub connection of his own: nothing of Ada's is in it. */
+  async function bobsMission(name = 'Bob own'): Promise<MissionRecord> {
+    const bobs = await seedConnection(rig.root.store, {
+      provider: 'github',
+      owner: { kind: 'user', id: rig.seeded.bob.id },
+      displayName: 'bob-org',
+      resources: [],
+    });
+    const draft = githubDraft(rig);
+    return issueMission(rig, rig.seeded.bob, {
+      ...draft,
+      name,
+      connections: [{ ...draft.connections[0]!, connection_id: bobs.connection.id }],
+    });
+  }
 
   const search = async (
     viewer: AuditViewer,
@@ -130,7 +148,101 @@ describe('audit search: visibility, filters, paging', () => {
 
     expect(calls(await search(userViewer(rig.seeded.bob, false, [group.id])))).toHaveLength(1);
     expect(await search(userViewer(rig.seeded.bob))).toEqual([]);
-    expect(calls(await search(userViewer(rig.operator, true)))).toEqual([]);
+  });
+
+  // ── Members (spec §4.2 "Audit": the missions shared with me) ──────────────
+
+  describe('a member of a mission', () => {
+    const team = () => rig.root.missions.team;
+    const asBob = () => userViewer(rig.seeded.bob);
+
+    it('sees the calls and the acts of a mission shared with them, and nothing of any other mission', async () => {
+      const other = await issueMission(rig, rig.seeded.ada, {
+        ...githubDraft(rig),
+        name: 'Not shared',
+      });
+      await seedCall(rig, mission);
+      await seedCall(rig, other);
+      expect(await search(asBob())).toEqual([]);
+
+      const added = await team().addMember(rig.seeded.ada, mission.id, {
+        email: rig.seeded.bob.email,
+      });
+      expect(added.ok).toBe(true);
+
+      const bob = await search(asBob());
+      expect(calls(bob).map((c) => [c.mission.name, c.tool])).toEqual([
+        ['Ship the billing page', 'github__get_file'],
+      ]);
+      expect(acts(bob).sort()).toEqual(['mission-issued', 'mission-member-added']);
+      expect(JSON.stringify(bob)).not.toContain('Not shared');
+      // The creator's own view is unchanged by the membership.
+      expect(calls(await search(userViewer(rig.seeded.ada)))).toHaveLength(2);
+    });
+
+    it('is never shown arguments, nor their fingerprint: the creator is', async () => {
+      const { entry } = await seedCall(rig, mission);
+      await team().addMember(rig.seeded.ada, mission.id, { email: rig.seeded.bob.email });
+
+      const [asMember] = calls(await search(asBob()));
+      expect(asMember?.arguments_hash).toBeNull();
+      const page = JSON.stringify(await rig.root.audit.query.search(asBob(), NO_FILTER));
+      expect(page).not.toContain(ARGUMENT_MARKER);
+      expect(page).not.toContain(entry.arguments_hash);
+
+      const [asCreator] = calls(await search(userViewer(rig.seeded.ada)));
+      expect(asCreator?.arguments_hash).toBe(entry.arguments_hash);
+    });
+
+    it('sees the requests of the mission without the fingerprint they carry', async () => {
+      await team().addMember(rig.seeded.ada, mission.id, { email: rig.seeded.bob.email });
+      const fingerprint = 'c'.repeat(64);
+      // Exhaust the pull-request quota (2): the third call drops a request.
+      for (let i = 0; i < 2; i++) await seedCall(rig, mission, { risks: [PR] });
+      const refused = await seedCall(rig, mission, { risks: [PR] });
+      if (refused.result.outcome !== 'refused' || !refused.result.request_id) {
+        throw new Error('expected a request');
+      }
+      const request = { id: refused.result.request_id };
+      await rig.root.store.auditWriter.write({
+        kind: 'admin',
+        ts: new Date().toISOString(),
+        user_id: rig.seeded.ada.id,
+        act: 'approval-granted',
+        object: { type: 'request', id: request.id },
+        before: { status: 'open' },
+        after: { status: 'granted', tool: 'github__create_pull_request', fingerprint },
+        delegated_client_id: null,
+      });
+
+      const bob = await search(asBob());
+      const granted = bob.find((e) => e.kind === 'admin' && e.act === 'approval-granted');
+      expect(granted).toMatchObject({
+        after: { status: 'granted', fingerprint: ARGUMENTS_NOT_SHOWN },
+      });
+      const ada = await search(userViewer(rig.seeded.ada));
+      expect(ada.find((e) => e.kind === 'admin' && e.act === 'approval-granted')).toMatchObject({
+        after: { fingerprint },
+      });
+    });
+
+    it('removed from the mission, reads none of it any more — past entries included', async () => {
+      await seedCall(rig, mission);
+      await team().addMember(rig.seeded.ada, mission.id, { email: rig.seeded.bob.email });
+      expect(calls(await search(asBob()))).toHaveLength(1);
+
+      const removed = await team().removeMember(rig.seeded.ada, mission.id, rig.seeded.bob.id);
+      expect(removed.ok).toBe(true);
+      expect(await search(asBob())).toEqual([]);
+      expect(await search(asBob(), { missionId: mission.id })).toEqual([]);
+    });
+
+    it('is offered the mission as a filter value, with the missions they created', async () => {
+      await team().addMember(rig.seeded.ada, mission.id, { email: rig.seeded.bob.email });
+      const own = await bobsMission();
+      const options = await rig.root.audit.query.filterOptions(asBob());
+      expect(options.missions.map((m) => m.id).sort()).toEqual([mission.id, own.id].sort());
+    });
   });
 
   it('administrative entries: an operator sees them all, a user only those on their missions and connections', async () => {
@@ -152,16 +264,120 @@ describe('audit search: visibility, filters, paging', () => {
       'mission-issued',
       'resource-edited',
     ]);
-    // An operator still does not browse the calls of other people's missions.
+    // The bootstrap operator owns nothing and sees the administrative entries, no call.
     await seedCall(rig, mission);
-    expect(calls(await search(userViewer(rig.operator, true)))).toEqual([]);
-    // The bootstrap operator owns nothing and sees the administrative entries.
     expect(acts(await search(BOOTSTRAP)).sort()).toEqual([
       'config-changed',
       'mission-issued',
       'resource-edited',
     ]);
     expect(calls(await search(BOOTSTRAP))).toEqual([]);
+  });
+
+  it('every dimension of the scope at once: created, member of, owned through a group — and nothing else', async () => {
+    // Bob created one mission, is a member of Ada's, and owns through a group a
+    // connection a third mission of Ada's calls through. A fourth mission is nobody's of his.
+    const created = await bobsMission('Created by Bob');
+    await rig.root.missions.team.addMember(rig.seeded.ada, mission.id, {
+      email: rig.seeded.bob.email,
+    });
+    const group = await rig.root.store.groups.getOrCreate('platform', 'idp');
+    await rig.root.store.groups.addMember(group.id, rig.seeded.bob.id);
+    const groupOwned = await seedConnection(rig.root.store, {
+      provider: 'github',
+      owner: { kind: 'group', id: group.id },
+      displayName: 'platform-org',
+      resources: [],
+    });
+    const through = await issueMission(rig, rig.seeded.ada, {
+      ...githubDraft(rig),
+      name: 'Through the group connection',
+    });
+    const unrelated = await issueMission(rig, rig.seeded.ada, {
+      ...githubDraft(rig),
+      name: 'Unrelated',
+    });
+    await seedCall(rig, created, { tool: 'github__get_file' });
+    await seedCall(rig, mission, { tool: 'github__list_branches' });
+    await seedCall(rig, through, {
+      tool: 'github__get_commit',
+      connectionId: groupOwned.connection.id,
+    });
+    await seedCall(rig, unrelated, { tool: 'github__list_tags' });
+
+    const bob = userViewer(rig.seeded.bob, false, [group.id]);
+    const seen = calls(await search(bob));
+    expect(seen.map((c) => c.mission.name).sort()).toEqual([
+      'Created by Bob',
+      'Ship the billing page',
+      'Through the group connection',
+    ]);
+    // The fingerprint follows the standing, entry by entry.
+    const shown: Record<string, boolean> = Object.fromEntries(
+      seen.map((c) => [c.mission.name ?? c.mission.id, c.arguments_hash !== null]),
+    );
+    expect(shown).toEqual({
+      'Created by Bob': true, // creator
+      'Ship the billing page': false, // member only
+      'Through the group connection': true, // owner of the connection, through the group
+    });
+    expect(JSON.stringify(await search(bob))).not.toContain('Unrelated');
+    // Without the group, the connection's calls are gone; the two others stay.
+    expect(
+      calls(await search(userViewer(rig.seeded.bob)))
+        .map((c) => c.mission.name)
+        .sort(),
+    ).toEqual(['Created by Bob', 'Ship the billing page']);
+  });
+
+  // ── Operators (spec §4.2 "Audit": every entry, never arguments) ───────────
+
+  describe('an operator', () => {
+    const asOperator = () => userViewer(rig.operator, true);
+
+    it('sees every call of the instance, allowed or refused, whoever created the mission', async () => {
+      const bobs = await bobsMission();
+      await seedCall(rig, mission);
+      await seedCall(rig, bobs, { tool: 'github__create_pull_request', risks: [PR] });
+
+      const seen = calls(await search(asOperator()));
+      expect(seen.map((c) => [c.mission.name, c.tool]).sort()).toEqual([
+        ['Bob own', 'github__create_pull_request'],
+        ['Ship the billing page', 'github__get_file'],
+      ]);
+      // Someone who is not an operator, with the same nothing-of-their-own, sees none.
+      expect(calls(await search(userViewer(rig.operator, false)))).toEqual([]);
+    });
+
+    it('is never shown arguments, nor their fingerprint, on a mission that is not theirs', async () => {
+      const { entry } = await seedCall(rig, mission);
+      const [call] = calls(await search(asOperator()));
+      expect(call?.arguments_hash).toBeNull();
+      const page = JSON.stringify(await rig.root.audit.query.search(asOperator(), NO_FILTER));
+      expect(page).not.toContain(ARGUMENT_MARKER);
+      expect(page).not.toContain(entry.arguments_hash);
+    });
+
+    it('who also answers for a call is shown its fingerprint, like any creator or owner', async () => {
+      // Being an operator takes nothing away: the standing is decided call by call.
+      expect(standingOn(asOperator(), { creatorUserId: rig.operator.id }, null)).toBe(
+        'responsible',
+      );
+      const { entry } = await seedCall(rig, mission);
+      const adaAsOperator = userViewer(rig.seeded.ada, true);
+      const [call] = calls(await search(adaAsOperator, { missionId: mission.id }));
+      expect(call?.arguments_hash).toBe(entry.arguments_hash);
+    });
+
+    it('filters narrow what an operator sees like anybody else', async () => {
+      const bobs = await bobsMission();
+      await seedCall(rig, mission);
+      await seedCall(rig, bobs);
+      expect(
+        calls(await search(asOperator(), { missionId: bobs.id })).map((c) => c.mission.name),
+      ).toEqual(['Bob own']);
+      expect(calls(await search(asOperator(), { kind: 'admin' }))).toEqual([]);
+    });
   });
 
   it('administrative entries name their actor and their object', async () => {
@@ -594,7 +810,7 @@ describe('audit search: visibility, filters, paging', () => {
 
   // ── Arguments ─────────────────────────────────────────────────────────────
 
-  it('nobody sees raw arguments: a call shows their hash only', async () => {
+  it('nobody sees raw arguments: a call shows their hash only, and only to who answers for it', async () => {
     const { entry } = await seedCall(rig, mission);
     await seedCall(rig, mission, {
       tool: 'github__create_pull_request',

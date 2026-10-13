@@ -67,6 +67,12 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   granted more than 90 days ago stop at the first renewal after the upgrade.** The
   page shows the date for each. Operators set another duration with
   `oauth.delegation_max_lifetime` (`VAUBAAN_OAUTH_DELEGATION_MAX_LIFETIME`).
+- **The Audit page shows more to two people.** A **member** of a mission now reads
+  that mission's entries (calls, acts, requests) for as long as they are a member.
+  An **operator** now reads every entry of the instance, calls included, where they
+  used to read administrative acts only. Neither is shown arguments — the audit never
+  holds them — nor the fingerprint that stands for them, which stays with the
+  mission's creator and the connection's owners.
 - **Upstash Redis: a time to live and a move are deletions.** `EXPIRE` with any
   TTL, `SETEX`, `SET … EX`/`PX` (and `upstash_redis__set` with `ex` or `px`),
   `RENAME`, `LMOVE`, `SMOVE` and `RPOPLPUSH` now need `delete-data` next to

@@ -674,7 +674,13 @@ pages:
 - **Delegations** — the agents authorized to manage my missions, what
   they issued, and their revocation.
 - **Audit** — search by mission, user, connection, tool, decision,
-  period.
+  period. **Who reads what:** a user reads the entries of the missions
+  they created, of the missions shared with them as a member, and of the
+  connections they own; an operator reads every entry of the instance,
+  calls included. **Nobody reads arguments there**: the audit never holds
+  them, and the fingerprint that stands for them is shown only to who
+  answers for the call — the creator of its mission, an owner of its
+  connection — never to a member or to an operator as such.
 - **Providers** — the reference of each shipped plugin, for any
   signed-in user: what it connects to, its data model, its risk catalog
   with the reason and the vector of each risk, its presets with
@@ -921,6 +927,11 @@ revocation, issuance, extension, reset, approval, rotation, delegation
 granted or revoked, configuration change), object, previous and new
 state when meaningful, and, when the act comes from the management
 surface, the identity of the delegated client.
+
+An entry is read by the creator of its mission, the current members of
+that mission, the owners of its connection, and the operators (§4.2
+"Audit"). A member who is removed stops reading the mission's entries,
+past ones included.
 
 Retention configured by the operator, 90 days by default. No cold archive
 in v5.

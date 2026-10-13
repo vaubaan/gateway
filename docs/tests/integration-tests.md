@@ -2884,7 +2884,7 @@ itself are asserted in "Scenarios — Execution door".
   comes first). **Visibility**: a creator sees the calls and acts of their
   missions, another user none; a connection's owner sees the calls made through it by a
   mission they did not create; a member of the owning group sees it, a non-member does
-  not; an operator sees every administrative entry and still not other people's calls;
+  not; an operator sees every entry, calls included, and the bootstrap operator the administrative ones only; **a member** sees the calls, acts and requests of a mission shared with them and nothing of any other, stops at once when removed, and is offered the mission as a filter; **neither a member nor an operator is shown the argument fingerprint** (call entries and request entries), while the creator and the connection's owners are — decided entry by entry (`standingOn`), every dimension of the scope exercised at once;
   the bootstrap operator sees administrative entries only; a request's entries belong to
   its mission; **a filter never widens the scope**. **Filters**: mission, connection,
   tool (exact), decision, kind, period, user (email or id, unknown user → nothing),

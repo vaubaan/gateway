@@ -292,7 +292,13 @@ describe('authorization server over HTTP', () => {
       expect(approved.headers.get('location')).toBe('/admin/oauth-clients?decided=approved');
       const entry = (
         await instance.root.store.audit.search({
-          scope: { missionCreatorUserId: null, connectionOwners: [], allAdmin: true },
+          scope: {
+            missionCreatorUserId: null,
+            missionMemberUserId: null,
+            connectionOwners: [],
+            allAdmin: true,
+            allCalls: false,
+          },
           limit: 10,
         })
       ).find((e) => e.kind === 'admin' && e.act === 'oauth-client-approved');
@@ -334,7 +340,13 @@ describe('authorization server over HTTP', () => {
 
       // The user finds the revocation in their own audit, in the operator's name.
       const mine = await instance.root.store.audit.search({
-        scope: { missionCreatorUserId: delegated.user.id, connectionOwners: [], allAdmin: false },
+        scope: {
+          missionCreatorUserId: delegated.user.id,
+          missionMemberUserId: null,
+          connectionOwners: [],
+          allAdmin: false,
+          allCalls: false,
+        },
         limit: 10,
       });
       expect(
@@ -824,7 +836,13 @@ describe('authorization server over HTTP', () => {
       );
       expect((await refresh(next.refresh_token)).status).toBe(400);
       const audit = await instance.root.store.audit.search({
-        scope: { missionCreatorUserId: delegated.user.id, connectionOwners: [], allAdmin: false },
+        scope: {
+          missionCreatorUserId: delegated.user.id,
+          missionMemberUserId: null,
+          connectionOwners: [],
+          allAdmin: false,
+          allCalls: false,
+        },
         limit: 10,
       });
       expect(audit[0]).toMatchObject({

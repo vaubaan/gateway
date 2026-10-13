@@ -68,6 +68,7 @@ export {
   AuditQueryService,
   BOOTSTRAP_ACTOR_ID,
   scopeOf,
+  standingOn,
   withoutArguments,
   type AuditAdminView,
   type AuditCallView,
@@ -78,6 +79,7 @@ export {
   type AuditPage,
   type AuditQueryDeps,
   type AuditTokenRef,
+  type AuditStanding,
   type AuditViewer,
 } from './query-service';
 export {
