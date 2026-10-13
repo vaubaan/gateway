@@ -17,15 +17,17 @@
  *   -32001 Auth required (Vaubaan-specific, unknown or malformed bearer).
  */
 
-import type { JsonRpcError, JsonRpcSuccess, RiskId, Slice } from '@vaubaan/shared';
 import {
-  REFUSAL_CODES,
+  isRefusalCode,
   type ConnectionStatus,
-  type CredentialKind,
-  type Door,
+  type JsonRpcError,
+  type JsonRpcSuccess,
   type MissionStatus,
   type RefusalCode,
-} from './types.ts';
+  type RiskId,
+  type Slice,
+} from '@vaubaan/shared';
+import type { BearerKind, Door } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Refusal shapes — one per code
@@ -98,8 +100,8 @@ export interface MissionInactiveRefusal extends RefusalBase<'mission-inactive'> 
 
 export interface WrongCredentialKindRefusal extends RefusalBase<'wrong-credential-kind'> {
   readonly door: Door;
-  readonly presented: CredentialKind;
-  readonly expected: CredentialKind;
+  readonly presented: BearerKind;
+  readonly expected: BearerKind;
 }
 
 export type Refusal =
@@ -115,15 +117,13 @@ export type Refusal =
 /** Narrow a refusal to one code. */
 export type RefusalOf<C extends RefusalCode> = Extract<Refusal, { code: C }>;
 
-const REFUSAL_CODE_SET: ReadonlySet<string> = new Set(REFUSAL_CODES);
-
 /** Type guard: an object is a refusal iff it carries a known code and a hint. */
 export function isRefusal(value: unknown): value is Refusal {
   if (!value || typeof value !== 'object') return false;
   const v = value as { code?: unknown; hint?: unknown };
   return (
     typeof v.code === 'string' &&
-    REFUSAL_CODE_SET.has(v.code) &&
+    isRefusalCode(v.code) &&
     typeof v.hint === 'string' &&
     v.hint.length > 0
   );
@@ -261,8 +261,8 @@ export const refuse = {
 
   wrongCredentialKind(input: {
     door: Door;
-    presented: CredentialKind;
-    expected: CredentialKind;
+    presented: BearerKind;
+    expected: BearerKind;
   }): WrongCredentialKindRefusal {
     return {
       code: 'wrong-credential-kind',

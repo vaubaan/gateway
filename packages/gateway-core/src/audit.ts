@@ -14,17 +14,13 @@
  */
 
 import { createHash } from 'node:crypto';
-import type { RiskId, Slice } from '@vaubaan/shared';
-import type { RefusalCode } from './types.ts';
+import type { AuditDecision, RefusalCode, RiskId, Slice } from '@vaubaan/shared';
+
+export type { AuditDecision } from '@vaubaan/shared';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Call entries
 // ─────────────────────────────────────────────────────────────────────────────
-
-/** Decision of the gateway. An upstream failure after an allow stays
- *  `allowed` with `upstream_error` set: the decision is what the gateway
- *  did; the outcome is what the provider did. */
-export type AuditDecision = 'allowed' | 'refused';
 
 export interface CallAuditEntry {
   readonly kind: 'call';
@@ -48,6 +44,10 @@ export interface CallAuditEntry {
   /** Snapshot of the mission's accepted risks at call time, for forensic
    *  reproducibility: the mission may be re-issued or revoked later. */
   readonly accepted_risks_snapshot: readonly RiskId[];
+  /** Decision of the gateway (`AuditDecision` in `@vaubaan/shared`). An
+   *  upstream failure after an allow stays `allowed` with `upstream_error`
+   *  set: the decision is what the gateway did; the outcome is what the
+   *  provider did. */
   readonly decision: AuditDecision;
   readonly refusal_code: RefusalCode | null;
   /** The refusal's hint, or the structural reason for a refusal that has no

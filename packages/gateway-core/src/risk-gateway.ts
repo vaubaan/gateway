@@ -10,15 +10,25 @@
  * which risks are acceptable. The pipeline (`pipeline.ts`) orchestrates
  * around it; keeping this module pure keeps it trivially unit-testable.
  *
- * TODO(P0 merge): `bindings: ProviderBinding[]` is the v4 shape the policy
- * engine still consumes for environment qualification. Feature P0.2 replaces
- * it with `Resource` + `EnvResolver`; the pipeline's risk stage adapts
- * `MissionResource[]` to whatever the engine expects after the merge.
+ * Environments are resolved through the policy engine's `EnvResolver`
+ * (ADR plugin-contract-and-credential-spec D3): by default
+ * `resourceEnvResolver(resources)` over the mission's resources, so a
+ * mission that accepted `supabase[staging].bulk-row-write` matches an
+ * executed `supabase.bulk-row-write` on the staging resource. A host may
+ * pass another resolver (a plugin deriving the env from a branch).
  */
 
-import type { ProviderBinding, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
+import type { RefusalCode, Resource, RiskDecision, RiskId, Slice } from '@vaubaan/shared';
+import type { ClassifyOutcome, ProviderPlugin } from '@vaubaan/plugin-sdk';
 
-import { evaluateCall, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
+import {
+  evaluateCall,
+  resourceEnvResolver,
+  type EnvResolver,
+  type IndexedRiskCatalog,
+} from '@vaubaan/policy-engine';
+
+export type { ClassifyOutcome } from '@vaubaan/plugin-sdk';
 
 /** What the decision core reads from the credential: the accepted set. */
 export interface AcceptedRisksSnapshot {
@@ -33,6 +43,8 @@ export type CallVerdict =
   | { kind: 'allow'; risks_touched: readonly RiskId[]; executed_slices: readonly Slice[] }
   | {
       kind: 'deny';
+      /** The structured refusal code carried by the engine's decision. */
+      code: RefusalCode;
       missing_risks: readonly RiskId[];
       executed_slices: readonly Slice[];
       hint: string;
@@ -40,29 +52,11 @@ export type CallVerdict =
   | { kind: 'classify-denied'; reason: string }
   | { kind: 'no-catalog'; provider: string };
 
-export interface ClassifyResult {
-  /** The slice(s) the call touches. */
-  slices: Slice[];
-}
-
-export type ClassifyOutcome = ClassifyResult | { denied: string };
-
-export interface Classifier {
-  classifyV4(
-    tool: string,
-    args: Record<string, unknown>,
-    bindings: ReadonlyArray<ProviderBinding>,
-  ): ClassifyOutcome;
-}
-
-/** @deprecated v4 name of {@link AcceptedRisksSnapshot}. */
-export type V4TokenSnapshot = AcceptedRisksSnapshot;
-/** @deprecated v4 name of {@link ClassifyResult}. */
-export type V4ClassifyResult = ClassifyResult;
-/** @deprecated v4 name of {@link ClassifyOutcome}. */
-export type V4ClassifyOutcome = ClassifyOutcome;
-/** @deprecated v4 name of {@link Classifier}. */
-export type V4ClassifierAdapter = Classifier;
+/**
+ * The classification half of the plugin contract: `classify(tool, args,
+ * resources)`. A `ProviderPlugin` satisfies it as-is; tests pass a stub.
+ */
+export type Classifier = Pick<ProviderPlugin, 'classify'>;
 
 /**
  * Pure: classify a call into slices, intersect with the provider catalog,
@@ -75,19 +69,24 @@ export type V4ClassifierAdapter = Classifier;
  */
 export function evaluateCallForToken(input: {
   tool: string;
-  args: Record<string, unknown>;
-  bindings: ReadonlyArray<ProviderBinding>;
+  args: Readonly<Record<string, unknown>>;
+  /** The mission's resources on the connection the call targets. Handed to
+   *  the classifier and, unless `envResolver` is given, used to qualify the
+   *  touched risks by environment. */
+  resources: readonly Resource[];
   token: AcceptedRisksSnapshot;
   adapter: Classifier;
   catalog: IndexedRiskCatalog | undefined;
+  /** Defaults to `resourceEnvResolver(resources)`. */
+  envResolver?: EnvResolver;
 }): CallVerdict {
-  const { tool, args, bindings, token, adapter, catalog } = input;
+  const { tool, args, resources, token, adapter, catalog } = input;
 
   if (!catalog) {
     return { kind: 'no-catalog', provider: 'unknown' };
   }
 
-  const classified = adapter.classifyV4(tool, args, bindings);
+  const classified: ClassifyOutcome = adapter.classify(tool, args, resources);
   if ('denied' in classified) {
     return { kind: 'classify-denied', reason: classified.denied };
   }
@@ -97,10 +96,7 @@ export function evaluateCallForToken(input: {
     token_accepted_risks: new Set(token.accepted_risks),
     token_denied_risks: new Set(token.denied_risks),
     catalog,
-    // Bindings enable env-qualification of touched risks at the runtime, so a
-    // mission that accepted `supabase[staging].bulk-row-write` matches an
-    // executed `supabase.bulk-row-write` on the staging resource.
-    bindings,
+    envResolver: input.envResolver ?? resourceEnvResolver(resources),
   });
 
   if (decision.outcome === 'allowed') {
@@ -112,6 +108,7 @@ export function evaluateCallForToken(input: {
   }
   return {
     kind: 'deny',
+    code: decision.code,
     missing_risks: decision.missing_risks,
     executed_slices: classified.slices,
     hint: decision.hint,
@@ -124,13 +121,13 @@ export function evaluateCallForToken(input: {
  * code; `refuse.riskNotAccepted` in `errors.ts` builds the typed refusal.
  */
 export function denyResponseBody(verdict: Extract<CallVerdict, { kind: 'deny' }>): {
-  error: 'risk-not-accepted';
+  error: RefusalCode;
   missing_risks: readonly RiskId[];
   executed_slices: readonly Slice[];
   hint: string;
 } {
   return {
-    error: 'risk-not-accepted',
+    error: verdict.code,
     missing_risks: verdict.missing_risks,
     executed_slices: verdict.executed_slices,
     hint: verdict.hint,

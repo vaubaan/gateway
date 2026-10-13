@@ -1,161 +1,97 @@
 /**
- * v5 domain types the gateway core needs before any door exists.
+ * Domain vocabulary of the gateway core.
  *
  * Spec: docs/spec/vaubaan-gateway.md §0 (vocabulary), §2 (domain), §3
  * (authority, budget, session), §4.1 (refusal codes), §6 (three credentials).
  *
- * TODO(P0 merge): move to @vaubaan/shared. Feature P0.2 adds the same
- * mission / session / request types and `RefusalCode` to `packages/shared`
- * in parallel; this file is the gateway-core-local copy so the two features
- * do not collide on one package. The orchestrator reconciles at merge by
- * re-exporting the shared definitions from here.
+ * The domain types themselves live in `@vaubaan/shared` (ADR
+ * plugin-contract-and-credential-spec D8): one source of truth for the
+ * refusal codes, the connection and mission states, the policy entries, the
+ * budget shape, the period, the resources. This module re-exports what the
+ * pipeline consumes, so `@vaubaan/gateway-core` stays a one-stop import for
+ * the door, and adds only what is specific to the core: the two doors, the
+ * three kinds of bearers, and the read-only *projections* of the shared
+ * records the pipeline reads at call time (`MissionContext`).
  */
 
-import type { RiskId } from '@vaubaan/shared';
+import type {
+  Connection,
+  ConnectionResource,
+  Mission,
+  MissionPolicy,
+  Principal,
+  Session,
+} from '@vaubaan/shared';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Refusals
+// Re-exported shared vocabulary (one source of truth: `@vaubaan/shared`)
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** The eight structured refusal codes of spec §4.1 and §6. */
-export const REFUSAL_CODES = [
-  'risk-not-accepted',
-  'budget-exhausted',
-  'approval-required',
-  'resource-not-in-mission',
-  'rate-limited',
-  'connection-unavailable',
-  'mission-inactive',
-  'wrong-credential-kind',
-] as const;
-
-export type RefusalCode = (typeof REFUSAL_CODES)[number];
+export { REFUSAL_CODES, isRefusalCode, acceptedRisksOf, GATES } from '@vaubaan/shared';
+export type {
+  Budget,
+  ConnectionResource,
+  ConnectionStatus,
+  Gate,
+  MissionPolicy,
+  MissionPolicyEntry,
+  MissionStatus,
+  Period,
+  Principal,
+  RateLimit,
+  RefusalCode,
+} from '@vaubaan/shared';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Doors and credentials (spec §4.1, §4.1 bis, §6)
+// Doors and bearers (spec §4.1, §4.1 bis, §6)
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** The two MCP doors of an instance. The human surface is not a door: it is
  *  authenticated by a session cookie and never receives a bearer. */
 export type Door = 'execution' | 'management';
 
-/** The three credential kinds the instance recognizes. None crosses over. */
-export type CredentialKind = 'mission-token' | 'delegated-token' | 'human-session';
+/**
+ * The three kinds of bearers the instance recognizes (spec §6 "Separation
+ * of the three credentials"). None crosses over: a mismatch at a door is the
+ * `wrong-credential-kind` refusal.
+ *
+ * Not to be confused with `CredentialKind` in `@vaubaan/shared`, which is
+ * how a *connection* authenticates to its provider (`api-key`, `oauth2`,
+ * `app-install`, `ssh-key`) and belongs to the plugin contract.
+ */
+export type BearerKind = 'mission-token' | 'delegated-token' | 'human-session';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Identities
+// Mission context — what the pipeline reads at call time
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** A user or a group, where a rule applies to both alike (spec §0). */
-export interface Principal {
-  readonly kind: 'user' | 'group';
-  readonly id: string;
-  /** Email for a user, name for a group. What a refusal shows an agent so a
-   *  human can be contacted. */
-  readonly display: string;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Connections and resources
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Spec §2.3. `unowned` keeps missions running but blocks share/reconnect. */
-export type ConnectionStatus = 'active' | 'expired' | 'revoked' | 'unowned';
+/** A principal with what a refusal shows an agent so a human can be
+ *  contacted: the user's email or the group's name. */
+export type ConnectionOwner = Principal & { readonly display: string };
 
 /** The slice of a connection a mission context carries. Credentials are
  *  never part of the context: the upstream stage decrypts them in memory
  *  for the duration of one call (spec §2.4). */
-export interface MissionConnection {
-  readonly id: string;
-  readonly provider: string;
-  readonly name: string;
-  readonly status: ConnectionStatus;
-  readonly owner: Principal;
-}
+export type MissionConnection = Pick<Connection, 'id' | 'provider' | 'display_name' | 'status'> & {
+  readonly owner: ConnectionOwner;
+};
 
-/** One resource a mission may touch, inside one of its connections
- *  (spec §0 "Resource", §3.1 "Resource selection"). Replaces the v4
- *  `ProviderBinding`: the connection carries the credential, the resource
- *  carries the ref and the environment label. */
-export interface MissionResource {
-  readonly connection_id: string;
-  readonly provider: string;
-  /** What the agent cites in its arguments and what the gateway checks. */
-  readonly ref: string;
-  /** Environment label set by the owner (`prod`, `staging`, ...), or null
-   *  when the resource has no parallel instances. */
-  readonly env: string | null;
-  readonly display_name: string | null;
-}
+/** One resource a mission may touch, hydrated from its selection (spec §0
+ *  "Resource", §3.1 "Resource selection"). The shared `ConnectionResource`
+ *  as-is, so `ctx.resources` feeds `resourceEnvResolver` and the plugin's
+ *  `classify` without an adapter. */
+export type MissionResource = ConnectionResource;
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Missions, policy, budget, session
-// ─────────────────────────────────────────────────────────────────────────────
-
-/** Spec §2.3. `exhausted` is per risk, never a mission status. */
-export type MissionStatus = 'active' | 'expired' | 'orphaned' | 'revoked';
-
-/** Spec §0 "Gate". */
-export type Gate = 'auto' | 'approval';
-
-/** Spec §0 "Budget": quota per period and rate limit per sliding window. */
-export interface Budget {
-  /** Number of actions allowed per period. Always a number (spec §3.2
-   *  "No infinite budget"). */
-  readonly quota: number;
-  /** Number of actions allowed per short sliding window. */
-  readonly rate_limit: RateLimit;
-}
-
-export interface RateLimit {
-  readonly max: number;
-  readonly window_seconds: number;
-}
-
-/** One policy entry: the value side of `RiskId → (budget, gate)`. */
-export interface PolicyEntry {
-  readonly budget: Budget;
-  readonly gate: Gate;
-}
-
-/**
- * The mission policy, `RiskId → (budget, gate)` (spec §0 "Mission policy").
- * The keys are the accepted risks. Always an explicit enumeration: no
- * wildcard, no sentinel, no preset reference is ever a key.
- */
-export type MissionPolicy = Readonly<Record<RiskId, PolicyEntry>>;
-
-/** The accepted risks of a policy are its keys. The policy is the single
- *  source of truth; nothing stores `accepted_risks` beside it. */
-export function acceptedRisksOf(policy: MissionPolicy): readonly RiskId[] {
-  return Object.keys(policy);
-}
-
-/** Recurrence of a mission (spec §0 "Period"). A one-off mission has a single
- *  non-renewed period and no `Period`. */
-export interface Period {
-  /** ISO timestamp of the first period start. */
-  readonly anchor: string;
-  readonly length_seconds: number;
-}
-
-export interface MissionSummary {
-  readonly id: string;
-  readonly name: string;
-  readonly status: MissionStatus;
-  /** The only identity that can enlarge the mission or answer its requests. */
-  readonly creator_id: string;
-  /** ISO timestamp or null: a mission may be unlimited in time (ADR D4). */
-  readonly expires_at: string | null;
-  readonly period: Period | null;
-}
+/** What the pipeline needs of the mission row. `period` is the shared
+ *  discriminated union: `{ kind: 'one-off' }` or a recurring period. */
+export type MissionSummary = Pick<
+  Mission,
+  'id' | 'name' | 'status' | 'creator_id' | 'expires_at' | 'period'
+>;
 
 /** Handle on the mission's session (spec §3.3). Created on the first call;
  *  a context loaded before that call carries `null`. */
-export interface SessionHandle {
-  readonly id: string;
-  readonly started_at: string;
-}
+export type SessionHandle = Pick<Session, 'id' | 'started_at'>;
 
 /**
  * Everything the pipeline knows about an authenticated mission token.
@@ -169,6 +105,8 @@ export interface MissionContext {
   /** Resource selection, all connections together. Empty for a connection
    *  means the mission may touch nothing on it. */
   readonly resources: readonly MissionResource[];
+  /** The explicit policy; its `risk_id`s are the accepted risks
+   *  (`acceptedRisksOf(ctx)`). Nothing stores `accepted_risks` beside it. */
   readonly policy: MissionPolicy;
   readonly session: SessionHandle | null;
 }

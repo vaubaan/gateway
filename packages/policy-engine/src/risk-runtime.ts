@@ -73,6 +73,7 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
   if (executed_slices.length === 0) {
     return {
       outcome: 'denied',
+      code: 'risk-not-accepted',
       missing_risks: [],
       covered_risks: [],
       executed_slices,
@@ -111,6 +112,7 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
   if (risks_touched.length === 0) {
     return {
       outcome: 'denied',
+      code: 'risk-not-accepted',
       missing_risks: [],
       covered_risks: [],
       executed_slices,
@@ -126,6 +128,7 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
     if (explicitly_denied.length > 0) {
       return {
         outcome: 'denied',
+        code: 'risk-not-accepted',
         missing_risks: explicitly_denied,
         covered_risks: risks_touched.filter((r) => token_accepted_risks.has(r)),
         executed_slices,
@@ -140,6 +143,7 @@ export function evaluateCall(input: EvaluateCallInput): RiskDecision {
   if (missing.length > 0) {
     return {
       outcome: 'denied',
+      code: 'risk-not-accepted',
       missing_risks: missing,
       covered_risks: risks_touched.filter((r) => token_accepted_risks.has(r)),
       executed_slices,

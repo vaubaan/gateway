@@ -41,8 +41,8 @@ import {
   type CacheClient,
   type ClassifyOutcome,
 } from '@vaubaan/gateway-core';
-import type { IndexedRiskCatalog } from '@vaubaan/policy-engine';
-import type { AuditDecision, DelegationChainEntry } from '@vaubaan/shared';
+import { resourceFromBinding, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
+import type { AuditLogRow, DelegationChainEntry } from '@vaubaan/shared';
 
 /** v4 `audit_log` row. The v5 shape is `CallAuditEntry` in gateway-core. */
 export interface LegacyAuditRow {
@@ -51,7 +51,8 @@ export interface LegacyAuditRow {
   access_token_id: string | null;
   tool_name: string;
   arguments_hash: string;
-  decision: AuditDecision;
+  /** v4 vocabulary (`denied`) ; the v5 `AuditDecision` says `refused`. */
+  decision: AuditLogRow['decision'];
   denial_reason: string | null;
   upstream_latency_ms: number | null;
   client_ip: string | null;
@@ -331,16 +332,19 @@ export class McpGateway {
         });
     const args = plan ? mergeInjectedArgs(rawArgs, plan) : rawArgs;
 
+    // The v4 adapters classify against bindings ; the v5 decision core takes
+    // resources (env qualification through `resourceEnvResolver`). Bridge
+    // both ways here until P1.6 deletes this file.
     const verdict = evaluateCallForToken({
       tool: toolName,
       args,
-      bindings: ctx.bindings,
+      resources: ctx.bindings.map(resourceFromBinding),
       token: {
         id: ctx.access_token.id,
         accepted_risks: ctx.accepted_risks,
         denied_risks: ctx.denied_risks,
       },
-      adapter: { classifyV4: (t, a, b) => adapter.classifyV4(t, a, b) },
+      adapter: { classify: (t, a) => adapter.classifyV4(t, { ...a }, ctx.bindings) },
       catalog,
     });
 

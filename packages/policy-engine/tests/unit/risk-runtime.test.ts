@@ -103,9 +103,36 @@ describe('evaluateCall — denied paths', () => {
     });
     expect(d.outcome).toBe('denied');
     if (d.outcome === 'denied') {
+      expect(d.code).toBe('risk-not-accepted');
       expect(d.missing_risks).toContain('github.merge-protected');
       expect(d.missing_risks).toContain('github.uncategorized-write');
       expect(d.hint).toContain('does not accept');
+    }
+  });
+
+  test('every denial carries the structured code `risk-not-accepted`', () => {
+    const denials = [
+      evaluateCall({ executed_slices: [], token_accepted_risks: new Set(), catalog: idx }),
+      evaluateCall({
+        executed_slices: [parseSlice('github.repo[foo].W')],
+        token_accepted_risks: new Set(),
+        catalog: indexCatalog({ provider: 'github', risks: [] }),
+      }),
+      evaluateCall({
+        executed_slices: [parseSlice('github.repo[foo].file[a.ts].R')],
+        token_accepted_risks: new Set(['github.read-code']),
+        token_denied_risks: new Set(['github.read-code']),
+        catalog: idx,
+      }),
+      evaluateCall({
+        executed_slices: [parseSlice('github.repo[foo].branch[main].W')],
+        token_accepted_risks: new Set(),
+        catalog: idx,
+      }),
+    ];
+    for (const d of denials) {
+      expect(d.outcome).toBe('denied');
+      if (d.outcome === 'denied') expect(d.code).toBe('risk-not-accepted');
     }
   });
 
