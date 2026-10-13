@@ -17,6 +17,7 @@ import {
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
@@ -115,6 +116,15 @@ describe('gmail plugin — SDK kit', () => {
   test('coverage of the exposed surface is vacuous (no tool) and passes', () => {
     const report = assertCatalogCoverage(gmailPlugin, {});
     expect(report.toolsChecked).toBe(0);
+  });
+
+  test('the identifier proof is vacuous too : no tool is exposed, so nothing can be executed', async () => {
+    const report = await assertIdentifiersRefused(
+      gmailPlugin,
+      {},
+      { context: (fetch) => execCtx(fetch) },
+    );
+    expect(report).toMatchObject({ toolsChecked: 0, hostileCalls: 0, pathIdentifiers: [] });
   });
 
   test('every classified tool maps to slices the catalog covers', () => {

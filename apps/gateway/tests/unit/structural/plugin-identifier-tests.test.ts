@@ -17,6 +17,13 @@
  * (not `skip`, not `todo`). It remains a statement about the shape of the
  * file: that the calls are handed the hostile values is what the plugin's own
  * assertions say, read one by one in `manifest.ts`.
+ *
+ * The behaviour itself is proven by the SDK kit: `assertIdentifiersRefused`
+ * runs the plugin's own `classify` and `execute` on every string argument of
+ * its samples, with the hostile values, and holds that a refused value sends
+ * nothing and an accepted one is named exactly (`packages/plugin-sdk`,
+ * `testing/identifiers.ts`). Here, every plugin must call it in a test that
+ * runs: a plugin added tomorrow cannot leave it out.
  */
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
@@ -34,6 +41,8 @@ const PLUGINS = join(REPO, 'plugins');
 const DOT_SEGMENT = /^\.\.$/;
 const OTHER_HOSTILE = /%2e%2e|%2f|\.\.\/|\/\.\./i;
 const RUNNERS = new Set(['it', 'test']);
+/** The SDK kit's behavioural proof (`@vaubaan/plugin-sdk/testing`). */
+const IDENTIFIER_PROOF = 'assertIdentifiersRefused';
 const NEVER_RUNS = new Set(['skip', 'todo']);
 
 interface FileShape {
@@ -103,6 +112,18 @@ const pluginDirs = readdirSync(PLUGINS, { withFileTypes: true })
   .map((entry) => entry.name)
   .sort();
 
+/** The unit test files of a plugin where a running test calls the SDK's identifier proof. */
+function kitProofsOf(plugin: string): string[] {
+  const dir = join(PLUGINS, plugin, 'tests/unit');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir)
+    .filter((name) => /\.test\.ts$/.test(name))
+    .filter((name) => {
+      const shape = shapeOf(readFileSync(join(dir, name), 'utf8'), name);
+      return shape.runningTests > 0 && shape.called.has(IDENTIFIER_PROOF);
+    });
+}
+
 /** The unit test files of a plugin that exercise hostile identifiers on both sides. */
 function identifierTestsOf(plugin: string): string[] {
   const dir = join(PLUGINS, plugin, 'tests/unit');
@@ -171,4 +192,23 @@ describe('every plugin proves that what it executes is what it classified', () =
       expect(identifierTestsOf(plugin)).not.toEqual([]);
     },
   );
+
+  it.each(pluginDirs)('%s runs the identifier proof of the SDK kit', (plugin) => {
+    expect(kitProofsOf(plugin)).not.toEqual([]);
+  });
+
+  it('does not take an import of the kit, or a skipped test, for a run of it', () => {
+    const calls = (code: string) => {
+      const shape = shapeOf(code);
+      return shape.runningTests > 0 && shape.called.has(IDENTIFIER_PROOF);
+    };
+    const real = `
+      import { assertIdentifiersRefused } from '@vaubaan/plugin-sdk/testing';
+      test('hostile identifiers', async () => { await assertIdentifiersRefused(plugin, SAMPLES, { context }); });`;
+    expect(calls(real)).toBe(true);
+    expect(calls(real.replace('await assertIdentifiersRefused(', 'await somethingElse('))).toBe(
+      false,
+    );
+    expect(calls(real.replace("test('", "test.skip('"))).toBe(false);
+  });
 });

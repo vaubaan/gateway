@@ -10,13 +10,14 @@ import { describe, expect, test } from 'vitest';
 import { pluginIssues, writeHandoutRiskIds, type Resource } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
 } from '@vaubaan/plugin-sdk/testing';
 
 import { classifyGithub, githubCatalog, githubCredential, githubPlugin } from '../../src/index.ts';
-import { appRepo, libRepo } from './fixtures.ts';
+import { appRepo, executeCtx, libRepo, mintRoute } from './fixtures.ts';
 
 const repo = { owner: 'acme', repo: 'app' };
 const feature = 'feature/test';
@@ -129,6 +130,31 @@ describe('github plugin — structural kit', () => {
     ]);
     expect(report.risksUntouched).toEqual([]);
     expect(report.fallbackHits).toEqual([]);
+  });
+
+  // What is executed is what was classified (SDK kit) : every string argument of
+  // every sample above is fed the hostile identifiers, through `classify` and
+  // through `execute`. The finer cases are in this plugin's identifier tests.
+  test('hostile identifiers are refused by classify and by execute, or named exactly', async () => {
+    const report = await assertIdentifiersRefused(githubPlugin, samples, {
+      resources,
+      context: (fetch, missionResources) => executeCtx(fetch, missionResources),
+      // The installation token is minted before the call that carries the identifiers.
+      routes: [mintRoute()],
+    });
+    expect(report.toolsChecked).toBe(26);
+    // Found by running the samples : the arguments that are a segment of a request path.
+    expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
+      'branch',
+      'owner',
+      'path',
+      'repo',
+      'sha',
+      'workflow_id',
+    ]);
+    // Whatever classify refused, execute sent nothing for.
+    expect(report.refusedByClassify).toBeGreaterThan(0);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
   });
 
   test('the fallback is the one catalog risk the samples leave out', () => {

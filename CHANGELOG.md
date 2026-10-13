@@ -80,6 +80,11 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   period, the gates opened in it and the credits granted in it are never purged. **The
   first start of this image deletes that history on an existing instance**: raise
   `retention_days` before you upgrade if you want to keep more than 90 days of it.
+- **The plugin test kit proves "what is executed is what was classified" by running
+  the plugin.** `assertIdentifiersRefused` feeds hostile identifiers to every string
+  argument of a plugin's samples, through `classify` and through `execute`; every
+  shipped plugin and the template run it, and a plugin whose tests do not is refused.
+  A plugin author adds one test to `plugin.test.ts` (see `plugins/README.md`).
 - **A preset never hands a write token without approval.** A plugin now declares which
   of its token-handing risks are read-only (`TokenHandout.readOnlyRiskIds`); every
   other one is treated as write, and a plugin whose preset leaves a write one on `auto`

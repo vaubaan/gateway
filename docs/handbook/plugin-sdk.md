@@ -66,6 +66,8 @@ packages/plugin-sdk/
                         (+ parseSlice / serializeSlice from @vaubaan/policy-engine)
     testing/
       mock-fetch.ts     mockFetch, MockRoute, RecordedCall, MockFetch, FetchInput
+      identifiers.ts    assertIdentifiersRefused, HOSTILE_IDENTIFIERS — "what is executed is what
+                        was classified", proven by running the plugin
       assertions.ts     assertPluginWellFormed, assertCatalogCoverage, assertNoWildcard,
                         assertPresetsValid, declaredOnly, refusalText, PluginAssertionError,
                         SampleCall, ToolSamples, CoverageOptions, CoverageReport
@@ -583,8 +585,8 @@ instance configuration; no contract change.
 ### Test kit (`testing/`)
 
 ```ts
-import { assertCatalogCoverage, assertNoWildcard, assertPluginWellFormed, assertPresetsValid,
-  declaredOnly, mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
+import { assertCatalogCoverage, assertIdentifiersRefused, assertNoWildcard, assertPluginWellFormed,
+  assertPresetsValid, declaredOnly, mockFetch, refusalText } from '@vaubaan/plugin-sdk/testing';
 
 assertPluginWellFormed(plugin);
 assertPresetsValid(plugin);
@@ -616,6 +618,53 @@ leaves unreached). `fallbackHits` lists the samples only the fallback
 covered — informational, but a realistic sample there means the catalog
 misses an entry. Every assertion throws `PluginAssertionError { subject,
 findings }`.
+
+**`assertIdentifiersRefused(plugin, samples, options)`** is the behavioural
+proof of the identifier rule (ADR
+[plugin-identifiers-one-grammar-for-classify-and-execute](../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+It takes the same `samples` as `assertCatalogCoverage`. For every sample
+`classify` accepts and every top-level **string** argument of it, it replaces
+the value by each of `HOSTILE_IDENTIFIERS` (`..`, `.`, `a/../b`, `%2e%2e`,
+`..%2f`, `%2f`, a line break, `r1?x=1#y`), calls `classify`, then `execute`
+against a `fetch` that records and answers anything, and holds four rules:
+
+1. refused by `classify` ⇒ `execute` sent nothing (the executor validates by
+   itself);
+2. no request carries a path segment that decodes to `.` or `..`;
+3. a value holding `?`, `#` or a line break never appears verbatim in a URL;
+4. when the sample's own value is a whole segment of a request path — which
+   is how the kit recognises an identifier, by running the sample, with no
+   list kept by hand — the request made for an accepted hostile value has
+   the same method and the same segments, and carries that value, encoded,
+   in the same place. A dot segment cannot satisfy 2 and 4: it must be
+   refused.
+
+```ts
+const report = await assertIdentifiersRefused(plugin, SAMPLES, {
+  resources: [stagingRepo],
+  context: (fetch, resources) => ({ credential, appConfig: {}, fetch, resources }),
+  routes: [mintRoute()], // answers an executor reads before the request that carries the identifier
+});
+// report.toolsChecked / argumentsChecked / hostileCalls / refusedByClassify / nothingSent
+// report.pathIdentifiers: [{ tool, argument }] — what it found in a request path
+```
+
+Options: `routes` (tried before the catch-all `{}`), `fallbackBody`, `exempt`
+(`{ tool: { argument: reason } }`), `elsewhere` (`{ reset(), sent() }`: what the
+executor sends by another road than `ctx.fetch`, for rule 1 on an upstream
+that is not HTTP — the SSH plugin reads its transport there), and
+`pathIdentifiers: { none: reason }`. **A plugin with tools in which no
+argument was seen in a request path fails**: the proof would have run on
+nothing. Either the executions did not reach their requests (give `routes`),
+or the plugin has no identifier in a path and says so with its reason
+(Railway: one JSON-RPC POST, identifiers in the body; SSH: a command).
+
+What it does not see: an identifier that is not a top-level string argument
+(a resource ref, connection metadata, a nested field), a request reached
+only after an answer the routes do not give, and "refuse, never repair" for
+a multi-segment value that escaping happens to name exactly. Each plugin's
+own identifier tests hold those. Every plugin directory must call it in a
+test that runs (`apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`).
 
 Two helpers serve the tests of the rules above:
 

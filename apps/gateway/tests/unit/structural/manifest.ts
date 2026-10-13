@@ -560,7 +560,19 @@ export const INVARIANTS: readonly Invariant[] = [
     proofs: [
       {
         file: `${STRUCTURAL}/plugin-identifier-tests.test.ts`,
-        tests: ['%s has a test feeding hostile identifiers to classify and to execute'],
+        tests: [
+          '%s has a test feeding hostile identifiers to classify and to execute',
+          '%s runs the identifier proof of the SDK kit',
+        ],
+      },
+      {
+        file: 'packages/plugin-sdk/tests/unit/identifiers-kit.test.ts',
+        tests: [
+          'passes a plugin whose classify and execute share one grammar, and says what it ran',
+          'finds a grammar applied in classify only : refused, yet sent',
+          'finds a dot segment that escaping left in place, and accepts what escaping names exactly',
+          'refuses to pass on nothing : no identifier seen in a path must be stated, with its reason',
+        ],
       },
       {
         file: 'plugins/github/tests/unit/injection.test.ts',

@@ -509,6 +509,26 @@ npx vitest run packages/policy-engine     # one package
   a TypeScript catalog**: a preset entry with an infinite quota, a negative
   rate or an unknown gate is refused like its YAML twin, every illegal value
   of one entry listed.
+- **`identifiers-kit.test.ts`** (9) — **`assertIdentifiersRefused`, the
+  behavioural proof of "what is executed is what was classified"**: passes a
+  plugin whose `classify` and `execute` share one grammar and reports what it
+  ran (tools, arguments, hostile calls, the path identifiers **found by
+  running the samples**); **finds the fixture plugin, which interpolates its
+  arguments**; finds a grammar applied in `classify` only (refused, yet
+  sent — one finding per hostile value and position); finds a dot segment
+  escaping left in place and accepts what escaping names exactly; finds an
+  accepted value the request does not name (repair instead of refusal); a
+  classifier that throws is a finding; **refuses to pass on nothing** (no
+  identifier seen in a path must be stated with its reason, and a wrong
+  statement is refused too); leaves out refused samples, undeclared tools
+  and exempt arguments; reads a request reached after an answer when the
+  routes give it. Each of the ten plugin directories runs it on its own
+  samples in `plugin.test.ts` (no finding; GitHub: `owner`, `repo`,
+  `branch`, `path`, `sha`, `workflow_id`; Supabase: `project_ref`,
+  `function_slug`, `provider_id`, `tpa_id`, `type`; Vercel: `projectId`,
+  `deploymentId`, `idOrUrl`, `domain`, `id`; Cloudflare: `zone_id`,
+  `record_id`; Stripe: `id`; Resend: `id`, `segment_id`; Upstash:
+  `databaseId`; Railway and SSH state why they have none in a path).
 - **`testing-kit.test.ts`** (14) — `assertCatalogCoverage` on the fixture
   (touched risks in catalog order; `risksUntouched` leaves the fallback
   out — reachable by design only; `fallbackHits` names the samples only

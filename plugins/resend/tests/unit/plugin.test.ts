@@ -16,11 +16,13 @@ import {
 } from '@vaubaan/plugin-sdk';
 import {
   assertCatalogCoverage,
+  assertIdentifiersRefused,
   assertNoWildcard,
   assertPluginWellFormed,
   assertPresetsValid,
   mockFetch,
   refusalText,
+  type ToolSamples,
 } from '@vaubaan/plugin-sdk/testing';
 import { resourceEnvResolver } from '@vaubaan/policy-engine';
 
@@ -102,88 +104,106 @@ describe('resend plugin — structural kit', () => {
     assertNoWildcard(resendPlugin);
   });
 
-  test('every tool classifies to slices the catalog covers', () => {
-    const seg = { segment_id: 'seg_news' };
-    const report = assertCatalogCoverage(
-      resendPlugin,
+  const seg = { segment_id: 'seg_news' };
+  // One table for the catalog coverage and for the identifier proof.
+  const SAMPLES: ToolSamples = {
+    resend__get_email: [{ args: { id: 'em_1' } }],
+    resend__list_domains: [{ args: {} }],
+    resend__get_domain: [{ args: { domain: 'notifications.acme.com' } }],
+    resend__list_segments: [{ args: {} }],
+    resend__get_segment: [{ args: seg }],
+    resend__list_contacts: [{ args: {} }, { args: seg }],
+    resend__get_contact: [{ args: { id: 'ct_1' } }, { args: { id: 'bob@example.com' } }],
+    resend__list_broadcasts: [{ args: {} }],
+    resend__get_broadcast: [{ args: { ...seg, id: 'brd_1' } }],
+    resend__send_email: [
+      { args: { from: FROM, to: ['alice@acme.com'], subject: 'hi' } },
+      { args: { from: FROM, to: 'bob@partner.com', subject: 'hi' } },
+      { args: { from: 'x@staging.acme.dev', to: ['who@evil.com'], subject: 'hi' } },
       {
-        resend__get_email: [{ args: { id: 'em_1' } }],
-        resend__list_domains: [{ args: {} }],
-        resend__get_domain: [{ args: { domain: 'notifications.acme.com' } }],
-        resend__list_segments: [{ args: {} }],
-        resend__get_segment: [{ args: seg }],
-        resend__list_contacts: [{ args: {} }, { args: seg }],
-        resend__get_contact: [{ args: { id: 'ct_1' } }, { args: { id: 'bob@example.com' } }],
-        resend__list_broadcasts: [{ args: {} }],
-        resend__get_broadcast: [{ args: { ...seg, id: 'brd_1' } }],
-        resend__send_email: [
-          { args: { from: FROM, to: ['alice@acme.com'], subject: 'hi' } },
-          { args: { from: FROM, to: 'bob@partner.com', subject: 'hi' } },
-          { args: { from: 'x@staging.acme.dev', to: ['who@evil.com'], subject: 'hi' } },
-          {
-            args: {
-              from: FROM,
-              to: ['alice@acme.com'],
-              cc: ['bob@acme.io'],
-              bcc: 'carol@acme.com',
-              subject: 'hi',
-              html: '<p>hi</p>',
-              text: 'hi',
-              reply_to: ['help@acme.com'],
-              headers: { 'X-Entity-Ref-ID': 'ref-1' },
-              tags: [{ name: 'kind', value: 'welcome' }],
-            },
-          },
-          {
-            args: { from: FROM, to: ['alice@acme.com'], subject: 'hi', attachments: [{}] },
-            expectDenied: true,
-          },
-          {
-            args: { from: FROM, to: ['alice@acme.com'], subject: 'hi', headers: { Bcc: 'x@e.io' } },
-            expectDenied: true,
-          },
-        ],
-        resend__send_batch_emails: [
-          { args: { emails: [{ from: FROM, to: ['alice@acme.com'], subject: 'hi' }] } },
-          {
-            args: {
-              emails: [
-                { from: FROM, to: ['bob@partner.com'], subject: 'hi' },
-                { from: 'x@staging.acme.dev', to: ['who@evil.com'], subject: 'hi' },
-              ],
-            },
-          },
-        ],
-        resend__create_domain: [{ args: { name: 'mail.acme.com' } }],
-        resend__update_domain: [{ args: { domain: 'notifications.acme.com', tls: 'enforced' } }],
-        resend__delete_domain: [{ args: { domain: 'staging.acme.dev' } }],
-        resend__verify_domain: [{ args: { domain: 'staging.acme.dev' } }],
-        resend__create_segment: [{ args: { name: 'Beta' } }],
-        resend__delete_segment: [{ args: { segment_id: 'seg_test' } }],
-        resend__create_contact: [
-          { args: { email: 'new@example.com' } },
-          { args: { email: 'new@example.com', ...seg } },
-        ],
-        resend__update_contact: [{ args: { id: 'ct_1', unsubscribed: true } }],
-        resend__delete_contact: [{ args: { id: 'ct_1' } }],
-        resend__add_contact_to_segment: [{ args: { ...seg, id: 'ct_1' } }],
-        resend__remove_contact_from_segment: [{ args: { ...seg, id: 'ct_1' } }],
-        resend__create_broadcast: [
-          { args: { ...seg, from: FROM, subject: 'News' } },
-          { args: { ...seg, from: FROM, subject: 'News', send: true }, expectDenied: true },
-        ],
-        resend__update_broadcast: [{ args: { ...seg, id: 'brd_1', subject: 'News 2' } }],
-        resend__send_broadcast: [{ args: { ...seg, id: 'brd_1' } }],
-        resend__delete_broadcast: [{ args: { ...seg, id: 'brd_1' } }],
-        resend__describe_zones: [{ args: {} }],
+        args: {
+          from: FROM,
+          to: ['alice@acme.com'],
+          cc: ['bob@acme.io'],
+          bcc: 'carol@acme.com',
+          subject: 'hi',
+          html: '<p>hi</p>',
+          text: 'hi',
+          reply_to: ['help@acme.com'],
+          headers: { 'X-Entity-Ref-ID': 'ref-1' },
+          tags: [{ name: 'kind', value: 'welcome' }],
+        },
       },
-      { resources: mission },
-    );
+      {
+        args: { from: FROM, to: ['alice@acme.com'], subject: 'hi', attachments: [{}] },
+        expectDenied: true,
+      },
+      {
+        args: { from: FROM, to: ['alice@acme.com'], subject: 'hi', headers: { Bcc: 'x@e.io' } },
+        expectDenied: true,
+      },
+    ],
+    resend__send_batch_emails: [
+      { args: { emails: [{ from: FROM, to: ['alice@acme.com'], subject: 'hi' }] } },
+      {
+        args: {
+          emails: [
+            { from: FROM, to: ['bob@partner.com'], subject: 'hi' },
+            { from: 'x@staging.acme.dev', to: ['who@evil.com'], subject: 'hi' },
+          ],
+        },
+      },
+    ],
+    resend__create_domain: [{ args: { name: 'mail.acme.com' } }],
+    resend__update_domain: [{ args: { domain: 'notifications.acme.com', tls: 'enforced' } }],
+    resend__delete_domain: [{ args: { domain: 'staging.acme.dev' } }],
+    resend__verify_domain: [{ args: { domain: 'staging.acme.dev' } }],
+    resend__create_segment: [{ args: { name: 'Beta' } }],
+    resend__delete_segment: [{ args: { segment_id: 'seg_test' } }],
+    resend__create_contact: [
+      { args: { email: 'new@example.com' } },
+      { args: { email: 'new@example.com', ...seg } },
+    ],
+    resend__update_contact: [{ args: { id: 'ct_1', unsubscribed: true } }],
+    resend__delete_contact: [{ args: { id: 'ct_1' } }],
+    resend__add_contact_to_segment: [{ args: { ...seg, id: 'ct_1' } }],
+    resend__remove_contact_from_segment: [{ args: { ...seg, id: 'ct_1' } }],
+    resend__create_broadcast: [
+      { args: { ...seg, from: FROM, subject: 'News' } },
+      { args: { ...seg, from: FROM, subject: 'News', send: true }, expectDenied: true },
+    ],
+    resend__update_broadcast: [{ args: { ...seg, id: 'brd_1', subject: 'News 2' } }],
+    resend__send_broadcast: [{ args: { ...seg, id: 'brd_1' } }],
+    resend__delete_broadcast: [{ args: { ...seg, id: 'brd_1' } }],
+    resend__describe_zones: [{ args: {} }],
+  };
+
+  test('every tool classifies to slices the catalog covers', () => {
+    const report = assertCatalogCoverage(resendPlugin, SAMPLES, { resources: mission });
     expect(report.toolsChecked).toBe(27);
     // No documented call reaches the fallback : every write slice has a named risk.
     expect(report.fallbackHits).toEqual([]);
     // Only the two retired catalog ids (account-rooted patterns) are never touched.
     expect(report.risksUntouched).toEqual(['resend.read-audiences', 'resend.audience-write']);
+  });
+
+  // What is executed is what was classified (SDK kit) : every string argument of
+  // every sample above is fed the hostile identifiers, through `classify` and
+  // through `execute`. The finer cases are in this plugin's identifier tests.
+  test('hostile identifiers are refused by classify and by execute, or named exactly', async () => {
+    const report = await assertIdentifiersRefused(resendPlugin, SAMPLES, {
+      resources: mission,
+      context: (fetch, resources) => ctxOf(fetch, resources),
+    });
+    expect(report.toolsChecked).toBe(27);
+    // Found by running the samples : the arguments that are a segment of a request path.
+    expect([...new Set(report.pathIdentifiers.map((p) => p.argument))].sort()).toEqual([
+      'id',
+      'segment_id',
+    ]);
+    // Whatever classify refused, execute sent nothing for.
+    expect(report.refusedByClassify).toBeGreaterThan(0);
+    expect(report.nothingSent).toBeGreaterThanOrEqual(report.refusedByClassify);
   });
 });
 
