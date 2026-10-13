@@ -133,6 +133,22 @@ export { Glyph, type GlyphName } from './Glyph.tsx';
 export { KindLegend } from './KindLegend.tsx';
 export { ITEM_KINDS, ITEM_KIND_WORDS, type ItemKind } from './kinds.ts';
 
+// What is running, the inbox and one open request (the home, "Waiting for you")
+export { RunList, RunRow } from './Running.tsx';
+export { InboxFrame, InboxList, InboxItem } from './Inbox.tsx';
+export {
+  RequestStatement,
+  CallBox,
+  ArgList,
+  FactColumns,
+  DecideBar,
+  ContextColumns,
+  Feed,
+  FeedEvent,
+  type ArgItem,
+  type Fact,
+  type FeedTone,
+} from './Request.tsx';
 // Added with the mission pages: the rest behind "···", a choice among presets, a key shown
 // once, a form with its rail
 export { MoreMenu, MenuItem } from './Menu.tsx';

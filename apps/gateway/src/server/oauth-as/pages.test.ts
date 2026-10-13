@@ -51,9 +51,9 @@ describe('the consent screen', () => {
   it('says the name is a claim, and what the delegation can and can never do', async () => {
     const html = await consentPage(view()).text();
     expect(html).toContain('It is not verified');
-    expect(html).toContain('issue missions in your name');
-    expect(html).toContain('answer a request');
-    expect(html).toContain('call a provider tool');
+    expect(html).toContain('create missions in your name');
+    expect(html).toContain('answer what waits for you');
+    expect(html).toContain('call a tool of a service itself');
   });
 
   it('warns according to where the code goes', async () => {
@@ -132,6 +132,17 @@ describe('the consent screen', () => {
   it('uses a fresh style nonce for every response', () => {
     const csp = (): string | null => consentPage(view()).headers.get('content-security-policy');
     expect(csp()).not.toBe(csp());
+  });
+});
+
+describe('the theme of the pages', () => {
+  it('follows the system by default and the choice of the person when the handlers pass it', async () => {
+    const plain = await consentPage(view()).text();
+    expect(plain).toContain('<html lang="en">');
+    expect(plain).toContain('prefers-color-scheme: dark');
+    expect(await consentPage(view({ theme: 'dark' })).text()).toContain('data-theme="dark"');
+    const message = await messagePage(400, 'Invalid request', 'No.', { theme: 'light' }).text();
+    expect(message).toContain('data-theme="light"');
   });
 });
 

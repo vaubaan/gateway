@@ -18,6 +18,7 @@ import {
   PageFrameSections,
   TokenSections,
 } from './sections-foundation';
+import { WaitingSections } from './sections-waiting';
 import { MISSION_SECTION_ITEMS, MissionSections } from './sections-missions';
 
 /** The sections, as the local navigation lists them. Each `id` is a section anchor. */
@@ -74,6 +75,14 @@ export const GALLERY_SECTIONS: readonly {
       { id: 'legacy', label: 'Kept for older pages' },
     ],
   },
+  {
+    group: 'Now and Waiting for you',
+    items: [
+      { id: 'running', label: 'Running list' },
+      { id: 'inbox', label: 'Inbox' },
+      { id: 'request', label: 'Open request' },
+    ],
+  },
   { group: 'Mission pages', items: MISSION_SECTION_ITEMS },
 ];
 
@@ -114,6 +123,7 @@ export function Gallery() {
         <OverlaySections />
         <FormSections />
         <LegacySections />
+        <WaitingSections />
         <MissionSections />
       </SubNavFrame>
     </>
