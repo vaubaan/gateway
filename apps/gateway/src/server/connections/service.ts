@@ -60,6 +60,7 @@ import type {
 } from '../store/types';
 import { serializeSecret } from './credential-codec';
 import type { CredentialBroker } from './credentials';
+import { canWithdraw } from './credentials';
 import { ConnectError, errorMessage, oneLine } from './errors';
 import {
   cleanName,
@@ -135,9 +136,21 @@ export interface DiscoveryRecord {
   readonly error: string | null;
 }
 
+/**
+ * What revoking a connection does to the grant at its provider — said before
+ * the act (the confirmation) and after it (the revoked connection's page).
+ */
+export interface ProviderGrantView {
+  /** True when the gateway asks the provider to withdraw the grant on revocation. */
+  readonly withdrawnByGateway: boolean;
+  /** Where the person removes the grant themselves; `null` when the plugin gives no sentence. */
+  readonly byHand: string | null;
+}
+
 export interface ConnectionView {
   readonly connection: ConnectionRecord;
   readonly providerLabel: string;
+  readonly providerGrant: ProviderGrantView;
   readonly experimental: boolean;
   /** `null` when the plugin is no longer registered. */
   readonly credentialKind: CredentialKind | null;
@@ -838,19 +851,48 @@ export class ConnectionService {
   // ── Revoke ────────────────────────────────────────────────────────────────
 
   /**
-   * Terminal. The sealed credential is erased; the provider-side grant is not
-   * revoked. The missions that carry the connection are `orphaned` from then
-   * on, and stay so: a revoked connection never comes back (spec §2.3, §7.8).
+   * Terminal. The sealed credential is erased, and the missions that carry
+   * the connection are `orphaned` from then on, and stay so: a revoked
+   * connection never comes back (spec §2.3, §7.8).
+   *
+   * The grant at the provider is withdrawn too when the provider documents
+   * how (`CredentialBroker.withdrawAtProvider`). In this order, on purpose:
+   * the credential is read, the connection is revoked here, and only then is
+   * the provider asked — the local revocation never waits for the provider
+   * and never depends on its answer. What the provider answered is stored on
+   * the connection (`providerGrant`) and written in the entry, so that a
+   * grant that still stands stays visible until somebody removes it by hand.
    */
   async revoke(actor: Actor, connectionId: string): Promise<ConnectionRecord> {
     const connection = await this.requireOwned(actor, connectionId);
     if (connection.status === 'revoked') return connection;
     const watch = await this.deps.grounds.watchConnection(connection.id);
-    const revoked = await this.deps.store.connections.revoke(connection.id);
+    // Read before the erase: the provider's endpoint wants the token the store is about to drop.
+    const held = await this.deps.broker.forRevocation(connection.id);
+    let revoked = await this.deps.store.connections.revoke(connection.id);
+    const providerGrant = await this.deps.broker.withdrawAtProvider(revoked, held);
+    try {
+      revoked =
+        (await this.deps.store.connections.recordProviderGrant(revoked.id, providerGrant)) ??
+        revoked;
+    } catch (err) {
+      // The revocation stands and the entry below still says what the provider answered.
+      this.deps.logger.error('provider grant outcome not stored', {
+        connection_id: revoked.id,
+        provider_grant: providerGrant,
+        error_class: err instanceof Error ? err.name : typeof err,
+      });
+    }
     // Settled whatever happens to the act's own entry: the revocation is committed, and
     // the entries that say which missions stopped serving must not depend on it.
     try {
-      await this.audit(actor.user.id, 'connection-revoked', revoked, { status: connection.status });
+      await this.audit(
+        actor.user.id,
+        'connection-revoked',
+        revoked,
+        { status: connection.status },
+        { provider_grant: providerGrant },
+      );
     } finally {
       await watch.settle(actor.user.id);
     }
@@ -858,6 +900,7 @@ export class ConnectionService {
       connection_id: revoked.id,
       provider: revoked.provider,
       user_id: actor.user.id,
+      provider_grant: providerGrant,
     });
     return revoked;
   }
@@ -1131,12 +1174,33 @@ export class ConnectionService {
     return record;
   }
 
+  /**
+   * What the plugin of a connection says about withdrawing its grant, with the
+   * provider's label. Read from the registry alone: it answers for a revoked
+   * connection too, and for a provider whose plugin is gone (nothing is known,
+   * so the person removes the access by hand).
+   */
+  providerGrantOf(connection: Pick<ConnectionRecord, 'provider'>): {
+    readonly providerLabel: string;
+    readonly grant: ProviderGrantView;
+  } {
+    const plugin = this.deps.registry.get(connection.provider)?.plugin;
+    return {
+      providerLabel: plugin?.displayName ?? connection.provider,
+      grant: {
+        withdrawnByGateway: plugin ? canWithdraw(plugin) : false,
+        byHand: plugin?.manualRevocation ?? null,
+      },
+    };
+  }
+
   private async view(connection: ConnectionRecord): Promise<ConnectionView> {
     const registered = this.deps.registry.get(connection.provider);
     const metadata = connection.metadata ?? {};
     return {
       connection,
       providerLabel: registered?.plugin.displayName ?? connection.provider,
+      providerGrant: this.providerGrantOf(connection).grant,
       experimental: registered?.plugin.experimental === true,
       credentialKind: registered?.plugin.credential.kind ?? null,
       ownerLabel: await this.ownerLabel(connection),
@@ -1162,6 +1226,7 @@ export class ConnectionService {
       | 'connection-reassigned',
     connection: ConnectionRecord,
     before: unknown,
+    extra: Readonly<Record<string, string>> = {},
   ): Promise<void> {
     await this.deps.audit.write({
       kind: 'admin',
@@ -1175,6 +1240,7 @@ export class ConnectionService {
         display_name: connection.displayName,
         status: connection.status,
         owner: connection.owner,
+        ...extra,
       },
       delegated_client_id: null,
     });

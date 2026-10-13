@@ -62,6 +62,59 @@ describe('definePlugin', () => {
     ]);
   });
 
+  test('manualRevocation is optional, and a sentence or two when present; revoke is a function', () => {
+    const sentence = 'Delete the API key in the Acme dashboard, under API keys.';
+    expect(pluginIssues({ ...acmePlugin, manualRevocation: sentence })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, manualRevocation: ' ' })).toEqual([
+      'manualRevocation: expected a non-empty string when present',
+    ]);
+    expect(pluginIssues({ ...acmePlugin, manualRevocation: 'x'.repeat(401) })).toEqual([
+      'manualRevocation: expected at most 400 characters',
+    ]);
+    expect(pluginIssues({ ...acmePlugin, revoke: async () => undefined })).toEqual([]);
+    expect(pluginIssues({ ...acmePlugin, revoke: 'yes' } as unknown as ProviderPlugin)).toEqual([
+      'revoke: expected a function when present',
+    ]);
+  });
+
+  test('an oauth2 revocation block names an https endpoint and one of the two request shapes', () => {
+    const oauth = (extra: Record<string, unknown>): ProviderPlugin => ({
+      ...acmePlugin,
+      credential: {
+        kind: 'oauth2',
+        authorizationUrl: 'https://auth.example/authorize',
+        tokenUrl: 'https://auth.example/token',
+        scopes: ['read'],
+        pkce: true,
+        clientAuthMethod: 'client_secret_basic',
+        refreshable: true,
+        ...extra,
+      },
+    });
+    const url = 'https://auth.example/revoke';
+    expect(pluginIssues(oauth({ revocation: { url, format: 'token-form' } }))).toEqual([]);
+    expect(pluginIssues(oauth({ revocation: { url, format: 'client-credentials-json' } }))).toEqual(
+      [],
+    );
+    expect(
+      pluginIssues(oauth({ revocation: { url: 'http://auth.example/revoke', format: 'rfc7009' } })),
+    ).toEqual([
+      'credential.revocation.url: expected an https URL',
+      'credential.revocation.format: expected one of token-form | client-credentials-json',
+    ]);
+    expect(pluginIssues(oauth({ revocation: 'https://auth.example/revoke' }))).toEqual([
+      'credential.revocation: expected { url, format }',
+    ]);
+    // The JSON shape carries the client secret and a refresh token: both must exist.
+    for (const extra of [{ clientAuthMethod: 'none' }, { refreshable: false }]) {
+      expect(
+        pluginIssues(oauth({ ...extra, revocation: { url, format: 'client-credentials-json' } })),
+      ).toEqual([
+        "credential.revocation.format: 'client-credentials-json' needs a confidential client and refresh tokens",
+      ]);
+    }
+  });
+
   test('a token handout names a declared tool and risks of the catalog', () => {
     const [tool] = acmePlugin.tools;
     const [risk] = acmePlugin.catalog.risks;

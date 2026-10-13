@@ -21,7 +21,9 @@ import { semanticIssues } from './catalog-loader.ts';
 import {
   CLIENT_ID_FIELD,
   CLIENT_SECRET_FIELD,
+  OAUTH2_REVOCATION_FORMATS,
   type AppInstallCredentialSpec,
+  type OAuth2CredentialSpec,
 } from './credential.ts';
 import type { ProviderPlugin } from './plugin.ts';
 
@@ -101,6 +103,42 @@ function identityIssues(plugin: ProviderPlugin): string[] {
     } else if (plugin.summary.length > PLUGIN_SUMMARY_MAX_LENGTH) {
       issues.push(`summary: expected at most ${PLUGIN_SUMMARY_MAX_LENGTH} characters`);
     }
+  }
+  if (plugin.manualRevocation !== undefined) {
+    if (typeof plugin.manualRevocation !== 'string' || plugin.manualRevocation.trim() === '') {
+      issues.push('manualRevocation: expected a non-empty string when present');
+    } else if (plugin.manualRevocation.length > PLUGIN_MANUAL_REVOCATION_MAX_LENGTH) {
+      issues.push(
+        `manualRevocation: expected at most ${PLUGIN_MANUAL_REVOCATION_MAX_LENGTH} characters`,
+      );
+    }
+  }
+  if (plugin.revoke !== undefined && typeof plugin.revoke !== 'function') {
+    issues.push('revoke: expected a function when present');
+  }
+  return issues;
+}
+
+/** Upper bound of `ProviderPlugin.manualRevocation` : a sentence or two. */
+export const PLUGIN_MANUAL_REVOCATION_MAX_LENGTH = 400;
+
+function revocationIssues(spec: OAuth2CredentialSpec): string[] {
+  const revocation: unknown = spec.revocation;
+  if (!isRecord(revocation)) return ['credential.revocation: expected { url, format }'];
+  const issues: string[] = [];
+  if (!isHttpsUrl(revocation.url)) issues.push('credential.revocation.url: expected an https URL');
+  if (!(OAUTH2_REVOCATION_FORMATS as readonly unknown[]).includes(revocation.format)) {
+    issues.push(
+      `credential.revocation.format: expected one of ${OAUTH2_REVOCATION_FORMATS.join(' | ')}`,
+    );
+  }
+  if (
+    revocation.format === 'client-credentials-json' &&
+    (spec.clientAuthMethod === 'none' || !spec.refreshable)
+  ) {
+    issues.push(
+      "credential.revocation.format: 'client-credentials-json' needs a confidential client and refresh tokens",
+    );
   }
   return issues;
 }
@@ -192,6 +230,7 @@ function credentialSpecIssues(plugin: ProviderPlugin): string[] {
         issues.push('credential.scopes: expected a list (may be empty)');
       if (spec.clientAuthMethod === 'none' && !spec.pkce)
         issues.push('credential.pkce: a public client (clientAuthMethod none) must use PKCE');
+      if (spec.revocation !== undefined) issues.push(...revocationIssues(spec));
       // `refreshable: true` needs no `refresh()` : the host performs the
       // standard refresh_token grant from the spec (ADR plugin-contract D2 as
       // amended by P1.2-align) ; `refresh` is an override for non-standard flows.

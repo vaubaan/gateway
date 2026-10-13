@@ -83,7 +83,39 @@ export interface OAuth2CredentialSpec {
   readonly extraAuthorizationParams?: Readonly<Record<string, string>>;
   /** Provider-specific operator settings beyond `client_id` / `client_secret`, which the host always asks for. */
   readonly appConfigFields?: readonly CredentialField[];
+  /**
+   * How the provider withdraws the grant when a connection is revoked (spec
+   * vaubaan-gateway §2.3). Declarative : the host sends the request, because
+   * it may carry the app's client secret, which a plugin never sees. Absent
+   * when the provider documents no such endpoint : the person removes the
+   * grant by hand (`ProviderPlugin.manualRevocation`).
+   */
+  readonly revocation?: OAuth2Revocation;
 }
+
+/**
+ * The request that withdraws an OAuth grant at the provider. Two shapes, each
+ * the one a shipped provider documents :
+ *
+ *   `token-form`               `POST url`, form-encoded `token=<the refresh
+ *                              token, or the access token when no refresh
+ *                              token is stored>`. No client authentication.
+ *                              (Google : revoking either token revokes both.)
+ *   `client-credentials-json`  `POST url`, JSON `{ client_id, client_secret,
+ *                              refresh_token }`. Needs a stored refresh token.
+ *                              (Supabase Management API.)
+ *
+ * Any 2xx answer means the provider took the request ; anything else, and a
+ * provider that does not answer, means the grant may still stand.
+ */
+export interface OAuth2Revocation {
+  /** The revocation endpoint (https). */
+  readonly url: string;
+  readonly format: OAuth2RevocationFormat;
+}
+
+export const OAUTH2_REVOCATION_FORMATS = ['token-form', 'client-credentials-json'] as const;
+export type OAuth2RevocationFormat = (typeof OAUTH2_REVOCATION_FORMATS)[number];
 
 /**
  * App-config keys of the app's OAuth client. The host asks for them for every

@@ -64,6 +64,8 @@ export const upstashRedisPlugin = definePlugin({
     'Serverless Redis plane — databases through the Management API, key-value data through each database REST endpoint.',
   summary:
     'One connection is one Upstash account (email and management API key); one resource is one Redis database. The connection owner labels each database with an environment; key reads and writes, deletions, FLUSH, arbitrary commands and database management are separate risks accepted per label.',
+  manualRevocation:
+    'Delete the management API key in the Upstash console, under Account, Management API.',
   docsUrl:
     'https://github.com/sbw-vaubaan/vaubaan-gateway/blob/main/docs/handbook/providers/upstash-redis.md',
   tools: upstashRedisTools,

@@ -81,6 +81,15 @@ export interface GroupRecord {
 
 // --- connections, resources, shares -------------------------------------------------
 
+/**
+ * What became of the grant at the provider when a connection was revoked.
+ * `revoked`: the provider confirmed the withdrawal. `manual`: the gateway
+ * cannot withdraw it for this provider. `failed`: it asked and was refused or
+ * not answered. In the last two cases the person removes the grant by hand.
+ */
+export const PROVIDER_GRANT_OUTCOMES = ['revoked', 'manual', 'failed'] as const;
+export type ProviderGrantOutcome = (typeof PROVIDER_GRANT_OUTCOMES)[number];
+
 export interface ConnectionRecord {
   readonly id: string;
   readonly provider: string;
@@ -94,6 +103,11 @@ export interface ConnectionRecord {
   readonly createdAt: Iso;
   readonly updatedAt: Iso;
   readonly revokedAt: Iso | null;
+  /**
+   * Null for a connection that is not revoked, and for one revoked before the
+   * gateway asked providers anything (nothing is known: remove it by hand).
+   */
+  readonly providerGrant: ProviderGrantOutcome | null;
 }
 
 export interface ConnectionResourceRecord {

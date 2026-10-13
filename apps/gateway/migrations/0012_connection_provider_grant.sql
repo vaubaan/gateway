@@ -1,0 +1,23 @@
+-- Migration 0012 — what became of the provider-side grant of a revoked connection
+-- (spec §2.3 "Connection"; ADR provider-side-revocation-on-connection-revoke).
+--
+-- Revoking a connection erases its credential here. Since this build the gateway also
+-- asks the provider to withdraw the grant, when the provider documents how. The answer
+-- has to outlive the request that revoked: a grant that still stands at the provider
+-- must stay visible on the connection's page until somebody removes it by hand.
+--
+--   connections.provider_grant   'revoked'  the provider confirmed the withdrawal
+--                                'manual'   the gateway cannot withdraw it for this
+--                                           provider: the person removes it by hand
+--                                'failed'   the gateway asked and was not answered, or
+--                                           was refused: the grant may still stand
+--                                NULL       not a revoked connection, or one revoked
+--                                           before this column existed (nothing was
+--                                           asked of the provider)
+--
+-- The values are checked by the repository (`PROVIDER_GRANT_OUTCOMES`), like
+-- `delegations.revoke_reason`: a new outcome needs no table rebuild.
+--
+-- Portable SQL: one nullable `ADD COLUMN`, no default, no backfill.
+
+ALTER TABLE connections ADD COLUMN provider_grant TEXT;

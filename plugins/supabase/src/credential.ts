@@ -24,6 +24,7 @@ import type { OAuth2CredentialSpec } from '@vaubaan/plugin-sdk';
 
 export const SUPABASE_OAUTH_AUTHORIZE_URL = 'https://api.supabase.com/v1/oauth/authorize';
 export const SUPABASE_OAUTH_TOKEN_URL = 'https://api.supabase.com/v1/oauth/token';
+export const SUPABASE_OAUTH_REVOKE_URL = 'https://api.supabase.com/v1/oauth/revoke';
 
 /** Keys of the app configuration the host fills from the company's registered app. */
 export const SUPABASE_APP_CONFIG_KEYS = {
@@ -41,4 +42,8 @@ export const supabaseCredential: OAuth2CredentialSpec = {
   pkce: true,
   clientAuthMethod: 'client_secret_basic',
   refreshable: true,
+  // Management API `POST /v1/oauth/revoke` : JSON `{ client_id, client_secret,
+  // refresh_token }`, "revoke oauth app authorization and its corresponding
+  // tokens". The host sends it : the plugin never holds the client secret.
+  revocation: { url: SUPABASE_OAUTH_REVOKE_URL, format: 'client-credentials-json' },
 };

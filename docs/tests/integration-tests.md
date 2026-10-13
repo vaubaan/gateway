@@ -1419,7 +1419,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
 > §3.5, §6 ("encryption at rest", "authoritative, atomic counting",
 > "immutable audit"), §8, §10 (structural tests). Handbook [[store]]. ADR
 > [[embedded-store-sqlite-and-migrations]]. Every suite runs on an
-> ephemeral `:memory:` store with the real migrations (`0001`-`0011`), a
+> ephemeral `:memory:` store with the real migrations (`0001`-`0012`), a
 > `ManualClock`, a `StubEncryptor` and a five-id `SetCatalogIndex`
 > (`apps/gateway/src/server/store/testing.ts`); the two file-based cases
 > use a temp directory. Paths are relative to `apps/gateway/tests/`.
@@ -1434,7 +1434,7 @@ Container smoke (`deploy/docker/smoke.sh`, CI job `docker`): see
   immutability of an applied file (boot refused), full rollback of a
   failing file (nothing recorded, no table left), a database carrying a
   migration this image does not ship is refused, the eleven shipped
-  migrations `0001`-`0011` in the default directory.
+  migrations `0001`-`0012` in the default directory.
 - **`unit/server/store/db.test.ts`** (2) — `isSqliteVersionAtLeast`
   against `MIN_SQLITE_VERSION`: major, minor and patch compared in order;
   a missing or malformed component counts as zero.

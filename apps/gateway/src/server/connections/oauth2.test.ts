@@ -10,6 +10,7 @@ import {
   newState,
   OAuth2TokenError,
   refreshGrant,
+  revokeGrant,
   type OAuth2Client,
 } from './oauth2';
 import { OAUTH_SPEC } from './testing';
@@ -254,5 +255,108 @@ describe('refresh_token grant', () => {
       refreshGrant(OAUTH_SPEC, CLIENT, { ...current, refreshToken: null }, io(fetch)),
     ).rejects.toMatchObject({ rejected: true });
     expect(fetch.calls).toHaveLength(0);
+  });
+});
+
+describe('revocation of the grant at the provider', () => {
+  const URL_ = 'https://provider.example.com/oauth/revoke';
+  const secret = { accessToken: 'at-PLAINTEXT', refreshToken: 'rt-PLAINTEXT' };
+  const route = (status = 200, body: unknown = {}) =>
+    mockFetch([{ method: 'POST', url: URL_, status, body }]);
+
+  it('token-form: posts the refresh token, form-encoded, with no client credentials', async () => {
+    const fetch = route();
+    expect(
+      await revokeGrant({ url: URL_, format: 'token-form' }, CLIENT, secret, { fetch }),
+    ).toEqual({ outcome: 'revoked' });
+    const [call] = fetch.calls;
+    expect(call?.method).toBe('POST');
+    expect(call?.url).toBe(URL_);
+    expect(call?.headers['content-type']).toBe('application/x-www-form-urlencoded');
+    expect(Object.fromEntries(form(call!.body))).toEqual({ token: 'rt-PLAINTEXT' });
+    expect(call?.headers.authorization).toBeUndefined();
+    expect(call!.body).not.toContain(CLIENT.clientSecret);
+  });
+
+  it('token-form: falls back to the access token when no refresh token is stored', async () => {
+    const fetch = route();
+    await revokeGrant(
+      { url: URL_, format: 'token-form' },
+      CLIENT,
+      { ...secret, refreshToken: null },
+      {
+        fetch,
+      },
+    );
+    expect(Object.fromEntries(form(fetch.calls[0]!.body))).toEqual({ token: 'at-PLAINTEXT' });
+  });
+
+  it('client-credentials-json: posts client id, client secret and refresh token as JSON', async () => {
+    const fetch = route();
+    expect(
+      await revokeGrant({ url: URL_, format: 'client-credentials-json' }, CLIENT, secret, {
+        fetch,
+      }),
+    ).toEqual({ outcome: 'revoked' });
+    const [call] = fetch.calls;
+    expect(call?.headers['content-type']).toBe('application/json');
+    expect(call?.json).toEqual({
+      client_id: CLIENT.clientId,
+      client_secret: CLIENT.clientSecret,
+      refresh_token: 'rt-PLAINTEXT',
+    });
+  });
+
+  it('client-credentials-json: sends nothing without a refresh token or a client secret', async () => {
+    const fetch = mockFetch([]);
+    const revocation = { url: URL_, format: 'client-credentials-json' } as const;
+    expect(
+      await revokeGrant(revocation, CLIENT, { ...secret, refreshToken: null }, { fetch }),
+    ).toEqual({ outcome: 'no-token' });
+    expect(
+      await revokeGrant(revocation, { ...CLIENT, clientSecret: null }, secret, { fetch }),
+    ).toEqual({ outcome: 'no-token' });
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  it.each([400, 401, 403, 404, 500, 503])(
+    'a %i is a failed attempt: the grant may still stand',
+    async (status) => {
+      const fetch = route(status, { error: 'invalid_token', token: 'rt-PLAINTEXT' });
+      const attempt = await revokeGrant({ url: URL_, format: 'token-form' }, CLIENT, secret, {
+        fetch,
+      });
+      expect(attempt).toEqual({
+        outcome: 'failed',
+        status,
+        detail: `revocation endpoint answered ${status}`,
+      });
+    },
+  );
+
+  it('an unreachable endpoint is a failed attempt, never an exception, and its detail names no secret', async () => {
+    const unreachable: typeof globalThis.fetch = async () => {
+      throw new TypeError(`connect ECONNREFUSED while sending ${secret.refreshToken}`);
+    };
+    const attempt = await revokeGrant({ url: URL_, format: 'token-form' }, CLIENT, secret, {
+      fetch: unreachable,
+    });
+    expect(attempt).toEqual({
+      outcome: 'failed',
+      status: 0,
+      detail: 'revocation endpoint unreachable (TypeError)',
+    });
+    expect(JSON.stringify(attempt)).not.toContain('PLAINTEXT');
+  });
+
+  it('never follows a redirect: the token goes to the declared endpoint or nowhere', async () => {
+    let init: RequestInit | undefined;
+    const spy: typeof globalThis.fetch = async (_input, received) => {
+      init = received;
+      return new Response(null, { status: 200 });
+    };
+    await revokeGrant({ url: URL_, format: 'token-form' }, CLIENT, secret, { fetch: spy });
+    expect(init?.redirect).toBe('error');
+    expect(init?.signal).toBeInstanceOf(AbortSignal);
   });
 });

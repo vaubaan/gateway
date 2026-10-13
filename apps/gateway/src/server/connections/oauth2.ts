@@ -5,7 +5,9 @@
  *   - the authorization request (RFC 6749 §4.1.1) with PKCE S256 (RFC 7636)
  *     and the resource indicator (RFC 8707) when the spec asks for them;
  *   - the code exchange (§4.1.3);
- *   - the `refresh_token` grant (§6), with rotation of the refresh token.
+ *   - the `refresh_token` grant (§6), with rotation of the refresh token;
+ *   - the withdrawal of the grant when a connection is revoked, in the shape
+ *     the spec's `revocation` block declares.
  *
  * Client authentication follows `clientAuthMethod` (§2.3.1): HTTP Basic with
  * form-encoded credentials, credentials in the body, or none for a public
@@ -21,6 +23,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type {
   OAuth2ClientAuthMethod,
   OAuth2CredentialSpec,
+  OAuth2Revocation,
   OAuth2Secret,
 } from '@vaubaan/plugin-sdk';
 
@@ -298,6 +301,85 @@ async function tokenRequest(
     expiresAt: expiryFrom(payload.expires_in, io.now()),
     scopes: scopesFrom(payload.scope),
   };
+}
+
+/** A provider that does not answer a revocation within this delay did not confirm it. */
+export const REVOCATION_REQUEST_TIMEOUT_MS = 10_000;
+
+/**
+ * What the provider answered to a revocation request. `no-token`: the stored
+ * credential holds nothing this endpoint accepts (no refresh token for a
+ * `client-credentials-json` endpoint), so nothing was sent.
+ */
+export type RevocationAttempt =
+  | { readonly outcome: 'revoked' }
+  | { readonly outcome: 'no-token' }
+  /** `status` is the HTTP status, or 0 when no response was received. */
+  | { readonly outcome: 'failed'; readonly status: number; readonly detail: string };
+
+/**
+ * Asks the provider to withdraw the grant of `secret`, in the shape
+ * `revocation` declares (`OAuth2Revocation`). Never throws: a provider that
+ * refuses, does not answer or redirects is a `failed` attempt. The detail
+ * never carries a token or the client secret — only the status.
+ */
+export async function revokeGrant(
+  revocation: OAuth2Revocation,
+  client: OAuth2Client,
+  secret: Pick<OAuth2Secret, 'accessToken' | 'refreshToken'>,
+  io: Pick<OAuth2Io, 'fetch'>,
+): Promise<RevocationAttempt> {
+  const request = revocationRequest(revocation, client, secret);
+  if (request === null) return { outcome: 'no-token' };
+  let response: Response;
+  try {
+    response = await io.fetch(revocation.url, {
+      method: 'POST',
+      headers: { 'Content-Type': request.contentType, Accept: 'application/json' },
+      body: request.body,
+      redirect: 'error',
+      signal: AbortSignal.timeout(REVOCATION_REQUEST_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const reason = err instanceof Error ? err.name : 'unknown error';
+    return { outcome: 'failed', status: 0, detail: `revocation endpoint unreachable (${reason})` };
+  }
+  if (response.ok) return { outcome: 'revoked' };
+  return {
+    outcome: 'failed',
+    status: response.status,
+    detail: `revocation endpoint answered ${response.status}`,
+  };
+}
+
+/** The body of a revocation request, or `null` when the credential holds no token it could carry. */
+function revocationRequest(
+  revocation: OAuth2Revocation,
+  client: OAuth2Client,
+  secret: Pick<OAuth2Secret, 'accessToken' | 'refreshToken'>,
+): { readonly contentType: string; readonly body: string } | null {
+  switch (revocation.format) {
+    case 'token-form': {
+      // The refresh token when there is one: revoking it ends the access tokens too.
+      const token = secret.refreshToken ?? secret.accessToken;
+      if (!token) return null;
+      return {
+        contentType: 'application/x-www-form-urlencoded',
+        body: new URLSearchParams({ token }).toString(),
+      };
+    }
+    case 'client-credentials-json': {
+      if (!secret.refreshToken || !client.clientSecret) return null;
+      return {
+        contentType: 'application/json',
+        body: JSON.stringify({
+          client_id: client.clientId,
+          client_secret: client.clientSecret,
+          refresh_token: secret.refreshToken,
+        }),
+      };
+    }
+  }
 }
 
 function requireSecret(client: OAuth2Client): string {

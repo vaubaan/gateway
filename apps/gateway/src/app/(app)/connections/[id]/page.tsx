@@ -14,6 +14,7 @@ import { notFound } from 'next/navigation';
 
 import { NeedsUser } from '@/components/auth/NeedsUser';
 import { RevokeConnection } from '@/components/connections/RevokeConnection';
+import { providerGrantForecast, providerGrantReport } from '@/server/connections/provider-grant';
 import { RiskIdLink } from '@/components/risk/RiskExplain';
 import { ValidationBadge } from '@/components/telemetry/ValidationBadge';
 import styles from '@/components/connections/connections.module.css';
@@ -85,6 +86,15 @@ export default async function ConnectionPage({
   const base = connectionPath(connection.id);
   const revoked = connection.status === 'revoked';
   const unowned = connection.status === 'unowned';
+  // What became of the access granted at the provider: kept on the page for as long as
+  // the connection is listed, so that a grant nobody removed stays in sight.
+  const grantReport = revoked
+    ? providerGrantReport(
+        detail.providerLabel,
+        connection.providerGrant,
+        detail.providerGrant.byHand,
+      )
+    : null;
   const fields = Object.entries(detail.fields);
   const { shares, unshareable } = await root.shares.service.contextFor(actor, connection.id);
   // Empty when the connection takes no owner act: the service says which groups `transfer` accepts.
@@ -118,7 +128,11 @@ export default async function ConnectionPage({
                 Reconnect
               </Link>
             )}
-            <RevokeConnection action={`${base}/revoke`} name={connection.displayName} />
+            <RevokeConnection
+              action={`${base}/revoke`}
+              name={connection.displayName}
+              atProvider={providerGrantForecast(detail.providerLabel, detail.providerGrant)}
+            />
           </div>
         )}
       </div>
@@ -142,6 +156,11 @@ export default async function ConnectionPage({
           This connection was revoked
           {connection.revokedAt ? ` on ${day(connection.revokedAt)}` : ''}; its credential is
           erased. Revocation is final.
+        </Banner>
+      )}
+      {revoked && grantReport && (
+        <Banner tone={grantReport.actionNeeded ? 'warning' : 'success'} title={grantReport.title}>
+          {grantReport.text}
         </Banner>
       )}
 

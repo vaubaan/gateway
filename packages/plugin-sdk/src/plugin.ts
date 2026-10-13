@@ -212,6 +212,29 @@ export interface ProviderPlugin {
   refresh?(ctx: ConnectionContext): Promise<CredentialSecret>;
 
   /**
+   * Withdraw at the provider the grant this connection holds, when the owner
+   * revokes the connection (spec vaubaan-gateway §2.3). For a provider whose
+   * revocation is not one of the declarative `OAuth2CredentialSpec.revocation`
+   * shapes. The host calls it once, with the credential it is about to erase,
+   * after the connection is revoked locally : the local revocation never
+   * depends on it. Resolve when the provider confirmed ; throw otherwise
+   * (the host then tells the person to remove the grant by hand). When
+   * present it takes precedence over `credential.revocation`. No agent
+   * argument ever reaches it.
+   */
+  revoke?(ctx: ConnectionContext): Promise<void>;
+
+  /**
+   * One or two plain sentences telling a person where, at the provider, they
+   * remove the grant themselves : shown when the gateway cannot withdraw it
+   * (no `revoke`, no `credential.revocation`) or tried and was not answered.
+   * Names the place in the provider's interface ; no markup. Optional in the
+   * contract ; every plugin shipped with the gateway fills it (structural
+   * test).
+   */
+  readonly manualRevocation?: string;
+
+  /**
    * Rewrite the arguments so the call respects the scope caps the mission
    * resolved (page size, time window). Pure. Return the input when nothing
    * applies ; throw when a cap cannot be enforced upstream so the host

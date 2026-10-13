@@ -306,7 +306,13 @@ owner; `revoked` by an owner, terminal. An `expired` connection makes
 every call of the missions that carry it fail with
 `connection-unavailable`, naming the connection, until someone
 reconnects it. A `revoked` connection grounds no authority any more: the
-missions that carry it become `orphaned`. A connection whose owner group
+missions that carry it become `orphaned`. Revoking a connection erases
+its credential on the instance and, **when the provider offers a way to
+do it, also withdraws the grant at the provider**; the interface says,
+provider by provider, whether the grant was withdrawn there or must be
+removed by hand, and keeps saying it on the revoked connection. The
+local revocation never waits for the provider's answer nor depends on
+it. A connection whose owner group
 becomes empty (all members removed from the IdP) becomes `unowned`:
 missions keep running, but nobody can share or reconnect until the
 operator reassigns an owner. This is the operator's only act on the
@@ -738,8 +744,10 @@ command.
 - **Provider plugins** — one per provider. Two responsibilities: classify
   `(tool, arguments) → slices`, execute the tool with an ephemeral
   credential. They also declare how to obtain and refresh a credential
-  from the app registered by the company, how to discover resources, and
-  ship at least one **preset** in their catalog. Contribution process:
+  from the app registered by the company, how to withdraw the grant at
+  the provider when a connection is revoked (or, failing that, where a
+  person removes it by hand), how to discover resources, and ship at
+  least one **preset** in their catalog. Contribution process:
   [CONTRIBUTING](../../CONTRIBUTING.md) and the plugin kit,
   [plugins/README](../../plugins/README.md).
 - **The company's IdP** — authenticates humans, provides subject, email
@@ -864,6 +872,9 @@ new request.
 The creator revokes a mission or rotates its token without changing the
 mission. The owner revokes a share or a connection; the missions that
 depend on it become `orphaned` and refuse everything, with the reason.
+When a connection is revoked, the owner is told what became of the
+access granted at the provider: withdrawn there too, or theirs to remove
+by hand, with the place to do it.
 
 ### 7.9 Work with several agents
 

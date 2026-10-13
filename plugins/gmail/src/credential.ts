@@ -29,6 +29,7 @@ import type { OAuth2CredentialSpec } from '@vaubaan/plugin-sdk';
 
 export const GMAIL_AUTHORIZATION_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export const GMAIL_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+export const GMAIL_REVOCATION_URL = 'https://oauth2.googleapis.com/revoke';
 
 /** Gmail REST API base, used by `discoverResources`. */
 export const GMAIL_API_BASE = 'https://gmail.googleapis.com/gmail/v1';
@@ -53,6 +54,9 @@ export const gmailCredentialSpec: OAuth2CredentialSpec = {
   pkce: true,
   clientAuthMethod: 'client_secret_post',
   refreshable: true,
+  // Google's documented revocation : POST, form-encoded `token`. Revoking the
+  // refresh token revokes the access tokens issued from it.
+  revocation: { url: GMAIL_REVOCATION_URL, format: 'token-form' },
   extraAuthorizationParams: {
     access_type: 'offline',
     prompt: 'consent',

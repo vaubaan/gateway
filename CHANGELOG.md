@@ -35,6 +35,16 @@ migrate, an instance starts empty. The notes below describe what the gateway doe
   checked against the services recorded for the mission's project at discovery; a
   project discovered by an earlier build has none recorded, and a call that names
   a service is refused until its owner refreshes the connection.
+- **Revoking a connection now withdraws the access at the provider, where the
+  provider allows it.** Schema migration `0012` (forward-only, one nullable column).
+  For Supabase (and the experimental Gmail plugin) the gateway asks the provider to
+  revoke the OAuth authorization and tells you whether it confirmed. For every other
+  provider it cannot, and says so before and after: the dialog and the revoked
+  connection's page tell you where to remove the access by hand — uninstall the
+  GitHub App, revoke the app in your Railway account, delete the API key for Vercel,
+  Stripe, Cloudflare, Upstash and Resend, remove the public key for SSH. Connections
+  revoked before this build asked nothing of the provider: their page says to remove
+  the access by hand.
 - **Mission tokens are stored as a SHA-256 digest; tokens you already issued keep
   working.** Nothing to do, and no schema migration. A token issued by an earlier
   build is stored as an argon2id hash: it still authenticates with the same Bearer,

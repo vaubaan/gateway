@@ -10,8 +10,9 @@ import type {
   DiscoveredResource,
   Iso,
   Principal,
+  ProviderGrantOutcome,
 } from '../types.ts';
-import { RESOURCE_ENV_SOURCES } from '../types.ts';
+import { PROVIDER_GRANT_OUTCOMES, RESOURCE_ENV_SOURCES } from '../types.ts';
 import {
   nowIso,
   parseEnum,
@@ -114,6 +115,12 @@ export interface ConnectionsRepo {
   /** Terminal revocation: status `revoked`, `revoked_at` set, the credential blob erased. */
   revoke(id: string): Promise<ConnectionRecord>;
   /**
+   * Records what became of the provider-side grant of a connection that is
+   * already revoked. Written once: a row that is not revoked, or that already
+   * holds an outcome, is left alone and `null` is returned.
+   */
+  recordProviderGrant(id: string, outcome: ProviderGrantOutcome): Promise<ConnectionRecord | null>;
+  /**
    * Discovery merge (spec §0 "Resource"): provider facts are refreshed, owner edits are
    * kept, nothing is deleted.
    *  - a new ref is inserted; an `env` the plugin returns marks the label `plugin`-set;
@@ -154,6 +161,7 @@ interface ConnectionRow {
   created_at: string;
   updated_at: string;
   revoked_at: string | null;
+  provider_grant: string | null;
 }
 
 interface ResourceRow {
@@ -172,7 +180,8 @@ interface ResourceRow {
 }
 
 const COLUMNS = `id, provider, owner_kind, owner_user_id, owner_group_id, display_name, status,
-  key_version, credential_expires_at, metadata_json, created_at, updated_at, revoked_at`;
+  key_version, credential_expires_at, metadata_json, created_at, updated_at, revoked_at,
+  provider_grant`;
 const RESOURCE_COLUMNS = `id, connection_id, ref, env, display_name, discovered_at, metadata_json,
   owner_metadata_json, env_source, display_name_edited, hidden, stale_since`;
 
@@ -205,6 +214,10 @@ function toRecord(row: ConnectionRow): ConnectionRecord {
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     revokedAt: row.revoked_at,
+    providerGrant:
+      row.provider_grant === null
+        ? null
+        : parseEnum(PROVIDER_GRANT_OUTCOMES, row.provider_grant, 'connections.provider_grant'),
   };
 }
 
@@ -322,6 +335,10 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     `UPDATE connections SET status = 'revoked', revoked_at = COALESCE(revoked_at, ?),
        credential_blob = NULL, key_version = NULL, credential_expires_at = NULL, updated_at = ?
      WHERE id = ?`,
+  );
+  const providerGrantStmt = db.prepare<[string, string]>(
+    `UPDATE connections SET provider_grant = ?
+     WHERE id = ? AND status = 'revoked' AND provider_grant IS NULL`,
   );
   const resourceByRef = db.prepare<[string, string], ResourceRow>(
     `SELECT ${RESOURCE_COLUMNS} FROM connection_resources WHERE connection_id = ? AND ref = ?`,
@@ -514,6 +531,12 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       const result = revokeStmt.run(now, now, id);
       if (result.changes === 0) throw new NotFoundError('connection', id);
       return requireConnection(id);
+    },
+    async recordProviderGrant(id, outcome) {
+      if (!PROVIDER_GRANT_OUTCOMES.includes(outcome)) {
+        throw new InvariantError(`unknown provider grant outcome '${String(outcome)}'`);
+      }
+      return providerGrantStmt.run(outcome, id).changes === 1 ? requireConnection(id) : null;
     },
     async syncDiscoveredResources(connectionId, resources) {
       requireConnection(connectionId);

@@ -453,6 +453,7 @@ const RULES: Readonly<Record<string, Rule>> = {
     writes: { act: 'connection-revoked', object: 'connection', actor: 'alice' },
   },
   'ConnectionService.transferTargets': READ,
+  'ConnectionService.providerGrantOf': READ,
   'ConnectionService.listOwnerless': READ,
   'ConnectionService.reassignTargets': READ,
   'ConnectionService.transfer': {
@@ -486,6 +487,10 @@ const RULES: Readonly<Record<string, Rule>> = {
   'CredentialBroker.resolve': READ,
   'CredentialBroker.contextOf': READ,
   'CredentialBroker.oauthClient': READ,
+  'CredentialBroker.forRevocation': READ,
+  'CredentialBroker.withdrawAtProvider': exempt(
+    'a step of ConnectionService.revoke, whose connection-revoked entry carries what the provider answered (after.provider_grant); it writes nothing in the store itself',
+  ),
   'CredentialBroker.refresh': exempt(SYSTEM_REFRESH),
   'PendingConnectStore.create': exempt(SESSION_STATE),
   'PendingConnectStore.take': exempt(SESSION_STATE),

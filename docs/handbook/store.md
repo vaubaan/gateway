@@ -51,6 +51,9 @@ apps/gateway/migrations/
   0011_users_keyed_by_issuer_and_subject.sql
                                   users: `subject` renamed `identity_key` (still the unique column),
                                   `issuer` and `subject` added, index `users_issuer` (schema version 11)
+  0012_connection_provider_grant.sql
+                                  connections: `provider_grant`, what became of the grant at the
+                                  provider when the connection was revoked (schema version 12)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -197,7 +200,7 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0011_users_keyed_by_issuer_and_subject.sql`)
+## Schema (`0001_schema.sql` … `0012_connection_provider_grant.sql`)
 
 Schema version 11. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
@@ -217,7 +220,13 @@ deactivation, kept after a reactivation — `removed_at` cannot carry it, since 
 cleared when the user is active again (handbook [authentication](authentication.md),
 "Deactivating a user"); `0010` adds mission members and gives every mission token one
 holder (see "Mission members and token holders" below); `0011` makes a user the pair
-(issuer, subject) (see "Users: (issuer, subject)" below).
+(issuer, subject) (see "Users: (issuer, subject)" below); `0012` adds
+`connections.provider_grant` (one nullable `ADD COLUMN`): `revoked`, `manual` or `failed`
+once the connection is revoked and the provider was asked — or could not be — to
+withdraw its grant, `NULL` before that and for a connection revoked by an earlier build.
+The values are checked by the repository (`PROVIDER_GRANT_OUTCOMES`), and the column is
+written once (`ConnectionsRepo.recordProviderGrant`: only on a revoked row that holds
+none). Handbook [connections](connections.md), "The grant at the provider".
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

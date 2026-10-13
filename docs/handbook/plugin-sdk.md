@@ -114,6 +114,8 @@ flowchart LR
 | `discoverResources(ctx)`                             | no    | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                                                                                                                                                                                                                                                                                                               |
 | `envOf?(slice, resources)`                           | yes   | The environment a slice carries in itself (Vercel's `env[prod]` segment, the only shipped plugin declaring it); `undefined` defers to the resource label; `NO_SINGLE_ENV` says the slice names several environments, and nothing stands in for them. See "Environment resolution".                                                                                                                                                                                                                                              |
 | `refresh?(ctx)`                                      | no    | Override for a non-standard refresh only (re-minted installation token…). A standard `oauth2` credential is refreshed by the host from the spec (`tokenUrl`, `clientAuthMethod`, `resourceIndicator`): `refreshable: true` needs no `refresh`.                                                                                                                                                                                                                                                                                  |
+| `revoke?(ctx)`                                       | no    | Withdraws the grant at the provider when the owner revokes the connection, for a provider whose revocation is not one of the declarative `credential.revocation` shapes. Called once by the host with the credential it is about to erase, after the local revocation; resolves when the provider confirmed, throws otherwise. Takes precedence over `credential.revocation`. No agent argument reaches it.                                                                                                                     |
+| `manualRevocation?`                                  | yes   | One or two sentences (at most 400 characters): where, at the provider, a person removes the grant themselves. Shown when the gateway cannot withdraw it, or tried and was not answered. Every shipped plugin fills it (`shipped-providers.test.ts`).                                                                                                                                                                                                                                                                            |
 | `normalizeForCaps?(args, caps)`                      | yes   | Scope caps. **Reserved: the v5.0 host never calls it** ([ADR](../decisions/scope-caps-not-enforced-in-v5-0.md)).                                                                                                                                                                                                                                                                                                                                                                                                                |
 | `normalizeArgs?(args, resources)`                    | yes   | Only called when `PluginHostFlags.argNormalization` is on. **Default off** (plan §8-Q4).                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 
@@ -291,6 +293,18 @@ by path. A spec **without** the block is valid, but the host refuses to
 connect it unless the operator explicitly accepts unverified installations
 for that provider ([connections](connections.md), "Installation binding").
 `ctx.appConfig` never contains `client_secret`, for any kind.
+
+**Revocation of an `oauth2` grant** is declared, not coded:
+`revocation: { url, format }` on the spec, with `format` one of
+`OAUTH2_REVOCATION_FORMATS` — `token-form` (`POST`, form-encoded `token`,
+no client authentication) or `client-credentials-json` (`POST`, JSON
+`{ client_id, client_secret, refresh_token }`; `definePlugin` refuses it for
+a public client or a spec that is not `refreshable`). The host sends the
+request when the owner revokes the connection, because it may carry the
+client secret. Absent: the provider documents no endpoint, and the plugin's
+`manualRevocation` sentence is what the person reads. Declare an endpoint
+only after reading it in the provider's documentation (handbook
+[providers](providers/README.md#revoking-a-connection-what-happens-at-the-provider)).
 
 The host runs each flow generically — the authorization-code dance **and**
 the standard `refresh_token` grant (client authentication per
