@@ -9,9 +9,9 @@
  *
  * Two consumers, one answer:
  *
- * - the management door (P2.4) authenticates its callers with it, through
- *   `ManagementGate` or through the MCP SDK's `requireBearerAuth`
- *   (`verifyAccessToken` is the SDK's `OAuthTokenVerifier` contract);
+ * - the management door authenticates its callers with it, through
+ *   `ManagementGate` (`verifyAccessToken` is the same answer in the MCP SDK's
+ *   `OAuthTokenVerifier` contract, for a host that uses `requireBearerAuth`);
  * - the execution door recognises a delegated token with it so as to refuse
  *   it by kind (`wrong-credential-kind`) rather than as an unknown bearer
  *   (`resolve` is its `DelegatedTokenResolver` contract).

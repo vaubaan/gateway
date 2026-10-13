@@ -133,6 +133,19 @@ export interface DelegationsRepo {
     tokenHash: string,
     next: Omit<CreateTokenInput, 'delegationId'>,
   ): Promise<RefreshTokenRecord | null>;
+  /**
+   * The reuse window of a rotation (ADR management-door-authorization-server,
+   * amendment of 2026-10-13): `previousHash` names a token that was rotated at
+   * or after `rotatedSince` and whose successor is still the live head of its
+   * family. That successor is rotated in turn — revoked and linked to `next` —
+   * in one transaction, and `next` is returned. `null` when any of this does not
+   * hold: the presented token is then a plain replay.
+   */
+  rotateSuccessorOf(
+    previousHash: string,
+    rotatedSince: Iso,
+    next: Omit<CreateTokenInput, 'delegationId'>,
+  ): Promise<RefreshTokenRecord | null>;
   revokeRefreshToken(id: string): Promise<boolean>;
 
   createAccessToken(input: CreateTokenInput): Promise<AccessTokenRecord>;
@@ -371,6 +384,12 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
        d.status AS delegation_status
      FROM oauth_refresh_tokens t JOIN delegations d ON d.id = t.delegation_id
      WHERE t.token_hash = ? AND t.revoked_at IS NULL AND t.expires_at > ?`,
+  );
+  const liveRefreshById = db.prepare<[string, string], RefreshRow & { delegation_status: string }>(
+    `SELECT t.id, t.delegation_id, t.created_at, t.expires_at, t.revoked_at, t.replaced_by_id,
+       d.status AS delegation_status
+     FROM oauth_refresh_tokens t JOIN delegations d ON d.id = t.delegation_id
+     WHERE t.id = ? AND t.revoked_at IS NULL AND t.replaced_by_id IS NULL AND t.expires_at > ?`,
   );
   const replaceRefresh = db.prepare<[string, string, string]>(
     'UPDATE oauth_refresh_tokens SET revoked_at = ?, replaced_by_id = ? WHERE id = ?',
@@ -633,6 +652,23 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
         const id = ctx.newId();
         insertRefresh.run(id, current.delegation_id, next.tokenHash, now, next.expiresAt);
         replaceRefresh.run(now, id, current.id);
+        const row = refreshById.get(id);
+        return row ? refreshToRecord(row) : null;
+      });
+    },
+    async rotateSuccessorOf(previousHash, rotatedSince, next) {
+      const now = nowIso(ctx);
+      return withImmediateTransaction(db, () => {
+        const previous = refreshByHash.get(previousHash);
+        if (!previous || previous.replaced_by_id === null || previous.revoked_at === null) {
+          return null;
+        }
+        if (previous.revoked_at < rotatedSince) return null;
+        const head = liveRefreshById.get(previous.replaced_by_id, now);
+        if (!head || head.delegation_status !== 'active') return null;
+        const id = ctx.newId();
+        insertRefresh.run(id, head.delegation_id, next.tokenHash, now, next.expiresAt);
+        replaceRefresh.run(now, id, head.id);
         const row = refreshById.get(id);
         return row ? refreshToRecord(row) : null;
       });

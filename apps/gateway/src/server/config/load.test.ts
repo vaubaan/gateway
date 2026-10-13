@@ -542,6 +542,7 @@ describe('loadInstanceConfig — authorization server of the management door', (
     expect(config.oauth).toEqual({
       accessTokenTtlSeconds: 900,
       refreshTokenTtlSeconds: 30 * 86_400,
+      refreshReuseWindowSeconds: 30,
       clientRegistration: {
         policy: 'operator-approved',
         autoApproveLoopback: true,
@@ -555,6 +556,7 @@ describe('loadInstanceConfig — authorization server of the management door', (
       env: validEnv({
         VAUBAAN_OAUTH_ACCESS_TOKEN_TTL: '5m',
         VAUBAAN_OAUTH_REFRESH_TOKEN_TTL: '7d',
+        VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS: '0',
         VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY: 'closed',
         VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK: 'false',
         VAUBAAN_OAUTH_CLIENT_REGISTRATION_METADATA_DOCUMENTS: 'true',
@@ -563,6 +565,7 @@ describe('loadInstanceConfig — authorization server of the management door', (
     expect(config.oauth).toEqual({
       accessTokenTtlSeconds: 300,
       refreshTokenTtlSeconds: 7 * 86_400,
+      refreshReuseWindowSeconds: 0,
       clientRegistration: { policy: 'closed', autoApproveLoopback: false, metadataDocuments: true },
     });
   });
@@ -604,6 +607,20 @@ describe('loadInstanceConfig — authorization server of the management door', (
       validEnv({ VAUBAAN_OAUTH_ACCESS_TOKEN_TTL: '30m', VAUBAAN_OAUTH_REFRESH_TOKEN_TTL: '30m' }),
     );
     expect(paths(err)).toEqual(['oauth.refresh_token_ttl']);
+  });
+
+  it('caps the reuse window of a rotated refresh token at one minute', () => {
+    const { config } = loadInstanceConfig({
+      env: validEnv({ VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS: '60' }),
+    });
+    expect(config.oauth.refreshReuseWindowSeconds).toBe(60);
+    const err = failure(validEnv({ VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS: '61' }));
+    expect(paths(err)).toEqual(['oauth.refresh_reuse_window_seconds']);
+    expect(err.message).toContain('at most 60');
+    expect(err.message).toContain('VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS');
+    expect(paths(failure(validEnv({ VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS: '-1' })))).toEqual([
+      'oauth.refresh_reuse_window_seconds',
+    ]);
   });
 
   it('refuses an unknown policy and a malformed duration, naming each key', () => {

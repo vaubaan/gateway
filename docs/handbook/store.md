@@ -372,6 +372,15 @@ Additive, for the approval gate (handbook [requests](requests.md), "Approvals"):
 - `store.approvals` — `ApprovalKey { riskId, tool, fingerprint }` for `create`, `consume`
   and the in-transaction lookups; `getByRequest(requestId)`; an approval with an empty
   tool is never written and never matched.
+- `store.missions.issuersOf(missionIds)` — for the missions issued through the
+  management door, the delegation and the client behind each (`MissionIssuerRecord`), by a
+  join `missions.delegation_id` → `delegations` → `oauth_clients`; a mission issued in the
+  interface has no entry. No column was added: the delegation is the one place that names
+  the client.
+- `store.delegations.rotateSuccessorOf(previousHash, rotatedSince, next)` — the reuse window
+  of a refresh rotation: when the named token was rotated at or after `rotatedSince` and its
+  successor is still the live head of the family, rotates that head in one transaction and
+  returns the new token; `null` otherwise (handbook [management-door](management-door.md)).
 - `store.missions.setGate(id, riskId, gate, actorUserId)` — one risk's gate, and the
   `gate-changed` session event in the same transaction when the mission has a session;
   `{ mission, previous }`, or `null` when the risk is not in the policy; the gate the risk

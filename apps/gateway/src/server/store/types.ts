@@ -170,6 +170,21 @@ export interface MissionRecord {
   readonly policy: readonly MissionPolicyEntry[];
 }
 
+/**
+ * Who issued a mission through the management door (spec §2.4 "every mission
+ * issued this way is visible to the user and marked as delegated"): the
+ * delegation the mission row names, and the client that held it. Derived from
+ * `missions.delegation_id` at every read; nothing is copied onto the mission.
+ */
+export interface MissionIssuerRecord {
+  readonly missionId: string;
+  readonly delegationId: string;
+  /** The client's public id (`oauth_clients.client_id`), as the audit names it. */
+  readonly clientId: string;
+  /** The name the client gave itself; a claim, never verified. */
+  readonly clientName: string;
+}
+
 /** The store distinguishes a token retired by rotation from a revoked one; the shared
  *  domain (`MissionTokenStatus` there) only knows `active | revoked`. */
 export const MISSION_TOKEN_STATUSES = ['active', 'rotated', 'revoked'] as const;

@@ -18,6 +18,16 @@
  * `delegation-revoked` entry (RFC 9700 §2.2.2, §4.14; the orchestrator's
  * decision for v5). The user grants a new delegation if the client was honest.
  *
+ * **One exception, the reuse window** (`oauth.refresh_reuse_window_seconds`,
+ * 30 s by default, at most 60; ADR amendment of 2026-10-13). Two sessions of
+ * one agent on one machine share one stored refresh token and may renew at the
+ * same moment. The refresh token that was rotated *last* — the immediate
+ * predecessor of the family's live head — presented again by the same client
+ * within the window, is answered with a new pair: the head is rotated once
+ * more and the family stays one chain. Any other replay (an older generation,
+ * outside the window, by another client, a second time after the head moved
+ * on) still revokes the family.
+ *
  * Nothing here logs a token or a code: entries name the delegation and the
  * client.
  */
@@ -73,7 +83,10 @@ export interface TokenServiceDeps {
   readonly clients: ClientRegistry;
   readonly audit: AuditWriter;
   readonly endpoints: OAuthEndpoints;
-  readonly config: Pick<OAuthConfig, 'accessTokenTtlSeconds' | 'refreshTokenTtlSeconds'>;
+  readonly config: Pick<
+    OAuthConfig,
+    'accessTokenTtlSeconds' | 'refreshTokenTtlSeconds' | 'refreshReuseWindowSeconds'
+  >;
   readonly clock: Clock;
   readonly logger: Logger;
 }
@@ -230,11 +243,7 @@ export class TokenService {
     const hash = digestOf(presented);
     const found = await repo.findRefreshToken(hash);
     if (!found) throw invalidGrant('unknown refresh token');
-    if (found.token.replacedById !== null) {
-      // Used before: whoever presents it now, two parties hold this family.
-      await this.revokeFamily(found.delegation, 'refresh-token-replay');
-      throw invalidGrant('this refresh token was already used; the delegation is revoked');
-    }
+    if (found.token.replacedById !== null) return this.replayed(client, found.delegation, hash);
     if (found.delegation.clientId !== client.id) {
       throw invalidGrant('this refresh token was issued to another client');
     }
@@ -249,8 +258,7 @@ export class TokenService {
       // Expired or revoked — or rotated by a concurrent request since the read above.
       const again = await repo.findRefreshToken(hash);
       if (again && again.token.replacedById !== null) {
-        await this.revokeFamily(again.delegation, 'refresh-token-replay');
-        throw invalidGrant('this refresh token was already used; the delegation is revoked');
+        return this.replayed(client, again.delegation, hash);
       }
       throw invalidGrant('this refresh token has expired or was revoked');
     }
@@ -260,6 +268,41 @@ export class TokenService {
       grant: 'refresh_token',
     });
     return this.respond(found.delegation, next);
+  }
+
+  /**
+   * A refresh token presented after its rotation. Inside the reuse window, and
+   * only for the token rotated last, the same client gets a new pair (the head
+   * of the family is rotated again). Everything else is a replay: two parties
+   * hold this family, whoever presents it, and the delegation ends.
+   */
+  private async replayed(
+    client: OAuthClientRecord,
+    delegation: DelegationRecord,
+    hash: string,
+  ): Promise<TokenResponse> {
+    const { repo, config, clock, logger } = this.deps;
+    const windowSeconds = config.refreshReuseWindowSeconds;
+    if (windowSeconds > 0 && delegation.clientId === client.id) {
+      const next = mintRefreshToken();
+      const rotatedSince = toIso(new Date(clock.now().getTime() - windowSeconds * MS_PER_SECOND));
+      const reissued = await repo.rotateSuccessorOf(hash, rotatedSince, {
+        tokenHash: digestOf(next),
+        expiresAt: this.expiry(config.refreshTokenTtlSeconds),
+      });
+      if (reissued) {
+        await this.requireLiveDelegation(delegation);
+        logger.info('delegated tokens issued', {
+          delegation_id: delegation.id,
+          client_id: client.clientId,
+          grant: 'refresh_token',
+          reuse_window: true,
+        });
+        return this.respond(delegation, next);
+      }
+    }
+    await this.revokeFamily(delegation, 'refresh-token-replay');
+    throw invalidGrant('this refresh token was already used; the delegation is revoked');
   }
 
   /**

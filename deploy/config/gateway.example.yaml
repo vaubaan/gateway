@@ -176,6 +176,12 @@
 #   # left unused for this long ends by itself.
 #   # env: VAUBAAN_OAUTH_REFRESH_TOKEN_TTL
 #   refresh_token_ttl: 30d
+#   # For how many seconds the refresh token that was just rotated may be
+#   # presented once more without ending the delegation: two sessions of one
+#   # agent sharing a stored token and renewing at the same moment. Any other
+#   # replay still revokes the delegation. 0 disables the window; at most 60.
+#   # env: VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS
+#   refresh_reuse_window_seconds: 30
 #   client_registration:
 #     # Who may become a client:
 #     #   open               any client that registers is usable at once

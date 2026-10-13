@@ -138,7 +138,7 @@ function DelegationCard({ view }: { view: DelegationView }) {
                     <Link href={`/missions/${mission.id}`}>{mission.name}</Link>{' '}
                     <Badge>{mission.status}</Badge>{' '}
                     <span className={styles.muted}>
-                      issued <LocalDate ts={mission.createdAt} />
+                      issued in your name <LocalDate ts={mission.createdAt} />
                     </span>
                   </li>
                 ))}

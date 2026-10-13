@@ -21,6 +21,7 @@ import {
 } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { MANAGEMENT_TOOL_NAMES } from '../../../src/server/management';
 import { ACCESS_TOKEN_PREFIX, REFRESH_TOKEN_PREFIX } from '../../../src/server/oauth-as';
 import {
   ADA,
@@ -179,7 +180,9 @@ describe('an MCP client obtains a delegation with no configuration', () => {
     expect(provider.stored).toMatchObject({ token_type: 'Bearer', expires_in: 900, scope: 'mgmt' });
 
     const client = await connect();
-    expect((await client.listTools()).tools).toEqual([]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
+      ...MANAGEMENT_TOOL_NAMES,
+    ]);
     await client.close();
 
     // ── What the instance recorded ───────────────────────────────────────────
@@ -203,7 +206,9 @@ describe('an MCP client obtains a delegation with no configuration', () => {
       .run('2000-01-01T00:00:00.000Z');
 
     const client = await connect();
-    expect((await client.listTools()).tools).toEqual([]);
+    expect((await client.listTools()).tools.map((tool) => tool.name)).toEqual([
+      ...MANAGEMENT_TOOL_NAMES,
+    ]);
     await client.close();
     expect(provider.stored?.access_token).not.toBe(before.access_token);
     expect(provider.stored?.refresh_token).not.toBe(before.refresh_token);

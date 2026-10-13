@@ -679,6 +679,37 @@ describe('authorization server over HTTP', () => {
       }
     });
 
+    it('two renewals with the same refresh token, moments apart, both succeed (reuse window)', async () => {
+      const delegated = await delegate(instance);
+      const refresh = () =>
+        tokenRequest(instance, {
+          grant_type: 'refresh_token',
+          client_id: delegated.clientId,
+          refresh_token: delegated.tokens.refresh_token,
+        });
+      const [first, second] = await Promise.all([refresh(), refresh()]);
+      expect([first.status, second.status]).toEqual([200, 200]);
+      const pairs = [
+        (await first.json()) as { access_token: string; refresh_token: string },
+        (await second.json()) as { access_token: string; refresh_token: string },
+      ];
+      expect(pairs[0]?.refresh_token).not.toBe(pairs[1]?.refresh_token);
+      for (const pair of pairs) {
+        expect((await toolsList(instance, MANAGEMENT_URL, bearer(pair.access_token))).status).toBe(
+          200,
+        );
+      }
+      const [view] = await instance.root.oauth.delegations.listFor(delegated.user);
+      expect(view?.state).toBe('active');
+      // A third presentation is no longer the token rotated last: the family ends.
+      expect((await refresh()).status).toBe(400);
+      const [after] = await instance.root.oauth.delegations.listFor(delegated.user);
+      expect(after).toMatchObject({
+        state: 'revoked',
+        delegation: { revokeReason: 'refresh-token-replay' },
+      });
+    });
+
     it('a replayed refresh token ends the delegation: invalid_grant, an audit entry, a closed door', async () => {
       const delegated = await delegate(instance);
       const refresh = (token: string) =>
@@ -693,6 +724,10 @@ describe('authorization server over HTTP', () => {
       expect((await toolsList(instance, MANAGEMENT_URL, bearer(next.access_token))).status).toBe(
         200,
       );
+
+      // A second renewal: the first refresh token is now two generations old,
+      // outside what the reuse window tolerates.
+      expect((await refresh(next.refresh_token)).status).toBe(200);
 
       const replay = await refresh(delegated.tokens.refresh_token);
       expect(replay.status).toBe(400);

@@ -160,9 +160,11 @@ deploy/config/                  gateway.example.yaml, .env.example (every key do
      [execution-door](execution-door.md)), which refuses delegated tokens
      by kind through `root.oauth.verifier` (`RootDeps.delegatedTokens`
      replaces it in tests of the door alone); then
-     `createManagementDoorModule()` → `root.management` (`gate`,
-     `handlers.mcp`), which identifies mission tokens through
-     `root.execution.tokens`;
+     `wireManagementDoor()` (`compose/management.ts`) → `root.management`
+     (`gate`, `tools`, `door`, `handlers.mcp`): the gate identifies mission
+     tokens through `root.execution.tokens`, and the door is handed ports of
+     closures over the mission service, the catalogs and the rate limiter
+     (handbook [management-door](management-door.md), "The hard deny");
    - the boot line `composition root ready` (`store`, `schema_version`,
      `plugins`, `build`) closes the sequence.
 
@@ -281,6 +283,7 @@ accept `<VAR>_FILE`.
 | `mcp.rate_limit_per_minute`                       | `VAUBAAN_MCP_RATE_LIMIT_PER_MINUTE`                       | integer >= 1, default 600: requests per minute on the execution door, per mission (spec §6)                                                            |
 | `oauth.access_token_ttl`                          | `VAUBAAN_OAUTH_ACCESS_TOKEN_TTL`                          | duration, default `15m`, at most `1h`: lifetime of a delegated access token ([management-door](management-door.md))                                    |
 | `oauth.refresh_token_ttl`                         | `VAUBAAN_OAUTH_REFRESH_TOKEN_TTL`                         | duration, default `30d`, longer than the access token's; restarts at every renewal                                                                     |
+| `oauth.refresh_reuse_window_seconds`              | `VAUBAAN_OAUTH_REFRESH_REUSE_WINDOW_SECONDS`              | integer 0 to 60, default 30: how long the refresh token rotated last may be presented once more (two sessions renewing together); 0 disables           |
 | `oauth.client_registration.policy`                | `VAUBAAN_OAUTH_CLIENT_REGISTRATION_POLICY`                | `open` `operator-approved` `closed`, default `operator-approved`: who may become an OAuth client                                                       |
 | `oauth.client_registration.auto_approve_loopback` | `VAUBAAN_OAUTH_CLIENT_REGISTRATION_AUTO_APPROVE_LOOPBACK` | default true: under `operator-approved`, loopback-only clients need no approval                                                                        |
 | `oauth.client_registration.metadata_documents`    | `VAUBAAN_OAUTH_CLIENT_REGISTRATION_METADATA_DOCUMENTS`    | default false: accept Client ID Metadata Documents (outbound https fetches)                                                                            |

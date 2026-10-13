@@ -1,10 +1,12 @@
 ---
-title: Management door — authorization server, delegated tokens, admission
+title: Management door — authorization server, delegated tokens, admission, tools
 status: current
 date: 2026-10-13
 last_synced: 2026-10-13
 tracks:
   - apps/gateway/src/server/oauth-as/
+  - apps/gateway/src/server/management/
+  - apps/gateway/src/server/compose/management.ts
   - apps/gateway/src/server/store/repositories/delegations.ts
   - apps/gateway/migrations/0006_oauth_client_decisions.sql
   - apps/gateway/src/app/oauth/
@@ -14,10 +16,12 @@ tracks:
   - apps/gateway/src/app/(app)/delegations/
   - apps/gateway/src/app/admin/(guarded)/oauth-clients/
   - apps/gateway/tests/integration/oauth-as/
+  - apps/gateway/tests/integration/management/
+  - apps/gateway/tests/e2e/v5/delegate-agent.spec.ts
   - apps/gateway/tests/integration/store/oauth-clients.test.ts
 ---
 
-# Management door — authorization server, delegated tokens, admission
+# Management door — authorization server, delegated tokens, admission, tools
 
 How an agent comes to act **on behalf of a user** (spec §0 "Delegation",
 §4.1 bis, §6 "separation of the three credentials", "short, traceable
@@ -29,18 +33,18 @@ guard), the [store](store.md) (`store.delegations`), the
 [configuration](configuration.md) (`oauth.*`, the `SessionStore` and
 `RateLimiter` ports) and the [audit](audit.md).
 
-**This page covers the authorization-server half** (feature P2.3): discovery,
-clients, consent, tokens, revocation, the admission gate of the door, the
-Delegations page. **The door's tools** — reading connections and missions,
-previewing, issuing, rotating, revoking — are feature P2.4; until then the
-door behind the gate is a placeholder that lists no tool
-(`placeholder-door.ts`).
+The page has two halves. **The authorization server** (feature P2.3):
+discovery, clients, consent, tokens, revocation, the admission gate of the
+door, the Delegations page. **The door's tools** (feature P2.4, section
+[The door's tools](#the-doors-tools)): what an admitted agent can read,
+preview, issue, rotate and revoke, and what the door is structurally unable
+to do.
 
 ## Layout
 
 ```
 apps/gateway/src/server/oauth-as/        host-agnostic, never imports `next`
-  index.ts                    createOAuthAsModule() → root.oauth; createManagementDoorModule() → root.management
+  index.ts                    createOAuthAsModule() → root.oauth; createManagementGate() → root.management.gate
   endpoints.ts                paths, the scope `mgmt`, issuer and resource URLs, RFC 8414 / RFC 9728 documents
   secrets.ts                  mint (256-bit, prefixed), SHA-256 digest, shape checks, constant-time match
   pkce.ts                     S256 only: challenge / verifier syntax, constant-time verification
@@ -52,11 +56,19 @@ apps/gateway/src/server/oauth-as/        host-agnostic, never imports `next`
   delegations.ts              DelegationService: a user's delegations with client and missions; revoke
   verifier.ts                 DelegatedTokenVerifier: resolve(bearer) / verifyAccessToken(token)
   management-gate.ts          ManagementGate.admit(request): the resource-server check of /mcp/manage
-  placeholder-door.ts         the MCP server with no tool behind the gate (replaced by P2.4)
   pages.ts                    the consent screen and the message pages, as self-contained HTML
   handlers.ts                 Request → Response handlers of the nine endpoints
   errors.ts                   OAuthProtocolError, AuthorizationPageError, AuthorizationRedirectError
   testing.ts                  openOAuthRig(): the services on the :memory: store (tests only)
+apps/gateway/src/server/management/      host-agnostic, never imports `next`
+  index.ts                    createManagementModule(ports) → { tools, door, handlers }
+  ports.ts                    ManagementModuleDeps: the four ports the door is built from — the hard deny
+  definitions.ts              MANAGEMENT_TOOLS: names, input schemas, the descriptions an agent reads; MANAGEMENT_INSTRUCTIONS
+  tools.ts                    ManagementTools: the seven acts as typed methods, refusals, the mutation budget
+  views.ts                    snake_case answers: connection, catalog, mission, preview
+  door.ts                     ManagementDoor: admit → surface rate limit → MCP server with the seven tools
+apps/gateway/src/server/compose/
+  management.ts               wireManagementDoor(): builds the gate and narrows the services to the ports
 apps/gateway/src/app/
   .well-known/oauth-authorization-server/route.ts          GET   RFC 8414
   .well-known/oauth-protected-resource/mcp/manage/route.ts GET   RFC 9728 (the path-less one is the execution door's)
@@ -65,7 +77,7 @@ apps/gateway/src/app/
   oauth/authorize/decision/route.ts  POST  the user's answer
   oauth/token/route.ts               POST  code and refresh grants
   oauth/revoke/route.ts              POST  RFC 7009
-  mcp/manage/route.ts                the management door (gate + placeholder)
+  mcp/manage/route.ts                the management door (gate + tools)
   (app)/delegations/page.tsx                 /delegations
   (app)/delegations/[id]/revoke/route.ts     POST  one-click revoke
   admin/(guarded)/oauth-clients/page.tsx     /admin/oauth-clients
@@ -346,13 +358,28 @@ used); a client that is not `approved` → `unauthorized_client`.
 **`refresh_token`** (`refresh`): the presented token is looked up by digest
 whatever its state.
 
-- **Already rotated (`replaced_by_id` set) → replay**, whoever presents it:
-  the delegation and every token under it are revoked
-  (`refresh-token-replay`), `invalid_grant`. A dead token tried again later
-  writes nothing more.
+- **Already rotated (`replaced_by_id` set)** → `replayed()`:
+  - **inside the reuse window** — the presented token is the one rotated
+    last (its successor is still the live head of the family), it was rotated
+    at most `oauth.refresh_reuse_window_seconds` ago (30 by default; the
+    instant is the row's `revoked_at`), and the caller is the delegation's
+    client — `DelegationsRepo.rotateSuccessorOf` rotates the head once more
+    in one transaction and the caller receives a new pair. The family stays
+    one chain with one live head. Logged `delegated tokens issued` with
+    `reuse_window: true`; no audit entry. This is what lets two sessions of
+    one agent, sharing one stored refresh token, renew at the same moment.
+  - **anything else → replay**, whoever presents it: an older generation,
+    the same token a second time (the head moved on), outside the window,
+    another client, a window of `0`. The delegation and every token under it
+    are revoked (`refresh-token-replay`), `invalid_grant`. A dead token tried
+    again later writes nothing more.
+  - After a reuse, the token the _first_ renewal received is no longer the
+    head: presenting it once the window has closed is a replay. Two sessions
+    must read their shared store before renewing.
 - Another client's token: `invalid_grant`, nothing revoked.
 - `rotateRefreshToken` revokes the presented token and links it to its
-  successor in one transaction; a concurrent renewal that loses is a replay.
+  successor in one transaction; a concurrent renewal that loses goes through
+  `replayed()` too, hence through the window.
 - `scope`, when sent, may only be `mgmt`; `resource` must be the door.
 - Access tokens issued before a rotation live out their 15 minutes.
 
@@ -429,11 +456,179 @@ The refusal bodies are the execution door's (`refusalToRpcError`,
 `rpcError`). A string that merely has the shape of a mission token is an
 unknown bearer: a kind is only named for a credential that was identified.
 
-**For P2.4.** Keep `root.management.gate`; replace
-`ManagementDoorPlaceholder` with the real door, and pass
-`{ delegation: { id: delegation.delegation_id, clientId: delegation.client_id } }`
-to `MissionService.issue` so that the mission records `delegation_id` and the
-audit entry carries `delegated_client_id`.
+The gate is built by the composition root (`createManagementGate`) and stays
+`root.management.gate`; the door receives its `admit` as a function.
+
+## The door's tools
+
+Spec §4.1 bis, §7.10. `/mcp/manage` is an MCP server (Streamable HTTP,
+stateless, both protocol eras like the execution door) named
+`vaubaan-gateway-management`. Every request:
+
+```
+ManagementDoor.handle(request)                                   door.ts
+  admit(request)                      → 401 challenge | 403 wrong-credential-kind | the delegation
+  rateLimit.take(`delegation:<id>`, 120, 60 s)                    → 429, JSON-RPC -32002, Retry-After
+  one McpServer for the request, instructions = MANAGEMENT_INSTRUCTIONS
+    registerTool × MANAGEMENT_TOOLS, bound to the actor
+      { userId: delegation.user_id, delegationId, clientId: delegation.client_id }
+  tools/call → definition.run(tools, actor, args) → toolResultOf(outcome)
+```
+
+The actor is rebuilt from the token at every request; nothing is kept
+between two requests.
+
+### The seven tools (`definitions.ts`, `tools.ts`)
+
+| Tool                   | Kind     | `ManagementTools` method | Reads / writes through                                                 |
+| ---------------------- | -------- | ------------------------ | ---------------------------------------------------------------------- |
+| `list_my_connections`  | read     | `listMyConnections`      | `missions.issuanceContext(user)`                                       |
+| `get_catalog`          | read     | `getCatalog`             | `catalog.get(provider)`, `issuanceContext` for `connection_id`         |
+| `list_my_missions`     | read     | `listMyMissions`         | `missions.list(user)`, or `missions.get` with `mission_id`             |
+| `preview_policy`       | preview  | `previewPolicy`          | `missions.preview(user, draft)`                                        |
+| `issue_mission`        | mutation | `issueMission`           | `missions.preview`, then `missions.issue(user, draft, { delegation })` |
+| `rotate_mission_token` | mutation | `rotateMissionToken`     | `missions.get`, then `missions.rotate(user, id, { delegation })`       |
+| `revoke_mission`       | mutation | `revokeMission`          | `missions.get`, then `missions.revoke(user, id, { delegation })`       |
+
+`user` is always `{ id: actor.userId }`: every act is the delegating user's,
+checked against their **current** authority by the mission service — owner,
+or the union of their direct and group shares (handbook
+[authority](authority.md)). The door decides nothing about authority itself.
+
+**Inputs** are Zod schemas, advertised as JSON Schema by `tools/list` and
+validated by the SDK before the method runs; unknown keys are refused
+(`.strict()`). `preview_policy` and `issue_mission` take a mission draft —
+`missionDraftSchema` of `missions/draft-schema.ts`, the very schema the
+creation form parses, with the descriptions an agent reads.
+
+**Answers** (`toolResultOf`) are `structuredContent`, repeated as JSON text
+for clients that only read text. A "no" is a tool error — `isError: true`
+with `structuredContent: { error: { code, message, hint, … } }` — so the
+model reads it and corrects itself:
+
+| `error.code`         | When                                                                                  | Extra fields                     |
+| -------------------- | ------------------------------------------------------------------------------------- | -------------------------------- |
+| `draft-refused`      | `issue_mission` on a draft the preview does not accept                                | `uncovered`, `issues`, `preview` |
+| `mission-not-found`  | no such mission of this user (another user's reads the same)                          | `mission_id`                     |
+| `mission-inactive`   | `rotate_mission_token` on a revoked, expired or orphaned mission                      | `mission_id`, `state`, `orphan`  |
+| `unknown-provider`   | `get_catalog` on a provider the instance does not ship                                | `providers`                      |
+| `unknown-connection` | `get_catalog` with a `connection_id` the user holds nothing on                        | `connection_id`                  |
+| `rate-limited`       | the delegation's mutation budget is spent                                             | `retry_after_seconds`            |
+| `internal-error`     | the method threw (logged `management tool failed`); the message never carries details |                                  |
+
+A call that fails the input schema is a tool error whose text is the SDK's
+validation message; a tool name that does not exist is the JSON-RPC error
+`Tool <name> not found`.
+
+What each answer contains (`views.ts`):
+
+- **`list_my_connections`** — per connection the user owns or was shared:
+  `authority.basis` (`owner` | `share`) and `authority.risk_ids`, **the exact
+  restriction** (`IssuanceConnection.authority`: the whole catalog for an
+  owner, the union of the shares otherwise); `resources` (ref, display name,
+  `env` label, `hidden`; stale ones are left out); `env_qualified_risks` —
+  `derives_env`, `labelled_envs`, `unlabelled_resources`, and the
+  env-qualified ids of the authority split into `usable_risk_ids` and
+  `unusable_risk_ids` (no resource carries their environment: a draft naming
+  one is refused `unresolvable-env`); `presets` with `within_authority` and
+  `outside_authority`. Connections of experimental plugins are left out
+  unless `include_experimental` (`hidden_experimental` counts them).
+- **`get_catalog`** — `risks` as explicit ids, one per environment for an
+  env-scoped entry (`enumerateCatalog`), with label, reason, level,
+  `fallback`, `deprecated`, `rate_ceiling_per_minute`; `presets` entry by
+  entry. With `connection_id`, each risk carries `in_my_authority`.
+- **`list_my_missions`** — `state` (`active`, `expired`, `orphaned`,
+  `revoked`) and `orphan` (`cause`, `connection_id`, `uncovered`,
+  `can_come_back`) exactly as `MissionService.list` derives them at this
+  read; `policy` with `remaining` per risk; `session` (current period);
+  `exhausted`; `issued_via` (`client_id`, `client_name`, `this_client`);
+  the masked `token_prefix`. Revoked and expired missions are left out
+  unless `include_closed`. With `mission_id`: plus `connections` with the
+  resources reached and `policy_details` (label, `gate_open_until`).
+- **`preview_policy`** — the mission preview: `ok`, `issues`, `notices`,
+  `uncovered` (per connection, the accepted risks outside the authority),
+  `policy`, `connections`, `summary`. A draft that does not pass is an
+  answer, not an error.
+- **`issue_mission`** — `mission` (`mission_id`, `creator_user_id`,
+  `issued_via_client_id`), `token` (`secret`, `prefix`, `env_var`,
+  `shown_once`), `bootstrap_kit` (`endpoint`, `env`, `mcp_json`,
+  `agent_instructions`, `verify`), `policy`, `summary`, `notices`.
+- **`rotate_mission_token`** — the new `token` and `bootstrap_kit`.
+- **`revoke_mission`** — `state: revoked`, `tokens_revoked`,
+  `already_revoked` (a second call changes nothing and writes nothing).
+
+The mission token appears in the answer of `issue_mission` and
+`rotate_mission_token` and nowhere else: the door logs the tool name, the
+outcome code and the ids of user, delegation and client — never arguments or
+answers.
+
+### `issued_via`: the mission, the audit, the interface
+
+`MissionService.issue/rotate/revoke` take `{ delegation: { id, clientId } }`
+(`IssueOptions`):
+
+- the mission row keeps the delegation (`missions.delegation_id`, a column of
+  migration `0001`); **the creator is the user** (`creator_user_id`);
+- the `mission-issued`, `mission-rotated` and `mission-revoked` entries carry
+  `user_id` = the user and `delegated_client_id` = the client's public id
+  (spec §8); the Audit page prints "through client …";
+- `MissionOverview.issuedVia` (`delegation_id`, `client_id`, `client_name`)
+  is read at every listing by `MissionsRepo.issuersOf` — a join from the
+  mission to its delegation to its client. Nothing is copied onto the
+  mission: there is one place that says which client a delegation belongs to.
+
+`/missions` shows "delegated — issued by <client name>" under the name,
+`/missions/<id>` an "Issued by" row linking to the delegation, and each card
+of `/delegations` the missions issued under it.
+
+### Rate limits
+
+Through the `RateLimiter` port, on keys the root prefixes with `mgmt:`
+(`managementRateLimitOf`), per delegation:
+
+| Key                              | Limit                                    | Refusal                                    |
+| -------------------------------- | ---------------------------------------- | ------------------------------------------ |
+| `mgmt:delegation:<id>`           | `MANAGEMENT_REQUESTS_PER_WINDOW` 120/min | HTTP 429, JSON-RPC `-32002`, `Retry-After` |
+| `mgmt:delegation:<id>:mutations` | `MANAGEMENT_MUTATIONS_PER_WINDOW` 60/h   | tool error `rate-limited`                  |
+
+The mutation budget is taken after the checks that need no write: a draft the
+preview refuses, a mission that is not found or not active, a mission
+already revoked do not spend it.
+
+### The hard deny is the dependency list (`ports.ts`, `compose/management.ts`)
+
+`ManagementModuleDeps` is everything the module receives:
+
+| Port              | What it is                                                                                                |
+| ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `admit`           | `(request) => gate.admit(request)`                                                                        |
+| `missions`        | `ManagementMissions` = `Pick<MissionService, issuanceContext, preview, issue, rotate, revoke, list, get>` |
+| `catalog`         | `ManagementCatalog`: per provider, label, flags, `enumerateCatalog` rows and presets, as frozen data      |
+| `rateLimit`       | `take` on prefixed keys                                                                                   |
+| `build`, `logger` |                                                                                                           |
+
+`wireManagementDoor` builds each port as a frozen object of closures
+(`managementMissionsOf`, `managementCatalogOf`, `managementRateLimitOf`). The
+door therefore holds no `MissionService` (which has `setGate`), no request,
+budget, connection, share, group or execution service, no repository, no
+plugin, and no limiter shared with the budget's windows. There is no method
+to call, by mistake or by a crafted request, that answers a request, opens a
+gate, extends a budget, touches a connection, a share or a group, or
+executes a tool.
+
+Held by four tests: the types (`Extract<Handed, Forbidden>` is `never`;
+`tsc`), the imports of every file of the module, the tool table, and a walk
+of the object graph of `root.management.door` on the real root, which meets
+none of the root's modules, services or repositories
+(`management/hard-deny.test.ts`, `tests/integration/management/hard-deny.test.ts`).
+
+### Bootstrap text
+
+`MANAGEMENT_INSTRUCTIONS` (the MCP `instructions` of the server) gives the
+order of the calls and the rules of a policy. The bootstrap kit's instruction
+block ends with "The management door" (`managementDoorSection`,
+`missions/bootstrap-kit.ts`), and `/agent-bootstrap.md` has §7 with the tools
+and how to compose a policy that passes.
 
 ## The three credentials, tested
 
@@ -483,8 +678,8 @@ administrative entries whose object is one of **their** delegations.
   orphaned mission reads `orphaned` here as on its own page, [authority](authority.md)):
   one card per delegation, most recent first — the client's name (as a
   claim), its client id, where its access goes, the scope, when it was
-  granted and last renewed, its state, the missions it issued (empty until
-  P2.4) and a **Revoke** button (`POST /delegations/<id>/revoke`, one click).
+  granted and last renewed, its state, the missions it issued (with their
+  derived status) and a **Revoke** button (`POST /delegations/<id>/revoke`, one click).
   States: `active` (a token is live), `idle` (the consent stands but no token
   is left: never redeemed, or unused past the refresh lifetime), `revoked`
   with the reason in words. Another user's delegation id answers
@@ -501,6 +696,7 @@ administrative entries whose object is one of **their** delegations.
 | ------------------------------------------------- | ------------------- | ------------------------------------------------------------ |
 | `oauth.access_token_ttl`                          | `15m`               | duration, at most `1h`                                       |
 | `oauth.refresh_token_ttl`                         | `30d`               | duration, longer than the access token's                     |
+| `oauth.refresh_reuse_window_seconds`              | `30`                | integer 0 to 60; 0: every replay revokes                     |
 | `oauth.client_registration.policy`                | `operator-approved` | `open`, `operator-approved`, `closed`                        |
 | `oauth.client_registration.auto_approve_loopback` | `true`              | under `operator-approved` only                               |
 | `oauth.client_registration.metadata_documents`    | `false`             | when true the instance fetches documents over outbound https |
@@ -553,15 +749,38 @@ curl -s -X POST "$BASE/oauth/token" -d grant_type=authorization_code -d client_i
 refused` carries the error code and the client id; the description in the
   response says which check failed.
 - **A delegation revoked "by the gateway".** A refresh token (or a code) was
-  presented twice: two processes share the client's token store, or the token
-  leaked. The audit entry `delegation-revoked` carries the reason; the log
+  presented twice outside the reuse window: two processes share the client's
+  token store and one of them kept renewing with a token the other had
+  replaced, or the token leaked. `delegated tokens issued` lines with
+  `reuse_window: true` just before tell the first case. The audit entry `delegation-revoked` carries the reason; the log
   has `delegation revoked` at `warn`.
 - **`wrong-credential-kind` at `/mcp/manage`.** The agent is configured with
   its mission token on the management URL; the hint names the right door.
-- Log component: `oauth-as` (and `management-door` for the gate).
+- **A tool answers `draft-refused`.** `error.uncovered` lists, per
+  connection, the risks outside the user's authority; `error.issues` every
+  other reason (`unknown-risk`, `missing-budget`, `unresolvable-env`,
+  `duplicate-provider`…). The same draft pasted in Missions → New mission →
+  "Paste an agent's proposal" shows the same preview to the user.
+- **A connection is missing from `list_my_connections`.** The user holds no
+  authority on it (not an owner, no active share), it is revoked, or its
+  plugin is experimental (`include_experimental`).
+- **`mission-inactive` on a rotation.** `error.state` says which; for
+  `orphaned`, `error.orphan` gives the cause and the uncovered risks.
+- **Which client issued a mission.** `SELECT m.name, c.client_id, c.name FROM
+missions m JOIN delegations d ON d.id = m.delegation_id JOIN oauth_clients c
+ON c.id = d.client_id`, or the `mission-issued` audit entry
+  (`delegated_client_id`).
+- Log component: `oauth-as`, and `management-door` for the gate and the
+  tools (`tools/call` with `tool`, `kind`, `outcome`, `user_id`,
+  `delegation_id`, `client_id`; `management act` for each mutation).
 
 ## Extension
 
+- A new tool: a method on `ManagementTools`, an entry in `MANAGEMENT_TOOLS`
+  and its name in `MANAGEMENT_TOOL_NAMES`. If it needs something the ports do
+  not give, the port's type changes first (`ports.ts`), then
+  `compose/management.ts` — and `hard-deny.test.ts` must still pass. A
+  mutation is classified in `tests/integration/audit/admin-mutations.test.ts`.
 - A second scope or resource: `MANAGEMENT_SCOPE` and `isManagementResource`
   are the two places that assume one of each; the delegation row already
   stores its scope string.
@@ -588,9 +807,31 @@ authorization service (page errors versus redirect errors, the consent:
 single use, user-bound, expiry, concurrent answers, disabled client, audit
 failure); the token service (code exchange, PKCE, **code single-use and
 replay**, client binding, **refresh rotation**, **replay revokes the family
-and is audited once**, concurrent renewals, scope and resource, expiry,
-revocation, client authentication, sweep); the delegation service and the
+and is audited once**, **the reuse window**: the token rotated last inside the
+window, its last second and the instant after, an older generation, a second
+reuse, another client, a revoked delegation, a window of 0, simultaneous
+renewals; scope and resource, expiry, revocation, client authentication,
+sweep); the delegation service and the
 verifier (**revoke cascades**, another user's delegation, states).
+
+The door's tools, beside the code (`src/server/management/`):
+`tools.test.ts` — every act carries the delegating user and, for mutations,
+the delegation; refusal before issuance with the uncovered list; the mutation
+budget; the views (exact restriction, env usability, presets against the
+authority, masked token); the descriptions state the rules of issuance; the
+schemas refuse unknown keys. `hard-deny.test.ts` — types, imports, tool table.
+
+Integration (`tests/integration/management/`, the real root, the simulated
+IdP, the official MCP client with a token obtained through the real flow):
+`management-door.test.ts` — the seven tools listed; an owner's and a
+beneficiary's authority; catalog; preview within and beyond; **issue within
+the authority → creator, `issued_via`, token once, kit, audit naming user and
+client, the token on `/mcp`**; **refusal beyond with the uncovered list**; a
+share narrowed after consent; rotate, revoke, an orphaned mission (not
+rotated, restored with the share, revocable), another user's mission; the
+forbidden families neither listed nor callable; `wrong-credential-kind` for a
+mission token and a session; both rate limits. `hard-deny.test.ts` — the
+object graph.
 
 Integration (`tests/integration/oauth-as/`, the real root on the `:memory:`
 store with the simulated IdP): `mcp-client-flow.test.ts` — the official
@@ -610,6 +851,12 @@ mutations through the one guard, the three protocol endpoints session-blind),
 and their routes), `tests/integration/audit/admin-mutations.test.ts` (every
 public method of the module's classes classified; the mutations leave their
 entry).
+
+Browser (`tests/e2e/v5/delegate-agent.spec.ts`): consent in a real browser,
+then the agent reads the authority, previews, issues, uses the mission token
+on `/mcp`; the user sees the mission marked delegated on Missions, the
+mission page and the Delegations card, revokes the delegation, keeps the
+mission.
 
 Not automated: a run with Claude Code itself against a deployed instance —
 see "How to use it".

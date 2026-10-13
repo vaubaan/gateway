@@ -8,8 +8,12 @@
  * registers itself and asks for the user's browser. The user signs in, reads
  * the consent screen in a real browser and clicks Authorize — the form post is
  * the browser's own, with the `Origin` header it really sends — and the agent
- * is admitted. The user then finds the delegation on the Delegations page and
- * revokes it in one click; the agent is locked out at its next request.
+ * is admitted. The agent then prepares a mission by itself (spec §7.10): it
+ * reads the user's authority, previews a policy, issues the mission, and the
+ * mission token it receives works on the execution door. The user finds the
+ * mission under their name, marked as delegated, and the delegation — with
+ * that mission — on the Delegations page, where they revoke it in one click;
+ * the agent is locked out at its next request and the mission stays theirs.
  */
 import {
   Client,
@@ -21,6 +25,7 @@ import {
 } from '@modelcontextprotocol/client';
 import { expect, test, type Page } from '@playwright/test';
 
+import { connectAgent, kitToolsList } from './agent';
 import { routeToInstance, signInAs } from './browser';
 import { E2E_USER, localOrigin, PUBLIC_URL } from './instance';
 
@@ -28,6 +33,7 @@ import { E2E_USER, localOrigin, PUBLIC_URL } from './instance';
 const CALLBACK = 'http://127.0.0.1:43217/callback';
 const MANAGEMENT_URL = `${PUBLIC_URL}/mcp/manage`;
 const CLIENT_NAME = 'E2E coding agent';
+const MISSION_NAME = 'Read the app repository (prepared by the agent)';
 
 type ClientInformation = NonNullable<Awaited<ReturnType<OAuthClientProvider['clientInformation']>>>;
 type Tokens = NonNullable<Awaited<ReturnType<OAuthClientProvider['tokens']>>>;
@@ -116,6 +122,21 @@ async function expectUnauthorized(connecting: Promise<void>): Promise<void> {
   expect(outcome).toBe('unauthorized');
 }
 
+/** The structured content of a tool answer of the management door. */
+async function manage<T>(client: Client, name: string, args: Record<string, unknown>): Promise<T> {
+  const result = await client.callTool({ name, arguments: args });
+  if (result.isError) throw new Error(`${name} refused: ${JSON.stringify(result.content)}`);
+  return result.structuredContent as T;
+}
+
+interface ListedConnection {
+  readonly connection_id: string;
+  readonly provider: string;
+  readonly authority: { readonly basis: string; readonly risk_ids: readonly string[] };
+  readonly resources: readonly { readonly ref: string }[];
+  readonly presets: readonly { readonly id: string; readonly within_authority: boolean }[];
+}
+
 /** Keeps a screenshot of a step when `E2E_V5_SCREENSHOT_DIR` names a folder (design review). */
 async function snap(page: Page, name: string): Promise<void> {
   const dir = process.env.E2E_V5_SCREENSHOT_DIR;
@@ -126,7 +147,7 @@ test.beforeEach(async ({ request }) => {
   await signInAs(request, E2E_USER);
 });
 
-test('an agent obtains a delegation through the consent screen, and the user revokes it', async ({
+test('an agent obtains a delegation, prepares and issues a mission, and the user revokes the delegation', async ({
   browser,
 }) => {
   // ── The agent's first contact: discovery, registration, "open this URL" ────
@@ -178,8 +199,109 @@ test('an agent obtains a delegation through the consent screen, and the user rev
   expect(provider.stored?.access_token).toMatch(/^vbn_dat_/);
   const admitted = connectWith(provider);
   await admitted.client.connect(admitted.transport);
-  expect((await admitted.client.listTools()).tools).toEqual([]);
-  await admitted.client.close();
+  const manager = admitted.client;
+  expect((await manager.listTools()).tools.map((tool) => tool.name)).toEqual([
+    'list_my_connections',
+    'get_catalog',
+    'list_my_missions',
+    'preview_policy',
+    'issue_mission',
+    'rotate_mission_token',
+    'revoke_mission',
+  ]);
+
+  // ── The agent reads the user's authority and the catalog ───────────────────
+  const { connections } = await manage<{ connections: ListedConnection[] }>(
+    manager,
+    'list_my_connections',
+    {},
+  );
+  const github = connections.find((connection) => connection.provider === 'github');
+  if (!github) throw new Error('the user holds no GitHub connection');
+  expect(github.authority.basis).toBe('owner');
+  expect(github.resources.map((resource) => resource.ref)).toContain('acme/app');
+  expect(github.presets.find((preset) => preset.id === 'read-only')?.within_authority).toBe(true);
+  const catalog = await manage<{ risks: { risk_id: string }[]; presets: { id: string }[] }>(
+    manager,
+    'get_catalog',
+    { provider: 'github', connection_id: github.connection_id },
+  );
+  expect(catalog.risks.map((risk) => risk.risk_id)).toContain('github.read-code');
+
+  // ── It composes a policy from a preset, previews it, issues the mission ────
+  const draft = {
+    name: MISSION_NAME,
+    connections: [
+      {
+        connection_id: github.connection_id,
+        preset: 'read-only',
+        resources: { scope: 'selected', resource_refs: ['acme/app'] },
+      },
+    ],
+    period: { kind: 'recurring', length_seconds: 86_400 },
+    expires_at: null,
+  };
+  const preview = await manage<{ ok: boolean; uncovered: unknown[]; policy: unknown[] }>(
+    manager,
+    'preview_policy',
+    draft,
+  );
+  expect(preview).toMatchObject({ ok: true, uncovered: [] });
+  expect(preview.policy.length).toBeGreaterThan(0);
+
+  const issued = await manage<{
+    mission: { mission_id: string; issued_via_client_id: string };
+    token: { secret: string };
+    bootstrap_kit: { agent_instructions: string; mcp_json: string };
+  }>(manager, 'issue_mission', draft);
+  expect(issued.mission.issued_via_client_id).toBe(provider.information?.client_id);
+  expect(issued.token.secret).toMatch(/^vbn_live_/);
+  expect(issued.bootstrap_kit.mcp_json).toContain(`${PUBLIC_URL}/mcp`);
+  expect(issued.bootstrap_kit.agent_instructions).toContain('### The management door');
+
+  // ── The mission token works on the execution door, and only there ──────────
+  expect((await kitToolsList(issued.token.secret)).status).toBe(200);
+  const executor = await connectAgent(issued.token.secret);
+  expect(await executor.listTools()).toContain('github__get_file_contents');
+  const read = await executor.call('github__get_file_contents', {
+    owner: 'acme',
+    repo: 'app',
+    path: 'README.md',
+  });
+  expect(read.outcome).toBe('allowed');
+  // A repository outside the selection the agent made cannot be called.
+  await expect(
+    executor.call('github__get_file_contents', { owner: 'acme', repo: 'docs', path: 'README.md' }),
+  ).rejects.toThrow(/not selected in this mission/);
+  await executor.close();
+  const wrongDoor = await viaLocalListener(MANAGEMENT_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      Authorization: `Bearer ${issued.token.secret}`,
+    },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+  });
+  expect(wrongDoor.status).toBe(403);
+  expect(await wrongDoor.json()).toMatchObject({
+    error: { data: { code: 'wrong-credential-kind' } },
+  });
+  await manager.close();
+
+  // ── The user sees the mission under their name, marked as delegated ────────
+  await page.goto(`${PUBLIC_URL}/missions`);
+  const row = page.getByRole('row').filter({ hasText: MISSION_NAME });
+  await expect(row).toContainText('delegated');
+  await expect(row).toContainText(`issued by ${CLIENT_NAME}`);
+  await snap(page, 'missions-delegated');
+  await row.getByRole('link', { name: MISSION_NAME }).click();
+  await expect(page.getByTestId('issued-via')).toContainText(CLIENT_NAME);
+  await expect(page.getByTestId('issued-via')).toContainText(
+    provider.information?.client_id ?? 'no client id',
+  );
+  await expect(page.getByTestId('issued-via')).toContainText('it is not verified');
+  await snap(page, 'mission-delegated');
 
   // ── The user sees the delegation and revokes it in one click ───────────────
   await page.goto(`${PUBLIC_URL}/delegations`);
@@ -188,6 +310,8 @@ test('an agent obtains a delegation through the consent screen, and the user rev
   await expect(card).toContainText('active');
   await expect(card).toContainText(provider.information?.client_id ?? 'no client id');
   await expect(card).toContainText('127.0.0.1:43217');
+  await expect(card.getByRole('link', { name: MISSION_NAME })).toBeVisible();
+  await expect(card).toContainText('issued in your name');
   await snap(page, 'delegations');
 
   await card.getByRole('button', { name: 'Revoke' }).click();
@@ -201,6 +325,12 @@ test('an agent obtains a delegation through the consent screen, and the user rev
   await expectUnauthorized(lockedOut.client.connect(lockedOut.transport));
   expect(provider.stored).toBeUndefined();
   expect(provider.authorizationUrl).not.toBeNull();
+
+  // ── The mission it issued is the user's and stays: its token still works ───
+  expect((await kitToolsList(issued.token.secret)).status).toBe(200);
+  await page.goto(`${PUBLIC_URL}/missions/${issued.mission.mission_id}`);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText(MISSION_NAME);
+  await expect(page.getByRole('heading', { level: 1 })).toContainText('active');
 
   await context.close();
 });

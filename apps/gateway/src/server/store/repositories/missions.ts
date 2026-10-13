@@ -7,6 +7,7 @@ import {
   type Gate,
   type Iso,
   type MissionConnection,
+  type MissionIssuerRecord,
   type MissionPolicyEntry,
   type MissionRecord,
   type MissionStatus,
@@ -47,6 +48,12 @@ export interface MissionsRepo {
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
   listForConnection(connectionId: string): Promise<MissionRecord[]>;
+  /**
+   * The client behind each of these missions that was issued through the
+   * management door, keyed by mission id. A mission issued in the interface
+   * has no entry.
+   */
+  issuersOf(missionIds: readonly string[]): Promise<Map<string, MissionIssuerRecord>>;
   /**
    * `orphaned` is not a stored status (spec §2.3: derived from the creator's current
    * authority, never stored as a verdict): the type refuses it here, and the trigger of
@@ -91,6 +98,13 @@ interface MissionRow {
   created_at: string;
   updated_at: string;
   closed_at: string | null;
+}
+
+interface IssuerRow {
+  mission_id: string;
+  delegation_id: string;
+  client_id: string;
+  name: string;
 }
 
 interface PolicyRow {
@@ -316,6 +330,29 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   }
 
   return {
+    async issuersOf(missionIds) {
+      const issuers = new Map<string, MissionIssuerRecord>();
+      const ids = [...new Set(missionIds)];
+      if (ids.length === 0) return issuers;
+      const rows = db
+        .prepare<string[], IssuerRow>(
+          `SELECT m.id AS mission_id, d.id AS delegation_id, c.client_id, c.name
+           FROM missions m
+             JOIN delegations d ON d.id = m.delegation_id
+             JOIN oauth_clients c ON c.id = d.client_id
+           WHERE m.id IN (${ids.map(() => '?').join(', ')})`,
+        )
+        .all(...ids);
+      for (const row of rows) {
+        issuers.set(row.mission_id, {
+          missionId: row.mission_id,
+          delegationId: row.delegation_id,
+          clientId: row.client_id,
+          clientName: row.name,
+        });
+      }
+      return issuers;
+    },
     async create(input) {
       validatePolicy(ctx, input.policy);
       assertConnectionSelections(ctx, input.connections);

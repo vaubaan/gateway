@@ -38,13 +38,7 @@ import { createGroupsModule, type GroupsModule } from '../groups';
 import { createLogger, createRedactor, type Logger, type LoggerOptions } from '../logging';
 import { ProviderAppsService } from '../provider-apps';
 import { createMissionsModule, type MissionsModule } from '../missions';
-import {
-  createManagementDoorModule,
-  createOAuthAsModule,
-  type ClientDocumentFetcher,
-  type ManagementDoorModule,
-  type OAuthAsModule,
-} from '../oauth-as';
+import { createOAuthAsModule, type ClientDocumentFetcher, type OAuthAsModule } from '../oauth-as';
 import { createRequestsModule, type RequestsModule } from '../requests';
 import { SlidingWindowRateLimiter } from '../rate-limit';
 import { createSharesModule, type SharesModule } from '../shares';
@@ -52,6 +46,7 @@ import { createTelemetryModule, type TelemetryModule } from '../telemetry';
 import type { Store } from '../store';
 import type { CacheClient, RateLimiter, SessionStore } from './ports';
 import { checkProviderApps, RegistryCatalogIndex } from './registry';
+import { wireManagementDoor, type ManagementDoorModule } from './management';
 import { buildShippedRegistry } from './shipped-plugins';
 import { openEmbeddedStore, type StoreContext } from './store';
 
@@ -94,7 +89,7 @@ export interface GatewayRoot {
   readonly telemetry: TelemetryModule;
   /** Authorization server of the management door: clients, consent, delegated tokens (P2.3). */
   readonly oauth: OAuthAsModule;
-  /** `/mcp/manage`: its admission gate, and a placeholder door until P2.4 brings the tools. */
+  /** `/mcp/manage`: its admission gate and, behind it, the door with its seven tools (P2.4). */
   readonly management: ManagementDoorModule;
   readonly build: BuildInfo;
   readonly startedAt: Date;
@@ -386,11 +381,13 @@ async function wireModules(base: RootBase, deps: RootDeps, opened: Closer[]): Pr
     delegations: deps.delegatedTokens ?? oauth.verifier,
     telemetry: telemetry.sink,
   });
-  const management = createManagementDoorModule({
+  // The door is handed ports, not modules: see `compose/management.ts`.
+  const management = wireManagementDoor({
     config,
-    oauth,
-    missionTokens: execution.tokens,
-    webSessions: auth.sessions,
+    gate: { oauth, missionTokens: execution.tokens, webSessions: auth.sessions },
+    missions: missions.service,
+    registry,
+    rateLimiter,
     build,
     logger,
   });

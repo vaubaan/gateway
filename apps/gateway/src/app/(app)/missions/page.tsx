@@ -1,11 +1,13 @@
 /**
- * `/missions` — my missions, their state, their token prefix (spec §4.2).
+ * `/missions` — my missions, their state, their token prefix (spec §4.2). A
+ * mission an agent issued on my behalf through the management door is marked
+ * with the application that issued it (spec §2.4, §7.10).
  */
 import Link from 'next/link';
 
 import { LocalDate } from '@/components/LocalDate';
 import { NeedsUser } from '@/components/auth/NeedsUser';
-import { Card, Code, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
+import { Badge, Card, Code, Table, Tbody, Td, Th, Thead, Tr } from '@/components/ui';
 import { currentUser } from '@/lib/auth/session';
 import { maskedToken } from '@/server/missions';
 
@@ -52,12 +54,17 @@ export default async function MissionsPage() {
               </Tr>
             </Thead>
             <Tbody>
-              {missions.map(({ mission, state, token }) => (
+              {missions.map(({ mission, state, token, issuedVia }) => (
                 <Tr key={mission.id}>
                   <Td>
                     <Link href={`/missions/${mission.id}`} className={styles.rowLink}>
                       {mission.name}
                     </Link>
+                    {issuedVia && (
+                      <div className={styles.muted} data-testid={`issued-via-${mission.id}`}>
+                        <Badge tone="info">delegated</Badge> issued by {issuedVia.client_name}
+                      </div>
+                    )}
                   </Td>
                   <Td>
                     <StateBadge state={state} />

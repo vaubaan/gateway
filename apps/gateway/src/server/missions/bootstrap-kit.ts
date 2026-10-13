@@ -8,14 +8,17 @@
  *   2. the client's MCP configuration: the instance URL and the Authorization
  *      header by reference to the variable, never the secret itself;
  *   3. the instruction block for the agent: connections, resource refs,
- *      accepted risks, budget, and what to do on each structured refusal;
+ *      accepted risks, budget, what to do on each structured refusal, and a
+ *      short "management door" section — the other MCP door of the instance,
+ *      which this token does not open;
  *   +  `curl … tools/list`.
  *
  * Pure: the instance URL comes from the configuration (`public_url`), nothing
- * is hard-coded but the path of the execution door on this instance.
+ * is hard-coded but the paths of the two MCP doors on this instance.
  */
 import { REFUSAL_CODES, type MissionPolicyEntry, type RefusalCode } from '@vaubaan/shared';
 
+import { MANAGEMENT_DOOR_PATH } from '../oauth-as/endpoints';
 import type { DraftPeriod } from './model';
 import { expiryPhrase, periodPhrase, reloadPhrase } from './summary';
 import { maskedToken } from './token';
@@ -113,7 +116,24 @@ function policyLine(entry: KitPolicyLine, period: DraftPeriod): string {
   return `- \`${entry.risk_id}\` — ${entry.label}: ${entry.quota} ${periodPhrase(period)}, at most ${entry.rate_limit.max} per ${entry.rate_limit.window_seconds}s, ${gate}`;
 }
 
-function agentInstructions(input: BootstrapKitInput, endpoint: string): string {
+/**
+ * The "management door" section of the instruction block: an executing agent
+ * must know the other door exists, that its mission token does not open it,
+ * and that nothing behind it lifts a refusal.
+ */
+export function managementDoorSection(managementEndpoint: string): string[] {
+  return [
+    '### The management door',
+    `This instance has a second MCP server, ${managementEndpoint}, for an agent acting on behalf of a user: it reads the user's connections and missions and issues, rotates or revokes missions in the user's name, within the user's authority. It is opened by an OAuth consent the user gives in a browser, never by this mission token (presenting it there is refused as \`wrong-credential-kind\`).`,
+    "It does not lift a refusal: answering a claim or an approval, opening a gate, extending a budget, connecting or sharing a provider are done by the human in the web interface, and by nobody else. If you also hold a delegation there, do not use it to issue yourself a wider mission in order to get past a refusal: the mission would appear under the user's name, marked as issued by you.",
+  ];
+}
+
+function agentInstructions(
+  input: BootstrapKitInput,
+  endpoint: string,
+  managementEndpoint: string,
+): string {
   const { mission } = input;
   const connections = input.connections.map((c) => {
     const resources =
@@ -143,11 +163,15 @@ function agentInstructions(input: BootstrapKitInput, endpoint: string): string {
     ...refusals,
     '',
     `${NEVER_WORK_AROUND} When a refusal carries a URL, give that URL to the human as is.`,
+    '',
+    ...managementDoorSection(managementEndpoint),
   ].join('\n');
 }
 
 export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
-  const endpoint = `${input.instanceUrl.replace(/\/+$/, '')}${EXECUTION_DOOR_PATH}`;
+  const instance = input.instanceUrl.replace(/\/+$/, '');
+  const endpoint = `${instance}${EXECUTION_DOOR_PATH}`;
+  const managementEndpoint = `${instance}${MANAGEMENT_DOOR_PATH}`;
   const revealsSecret = 'secret' in input.token;
   const tokenValue = 'secret' in input.token ? input.token.secret : maskedToken(input.token.prefix);
 
@@ -165,7 +189,7 @@ export function buildBootstrapKit(input: BootstrapKitInput): BootstrapKit {
     endpoint,
     env: `export ${MISSION_TOKEN_ENV}=${shellQuote(tokenValue)}`,
     mcp_json: JSON.stringify(mcpConfig, null, 2),
-    agent_instructions: agentInstructions(input, endpoint),
+    agent_instructions: agentInstructions(input, endpoint, managementEndpoint),
     verify: [
       `curl -sS ${shellQuote(endpoint)} \\`,
       `  -H "Authorization: Bearer $${MISSION_TOKEN_ENV}" \\`,

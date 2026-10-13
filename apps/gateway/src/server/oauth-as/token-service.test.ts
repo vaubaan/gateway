@@ -13,6 +13,9 @@ import {
 import { openOAuthRig, pkcePair, WEB_REDIRECT, type Granted, type OAuthRig } from './testing';
 import { clientCredentialsOf, PURGE_GRACE_MS, PURGE_INTERVAL_MS } from './token-service';
 
+/** Longer than any reuse window the configuration accepts. */
+const AFTER_REUSE_WINDOW_MS = 61_000;
+
 async function refusal(run: () => Promise<unknown>): Promise<OAuthProtocolError> {
   try {
     await run();
@@ -228,6 +231,159 @@ describe('TokenService', () => {
     });
   });
 
+  describe('reuse window of a rotated refresh token', () => {
+    /** Rows of the family, oldest first: which are spent, which is the live head. */
+    function family(): { revoked: boolean; replaced: boolean }[] {
+      return rig.store.db
+        .prepare<[], { revoked_at: string | null; replaced_by_id: string | null }>(
+          'SELECT revoked_at, replaced_by_id FROM oauth_refresh_tokens ORDER BY created_at, rowid',
+        )
+        .all()
+        .map((row) => ({
+          revoked: row.revoked_at !== null,
+          replaced: row.replaced_by_id !== null,
+        }));
+    }
+
+    it('the token rotated last, presented again inside the window, gets a new pair and the delegation lives', async () => {
+      const { tokens: first, delegationId } = await rig.issue(rig.ada, client);
+      // Session A renews; session B, which read the same stored token, renews a moment later.
+      const sessionA = await rig.tokens.refresh(client, refreshForm(first.refresh_token));
+      rig.clock.advance(5_000);
+      const sessionB = await rig.tokens.refresh(client, refreshForm(first.refresh_token));
+
+      expect(sessionB.refresh_token).not.toBe(sessionA.refresh_token);
+      expect(sessionB).toMatchObject({ token_type: 'Bearer', expires_in: 900, scope: 'mgmt' });
+      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({ status: 'active' });
+      expect(revocations()).toEqual([]);
+      // Both access tokens work; the family is still one chain with one live head.
+      expect(await rig.verifier.resolve(sessionA.access_token)).not.toBeNull();
+      expect(await rig.verifier.resolve(sessionB.access_token)).not.toBeNull();
+      expect(family()).toEqual([
+        { revoked: true, replaced: true },
+        { revoked: true, replaced: true },
+        { revoked: false, replaced: false },
+      ]);
+      // The head is the token session B received: it renews normally.
+      rig.clock.advance(AFTER_REUSE_WINDOW_MS);
+      await expect(
+        rig.tokens.refresh(client, refreshForm(sessionB.refresh_token)),
+      ).resolves.toBeTruthy();
+    });
+
+    it('the window is inclusive of its last second and closed right after', async () => {
+      const windowMs = rig.config.refreshReuseWindowSeconds * 1000;
+      const inside = await rig.issue(rig.ada, client);
+      await rig.tokens.refresh(client, refreshForm(inside.tokens.refresh_token));
+      rig.clock.advance(windowMs);
+      await expect(
+        rig.tokens.refresh(client, refreshForm(inside.tokens.refresh_token)),
+      ).resolves.toBeTruthy();
+
+      const outside = await rig.issue(rig.ada, client);
+      await rig.tokens.refresh(client, refreshForm(outside.tokens.refresh_token));
+      rig.clock.advance(windowMs + 1);
+      const err = await refusal(() =>
+        rig.tokens.refresh(client, refreshForm(outside.tokens.refresh_token)),
+      );
+      expect(err.code).toBe('invalid_grant');
+      expect(await rig.store.delegations.getById(outside.delegationId)).toMatchObject({
+        status: 'revoked',
+        revokeReason: 'refresh-token-replay',
+      });
+      expect(await rig.store.delegations.getById(inside.delegationId)).toMatchObject({
+        status: 'active',
+      });
+    });
+
+    it('an older generation is a replay even inside the window', async () => {
+      const { tokens: first, delegationId } = await rig.issue(rig.ada, client);
+      const second = await rig.tokens.refresh(client, refreshForm(first.refresh_token));
+      await rig.tokens.refresh(client, refreshForm(second.refresh_token));
+      // `first` was rotated a moment ago, but its successor is no longer the head.
+      await refusal(() => rig.tokens.refresh(client, refreshForm(first.refresh_token)));
+      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({
+        status: 'revoked',
+        revokeReason: 'refresh-token-replay',
+      });
+      expect(revocations()).toHaveLength(1);
+    });
+
+    it('the same token cannot be reused twice: the second reuse is a replay', async () => {
+      const { tokens: first, delegationId } = await rig.issue(rig.ada, client);
+      await rig.tokens.refresh(client, refreshForm(first.refresh_token));
+      const reused = await rig.tokens.refresh(client, refreshForm(first.refresh_token));
+      await refusal(() => rig.tokens.refresh(client, refreshForm(first.refresh_token)));
+      expect((await rig.store.delegations.getById(delegationId))?.status).toBe('revoked');
+      expect(await rig.verifier.resolve(reused.access_token)).toBeNull();
+    });
+
+    it('the token the first renewal received, replaced by the reuse, is a replay once the window closed', async () => {
+      const { tokens: first, delegationId } = await rig.issue(rig.ada, client);
+      const sessionA = await rig.tokens.refresh(client, refreshForm(first.refresh_token));
+      await rig.tokens.refresh(client, refreshForm(first.refresh_token));
+      rig.clock.advance(AFTER_REUSE_WINDOW_MS);
+      // Session A never picked up the token session B stored: two holders, as far as the server can tell.
+      await refusal(() => rig.tokens.refresh(client, refreshForm(sessionA.refresh_token)));
+      expect((await rig.store.delegations.getById(delegationId))?.status).toBe('revoked');
+    });
+
+    it('another client gets nothing from the window: the family ends', async () => {
+      const other = await rig.registerClient();
+      const { tokens, delegationId } = await rig.issue(rig.ada, client);
+      await rig.tokens.refresh(client, refreshForm(tokens.refresh_token));
+      await refusal(() => rig.tokens.refresh(other, refreshForm(tokens.refresh_token)));
+      expect((await rig.store.delegations.getById(delegationId))?.status).toBe('revoked');
+    });
+
+    it('two simultaneous renewals of one token both succeed and the delegation lives', async () => {
+      const { tokens, delegationId } = await rig.issue(rig.ada, client);
+      const results = await Promise.all([
+        rig.tokens.refresh(client, refreshForm(tokens.refresh_token)),
+        rig.tokens.refresh(client, refreshForm(tokens.refresh_token)),
+      ]);
+      expect(new Set(results.map((r) => r.refresh_token)).size).toBe(2);
+      expect((await rig.store.delegations.getById(delegationId))?.status).toBe('active');
+      expect(family().filter((row) => !row.revoked)).toHaveLength(1);
+      expect(revocations()).toEqual([]);
+    });
+
+    it('a revoked delegation or a removed user gets nothing from the window', async () => {
+      const revoked = await rig.issue(rig.ada, client);
+      await rig.tokens.refresh(client, refreshForm(revoked.tokens.refresh_token));
+      await rig.delegations.revoke(rig.ada, revoked.delegationId);
+      expect(
+        (await refusal(() => rig.tokens.refresh(client, refreshForm(revoked.tokens.refresh_token))))
+          .code,
+      ).toBe('invalid_grant');
+
+      const removed = await rig.issue(rig.bob, client);
+      await rig.tokens.refresh(client, refreshForm(removed.tokens.refresh_token));
+      rig.store.db.prepare("UPDATE users SET status = 'removed' WHERE id = ?").run(rig.bob.id);
+      expect(
+        (await refusal(() => rig.tokens.refresh(client, refreshForm(removed.tokens.refresh_token))))
+          .code,
+      ).toBe('invalid_grant');
+    });
+
+    it('with the window set to 0 every replay ends the family at once', async () => {
+      const strict = await openOAuthRig({ ttl: { refreshReuseWindowSeconds: 0 } });
+      try {
+        const strictClient = await strict.registerClient();
+        const { tokens, delegationId } = await strict.issue(strict.ada, strictClient);
+        const form = (): URLSearchParams =>
+          strict.form({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token });
+        await strict.tokens.refresh(strictClient, form());
+        await expect(strict.tokens.refresh(strictClient, form())).rejects.toMatchObject({
+          code: 'invalid_grant',
+        });
+        expect((await strict.store.delegations.getById(delegationId))?.status).toBe('revoked');
+      } finally {
+        await strict.close();
+      }
+    });
+  });
+
   describe('refresh grant', () => {
     it('rotates: a new pair is issued and the presented refresh token stops working', async () => {
       const { tokens: first, delegationId } = await rig.issue(rig.ada, client);
@@ -320,6 +476,7 @@ describe('TokenService', () => {
     it('a replay is audited once, however many times the dead token is tried', async () => {
       const { tokens } = await rig.issue(rig.ada, client);
       await rig.tokens.refresh(client, refreshForm(tokens.refresh_token));
+      rig.clock.advance(AFTER_REUSE_WINDOW_MS);
       for (let i = 0; i < 3; i += 1) {
         await refusal(() => rig.tokens.refresh(client, refreshForm(tokens.refresh_token)));
       }
@@ -334,18 +491,26 @@ describe('TokenService', () => {
       expect((await rig.store.delegations.getById(delegationId))?.status).toBe('revoked');
     });
 
-    it('two simultaneous renewals of one token: one wins, and the family ends', async () => {
-      const { tokens, delegationId } = await rig.issue(rig.ada, client);
-      const results = await Promise.allSettled([
-        rig.tokens.refresh(client, refreshForm(tokens.refresh_token)),
-        rig.tokens.refresh(client, refreshForm(tokens.refresh_token)),
-      ]);
-      expect(results.filter((r) => r.status === 'fulfilled').length).toBeLessThanOrEqual(1);
-      expect(await rig.store.delegations.getById(delegationId)).toMatchObject({
-        status: 'revoked',
-        revokeReason: 'refresh-token-replay',
-      });
-      expect(revocations()).toHaveLength(1);
+    it('two simultaneous renewals of one token, with no reuse window: one wins, and the family ends', async () => {
+      const strict = await openOAuthRig({ ttl: { refreshReuseWindowSeconds: 0 } });
+      try {
+        const strictClient = await strict.registerClient();
+        const { tokens, delegationId } = await strict.issue(strict.ada, strictClient);
+        const form = (): URLSearchParams =>
+          strict.form({ grant_type: 'refresh_token', refresh_token: tokens.refresh_token });
+        const results = await Promise.allSettled([
+          strict.tokens.refresh(strictClient, form()),
+          strict.tokens.refresh(strictClient, form()),
+        ]);
+        expect(results.filter((r) => r.status === 'fulfilled').length).toBeLessThanOrEqual(1);
+        expect(await strict.store.delegations.getById(delegationId)).toMatchObject({
+          status: 'revoked',
+          revokeReason: 'refresh-token-replay',
+        });
+        expect(strict.audit.admin.filter((e) => e.act === 'delegation-revoked')).toHaveLength(1);
+      } finally {
+        await strict.close();
+      }
     });
 
     it('revoking the family of one delegation leaves the others alone', async () => {
@@ -353,6 +518,7 @@ describe('TokenService', () => {
       const again = await rig.issue(rig.ada, client);
       const bobs = await rig.issue(rig.bob, client);
       await rig.tokens.refresh(client, refreshForm(mine.tokens.refresh_token));
+      rig.clock.advance(AFTER_REUSE_WINDOW_MS);
       await refusal(() => rig.tokens.refresh(client, refreshForm(mine.tokens.refresh_token)));
       expect(await rig.verifier.resolve(again.tokens.access_token)).not.toBeNull();
       expect(await rig.verifier.resolve(bobs.tokens.access_token)).not.toBeNull();

@@ -101,6 +101,19 @@ describe('buildBootstrapKit', () => {
     expect(kit.agent_instructions).toContain('give that URL to the human as is');
   });
 
+  it('3 — names the management door, says the mission token does not open it and that it lifts no refusal', () => {
+    const text = kit.agent_instructions;
+    expect(text).toContain('### The management door');
+    expect(text).toContain(`${INPUT.instanceUrl.replace(/\/+$/, '')}/mcp/manage`);
+    expect(text).toContain('never by this mission token');
+    expect(text).toContain('`wrong-credential-kind`');
+    expect(text).toContain('It does not lift a refusal');
+    // The section comes last: the refusal guidance is read first.
+    expect(text.indexOf('### The management door')).toBeGreaterThan(
+      text.indexOf('### When a call is refused'),
+    );
+  });
+
   it('ends with a curl tools/list check that reads the variable', () => {
     expect(kit.verify).toContain("curl -sS 'https://gateway.acme.example/mcp'");
     expect(kit.verify).toContain('-H "Authorization: Bearer $VAUBAAN_MISSION_TOKEN"');
@@ -133,6 +146,24 @@ describe('/agent-bootstrap.md', () => {
     expect(page).toContain('Never work around a refusal');
     expect(page).toContain('`claim_url`');
     expect(page).toContain('`approval_url`');
+  });
+
+  it('describes the management door: OAuth, its tools, what it never does', () => {
+    expect(page).toContain('## 7. The management door');
+    expect(page).toContain('`<instance URL>/mcp/manage`');
+    for (const tool of [
+      'list_my_connections',
+      'get_catalog',
+      'list_my_missions',
+      'preview_policy',
+      'issue_mission',
+      'rotate_mission_token',
+      'revoke_mission',
+    ]) {
+      expect(page).toContain(`\`${tool}\``);
+    }
+    expect(page).toContain('never by a mission token');
+    expect(page).toContain('**never** answer a request');
   });
 
   it('refers to the token by its variable and names no instance', () => {

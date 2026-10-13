@@ -3,14 +3,14 @@
  * "Delegation", §4.1 bis, §6 "three credentials", "short, traceable delegated
  * tokens"). The instance issues delegated tokens itself, relying on the IdP
  * for the user's identity at consent time. Built once by the composition root
- * as `root.oauth`; `root.management` is the admission gate of `/mcp/manage`
- * with its placeholder door (the door's tools are feature P2.4).
+ * as `root.oauth`; `createManagementGate` is the admission of `/mcp/manage`,
+ * in front of the door's tools (`server/management`, feature P2.4).
  * Handbook: docs/handbook/management-door.md.
  * ADR: docs/decisions/management-door-authorization-server.md.
  */
 import type { Authenticator, SessionService as WebSessionService } from '../auth';
 import type { RateLimiter, SessionStore } from '../compose/ports';
-import type { BuildInfo, InstanceConfig } from '../config';
+import type { InstanceConfig } from '../config';
 import type { TokenVerifier } from '../execution/token-verifier';
 import { clientIpResolver } from '../http/client-ip';
 import type { Logger } from '../logging';
@@ -26,7 +26,6 @@ import { DelegationService } from './delegations';
 import { oauthEndpoints, type OAuthEndpoints } from './endpoints';
 import { createOAuthHandlers, type OAuthHandlers } from './handlers';
 import { ManagementGate } from './management-gate';
-import { ManagementDoorPlaceholder } from './placeholder-door';
 import { TokenService } from './token-service';
 import { DelegatedTokenVerifier } from './verifier';
 
@@ -121,43 +120,29 @@ export function createOAuthAsModule(deps: OAuthAsModuleDeps): OAuthAsModule {
   return { endpoints, clients, authorization, tokens, delegations, verifier, handlers };
 }
 
-export interface ManagementDoorModuleDeps {
+export interface ManagementGateModuleDeps {
   readonly config: Pick<InstanceConfig, 'publicUrl' | 'trustedProxies'>;
   readonly oauth: Pick<OAuthAsModule, 'endpoints' | 'verifier'>;
   /** The execution door's verifier: a mission token presented here is refused by kind. */
   readonly missionTokens: Pick<TokenVerifier, 'verify'>;
   readonly webSessions: Pick<WebSessionService, 'read'>;
-  readonly build: BuildInfo;
   readonly logger: Logger;
 }
 
-export interface ManagementDoorHandlers {
-  /** `/mcp/manage` — MCP Streamable HTTP. */
-  readonly mcp: (request: Request) => Promise<Response>;
-}
-
-export interface ManagementDoorModule {
-  /** Admission of `/mcp/manage`: the part feature P2.4 keeps. */
-  readonly gate: ManagementGate;
-  readonly handlers: ManagementDoorHandlers;
-}
-
 /**
- * The management door as far as P2.3 goes: the admission gate, and a
- * placeholder MCP server with no tool behind it (see `placeholder-door.ts`).
+ * The admission gate of `/mcp/manage`: the resource-server half of this
+ * module. The door behind it (its tools) is `server/management`; the
+ * composition root hands that module the gate's `admit` and nothing more.
  */
-export function createManagementDoorModule(deps: ManagementDoorModuleDeps): ManagementDoorModule {
-  const logger = deps.logger.child({ component: 'management-door' });
-  const gate = new ManagementGate({
+export function createManagementGate(deps: ManagementGateModuleDeps): ManagementGate {
+  return new ManagementGate({
     config: deps.config,
     endpoints: deps.oauth.endpoints,
     verifier: deps.oauth.verifier,
     missionTokens: deps.missionTokens,
     webSessions: deps.webSessions,
-    logger,
+    logger: deps.logger.child({ component: 'management-door' }),
   });
-  const placeholder = new ManagementDoorPlaceholder({ gate, build: deps.build, logger });
-  return { gate, handlers: { mcp: (request) => placeholder.handle(request) } };
 }
 
 export {
@@ -235,7 +220,6 @@ export {
 export { ManagementGate, type AdmittedDelegation } from './management-gate';
 export { CONSENT_FIELD, consentPage, DECISION_FIELD, escapeHtml, messagePage } from './pages';
 export { challengeOf, isCodeChallenge, isCodeVerifier, verifyS256 } from './pkce';
-export { MANAGEMENT_SERVER_INFO_NAME, ManagementDoorPlaceholder } from './placeholder-door';
 export {
   checkRedirectUri,
   isLoopbackHost,

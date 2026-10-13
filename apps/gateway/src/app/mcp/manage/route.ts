@@ -1,8 +1,7 @@
 /**
  * `/mcp/manage` — the management MCP door (spec §4.1 bis), authenticated by a
- * delegated access token. Until feature P2.4 brings its tools, the handler is
- * the authorization server's placeholder: the real admission gate in front of
- * an MCP server that lists no tool.
+ * delegated access token: read the user's authority, preview a policy, issue,
+ * rotate or revoke missions in the user's name (`server/management`).
  */
 import { getRoot } from '@/server/compose';
 

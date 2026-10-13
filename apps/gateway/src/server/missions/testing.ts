@@ -192,6 +192,7 @@ export function acmeConnection(overrides: Partial<IssuanceConnection> = {}): Iss
     status: 'active',
     experimental: false,
     derives_env: false,
+    basis: 'owner',
     resources: ACME_RESOURCES,
     risks: enumerateCatalog(ACME_CATALOG),
     authority: fullCatalogRiskIds(ACME_CATALOG),

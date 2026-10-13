@@ -4,7 +4,7 @@
  * enumerates the service methods").
  *
  * The public methods of every class under `server/{connections,
- * provider-apps,missions,auth,requests,telemetry,authority,shares,groups,oauth-as}` are
+ * provider-apps,missions,auth,requests,telemetry,authority,shares,groups,oauth-as,management}` are
  * read from the source with the TypeScript
  * parser and each must be classified below as a read, a mutation or an
  * exemption with its reason. A method added tomorrow fails the first test
@@ -37,6 +37,7 @@ import {
   UNVERIFIED_APP_INSTALL_SPEC,
 } from '../../../src/server/connections/testing';
 import { silentLogger } from '../../../src/server/logging';
+import type { ManagementActor } from '../../../src/server/management';
 import type { TokenResponse } from '../../../src/server/oauth-as';
 import { pkcePair } from '../../../src/server/oauth-as/testing';
 import type {
@@ -59,6 +60,7 @@ const SCANNED = [
   'shares',
   'groups',
   'oauth-as',
+  'management',
 ];
 const PUBLIC_URL = 'https://gateway.example.com';
 const OPERATOR_EMAIL = 'ops@example.com';
@@ -328,6 +330,11 @@ interface ExpectedEntry {
   readonly objectId?: string;
   /** Who the entry names: the acting user. */
   readonly actor: 'alice' | 'operator';
+  /**
+   * The act comes from the management surface: the entry also names the
+   * delegated client (spec §8). Absent: the entry names none.
+   */
+  readonly delegated?: true;
 }
 
 type Rule =
@@ -357,6 +364,13 @@ const OAUTH_PROTOCOL =
 const connections = (root: GatewayRoot) => root.connections.service;
 const missions = (root: GatewayRoot) => root.missions.service;
 const providerApps = (root: GatewayRoot) => root.providerApps;
+const managementTools = (root: GatewayRoot) => root.management.tools;
+
+/** Alice's delegation to a fresh client, as the management door hands it to its tools. */
+async function delegatedActor(rig: Rig): Promise<ManagementActor> {
+  const held = await rig.delegation();
+  return { userId: rig.alice.user.id, delegationId: held.id, clientId: held.client.clientId };
+}
 
 const RULES: Readonly<Record<string, Rule>> = {
   // ── connections ───────────────────────────────────────────────────────────
@@ -867,7 +881,46 @@ const RULES: Readonly<Record<string, Rule>> = {
   'DelegatedTokenVerifier.resolve': READ,
   'DelegatedTokenVerifier.verifyAccessToken': READ,
   'ManagementGate.admit': READ,
-  'ManagementDoorPlaceholder.handle': READ,
+  // ── management door: an agent acting for the user, under a delegation ─────
+  'ManagementDoor.handle': READ,
+  'ManagementTools.listMyConnections': READ,
+  'ManagementTools.getCatalog': READ,
+  'ManagementTools.listMyMissions': READ,
+  'ManagementTools.previewPolicy': READ,
+  'ManagementTools.issueMission': {
+    kind: 'mutation',
+    target: managementTools,
+    prepare: async (rig) => ({
+      connection: await rig.connectByKey(),
+      actor: await delegatedActor(rig),
+    }),
+    drive: (rig, prepared: { connection: ConnectionRecord; actor: ManagementActor }) =>
+      rig.root.management.tools.issueMission(prepared.actor, {
+        name: 'Read the things',
+        connections: [{ connection_id: prepared.connection.id, preset: 'reader' }],
+        period: { kind: 'one-off' },
+        expires_at: null,
+      }),
+    writes: { act: 'mission-issued', object: 'mission', actor: 'alice', delegated: true },
+  },
+  'ManagementTools.rotateMissionToken': {
+    kind: 'mutation',
+    target: managementTools,
+    prepare: async (rig) => ({ mission: await rig.issue(), actor: await delegatedActor(rig) }),
+    drive: (rig, prepared: { mission: MissionRecord; actor: ManagementActor }) =>
+      rig.root.management.tools.rotateMissionToken(prepared.actor, {
+        mission_id: prepared.mission.id,
+      }),
+    writes: { act: 'mission-rotated', object: 'mission', actor: 'alice', delegated: true },
+  },
+  'ManagementTools.revokeMission': {
+    kind: 'mutation',
+    target: managementTools,
+    prepare: async (rig) => ({ mission: await rig.issue(), actor: await delegatedActor(rig) }),
+    drive: (rig, prepared: { mission: MissionRecord; actor: ManagementActor }) =>
+      rig.root.management.tools.revokeMission(prepared.actor, { mission_id: prepared.mission.id }),
+    writes: { act: 'mission-revoked', object: 'mission', actor: 'alice', delegated: true },
+  },
 };
 
 const MUTATIONS = Object.entries(RULES).flatMap(([name, rule]) =>
@@ -917,10 +970,13 @@ describe('every administrative mutation writes an admin audit entry', () => {
       'group-member-removed',
       'mission-issued',
       'mission-issued',
+      'mission-issued',
       'mission-orphaned',
       'mission-orphaned',
       'mission-restored',
       'mission-revoked',
+      'mission-revoked',
+      'mission-rotated',
       'mission-rotated',
       'oauth-client-approved',
       'period-reset',
@@ -964,6 +1020,12 @@ describe('every administrative mutation writes an admin audit entry', () => {
     const [entry] = matching;
     expect(entry?.object.id.length).toBeGreaterThan(0);
     expect(Number.isNaN(Date.parse(entry?.ts ?? ''))).toBe(false);
+    if (rule.writes.delegated) {
+      expect(entry?.delegated_client_id, name).toMatch(/^vbn_client_/);
+    } else if (rule.writes.act.startsWith('mission-')) {
+      // An act of the interface names no client.
+      expect(entry?.delegated_client_id ?? null, name).toBeNull();
+    }
   });
 
   it.each([

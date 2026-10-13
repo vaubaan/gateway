@@ -169,5 +169,120 @@ describe('delegations repository', () => {
       ],
     });
     expect(m.delegationId).toBe(d.id);
+
+    // `issued_via`: the client behind the mission, read through the delegation it names.
+    const own = await store.missions.create({
+      name: 'by hand',
+      creatorUserId: user,
+      periodSeconds: null,
+      connections: [{ connectionId: connection.id, resourceScope: 'all', resourceIds: [] }],
+      policy: [
+        { riskId: 'github.code-read', quota: 1, rateLimit: 1, rateWindowSeconds: 60, gate: 'auto' },
+      ],
+    });
+    const issuers = await store.missions.issuersOf([m.id, own.id, m.id, 'missing']);
+    expect([...issuers]).toEqual([
+      [
+        m.id,
+        { missionId: m.id, delegationId: d.id, clientId: 'claude-code', clientName: 'Claude Code' },
+      ],
+    ]);
+    expect(await store.missions.issuersOf([])).toEqual(new Map());
+    // A revoked delegation still names who issued the mission.
+    await store.delegations.revoke(d.id, 'user');
+    expect((await store.missions.issuersOf([m.id])).get(m.id)?.clientId).toBe('claude-code');
+  });
+
+  describe('rotateSuccessorOf — the reuse window of a rotation', () => {
+    const NEXT = { expiresAt: '2026-12-13T09:00:00.000Z' };
+
+    async function rotatedOnce() {
+      const d = await store.delegations.create({ userId: user, clientId, scope: 's' });
+      await store.delegations.createRefreshToken({
+        delegationId: d.id,
+        tokenHash: 'r1',
+        expiresAt: '2026-11-13T09:00:00.000Z',
+      });
+      const rotatedAt = t.clock.now().toISOString();
+      const second = await store.delegations.rotateRefreshToken('r1', { tokenHash: 'r2', ...NEXT });
+      return { d, rotatedAt, second };
+    }
+
+    it('rotates the live head when the presented token is its immediate predecessor, rotated since the instant given', async () => {
+      const { d, rotatedAt, second } = await rotatedOnce();
+      t.clock.advance(10_000);
+      const third = await store.delegations.rotateSuccessorOf('r1', rotatedAt, {
+        tokenHash: 'r3',
+        ...NEXT,
+      });
+      expect(third).toMatchObject({ delegationId: d.id, revokedAt: null, replacedById: null });
+      const head = await store.delegations.findRefreshToken('r2');
+      expect(head?.token).toMatchObject({
+        id: second?.id,
+        replacedById: third?.id,
+        revokedAt: t.clock.now().toISOString(),
+      });
+      // One live head, and the family is a chain: r1 → r2 → r3.
+      expect((await store.delegations.findRefreshToken('r1'))?.token.replacedById).toBe(second?.id);
+      const live = store.db
+        .prepare<
+          [],
+          { n: number }
+        >('SELECT COUNT(*) AS n FROM oauth_refresh_tokens WHERE revoked_at IS NULL')
+        .get();
+      expect(live?.n).toBe(1);
+    });
+
+    it('answers null when the token was rotated before the instant given', async () => {
+      const { rotatedAt } = await rotatedOnce();
+      const later = new Date(Date.parse(rotatedAt) + 1).toISOString();
+      expect(
+        await store.delegations.rotateSuccessorOf('r1', later, { tokenHash: 'r3', ...NEXT }),
+      ).toBeNull();
+      expect((await store.delegations.findRefreshToken('r2'))?.token.revokedAt).toBeNull();
+    });
+
+    it('answers null when the successor is no longer the head, or the token was never rotated, or is unknown', async () => {
+      const { rotatedAt } = await rotatedOnce();
+      // The head itself: never rotated.
+      expect(
+        await store.delegations.rotateSuccessorOf('r2', rotatedAt, { tokenHash: 'x1', ...NEXT }),
+      ).toBeNull();
+      expect(
+        await store.delegations.rotateSuccessorOf('nope', rotatedAt, { tokenHash: 'x2', ...NEXT }),
+      ).toBeNull();
+      // The head moves on: r1's successor is now rotated too.
+      await store.delegations.rotateRefreshToken('r2', { tokenHash: 'r3', ...NEXT });
+      expect(
+        await store.delegations.rotateSuccessorOf('r1', rotatedAt, { tokenHash: 'x3', ...NEXT }),
+      ).toBeNull();
+    });
+
+    it('answers null once the delegation is revoked or the head expired', async () => {
+      const revoked = await rotatedOnce();
+      await store.delegations.revoke(revoked.d.id, 'user');
+      expect(
+        await store.delegations.rotateSuccessorOf('r1', revoked.rotatedAt, {
+          tokenHash: 'x1',
+          ...NEXT,
+        }),
+      ).toBeNull();
+
+      const d = await store.delegations.create({ userId: user, clientId, scope: 's' });
+      await store.delegations.createRefreshToken({
+        delegationId: d.id,
+        tokenHash: 'e1',
+        expiresAt: '2026-11-13T09:00:00.000Z',
+      });
+      const rotatedAt = t.clock.now().toISOString();
+      await store.delegations.rotateRefreshToken('e1', {
+        tokenHash: 'e2',
+        expiresAt: new Date(t.clock.now().getTime() + 1_000).toISOString(),
+      });
+      t.clock.advance(2_000);
+      expect(
+        await store.delegations.rotateSuccessorOf('e1', rotatedAt, { tokenHash: 'x2', ...NEXT }),
+      ).toBeNull();
+    });
   });
 });
