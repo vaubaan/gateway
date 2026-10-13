@@ -248,6 +248,12 @@ again (`before` with the cause it was orphaned for, `after: { status:
 | `GroupService.addMember` / `removeMember`                | yes        | yes         | the operator           |
 | a sign-in (`completeLogin`, around `syncIdpMemberships`) | yes        | yes         | the user who signed in |
 
+The sweeps of Decision 1 and the hook of Decision 4 are replaced accordingly:
+`sweepConnection` / `sweepCreator` by `watchConnection` / `watchCreator`,
+`MembershipSettler.afterRemoval` by `watch(userId)` … `settle(actorId)`, and
+`LoginDeps.membershipsSynced` by `membershipsChanging`, called before the
+memberships are replaced and returning the function called after.
+
 The door writes no administrative entry in either direction: no human is
 behind a read. It logs the refusal with its cause, and the pipeline audits
 the refused call. A change made by a path that no service watched is
