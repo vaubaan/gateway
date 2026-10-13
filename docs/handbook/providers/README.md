@@ -98,9 +98,9 @@ an endpoint, the endpoint and its shape; adding one changes the test and
 this table in the same commit.
 
 Versions shipped today (`version` in `src/index.ts`, equal to the plugin's
-`package.json`; what telemetry reports as `plugin_version`): `3.0.0` for
-cloudflare-dns, github, railway, supabase and vercel; `2.0.1` for
-upstash-redis; `2.0.0` for ssh; `0.4.0` for stripe; `0.3.0` for gmail and
+`package.json`; what telemetry reports as `plugin_version`): `4.0.0` for
+railway and supabase; `3.0.0` for cloudflare-dns, github, upstash-redis and
+vercel; `2.0.0` for ssh; `0.4.0` for stripe; `0.3.0` for gmail and
 resend. A version moves by a breaking step — major, or minor before 1.0 —
 when the classification becomes stricter or the executor refuses what it used
 to forward, because a call the previous version allowed is then refused: the
