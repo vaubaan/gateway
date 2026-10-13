@@ -12,6 +12,10 @@
  *     `refresh` and otherwise mark the connection `expired`.
  *   - the provider's public API base is a constant of the plugin : it is a
  *     fact about the provider, not configuration of the instance.
+ *   - the workspace is resolved by the classifier's own `resolveWorkspace` :
+ *     the call runs on the workspace the slice named, or not at all.
+ *   - what the provider answers is untrusted : checked by a type guard
+ *     before it becomes a `Resource`.
  */
 
 import {
@@ -22,6 +26,9 @@ import {
   type McpToolResult,
   type Resource,
 } from '@vaubaan/plugin-sdk';
+
+import { resolveWorkspace } from './classify.ts';
+import { API_KEY_FIELD, PROVIDER_ID, TOOL } from './identity.ts';
 
 /** Public API of the provider. Replace with the real base URL in a copy of this template. */
 export const TEMPLATE_API_BASE = 'https://api.example.com/v1';
@@ -36,11 +43,13 @@ export async function executeTemplate(
   tool: string,
   args: Readonly<Record<string, unknown>>,
 ): Promise<McpToolResult> {
-  const workspace = encodeURIComponent(String(args.workspace ?? singleWorkspace(ctx.resources)));
+  const resolved = resolveWorkspace(args, ctx.resources);
+  if ('denied' in resolved) throw new Error(resolved.denied);
+  const workspace = encodeURIComponent(resolved.ref);
   switch (tool) {
-    case 'template__list_widgets':
+    case TOOL.listWidgets:
       return text(await request(ctx, 'GET', `/workspaces/${workspace}/widgets`));
-    case 'template__get_widget':
+    case TOOL.getWidget:
       return text(
         await request(
           ctx,
@@ -48,7 +57,7 @@ export async function executeTemplate(
           `/workspaces/${workspace}/widgets/${encodeURIComponent(String(args.widget_id))}`,
         ),
       );
-    case 'template__update_widget':
+    case TOOL.updateWidget:
       return text(
         await request(
           ctx,
@@ -68,8 +77,20 @@ export async function executeTemplate(
 export async function discoverTemplateResources(
   ctx: ConnectionContext,
 ): Promise<readonly Resource[]> {
-  const workspaces = (await request(ctx, 'GET', '/workspaces')) as readonly WorkspaceDto[];
-  return workspaces.map((w) => ({ provider: 'template', ref: w.id, displayName: w.name }));
+  const workspaces = await request(ctx, 'GET', '/workspaces');
+  if (!isWorkspaceDtoList(workspaces)) {
+    throw new Error(`${PROVIDER_ID}: unexpected workspace list (expected [{ id, name }])`);
+  }
+  return workspaces.map((w) => ({ provider: PROVIDER_ID, ref: w.id, displayName: w.name }));
+}
+
+function isWorkspaceDtoList(x: unknown): x is readonly WorkspaceDto[] {
+  return Array.isArray(x) && x.every(isWorkspaceDto);
+}
+
+function isWorkspaceDto(x: unknown): x is WorkspaceDto {
+  if (typeof x !== 'object' || x === null) return false;
+  return 'id' in x && typeof x.id === 'string' && 'name' in x && typeof x.name === 'string';
 }
 
 async function request(
@@ -78,11 +99,13 @@ async function request(
   path: string,
   body?: unknown,
 ): Promise<unknown> {
-  const secret = expectCredentialKind('template', ctx.credential, 'api-key');
+  const secret = expectCredentialKind(PROVIDER_ID, ctx.credential, 'api-key');
+  const apiKey = secret.fields[API_KEY_FIELD];
+  if (!apiKey) throw new Error(`${PROVIDER_ID}: the credential has no '${API_KEY_FIELD}' field`);
   const res = await ctx.fetch(`${TEMPLATE_API_BASE}${path}`, {
     method,
     headers: {
-      authorization: `Bearer ${secret.fields.api_key}`,
+      authorization: `Bearer ${apiKey}`,
       accept: 'application/json',
       ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
     },
@@ -91,19 +114,12 @@ async function request(
   });
   if (res.status === 401 || res.status === 403) {
     throw new UpstreamAuthError(
-      `template rejected the credential (HTTP ${res.status})`,
+      `${PROVIDER_ID} rejected the credential (HTTP ${res.status})`,
       res.status,
     );
   }
-  if (!res.ok) throw new Error(`template ${method} ${path} failed with HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`${PROVIDER_ID} ${method} ${path} failed with HTTP ${res.status}`);
   return await res.json();
-}
-
-function singleWorkspace(resources: readonly Resource[]): string {
-  const own = resources.filter((r) => r.provider === 'template');
-  if (own.length !== 1)
-    throw new Error('workspace: argument required when the mission touches several workspaces');
-  return own[0]!.ref;
 }
 
 function text(payload: unknown): McpToolResult {

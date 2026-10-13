@@ -147,8 +147,8 @@ export interface ProviderPlugin {
   /**
    * Derive the environment a slice falls under when the provider carries
    * it in the call itself rather than on the resource : the `env[<label>]`
-   * segment for Vercel, the branch for GitHub (spec vaubaan-gateway §0
-   * "Resource"). Pure. Return `undefined` when the slice carries no
+   * segment for Vercel, the only shipped plugin that declares the hook
+   * (spec vaubaan-gateway §0 "Resource"). Pure. Return `undefined` when the slice carries no
    * environment of its own ; the host then falls back to the owner's label
    * on the matching resource (`envResolverFor` in `@vaubaan/policy-engine`).
    * Absent when the environment always lives on the resource label
@@ -174,6 +174,12 @@ export interface ProviderPlugin {
    * resolved (page size, time window). Pure. Return the input when nothing
    * applies ; throw when a cap cannot be enforced upstream so the host
    * refuses the call.
+   *
+   * Reserved : the v5.0 host has no cap stage and never calls this hook
+   * (ADR scope-caps-not-enforced-in-v5-0). A catalog's `caps` block is
+   * therefore applied nowhere, and the shipped catalogs are not allowed to
+   * declare one ; the hook keeps its place so that enforcing caps later is
+   * not a contract change.
    */
   normalizeForCaps?(
     args: Readonly<Record<string, unknown>>,

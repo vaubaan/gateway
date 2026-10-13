@@ -4,6 +4,12 @@ import { PluginDefinitionError, definePlugin, pluginIssues } from '../../src/def
 import type { ProviderPlugin } from '../../src/plugin.ts';
 import { CredentialKindMismatch, expectCredentialKind } from '../../src/credential.ts';
 import { DEFAULT_HOST_FLAGS, normalizeArgsIfEnabled } from '../../src/flags.ts';
+import { PluginRegistry, PluginRegistryError } from '../../src/registry.ts';
+import {
+  PluginAssertionError,
+  assertPluginWellFormed,
+  assertPresetsValid,
+} from '../../src/testing/assertions.ts';
 import { acmePlugin } from '../fixtures/acme/acme-plugin.ts';
 
 describe('definePlugin', () => {
@@ -52,6 +58,83 @@ describe('definePlugin', () => {
     expect(pluginIssues(noPresets)).toEqual([
       expect.stringMatching(/^catalog: presets: every plugin ships at least one preset/),
     ]);
+  });
+
+  // A catalog written in TypeScript never goes through the YAML loader: the
+  // budget rule (spec §3.2, "always numbers, never unbounded") must hold on
+  // this path too, for `definePlugin`, the registry and the test kit.
+  describe('budget rules on a TypeScript catalog', () => {
+    const withEntry = (entry: Record<string, unknown>): ProviderPlugin =>
+      ({
+        ...acmePlugin,
+        catalog: {
+          ...acmePlugin.catalog,
+          presets: [
+            {
+              id: 'ts-preset',
+              label: 'TS',
+              description: 'Declared in TypeScript.',
+              entries: [
+                {
+                  risk_id: 'acme.read-things',
+                  quota: 10,
+                  rate_limit: { max: 1, window_seconds: 60 },
+                  gate: 'auto',
+                  ...entry,
+                },
+              ],
+            },
+          ],
+        },
+      }) as unknown as ProviderPlugin;
+    const at = 'catalog: presets[0].entries[0]';
+
+    test('a legal budget passes', () => {
+      expect(pluginIssues(withEntry({}))).toEqual([]);
+    });
+
+    test.each([
+      ['an infinite quota', { quota: Infinity }, `${at}.quota: expected a positive integer`],
+      ['a zero quota', { quota: 0 }, `${at}.quota: expected a positive integer`],
+      ['a fractional quota', { quota: 1.5 }, `${at}.quota: expected a positive integer`],
+      ['a missing quota', { quota: undefined }, `${at}.quota: expected a positive integer`],
+      [
+        'a negative rate',
+        { rate_limit: { max: -1, window_seconds: 60 } },
+        `${at}.rate_limit.max: expected a positive integer`,
+      ],
+      [
+        'a zero window',
+        { rate_limit: { max: 1, window_seconds: 0 } },
+        `${at}.rate_limit.window_seconds: expected a positive integer`,
+      ],
+      [
+        'a missing rate limit',
+        { rate_limit: undefined },
+        `${at}.rate_limit: expected { max, window_seconds }`,
+      ],
+      ['a bogus gate', { gate: 'whatever' }, `${at}.gate: expected one of auto | approval`],
+      ['a missing gate', { gate: undefined }, `${at}.gate: expected one of auto | approval`],
+    ])('%s is refused', (_name, entry, expected) => {
+      const issues = pluginIssues(withEntry(entry));
+      expect(issues).toHaveLength(1);
+      expect(issues[0]).toContain(expected);
+      expect(() => definePlugin(withEntry(entry))).toThrow(PluginDefinitionError);
+      expect(() => new PluginRegistry([withEntry(entry)])).toThrow(PluginRegistryError);
+      expect(() => assertPresetsValid(withEntry(entry))).toThrow(PluginAssertionError);
+      expect(() => assertPluginWellFormed(withEntry(entry))).toThrow(PluginAssertionError);
+    });
+
+    test('every illegal value of one entry is listed', () => {
+      const issues = pluginIssues(
+        withEntry({
+          quota: Infinity,
+          rate_limit: { max: -1, window_seconds: 0 },
+          gate: 'whatever',
+        }),
+      );
+      expect(issues).toHaveLength(4);
+    });
   });
 
   test('optional hooks must be functions when present', () => {

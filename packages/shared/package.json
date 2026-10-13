@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./api-key": "./src/api-key.ts",
+    "./domain": "./src/domain.ts",
     "./risk-id": "./src/risk-id.ts"
   },
   "scripts": {

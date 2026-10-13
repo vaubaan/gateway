@@ -16,6 +16,7 @@ import { catalogPathNextTo, definePlugin, loadCatalogFile } from '@vaubaan/plugi
 import { classifyTemplate } from './classify.ts';
 import { templateDataModel } from './data-model.ts';
 import { discoverTemplateResources, executeTemplate } from './execute.ts';
+import { API_KEY_FIELD, PROVIDER_ID } from './identity.ts';
 import { templateTools } from './tools.ts';
 
 // `catalogPathNextTo` builds a filesystem path from `import.meta.url` ; never
@@ -25,7 +26,7 @@ import { templateTools } from './tools.ts';
 export const templateCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 export const templatePlugin = definePlugin({
-  id: 'template',
+  id: PROVIDER_ID,
   displayName: 'Template provider',
   version: '0.1.0',
   description: 'Scaffold plugin. Copy it to start a real one.',
@@ -36,7 +37,7 @@ export const templatePlugin = definePlugin({
     kind: 'api-key',
     fields: [
       {
-        name: 'api_key',
+        name: API_KEY_FIELD,
         label: 'API key',
         secret: true,
         help: 'Create a key with read and write access to the workspaces you want to connect.',
@@ -53,3 +54,4 @@ export const templatePlugin = definePlugin({
 });
 
 export { classifyTemplate, templateDataModel, templateTools };
+export { API_KEY_FIELD, PROVIDER_ID, TOOL } from './identity.ts';

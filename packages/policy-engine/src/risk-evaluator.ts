@@ -59,9 +59,13 @@ export interface IndexedRiskCatalog {
 // Fallback detection
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** Id prefix of the catch-all entry every catalog declares (`<provider>.uncategorized`). */
+/**
+ * Id prefix of the catch-all entry every catalog declares :
+ * `<provider>.uncategorized-`, dash included — `github.uncategorized-write`
+ * carries it, `github.uncategorizedfoo` does not.
+ */
 export function fallbackRiskPrefix(provider: string): string {
-  return `${provider}.uncategorized`;
+  return `${provider}.uncategorized-`;
 }
 
 /** True iff the parsed pattern is the catch-all write `<provider>.**.W` (one `[**]` segment, action W). */
@@ -89,6 +93,17 @@ export function isFallbackEntry(
   if (entry.id.startsWith(fallbackRiskPrefix(provider))) return true;
   const parsed = patterns ?? parsePatternsLeniently(entry);
   return parsed.some(isCatchAllWritePattern);
+}
+
+/**
+ * True iff one of the entry's `matches` patterns is the catch-all write
+ * `<provider>.**.W`. An unparseable pattern does not count. The SDK loader
+ * requires it of the fallback entry : the fallback is left out of the
+ * touched risks whenever another entry matches, which is only sound for the
+ * entry that covers every write.
+ */
+export function hasCatchAllWritePattern(entry: RiskEntry): boolean {
+  return parsePatternsLeniently(entry).some(isCatchAllWritePattern);
 }
 
 /** The fallback entries of a catalog — exactly one in a valid catalog. */

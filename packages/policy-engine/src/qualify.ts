@@ -113,7 +113,13 @@ export interface EnvResolver {
   resolveEnv(slice: Slice): string | null;
 }
 
-/** Resolver that never qualifies anything — the test mode. */
+/**
+ * Resolver that knows no environment : every slice resolves to `null`.
+ * It is an ordinary resolver, not a switch — `evaluateCall` given this one
+ * runs in the host mode and refuses every env-scoped risk (nothing is
+ * labelled). The mode without qualification is requested by name :
+ * `envResolver: 'unqualified'`.
+ */
 export const noEnvResolver: EnvResolver = {
   resolveEnv: () => null,
 };
@@ -156,8 +162,8 @@ export function resourceEnvResolver(resources: ReadonlyArray<Resource>): EnvReso
 }
 
 /**
- * A plugin-side derivation of the environment of a slice : `env[prod]`
- * segment for Vercel, the branch for GitHub. Returns `undefined` (or
+ * A plugin-side derivation of the environment of a slice : the `env[prod]`
+ * segment for Vercel, the only shipped plugin with one. Returns `undefined` (or
  * `null`) when the slice carries no environment of its own, so the
  * resource label applies. Mirrors `ProviderPlugin.envOf` in the SDK
  * without importing it (the SDK depends on this package, not the reverse).
@@ -174,7 +180,7 @@ export type EnvDeriver = (
  * derives it") :
  *
  *   1. the plugin's `envOf(slice, resources)` when given and non-empty —
- *      the environment is a slice segment or an argument (Vercel, GitHub) ;
+ *      the environment is a slice segment or an argument (Vercel) ;
  *   2. else the owner's label on the matching resource
  *      (`resourceEnvResolver`) — Supabase, Railway, and Stripe whose
  *      plugin labels one resource per mode at discovery ;

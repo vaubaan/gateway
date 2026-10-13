@@ -10,9 +10,20 @@
  */
 
 import { risksTouchedBy, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
-import { isExplicitRiskId, type Resource, type RiskCatalog, type RiskId } from '@vaubaan/shared';
+import {
+  isExplicitRiskId,
+  type Resource,
+  type RiskCatalog,
+  type RiskId,
+  type Slice,
+} from '@vaubaan/shared';
 
-import { fallbackFlagIssues, presetIssues, wildcardIssues } from '../catalog-loader.ts';
+import {
+  fallbackFlagIssues,
+  presetIssues,
+  presetWildcardIssues,
+  wildcardIssues,
+} from '../catalog-loader.ts';
 import { pluginIssues } from '../define-plugin.ts';
 import type { ProviderPlugin } from '../plugin.ts';
 import { PluginRegistry } from '../registry.ts';
@@ -69,12 +80,17 @@ function isIdList(x: RiskCatalog | ProviderPlugin | readonly RiskId[]): x is rea
   return Array.isArray(x);
 }
 
-/** At least one preset ; every entry a risk of the same catalog ; budgets explicit. */
+/**
+ * At least one preset ; every entry an explicit risk of the same catalog
+ * (no wildcard, no sentinel) ; budgets explicit — a positive integer quota
+ * and rate limit, a gate from the closed set (`presetIssues`, which applies
+ * `budgetIssues` to every entry).
+ */
 export function assertPresetsValid(input: RiskCatalog | ProviderPlugin): void {
   const catalog = 'catalog' in input ? input.catalog : input;
   fail(`presets of catalog '${catalog.provider}'`, [
     ...presetIssues(catalog, { requirePresets: true }),
-    ...wildcardIssues(catalog).filter((m) => m.startsWith('presets')),
+    ...presetWildcardIssues(catalog),
   ]);
 }
 
@@ -130,11 +146,53 @@ export function assertCatalogCoverage(
   samples: ToolSamples,
   options: CoverageOptions = {},
 ): CoverageReport {
-  const findings: string[] = [];
   const registry = new PluginRegistry([plugin]);
   const indexed: IndexedRiskCatalog = registry.catalogOf(plugin.id);
   const declared = new Set(plugin.tools.map((t) => t.name));
+  const run: CoverageRun = {
+    plugin,
+    indexed,
+    fallbackIds: new Set(indexed.entries.filter((e) => e.fallback).map((e) => e.entry.id)),
+    defaultResources: options.resources ?? [],
+    findings: sampleSetFindings(declared, samples),
+    touched: new Set<RiskId>(),
+    fallbackHits: [],
+  };
 
+  let samplesChecked = 0;
+  for (const [tool, calls] of Object.entries(samples)) {
+    if (!declared.has(tool)) continue;
+    calls.forEach((sample, i) => {
+      samplesChecked += 1;
+      classifySample(run, sample, `'${tool}' sample #${i + 1}`, tool);
+    });
+  }
+
+  fail(`catalog coverage of plugin '${plugin.id}'`, run.findings);
+  const all = plugin.catalog.risks.map((r) => r.id);
+  return {
+    toolsChecked: declared.size,
+    samplesChecked,
+    risksTouched: all.filter((id) => run.touched.has(id)),
+    risksUntouched: all.filter((id) => !run.touched.has(id) && !run.fallbackIds.has(id)),
+    fallbackHits: run.fallbackHits,
+  };
+}
+
+/** What one coverage run reads and accumulates. */
+interface CoverageRun {
+  readonly plugin: ProviderPlugin;
+  readonly indexed: IndexedRiskCatalog;
+  readonly fallbackIds: ReadonlySet<RiskId>;
+  readonly defaultResources: readonly Resource[];
+  readonly findings: string[];
+  readonly touched: Set<RiskId>;
+  readonly fallbackHits: string[];
+}
+
+/** Every declared tool has a sample ; every sample names a declared tool. */
+function sampleSetFindings(declared: ReadonlySet<string>, samples: ToolSamples): string[] {
+  const findings: string[] = [];
   for (const tool of declared) {
     if (!samples[tool] || samples[tool].length === 0)
       findings.push(`tool '${tool}' has no sample call`);
@@ -143,58 +201,41 @@ export function assertCatalogCoverage(
     if (!declared.has(tool))
       findings.push(`sample for '${tool}' but the plugin declares no such tool`);
   }
+  return findings;
+}
 
-  const touched = new Set<RiskId>();
-  const fallbackIds = new Set(indexed.entries.filter((e) => e.fallback).map((e) => e.entry.id));
-  const fallbackHits: string[] = [];
-  let samplesChecked = 0;
-  for (const [tool, calls] of Object.entries(samples)) {
-    if (!declared.has(tool)) continue;
-    calls.forEach((sample, i) => {
-      samplesChecked += 1;
-      const where = `'${tool}' sample #${i + 1}`;
-      const resources = sample.resources ?? options.resources ?? [];
-      const outcome = plugin.classify(tool, sample.args, resources);
-      if ('denied' in outcome) {
-        if (!sample.expectDenied)
-          findings.push(
-            `${where}: classifier denied (${outcome.denied}) but the sample did not expect it`,
-          );
-        return;
-      }
-      if (sample.expectDenied) {
-        findings.push(
-          `${where}: expected the classifier to deny, got ${outcome.slices.length} slice(s)`,
-        );
-        return;
-      }
-      if (outcome.slices.length === 0) {
-        findings.push(`${where}: classifier returned no slice`);
-        return;
-      }
-      outcome.slices.forEach((slice, s) => {
-        if (slice.provider !== plugin.id) {
-          findings.push(
-            `${where} slice #${s + 1}: provider '${slice.provider}' is not '${plugin.id}'`,
-          );
-          return;
-        }
-        const risks = risksTouchedBy(slice, indexed);
-        if (risks.length === 0)
-          findings.push(`${where} slice #${s + 1}: no catalog risk matches it`);
-        if (risks.some((r) => fallbackIds.has(r))) fallbackHits.push(`${where} slice #${s + 1}`);
-        for (const r of risks) touched.add(r);
-      });
-    });
+/** Classify one sample and check the outcome against what the sample expects. */
+function classifySample(run: CoverageRun, sample: SampleCall, where: string, tool: string): void {
+  const resources = sample.resources ?? run.defaultResources;
+  const outcome = run.plugin.classify(tool, sample.args, resources);
+  if ('denied' in outcome) {
+    if (!sample.expectDenied)
+      run.findings.push(
+        `${where}: classifier denied (${outcome.denied}) but the sample did not expect it`,
+      );
+    return;
   }
+  if (sample.expectDenied) {
+    run.findings.push(
+      `${where}: expected the classifier to deny, got ${outcome.slices.length} slice(s)`,
+    );
+    return;
+  }
+  if (outcome.slices.length === 0) {
+    run.findings.push(`${where}: classifier returned no slice`);
+    return;
+  }
+  outcome.slices.forEach((slice, s) => sliceFindings(run, slice, `${where} slice #${s + 1}`));
+}
 
-  fail(`catalog coverage of plugin '${plugin.id}'`, findings);
-  const all = plugin.catalog.risks.map((r) => r.id);
-  return {
-    toolsChecked: declared.size,
-    samplesChecked,
-    risksTouched: all.filter((id) => touched.has(id)),
-    risksUntouched: all.filter((id) => !touched.has(id) && !fallbackIds.has(id)),
-    fallbackHits,
-  };
+/** One emitted slice : the plugin's own provider, and at least one catalog risk. */
+function sliceFindings(run: CoverageRun, slice: Slice, where: string): void {
+  if (slice.provider !== run.plugin.id) {
+    run.findings.push(`${where}: provider '${slice.provider}' is not '${run.plugin.id}'`);
+    return;
+  }
+  const risks = risksTouchedBy(slice, run.indexed);
+  if (risks.length === 0) run.findings.push(`${where}: no catalog risk matches it`);
+  if (risks.some((r) => run.fallbackIds.has(r))) run.fallbackHits.push(where);
+  for (const r of risks) run.touched.add(r);
 }

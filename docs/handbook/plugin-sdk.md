@@ -45,7 +45,8 @@ packages/plugin-sdk/
     catalog-loader.ts   loadCatalogFile / parseCatalogYaml / validateCatalog, CatalogError,
                         PluginCatalog / LoadedCatalog / LoadCatalogOptions,
                         semanticIssues / fallbackIssues / fallbackFlagIssues / presetIssues / wildcardIssues /
-                        structuralIssues, catalogWarnings
+                        riskIdWildcardIssues / presetWildcardIssues / structuralIssues, catalogWarnings,
+                        isCompleteVector
     catalog-path.ts     catalogPathNextTo, CATALOG_FILE_NAME — the filesystem path of the YAML
     env-of.ts           envFromSliceSegment, EnvOf — helpers for `ProviderPlugin.envOf`
     define-plugin.ts    definePlugin, pluginIssues, PluginDefinitionError, PLUGIN_VERSION_PATTERN,
@@ -61,8 +62,8 @@ packages/plugin-sdk/
                         SampleCall, ToolSamples, CoverageOptions, CoverageReport
   tests/
     fixtures/acme/      a tiny valid plugin (risk-catalog.yaml + acme-plugin.ts) used by the tests
-    unit/               catalog-loader (22), catalog-path (4), env-of (3), registry (10),
-                        define-plugin (13), testing-kit (14)
+    unit/               catalog-loader (31), catalog-path (4), env-of (3), registry (10),
+                        define-plugin (24), testing-kit (14)
 ```
 
 Dependencies: `@vaubaan/shared`, `@vaubaan/policy-engine`, `js-yaml`.
@@ -99,14 +100,30 @@ flowchart LR
 | `classify(tool, args, resources)`                    | yes   | `{ slices: Slice[] } \| { denied: string }`. `resources` = the mission's resources on this connection; used to derive the env and default refs. The gateway core's `Classifier` is this member plus `envOf` (`Pick<ProviderPlugin, 'classify' \| 'envOf'>`). |
 | `execute(ctx, tool, args)`                           | no    | `ctx: ExecuteContext` = credential (decrypted), appConfig, fetch, signal?, logger?, resources, agentLabel?, credentialCache?. Throws `UpstreamAuthError` on 401/403.                                                                                         |
 | `discoverResources(ctx)`                             | no    | `ctx: ConnectionContext` (same minus resources/agentLabel). Returns `Resource[]`.                                                                                                                                                                            |
-| `envOf?(slice, resources)`                           | yes   | The environment a slice carries in itself (Vercel's `env[prod]` segment, GitHub's branch); `undefined` defers to the resource label. See "Environment resolution".                                                                                           |
+| `envOf?(slice, resources)`                           | yes   | The environment a slice carries in itself (Vercel's `env[prod]` segment, the only shipped plugin declaring it); `undefined` defers to the resource label. See "Environment resolution".                                                                      |
 | `refresh?(ctx)`                                      | no    | Override for a non-standard refresh only (re-minted installation token…). A standard `oauth2` credential is refreshed by the host from the spec (`tokenUrl`, `clientAuthMethod`, `resourceIndicator`): `refreshable: true` needs no `refresh`.               |
-| `normalizeForCaps?(args, caps)`                      | yes   | Scope caps (ADR scope-caps).                                                                                                                                                                                                                                 |
+| `normalizeForCaps?(args, caps)`                      | yes   | Scope caps. **Reserved: the v5.0 host never calls it** ([ADR](../decisions/scope-caps-not-enforced-in-v5-0.md)).                                                                                                                                             |
 | `normalizeArgs?(args, resources)`                    | yes   | Only called when `PluginHostFlags.argNormalization` is on. **Default off** (plan §8-Q4).                                                                                                                                                                     |
 
 `definePlugin(def)` validates (`pluginIssues`) and `Object.freeze`s. Issues
 are aggregated into one `PluginDefinitionError` so a contributor fixes a
-broken definition in one pass.
+broken definition in one pass. `pluginIssues` is the concatenation of
+`identityIssues`, `toolIssues` (a malformed tool entry is an issue —
+`tools[i].name: expected a string` — not a `TypeError`), `dataModelIssues`,
+`catalogIssues`, `credentialSpecIssues` and `hookIssues`.
+
+`catalogIssues` runs `semanticIssues` on `plugin.catalog`. It is the only
+validation a catalog **written in TypeScript** goes through (it never
+meets the YAML parser), so every rule that must hold for every catalog
+lives there: the fallback rules, the wildcard rules and the preset rules,
+budgets included. A TypeScript preset entry with `quota: Infinity`, a
+negative rate, a zero window or a gate outside `auto | approval` is refused
+by `definePlugin`, by `new PluginRegistry(...)` and by the test kit, with
+the same message the YAML loader gives
+(`catalog: presets[0].entries[0].quota: expected a positive integer …`).
+Not on this path yet (YAML only): the vector axis values, the env-label
+grammar of `acceptable_in_envs`, the non-empty `matches`, the preset id
+slug and the `caps` / `infra_limits` values.
 
 `ExecuteContext.credentialCache` (`UpstreamCredentialCache { get, set(key,
 value, ttlSeconds) }`, optional) is a cache the host scopes to the
@@ -202,8 +219,11 @@ export const myCatalog = loadCatalogFile(catalogPathNextTo(import.meta.url));
 
 Runs at module load, hence at gateway boot. The rules it shares with the
 policy engine are imported, not re-implemented: `fallbackEntriesOf` /
-`fallbackRiskPrefix` for the mandatory fallback, `isEnvScopedEntry` /
-`isAcceptableInEnv` for env-qualified preset entries. Pipeline:
+`fallbackRiskPrefix` / `hasCatchAllWritePattern` for the mandatory
+fallback, `isEnvScopedEntry` / `isAcceptableInEnv` for env-qualified preset
+entries, `budgetIssues` / `isValidBudget` for the budget of a preset entry
+(the same function the application's issuance preview is meant to call).
+Pipeline:
 
 1. `js-yaml` `load` with `CORE_SCHEMA` (YAML 1.2 core: no implicit date
    or binary coercion). Syntax errors → `CatalogError` with the source name.
@@ -215,18 +235,40 @@ policy engine are imported, not re-implemented: `fallbackEntriesOf` /
    `infra_limits`, `fallback` (boolean), `deprecated`, `replaced_by`; each preset: slug id,
    `label`, `description`, non-empty `entries` with `risk_id`, positive
    integer `quota`, `rate_limit { max, window_seconds }`, `gate` (default
-   `auto`).
+   `auto`). One parser per field (`riskIdFrom`, `matchesFrom`,
+   `vectorFrom` / `partialVectorFrom`, `vectorOverridesFrom`,
+   `acceptableEnvsFrom`, `capsFrom`, `optionalBoolean`, `replacedByFrom`;
+   `presetEntryFrom`, `presetEntriesFrom`), each taking a `ParseContext
+{ at, issues }` and returning the typed value or `undefined` after
+   reporting at its path; `riskFrom` and `presetFrom` only assemble. The
+   output types prove what was checked: a vector is a `RiskVector` only
+   through the guard `isCompleteVector`, `caps` / `infra_limits` are a
+   `ScopeCaps` rebuilt from the five known keys (accepted keys and values
+   unchanged: positive integers), a preset entry is typed through
+   `isValidBudget`. The loader accepts `caps` and every `infra_limits` key
+   because the contract is the SDK's; what a host enforces is the host's
+   business. The v5.0 gateway enforces `infra_limits.calls_per_minute_max`
+   only (at issuance), calls neither `normalizeForCaps` nor `normalizeArgs`,
+   and a structural test of the app refuses any other declared limit in the
+   shipped catalogs
+   ([ADR](../decisions/scope-caps-not-enforced-in-v5-0.md)).
 3. `prepareCatalog` from `policy-engine` — duplicate ids, id regex, every
    pattern parses and belongs to the provider.
 4. `semanticIssues` — `fallbackIssues`: exactly one fallback entry
    (`fallback: true`, or detected by the catch-all pattern
    `<provider>.**.W` or the `<provider>.uncategorized-` id — see
    `isFallbackEntry` in the policy engine), named
-   `<provider>.uncategorized-*`; zero (`requireFallback`, default true) or
-   two is an error. `wildcardIssues`; `presetIssues` (`requirePresets`,
-   default true): at least one preset, ids unique, every `risk_id` an
-   explicit id of this provider present in the catalog, env-qualified
-   entries only on env-scoped risks and inside `acceptable_in_envs`, no
+   `<provider>.uncategorized-*` (the dash is part of the prefix) **and
+   matching the catch-all write `<provider>.**.W`**; zero
+(`requireFallback`, default true) or two is an error. The pattern is
+checked because the fallback is left out of the touched risks whenever
+another entry matches: flagged on a narrow pattern, a named risk would
+silently stop being required. `wildcardIssues`(=`riskIdWildcardIssues`+`presetWildcardIssues`); `presetIssues`
+(`requirePresets`, default true): at least one preset, ids unique, every
+entry a legal budget (`budgetIssues`: positive integer quota and rate
+limit, gate from the closed set), every `risk_id`an
+explicit id of this provider present in the catalog, env-qualified
+entries only on env-scoped risks and inside`acceptable_in_envs`, no
    deprecated risk, no repeated risk in a preset, **never the fallback** —
    it fires only on writes no other entry covers (ADR
    [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md)),
@@ -249,8 +291,8 @@ Invalid risk catalog '/…/plugins/github/src/risk-catalog.yaml':
 
 `validateCatalog(doc)` accepts an already-parsed object (tests, JSON).
 `semanticIssues`, `fallbackIssues`, `fallbackFlagIssues`, `presetIssues`,
-`wildcardIssues` and `catalogWarnings` are exported for the test kit and
-`definePlugin`.
+`wildcardIssues`, `riskIdWildcardIssues`, `presetWildcardIssues` and
+`catalogWarnings` are exported for the test kit and `definePlugin`.
 
 ### The fallback at runtime
 
@@ -331,6 +373,12 @@ const report = assertCatalogCoverage(plugin, {
 // report.risksTouched / report.risksUntouched / report.fallbackHits / report.toolsChecked / report.samplesChecked
 ```
 
+`assertPresetsValid` is `presetIssues` plus `presetWildcardIssues` — the
+preset half of the wildcard rule called as a function, not filtered out of
+`wildcardIssues` by the wording of its messages. Budgets are part of
+`presetIssues`, so the kit refuses an illegal budget whatever the catalog
+was written in.
+
 `assertCatalogCoverage` fails when a declared tool has no sample, a sample
 names an undeclared tool, a non-`expectDenied` sample is denied (or an
 `expectDenied` one is not), a sample yields no slice, a slice carries
@@ -355,7 +403,9 @@ test can never reach the network.
 The barrel `@vaubaan/shared` is **server-only**: it re-exports `api-key.ts`
 (argon2, `node:crypto`). Code the UI bundles — and `@vaubaan/policy-engine`,
 which the issuance form imports — takes _values_ from the subpaths
-`@vaubaan/shared/risk-id` and `@vaubaan/shared/api-key`; type imports from
+`@vaubaan/shared/risk-id`, `@vaubaan/shared/domain` (the closed sets and
+their guards: `GATES`, `isGate`…; added for the policy engine's
+`budgetIssues`) and `@vaubaan/shared/api-key`; type imports from
 the barrel are erased and always safe. The SDK itself is server-side
 (`node:fs` for the YAML) and imports the barrel.
 
@@ -401,16 +451,42 @@ any more.
 ## The template (`plugins/_template`)
 
 `@vaubaan/plugin-template`, provider id `template`, imports the SDK only.
-Six source files (`risk-catalog.yaml` with its `fallback: true` entry,
-`data-model.ts`, `tools.ts`, `classify.ts`, `execute.ts`, `index.ts` loading
-the catalog with `catalogPathNextTo`) and one test file running the kit,
-`mockFetch`, and the on-disk check of the catalog path. The classifier shows the two conventions every plugin
-follows: the resource ref is taken from the arguments, falls back to the
-mission's single resource of the provider, and anything else is `denied`
-(never mapped to a broad slice); identifiers are validated against a safe
-character class before being embedded in a slice. `execute.ts` shows the
-injected `fetch`, the bearer from the `api-key` secret and the
-`UpstreamAuthError` on 401/403.
+Seven source files (`identity.ts`, `risk-catalog.yaml` with its
+`fallback: true` entry, `data-model.ts`, `tools.ts`, `classify.ts`,
+`execute.ts`, `index.ts` loading the catalog with `catalogPathNextTo`) and
+one test file running the kit, `mockFetch`, and the on-disk check of the
+catalog path.
+
+`identity.ts` is the one place the ids are written: `PROVIDER_ID`, the tool
+names derived from it with `toolPrefixFor` (`TOOL.listWidgets`…) and
+`API_KEY_FIELD`, the name of the credential's secret field. The plugin id,
+the data-model provider, the tool declarations, both dispatch `switch`es,
+the discovered resources and the bearer all read it; a copy changes
+`PROVIDER_ID` and the YAML (`provider:` and the ids), nothing else. The
+test derives its expectations the same way.
+
+The classifier shows the conventions every plugin follows:
+
+- the resource ref is resolved by one exported function,
+  `resolveWorkspace(args, resources)`: an explicit ref must be well-formed
+  **and one of the mission's resources of this provider**, else the call is
+  `denied` (`workspace '<ref>' is not selected in this mission`) — never
+  the single resource as a silent substitute; an absent ref falls back to
+  the mission's single resource, and none or several is `denied`. The
+  classifier is the check: the gateway's resource stage works from the
+  slices and only recognises refs the connection has discovered;
+- identifiers are validated against a safe character class before being
+  embedded in a slice;
+- a call that cannot be placed on the data model is `denied`, never mapped
+  to a broad slice.
+
+`execute.ts` resolves the workspace with the same `resolveWorkspace` (a
+refusal throws before any request), so the call runs on the workspace the
+slice named. It shows the injected `fetch`, the bearer read from the
+`api-key` secret by `API_KEY_FIELD` (a credential without it is refused,
+never sent as `Bearer undefined`), the `UpstreamAuthError` on 401/403, and
+`discoverResources` checking the provider's answer with a type guard
+(`isWorkspaceDtoList`) instead of a cast.
 
 ## How to debug
 
@@ -421,6 +497,14 @@ slug` + `risks: expected a non-empty list` + `railway: unknown key`:
   convert it to `provider:` / `risks:` (P1.2). `exactly one fallback entry
   per catalog, found 2`: a second entry matches `<provider>.**.W` or is
   flagged — give it a narrower pattern or `fallback: false`.
+  `risks[i].matches: the fallback '…' must match the catch-all write
+'<provider>.**.W'`: the entry flagged (or named) as the fallback has a
+  narrower pattern — give the fallback the catch-all and move the narrow
+  pattern to a named risk.
+- **`PluginDefinitionError … catalog: presets[…].entries[…].quota:
+expected a positive integer`** (or `.rate_limit.max`, `.gate`) — a
+  catalog built in TypeScript carries an illegal budget; the rule is the
+  YAML loader's (`budgetIssues`).
 - **`next build` fails reading `risk-catalog.yaml`, or `catalogPathNextTo:
 expected a file: URL`** — the plugin uses `new URL('./risk-catalog.yaml',
 import.meta.url)`; switch to `catalogPathNextTo(import.meta.url)`.
@@ -459,9 +543,12 @@ fallback: true on it`** — add the flag to the catch-all entry; the kit's
   its coherence checks in `credentialSpecIssues`, and the generic flow in
   the host. That is an ADR (it changes the public contract).
 - **A new catalog field** — add it to `RiskEntry` (shared), to the
-  `RISK_KEYS` set and `riskFrom` in `catalog-loader.ts`, and to the loader
-  tests (`fallback` is the worked example). Unknown keys are rejected on
-  purpose, so a typo in a YAML never silently disables a guard.
+  `RISK_KEYS` set, a `<field>From(raw, ctx)` parser and its line in
+  `riskFrom` in `catalog-loader.ts`, and to the loader tests (`fallback` is
+  the worked example). Unknown keys are rejected on purpose, so a typo in a
+  YAML never silently disables a guard. A rule that must also hold for a
+  catalog written in TypeScript goes in `semanticIssues`, not in the
+  parser.
 - **A new derivation from the registry** — add a method on
   `PluginRegistry`; never a second list.
 
@@ -475,6 +562,6 @@ fallback: true on it`** — add the flag to the catch-all entry; the kit's
   [`providers/README.md`](./providers/README.md) (index of the
   per-provider handbooks).
 - Guide: [`plugins/README.md`](../../plugins/README.md).
-- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 78 tests;
+- Tests: `npx vitest run packages/plugin-sdk plugins/_template` — 104 tests;
   `apps/gateway/tests/integration/standalone-plugin-catalogs.test.ts` after
   a `next build`.

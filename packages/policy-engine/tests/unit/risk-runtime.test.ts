@@ -2,8 +2,8 @@ import { describe, expect, test } from 'vitest';
 import type { Resource, RiskCatalog } from '@vaubaan/shared';
 
 import { indexCatalog } from '../../src/risk-evaluator.ts';
-import { evaluateCall, evaluateCallSimple } from '../../src/risk-runtime.ts';
-import { resourceEnvResolver } from '../../src/qualify.ts';
+import { UNQUALIFIED, evaluateCall, evaluateCallSimple } from '../../src/risk-runtime.ts';
+import { noEnvResolver, resourceEnvResolver, type EnvResolver } from '../../src/qualify.ts';
 import { parseSlice } from '../../src/slice-dsl.ts';
 
 const catalog: RiskCatalog = {
@@ -313,6 +313,42 @@ describe('evaluateCall — env-qualified subset check', () => {
       catalog: supabaseIdx,
     });
     expect(d.outcome).toBe('allowed');
+  });
+
+  test("the unqualified mode is named : `envResolver: 'unqualified'` is the omitted field, said aloud", () => {
+    const d = evaluateCall({
+      executed_slices: [stagingBulkSlice],
+      token_accepted_risks: new Set(['supabase.bulk-row-write']),
+      catalog: supabaseIdx,
+      envResolver: UNQUALIFIED,
+    });
+    expect(d).toEqual({ outcome: 'allowed', risks_touched: ['supabase.bulk-row-write'] });
+  });
+
+  test('the mode never depends on which resolver object is passed', () => {
+    // A resolver that answers `null` for every slice says "no resource has
+    // an environment" : the env-scoped risk is touched where it is not
+    // acceptable, and the call is refused. That holds for the exported
+    // `noEnvResolver`, for a wrapper around it and for a home-made one —
+    // none of them switches the runtime to the unqualified mode.
+    const resolvers: EnvResolver[] = [
+      noEnvResolver,
+      { resolveEnv: (slice) => noEnvResolver.resolveEnv(slice) },
+      { resolveEnv: () => null },
+    ];
+    for (const envResolver of resolvers) {
+      const d = evaluateCall({
+        executed_slices: [stagingBulkSlice],
+        token_accepted_risks: new Set(['supabase.bulk-row-write']),
+        catalog: supabaseIdx,
+        envResolver,
+      });
+      expect(d.outcome).toBe('denied');
+      if (d.outcome === 'denied') {
+        expect(d.missing_risks).toEqual(['supabase.bulk-row-write']);
+        expect(d.hint).toContain('a resource with no environment label');
+      }
+    }
   });
 });
 

@@ -9,7 +9,13 @@
  * checks what spans several plugins (unique ids, unique tool names).
  */
 
-import { CREDENTIAL_KINDS, isProviderId, toolPrefixFor, validateDataModel } from '@vaubaan/shared';
+import {
+  CREDENTIAL_KINDS,
+  isCredentialKind,
+  isProviderId,
+  toolPrefixFor,
+  validateDataModel,
+} from '@vaubaan/shared';
 
 import { semanticIssues } from './catalog-loader.ts';
 import {
@@ -34,6 +40,17 @@ export class PluginDefinitionError extends Error {
 
 /** Every issue with a definition. Empty array = well-formed. Pure. */
 export function pluginIssues(plugin: ProviderPlugin): string[] {
+  return [
+    ...identityIssues(plugin),
+    ...toolIssues(plugin),
+    ...dataModelIssues(plugin),
+    ...catalogIssues(plugin),
+    ...credentialSpecIssues(plugin),
+    ...hookIssues(plugin),
+  ];
+}
+
+function identityIssues(plugin: ProviderPlugin): string[] {
   const issues: string[] = [];
   if (typeof plugin.id !== 'string' || !isProviderId(plugin.id)) {
     issues.push(`id: expected a lowercase slug such as 'github' or 'cloudflare-dns'`);
@@ -44,45 +61,64 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
   if (typeof plugin.version !== 'string' || !PLUGIN_VERSION_PATTERN.test(plugin.version)) {
     issues.push(`version: expected semver (MAJOR.MINOR.PATCH), got '${String(plugin.version)}'`);
   }
+  return issues;
+}
 
-  if (!isList(plugin.tools)) {
-    issues.push('tools: expected a list of McpToolDeclaration');
-  } else if (typeof plugin.id === 'string') {
-    const prefix = toolPrefixFor(plugin.id);
-    const seen = new Set<string>();
-    plugin.tools.forEach((tool, i) => {
-      if (!tool.name.startsWith(prefix) || tool.name.length === prefix.length) {
-        issues.push(`tools[${i}].name '${tool.name}' must start with '${prefix}'`);
-      }
-      if (seen.has(tool.name)) issues.push(`tools[${i}].name '${tool.name}' is declared twice`);
-      seen.add(tool.name);
-      if (tool.inputSchema?.type !== 'object')
-        issues.push(`tools[${i}].inputSchema.type must be 'object'`);
-    });
-  }
-
-  if (!plugin.dataModel || typeof plugin.dataModel !== 'object') {
-    issues.push('dataModel: missing');
-  } else {
-    if (plugin.dataModel.provider !== plugin.id) {
-      issues.push(`dataModel.provider '${plugin.dataModel.provider}' must equal the plugin id`);
+function toolIssues(plugin: ProviderPlugin): string[] {
+  if (!isList(plugin.tools)) return ['tools: expected a list of McpToolDeclaration'];
+  if (typeof plugin.id !== 'string') return [];
+  const issues: string[] = [];
+  const prefix = toolPrefixFor(plugin.id);
+  const seen = new Set<string>();
+  plugin.tools.forEach((tool: unknown, i) => {
+    // A definition may come from untyped code : a malformed entry is an
+    // issue like any other, not a TypeError that hides the rest.
+    if (!isRecord(tool) || typeof tool.name !== 'string') {
+      issues.push(`tools[${i}].name: expected a string`);
+      return;
     }
-    issues.push(...validateDataModel(plugin.dataModel).map((m) => `dataModel: ${m}`));
-  }
+    const name = tool.name;
+    if (!name.startsWith(prefix) || name.length === prefix.length) {
+      issues.push(`tools[${i}].name '${name}' must start with '${prefix}'`);
+    }
+    if (seen.has(name)) issues.push(`tools[${i}].name '${name}' is declared twice`);
+    seen.add(name);
+    if (!isRecord(tool.inputSchema) || tool.inputSchema.type !== 'object')
+      issues.push(`tools[${i}].inputSchema.type must be 'object'`);
+  });
+  return issues;
+}
 
+function dataModelIssues(plugin: ProviderPlugin): string[] {
+  if (!plugin.dataModel || typeof plugin.dataModel !== 'object') return ['dataModel: missing'];
+  const issues: string[] = [];
+  if (plugin.dataModel.provider !== plugin.id) {
+    issues.push(`dataModel.provider '${plugin.dataModel.provider}' must equal the plugin id`);
+  }
+  issues.push(...validateDataModel(plugin.dataModel).map((m) => `dataModel: ${m}`));
+  return issues;
+}
+
+/**
+ * The catalog rules of `semanticIssues` — fallback, wildcards, presets and
+ * their budgets. This is the only validation a catalog written in
+ * TypeScript goes through, so everything that must hold for every catalog
+ * lives there, not in the YAML parser.
+ */
+function catalogIssues(plugin: ProviderPlugin): string[] {
   if (!plugin.catalog || typeof plugin.catalog !== 'object') {
-    issues.push(
-      'catalog: missing — load it with loadCatalogFile(catalogPathNextTo(import.meta.url))',
-    );
-  } else {
-    if (plugin.catalog.provider !== plugin.id) {
-      issues.push(`catalog.provider '${plugin.catalog.provider}' must equal the plugin id`);
-    }
-    issues.push(...semanticIssues(plugin.catalog).map((m) => `catalog: ${m}`));
+    return ['catalog: missing — load it with loadCatalogFile(catalogPathNextTo(import.meta.url))'];
   }
+  const issues: string[] = [];
+  if (plugin.catalog.provider !== plugin.id) {
+    issues.push(`catalog.provider '${plugin.catalog.provider}' must equal the plugin id`);
+  }
+  issues.push(...semanticIssues(plugin.catalog).map((m) => `catalog: ${m}`));
+  return issues;
+}
 
-  issues.push(...credentialSpecIssues(plugin));
-
+function hookIssues(plugin: ProviderPlugin): string[] {
+  const issues: string[] = [];
   for (const fn of ['classify', 'execute', 'discoverResources'] as const) {
     if (typeof plugin[fn] !== 'function') issues.push(`${fn}: expected a function`);
   }
@@ -96,7 +132,7 @@ export function pluginIssues(plugin: ProviderPlugin): string[] {
 function credentialSpecIssues(plugin: ProviderPlugin): string[] {
   const spec = plugin.credential;
   if (!spec || typeof spec !== 'object') return ['credential: missing CredentialSpec'];
-  if (!(CREDENTIAL_KINDS as readonly string[]).includes(spec.kind)) {
+  if (typeof spec.kind !== 'string' || !isCredentialKind(spec.kind)) {
     return [`credential.kind: expected one of ${CREDENTIAL_KINDS.join(' | ')}`];
   }
   const issues: string[] = [];
@@ -166,42 +202,51 @@ function userVerificationIssues(spec: AppInstallCredentialSpec): string[] {
   if (v.installationsListField !== undefined && !isName(v.installationsListField)) {
     issues.push(`${at}.installationsListField: expected a property name when present`);
   }
-  if (v.installationsHeaders !== undefined) {
-    if (!isRecord(v.installationsHeaders)) {
-      issues.push(`${at}.installationsHeaders: expected a record of header values`);
-    } else {
-      for (const [name, value] of Object.entries(v.installationsHeaders)) {
-        if (typeof value !== 'string') {
-          issues.push(`${at}.installationsHeaders.${name}: expected a string`);
-        }
-        if (name.toLowerCase() === 'authorization') {
-          issues.push(`${at}.installationsHeaders: the host sets Authorization itself`);
-        }
-      }
+  issues.push(...installationsHeaderIssues(v.installationsHeaders, at));
+  issues.push(...paginationIssues(v.pagination, at));
+  issues.push(...oauthClientFieldIssues(spec));
+  return issues;
+}
+
+function installationsHeaderIssues(headers: unknown, at: string): string[] {
+  if (headers === undefined) return [];
+  if (!isRecord(headers)) return [`${at}.installationsHeaders: expected a record of header values`];
+  const issues: string[] = [];
+  for (const [name, value] of Object.entries(headers)) {
+    if (typeof value !== 'string') {
+      issues.push(`${at}.installationsHeaders.${name}: expected a string`);
+    }
+    if (name.toLowerCase() === 'authorization') {
+      issues.push(`${at}.installationsHeaders: the host sets Authorization itself`);
     }
   }
-  if (v.pagination !== undefined) {
-    const p: unknown = v.pagination;
-    if (!isRecord(p)) {
-      issues.push(`${at}.pagination: expected an object when present`);
-    } else {
-      if (!isName(p.pageParam) || !isName(p.perPageParam) || p.pageParam === p.perPageParam) {
-        issues.push(`${at}.pagination: pageParam and perPageParam must be two parameter names`);
-      }
-      const perPage = p.perPage;
-      if (
-        typeof perPage !== 'number' ||
-        !Number.isInteger(perPage) ||
-        perPage < 1 ||
-        perPage > MAX_INSTALLATIONS_PER_PAGE
-      ) {
-        issues.push(
-          `${at}.pagination.perPage: expected an integer from 1 to ${MAX_INSTALLATIONS_PER_PAGE}`,
-        );
-      }
-    }
+  return issues;
+}
+
+function paginationIssues(pagination: unknown, at: string): string[] {
+  if (pagination === undefined) return [];
+  if (!isRecord(pagination)) return [`${at}.pagination: expected an object when present`];
+  const issues: string[] = [];
+  const { pageParam, perPageParam, perPage } = pagination;
+  if (!isName(pageParam) || !isName(perPageParam) || pageParam === perPageParam) {
+    issues.push(`${at}.pagination: pageParam and perPageParam must be two parameter names`);
   }
-  // The host authenticates the app's OAuth client : the operator must be asked for it.
+  if (
+    typeof perPage !== 'number' ||
+    !Number.isInteger(perPage) ||
+    perPage < 1 ||
+    perPage > MAX_INSTALLATIONS_PER_PAGE
+  ) {
+    issues.push(
+      `${at}.pagination.perPage: expected an integer from 1 to ${MAX_INSTALLATIONS_PER_PAGE}`,
+    );
+  }
+  return issues;
+}
+
+/** The host authenticates the app's OAuth client : the operator must be asked for it. */
+function oauthClientFieldIssues(spec: AppInstallCredentialSpec): string[] {
+  const issues: string[] = [];
   const fields = isList(spec.appConfigFields) ? spec.appConfigFields : [];
   const clientId = fields.find((f) => f.name === CLIENT_ID_FIELD);
   const clientSecret = fields.find((f) => f.name === CLIENT_SECRET_FIELD);

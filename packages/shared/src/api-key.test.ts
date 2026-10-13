@@ -33,6 +33,31 @@ describe('api-key', () => {
     expect(await verifyApiKey(hash, apiKey + 'X')).toBe(false);
   });
 
+  test('parseApiKey rejects wrong lengths', () => {
+    const secret = 'z'.repeat(32);
+    expect(parseApiKey(`vbn_live_abcdefgh_${secret}`)?.prefix).toBe('abcdefgh');
+    expect(parseApiKey(`vbn_live_abcdefg_${secret}`)).toBeNull(); // prefix of 7
+    expect(parseApiKey(`vbn_live_abcdefghi_${secret}`)).toBeNull(); // prefix of 9
+    expect(parseApiKey(`vbn_live_abcdefgh_${secret.slice(1)}`)).toBeNull(); // secret of 31
+    expect(parseApiKey(`vbn_live_abcdefgh_${secret}z`)).toBeNull(); // secret of 33
+    expect(parseApiKey('vbn_live_abcdefgh')).toBeNull();
+    expect(parseApiKey('vbn_live_')).toBeNull();
+    expect(parseApiKey('')).toBeNull();
+  });
+
+  test('parseApiKey rejects a prefix or a secret outside base62', () => {
+    expect(parseApiKey(`vbn_live_abcd-fgh_${'z'.repeat(32)}`)).toBeNull();
+    expect(parseApiKey(`vbn_live_abcdefgh_${'!'.repeat(32)}`)).toBeNull();
+    expect(parseApiKey(`vbn_test_abcdefgh_${'z'.repeat(31)}_`)).toBeNull();
+    expect(parseApiKey(`vbn_test_abcdefgh_${'z'.repeat(31)}\n`)).toBeNull();
+  });
+
+  test('verifyApiKey answers false on a hash it cannot read', async () => {
+    const { apiKey } = generateApiKey('live');
+    expect(await verifyApiKey('not-an-argon2-hash', apiKey)).toBe(false);
+    expect(await verifyApiKey('', apiKey)).toBe(false);
+  });
+
   test('parseApiKey rejects unknown prefix', () => {
     expect(parseApiKey('foobar_abcdefgh_zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz')).toBeNull();
   });

@@ -8,8 +8,9 @@
  * No IO, no framework import, except `api-key.ts` (argon2, node:crypto),
  * which makes this barrel server-only. Browser code and the packages the
  * UI bundles (`@vaubaan/policy-engine`) import values from the subpaths
- * `@vaubaan/shared/risk-id` and `@vaubaan/shared/api-key` instead ; type
- * imports from the barrel are erased and always safe.
+ * `@vaubaan/shared/risk-id`, `@vaubaan/shared/domain` (closed sets and
+ * their guards : `GATES`, `isGate`…) and `@vaubaan/shared/api-key`
+ * instead ; type imports from the barrel are erased and always safe.
  */
 
 export * from './mcp.ts';

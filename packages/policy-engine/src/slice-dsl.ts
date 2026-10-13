@@ -72,68 +72,79 @@ export function parseSlice(input: string): Slice {
     throw new SliceParseError(input, 0, `invalid provider name '${provider}'`);
   }
 
-  const rest = input.slice(dot + 1);
+  const cursor: SliceCursor = { input, rest: input.slice(dot + 1), pos: dot + 1 };
   const segments: SliceSegment[] = [];
-  const pos = dot + 1;
   let i = 0;
 
-  while (i < rest.length) {
-    // Read one segment.
-    if (rest[i] === '[') {
-      // Bracketed segment.
-      const close = rest.indexOf(']', i);
-      if (close < 0) {
-        throw new SliceParseError(input, pos + i, "unterminated '['");
-      }
-      const inner = rest.slice(i + 1, close);
-      if (inner.length === 0) {
-        throw new SliceParseError(input, pos + i, 'empty bracket');
-      }
-      segments.push(parseBracket(inner, input, pos + i + 1));
-      i = close + 1;
-    } else {
-      // Bare name segment OR bare '**' wildcard OR final action letter.
-      // We greedily consume until '.' or '['.
-      let j = i;
-      while (j < rest.length && rest[j] !== '.' && rest[j] !== '[') j++;
-      const tok = rest.slice(i, j);
-      if (tok.length === 0) {
-        throw new SliceParseError(input, pos + i, "empty segment ('..')");
-      }
-      // Final action token : only valid when terminal.
-      if ((tok === 'R' || tok === 'W') && j === rest.length) {
-        return { provider, path: segments, action: tok };
-      }
-      // Bare '**' = recursive wildcard segment (catalog fallback pattern).
-      if (tok === '**') {
-        segments.push({ kind: 'wild-rec' });
-      } else if (tok === '*') {
-        segments.push({ kind: 'wild-one' });
-      } else if (BARE_NAME_CHARS.test(tok)) {
-        segments.push({ kind: 'name', value: tok });
-      } else {
-        throw new SliceParseError(input, pos + i, `invalid segment name '${tok}'`);
-      }
-      i = j;
-    }
-    // Skip the '.' separator if present — but NOT mandatory between a name
-    // and the immediately following '[' (entity-then-identifier convention).
-    if (i < rest.length) {
-      if (rest[i] === '.') {
-        i++;
-      } else if (rest[i] === '[') {
-        // Continue : the bracket is the next segment, no separator needed.
-      } else {
-        throw new SliceParseError(
-          input,
-          pos + i,
-          `expected '.' or '[' after segment, got '${rest[i]}'`,
-        );
-      }
-    }
+  while (i < cursor.rest.length) {
+    const read = cursor.rest[i] === '[' ? readBracketSegment(cursor, i) : readBareToken(cursor, i);
+    if ('action' in read) return { provider, path: segments, action: read.action };
+    segments.push(read.segment);
+    i = skipSeparator(cursor, read.next);
   }
 
   throw new SliceParseError(input, input.length, "missing terminal action ('.R' or '.W')");
+}
+
+/** The text being parsed : `rest` is `input` after `<provider>.`, which starts at `pos`. */
+interface SliceCursor {
+  readonly input: string;
+  readonly rest: string;
+  readonly pos: number;
+}
+
+/** One segment read, and the index in `rest` right after it. */
+interface SegmentRead {
+  readonly segment: SliceSegment;
+  readonly next: number;
+}
+
+/** Read the bracketed segment that opens at `i`. */
+function readBracketSegment(cursor: SliceCursor, i: number): SegmentRead {
+  const { input, rest, pos } = cursor;
+  const close = rest.indexOf(']', i);
+  if (close < 0) {
+    throw new SliceParseError(input, pos + i, "unterminated '['");
+  }
+  const inner = rest.slice(i + 1, close);
+  if (inner.length === 0) {
+    throw new SliceParseError(input, pos + i, 'empty bracket');
+  }
+  return { segment: parseBracket(inner, input, pos + i + 1), next: close + 1 };
+}
+
+/**
+ * Read the bare token that starts at `i`, greedily up to '.' or '[' : a
+ * name segment, a bare `**` / `*` wildcard, or — only when it ends the
+ * input — the action letter.
+ */
+function readBareToken(cursor: SliceCursor, i: number): SegmentRead | { action: 'R' | 'W' } {
+  const { input, rest, pos } = cursor;
+  let j = i;
+  while (j < rest.length && rest[j] !== '.' && rest[j] !== '[') j++;
+  const tok = rest.slice(i, j);
+  if (tok.length === 0) {
+    throw new SliceParseError(input, pos + i, "empty segment ('..')");
+  }
+  // Final action token : only valid when terminal.
+  if ((tok === 'R' || tok === 'W') && j === rest.length) return { action: tok };
+  // Bare '**' = recursive wildcard segment (catalog fallback pattern).
+  if (tok === '**') return { segment: { kind: 'wild-rec' }, next: j };
+  if (tok === '*') return { segment: { kind: 'wild-one' }, next: j };
+  if (BARE_NAME_CHARS.test(tok)) return { segment: { kind: 'name', value: tok }, next: j };
+  throw new SliceParseError(input, pos + i, `invalid segment name '${tok}'`);
+}
+
+/**
+ * Skip the '.' separator after a segment, if present — it is NOT mandatory
+ * between a name and the immediately following '[' (entity-then-identifier
+ * convention). Returns the index of the next segment.
+ */
+function skipSeparator(cursor: SliceCursor, i: number): number {
+  const { input, rest, pos } = cursor;
+  if (i >= rest.length || rest[i] === '[') return i;
+  if (rest[i] === '.') return i + 1;
+  throw new SliceParseError(input, pos + i, `expected '.' or '[' after segment, got '${rest[i]}'`);
 }
 
 function parseBracket(inner: string, input: string, position: number): SliceSegment {

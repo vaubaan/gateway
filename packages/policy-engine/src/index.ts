@@ -9,5 +9,6 @@ export * from './slice-dsl.ts';
 export * from './slice-matcher.ts';
 export * from './risk-evaluator.ts';
 export * from './risk-policy.ts';
+export * from './budget.ts';
 export * from './risk-runtime.ts';
 export * from './qualify.ts';

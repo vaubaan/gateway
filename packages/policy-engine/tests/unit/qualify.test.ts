@@ -19,6 +19,7 @@ import {
   isEnvScopedEntry,
   noEnvResolver,
   qualifyRiskId,
+  resolveVector,
   resourceEnvResolver,
   unqualifyRiskId,
   type EnvDeriver,
@@ -273,5 +274,34 @@ describe('envResolverFor — plugin-derived env first, resource label next, else
     expect(envResolverFor(resources).resolveEnv(slice)).toBe(
       resourceEnvResolver(resources).resolveEnv(slice),
     );
+  });
+});
+
+describe('resolveVector', () => {
+  const entry: Pick<RiskEntry, 'vector' | 'vector_overrides'> = {
+    vector: envScopedEntry.vector,
+    vector_overrides: { prod: { reversibility: 'irreversible', visibility: 'public' } },
+  };
+
+  test('the override of the env replaces its axes, the others inherit', () => {
+    expect(resolveVector(entry, 'prod')).toEqual({
+      ...envScopedEntry.vector,
+      reversibility: 'irreversible',
+      visibility: 'public',
+    });
+  });
+
+  test('an env without override, no env, or no overrides at all : the base vector', () => {
+    expect(resolveVector(entry, 'staging')).toBe(entry.vector);
+    expect(resolveVector(entry, null)).toBe(entry.vector);
+    expect(resolveVector(entry, undefined)).toBe(entry.vector);
+    expect(resolveVector(entry, '')).toBe(entry.vector);
+    expect(resolveVector({ vector: envScopedEntry.vector }, 'prod')).toBe(envScopedEntry.vector);
+  });
+
+  test('the base vector is not mutated', () => {
+    const before = { ...entry.vector };
+    resolveVector(entry, 'prod');
+    expect(entry.vector).toEqual(before);
   });
 });

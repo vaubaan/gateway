@@ -6,6 +6,8 @@ import {
   findRiskEntry,
   hasFallbackRisk,
   indexCatalog,
+  fallbackRiskPrefix,
+  hasCatchAllWritePattern,
   isFallbackEntry,
   risksTouchedBy,
   risksTouchedByAll,
@@ -205,6 +207,24 @@ describe('fallback detection', () => {
     expect(isFallbackEntry(entry('x.read-all', 'x.**.R'), 'x')).toBe(false);
     expect(isFallbackEntry(entry('x.repo-write', 'x.repo[**].W'), 'x')).toBe(false);
     expect(isFallbackEntry(entry('x.broken', 'not a slice'), 'x')).toBe(false);
+  });
+
+  test('the id convention is `<provider>.uncategorized-`, dash included', () => {
+    expect(fallbackRiskPrefix('x')).toBe('x.uncategorized-');
+    expect(isFallbackEntry(entry('x.uncategorizedfoo', 'x.repo[**].W'), 'x')).toBe(false);
+    expect(isFallbackEntry(entry('x.uncategorized', 'x.repo[**].W'), 'x')).toBe(false);
+    expect(isFallbackEntry(entry('x.uncategorized-write', 'x.repo[**].W'), 'x')).toBe(true);
+  });
+
+  test('hasCatchAllWritePattern : one catch-all write among the patterns', () => {
+    expect(hasCatchAllWritePattern(entry('x.a', 'x.**.W'))).toBe(true);
+    expect(hasCatchAllWritePattern(entry('x.a', 'x.[**].W'))).toBe(true);
+    expect(
+      hasCatchAllWritePattern({ ...entry('x.a', 'x.**.W'), matches: ['x.r[**].W', 'x.**.W'] }),
+    ).toBe(true);
+    expect(hasCatchAllWritePattern(entry('x.a', 'x.repo[**].W'))).toBe(false);
+    expect(hasCatchAllWritePattern(entry('x.a', 'x.**.R'))).toBe(false);
+    expect(hasCatchAllWritePattern(entry('x.a', 'not a slice'))).toBe(false);
   });
 
   test('fallbackEntriesOf / hasFallbackRisk / indexCatalog agree', () => {
