@@ -105,23 +105,33 @@ export class UserAdminService {
 
     const watch = await membership.watch(user.id);
     const removed = await store.users.markRemoved(user.id);
-    // From here on the user holds nothing. What follows closes what they still held;
-    // each step is attempted whatever happened to the one before, and the first
-    // failure reaches the caller once the settlement has run: `unowned` is a stored
-    // state and must not depend on another write succeeding.
-    let groupsLeft: string[] = [];
-    let delegationsRevoked = 0;
-    let settlement: MembershipSettlement;
-    try {
-      groupsLeft = (await store.groups.removeAllMemberships(user.id)).map((group) => group.name);
-      delegationsRevoked = (
-        await delegations.revokeAllOf(user.id, {
-          reason: 'user-deactivated',
-          actorId: actor.actorId,
-          viaClient: false,
-        })
-      ).length;
-      await this.deps.audit.write({
+    // From here on the user holds nothing. What follows closes what they still held.
+    // Each step is attempted whatever happened to the one before — a failure to
+    // revoke a delegation must not leave the memberships, nor a failed entry the
+    // settlement — and the first failure reaches the caller once all have run:
+    // `unowned` is a stored state and must not depend on another write succeeding.
+    const failures: unknown[] = [];
+    const attempt = async <T>(fallback: T, step: () => Promise<T>): Promise<T> => {
+      try {
+        return await step();
+      } catch (err) {
+        failures.push(err);
+        return fallback;
+      }
+    };
+    const groupsLeft = await attempt<string[]>([], async () =>
+      (await store.groups.removeAllMemberships(user.id)).map((group) => group.name),
+    );
+    const delegationsRevoked = await attempt(0, async () => {
+      const ended = await delegations.revokeAllOf(user.id, {
+        reason: 'user-deactivated',
+        actorId: actor.actorId,
+        viaClient: false,
+      });
+      return ended.length;
+    });
+    await attempt(undefined, () =>
+      this.deps.audit.write({
         kind: 'admin',
         ts: toIso(this.deps.clock.now()),
         user_id: actor.actorId,
@@ -134,9 +144,20 @@ export class UserAdminService {
           delegations_revoked: delegationsRevoked,
         },
         delegated_client_id: null,
+      }),
+    );
+    const settlement = await attempt<MembershipSettlement>(
+      { unowned: [], orphaned: [], restored: [] },
+      () => watch.settle(actor.actorId),
+    );
+    if (failures.length > 0) {
+      this.deps.logger.error('user deactivated, but not everything they held was closed', {
+        user_id: user.id,
+        actor_id: actor.actorId,
+        failed_steps: failures.length,
+        err: failures[0],
       });
-    } finally {
-      settlement = await watch.settle(actor.actorId);
+      throw failures[0];
     }
     this.deps.logger.warn('user deactivated', {
       user_id: user.id,

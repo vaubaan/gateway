@@ -284,6 +284,7 @@ describe('editing a gate after issuance', () => {
         risk_id: READ,
         gate: 'approval',
         previous: 'auto',
+        opening_closed: false,
       });
       expect(await gateOf(READ)).toBe('approval');
     });

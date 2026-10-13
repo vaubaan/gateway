@@ -45,7 +45,8 @@ suites were ported to `classifyStripe` and `stripePlugin.execute`
 
 ```
 plugins/stripe/src/
-  resources.ts        STRIPE_MODES, stripeResourceRef, modeOf, resolveStripeResource, keyMatchesMode
+  resources.ts        STRIPE_MODES, stripeResourceRef, modeOf, resolveStripeResource, keyMatchesMode,
+                      STRIPE_ID / stripeId, readIdArgs, STRIPE_ACCOUNT_REF / stripeAccountRef
   tools.ts            27 McpToolDeclaration (+ `account` arg), declaredArgsOf
   classify.ts         classifyStripe — pure, (tool, args, resources) → slices | denied
   execute.ts          executeStripe, discoverStripeResources, STRIPE_API_BASE
@@ -86,9 +87,11 @@ flowchart LR
   engine refuses it (an env-scoped risk touched outside its
   `acceptable_in_envs` refuses the call — `policy.test.ts` pins both
   layers).
-- `resolveStripeResource` : explicit `account` ref must be one of the
-  mission's Stripe resources ; absent, the mission's single Stripe resource
-  ; otherwise `denied` (ambiguous, none, unknown, malformed).
+- `resolveStripeResource` : explicit `account` ref must read as a resource
+  ref (`stripeAccountRef`) and be one of the mission's Stripe resources ;
+  absent, the mission's single Stripe resource ; otherwise `denied`
+  (ambiguous, none, unknown, malformed). `classify` and `execute` call the
+  same function.
 - The host keeps a plugin-set label read-only. If the label of a Stripe
   resource were changed anyway, the key `execute` uses would not move and
   every call on that resource would be refused. The mode is a fact of the
@@ -96,10 +99,28 @@ flowchart LR
 
 ## Classifier conventions
 
-All slices are rooted at `account[<ref>].mode[<mode>]`. Identifiers from the
-arguments must match `SAFE_IDENT` (`[a-zA-Z0-9_./~-]+`) and not be made of
-dots only (`.` and `..` would collapse the URL path onto another endpoint) ;
-a malformed one is `denied`, an absent optional one is the glob `*`.
+All slices are rooted at `account[<ref>].mode[<mode>]`.
+
+**Identifiers.** One grammar function per kind, in `resources.ts`, read by
+`classify` and by `execute` alike ; a value outside its grammar is refused,
+never escaped (ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+
+| Argument                                                    | Grammar                                                                           | Where it lands                             | Outside the grammar                                                               |
+| ----------------------------------------------------------- | --------------------------------------------------------------------------------- | ------------------------------------------ | --------------------------------------------------------------------------------- |
+| `id`                                                        | `stripeId` — `STRIPE_ID = ^[A-Za-z0-9][A-Za-z0-9_.-]{0,254}$`                     | URL path segment (as it is), slice ident   | `denied` `id: malformed identifier` ; `execute` throws `id: missing or malformed` |
+| `product`, `customer`, `coupon`, `charge`, `payment_intent` | `stripeId`                                                                        | query string or form body, slice ident     | `denied` `<arg>: malformed identifier` ; `execute` throws the same                |
+| `account`                                                   | `stripeAccountRef` — `STRIPE_ACCOUNT_REF = ^[A-Za-z0-9_-]{1,64}(/(test\|live))?$` | slice `account[<ref>]` ; never the request | `denied` `account: malformed ref`                                                 |
+
+`readIdArgs` reads the six identifier arguments at once, for the classifier
+(which turns each into a slice ident) and for `execute` (which sends
+nothing when one is refused, whether it would have landed in the path, the
+query or the body). An absent, `null` or empty optional identifier is the
+glob `*`. `STRIPE_ID` covers the ids Stripe issues (`cus_…`, `pi_…`) and
+the ids an account chooses for its products and coupons (`SUMMER-25`,
+`com.example.pro`) ; its leading letter or digit rules out `.` and `..`,
+which `encodeURIComponent` leaves untouched and a URL parser removes —
+`/customers/..` would be sent as `/v1/`.
 
 **Only declared arguments.** The properties of a tool's `inputSchema` are
 its whole argument surface (`declaredArgsOf` in `tools.ts`). The classifier
@@ -197,8 +218,9 @@ Stripe takes form-urlencoded bodies with bracket notation
 `execute.ts` maps each tool to method + path, with the id in the path and
 removed from the body. 401/403 → `UpstreamAuthError`. Only the arguments
 the tool declares are forwarded ; `account` is consumed by the gateway.
-A path id that is missing, not a string or made of dots throws before any
-request. Unknown tool → `isError` result. Discovery refuses a
+A path id that is missing or not a `stripeId`, or any other identifier
+argument `readIdArgs` refuses, throws before any request ; the path id is
+interpolated as it is. Unknown tool → `isError` result. Discovery refuses a
 `GET /v1/account` answer without an account id.
 
 ## How to debug
@@ -226,7 +248,7 @@ request. Unknown tool → `isError` result. Discovery refuses a
 
 ## Tests
 
-`npx vitest run plugins/stripe` — 160 : `plugin.test.ts` (31 : kit,
+`npx vitest run plugins/stripe` — 219 : `plugin.test.ts` (31 : kit,
 resource resolution, execute, discovery, credential, presets),
 `classify.test.ts` (48 : the security suite of `classifyStripe`),
 `policy.test.ts` (30 : classifier + catalog + `evaluateCall` — stronger
@@ -234,4 +256,6 @@ risk on `cancel_at*` / `auto_advance`, PII overlay, mode resolution, the
 three presets on test and live), `execute.test.ts` (23 : REST routing,
 form-encoding and declared-only forwarding through `stripePlugin.execute`),
 `risk-catalog.test.ts` (20 : invariants, catalog v4, exact risk sets, no
-preset on the fallback), `data-model.test.ts` (8).
+preset on the fallback), `identifiers.test.ts` (59 : the grammars, then
+hostile `id`, query / body identifiers and `account` fed to `classify` and
+to `execute`), `data-model.test.ts` (8).

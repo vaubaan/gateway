@@ -5,7 +5,9 @@ date: 2026-10-13
 last_synced: 2026-10-13
 tracks:
   - apps/gateway/src/server/auth/
+  - apps/gateway/src/server/users/
   - apps/gateway/src/server/store/repositories/web-sessions.ts
+  - apps/gateway/src/server/store/repositories/users.ts
   - apps/gateway/src/lib/auth/session.ts
   - apps/gateway/src/app/auth/
   - apps/gateway/src/app/logout/route.ts
@@ -17,6 +19,7 @@ tracks:
   - apps/gateway/src/app/admin/
   - apps/gateway/src/components/auth/
   - apps/gateway/migrations/0003_web_sessions.sql
+  - apps/gateway/migrations/0009_user_sessions_ended_at.sql
   - apps/gateway/tests/integration/auth/
   - apps/gateway/tests/unit/app/admin-guard.test.ts
   - apps/gateway/tests/unit/server/auth/mutation-guard.test.ts
@@ -27,8 +30,10 @@ tracks:
 How a human gets a session on the instance (spec §0 "Operator", "User",
 "Group", "IdP"; §4.2 Administration; §4.3; §6 "human authentication";
 §7.1), how the operator bootstraps the identity provider, and how
-"operator" is decided afterwards. ADR
-[oidc-relying-party-and-web-session](../decisions/oidc-relying-party-and-web-session.md).
+"operator" is decided afterwards, and how an operator deactivates a user. ADRs
+[oidc-relying-party-and-web-session](../decisions/oidc-relying-party-and-web-session.md),
+[sign-in-hardening-host-cookies-group-overage](../decisions/sign-in-hardening-host-cookies-group-overage.md)
+and [operator-deactivates-a-user](../decisions/operator-deactivates-a-user.md).
 Built on the [configuration](configuration.md) root (`InstanceConfig.idp`,
 `admin`, `bootstrapToken`, the `SessionStore` port) and the
 [store](store.md) repositories (`users`, `groups`, `config`, `audit`).
@@ -39,21 +44,28 @@ Built on the [configuration](configuration.md) root (`InstanceConfig.idp`,
 apps/gateway/src/server/auth/            host-agnostic, never imports `next`
   index.ts            createAuthModule(deps) → root.auth; barrel
   relying-party.ts    openid-client v6 RP: discovery cache, PKCE/state/nonce, code grant, userinfo merge
-  claims.ts           mapClaims(), parseGroupsClaim(), assertEmailDomainAllowed()
+  claims.ts           mapClaims(), parseGroupsClaim(), groupsMovedOutOfToken(), assertEmailDomainAllowed()
   admin-rule.ts       isOperator(), describeAdminRule()
   idp-settings.ts     IdpSettingsService: file-or-store IdP settings, secret sealed in instance_config
   bootstrap.ts        BootstrapService: constant-time verify, revoked flag in instance_config
   session-service.ts  SessionService over SessionStore: session + pending-login records, their type guards, cookies
-  cookies.ts          vbn_session / vbn_login: HttpOnly, Secure, SameSite=Lax
+  cookies.ts          __Host-vbn_session / __Host-vbn_login: HttpOnly, Secure, SameSite=Lax, Path=/
   origin.ts           isSameOrigin(headers, publicUrl) for every mutation
   guard.ts            guardMutation() / guardSession(): origin → session → role, for every handler; refusalResponse()
-  login.ts            completeLogin(): users upsert, IdP group sync, bootstrap revocation; currentAuthority()
+  login.ts            completeLogin(): deactivated user refused, users upsert, IdP group sync, bootstrap revocation; currentAuthority()
   authenticator.ts    Authenticator.authenticate(headers) → Principal; authorizeAdmin(); auditActorId()
   handlers.ts         Request → Response handlers of the five endpoints; adminSignInPage()
   errors.ts           LoginError (closed codes + UI sentences), IdpSettingsError
+apps/gateway/src/server/users/           host-agnostic; built by the root as root.users
+  index.ts            createUsersModule(deps) → { service, handlers }; barrel
+  service.ts          UserAdminService: list(), deactivate(), reactivate()
+  handlers.ts         Request → Response handlers of the two endpoints; USERS_PAGE
+  errors.ts           UserAdminError (closed codes + UI sentences + HTTP status)
 apps/gateway/src/server/store/repositories/
   web-sessions.ts     store.webSessions: the SessionStore port over table web_sessions, rows keyed by SHA-256(id)
+  users.ts            store.users: upsertFromIdp (never changes the status), markRemoved, reactivate
 apps/gateway/migrations/0003_web_sessions.sql
+apps/gateway/migrations/0009_user_sessions_ended_at.sql    users.sessions_ended_at
 apps/gateway/src/lib/auth/session.ts     Next glue: currentPrincipal(), requirePrincipal(), currentUser(), adminDecision(), requireOperator()
 apps/gateway/src/app/
   page.tsx                               /  — redirect: /missions with a session, /login without
@@ -68,15 +80,20 @@ apps/gateway/src/app/
   admin/(guarded)/layout.tsx             the Administration shell (bar, "Not an operator" page) — not the boundary
   admin/(guarded)/page.tsx               /admin
   admin/(guarded)/identity-provider/page.tsx
+  admin/(guarded)/users/page.tsx         /admin/users
+  admin/(guarded)/users/[id]/deactivate/route.ts   POST /admin/users/<id>/deactivate
+  admin/(guarded)/users/[id]/reactivate/route.ts   POST /admin/users/<id>/reactivate
 apps/gateway/src/components/auth/        PrincipalCard.tsx (PrincipalCard, OperatorBadge, SignOutButton), NeedsUser.tsx, auth.module.css
 ```
 
-The route handlers are one-line adapters over `root.auth.handlers`; the pages
+The route handlers are one-line adapters over `root.auth.handlers` (and
+`root.users.handlers` for the two under `/admin/users`); the pages
 call `currentPrincipal()`, under `/admin` `requireOperator()`, and under
 `(app)` `currentUser()` (an identified user; `null` for the bootstrap
 operator, for whom the page renders `NeedsUser`) or `requirePrincipal()` (any
 session, the Audit page), and render.
-Everything that decides lives under `server/auth` and is tested without Next.
+Everything that decides lives under `server/auth` and `server/users` and is
+tested without Next.
 
 ## The three states of an instance
 
@@ -136,8 +153,14 @@ status nor passes the domain filter.
 `save()` validates everything at once (`IdpSettingsError.problems`): https
 issuer without query/fragment (an `http://` issuer only with
 `allowInsecureIssuer`, tests), non-empty client id, a client secret unless one
-is already stored (the form never echoes it; blank keeps it), three non-empty
-claim names, domains without `@`. The redirect URI to register at the IdP is
+is already stored **for the same issuer** (the form never echoes it; blank
+keeps it), three non-empty claim names, domains without `@`. When the issuer
+differs from the stored one — compared after the URL parser has normalised
+both — a blank secret is a problem (`client secret is required when the issuer
+changes: …`): the stored secret is never sent to another identity provider's
+token endpoint (ADR
+[sign-in-hardening-host-cookies-group-overage](../decisions/sign-in-hardening-host-cookies-group-overage.md)).
+The redirect URI to register at the IdP is
 `<public_url>/auth/callback` (`relyingParties.redirectUri`, shown on the
 page). The seven keys are written by one `ConfigRepo.apply()` call, in one
 transaction: a failure leaves the previous settings whole, never the issuer
@@ -162,7 +185,7 @@ GET /auth/login?return_to=/x
   sessions.createPending({state, nonce, codeVerifier, returnTo})   TTL 10 min
   303 <authorization_endpoint>?client_id&redirect_uri=<public_url>/auth/callback
       &scope=openid profile email [groups]&code_challenge&state&nonce
-      Set-Cookie: vbn_login=<id>; HttpOnly; Secure; SameSite=Lax
+      Set-Cookie: __Host-vbn_login=<id>; Path=/; HttpOnly; Secure; SameSite=Lax
 
 GET /auth/callback?code&state           (Lax cookie travels on this top-level GET)
   sessions.takePending(cookie)  ──none──▶ 303 /login?error=login-expired
@@ -170,12 +193,13 @@ GET /auth/callback?code&state           (Lax cookie travels on this top-level GE
   rp.finish(url, {state, nonce, codeVerifier}):
       authorizationCodeGrant (ClientSecretPost, expectedState, expectedNonce, pkceCodeVerifier,
       idTokenExpected); claims = { ...userinfo, ...idToken } when userinfo_endpoint exists
-  mapClaims(claims, settings.claims)   ← refuses email_verified: false
+  mapClaims(claims, settings.claims)   ← refuses email_verified: false, and a group overage
   assertEmailDomainAllowed()
-  completeLogin(): users.upsertFromIdp, membershipsChanging (watch), syncIdpGroups, settle, currentAuthority, bootstrap revoke
+  completeLogin(): users.getBySubject (not active → account-deactivated), users.upsertFromIdp,
+      membershipsChanging (watch), syncIdpGroups, settle, currentAuthority, bootstrap revoke
   sessions.destroy(cookie)             ← the session the browser already had, if any
   sessions.create({kind:'user', userId, login:{email, groups}})          TTL 8 h, absolute
-  303 return_to   Set-Cookie: vbn_session=<id>; …   Set-Cookie: vbn_login=; Max-Age=0
+  303 return_to   Set-Cookie: __Host-vbn_session=<id>; …   Set-Cookie: __Host-vbn_login=; Max-Age=0
 ```
 
 - `return_to` is accepted only as a path of this instance (`safeReturnTo`:
@@ -204,6 +228,27 @@ GET /auth/callback?code&state           (Lax cookie travels on this top-level GE
   many IdPs never send it. Entra ID returns group **object ids**
   unless the app registration is configured to emit names; the admin rule
   then names the object id.
+- **Group overage.** Entra ID leaves the groups out of a token once the user
+  belongs to too many of them and sends a pointer instead. `mapClaims`
+  refuses such a token with `groups-overage` (`groupsMovedOutOfToken`) rather
+  than read it as "no group", which would replace the user's IdP memberships
+  with nothing. It is judged on the configured groups claim: `_claim_names`
+  is an object naming that claim, or — when the claim is Entra's `groups` —
+  `hasgroups` is `true` (boolean or string). A partial list next to the
+  pointer is refused too; a pointer for another claim, and a token with no
+  groups and no pointer, are not an overage. The sign-in stops there (no user
+  row, no group sync, no bootstrap revocation); the log line names the claim
+  and the remedy (limit the claim to the groups assigned to the application,
+  or map `idp.claims.groups` to a claim that is always complete). The
+  instance does not follow the pointer (ADR
+  [sign-in-hardening-host-cookies-group-overage](../decisions/sign-in-hardening-host-cookies-group-overage.md)).
+- **A deactivated user does not sign in.** `completeLogin` reads the user by
+  subject first; one whose status is not `active` is refused with
+  `account-deactivated` before anything is written (no row refreshed, no
+  group synced, no bootstrap revocation). `users.upsertFromIdp` refreshes
+  email, display name and last sign-in only: it never changes the status, so
+  the identity provider vouching for somebody does not bring them back (see
+  "Deactivating a user").
 - **Groups sync** (`syncIdpGroups` → `GroupsRepo.syncIdpMemberships(userId,
 names)`): one store transaction creates the missing groups (source `idp`),
   adds the claimed memberships and removes the IdP-sourced ones the user no
@@ -250,14 +295,21 @@ performed; `/logout` ends the instance session only.
 `SessionService` over the root's `SessionStore` port, two record kinds under
 distinct key prefixes in the same store:
 
-| Key            | Record                                                                                       | TTL                | Cookie        |
-| -------------- | -------------------------------------------------------------------------------------------- | ------------------ | ------------- |
-| `session:<id>` | `{kind:'user', userId, login:{email, groups}, createdAt}` or `{kind:'bootstrap', createdAt}` | 8 h, absolute      | `vbn_session` |
-| `login:<id>`   | `{state, nonce, codeVerifier, returnTo, createdAt}`                                          | 10 min, single use | `vbn_login`   |
+| Key            | Record                                                                                       | TTL                | Cookie               |
+| -------------- | -------------------------------------------------------------------------------------------- | ------------------ | -------------------- |
+| `session:<id>` | `{kind:'user', userId, login:{email, groups}, createdAt}` or `{kind:'bootstrap', createdAt}` | 8 h, absolute      | `__Host-vbn_session` |
+| `login:<id>`   | `{state, nonce, codeVerifier, returnTo, createdAt}`                                          | 10 min, single use | `__Host-vbn_login`   |
 
 Ids are 32 random bytes base64url; cookies are `Path=/; Max-Age=<ttl>;
-HttpOnly; Secure; SameSite=Lax` (the public URL is always https). A cookie
-value that is not base64url is ignored. There is no sliding expiry: a
+HttpOnly; Secure; SameSite=Lax` (the public URL is always https), with no
+`Domain` attribute. Both names (`SESSION_COOKIE`, `LOGIN_COOKIE`) carry the
+`__Host-` prefix (`HOST_PREFIX`): a browser accepts such a cookie only when it
+is `Secure`, on `Path=/`, without `Domain` and set by the host itself, so a
+sibling subdomain cannot plant one. `serializeCookie` and `clearCookie` throw
+a `RangeError` for a `__Host-` name on another path instead of emitting a
+cookie the browser would drop (ADR
+[sign-in-hardening-host-cookies-group-overage](../decisions/sign-in-hardening-host-cookies-group-overage.md)).
+A cookie value that is not base64url is ignored. There is no sliding expiry: a
 session ends 8 hours after sign-in whatever the activity. A sign-in (IdP or
 bootstrap token) deletes the session the browser presented before it issues
 the new one.
@@ -281,7 +333,11 @@ they expire. The root uses `store.webSessions` unless `RootDeps.sessions`
 injects another implementation (Redis for a hosted deployment,
 `MemorySessionStore` in unit tests). Sessions therefore survive a restart and
 are revoked by deleting the row (`destroyById`, done when a user turns
-`removed` or a bootstrap session outlives the token).
+`removed`, when the session was created at or before the user's
+`sessions_ended_at`, or when a bootstrap session outlives the token). The
+port is keyed by a digest of the bearer and cannot list the sessions of one
+user: a deactivation ends them through that instant on the user row, read at
+the session's next request.
 
 **Origin check.** Every mutation (`/logout`, `/api/auth/bootstrap`,
 `/api/admin/identity-provider`) passes `isSameOrigin(headers, publicUrl)`:
@@ -294,8 +350,8 @@ origin is known from the configuration rather than from forwarded headers.
 **One guard for every mutation.** `guardMutation(request, deps, 'user' |
 'operator')` (`guard.ts`) is the single implementation of the order and of
 the checks, used by the handlers of this module and of the connections,
-missions, requests, shares, groups, telemetry and OAuth authorization-server
-modules:
+missions, requests, shares, groups, users, telemetry and OAuth
+authorization-server modules:
 
 1. origin (`isSameOrigin`) → `origin-mismatch`; the session of a foreign
    origin is not even read;
@@ -314,8 +370,8 @@ redirect or a page). `guardSession` is steps 2 and 3 alone, for the reads
 `/api/auth/bootstrap` need no session and check the origin only.
 
 `tests/unit/server/auth/mutation-guard.test.ts` holds the table of every
-handler of the eight human surfaces (`SURFACES`: auth, connections, missions,
-requests, telemetry, shares, groups, oauth): a handler added without being classified (a
+handler of the nine human surfaces (`SURFACES`: auth, connections, missions,
+requests, telemetry, shares, groups, users, oauth): a handler added without being classified (a
 mutation with its role, or a read with the reason) fails it, and so does a
 `route.ts` exporting `POST` / `PUT` / `PATCH` / `DELETE` that delegates to
 anything but a classified mutation, an MCP door (execution, management) or
@@ -327,12 +383,14 @@ handbook [management-door](management-door.md)).
 
 `Authenticator.authenticate(headers)` → `Principal | null`:
 
-- `vbn_session` → bootstrap record → `{kind:'bootstrap', sessionId}` while
+- `__Host-vbn_session` → bootstrap record → `{kind:'bootstrap', sessionId}` while
   the token is `active`; once it is revoked the session is deleted and `null`
   returned, on every surface (the decision is made where the principal is
   made, not by each caller);
-- user record → `users.getById` (must be `active`; a `removed` user's
-  session is deleted and `null` returned) → `currentAuthority()` →
+- user record → `users.getById` (must be `active`, and the session must have
+  been created after the user's `sessionsEndedAt`: the session of a `removed`
+  user, and one opened at or before their last deactivation — also once they
+  are active again — is deleted and `null` returned) → `currentAuthority()` →
   `{kind:'user', user, groups, isOperator, login, sessionId}`.
 
 `authorizeAdmin(principal)` → `{ok, principal}` or `{ok:false, status: 401 |
@@ -359,6 +417,80 @@ rendered without its layout. So:
 `tests/unit/app/admin-guard.test.ts` discovers every `page.tsx` and
 `route.ts` under `(guarded)`, so a page added without the guard fails it.
 
+## Deactivating a user
+
+The instance keeps no directory: a user exists once they have signed in, and
+the identity provider decides who may sign in. An operator ends a user's
+standing on the instance itself, without the IdP, from Administration → Users
+(ADR [operator-deactivates-a-user](../decisions/operator-deactivates-a-user.md)).
+`UserAdminService` (`server/users/service.ts`, `root.users.service`) does not
+authorize: its two handlers do (`guardMutation(…, 'operator')`), and pass the
+actor (`auditActorId(principal)`, and the operator's own user id, `null` for
+the bootstrap operator).
+
+| Endpoint                            | Effect                                   |
+| ----------------------------------- | ---------------------------------------- |
+| `POST /admin/users/<id>/deactivate` | `UserAdminService.deactivate(actor, id)` |
+| `POST /admin/users/<id>/reactivate` | `UserAdminService.reactivate(actor, id)` |
+
+Both answer `303` to `/admin/users` with a one-time notice (what happened, or
+the sentence of the refusal). `UserAdminError` codes: `not-found` (404),
+`already-deactivated`, `not-deactivated` and `cannot-deactivate-self` (409).
+An operator cannot deactivate their own account; the bootstrap operator can
+deactivate anyone. A refused act writes nothing.
+
+**`deactivate`**, in this order:
+
+1. `MembershipSettler.watch(user.id)` is taken, then `users.markRemoved`:
+   `status = 'removed'`, `removed_at` and `sessions_ended_at` = now. From
+   this write on every authority check answers "holds nothing".
+2. `groups.removeAllMemberships(user.id)`: the user leaves every group, local
+   and IdP-sourced.
+3. `DelegationService.revokeAllOf(user.id, …)` with the reason
+   `user-deactivated`: every active delegation is revoked with its tokens,
+   each with its own `delegation-revoked` entry in the operator's name
+   (handbook [management-door](management-door.md)).
+4. One `user-deactivated` entry (object type `user`): `before` carries
+   `status: 'active'` and the email, `after` `status: 'removed'`,
+   `groups_left` and `delegations_revoked`.
+5. `watch.settle(actorId)`, in a `finally`: connections nobody owns any more
+   become `unowned`, and each mission of the user that read `active` gets a
+   `mission-orphaned` entry (`creator-removed`) — handbook
+   [authority](authority.md).
+
+Steps 2 to 4 run in one `try`; the settlement runs whatever happened to them,
+and the first failure reaches the caller after it. A `warn` line `user
+deactivated` carries the counts. The result (`Deactivation`: `user`,
+`groupsLeft`, `delegationsRevoked`, `orphaned`, `unowned`) is what the notice
+says.
+
+What each thing the user held becomes:
+
+| Held                      | After deactivation                                                                                                                          |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| sign-in                   | refused with `account-deactivated`, before anything is written, although the IdP vouches                                                    |
+| web sessions              | nobody at the next request (the row is deleted then); a session created at or before `sessions_ended_at` stays refused after a reactivation |
+| delegations               | revoked, terminal (reason `user-deactivated`): the access token is refused on the management door, the refresh token at the token endpoint  |
+| missions                  | nothing is written on them: they read `orphaned` by the derived rule and every call is `mission-inactive`                                   |
+| group memberships         | removed                                                                                                                                     |
+| connections owned alone   | `unowned` (a group they were the last member of, or a connection in their own name): the operator reassigns                                 |
+| shares made to them       | kept; they grant nothing to a user who is not active, and no new share reaches them (`target-unknown`)                                      |
+| open requests of missions | nobody can decide them; they expire on the normal delay                                                                                     |
+
+**`reactivate`** sets the status back to `active` and clears `removed_at`
+(`users.reactivate`, which returns `null` when the user is not `removed`),
+writes one `user-reactivated` entry and settles the same way. It restores
+nothing else: `sessions_ended_at` stays, so a session opened before the
+deactivation is not reopened; the missions whose authority still stands (a
+share made to the user, a connection still theirs) serve again by the derived
+rule, each with a `mission-restored` entry; IdP groups return at the next
+sign-in; local groups, delegations and reassigned connections do not.
+
+The comparison that ends a session is `session.createdAt <=
+user.sessionsEndedAt` (`endedByDeactivation`, `authenticator.ts`; both are
+ISO-8601 UTC instants of the same clock): a session opened in the very
+millisecond of a deactivation is refused.
+
 ## Pages
 
 - **`/login`** (where `/` sends a visitor with no session; a signed-in one
@@ -379,8 +511,9 @@ rendered without its layout. So:
 - **`/admin`** — issuer, source (file or Admin page), admin rule, bootstrap
   state, build. The Administration bar links Identity provider, Provider
   apps (`/admin/provider-apps`, handbook [connections](connections.md)),
-  Groups and Connections (`/admin/groups`, `/admin/connections`: local
-  groups and ownerless connections, handbook [authority](authority.md)),
+  Users (`/admin/users`, below), Groups and Connections (`/admin/groups`,
+  `/admin/connections`: local groups and ownerless connections, handbook
+  [authority](authority.md)),
   Telemetry (`/admin/telemetry`, handbook [telemetry](telemetry.md)) and
   OAuth clients (`/admin/oauth-clients`, handbook
   [management-door](management-door.md)).
@@ -394,6 +527,16 @@ rendered without its layout. So:
   operator yes/no) from the new session. Note that the tester's session
   replaces the bootstrap one: a non-operator tester lands on the 403 page
   and signs out to return to bootstrap.
+- **`/admin/users`** — everyone who has signed in, in sign-up order
+  (`UserAdminService.list()`): email, an `active` / `deactivated` badge, a
+  `you` badge on the operator's own card, display name, last sign-in, current
+  groups, and the date of the deactivation. An active user gets a
+  **Deactivate** form (`POST /admin/users/<id>/deactivate`) — except the
+  operator's own card, which says another operator can; a deactivated one a
+  **Reactivate** form with what does not come back by itself. The notice of
+  the last act is shown once at the top: the delegations revoked, the groups
+  left, the missions orphaned, and — as a warning — the connections left
+  without owner, to reassign under Administration → Connections.
 
 Styling uses the style-guide tokens through the UI primitives (`Card`,
 `Button`, `Field`, `Input`, `Badge`, `Banner`, `Stack`) and
@@ -401,19 +544,25 @@ Styling uses the style-guide tokens through the UI primitives (`Card`,
 
 ## Tests
 
-Unit, co-located under `src/server/auth/*.test.ts` (57): the guard (each
+Unit, co-located under `src/server/auth/*.test.ts` (65): the guard (each
 foreign-origin form refused before the session is read, same-origin Referer
 accepted, 401 for nobody, the two roles, `guardSession` without the origin
 step, the wording of `refusalResponse`); claim mapping (array, delimited string, absent, custom names, missing
 claims named, email lower-casing, allowed domains, `email_verified` false
-refused in its boolean and string forms and accepted when true or absent); admin rule (group,
+refused in its boolean and string forms and accepted when true or absent;
+the group overage refused for `_claim_names` naming the configured claim, for
+`hasgroups` as a boolean or a string and with a partial list next to the
+pointer, a pointer for another claim and a token with no groups and no
+pointer accepted); admin rule (group,
 email, neither, both); origin check (match, mismatch, scheme, internal host,
 Referer fallback, missing, `null`); cookies and `SessionService` (attributes,
-malformed values, absolute expiry, pending login single use and TTL, a
+both names under the `__Host-` prefix, a `__Host-` cookie on another path
+refused, malformed values, absolute expiry, pending login single use and TTL, a
 stored record or pending sign-in of another shape read as none and deleted);
 `BootstrapService` (exact token, absent, revoked durable, idempotent
 revocation); `IdpSettingsService` (store round trip, sealed secret with its
-associated data, blank secret keeps the stored one, every problem at once,
+associated data, blank secret keeps the stored one, the secret asked again
+when the issuer changes, every problem at once,
 http issuer only when allowed, one transaction (a failed write keeps the
 previous settings whole), file wins and read-only); `safeReturnTo`. The
 `store.webSessions` repository is covered by
@@ -421,35 +570,35 @@ previous settings whole), file wins and read-only); `safeReturnTo`. The
 the digest and never the id, a clear-keyed row not read, TTL, sweep,
 overwrite, invalid TTL, an unreadable value removed).
 
-Unit, `tests/unit/app/admin-guard.test.ts` (54), over the real root on the
+Unit, `tests/unit/app/admin-guard.test.ts` (63), over the real root on the
 `:memory:` store with only `next/headers` replaced: `requireOperator()` with
 no session (bootstrap page, then `/login` once an IdP exists), an unknown
 cookie, a plain user (`notFound`), an operator, a bootstrap session before
 and after the token is revoked (6); the pages and routes of the surface are
-found (1); then, for each of the seven pages under `admin/(guarded)`, the
+found (1); then, for each of the eight pages under `admin/(guarded)`, the
 page calls `requireOperator()`, renders nothing for those three
-non-operators and renders for an operator (5 each); and each of the six
+non-operators and renders for an operator (5 each); and each of the eight
 routes under it answers 401 / 403, and 401 to a revoked bootstrap session
 (2 each).
 
-Unit, `tests/unit/server/auth/mutation-guard.test.ts` (224), over the real
+Unit, `tests/unit/server/auth/mutation-guard.test.ts` (242), over the real
 root on the `:memory:` store with seeded connections, a mission, an open
 claim, a registered OAuth client, a delegation and an unanswered consent
 screen: the completeness checks above (every handler classified; each of the
-25 mutating `route.ts` files delegates to a classified mutation, an MCP door
+27 mutating `route.ts` files delegates to a classified mutation, an MCP door
 or a protocol endpoint); the three OAuth protocol endpoints read no session
 (an operator's cookie sent from another origin changes neither the answer
-nor the store); then, for each of the twenty-five mutating handlers, the
+nor the store); then, for each of the twenty-seven mutating handlers, the
 rightful caller gets through (so the request is one that would be served),
 and the request is refused with every table of the store unchanged for
 another origin, no `Origin` and no `Referer`, a foreign `Referer` and an
-opaque `Origin`; and, for the twenty-three that need a session (all but
+opaque `Origin`; and, for the twenty-five that need a session (all but
 `/logout` and `/api/auth/bootstrap`), for no session (401), a session of the
 wrong role (a plain user on an operator endpoint, the bootstrap operator on
 a user endpoint: 403) and a bootstrap session whose token was revoked (401;
 only that session's row is removed).
 
-Integration, `tests/integration/auth/oidc-login.test.ts` (16) over the real
+Integration, `tests/integration/auth/oidc-login.test.ts` (17) over the real
 root on the `:memory:` store and the in-process `FakeIdp` (`fake-idp.ts`:
 discovery, JWKS, token and userinfo endpoints answered through
 `customFetch`, ES256 ID tokens signed with `node:crypto`, PKCE verified,
@@ -467,11 +616,32 @@ request arrives on `127.0.0.1:3000`; tampered state → `state-mismatch`,
 missing pending login → `login-expired`, IdP `access_denied` → `idp-error`;
 email outside the allowed domains and missing claims refused; an email the
 IdP marks unverified refused even when it is on the admin list (no user, no
-operator, token still active); a second sign-in ends the first session; an
+operator, token still active); a sign-in whose groups the IdP moved out of
+the token refused with `groups-overage`, the user's memberships kept and an
+unknown user not created; a second sign-in ends the first session; an
 IdP save whose audit entry cannot be written is logged at `error` and
 stands; a non-form body → 400; userinfo claims merged under the ID token;
 logout needs the origin check and deletes the row; sessions are rows of
 `web_sessions` keyed by a digest.
+
+Integration, `tests/integration/auth/deactivate-user.test.ts` (9) over the
+real root with a user who holds one of everything (a web session, a
+delegation with live tokens, a mission issued through it, a local-group
+membership, a connection of their own): deactivation ends the session, has
+the access token refused 401 on the management door and the refresh token
+`invalid_grant` at the token endpoint, has the mission refused
+`mission-inactive` at the execution door with nothing written on it, turns
+the connection `unowned`, and audits each (`user-deactivated`,
+`delegation-revoked`, `mission-orphaned`, no `mission-revoked`); the sign-in
+of the deactivated user is refused `account-deactivated` although the IdP
+vouches, and nothing is written; reactivation restores the mission that still
+has grounds and nothing that was closed (the old session, the delegation, the
+local group, the connection); the operator reassigns the deactivated owner's
+connection; an operator cannot deactivate themselves, an unknown or already
+deactivated user and an active one to reactivate are refused with nothing
+written; the bootstrap operator deactivates an operator; over HTTP the two
+routes answer `303` to the Users page for an operator and refuse a plain
+user, a foreign origin and no session.
 
 Not automated: a browser run against a real IdP (Google, Entra ID,
 Keycloak) — [e2e-tests](../tests/e2e-tests.md) describes the manual check.

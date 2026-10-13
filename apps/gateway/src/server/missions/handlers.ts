@@ -153,6 +153,7 @@ export function createMissionHandlers(deps: MissionHandlerDeps): MissionHandlers
           risk_id: result.risk_id,
           gate: result.gate,
           previous: result.previous,
+          opening_closed: result.opening_closed,
         });
       }
       switch (result.reason) {

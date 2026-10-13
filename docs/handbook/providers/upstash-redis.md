@@ -64,31 +64,54 @@ several databases and no argument, a database the mission does not hold, or
 a malformed ref are refused. Two account-level tools need no database
 (`list_databases`, `create_database`) but still refuse a foreign `databaseId`.
 
-| Tool                                                          | Slice                                                        |
-| ------------------------------------------------------------- | ------------------------------------------------------------ |
-| `list_databases`                                              | `account.database[*].R`                                      |
-| `get_database`                                                | `database[D].R`                                              |
-| `get_database_stats`                                          | `database[D].stats.R`                                        |
-| `create_database`                                             | `account.database.W`                                         |
-| `delete_database`                                             | `account.database[D].delete.W`                               |
-| `rename_database`                                             | `database[D].credentials.W`                                  |
-| `get`, `keys`, `scan`, `ttl`, `hgetall`, `lrange`, `smembers` | `database[D].key-space[K].R`                                 |
-| `dbsize`                                                      | `database[D].key-space[*].R`                                 |
-| `set`, `hset`, `lpush`, `sadd`                                | `database[D].key-space[K].W`                                 |
-| `expire` — `seconds` a strictly positive integer              | `database[D].key-space[K].W`                                 |
-| `expire` — `seconds` zero, negative, missing or unreadable    | `database[D].key-space[K].delete.W`                          |
-| `del`                                                         | `database[D].key-space[K].delete.W` (`[*]` for several keys) |
-| `execute` — read command                                      | `database[D].key-space[*].R`                                 |
-| `execute` — write command                                     | `database[D].key-space[*].W`                                 |
-| `execute` — delete command                                    | `database[D].key-space[*].delete.W`                          |
-| `execute` — FLUSHDB / FLUSHALL                                | `database[D].key-space.flush.W`                              |
-| `execute` — script, administration, unknown or unreadable     | `database[D].key-space[*].execute.W`                         |
+**Identifiers.** The database ref is the one identifier that reaches a URL:
+it is a segment of the Management API path (`/redis/database/{id}`,
+`/redis/rename/{id}`, `/redis/stats/{id}`) and of the slice. One function
+reads it, `pathIdent` (`PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`, in
+`classify.ts`), inside `resolveDatabase`, which `classify` and `execute`
+both call: the ref it returns — from the argument or from the mission's
+single database — is what the slice names and what is interpolated into the
+path, as it is; the argument is not read a second time. `.`, `..`, a `/`,
+an encoded form, an empty or overlong value is refused
+(`databaseId: malformed database ref`), never escaped:
+`encodeURIComponent` leaves `..` untouched and a URL parser would turn
+`/redis/database/..` into `/redis/`. Rule: ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md).
 
-**Keys.** A key is embedded as `[K]` when it is a slice-DSL ident
-(`[a-zA-Z0-9_./~-]+`); glob patterns, braces and keys with `:`
-(`session:123`) fall back to `[*]`, because a slice embedding them would not
-parse back. The catalog patterns match any ident there, so only audit
-precision is lost.
+| Value                                           | Grammar                                           | Where it lands                                         | Outside the grammar                   |
+| ----------------------------------------------- | ------------------------------------------------- | ------------------------------------------------------ | ------------------------------------- |
+| `databaseId` / `database_id`, the database ref  | `pathIdent`, through `resolveDatabase`            | Management API path, slice `database[D]`               | refused by `classify` and `execute`   |
+| `key` of a dedicated data tool                  | `KEY_IDENT` — `[a-zA-Z0-9_./~-]{1,128}` (private) | slice `key-space[K]` only; JSON array in the POST body | `key-space[*]`; the key is sent as is |
+| patterns, command words, values (`execute` too) | none — never part of a URL                        | JSON array in the POST body                            | —                                     |
+
+| Tool                                                       | Slice                                                        |
+| ---------------------------------------------------------- | ------------------------------------------------------------ |
+| `list_databases`                                           | `account.database[*].R`                                      |
+| `get_database`                                             | `database[D].R`                                              |
+| `get_database_stats`                                       | `database[D].stats.R`                                        |
+| `create_database`                                          | `account.database.W`                                         |
+| `delete_database`                                          | `account.database[D].delete.W`                               |
+| `rename_database`                                          | `database[D].credentials.W`                                  |
+| `get`, `ttl`, `hgetall`, `lrange`, `smembers`              | `database[D].key-space[K].R`                                 |
+| `keys`, `scan`, `dbsize`                                   | `database[D].key-space[*].R` (the whole key space, always)   |
+| `set`, `hset`, `lpush`, `sadd`                             | `database[D].key-space[K].W`                                 |
+| `expire` — `seconds` a strictly positive integer           | `database[D].key-space[K].W`                                 |
+| `expire` — `seconds` zero, negative, missing or unreadable | `database[D].key-space[K].delete.W`                          |
+| `del`                                                      | `database[D].key-space[K].delete.W` (`[*]` for several keys) |
+| `execute` — read command                                   | `database[D].key-space[*].R`                                 |
+| `execute` — write command                                  | `database[D].key-space[*].W`                                 |
+| `execute` — delete command                                 | `database[D].key-space[*].delete.W`                          |
+| `execute` — FLUSHDB / FLUSHALL                             | `database[D].key-space.flush.W`                              |
+| `execute` — script, administration, unknown or unreadable  | `database[D].key-space[*].execute.W`                         |
+
+**Keys.** A key is embedded as `[K]` when it is a slice-DSL ident of at
+most 128 characters (`[a-zA-Z0-9_./~-]{1,128}`); glob patterns, braces,
+keys with `:` (`session:123`) and overlong keys fall back to `[*]`, because
+a slice embedding them would not parse back. The catalog patterns match any
+ident there, so only audit precision is lost. `keys`, `scan` and `dbsize`
+send no `key`: they read the whole key space and are classified on `[*]`
+whatever else the call carries. A key never reaches a URL — the command
+travels as a JSON array in the body — so any string is a key.
 
 ### The command table of `execute`
 
@@ -189,10 +212,14 @@ staging, prod]`) except `create-database`, which is account-rooted (the
   pipeline endpoint is wired.
 - Management API answers about a database are redacted (`rest_token`,
   `read_only_rest_token`, `password`) before reaching the agent.
-- A `databaseId` that is not a mission resource, or a data tool on a mission
-  holding several databases without `databaseId`, is an `isError` result
-  before any network call, like every malformed argument (`ExecutorRefusal`
-  in `src/execute.ts`). A provider failure is **thrown**: 401/403 on either
+- The database is resolved by the classifier's own `resolveDatabase` (§2):
+  a `databaseId` that is not one path segment or not a mission resource, or
+  a data tool on a mission holding several databases without `databaseId`,
+  is an `isError` result carrying the classifier's refusal, before any
+  network call, like every malformed argument (`ExecutorRefusal` in
+  `src/execute.ts`). A management tool acts on the database the call names:
+  the mission's single database is not a default for it. A provider failure
+  is **thrown**: 401/403 on either
   surface → `UpstreamAuthError` (the host treats a 401 as a rejected
   credential, a 403 as a failed call), any other failed status →
   `UpstreamHttpError` with the status, a database whose answer exposes no
@@ -212,7 +239,7 @@ refresh.
 
 ## 6. Tests
 
-`npx vitest run plugins/upstash-redis` — 229 tests: `plugin.test.ts` (26:
+`npx vitest run plugins/upstash-redis` — 271 tests: `plugin.test.ts` (26:
 SDK kit with samples for every tool, presets, classifier conventions, env
 resolution through `resourceEnvResolver`, credential spec, execute and
 discovery against `mockFetch`), `classify.test.ts` (30: the expected slice
@@ -226,7 +253,9 @@ preset allows and refuses), `risk-catalog.test.ts` (49: schema, pattern and
 per-tool coverage lint of the loaded catalog), `execute.test.ts` (11:
 request shapes of the management tools, the Redis commands of the data
 tools, refusal of a command that is not one readable command),
-`data-model.test.ts` (1).
+`identifiers.test.ts` (42: the grammar of a database ref, hostile refs fed
+to `classify` and to `execute` for every tool that names a database, keys
+and command words that stay in the JSON body), `data-model.test.ts` (1).
 
 ## 7. How to debug
 

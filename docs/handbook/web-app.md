@@ -87,6 +87,7 @@ endpoints behind them, and the agent-facing MCP door from the same process.
 | `/connections`, `/connections/new`, `/connections/new/<provider>`, `/connections/<id>`                                      | `(app)/connections/**/page.tsx`                                                                               | [connections](connections.md)         |
 | `/connections/<id>/share`, `POST /connections/<id>/shares`, `…/shares/<id>/revoke`, `…/transfer`                            | `(app)/connections/[id]/share/`, `shares/`, `transfer/`                                                       | [authority](authority.md)             |
 | `/shares`                                                                                                                   | `(app)/shares/page.tsx`                                                                                       | [authority](authority.md)             |
+| `/admin/users`, `POST /admin/users/<id>/deactivate`, `…/<id>/reactivate`                                                    | `admin/(guarded)/users/**`                                                                                    | [authentication](authentication.md)   |
 | `/admin/groups`, `POST /admin/groups/create`, `…/<id>/members[/<userId>/remove]`                                            | `admin/(guarded)/groups/**`                                                                                   | [authority](authority.md)             |
 | `/admin/connections`, `POST /admin/connections/<id>/reassign`                                                               | `admin/(guarded)/connections/**`                                                                              | [authority](authority.md)             |
 | `POST /connections/connect/<provider>`, `GET /connections/callback/<provider>`                                              | `(app)/connections/connect/`, `(app)/connections/callback/`                                                   | [connections](connections.md)         |
@@ -138,7 +139,7 @@ only.
   principal → `redirect('/login')`; otherwise `<AppShell principal>`.
 - **`admin/(guarded)/layout.tsx`** — the Administration bar (the brand link
   "Vaubaan · Administration" to `/admin`, then Identity provider, Provider apps,
-  Groups, Connections, Telemetry, OAuth clients; the same account block as the
+  Users, Groups, Connections, Telemetry, OAuth clients; the same account block as the
   shell on the right) and the "Not an operator" explanation; rules in
   [authentication](authentication.md). The bar has no link back to the
   application bar.

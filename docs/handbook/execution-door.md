@@ -173,7 +173,11 @@ the door resolves it once per request, before authenticating, and builds the
   is `unknown` and shares one window per prefix: a cold agent can still be held
   off for the duration of a flood, a warm one cannot (its hits skip the
   throttle). The argon2 ceiling is therefore 30 a minute per prefix **and
-  address**, not per prefix.
+  address**, not per prefix. The shared window of an instance without
+  `trusted_proxies` is accepted and said: the composition root logs one
+  warning at boot naming the key ([configuration](configuration.md), "Boot
+  sequence"; ADR
+  [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)).
 
 ### Grounds (`door.ts` → `authority/mission-grounds.ts`)
 
@@ -232,6 +236,19 @@ that mission stays orphaned.
 
 `mission-inactive` and `connection-unavailable` (a connection already `expired`
 or `revoked`) come from the pipeline's own pure checks.
+
+**Before any stage: the arguments must be JSON values.** `CallPipeline.execute`
+first asks gateway-core's `unfaithfulArgument(call.args)` for a non-finite
+number (`1e999` in the request body parses to `Infinity`, which canonical
+JSON writes `null`) or a BigInt. When there is one the call is a `rejected`
+outcome naming its path
+(`argument 'per_page' is Infinity: arguments must be JSON values (…)`)
+before the mission's state is looked at: no stage runs, no
+budget is spent, no request is opened, nothing reaches the plugin. What is
+fingerprinted, sealed for the approver and handed to the plugin is therefore
+always what JSON carries as is ([gateway-core](gateway-core.md), "Audit"
+and "Order of a call"; ADR
+[execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)).
 
 ### Resource stage (`resource-stage.ts`)
 
@@ -407,7 +424,9 @@ Written by the pipeline, once per call. Fields filled by the door:
 `agent_label` (below), `client_ip` / `client_user_agent` (`clientOriginOf`),
 `arguments_hash` = `fingerprintArguments(args)` — the canonical SHA-256 (64 hex)
 that also binds approvals, so an `approval-required` refusal's `fingerprint`
-equals the entry's hash. The creator's view of an approval request reads the
+equals the entry's hash. The entry of a call rejected for a non-finite number
+keeps that canonical hash (the value reads `null` there), with
+`decision: 'refused'` and no `refusal_code`. The creator's view of an approval request reads the
 slices and the touched risks of the call from this entry, found by mission,
 tool and that hash; the entry of the approved replay carries `approval_id`.
 
@@ -909,13 +928,17 @@ plugin streams), and a run behind a proxy other than Caddy.
   host-built summary in the audit, the detail to the agent, the HTTP status
   of a client error), 401 → refresh → retry, rejected refresh → `expired`,
   403, credential cache.
-- `tests/integration/execution/door-http.test.ts` (19) — the official MCP
+- `tests/integration/execution/door-http.test.ts` (21) — the official MCP
   client in both eras against the real GitHub plugin on a mocked upstream,
   refusal `data` as the client sees it, plain JSON for `curl`, 405, tool filter,
   catalog, the 401 cases, session and delegated token refused, foreign origin,
   argon2 once, verification throttle, a flood of wrong secrets that does not
-  lock out the agent (from another address; with a warm proof), surface rate
-  limit, logs.
+  lock out the agent (from another address; with a warm proof), the accepted
+  risk stated (with no trusted proxy, an agent not verified yet is held at 429
+  while its prefix is flooded, and is back with the window; the mission and
+  its token stand), surface rate limit, a call whose arguments carry `1e999`
+  rejected `-32602` with the argument's path, nothing sent upstream and an
+  audit entry without refusal code, logs.
 - `tests/integration/execution/agent-label.test.ts` (6) — two labels and no
   label share one counter; the same decision with any label, none, or one
   that claims an identity; a value that is not a label dropped, logged
@@ -947,9 +970,10 @@ plugin streams), and a run behind a proxy other than Caddy.
   calls per seed (three seeds) through the door, then
   `countersAgreeWithAudit` with no mismatch; a concurrent burst on a small
   quota.
-- `packages/gateway-core/tests/unit/pipeline.test.ts` (27) — `UpstreamRefusalError`,
+- `packages/gateway-core/tests/unit/pipeline.test.ts` (28) — `UpstreamRefusalError`,
   `UpstreamFailureError` (summary to the audit, detail to the outcome, the
-  bound), the structural rejection of the resource stage;
+  bound), the structural rejection of the resource stage, an argument JSON
+  cannot carry rejected before any stage;
   `plugins/github/tests/unit/token-cache.test.ts` (5).
 
 Scenarios in [integration-tests](../tests/integration-tests.md).
@@ -971,11 +995,14 @@ Scenarios in [integration-tests](../tests/integration-tests.md).
   throttle of its prefix and client address. A valid token answered 429 right
   after a restart: someone is replaying wrong secrets on its prefix from the
   same resolved address — or `trusted_proxies` is empty and all callers share
-  the `unknown` window; declare the proxies.
+  the `unknown` window (the boot log has `trusted_proxies is empty: …` at
+  `warn`); declare the proxies.
 - **`Vaubaan rejected the call: …`** (`-32602`) — no refusal code: the tool is
   unknown, its provider has no connection in the mission, or the classifier
   could not place the arguments. The sentence is the classifier's. The audit
   row has `refusal_code` null and the same sentence in `refusal_reason`.
+  `argument '<path>' is Infinity: arguments must be JSON values` is the
+  pipeline's own: the client sent a number JSON has no text for (`1e999`).
 - **`resource-not-in-mission` for a resource the mission selected** — it went
   stale: the last discovery no longer returned it (Connections page, "Refresh
   discovery").
@@ -1039,6 +1066,7 @@ textParts(response.body))`, or call `ctx.emitPart` yourself and await it.
   [upstream-credential-cache-and-rejected-credentials](../decisions/upstream-credential-cache-and-rejected-credentials.md),
   [atomic-budget-accounting](../decisions/atomic-budget-accounting.md),
   [api-key-format-vbn-live-argon2id](../decisions/api-key-format-vbn-live-argon2id.md),
+  [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md),
   [scope-caps-not-enforced-in-v5-0](../decisions/scope-caps-not-enforced-in-v5-0.md),
   [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
   (amendment "Streamed results"); the agent label is in

@@ -20,18 +20,18 @@ modelling rationale (research, edge cases) is preserved in git history
 
 ## Shape
 
-| Member              | Where                   | Facts                                                                                                                                               |
-| ------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `id` / `version`    | `src/index.ts`          | `supabase`, `2.0.0`. Default export `supabasePlugin`.                                                                                               |
-| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                      |
-| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`).                           |
-| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 2`, 24 risks + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import.                                  |
-| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                            |
-| `classify`          | `src/classify.ts`       | Pure ; identifiers validated, missing identifiers denied. Exports `resolveProjectRef`, the one project resolution `execute` shares.                 |
-| migration reading   | `src/migration-sql.ts`  | Pure allow-list reader of the SQL of `apply_migration` : the write classes it takes, every class when a statement is not recognised.                |
-| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context ; target from `resolveProjectRef`. |
-| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                    |
-| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align).                                  |
+| Member              | Where                   | Facts                                                                                                                                                                                   |
+| ------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id` / `version`    | `src/index.ts`          | `supabase`, `2.0.0`. Default export `supabasePlugin`.                                                                                                                                   |
+| `tools`             | `src/tools.ts`          | 44, prefix `supabase__`. The three v4 `*_to_venv` tools are gone (plan §8-Q5).                                                                                                          |
+| `dataModel`         | `src/data-model.ts`     | 4 planes (`db`, `storage`, `auth`, `functions` : 14 / 6 / 8 / 6 entities, 34 in all) rooted on `project` (`envScopable`).                                                               |
+| `catalog`           | `src/risk-catalog.yaml` | `catalog_version: 2`, 24 risks + `supabase.uncategorized-write`, 3 presets. Loaded by `loadCatalogFile` at import.                                                                      |
+| `credential`        | `src/credential.ts`     | `oauth2`, PKCE, `client_secret_basic`, scope `all`, `refreshable: true`.                                                                                                                |
+| `classify`          | `src/classify.ts`       | Pure ; identifiers validated, missing identifiers denied. Exports `resolveProjectRef`, `readIdentifiers` and `tableSchemas`, which `execute` shares.                                    |
+| migration reading   | `src/migration-sql.ts`  | Pure allow-list reader of the SQL of `apply_migration` : the write classes it takes, every class when a statement is not recognised.                                                    |
+| `execute`           | `src/execute.ts`        | Management API + per-project data plane ; `UpstreamAuthError` on 401/403 ; `fetch` and `signal` from the context ; target from `resolveProjectRef`, identifiers from `readIdentifiers`. |
+| `discoverResources` | `src/execute.ts`        | One `Resource` per project of every organization, capped at 200.                                                                                                                        |
+| `refresh`           | —                       | None : the standard `refresh_token` grant (Basic client auth) is performed by the host from the spec (P1.2-align).                                                                      |
 
 ## Classification rules
 
@@ -55,10 +55,12 @@ flowchart LR
   (`src/classify.ts`) is called by `classifySupabase` and, with
   `ctx.resources`, by `executeSupabase` ; `execute` builds every URL from its
   answer and never reads `args.project_ref`. A `project_ref` that is present
-  must be a string matching `[a-zA-Z0-9_-]+` (it becomes a path segment and
-  the host label of `https://{ref}.supabase.co`) and one of the mission's
+  must be a host label (`projectRefIdent` : lowercase letters, digits and
+  inner hyphens, 63 characters at most — it becomes a path segment and the
+  host label of `https://{ref}.supabase.co`) and one of the mission's
   Supabase resources ; an array, an object, a number or an unsafe string is a
-  denial, never coerced and never skipped. The camelCase `projectRef` is not
+  denial, never coerced and never skipped. The ref of the mission's single
+  project goes through the same grammar. The camelCase `projectRef` is not
   an argument of any tool : a call carrying it is denied. When `execute`
   gets a denial it returns an `isError` result and sends nothing.
 - **Cardinality markers** are literal identifiers : `row[one]` / `row[bulk]`,
@@ -83,11 +85,44 @@ flowchart LR
   write class its SQL takes — see "Reading a migration" below.
 - **Cascades** : `delete_bucket` adds `object[bulk].W` ; `deploy_function`
   with files adds `edge-function[slug].W`.
-- **Identifiers** must match `[a-zA-Z0-9_.@+:/~-]+` (emails, phone numbers,
-  `dir/file.png` and secret names fit) ; a missing or malformed required
-  identifier is a denial, never `any`.
+- **Identifiers** have one grammar per kind — see "Identifiers" below ; a
+  missing or malformed required identifier is a denial, never `any`.
 - **No sample lands on the fallback** : `plugin.test.ts` asserts
   `fallbackHits` of the SDK kit is empty.
+
+### Identifiers
+
+Every argument that lands in a URL path, a query string, a host, a header
+or the SQL text the plugin writes is read by `readIdentifiers(tool, args)`
+(and `tableSchemas(args)` for `list_tables`), with the grammar of its kind.
+It is the only place that reads them : `classifySupabase` builds its slices
+from the answer and `executeSupabase` its request, never from `args`. A
+value outside its grammar is a denial (`<arg>: missing or malformed.`) and
+an `isError` refusal before any request — never escaped, never replaced by
+another argument (ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+
+| Argument                                                                    | Grammar                                                                                                      | Where it lands                                                           |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------ |
+| `project_ref`, the project resource ref                                     | `projectRefIdent` — a host label : `[a-z0-9]`, inner hyphens, ≤ 63 characters                                | URL path and host `https://{ref}.supabase.co`, slice `project[ref]`      |
+| `user_id`, `provider_id`, `tpa_id`, `function_slug`, `slug`                 | `pathIdent` — `PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`                                                           | URL path segment, as it is (`slug` of `deploy_function` : query) ; slice |
+| `type` of `create_sso_provider`, `create_third_party_auth`, `generate_link` | `pathIdent`                                                                                                  | JSON body ; slice ident                                                  |
+| `type` of `get_advisors`                                                    | closed set `security` \| `performance` (`security` when absent)                                              | URL path segment                                                         |
+| bucket `id`, `bucket`                                                       | `bucketId` — one segment of `[A-Za-z0-9_.@+:~-]`, ≤ 100 characters, never dots alone                         | URL path segment, percent-encoded ; slice `bucket[id]`                   |
+| object `path`                                                               | `objectPath` — `/`-separated segments of the same characters, none empty, none dots alone, ≤ 1024 characters | URL path, each segment percent-encoded ; slice of `create_signed_url`    |
+| `email` of `generate_link`                                                  | `emailAddress` — a local part, one `@`, a dotted domain, ≤ 254 characters                                    | JSON body ; slice `user[email]`                                          |
+| `content_type` of `upload_object`                                           | a media type (`image/png`, `text/plain; charset=utf-8`) ; `application/octet-stream` when absent             | `Content-Type` request header                                            |
+| `page`, `per_page` of `list_users`                                          | a positive integer up to 1 000 000 (1 and 50 when absent)                                                    | query string                                                             |
+| `schemas` of `list_tables`                                                  | `tableSchemas` — unquoted SQL identifiers `[A-Za-z_][A-Za-z0-9_$]{0,62}` ; `public` when absent or empty     | SQL text of the read-only query, between quotes as they are              |
+| secret names (`create_function_secrets`, `delete_function_secrets`)         | slice-safe name, `[a-zA-Z0-9_.@+:/~-]{1,256}` — not a path identifier                                        | JSON body ; slice `function-secret[name]`                                |
+
+`create_bucket` names the bucket after `id`, and after `name` only when
+`id` is absent : a malformed `id` is a denial, `name` is not a second
+chance. `get_function` and `get_function_body` read `function_slug` only.
+Why refuse rather than escape : `encodeURIComponent` leaves `.` and `..`
+untouched and a URL parser removes them, so `delete_function` with `..`
+would be classified as a function write and sent to the project endpoint,
+and a `delete_object` path with a `..` segment would leave its bucket.
 
 ### Reading a migration
 
@@ -181,8 +216,15 @@ call in `mission-evaluation.test.ts`. Values provisional until ADR
 
 - Management API base `https://api.supabase.com/v1` (constant of the plugin).
   Bearer = the OAuth access token.
+- **Fail closed** : `executeSupabase` first runs `classifySupabase(tool,
+args, ctx.resources)` and returns whatever it denies as an `isError`
+  result, before any request — the `service_role` key lookup included.
+- **Identifiers** : every path segment, query parameter and header value
+  that names something comes from `readIdentifiers` / `tableSchemas` (see
+  "Identifiers"). An opaque id or a slug is interpolated as it is ; a bucket
+  id and the segments of an object path are percent-encoded.
 - **Target project** : `executeSupabase` calls `resolveProjectRef(args,
-ctx.resources)` first — the classifier's function, with the mission's
+ctx.resources)` — the classifier's function, with the mission's
   resources — and passes the resolved ref down. A denial (project outside
   the mission, non-string `project_ref`, `projectRef` alias, several
   projects and no ref) is an `isError` result with the classifier's message
@@ -209,11 +251,13 @@ removed `refreshSupabaseCredential` and `shouldRefreshSupabaseCredential`).
 `discoverResources` reads `/organizations` and `/projects` (unpaged upstream,
 capped at `MAX_DISCOVERED_PROJECTS` with a logger warning) and returns
 `{ ref, displayName: "<org> / <project>", metadata: { organization,
-organization_name, region, status } }` ; the owner labels `env`.
+organization_name, region, status } }` ; the owner labels `env`. A project
+whose ref is not a host label (`projectRefIdent`) fails discovery : no call
+could name it.
 
 ## Tests
 
-`npx vitest run plugins/supabase` — 245 tests : `plugin.test.ts` (22 : SDK
+`npx vitest run plugins/supabase` — 1582 tests : `plugin.test.ts` (22 : SDK
 kit with samples per tool and `fallbackHits` empty, presets, credential
 spec, execute and discovery against `mockFetch`), `risk-catalog.test.ts`
 (44 : loaded catalog lint, coverage without the fallback, exact risks of the
@@ -224,7 +268,11 @@ denials), `execute.test.ts` (35 : request shapes sent to the Management API
 and the per-project data plane, and the target-project resolution — zero
 request on a denial), `mission-evaluation.test.ts` (34 : the engine decision
 through the real catalog — unlabelled project, bulk writes on prod, each
-preset call by call), `data-model.test.ts` (1).
+preset call by call), `identifier-injection.test.ts` (1337 : hostile values
+in every identifier position of `classify` and `execute`, the dot-segment
+reproductions, one argument per target, legitimate dotted names, the query
+strings and SQL text the plugin builds, the project ref as a host label),
+`data-model.test.ts` (1).
 
 ## How to debug
 

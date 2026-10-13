@@ -49,7 +49,8 @@ of the v4 classifier was ported to `classifyResend`
 
 ```
 plugins/resend/src/
-  resources.ts        kinds, SAFE_IDENT, zoneConfigOf, resolveDomain / resolveDomainArg / resolveSegmentArg
+  resources.ts        kinds, PATH_IDENT / pathIdent, DOMAIN_NAME / domainName, CONTACT_EMAIL / contactSelector,
+                      domainIdOf, zoneConfigOf, resolveDomain / resolveDomainArg / resolveSegmentArg
   zones.ts            parseAddress, collectRecipients, zoneOfAddress, worstZone
   tools.ts            27 McpToolDeclaration (`domain` / `segment_id` resource arguments), declaredFieldsOf
   classify.ts         classifyResend — pure, (tool, args, resources) → slices | denied
@@ -77,7 +78,14 @@ flowchart LR
 - **Zone of a send** = worst zone across `to` + `cc` + `bcc` against the
   sending domain's `internal_domains` / `allowlist_domains` /
   `allowlist_addresses` (exact, case-insensitive). Addresses are parsed
-  (`"Alice <alice@acme.com>"`), a malformed one is `denied`. Empty lists
+  (`"Alice <alice@acme.com>"`), a malformed one is `denied`. **One string
+  is one address** (`parseAddress` in `zones.ts`) : the field is zoned on
+  the address the parser returns and sent to Resend as the string it was
+  given, so a string a mail API could read as several recipients
+  (`x@evil.example, Bob <bob@acme.com>`) is refused — the display name
+  takes no `,` `;` `@` `"` `\`, no angle bracket and no control character,
+  the local part no `,` or `;`. Several recipients are an array, each item
+  parsed and zoned on its own. Empty lists
   mean every recipient is `external-unbounded` — fail closed.
 - **Recipient count** : the marker has one value, `batch`, emitted by
   `send_batch_emails` only and matched by `send-batch`. A single send emits
@@ -147,9 +155,34 @@ not a plain header token, or whose value is not a single-line string, or
 `headers` that is not an object (the zone was computed from `from`, `to`,
 `cc`, `bcc` alone) ; `send` on a broadcast create or update (would bypass
 `broadcast-send`) ; `domain` / `segment_id` outside the mission ; malformed
-identifiers (`SAFE_IDENT`, and an id made of dots only, which the URL parser
-would collapse) ; a create without its `name` / `email` / `from` ;
-`scheduled_at` on a broadcast send ; unknown tool.
+identifiers (see "Identifiers" below) ; a create without its `name` /
+`email` / `from` ; `scheduled_at` on a broadcast send ; unknown tool.
+
+### Identifiers
+
+One grammar function per kind of identifier, all in `resources.ts`, read by
+`classify` and by `execute` alike ; a value outside its grammar is refused,
+never escaped or repaired (ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+
+| Value                                           | Grammar                                                                                                                | Where it lands                                                                                   | Outside the grammar                                        |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `id` of an email or a broadcast                 | `pathIdent` — `PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`                                                                     | URL path segment (as it is), slice ident                                                         | `id: missing or malformed identifier`                      |
+| `id` of a contact                               | `contactSelector` — a `pathIdent`, or a bare `local@domain` (`CONTACT_EMAIL` : local part of letters, digits, `._+'-`) | URL path segment : the id as it is, an address percent-encoded ; slice ident, `*` for an address | `id: missing or malformed contact id or email`             |
+| `segment_id`                                    | `pathIdent`, inside `resolveSegmentArg`                                                                                | URL path, query (`list_contacts`) or body ; slice `segment[S]`                                   | `segment_id: missing or malformed ref`                     |
+| `domain`                                        | `domainName` — `DOMAIN_NAME` : dotted host labels, ≤ 253 characters, lower-cased ; inside `resolveDomainArg`           | slice `domain[D]` ; never the request                                                            | `domain: missing or malformed ref`                         |
+| `metadata.domain_id` of a domain resource       | `pathIdent` (`domainIdOf`)                                                                                             | URL path `/domains/<id>`                                                                         | `resource '<ref>' carries a malformed domain_id`           |
+| the `id` Resend answers to `POST /contacts`     | `pathIdent`                                                                                                            | URL path of the membership call                                                                  | the second call is not made (error, as for a missing `id`) |
+| `from`, `to`, `cc`, `bcc`, `email` of a contact | `parseAddress` (`zones.ts`)                                                                                            | JSON body ; decides the zone                                                                     | `denied`                                                   |
+
+`execute` reads each of them with the function the classifier used
+(`idSegment`, `contactSegment`, `segmentRef` and `domainId` in `execute.ts`
+wrap them and throw the classifier's message). An id is interpolated as it
+is : `encodeURIComponent` leaves `.` and `..` untouched and a URL parser
+removes them, so `/emails/..` would be sent as `/`. The one value that is
+percent-encoded is a contact address, whose `@` becomes `%40` — the segment
+is never a dot segment and the grammar leaves no character that could end
+it.
 
 ## Catalog and presets
 
@@ -193,14 +226,16 @@ was read by no classifier rule, so it is dropped before the call instead of
 reaching Resend unseen. The resource arguments (`domain`, `segment_id`,
 `id`) go in the path or are re-resolved against the mission, never copied
 into the body. Domain tools map the ref to `metadata.domain_id` (missing →
-"refresh the connection's resources"). Every broadcast call first
+"refresh the connection's resources" ; not a `pathIdent` → "carries a
+malformed domain_id"). Every broadcast call first
 `GET /broadcasts/:id` and refuses a broadcast whose `segment_id`
 (`audience_id` on older payloads) differs from the one named. List tools
 filter upstream results to the mission's resources. `create_contact` with
 `segment_id` is two calls (`POST /contacts`, then
 `POST /contacts/:id/segments/:segment_id`) ; a create answer without an
-`id` stops there with an error rather than building the second URL from a
-missing value. 401 → `UpstreamAuthError` ;
+`id`, or with one that is not a `pathIdent`, stops there with an error
+rather than building the second URL from a missing or unchecked value.
+401 → `UpstreamAuthError` ;
 403 → `UpstreamAuthError` unless Resend names a `validation_error` (an
 unverified `from` domain is a 403 too). Unknown tool → `isError` result.
 
@@ -234,11 +269,15 @@ resource with no environment label`) — a recipient is in no zone list of
 
 ## Tests
 
-`npx vitest run plugins/resend` — 161 : `plugin.test.ts` (kit with
+`npx vitest run plugins/resend` — 232 : `plugin.test.ts` (kit with
 `fallbackHits` empty, cross-cutting classifier rules, execute and its
 forwarded fields, discovery, credential, presets ; 43), `classify.test.ts`
 (one scenario per tool on `classifyResend`, envelope headers, attachments,
 identifiers ; 64), `risk-catalog.test.ts` (counts, invariants and
 disjointness ; 33), `mission-evaluation.test.ts` (real catalog through
 `evaluateCall` with the gateway's env resolver : external sends per domain
-label, each preset call by call ; 15), `data-model.test.ts` (6).
+label, each preset call by call ; 15), `identifiers.test.ts` (the
+grammars, then hostile `id`, contact selector, `segment_id`, `domain`,
+`domain_id` and provider-supplied contact id fed to `classify` and to
+`execute` ; 58), `addresses.test.ts` (`parseAddress` : a string that could
+carry a second recipient is not an address ; 13), `data-model.test.ts` (6).

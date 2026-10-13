@@ -46,9 +46,9 @@ ported to `classifyCloudflareDns` (`tests/unit/classify.test.ts`).
 
 ```
 plugins/cloudflare-dns/src/
-  resources.ts              CLOUDFLARE_DNS_PROVIDER, SAFE_IDENT, PATH_IDENT, pathIdent,
-                            resolveZoneResource, accountIdOf, zoneNameOf, isCriticalRecord,
-                            recordSensitivity
+  resources.ts              CLOUDFLARE_DNS_PROVIDER, PATH_IDENT, pathIdent, DNS_NAME, dnsName,
+                            RECORD_TYPE, recordType, resolveZoneResource, accountIdOf,
+                            zoneNameOf, isCriticalRecord, recordSensitivity
   tools.ts                  15 McpToolDeclaration (update_record requires type + name ;
                             delete_record takes them as optional)
   classify.ts               classifyCloudflareDns — pure, (tool, args, resources) → slices | denied
@@ -78,9 +78,9 @@ flowchart LR
   otherwise `denied` (ambiguous, none, unknown, malformed). The resolved
   ref is always path-safe (`pathIdent`) : a zone whose ref is not is
   `denied` too, even as the mission's single zone.
-- The account segment comes from `metadata.account_id` (`*` when absent) ;
-  `list_zones` uses the account shared by the mission's zones, else
-  `account[*]`.
+- The account segment comes from `metadata.account_id` when it passes
+  `pathIdent` (`*` when absent or malformed) ; `list_zones` uses the
+  account shared by the mission's zones, else `account[*]`.
 - No env : DNS has no test/live mode. The owner may still label zones, but
   no catalog risk carries `acceptable_in_envs`.
 
@@ -103,10 +103,13 @@ flowchart LR
 
 **Critical** (`isCriticalRecord`) : type MX or NS whatever the name ; name
 equal to the zone name or `@` ; wildcard at the apex (`*.zone`, `*`) ;
-conservatively, an empty or non-ASCII name, an unknown or non-ASCII zone
-name, or a write whose arguments lack `type` or `name`
-(`recordSensitivity`). Trailing dots are ignored (`example.com..` is the
-apex).
+conservatively, a type that `recordType` does not read, a name or a zone
+name that `dnsName` does not read (see "Identifiers" below), an unknown
+zone name, or a write whose arguments lack `type` or `name`
+(`recordSensitivity`). A record is ordinary only when its type is a type
+name, its name and the zone name are both DNS names, and the two differ.
+Case and trailing dots are ignored (`Example.COM..` is the apex) ;
+surrounding whitespace is not trimmed, it makes the name critical.
 
 **Deleting a record is a record write like the others.** Removing the apex
 `A`, the `MX` set or an `NS` delegation has the effect
@@ -128,20 +131,35 @@ every deletion as critical would leave no way to delete an ordinary record
 without holding `critical-record-write`. A declaration is never trusted on
 its own : see the guard under "Execute".
 
-**Identifiers in the request path.** `zone_id` and `record_id` are
-interpolated into the URL, so both go through `pathIdent`
-(`PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`, in `resources.ts`) — one function,
-called by `classify` (`recordIdent`, `resolveZoneResource`) and by
-`execute` (`recordIdArg`, `resolveZoneResource`, and once more when the
-path is built). `record_id` is required on `get_record`, `update_record`
-and `delete_record` ; a missing one is `record_id: missing`, a malformed
-one `record_id: malformed identifier`, a malformed zone
-`zone_id: malformed zone id`. `SAFE_IDENT` (which accepts `.`, `/` and `~`)
-now only validates the account id, which lands in a slice segment and never
-in a URL. Why it matters : `encodeURIComponent('..')` is `..`, and every
-URL parser removes dot segments, so `record_id: '..'` used to be classified
-as a record deletion while the request that left was
-`DELETE /zones/<zone>/` — the zone endpoint.
+## Identifiers
+
+One grammar function per kind of identifier, all in `resources.ts`, read by
+`classify` and by `execute` alike ; a value outside its grammar is refused
+or classified at the most severe risk, never escaped (ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+
+| Value                                            | Grammar                                                                                                                                                          | Where it lands                                                  | Outside the grammar                                                                               |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `zone_id` argument, zone resource ref            | `pathIdent` — `PATH_IDENT = ^[A-Za-z0-9_-]{1,64}$`                                                                                                               | URL path `/zones/<zone>`, slice `zone[Z]`                       | `denied` / refusal : `zone_id: malformed zone id`                                                 |
+| `record_id` argument                             | `pathIdent`                                                                                                                                                      | URL path `/dns_records/<record>`, slice `record[R]`             | `denied` `record_id: malformed identifier` ; refusal `record_id: missing or malformed identifier` |
+| `metadata.account_id` of a zone                  | `pathIdent` (`accountIdOf`)                                                                                                                                      | slice `account[A]` only, never a request                        | the glob `account[*]`                                                                             |
+| record `name`, zone name                         | `dnsName` — `DNS_NAME` : lower-cased, trailing dots removed, dotted labels of letters, digits, `_` and inner hyphens, an optional leading `*.`, ≤ 253 characters | JSON body ; decides the critical-record verdict                 | the write is classified critical                                                                  |
+| record `type`                                    | `recordType` — `RECORD_TYPE = ^[A-Za-z][A-Za-z0-9]{0,15}$`, upper-cased                                                                                          | JSON body ; decides the critical-record verdict                 | the write is classified critical                                                                  |
+| list filters (`name`, `type`… on `list_records`) | none — never an identifier                                                                                                                                       | query string, percent-encoded (`toQueryString`), never the path | —                                                                                                 |
+
+`pathIdent` is called by `classify` (`recordIdent`, `resolveZoneResource`)
+and by `execute` (`recordIdArg`, `resolveZoneResource`, and once more in
+`segment` when the path is built). `record_id` is required on `get_record`,
+`update_record` and `delete_record` ; a missing one is `record_id: missing`.
+`encodeURIComponent('..')` is `..`, and every URL parser removes dot
+segments : without the grammar, `record_id: '..'` would be classified as a
+record deletion while the request that leaves is `DELETE /zones/<zone>/` —
+the zone endpoint. `dnsName` and `recordType` are the one reading of a
+record name and type, in the classifier (`recordSensitivity`) and in the
+read-back guard of `execute` : `@`, a bare `*`, an inner wildcard, an empty
+label, whitespace, a control or non-ASCII character, a separator or an
+escape is not a name, so the write needs `critical-record-write`. Service
+labels (`_dmarc`, `_sip._tcp`) and punycode (`xn--…`) are names.
 
 ## Catalog and presets
 
@@ -225,10 +243,13 @@ whose `result` is not a list fails discovery.
 
 ## Tests
 
-`npx vitest run plugins/cloudflare-dns` — 122 : `plugin.test.ts` (42 : kit,
+`npx vitest run plugins/cloudflare-dns` — 181 : `plugin.test.ts` (42 : kit,
 classifier zone resolution and record writes, execute including the
 update / delete guard and the path-unsafe identifiers, discovery,
 credential, presets), `classify.test.ts` (33 : the per-tool security suite
 of `classifyCloudflareDns`, the deletion overlay, the identifiers that
 reach the URL path), `risk-catalog.test.ts` (38 : invariants, the exact
-risks every tool touches, layering), `data-model.test.ts` (9).
+risks every tool touches, layering), `identifiers.test.ts` (59 : the
+grammars, then hostile `zone_id`, `record_id`, account id, record `name`
+and `type` and list filters fed to `classify` and to `execute`),
+`data-model.test.ts` (9).

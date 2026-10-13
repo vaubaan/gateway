@@ -39,6 +39,7 @@ plugins/railway/
     classify.test.ts         per-tool slices of classifyRailway (22)
     risk-catalog.test.ts     catalog shape and risksTouchedBy (19)
     policy.test.ts           decisions of the gateway core, preset by preset (39)
+    identifier-injection.test.ts  hostile ids and variable names on classify and execute (288)
     data-model.test.ts       data-model integrity (1)
 ```
 
@@ -110,7 +111,7 @@ the mission; otherwise the project whose discovered environments contain
 schema has no `projectId`); anything else is `denied` ("ambiguous railway
 target").
 
-**`environmentId` is bound to `P`.** The id is forwarded upstream as given
+**`environmentId` is bound to `P`.** The id is sent upstream
 and the OAuth token reaches every project of the workspace, so whichever
 way the project was resolved, an `environmentId` argument must be one of
 the environments discovery stored on that project
@@ -130,8 +131,41 @@ to mean "no") and when `variables` is empty or not an object; the variable
 leaf is then a wildcard. `railway-agent` always emits it. A missing or
 empty `name` on `upsert-variable` / `delete-variable` is denied.
 
-Identifiers embedded in a slice (`serviceId`, variable names) must match
-`[a-zA-Z0-9_./~-]+` or the call is denied. An unknown tool is denied.
+An unknown tool is denied.
+
+### Identifiers
+
+One grammar function per kind of identifier, exported from `classify.ts`;
+a value outside its grammar is denied by `classify` and refused by
+`execute` before any request, never escaped (ADR
+[`plugin-identifiers-one-grammar-for-classify-and-execute`](../../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+No id reaches a URL: the rewrapped tools carry them as JSON-RPC arguments,
+the variable tools as GraphQL variables of a constant document.
+
+| Value                                 | Grammar                                                      | Bound to the mission                               | Where it lands                                           | Outside the grammar                                                      |
+| ------------------------------------- | ------------------------------------------------------------ | -------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------ |
+| `projectId`, the project resource ref | `railwayId` — `RAILWAY_ID = ^[A-Za-z0-9_-]{1,64}$`           | yes — a resource of the mission                    | JSON-RPC argument / GraphQL variable, slice `project[P]` | `projectId: malformed ref.`                                              |
+| `environmentId`                       | `railwayId`                                                  | yes — one of the project's discovered environments | JSON-RPC argument / GraphQL variable                     | `environmentId: malformed ref.`                                          |
+| `serviceId`                           | `railwayId`                                                  | **no** — shape only                                | JSON-RPC argument / GraphQL variable, slice `service[S]` | `serviceId: malformed ref.`                                              |
+| `deploymentId` (`get-logs`)           | `railwayId`                                                  | **no** — shape only                                | JSON-RPC argument                                        | `deploymentId: malformed ref.`                                           |
+| `name`, the keys of `variables`       | `variableName` — `VARIABLE_NAME = ^[a-zA-Z0-9_./~-]{1,256}$` | —                                                  | GraphQL variable, slice `service-var[NAME,…]`            | `name: malformed variable name.` / `variables: malformed variable name.` |
+
+`classify` and `execute` share the readers, not only the grammars:
+`resolveTarget(tool, args, resources)` is the only place that decides the
+project, environment, service and deployment of a project-scoped call, and
+`readVariableWrite` the only reading of a variable write. `execute`
+(`pinTarget`) calls both with the same inputs and writes `projectId`,
+`environmentId`, `serviceId` and `deploymentId` from their answer, never
+from the arguments.
+
+**Limit: `serviceId` and `deploymentId` are not bound to the mission's
+project.** Discovery stores the environments of a project, not its services
+or deployments, so the classifier checks the shape of these two ids and
+cannot tell which project owns them. The OAuth token reaches every project
+of the workspace: a call that names the mission's project and the
+`serviceId` of another project, or `get-logs` with the `deploymentId` of
+another project, is classified on the mission's project and sent with the
+foreign id; whether it is served depends on Railway alone.
 
 ## Catalog and presets
 
@@ -181,9 +215,15 @@ The plugin never persists: the host refreshes and stores the result.
 ## Execution
 
 `executeRailway(ctx, tool, args)` narrows the secret with
-`expectCredentialKind('railway', …, 'oauth2')`, fills `projectId` from the
-single mission project when the tool's schema takes one and the argument is
-absent (throws when several projects), then:
+`expectCredentialKind('railway', …, 'oauth2')`, then pins the target
+(`pinTarget`): a project-scoped call is resolved by the classifier's own
+`resolveTarget` and `readVariableWrite` (see "Identifiers"), `projectId` is
+written from the resolved project when the tool's schema takes one or the
+caller passed one, `environmentId`, `serviceId` and `deploymentId` from the
+resolved target. What the classifier denies is an `isError` result before
+any request, except a call that names no project the mission can resolve
+(no Railway project, or an ambiguous target), which throws. Account-level
+tools are forwarded as received. Then:
 
 - upstream tools → JSON-RPC `tools/call` to `https://mcp.railway.com/` with
   the `railway__` prefix stripped, headers `Authorization: Bearer`,
@@ -233,7 +273,7 @@ a refusal surfaces as `UpstreamAuthError` with the upstream message.
 
 ## Tests
 
-`npx vitest run plugins/railway` — 111 tests. `plugin.test.ts` (30)
+`npx vitest run plugins/railway` — 399 tests. `plugin.test.ts` (30)
 runs the kit (`assertPluginWellFormed`, `assertPresetsValid`,
 `assertNoWildcard`, `assertCatalogCoverage` with every risk touched),
 classifier branches on `Resource[]` (including the `environmentId`
@@ -246,7 +286,11 @@ real classifier and catalog through the gateway decision core
 decision per sample call for `read-only`, `developer` and `operator` on
 each environment, the risks each variable write touches, the refusal of
 env-scoped operations on an unlabelled or mislabelled project, and the
-`environmentId` binding. No test reaches Railway.
+`environmentId` binding. `identifier-injection.test.ts` (288) feeds
+malformed ids and variable names to `classify` and to `execute`, checks
+that `execute` runs on the target the classifier resolved, and that
+discovery refuses a project id that is not a `railwayId`. No test reaches
+Railway.
 
 ## References
 

@@ -563,12 +563,27 @@ The classifier shows the conventions every plugin follows:
   the mission's single resource, and none or several is `denied`. The
   classifier is the check: the gateway's resource stage works from the
   slices and only recognises refs the connection has discovered;
-- every identifier goes through `pathIdent` (`PATH_IDENT`,
-  `^[A-Za-z0-9_-]{1,64}$`) before it is embedded in a slice: both
-  identifiers of the template also reach the request path, and a wider
-  class lets `..` through, which `encodeURIComponent` leaves alone and the
-  URL parser then removes — the request would hit the workspace while the
-  slice named a widget (the finding `plugins/cloudflare-dns` fixed first);
+- **identifiers: one grammar function per kind, shared by `classify` and
+  `execute`; refuse, never escape** (ADR
+  [plugin-identifiers-one-grammar-for-classify-and-execute](../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md)).
+  Every identifier a call carries — an argument, a resource ref, connection
+  metadata, a value the provider answered — is read by the grammar function
+  of its kind, which returns the value or `null`; `classify` builds its
+  slices from the result and `execute` its request from the same function,
+  never from the raw arguments. A value outside the grammar is `denied` on
+  one side and refused before any request on the other: it is not trimmed,
+  escaped or replaced. `encodeURIComponent` does not neutralise `.` and
+  `..` — it leaves them alone and the URL parser then removes them, so the
+  request would hit the workspace while the slice named a widget. The
+  template's grammar is `pathIdent` (`PATH_IDENT`, `^[A-Za-z0-9_-]{1,64}$`)
+  in `plugins/_template/src/classify.ts`, the default for a URL path
+  segment; a value that is legitimately dotted or multi-segment (a domain,
+  a file path, a git ref) gets a grammar of its own that forbids empty and
+  dot-only segments. A plugin proves it with a test file that feeds hostile
+  values (`..`, `.`, `a/../b`, `%2e%2e`, `%2f`, empty, overlong) to both
+  sides; `apps/gateway/tests/unit/structural/plugin-identifier-tests.test.ts`
+  fails for a plugin directory without one. Each provider handbook lists its
+  grammars under "Identifiers";
 - a call that cannot be placed on the data model is `denied`, never mapped
   to a broad slice;
 - a destructive operation has its own risk through a **verb leaf**:
@@ -580,7 +595,8 @@ The classifier shows the conventions every plugin follows:
 
 `execute.ts` resolves the workspace with the same `resolveWorkspace` and the
 widget id with the same `pathIdent` (a refusal is an `isError` result,
-returned before any request), so the call runs on what the slice named. It
+returned before any request), so the call runs on what the slice named; it
+validates by itself and is safe when called alone. It
 shows the injected `fetch`, the bearer read from the `api-key` secret by
 `API_KEY_FIELD` (a credential without it is refused, never sent as
 `Bearer undefined`), the two thrown provider failures (`UpstreamAuthError`
@@ -667,7 +683,8 @@ fallback: true on it`** — add the flag to the catch-all entry; the kit's
 - ADRs
   [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md),
   [plugin-catalog-path-and-standalone-tracing](../decisions/plugin-catalog-path-and-standalone-tracing.md),
-  [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md);
+  [fallback-risk-only-when-uncategorized](../decisions/fallback-risk-only-when-uncategorized.md),
+  [plugin-identifiers-one-grammar-for-classify-and-execute](../decisions/plugin-identifiers-one-grammar-for-classify-and-execute.md);
   neighbours [policy-engine](./policy-engine.md),
   [`providers/README.md`](./providers/README.md) (index of the
   per-provider handbooks).

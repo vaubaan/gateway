@@ -99,7 +99,7 @@ Rules a reviewer must know (`src/classify.ts`) :
   dot-only ; an email has one `@` and a dotted domain ; `project_ref` is a
   host label ; `list_tables` schemas are unquoted SQL identifiers ;
   `list_users` pages are positive integers ; `content_type` is a media
-  type. Anything else, or a missing required identifier, is a denial and an
+  type ; the `type` of `get_advisors` is `security` or `performance`. Anything else, or a missing required identifier, is a denial and an
   `isError` refusal before any request — never escaped, never a broad slice.
 
 `supabase__get_anon_key` returns the project URL and the anon key ;

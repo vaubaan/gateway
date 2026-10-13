@@ -101,6 +101,10 @@ Rules the classifier enforces, all `denied` (audited, never executed):
   `domain` is a dotted host name (`domainName`) and never reaches the path
   — the resource's `domain_id` does, checked by `pathIdent` too. `classify`
   and `execute` share these functions; nothing is escaped or repaired.
+- a recipient string that could be read as several addresses: one string
+  is one address (`parseAddress` in `zones.ts`) — a display name takes no
+  `,` `;` `@` `"` `\\` nor control character, a local part no `,` or `;`.
+  Several recipients are an array, each zoned on its own.
 
 A single send classifies to one slice, `domain[D].to-zone[Z].W`, whatever
 its number of recipients; a batch adds `domain[D].recipient-count[batch].W`

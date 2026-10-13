@@ -65,6 +65,10 @@ When a delegation is revoked for `refresh-token-replay` or
   a link to each, saying they were **not** revoked and what to do: revoke the
   ones not recognised, rotate the token of the ones kept.
 
+If the missions cannot be read at that moment, the delegation is revoked and
+its entry written all the same, **without** the key: absent means "not
+listed", which is not the same as an empty list; the failure is logged.
+
 Nothing is stored for this: the list is derived at every read from the
 delegation's revoke reason and the missions' `delegation_id`, and shrinks as
 the user revokes missions or they expire.

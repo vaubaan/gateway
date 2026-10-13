@@ -224,6 +224,18 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
     expect(await rig.root.store.groups.groupsOf(bob.id)).toEqual([]);
     expect((await rig.root.store.connections.getById(ownConnectionId))?.status).toBe('unowned');
 
+    // Reactivated, he is the owner of his connection again as far as authority goes
+    // (a mission on it would be grounded), but the connection is ownerless: no owner
+    // act passes until the operator reassigns it.
+    const own = (await rig.root.store.connections.getById(ownConnectionId))!;
+    expect((await rig.root.missions.authority.authorityOf(bob, own)).basis).toBe('owner');
+    await expect(
+      rig.root.shares.service.share(await rig.actor(bob), ownConnectionId, {
+        target: { kind: 'user', email: ADA.email },
+        riskIds: ['github.read-code'],
+      }),
+    ).rejects.toMatchObject({ code: 'connection-unowned' });
+
     // A new sign-in is a new session.
     await nextMillisecond();
     const browser = rig.browser();
@@ -263,6 +275,35 @@ describe('deactivating a user: sessions end, delegations are revoked, missions f
     await expect(service.reactivate(operator(), 'no-such-user')).rejects.toMatchObject({
       code: 'not-found',
     });
+  });
+
+  it('closes everything it can when one step fails, then reports the failure: the audit entry and the settlement do not depend on the delegations', async () => {
+    const original = rig.root.oauth.delegations.revokeAllOf.bind(rig.root.oauth.delegations);
+    rig.root.oauth.delegations.revokeAllOf = async () => {
+      throw new Error('delegations unavailable');
+    };
+    try {
+      await expect(rig.root.users.service.deactivate(operator(), bob.id)).rejects.toThrow(
+        'delegations unavailable',
+      );
+    } finally {
+      rig.root.oauth.delegations.revokeAllOf = original;
+    }
+    // The user is deactivated and everything else was closed.
+    expect((await rig.root.store.users.getById(bob.id))?.status).toBe('removed');
+    expect(await rig.root.store.groups.groupsOf(bob.id)).toEqual([]);
+    expect((await rig.root.store.connections.getById(ownConnectionId))?.status).toBe('unowned');
+    expect(await rig.adminEntries('user-deactivated')).toMatchObject([
+      { after: { status: 'removed', groups_left: ['reviewers'], delegations_revoked: 0 } },
+    ]);
+    expect(await rig.adminEntries('mission-orphaned')).toHaveLength(1);
+    // The delegation was not revoked — and is dead all the same: its user is not active.
+    const door = await toolsList(rig, MANAGEMENT_URL, bearer(agent.delegated.tokens.access_token));
+    expect(door.status).toBe(401);
+    expect((await refresh()).status).toBe(400);
+    expect(rig.logs.some((line) => line.includes('not everything they held was closed'))).toBe(
+      true,
+    );
   });
 
   it('the bootstrap operator may deactivate anyone, an operator included', async () => {

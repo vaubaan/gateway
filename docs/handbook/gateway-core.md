@@ -40,7 +40,8 @@ packages/gateway-core/
     errors.ts        Refusal union, `refuse.*` builders, JSON-RPC mapping, AuthError
     audit.ts         CallAuditEntry / AdminAuditEntry, AuditWriter, MemoryAuditWriter,
                      BOOTSTRAP_ACTOR_ID / BOOTSTRAP_ACTOR_LABEL
-    fingerprint.ts   canonicalJson, fingerprintArguments — the one argument hash (audit, approvals)
+    fingerprint.ts   canonicalJson, fingerprintArguments — the one argument hash (audit, approvals);
+                     unfaithfulArgument — the first value JSON does not carry as is
     cache.ts         CacheClient interface, bounded MemoryCacheClient (single-process only)
     risk-gateway.ts  decision core: evaluateCallForToken (classify → intersect → allow/deny),
                      Classifier, CallVerdict, AcceptedRisksSnapshot
@@ -148,7 +149,7 @@ Two conventions:
   query for
   "actions with no business effect" is `decision = 'allowed' AND
 upstream_error IS NOT NULL`.
-- A structural rejection without a code (unknown tool, a provider the
+- A structural rejection without a code (an argument JSON cannot carry, unknown tool, a provider the
   mission has no connection for, classifier denial, catalog not loaded) is `decision = 'refused'`, `refusal_code = null`,
   `refusal_reason = <text>`.
 
@@ -158,9 +159,10 @@ discovered, resource edited, share created/revoked,
 mission issued/rotated/revoked/closed/orphaned/restored, budget extended, period reset,
 expiry extended, gate opened, gate changed, approval granted, request refused,
 delegation granted/revoked, group created, group member added/removed,
-OAuth client approved/disabled, config changed),
+OAuth client approved/disabled, user deactivated/reactivated, config changed),
 `object {type, id}` with `type: AdminObjectType` (`connection | share |
-mission | request | delegation | group | oauth-client | instance-config`),
+mission | request | delegation | group | oauth-client | user |
+instance-config`),
 `before`, `after`, `delegated_client_id` (set when the act came through
 the management door).
 
@@ -185,6 +187,20 @@ honoured, BigInt refused. It is the same value that binds approval
 requests, approvals and the `approval-required` refusal, so an audit row
 joins the request it produced. The budget re-exports both functions; v4's
 16-hex `hashArguments` is gone.
+
+**What the fingerprint cannot tell apart.** Canonical JSON writes `null` for
+a number JSON has no text for (`Infinity`, `-Infinity`, `NaN`), so `{"n":
+Infinity}` and `{"n": null}` share a fingerprint — and
+`JSON.parse('{"n":1e999}')` yields `Infinity`. `unfaithfulArgument(args)`
+(`fingerprint.ts`) returns the first such value, or `null`:
+`UnfaithfulArgument { kind: 'non-finite-number' | 'bigint', path, value }`,
+`path` like `a.b[2]` (`(arguments)` for the arguments as a whole), `value`
+one of `Infinity`, `-Infinity`, `NaN`, `a BigInt` — never the arguments.
+Functions, symbols and `undefined` are not reported: they are dropped, as
+`JSON.stringify` drops them. The pipeline rejects a call that has one before
+anything else looks at it (below). `-0` and `0` also share a fingerprint;
+JSON carries both as `0`, and it is accepted (ADR
+[execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)).
 
 `MemoryAuditWriter` keeps entries in memory for tests (`.entries`, `.calls`,
 `.admin`).
@@ -246,6 +262,7 @@ door.
 ### Order of a call
 
 ```
+unfaithfulArgument(call.args)       rejected, no code        (pure, this module)
 checkMissionActive(ctx, now)        mission-inactive         (pure, this module)
 resources.resolve(ctx, call)        resource-not-in-mission  (ResourceStage — execution door)
 checkConnectionAvailable(target)    connection-unavailable   (pure, this module)
@@ -264,8 +281,15 @@ returns a `BudgetDecision`). `CallPipeline.execute(ctx, call)` returns a
 - `refused` — a typed `Refusal` + audit entry (`refusal_code` set,
   `refusal_reason` = the hint; a `risk-not-accepted` entry also records
   the `risks_touched` the decision core computed, covered and missing);
-- `rejected` — structural, no code (the resource stage found no target,
-  classifier denial, catalog missing); fail closed;
+- `rejected` — structural, no code (an argument that is not a JSON value,
+  the resource stage found no target, classifier denial, catalog missing);
+  fail closed. The first of these is decided before the mission's state is
+  read and before any stage, and its reason reads
+  `argument '<path>' is <value>: arguments must be JSON values (…)`.
+  Its audit entry keeps the canonical hash of the arguments (the
+  number reads `null` there), so it joins the other entries of the same
+  arguments; for a BigInt, which has no canonical form and cannot come from a
+  JSON body, the entry is built over empty arguments;
 - `failed` — allowed, then the provider threw (`decision: 'allowed'`,
   `upstream_error` set). `refusal` is the typed refusal when the stage threw
   `UpstreamRefusalError` (`connection-unavailable` after a rejected
@@ -420,16 +444,18 @@ pivot D1; the Upstash ADR is superseded).
   an orphaned mission says how long an earlier request stays grantable.
 - `audit.test.ts` (2) — `MemoryAuditWriter` over both kinds; the call entry
   carries every §8 field.
-- `fingerprint.test.ts` (8) — key sorting, `undefined` and array holes,
+- `fingerprint.test.ts` (12) — key sorting, `undefined` and array holes,
   `toJSON`, primitives, BigInt refused, sha256 vector, key order vs value
-  change, no arguments, 64 hex.
+  change, no arguments, 64 hex; `unfaithfulArgument`: nothing found in what
+  JSON carries as is, the first non-finite number named with its path, a
+  BigInt named, `Infinity` and `null` colliding in the fingerprint.
 - `cache.test.ts` (7) — TTL, a non-positive or non-finite TTL caching
   nothing, delete, bound eviction order, refresh on re-set, sweep before
   eviction, invalid bound.
 - `authenticate.test.ts` (11) — door table, pure `checkDoor` on every
   mismatch, `parseBearer`, `DoorAuthenticator` for mission token vs
   delegated token vs session at each door, unknown bearer → `AuthError`.
-- `pipeline.test.ts` (27) — `checkMissionActive` (status, passed, future
+- `pipeline.test.ts` (28) — `checkMissionActive` (status, passed, future
   and unreadable `expires_at`, the wording of an expired status without a
   stored expiry), `checkConnectionAvailable` (`unowned` passes,
   `expired` and `revoked` refuse), then the pipeline over
@@ -442,7 +468,8 @@ pivot D1; the Upstash ADR is superseded).
   without `UpstreamRefusalError`; `UpstreamFailureError` with an argument
   marker absent from the audit and present on the outcome; the bound of the
   stored summary; `upstreamErrorClassName`), a call with no target rejected before
-  any risk, audit failure propagating — including a writer that fails once
+  any risk, an argument JSON cannot carry (`Infinity`) rejected before any
+  stage, audit failure propagating — including a writer that fails once
   after a successful forward (the call rejects, the provider was called
   once, nothing is stored as an upstream failure) and one that fails after
   an upstream failure.
@@ -459,7 +486,9 @@ pivot D1; the Upstash ADR is superseded).
   D1 (in-memory cache, single process), D4 (budget, claim), amendments
   (approval gate, management door, English);
   [plugin-contract-and-credential-spec](../decisions/plugin-contract-and-credential-spec.md)
-  D1 (`classify`), D3 (`Resource`, `EnvResolver`), D8 (`shared` reset).
+  D1 (`classify`), D3 (`Resource`, `EnvResolver`), D8 (`shared` reset);
+  [execution-door-json-faithful-arguments-and-shared-throttle](../decisions/execution-door-json-faithful-arguments-and-shared-throttle.md)
+  (arguments must be JSON values).
 - Spec [vaubaan-gateway](../spec/vaubaan-gateway.md) §3.1–3.5, §4.1,
   §6, §8, §10; [gateway-risk-model](../spec/gateway-risk-model.md) §8,
   §12.
