@@ -38,6 +38,21 @@ jobs:
       - run: npm run build
       - run: npm run test
 
+  # Dependency audit: `npm audit --omit=dev` against the reviewed allowlist
+  # (.github/audit-allowlist.json). Fails on an advisory that is not allowlisted
+  # or whose review date has passed; a registry that does not answer after the
+  # retries is a warning, never a failure (scripts/audit-gate.mjs). Reads the
+  # lockfile only: nothing is installed, no install script runs.
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/audit-gate.mjs
+
   # Browser tests against an ephemeral instance (apps/gateway/tests/e2e/v5):
   # the built app on the real composition root with the `:memory:` store, a
   # simulated identity provider and a mocked provider. No credential, no

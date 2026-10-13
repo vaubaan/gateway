@@ -9,6 +9,7 @@
 # 4. native addons traced      -> argon2 and better-sqlite3 (prebuilt .node) load inside the image
 # 5. non-root                  -> the process runs as uid 10001
 # 6. no env file shipped       -> the standalone output carries no apps/gateway/.env*
+# 7. no test file shipped      -> no test, spec, fixture or demo tree of this repository in the image
 #
 # Optional expectations, set by the release pipeline (.github/workflows/release.yml),
 # which knows what it built:
@@ -124,5 +125,23 @@ pass "process runs as non-root"
 shipped="$(docker exec "$NAME" sh -c 'ls apps/gateway/.env* 2>/dev/null' || true)"
 [ -z "$shipped" ] || fail "env file shipped inside the image: $shipped"
 pass "no env file inside the image"
+
+# 7. No test file shipped: the image is the traced standalone output, and a trace
+#    that follows an import from a test helper (or a tracing include that is too
+#    wide) would carry tests, fixtures, the simulated identity provider or the
+#    demo launcher into production. Third-party packages are not this
+#    repository's to judge: node_modules is skipped. The list must be empty,
+#    and the search itself must have looked at something.
+searched="$(docker exec "$NAME" sh -c 'find /app -path "*/node_modules" -prune -o -type f -print | wc -l')"
+[ "${searched:-0}" -gt 0 ] || fail "the test-file search found no file at all under /app"
+tests_shipped="$(docker exec "$NAME" sh -c '
+  find /app -path "*/node_modules" -prune -o \
+    \( -type f \( -name "*.test.*" -o -name "*.spec.*" -o -name "*.bench.*" \
+               -o -name "testing.ts" -o -name "testing.js" -o -name "vitest.config.*" \
+               -o -name "playwright.config.*" \) \
+       -o -type d \( -name tests -o -name __tests__ -o -name e2e -o -name fixtures \) \) \
+    -print' | head -n 20)"
+[ -z "$tests_shipped" ] || fail "test files shipped inside the image:\n$tests_shipped"
+pass "no test, spec, fixture or demo file inside the image (${searched} files searched)"
 
 echo "SMOKE PASSED"

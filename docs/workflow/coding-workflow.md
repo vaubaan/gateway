@@ -139,6 +139,8 @@ jobs:
     - npm run format:check
     - npm run build # next build (Turbopack); standalone output
     - npm run test # vitest run
+  audit: # no install; timeout 5 min
+    - node scripts/audit-gate.mjs # npm audit --omit=dev against .github/audit-allowlist.json
   e2e: # needs: check; timeout 20 min
     - npx playwright install --with-deps chromium
     - npm run test:e2e:v5 # next build, then Playwright on the ephemeral instance
@@ -152,8 +154,55 @@ jobs:
 The `docker` job builds the single gateway image and runs the container
 smoke test described in [`docs/tests/e2e-tests.md`](../tests/e2e-tests.md)
 (fail-fast exit naming the key, https rule, `/healthz`, secret redaction,
-native addons, non-root, no env file shipped). The image is not published; that is the release
+native addons, non-root, no env file shipped, no test file shipped). The image is not published; that is the release
 pipeline's job ([Release](#release)). No Node matrix, no cross-OS.
+
+### Dependency audit
+
+The `audit` job runs `node scripts/audit-gate.mjs`: `npm audit --omit=dev
+--json` on the lockfile (nothing is installed, no install script runs),
+compared with the reviewed allowlist `.github/audit-allowlist.json`. Because
+the release pipeline calls `ci.yml`, the same gate stands in front of every
+release.
+
+| What the run finds                                                        | Result                                      |
+| ------------------------------------------------------------------------- | ------------------------------------------- |
+| no advisory, or only allowlisted ones                                     | pass                                        |
+| an advisory of severity `moderate`, `high` or `critical` not in the list  | **fail**, one error annotation per advisory |
+| an allowlisted advisory whose `review_by` date has passed                 | **fail**: the review lapsed                 |
+| an advisory of severity `low` or `info`                                   | pass, listed as a notice                    |
+| an allowlist entry that matches nothing in this tree                      | pass, notice (prune it)                     |
+| the registry does not answer after four attempts (2 s, 8 s, 20 s between) | pass, with a **warning** annotation         |
+| the allowlist is invalid, or the output is neither a report nor an outage | fail (exit 2): the gate itself is broken    |
+
+A registry outage is not a vulnerability: it never fails a merge or a
+release, and the warning says that no advisory was checked by that run. The
+two cases are told apart by what `npm audit --json` printed (a report, or an
+`error` whose code or text is a network or registry failure —
+`parseAuditOutput`), never by the exit code.
+
+**When the gate fails**, in this order:
+
+1. Upgrade. `npm update <package>` when the fixed version is within the
+   ranges already declared (a lockfile-only change); otherwise bump the direct
+   dependency that brings it.
+2. If no fixed version exists, or the upgrade is not possible now, read the
+   advisory and decide whether the vulnerable code is reachable **in what the
+   instance runs**: `npm ls --all --omit=dev <package>` says which dependency
+   brings it. Only then add an entry to `.github/audit-allowlist.json`:
+   `id` (one GHSA id — never a wildcard, never a package-wide mute),
+   `package`, `reason` (why it does not apply here, in a sentence a reviewer
+   can check), `reviewed` (today) and `review_by` (at most a quarter later).
+   The pull request that adds the entry is reviewed like code.
+3. Never raise the gated severities or remove the job to get a release out.
+
+**Review cadence.** Every entry carries its own `review_by`, at most about a
+quarter after `reviewed` (`scripts/audit-gate.test.mjs` holds the bound). On
+that date the gate fails until somebody looks again: upgrade if a fix exists
+now, otherwise re-read the advisory, then move both dates. Entries that no
+longer match anything are removed in the same pass. Before every release,
+`node scripts/audit-gate.mjs` is run once by hand so a lapsed review is not
+discovered by the release pipeline.
 
 The `e2e` job (P1.9) runs the browser tests of
 `apps/gateway/tests/e2e/v5/` — the cutover smoke among them — against an
@@ -406,6 +455,11 @@ the security fixes of its tag, so it is refreshed by hand: before every
 release, and when Node 22 or Debian publishes a security release. Nothing
 proposes the bump automatically.
 
+0. To know whether a refresh is due without a new version: the same tag is
+   rebuilt when Debian publishes fixes, so
+   `docker buildx imagetools inspect node:<pinned version>-bookworm-slim`
+   answering another `Digest:` than the one in `ARG NODE_IMAGE` means the
+   pinned image is behind its own tag. Same check for Caddy.
 1. `docker buildx imagetools inspect node:<new version>-bookworm-slim` and
    read the `Digest:` line — the digest of the multi-architecture index,
    never of one platform. Check that `linux/amd64` and `linux/arm64` are
@@ -413,7 +467,10 @@ proposes the bump automatically.
 2. Change the version and the digest **together** in `ARG NODE_IMAGE`, and
    the version where the documentation quotes it (`deploy/README.md`, the
    "Docker image" section above). Same for Caddy in `deploy/compose.yaml`.
-3. `npm run docker:build && npm run docker:smoke`.
+3. `npm run docker:build && npm run docker:smoke`, and `npm run test`: the
+   structural suite holds that both references are `name:tag@sha256:<64 hex>`
+   and that the documentation quotes the pinned versions
+   (`apps/gateway/tests/unit/structural/base-images-pinned.test.ts`).
 4. Pull request `chore(deps): base image node <version>`, with a changelog
    bullet under `### Security` or `### Changed`.
 
