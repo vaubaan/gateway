@@ -1,18 +1,11 @@
 /**
- * StripeAdapter — paste-token mode, all custom REST tools.
+ * LEGACY v4 adapter — paste-token mode, one raw API key per binding.
  *
- * Auth model : the user pastes a Stripe API restricted key (`sk_test_*`,
- * `sk_live_*`, or `rk_live_*`). This is stored encrypted in
- * `provider_admins.access_token_encrypted` and decrypted by the gateway
- * build.ts before reaching the adapter.
+ * Kept so `apps/gateway/src/lib/gateway/build.ts` compiles until P1.6
+ * rewrites the execution door on `stripePlugin`. Nothing here is reached by
+ * the v5 gateway.
  *
- * `mintUpstreamToken()` returns the raw stored secret (the API key string).
- * Binding validation calls `GET /v1/account` to verify the key is valid
- * and extract the account id.
- *
- * Spec     : docs/spec/gateway-risk-model.md §7, §8.
- * Research : .vaubaan/research/providers/stripe.md §6.
- * Handbook : docs/handbook/providers/stripe.md §6, §7.
+ * @deprecated legacy v4, deleted in P1.6 — use `stripePlugin` from `./index.ts`.
  */
 
 import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
@@ -31,6 +24,7 @@ export interface ValidateResult {
   error?: string;
 }
 
+/** @deprecated legacy v4, deleted in P1.6 — use `stripePlugin`. */
 export class StripeAdapter {
   readonly provider = 'stripe' as const;
   readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;

@@ -1,42 +1,46 @@
-# Stripe risk catalog — v4 risk-based model.
+# Risk catalog of the `stripe` provider.
 #
-# Spec     : docs/spec/gateway-risk-model.md §4 + §4bis (scope caps).
-# Research : .vaubaan/research/providers/stripe.md §3.
-# ADR      : docs/decisions/scope-caps-amplification-axis.md
-#            docs/decisions/unified-gates-drop-confirm.md (no default_gate).
+# Spec : docs/spec/gateway-risk-model.md §4 + §4bis (scope caps),
+#        docs/spec/vaubaan-gateway.md §3.2 (presets).
+# ADR  : docs/decisions/scope-caps-amplification-axis.md,
+#        docs/decisions/unified-gates-drop-confirm.md (no default_gate),
+#        docs/decisions/plugin-contract-and-credential-spec.md (presets, loader).
 #
-# 14 named risks + 1 fallback = 15 total. RiskId format follows
-# `<provider>.<name>` (cf. shared/src/risk.ts RISK_ID_REGEX). The env
-# qualification (test/live) is encoded in the binding (mode is `envScopable`),
-# not in the RiskId — the runtime resolves the env from the binding and
-# qualifies the cardinal risks as `stripe[live].refund-create` etc.
+# 16 named risks + 1 fallback. Every risk, fallback included, lives under
+# `account[**].mode[**]` and is env-scoped on the Stripe mode
+# (`acceptable_in_envs: [test, live]`) : the runtime qualifies it from the
+# resource the call targets, so a mission can accept
+# `stripe[test].refund-create` without `stripe[live].refund-create`.
 #
-# Slice patterns use the DSL declared in policy-engine/src/slice-dsl.ts
-# (no regex, only `[*]` / `[**]` wildcards and `[a,b,c]` lists). Each pattern
-# must match at least one tool's emitted slice — verified by the
-# `risk-catalog.test.ts` coverage lint.
+# The fallback matches every write and the engine never drops it from
+# `risks_touched` (policy-engine `risk-evaluator.ts`) : a preset that allows
+# writes must therefore also carry the fallback of the same mode.
 #
-# One entry carries `caps` + `infra_limits` per the scope-caps ADR :
-# `stripe.refund-create` (cardinal cost-unbounded irreversible action — the
-# only Vaubaan risk to date touching real outbound cash). The other 13 risks
-# stay caps-free at MVP — the org chooses.
+# Two entries carry `caps` + `infra_limits` : `refund-create` and
+# `payout-create`, the two actions that move real money out of the account.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Removing or renaming a risk : forbidden — mark it `deprecated: true` and
+# point `replaced_by` at its successor.
 
 provider: stripe
+catalog_version: 2
+catalog_date: 2026-10-13
 
 risks:
-  # ─── READS ─────────────────────────────────────────────────────────────
+  # ─── Reads ───────────────────────────────────────────────────────────────
 
   - id: stripe.read-catalog
     label: 'Read catalog (products, prices, coupons, promotion codes)'
     reason: >-
-      Inventaire du catalogue commercial. Métadonnées publiques par
-      construction (les prix s'affichent sur le site marketing).
-      Aucune PII, aucun secret.
+      Inventory of the commercial catalog. Public metadata by construction
+      (prices are shown on the marketing site). No PII, no secret.
     matches:
       - 'stripe.account[**].mode[**].product[**].R'
       - 'stripe.account[**].mode[**].product[**].price[**].R'
       - 'stripe.account[**].mode[**].coupon[**].R'
       - 'stripe.account[**].mode[**].coupon[**].promotion-code[**].R'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: reversible
       blast: single
@@ -48,16 +52,17 @@ risks:
   - id: stripe.read-billing-history
     label: 'Read billing history (subscriptions, invoices, charges, payment intents)'
     reason: >-
-      Lecture de l'historique transactionnel. Pas d'exfil de PAN (Stripe
-      masque), mais montants + dates + descriptions par client. Donne la
-      trajectoire commerciale et permet l'analytics business. Distinct
-      du read-customer-pii pour permettre des stats anonymisées.
+      Reads the transactional history. No card number leaves Stripe, but
+      amounts, dates and descriptions per customer reveal the commercial
+      trajectory. Distinct from read-customer-pii so anonymised statistics
+      can be accepted without identities.
     matches:
       - 'stripe.account[**].mode[**].customer[**].R'
       - 'stripe.account[**].mode[**].customer[**].subscription[**].R'
       - 'stripe.account[**].mode[**].customer[**].invoice[**].R'
       - 'stripe.account[**].mode[**].payment-intent[**].R'
       - 'stripe.account[**].mode[**].payment-intent[**].charge[**].R'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: reversible
       blast: account
@@ -69,12 +74,12 @@ risks:
   - id: stripe.read-customer-pii
     label: 'Read customer PII (email, name, address, phone)'
     reason: >-
-      Lecture des champs PII des customers (`email`, `name`, `address`,
-      `phone`, `shipping`). Surface RGPD/CCPA — toute consommation par un
-      agent IA déclenche obligation de minimisation. Distinct du
-      read-billing-history pour permettre lecture "stats anonymisées" sans
-      débloquer l'identité.
+      Reads the personal fields of customers (`email`, `name`, `address`,
+      `phone`, `shipping`). GDPR/CCPA surface : any consumption by an agent
+      triggers a minimisation duty. Emitted alongside the business payload
+      of every customer read, so a mission without it cannot read customers.
     matches: 'stripe.account[**].mode[**].customer[**].pii.R'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: reversible
       blast: account
@@ -84,16 +89,17 @@ risks:
       persistence: stateless
 
   - id: stripe.read-balance
-    label: 'Read balance and balance transactions (cash position)'
+    label: 'Read balance, ledger and events (cash position)'
     reason: >-
-      Solde dispo + en attente + historique du ledger. Donne la position
-      cash en temps réel. Sensible côté direction financière mais pas PII
-      — distinct du read-billing-history pour permettre un agent "ops
-      monitoring" sans accès aux détails clients.
+      Available and pending balance, ledger history, event feed. Real-time
+      cash position : sensitive for finance, no PII. Distinct from
+      read-billing-history so an "ops monitoring" agent needs no customer
+      details.
     matches:
       - 'stripe.account[**].mode[**].balance.R'
       - 'stripe.account[**].mode[**].balance-transaction[**].R'
       - 'stripe.account[**].mode[**].event[**].R'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: reversible
       blast: account
@@ -102,19 +108,20 @@ risks:
       visibility: internal
       persistence: stateless
 
-  # ─── WRITES — CATALOGUE (produits / prix / coupons) ────────────────────
+  # ─── Writes — catalog ────────────────────────────────────────────────────
 
   - id: stripe.catalog-write
     label: 'Create / update products, prices, coupons, promotion codes'
     reason: >-
-      Modifications du catalogue commercial. Réversible (archive +
-      recreate), pas d'impact direct sur les paiements existants, mais
-      affecte tous les futurs checkouts. Posture-shift "soft" sur l'offre.
+      Changes the commercial catalog. Reversible (archive and recreate), no
+      effect on existing payments, but every future checkout sees it. A soft
+      posture shift on the offer.
     matches:
       - 'stripe.account[**].mode[**].product[**].W'
       - 'stripe.account[**].mode[**].product[**].price[**].W'
       - 'stripe.account[**].mode[**].coupon[**].W'
       - 'stripe.account[**].mode[**].coupon[**].promotion-code[**].W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: reversible
       blast: account
@@ -123,17 +130,17 @@ risks:
       visibility: public
       persistence: posture
 
-  # ─── WRITES — ABONNEMENTS ──────────────────────────────────────────────
+  # ─── Writes — subscriptions ──────────────────────────────────────────────
 
   - id: stripe.subscription-create
-    label: 'Create a new subscription (may trigger immediate charge)'
+    label: 'Create a subscription (may charge immediately)'
     reason: >-
-      Création d'un abonnement. Si proration immédiate (cas par défaut sans
-      `billing_cycle_anchor`), Stripe facture immédiatement — donc side
-      effect cash. Le classifier émet en parallèle `payment-intent.W` pour
-      forcer l'opérateur à accepter le risque cash en même temps que la
-      création de sub (worst-case, research §4.3 cas 2).
+      Creates a subscription. With immediate proration (the default without
+      `billing_cycle_anchor`) Stripe charges the customer at creation. The
+      classifier also emits `payment-intent.W` so the cash side effect is
+      accepted explicitly.
     matches: 'stripe.account[**].mode[**].customer[**].subscription.W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: costly
       blast: single
@@ -143,13 +150,13 @@ risks:
       persistence: posture
 
   - id: stripe.subscription-update
-    label: 'Update an existing subscription (plan change, quantity, metadata)'
+    label: 'Update a subscription (plan, quantity, pause, metadata)'
     reason: >-
-      Modification d'abonnement existant : changement de plan, quantité,
-      métadonnées, pause_collection. Costly si proration (charge ou crédit
-      immédiat selon direction). Posture-shift sur la facturation
-      récurrente.
+      Changes an existing subscription : plan, quantity, metadata,
+      `pause_collection`. Costly when proration charges or credits the
+      customer. Posture shift on recurring billing.
     matches: 'stripe.account[**].mode[**].customer[**].subscription[**].W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: costly
       blast: single
@@ -161,11 +168,11 @@ risks:
   - id: stripe.subscription-cancel
     label: 'Cancel a subscription (stops future charges)'
     reason: >-
-      Annulation d'abonnement. Stoppe la facturation future. Irréversible
-      sémantiquement (resubscribe = nouvelle subscription, perte
-      d'historique de fidélité). Côté client : perte d'accès au service
-      à la fin de période.
+      Stops future billing. Semantically irreversible : resubscribing creates
+      a new subscription and loses the history. The customer loses access at
+      the end of the period.
     matches: 'stripe.account[**].mode[**].customer[**].subscription[**].cancel.W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: irreversible
       blast: single
@@ -174,15 +181,15 @@ risks:
       visibility: internal
       persistence: posture
 
-  # ─── WRITES — FACTURES ─────────────────────────────────────────────────
+  # ─── Writes — invoices ───────────────────────────────────────────────────
 
   - id: stripe.invoice-create-draft
     label: 'Create a draft invoice (no customer notification)'
     reason: >-
-      Création d'une facture en brouillon. Aucune notification client,
-      aucun mouvement d'argent. Réversible par delete tant que non
-      finalisée. Surface acceptable pour un agent "billing assistant".
+      Creates an invoice in draft state. No notification, no money movement,
+      deletable until finalised. Acceptable surface for a billing assistant.
     matches: 'stripe.account[**].mode[**].customer[**].invoice.W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: reversible
       blast: single
@@ -192,13 +199,13 @@ risks:
       persistence: session
 
   - id: stripe.invoice-finalize
-    label: 'Finalize an invoice (locks it and triggers payment attempt)'
+    label: 'Finalize an invoice (locks it, notifies, attempts collection)'
     reason: >-
-      Finalisation d'une facture draft. À ce moment, Stripe verrouille
-      l'invoice (impossible à modifier), notifie le client (email auto par
-      défaut) et tente automatiquement la collection si l'invoice est
-      `auto_advance: true`. Costly à reverter (void laisse trace).
+      Locks the draft, emails the customer by default and attempts
+      collection when `auto_advance` is set. Costly to revert : voiding
+      leaves a trace.
     matches: 'stripe.account[**].mode[**].customer[**].invoice[**].finalize.W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: costly
       blast: single
@@ -210,11 +217,11 @@ risks:
   - id: stripe.invoice-void
     label: 'Void a finalized invoice (cannot be undone)'
     reason: >-
-      Annulation d'une invoice finalisée. **Action irréversible** par
-      design Stripe (papertrail conservé mais l'invoice est inerte
-      définitivement). Pas de mouvement d'argent direct mais déprécie la
-      créance — impact comptable.
+      Voids a finalised invoice. Irreversible by design (the paper trail
+      stays, the invoice is inert for ever). No direct money movement but
+      the receivable is written off : accounting impact.
     matches: 'stripe.account[**].mode[**].customer[**].invoice[**].void.W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: irreversible
       blast: single
@@ -223,18 +230,18 @@ risks:
       visibility: team
       persistence: posture
 
-  # ─── WRITES — REFUNDS (le plus sensible) ───────────────────────────────
+  # ─── Writes — money out ──────────────────────────────────────────────────
 
   - id: stripe.refund-create
     label: 'Create a refund (real money out of the merchant account)'
     reason: >-
-      Émission d'un remboursement. **Sortie d'argent réelle** côté
-      merchant ; le coût est borné par le montant de la charge mais cumulé
-      sur N appels = non borné en pratique. **Irréversible** (un refund
-      ne se reverse pas — il faut recharger le client, qui peut refuser).
-      Vecteur cardinal d'exfiltration financière par agent compromis ou
-      prompt-injected.
+      Issues a refund. Real money leaves the account ; bounded per call by
+      the charge amount, unbounded over N calls. Irreversible : a refund is
+      not reversed, the customer has to be charged again and may refuse.
+      The cardinal financial-exfiltration vector of a compromised or
+      prompt-injected agent.
     matches: 'stripe.account[**].mode[**].payment-intent[**].charge[**].refund[**].W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: irreversible
       blast: account
@@ -249,17 +256,57 @@ risks:
     infra_limits:
       calls_per_minute_max: 30
 
-  # ─── WRITES — WEBHOOKS (intégration + credential mint) ─────────────────
+  - id: stripe.payout-create
+    label: 'Create a payout (moves the balance to the bank account on file)'
+    reason: >-
+      Sends funds from the Stripe balance to the external account on file.
+      Cancellable only while pending, then irreversible ; the amount is
+      bounded by the balance, not by a budget. In test mode no money moves.
+    matches: 'stripe.account[**].mode[**].payout[**].W'
+    acceptable_in_envs: [test, live]
+    vector:
+      reversibility: irreversible
+      blast: account
+      data: data
+      cost: unbounded
+      visibility: internal
+      persistence: posture
+    caps:
+      items_per_call_max: 1
+      calls_per_minute_max: 2
+      calls_per_session_max: 5
+    infra_limits:
+      calls_per_minute_max: 30
+
+  # ─── Writes — customers ──────────────────────────────────────────────────
+
+  - id: stripe.customer-delete
+    label: 'Delete a customer (cancels its subscriptions, cannot be undone)'
+    reason: >-
+      Permanently deletes a customer and immediately cancels every active
+      subscription. Irreversible ; erases personal data (a GDPR erasure
+      path) and recurring revenue in one call.
+    matches: 'stripe.account[**].mode[**].customer[**].delete.W'
+    acceptable_in_envs: [test, live]
+    vector:
+      reversibility: irreversible
+      blast: single
+      data: pii
+      cost: moderate
+      visibility: team
+      persistence: posture
+
+  # ─── Writes — webhooks (configuration + credential mint) ─────────────────
 
   - id: stripe.webhook-endpoint-write
     label: 'Create / update / delete a webhook endpoint configuration'
     reason: >-
-      Configuration de l'URL et des events qu'un endpoint webhook reçoit.
-      Posture-shift : un endpoint mal configuré peut router des events
-      vers un attaquant (data flow externe), ou faire fuiter des données
-      customer dans le payload. Distinct du mint-secret car l'update ne
-      re-génère pas le secret.
+      Configures the URL and the events an endpoint receives. Posture shift :
+      a misconfigured endpoint routes events (customer data included) to an
+      attacker. Distinct from mint-webhook-secret because an update does not
+      regenerate the secret.
     matches: 'stripe.account[**].mode[**].webhook-endpoint[**].W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: reversible
       blast: account
@@ -269,15 +316,13 @@ risks:
       persistence: posture
 
   - id: stripe.mint-webhook-secret
-    label: 'Mint a new webhook signing secret (create_webhook_endpoint)'
+    label: 'Mint a webhook signing secret (create_webhook_endpoint)'
     reason: >-
-      Credential creation. Le secret `whsec_*` est retourné une seule
-      fois à la création — il signe l'authenticité de tous les events
-      reçus. Distinct du webhook-endpoint-write car même intention (créer
-      un endpoint) produit un effet secret-bearer asymétrique. Aligne
-      avec `vercel.mint-bypass-token` (credential minted via opération
-      atomique).
+      Credential creation. The `whsec_*` secret is returned once, at
+      creation, and authenticates every event received. Same intention as
+      creating an endpoint, asymmetric secret-bearing effect.
     matches: 'stripe.account[**].mode[**].webhook-endpoint[**].secret.W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: reversible
       blast: account
@@ -286,16 +331,15 @@ risks:
       visibility: internal
       persistence: posture
 
-  # ─── FALLBACK (required) ───────────────────────────────────────────────
+  # ─── Fallback (required) ─────────────────────────────────────────────────
 
   - id: stripe.uncategorized-write
     label: 'Uncategorized Stripe write'
     reason: >-
-      Catch-all pour les writes non catégorisés. Si Vaubaan étend vers
-      `delete_customer`, `payment_intent.confirm`, `create_payout`,
-      `create_transfer` (Connect), ces actions tomberont ici jusqu'à ce
-      qu'un risk dédié soit ajouté — fail-loud par design.
+      Catch-all for writes without a dedicated entry. Seen in production, it
+      means a tool classifies to a slice no entry covers : add the entry.
     matches: 'stripe.[**].W'
+    acceptable_in_envs: [test, live]
     vector:
       reversibility: costly
       blast: account
@@ -303,3 +347,162 @@ risks:
       cost: moderate
       visibility: internal
       persistence: posture
+
+# Presets are UI sugar : the persisted policy is always the explicit
+# enumeration. Quotas are actions per mission period ; rate limits are
+# actions per sliding window ; `approval` gates suggest a human in the loop
+# on irreversible live actions. Values are a starting point (ADR
+# `mission-presets-default-values`, deferred).
+presets:
+  - id: read-only
+    label: Read-only
+    description: Catalog, billing history and cash position of the selected mode. No PII, no write.
+    entries:
+      - risk_id: stripe.read-catalog
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe.read-billing-history
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe.read-balance
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+
+  - id: test-mode-developer
+    label: Test-mode developer
+    description: Everything on the test-mode resource, generous budgets, nothing on live.
+    entries:
+      - risk_id: stripe[test].read-catalog
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].read-billing-history
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].read-customer-pii
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].read-balance
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].catalog-write
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].subscription-create
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].subscription-update
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].subscription-cancel
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].invoice-create-draft
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].invoice-finalize
+        quota: 200
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].invoice-void
+        quota: 100
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].refund-create
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].payout-create
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].customer-delete
+        quota: 100
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].webhook-endpoint-write
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[test].mint-webhook-secret
+        quota: 20
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      # Co-touched by every write (see the header) ; same budget as the widest write.
+      - risk_id: stripe[test].uncategorized-write
+        quota: 1000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+
+  - id: finance-operator
+    label: Finance operator
+    description: Live-mode billing operations ; refunds, payouts, cancellations, voids and deletions need approval.
+    entries:
+      - risk_id: stripe[live].read-catalog
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[live].read-billing-history
+        quota: 2000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[live].read-customer-pii
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[live].read-balance
+        quota: 500
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[live].subscription-create
+        quota: 50
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[live].subscription-update
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[live].subscription-cancel
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: stripe[live].invoice-create-draft
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[live].invoice-finalize
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: stripe[live].invoice-void
+        quota: 20
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: stripe[live].refund-create
+        quota: 20
+        rate_limit: { max: 3, window_seconds: 60 }
+        gate: approval
+      - risk_id: stripe[live].payout-create
+        quota: 5
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: stripe[live].customer-delete
+        quota: 10
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      # Co-touched by every write (see the header) ; same budget as the widest write.
+      - risk_id: stripe[live].uncategorized-write
+        quota: 200
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
