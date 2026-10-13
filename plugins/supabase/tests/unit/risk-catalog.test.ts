@@ -221,11 +221,10 @@ describe('risk-catalog.yaml — cardinality mutual exclusion', () => {
     );
   }
 
-  test('row[one].W fires row-write-one but NOT bulk-row-write ; the fallback co-fires', () => {
+  test('row[one].W fires row-write-one but NOT bulk-row-write', () => {
     const touched = risksTouchedByAll([rowSlice('one')], INDEXED);
     expect(touched).toContain('supabase.row-write-one');
     expect(touched).not.toContain('supabase.bulk-row-write');
-    expect(touched).toContain('supabase.uncategorized-write');
   });
 
   test('row[bulk].W fires bulk-row-write but NOT row-write-one', () => {

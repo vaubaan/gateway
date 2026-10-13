@@ -248,12 +248,12 @@ describe('supabase presets', () => {
     expect(ids).not.toContain('supabase.auth.read-users');
   });
 
-  test('staging-developer writes only on staging, including the fallback, and never touches prod', () => {
+  test('staging-developer writes only on staging, never carries the fallback, never touches prod', () => {
     const entries = preset('staging-developer').entries;
     const writes = entries.filter((e) => isWrite(e.risk_id));
     expect(writes.length).toBeGreaterThan(5);
     for (const e of writes) expect(e.risk_id.startsWith('supabase[staging].')).toBe(true);
-    expect(entries.map((e) => e.risk_id)).toContain('supabase[staging].uncategorized-write');
+    expect(entries.some((e) => e.risk_id.includes('uncategorized-write'))).toBe(false);
     expect(entries.some((e) => e.risk_id.includes('[prod]'))).toBe(false);
     expect(entries.every((e) => e.gate === 'auto')).toBe(true);
   });
@@ -264,8 +264,8 @@ describe('supabase presets', () => {
     expect(prodEntries.map((e) => e.risk_id)).toEqual([
       'supabase[prod].migration-write',
       'supabase[prod].policy-write',
-      'supabase[prod].uncategorized-write',
     ]);
+    expect(entries.some((e) => e.risk_id.includes('uncategorized-write'))).toBe(false);
     for (const e of prodEntries) expect(e.gate).toBe('approval');
     expect(entries.some((e) => e.risk_id === 'supabase[prod].bulk-row-write')).toBe(false);
   });

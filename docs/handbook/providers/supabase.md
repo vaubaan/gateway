@@ -70,14 +70,13 @@ flowchart LR
   (`acceptable_in_envs`) ; the three bulk risks are acceptable on `preview`
   and `staging` only (a bulk write on a prod project is refused
   structurally). Reads are account-scoped except `auth.read-users` (PII).
-- The fallback `supabase.uncategorized-write` **co-fires on every write**
-  (`risksTouchedBy` never drops it) and is env-scoped, so a preset that
-  allows writes carries `supabase[<env>].uncategorized-write` with its own
-  quota and gate.
+- The fallback `supabase.uncategorized-write` is env-scoped and **counts only
+  when no specific entry matched** the write (policy-engine rule, P1.2-SDK) ;
+  no preset carries it.
 - Presets : `read-only-analyst` (read-data, object-read), `staging-developer`
   (reads everywhere, every write on `[staging]`, `auto`), `migration-operator`
-  (`[staging]` migrations auto ; `[prod]` migration-write, policy-write,
-  uncategorized-write on `approval`). Values provisional until ADR
+  (`[staging]` migrations auto ; `[prod]` migration-write and policy-write
+  on `approval`). Values provisional until ADR
   `mission-presets-default-values`.
 
 ## Execution
@@ -118,8 +117,8 @@ threshold, execute and discovery against `mockFetch`), `risk-catalog.test.ts`
   An env-qualified preset entry on a risk without `acceptable_in_envs` is
   the usual cause after adding a risk.
 - **A write is refused with `risk-not-accepted` on `uncategorized-write`** —
-  expected : the fallback co-fires ; the policy must carry
-  `supabase[<env>].uncategorized-write`.
+  the tool emits a slice no fine-grained entry covers : add the catalog
+  entry rather than accepting the fallback.
 - **`assertCatalogCoverage` lists a new untouched risk** — either the tool's
   sample is missing in `plugin.test.ts` or the pattern does not match the
   emitted slice (compare with `serializeSlice` output in
