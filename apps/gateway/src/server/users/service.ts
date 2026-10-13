@@ -17,6 +17,11 @@
  *                 reactivation
  *   delegations   every active one is revoked with its tokens (reason
  *                 `user-deactivated`); a reactivated user consents again
+ *   member tokens the tokens they generated on missions shared with them are
+ *                 revoked (`mission-token-revoked`, reason `holder-deactivated`);
+ *                 the execution door refuses them from the deactivation itself,
+ *                 since it reads the holder's status on every call. They stay
+ *                 members: a reactivated user generates a new token
  *   memberships   removed from every group, local and IdP-sourced; a
  *                 connection whose owner group empties, or that the user owned
  *                 in their own name, becomes `unowned` — the operator
@@ -39,6 +44,7 @@ import type { AuditWriter } from '@vaubaan/gateway-core';
 
 import type { MembershipSettlement, MembershipSettler } from '../authority';
 import type { Logger } from '../logging';
+import type { MissionTeamService } from '../missions';
 import type { DelegationService } from '../oauth-as';
 import type { Store } from '../store';
 import { toIso, type Clock } from '../store/clock';
@@ -62,6 +68,8 @@ export interface Deactivation {
   /** Names of the groups the user was removed from. */
   readonly groupsLeft: readonly string[];
   readonly delegationsRevoked: number;
+  /** Tokens the user held as a member of other people's missions, now revoked. */
+  readonly memberTokensRevoked: number;
   /** Missions of the user that read `orphaned` from now on. */
   readonly orphaned: number;
   /** Connections that have no owner left with this deactivation. */
@@ -78,6 +86,8 @@ export interface UserAdminServiceDeps {
   readonly store: Pick<Store, 'users' | 'groups'>;
   readonly membership: Pick<MembershipSettler, 'watch'>;
   readonly delegations: Pick<DelegationService, 'revokeAllOf'>;
+  /** Revokes the tokens the user holds as a member of missions they did not create. */
+  readonly memberTokens: Pick<MissionTeamService, 'revokeTokensOfDeactivated'>;
   readonly audit: AuditWriter;
   readonly clock: Clock;
   readonly logger: Logger;
@@ -97,7 +107,7 @@ export class UserAdminService {
   }
 
   async deactivate(actor: UserAdminActor, userId: string): Promise<Deactivation> {
-    const { store, membership, delegations } = this.deps;
+    const { store, membership, delegations, memberTokens } = this.deps;
     const user = await store.users.getById(userId);
     if (!user) throw new UserAdminError('not-found');
     if (user.status !== 'active') throw new UserAdminError('already-deactivated');
@@ -130,6 +140,11 @@ export class UserAdminService {
       });
       return ended.length;
     });
+    // The door already refuses these tokens (it reads the holder's status on every
+    // call, and the status was written above); revoking them makes it durable.
+    const memberTokensRevoked = await attempt(0, () =>
+      memberTokens.revokeTokensOfDeactivated(actor.actorId, user.id),
+    );
     await attempt(undefined, () =>
       this.deps.audit.write({
         kind: 'admin',
@@ -142,6 +157,7 @@ export class UserAdminService {
           status: 'removed',
           groups_left: groupsLeft,
           delegations_revoked: delegationsRevoked,
+          member_tokens_revoked: memberTokensRevoked,
         },
         delegated_client_id: null,
       }),
@@ -164,6 +180,7 @@ export class UserAdminService {
       actor_id: actor.actorId,
       groups_left: groupsLeft.length,
       delegations_revoked: delegationsRevoked,
+      member_tokens_revoked: memberTokensRevoked,
       missions_orphaned: settlement.orphaned.length,
       connections_unowned: settlement.unowned.length,
     });
@@ -171,6 +188,7 @@ export class UserAdminService {
       user: removed,
       groupsLeft,
       delegationsRevoked,
+      memberTokensRevoked,
       orphaned: settlement.orphaned.length,
       unowned: settlement.unowned.length,
     };

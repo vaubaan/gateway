@@ -140,7 +140,7 @@ test('a day of calls: session page, then the audit of the mission', async ({ pag
   const boxes = await filters
     .locator('label')
     .evaluateAll((labels) => labels.map((label) => Math.round(label.getBoundingClientRect().top)));
-  expect(boxes).toHaveLength(9);
+  expect(boxes).toHaveLength(10);
   expect(new Set(boxes).size).toBe(1);
   // And the table shows its last column without scrolling the page sideways.
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);

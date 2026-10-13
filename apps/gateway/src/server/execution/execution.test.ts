@@ -10,10 +10,10 @@ import { parseSlice } from '@vaubaan/policy-engine';
 import { describe, expect, it, vi } from 'vitest';
 
 import { API_KEY_SPEC, fixturePlugin } from '../connections/testing';
-import type { TokenVerification } from '../missions';
+import type { TokenVerification, VerifiedToken } from '../missions';
 import { UNKNOWN_CLIENT } from '../http/client-ip';
 import { SlidingWindowRateLimiter } from '../rate-limit';
-import type { MissionRecord, MissionTokenRecord } from '../store/types';
+import type { MissionRecord } from '../store/types';
 import { ConnectionCredentialCache, MAX_UPSTREAM_CREDENTIAL_TTL_SECONDS } from './credential-cache';
 import {
   AGENT_LABEL_MAX_LENGTH,
@@ -30,6 +30,7 @@ import {
   VERIFIED_TOKEN_TTL_SECONDS,
   VERIFY_ATTEMPTS_PER_WINDOW,
   verifiedTokenCacheKey,
+  verifyThrottleKey,
 } from './token-verifier';
 import { callableProviders, callableTools } from './tools';
 
@@ -214,40 +215,117 @@ describe('tool discovery', () => {
 
 describe('verified-token cache', () => {
   const BEARER = `vbn_live_AbCd1234_${'s'.repeat(32)}`;
-  const token = { id: 'tok-1', prefix: 'AbCd1234', status: 'active' } as MissionTokenRecord;
+  const token: VerifiedToken = {
+    id: 'tok-1',
+    prefix: 'AbCd1234',
+    holder: { kind: 'member', user_id: 'usr-bob', display: 'bob@example.com' },
+  };
   const mission = { id: 'mis-1', status: 'active' } as MissionRecord;
+  const verified: TokenVerification = { outcome: 'verified', token, mission };
 
-  function setup(verification: TokenVerification = { outcome: 'verified', token, mission }) {
-    let stored: { token: MissionTokenRecord; mission: MissionRecord } | null = { token, mission };
+  /**
+   * `verifyToken` computes the hash; `provenToken` answers for a cached proof.
+   * `standing` is what the mission service would say of the token right now.
+   */
+  function setup(verification: TokenVerification = verified) {
+    let standing: TokenVerification = verification;
     const verifyToken = vi.fn(async () => verification);
+    const provenToken = vi.fn(
+      async (_prefix: string, tokenId: string): Promise<TokenVerification> =>
+        standing.outcome !== 'unknown' && standing.token.id === tokenId
+          ? standing
+          : { outcome: 'unknown' },
+    );
     const cache = new MemoryCacheClient();
     const verifier = new TokenVerifier({
-      missions: { verifyToken },
-      tokens: { findTokenByPrefix: async () => stored },
+      missions: { verifyToken, provenToken },
       cache,
       rateLimiter: new SlidingWindowRateLimiter(),
     });
     return {
       verifier,
       verifyToken,
+      provenToken,
       cache,
-      store(next: typeof stored) {
-        stored = next;
+      /** What the store says of the token from now on. */
+      now(next: TokenVerification) {
+        standing = next;
       },
     };
   }
 
-  it('computes the hash once, then re-reads the state from the store', async () => {
-    const { verifier, verifyToken, store } = setup();
+  it('computes the hash once, then asks what the token is worth now on every call', async () => {
+    const { verifier, verifyToken, provenToken, now } = setup();
     expect((await verifier.verify(BEARER)).outcome).toBe('verified');
     expect((await verifier.verify(BEARER)).outcome).toBe('verified');
     expect(verifyToken).toHaveBeenCalledTimes(1);
+    expect(provenToken).toHaveBeenCalledWith('AbCd1234', 'tok-1');
 
-    store({ token: { ...token, status: 'revoked' }, mission: { ...mission, status: 'revoked' } });
+    now({ outcome: 'retired', reason: 'revoked', token, mission });
     expect(await verifier.verify(BEARER)).toMatchObject({ outcome: 'retired', reason: 'revoked' });
-    store({ token: { ...token, status: 'rotated' }, mission });
+    now({ outcome: 'retired', reason: 'rotated', token, mission });
     expect(await verifier.verify(BEARER)).toMatchObject({ outcome: 'retired', reason: 'rotated' });
     expect(verifyToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('a cached proof never outlives the holder: removed or deactivated is refused on the next call, with no hash', async () => {
+    const { verifier, verifyToken, now } = setup();
+    expect((await verifier.verify(BEARER)).outcome).toBe('verified');
+
+    now({ outcome: 'retired', reason: 'holder-removed', token, mission });
+    expect(await verifier.verify(BEARER)).toMatchObject({
+      outcome: 'retired',
+      reason: 'holder-removed',
+    });
+    now({ outcome: 'retired', reason: 'holder-deactivated', token, mission });
+    expect(await verifier.verify(BEARER)).toMatchObject({
+      outcome: 'retired',
+      reason: 'holder-deactivated',
+    });
+    // The member is back (added again, reactivated): the same proof serves, by the same read.
+    now(verified);
+    expect((await verifier.verify(BEARER)).outcome).toBe('verified');
+    expect(verifyToken).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps one proof per token: two holders of one mission never share a cache entry or a throttle window', async () => {
+    const OTHER = `vbn_live_ZyXw9876_${'t'.repeat(32)}`;
+    const other: VerifiedToken = {
+      id: 'tok-2',
+      prefix: 'ZyXw9876',
+      holder: { kind: 'named', name: 'CI runner' },
+    };
+    const standing = new Map<string, TokenVerification>([
+      ['tok-1', verified],
+      ['tok-2', { outcome: 'verified', token: other, mission }],
+    ]);
+    const verifyToken = vi.fn(
+      async (bearer: string): Promise<TokenVerification> =>
+        standing.get(bearer === BEARER ? 'tok-1' : 'tok-2') ?? { outcome: 'unknown' },
+    );
+    const cache = new MemoryCacheClient();
+    const verifier = new TokenVerifier({
+      missions: {
+        verifyToken,
+        provenToken: async (_prefix, tokenId) => standing.get(tokenId) ?? { outcome: 'unknown' },
+      },
+      cache,
+      rateLimiter: new SlidingWindowRateLimiter(),
+    });
+    const first = await verifier.verify(BEARER);
+    const second = await verifier.verify(OTHER);
+    expect(first.outcome === 'verified' && first.token.holder).toEqual(token.holder);
+    expect(second.outcome === 'verified' && second.token.holder).toEqual(other.holder);
+    expect(verifiedTokenCacheKey(BEARER)).not.toBe(verifiedTokenCacheKey(OTHER));
+    expect(verifyThrottleKey('AbCd1234', '198.51.100.9')).not.toBe(
+      verifyThrottleKey('ZyXw9876', '198.51.100.9'),
+    );
+
+    // Bob's token is revoked: the CI runner's proof is untouched.
+    standing.set('tok-1', { outcome: 'retired', reason: 'revoked', token, mission });
+    expect((await verifier.verify(BEARER)).outcome).toBe('retired');
+    expect((await verifier.verify(OTHER)).outcome).toBe('verified');
+    expect(verifyToken).toHaveBeenCalledTimes(2);
   });
 
   it('keys the proof by a hash of the bearer, never by the bearer', async () => {
@@ -260,9 +338,9 @@ describe('verified-token cache', () => {
   });
 
   it('voids a proof whose token row is gone or replaced, and verifies again', async () => {
-    const { verifier, verifyToken, store } = setup();
+    const { verifier, verifyToken, now } = setup();
     await verifier.verify(BEARER);
-    store({ token: { ...token, id: 'tok-2' }, mission });
+    now({ outcome: 'verified', token: { ...token, id: 'tok-2' }, mission });
     await verifier.verify(BEARER);
     expect(verifyToken).toHaveBeenCalledTimes(2);
   });
@@ -292,8 +370,7 @@ describe('verified-token cache', () => {
       async (): Promise<TokenVerification> => ({ outcome: 'verified', token, mission }),
     );
     const verifier = new TokenVerifier({
-      missions: { verifyToken },
-      tokens: { findTokenByPrefix: async () => ({ token, mission }) },
+      missions: { verifyToken, provenToken: async () => verified },
       cache: new MemoryCacheClient({ now: () => nowMs }),
       rateLimiter: new SlidingWindowRateLimiter({ now: () => nowMs }),
     });
@@ -316,8 +393,7 @@ describe('verified-token cache', () => {
         bearer === BEARER ? { outcome: 'verified', token, mission } : { outcome: 'unknown' },
     );
     const verifier = new TokenVerifier({
-      missions: { verifyToken },
-      tokens: { findTokenByPrefix: async () => ({ token, mission }) },
+      missions: { verifyToken, provenToken: async () => verified },
       cache: new MemoryCacheClient(),
       rateLimiter: new SlidingWindowRateLimiter(),
     });

@@ -68,6 +68,11 @@ export function approvalReplayCommand(origin: string, seeded: SeedSummary): stri
   ].join('\n');
 }
 
+/** `GET /mcp/catalog` with a token: the answer says whose token it is. */
+export function whoseTokenCommand(origin: string, variable: string): string {
+  return `curl -sS ${origin}/mcp/catalog -H "Authorization: Bearer $${variable}"`;
+}
+
 export function tourText(input: TourInput): string {
   const { origin, port, seeded } = input;
   const accounts = DEMO_PEOPLE.map(
@@ -90,6 +95,8 @@ Tokens of three seeded missions of Alice, for the commands below:
   export VAUBAAN_MISSION_TOKEN='${seeded.activeMission.token}'
   export VAUBAAN_QUOTA_TOKEN='${seeded.quotaMission.token}'
   export VAUBAAN_APPROVAL_TOKEN='${seeded.approval.mission.token}'
+The named token "${seeded.team.named.name}" of "${seeded.team.mission.name}" (step 11):
+  export VAUBAAN_CI_TOKEN='${seeded.team.named.token}'
 
 Things to try
   1. Sign in as Alice. Missions lists ${seeded.counts.missions} missions in every state: active,
@@ -128,13 +135,28 @@ Things to try
  10. As Alice, revoke that share; as Bob, his mission now reads "orphaned" and
      every call with its token is refused. Share again as Alice: the same
      mission comes back, same token, same counters.
- 11. Audit: every call and every administrative act, with filters (mission,
-     agent label, decision). On a mission, "Session" shows the calls of the
-     current period per agent label ("planner", "coder").
- 12. Admin, as Alice (she is the operator): Identity provider, Provider apps
+ 11. Work on a mission as a team. Alice added Bob as a member of
+     "${seeded.team.mission.name}" and created the named token "${seeded.team.named.name}".
+     Sign in as Bob: Missions -> "Shared with me" -> that mission. He reads it and
+     cannot change it. In "Members and tokens", "Rotate my token": his new token
+     is shown once, to him, with the bootstrap kit; Alice never sees it. Copy the
+     export line of the dialog, then ask the gateway whose token it is:
+     ${whoseTokenCommand(origin, 'VAUBAAN_MISSION_TOKEN')}
+     The answer reads "token": { "kind": "member", "holder": "${seeded.team.member.email}" }.
+     The machine's token answers with its name:
+     ${whoseTokenCommand(origin, 'VAUBAAN_CI_TOKEN')}
+     Sign in as Alice: the same section lists Bob and "${seeded.team.named.name}" with when
+     each token was last used; "Session" has "Calls per token holder", and each
+     call of the timeline names its holder. Remove Bob: his token is refused at
+     once (401, reason "holder-removed"), the others keep working.
+ 12. Audit: every call and every administrative act, with filters (mission,
+     token holder, agent label, decision). On a mission, "Session" shows the
+     calls of the current period per token holder and per agent label
+     ("planner", "coder").
+ 13. Admin, as Alice (she is the operator): Identity provider, Provider apps
      (the GitHub App), Groups ("GitHub admins", "Contractors"), Connections
      without owner, OAuth clients ("Claude Code (demo)"), Telemetry (off).
- 13. Sign in as Carol: she sees the GitHub connection owned by the group
+ 14. Sign in as Carol: she sees the GitHub connection owned by the group
      "GitHub admins", which Alice transferred to it, and her own Stripe account
      (test and live mode as two resources), whose test mode she shares to Alice.
 

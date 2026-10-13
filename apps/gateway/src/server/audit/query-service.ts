@@ -17,10 +17,11 @@ import {
   type AdminObjectType,
   type AuditDecision,
 } from '@vaubaan/gateway-core';
-import type { Principal, RefusalCode, RiskId } from '@vaubaan/shared';
+import type { MissionTokenKind, Principal, RefusalCode, RiskId } from '@vaubaan/shared';
 
-import type { AuditCursor, AuditRecord, AuditScope, Store } from '../store';
+import type { AuditCursor, AuditRecord, AuditScope, AuditSearch, Store } from '../store';
 import type { AuditFilters } from './filters';
+import { parseHolderParam } from './session-view';
 
 export const AUDIT_PAGE_SIZE = 50;
 
@@ -49,11 +50,22 @@ export interface AuditConnectionRef {
   readonly provider: string | null;
 }
 
+/** The token a call presented and who it belongs to (spec §8). */
+export interface AuditTokenRef {
+  readonly kind: MissionTokenKind;
+  /** The member's user id, or the token's name: what the entry stores. */
+  readonly key: string;
+  /** What a page shows: the member's email (their id when the user is gone), or the name. */
+  readonly label: string;
+}
+
 export interface AuditCallView {
   readonly kind: 'call';
   readonly id: string;
   readonly ts: string;
   readonly mission: AuditMissionRef;
+  /** `null` on an entry written before tokens had a holder. */
+  readonly token: AuditTokenRef | null;
   readonly connection: AuditConnectionRef | null;
   readonly resource_ref: string | null;
   readonly tool: string;
@@ -173,6 +185,8 @@ export class AuditQueryService {
     pageSize: number = AUDIT_PAGE_SIZE,
   ): Promise<AuditPage> {
     const userIds = filters.user === null ? undefined : await this.userIdsOf(filters.user);
+    const tokenHolders =
+      filters.tokenHolder === null ? undefined : await this.holdersOf(filters.tokenHolder);
     // One more than the page: its presence says there is an older page.
     const records = await this.deps.store.audit.search({
       scope: scopeOf(viewer),
@@ -183,6 +197,7 @@ export class AuditQueryService {
       ...(filters.tool ? { tool: filters.tool } : {}),
       ...(filters.decision ? { decision: filters.decision } : {}),
       ...(filters.agentLabel ? { agentLabel: filters.agentLabel } : {}),
+      ...(tokenHolders ? { tokenHolders } : {}),
       ...(filters.kind ? { kind: filters.kind } : {}),
       ...(filters.since ? { since: filters.since } : {}),
       ...(filters.until ? { until: filters.until } : {}),
@@ -223,6 +238,20 @@ export class AuditQueryService {
       return (await this.deps.store.users.findByEmail(typed)).map((u) => u.id);
     }
     return [typed];
+  }
+
+  /**
+   * The holder filter as typed. The exact form (`member:<user id>`,
+   * `named:<name>`) is taken as it is. Otherwise an email names a member — a
+   * token name never contains `@` (`parseTokenName`) — and anything else the
+   * name of a named token. An unknown email yields no entry, like a known
+   * member with no call.
+   */
+  private async holdersOf(typed: string): Promise<NonNullable<AuditSearch['tokenHolders']>> {
+    const exact = parseHolderParam(typed);
+    if (exact) return { kind: exact.kind, holders: [exact.key] };
+    if (typed.includes('@')) return { kind: 'member', holders: await this.userIdsOf(typed) };
+    return { kind: 'named', holders: [typed] };
   }
 }
 
@@ -329,6 +358,7 @@ async function toView(record: AuditRecord, names: NameCache): Promise<AuditEntry
       id: record.id,
       ts: record.ts,
       mission: await names.mission(record.mission_id),
+      token: await tokenRef(record, names),
       connection: record.connection_id ? await names.connection(record.connection_id) : null,
       resource_ref: record.resource_ref,
       tool: record.tool,
@@ -360,6 +390,16 @@ async function toView(record: AuditRecord, names: NameCache): Promise<AuditEntry
     after: withoutArguments(record.after),
     delegated_client_id: record.delegated_client_id,
   };
+}
+
+async function tokenRef(
+  record: Extract<AuditRecord, { kind: 'call' }>,
+  names: NameCache,
+): Promise<AuditTokenRef | null> {
+  const { token_kind: kind, token_holder: key } = record;
+  if (kind === null || key === null) return null;
+  if (kind === 'named') return { kind, key, label: key };
+  return { kind, key, label: (await names.email(key)) ?? key };
 }
 
 async function objectLabel(

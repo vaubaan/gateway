@@ -13,7 +13,12 @@
  * recorded at issuance (the counters of a one-off mission are keyed by it).
  */
 
-import type { BudgetDecision, BudgetStage, MissionContext } from '@vaubaan/gateway-core';
+import {
+  tokenAttributionOf,
+  type BudgetDecision,
+  type BudgetStage,
+  type MissionContext,
+} from '@vaubaan/gateway-core';
 import type { MissionsRepo } from '../store/index.ts';
 import { BudgetInvariantError } from './errors.ts';
 import type { BudgetMission } from './mapping.ts';
@@ -49,6 +54,9 @@ export function createBudgetStage(deps: BudgetStageDeps): BudgetStage {
         args: call.args,
         risks_touched: input.risks_touched,
         agent_label: call.agent_label,
+        // Who called, from the authenticated context: the event is attributed to
+        // the token's holder whatever the caller declares.
+        token: tokenAttributionOf(ctx.token),
         now: input.now,
       });
       if (result.outcome === 'refused') return { outcome: 'refused', refusal: result.refusal };

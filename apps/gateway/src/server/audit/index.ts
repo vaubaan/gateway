@@ -77,6 +77,7 @@ export {
   type AuditMissionRef,
   type AuditPage,
   type AuditQueryDeps,
+  type AuditTokenRef,
   type AuditViewer,
 } from './query-service';
 export {
@@ -88,12 +89,17 @@ export {
 export {
   ALL_EVENTS,
   eventView,
+  holderParam,
   MissionSessionService,
+  parseHolderParam,
   PAST_PERIODS_SHOWN,
   SESSION_EVENTS_PAGE_SIZE,
   type MissionSessionDeps,
   type MissionSessionView,
   type SessionEventView,
+  type SessionHolderActivity,
+  type SessionHolderRef,
+  type SessionHolderView,
   type SessionLabelActivity,
   type SessionTimelineFilter,
   type SessionOpenRequest,

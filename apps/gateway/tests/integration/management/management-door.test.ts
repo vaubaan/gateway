@@ -43,6 +43,7 @@ const SHARED = ['github.read-code', 'github.read-meta', 'github.create-pr'] as c
 const NOT_SHARED = 'github.feature-branch-write';
 
 type Refused = { readonly error: ManagementRefusal };
+type MissionListed = MissionsAnswer['missions'][number];
 
 describe('management door — tools of a delegated agent', () => {
   let rig: ManagementRig;
@@ -582,6 +583,50 @@ describe('management door — tools of a delegated agent', () => {
       expect((await rig.root.store.missions.getById(missionId))?.status).toBe('active');
       expect(await executionSays(issued.token.secret)).toBe('ok');
       expect(await rig.adminEntries('mission-revoked')).toEqual([]);
+      await ada.close();
+      await bob.close();
+    });
+
+    it('a mission shared with the user as a member is listed, marked, and changed by no tool', async () => {
+      const ada = await rig.agentOf(ADA);
+      const issued = await issue(ada, draftOn(github, ['github.read-code']));
+      const missionId = issued.mission.mission_id;
+      const { team } = rig.root.missions;
+      const added = await team.addMember(rig.seeded.ada, missionId, {
+        email: rig.seeded.bob.email,
+      });
+      expect(added.ok).toBe(true);
+      const bobs = await team.generateToken(rig.seeded.bob, missionId);
+      if (!bobs.ok) throw new Error('generate refused');
+
+      const bob = await rig.agentOf(BOB);
+      const listed = await bob.call<{ missions: MissionListed[] }>('list_my_missions', {});
+      expect(
+        listed.data.missions.map((m) => [m.mission_id, m.role, m.creator_email, m.token_prefix]),
+      ).toEqual([[missionId, 'member', rig.seeded.ada.email, `vbn_live_${bobs.token.prefix}_…`]]);
+      // The detail is readable too: a member reads the mission.
+      const detail = await bob.call<{ missions: MissionListed[] }>('list_my_missions', {
+        mission_id: missionId,
+      });
+      expect(detail.data.missions[0]?.role).toBe('member');
+      // Nothing of Bob's token secret, nor of Ada's, is in what the agent reads.
+      for (const secret of [bobs.token.secret, issued.token.secret]) {
+        expect(listed.text + detail.text).not.toContain(secret.slice(-32));
+      }
+      // No tool changes it: the mission is its creator's.
+      for (const tool of ['rotate_mission_token', 'revoke_mission']) {
+        const answer = await bob.call<Refused>(tool, { mission_id: missionId });
+        expect(answer.isError, tool).toBe(true);
+        expect(answer.data.error.code, tool).toBe('mission-not-found');
+      }
+      expect((await rig.root.store.missions.getById(missionId))?.status).toBe('active');
+      expect(await executionSays(issued.token.secret)).toBe('ok');
+      expect(await executionSays(bobs.token.secret)).toBe('ok');
+      // And no tool of the door adds a member: humans only.
+      expect((await bob.toolNames()).some((name) => /member|named/i.test(name))).toBe(false);
+      // For Ada it is her own.
+      const hers = await ada.call<{ missions: MissionListed[] }>('list_my_missions', {});
+      expect(hers.data.missions.map((m) => m.role)).toEqual(['creator']);
       await ada.close();
       await bob.close();
     });

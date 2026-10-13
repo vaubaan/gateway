@@ -356,11 +356,55 @@ export class GatewayError extends Error {
   }
 }
 
+/**
+ * Why a mission token whose secret was proven no longer authenticates (spec §0
+ * "Mission token": a token is rotated or revoked on its own, and a member
+ * token stops working when the member is removed or deactivated). These are
+ * NOT refusal codes: the mission may well be serving its other holders, and a
+ * refusal presupposes a credential that authenticates. The door answers 401
+ * and states the reason in the error's `data`, so the agent can tell the human
+ * what happened instead of reporting "unknown bearer".
+ */
+export const AUTH_FAILURE_REASONS = [
+  /** The holder generated a newer token: this one was replaced. */
+  'token-rotated',
+  /** The token was revoked, by its holder or by the mission creator. */
+  'token-revoked',
+  /** The token's holder is no longer a member of the mission. */
+  'holder-removed',
+  /** The token's holder was deactivated on this instance. */
+  'holder-deactivated',
+] as const;
+export type AuthFailureReason = (typeof AUTH_FAILURE_REASONS)[number];
+
+/** What the agent is told, per reason. Keyed by reason so a new one fails to
+ *  compile until it has its sentence. */
+export const AUTH_FAILURE_MESSAGES: Readonly<Record<AuthFailureReason, string>> = {
+  'token-rotated':
+    'this mission token was replaced by a newer one of the same holder. Use the newer token; if you do not have it, ask the human who gave you this one.',
+  'token-revoked':
+    'this mission token was revoked. The mission may still be running for its other holders; ask the human who gave you this token for a new one.',
+  'holder-removed':
+    'the holder of this mission token is no longer a member of the mission. Stop calling with this token and report to the human.',
+  'holder-deactivated':
+    'the holder of this mission token was deactivated on this instance. Stop calling with this token and report to the human.',
+};
+
 /** Malformed, unknown, revoked or expired bearer: the door answers 401 with
- *  `-32001`. Not a refusal: a refusal presupposes an identified credential. */
+ *  `-32001`. Not a refusal: a refusal presupposes an identified credential.
+ *  `reason` is set only when the secret was proven and the token is known to
+ *  have stopped working (`AUTH_FAILURE_REASONS`). */
 export class AuthError extends GatewayError {
-  constructor(message: string) {
+  constructor(
+    message: string,
+    readonly reason: AuthFailureReason | null = null,
+  ) {
     super(message, AUTH_REQUIRED_RPC_CODE, AUTH_REQUIRED_HTTP_STATUS);
     this.name = 'AuthError';
+  }
+
+  /** The 401 of a token that authenticated once and no longer does. */
+  static tokenStopped(reason: AuthFailureReason): AuthError {
+    return new AuthError(AUTH_FAILURE_MESSAGES[reason], reason);
   }
 }

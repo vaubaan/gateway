@@ -61,13 +61,14 @@ import {
 } from './errors.ts';
 import { fingerprintArguments, unfaithfulArgument } from './fingerprint.ts';
 import type { CallVerdict } from './risk-gateway.ts';
-import type {
-  BearerKind,
-  DelegationContext,
-  Door,
-  MissionConnection,
-  MissionContext,
-  MissionResource,
+import {
+  tokenAttributionOf,
+  type BearerKind,
+  type DelegationContext,
+  type Door,
+  type MissionConnection,
+  type MissionContext,
+  type MissionResource,
 } from './types.ts';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -669,10 +670,16 @@ export class CallPipeline {
   }
 
   private baseEntry(ctx: MissionContext, call: CallRequest, now: Date): CallAuditEntry {
+    // Who called is the token's holder, read from the authenticated context:
+    // nothing the caller sends can change it (the agent label is the declared part).
+    const attribution = tokenAttributionOf(ctx.token);
     return {
       kind: 'call',
       ts: now.toISOString(),
       mission_id: ctx.mission.id,
+      token_id: attribution.token_id,
+      token_kind: attribution.token_kind,
+      token_holder: attribution.holder,
       session_id: ctx.session?.id ?? null,
       connection_id: null,
       resource_ref: null,

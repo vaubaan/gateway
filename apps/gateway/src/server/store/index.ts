@@ -170,13 +170,21 @@ export type {
   CreateConnectionInput,
 } from './repositories/connections.ts';
 export type { CreateShareInput, SharesRepo } from './repositories/shares.ts';
-export type { CreateMissionInput, IssueTokenInput, MissionsRepo } from './repositories/missions.ts';
+export type {
+  AddMemberInput,
+  CreateMissionInput,
+  IssuedToken,
+  IssueTokenInput,
+  MissionsRepo,
+  RemovedMember,
+} from './repositories/missions.ts';
 export type {
   DecideContext,
   DecideInput,
   DecideResult,
   DecisionOutcome,
   ListEventsOptions,
+  EventHolder,
   RiskEventQuery,
   SessionsRepo,
 } from './repositories/sessions.ts';
@@ -218,6 +226,7 @@ export type {
   AuditScope,
   AuditSearch,
   CallLookup,
+  TokenHolderActivity,
 } from './repositories/audit.ts';
 export type { ConfigRepo, ConfigWrite } from './repositories/config.ts';
 export type { WebSessionsRepo } from './repositories/web-sessions.ts';

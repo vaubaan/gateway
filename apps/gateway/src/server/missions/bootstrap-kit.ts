@@ -7,15 +7,17 @@
  *      revisited page gets the masked prefix);
  *   2. the client's MCP configuration: the instance URL and the Authorization
  *      header by reference to the variable, never the secret itself;
- *   3. the instruction block for the agent: connections, resource refs,
- *      accepted risks, budget, what to do on each structured refusal, and a
- *      short "management door" section — the other MCP door of the instance,
+ *   3. the instruction block for the agent: whose token it holds (every token
+ *      of a mission has one holder), connections, resource refs, accepted
+ *      risks, budget, what to do on each structured refusal and when the
+ *      token itself stops working, and a short "management door" section — the other MCP door of the instance,
  *      which this token does not open;
  *   +  `curl … tools/list`.
  *
  * Pure: the instance URL comes from the configuration (`public_url`), nothing
  * is hard-coded but the paths of the two MCP doors on this instance.
  */
+import { AUTH_FAILURE_REASONS, type AuthFailureReason } from '@vaubaan/gateway-core';
 import { REFUSAL_CODES, type MissionPolicyEntry, type RefusalCode } from '@vaubaan/shared';
 
 import { MANAGEMENT_DOOR_PATH } from '../oauth-as/endpoints';
@@ -110,6 +112,23 @@ export const REFUSAL_GUIDANCE: Readonly<Record<RefusalCode, string>> = {
     'this token was presented on the wrong door. A mission token only opens the execution endpoint above; do not send it anywhere else.',
 };
 
+/**
+ * What the agent does when its token stops authenticating (HTTP 401 with
+ * `error.data.reason`). Not refusals: the mission may be serving its other
+ * holders. Keyed by the closed set of reasons, so a new one fails to compile
+ * until it has its line.
+ */
+export const TOKEN_STOPPED_GUIDANCE: Readonly<Record<AuthFailureReason, string>> = {
+  'token-rotated':
+    'the holder of this token generated a newer one. Ask the human who gave you this token for the new one; do not look for another token.',
+  'token-revoked':
+    'this token was revoked by its holder or by the mission creator. The mission may still be running for others. Stop, and tell the human.',
+  'holder-removed':
+    'the holder of this token is no longer a member of the mission. Stop, and tell the human.',
+  'holder-deactivated':
+    'the holder of this token was deactivated on this instance. Stop, and tell the human.',
+};
+
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
@@ -144,10 +163,10 @@ function agentLabelGuidance(): string[] {
   const punctuation = [...AGENT_LABEL_PUNCTUATION].map((c) => `\`${c}\``).join(' ');
   return [
     '### Sub-agents and agent labels',
-    `- An orchestrator hands its sub-agents this MCP configuration as is: same endpoint, same \`${MISSION_TOKEN_ENV}\`. There is no token per agent, and nothing to request for a new one.`,
+    `- An orchestrator hands its sub-agents this MCP configuration as is: same endpoint, same \`${MISSION_TOKEN_ENV}\`. A token belongs to its holder (a person, or a machine the mission creator named), not to an agent: there is no token per agent, and nothing to request for a new one.`,
     `- So that the session and the audit tell who did what, each agent names itself with a label. A sub-agent started with its own copy of the configuration adds the header \`${AGENT_LABEL_HEADER}: <label>\` next to \`Authorization\`. An orchestrator that sends the calls itself on behalf of several agents sets \`_meta.${AGENT_LABEL_META_KEY}\` on each \`tools/call\` instead; on a call that carries both, \`_meta.${AGENT_LABEL_META_KEY}\` wins.`,
     `- A label is 1 to ${AGENT_LABEL_MAX_LENGTH} characters: letters, digits and ${punctuation}, starting with a letter or a digit (\`planner\`, \`sub-agent-2\`, \`team/reviewer\`). Anything else is ignored: the call is served, unlabelled.`,
-    '- A label is attribution only. It changes nothing about what is allowed or counted, it reserves no share of the budget, and it is not an identity: never put a secret in it.',
+    '- A label is attribution only. It changes nothing about what is allowed or counted, it reserves no share of the budget, and it is not an identity: never put a secret in it. The identity of a call is the holder of its token, which you cannot change.',
   ];
 }
 
@@ -165,10 +184,18 @@ function agentInstructions(
     return `- ${c.provider_label} "${c.display_name}" — ${resources}`;
   });
   const refusals = REFUSAL_CODES.map((code) => `- \`${code}\` — ${REFUSAL_GUIDANCE[code]}`);
+  const stopped = AUTH_FAILURE_REASONS.map(
+    (reason) => `- \`${reason}\` — ${TOKEN_STOPPED_GUIDANCE[reason]}`,
+  );
   return [
     `## Vaubaan mission "${mission.name}"`,
     '',
     `You reach the company's cloud providers only through the Vaubaan Gateway MCP server \`${MCP_SERVER_NAME}\` (${endpoint}), authenticated by the mission token in \`${MISSION_TOKEN_ENV}\`. You hold no provider credential and must not look for one. Sub-agents use the same MCP configuration and the same token: the budget below is shared, it is not multiplied.`,
+    '',
+    '### Whose token this is',
+    `- This token belongs to one holder, and every call you make with it is recorded under that holder's name in the session and the audit of the mission. \`GET ${endpoint}/catalog\` tells you who (\`token.holder\`) and who created the mission (\`mission.creator\`).`,
+    '- Other people or machines may work on this mission with their own tokens. The budget is one for all of them: what they spend is spent for you too.',
+    '- Requests (claims, approvals) are answered by the mission creator alone, whoever holds the token that caused them.',
     '',
     ...agentLabelGuidance(),
     '',
@@ -185,6 +212,10 @@ function agentInstructions(
     ...refusals,
     '',
     `${NEVER_WORK_AROUND} When a refusal carries a URL, give that URL to the human as is.`,
+    '',
+    '### When the token itself stops working',
+    'An HTTP 401 whose `error.data.reason` is set means this token authenticated before and no longer does. It says nothing about the mission:',
+    ...stopped,
     '',
     ...managementDoorSection(managementEndpoint),
   ].join('\n');

@@ -33,7 +33,7 @@ export const BOB: DemoPerson = {
   name: 'Bob',
   email: 'bob@acme-demo.example',
   tagline: 'teammate (share beneficiary)',
-  sees: 'no connection of his own, one share received from Alice (Shares received) and one mission issued within it',
+  sees: 'no connection of his own, one share received from Alice (Shares received), one mission issued within it, and a mission of Alice shared with him as a member (Missions, "Shared with me")',
   idpGroups: ['engineering'],
 };
 

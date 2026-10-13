@@ -14,8 +14,10 @@
  */
 import {
   isGate,
+  isMissionTokenKind,
   type Gate,
   type Iso8601,
+  type MissionTokenKind,
   type RequestKind,
   type SessionEventKind,
 } from './domain.ts';
@@ -30,6 +32,14 @@ interface CallEventDetails {
   readonly risk_ids: readonly RiskId[];
   /** Free-form agent label copied from the call; attribution only. */
   readonly agent_label: string | null;
+  /**
+   * The token the call presented and its holder (spec §8). Authenticated, unlike
+   * the label. Absent on an event stored before tokens had a holder.
+   */
+  readonly token_id?: string | null;
+  readonly token_kind?: MissionTokenKind | null;
+  /** The member's user id (`member`) or the token's name (`named`). */
+  readonly holder?: string | null;
 }
 
 export interface CallAllowedEventDetails extends CallEventDetails {
@@ -132,12 +142,30 @@ export interface GateChangedEventDetails {
   readonly gate_before: Gate;
 }
 
+/**
+ * A token of the mission was issued: a member generated or rotated theirs, or
+ * the creator created a named one. `token_prefix` is the new token's.
+ */
 export interface RotationEventDetails {
   readonly token_prefix: string;
+  /** Absent on an event stored before tokens had a holder. */
+  readonly token_kind?: MissionTokenKind | null;
+  /** The member's user id (`member`) or the token's name (`named`). */
+  readonly holder?: string | null;
+  /** The prefix of the holder's token this one replaced; `null` for a first token. */
+  readonly replaced_prefix?: string | null;
 }
 
+/**
+ * Tokens stopped working: every token when the mission is revoked, or one
+ * token revoked on its own (then `token_prefix` names it).
+ */
 export interface RevocationEventDetails {
   readonly tokens_revoked: number;
+  /** Set when one token was revoked on its own. */
+  readonly token_prefix?: string | null;
+  readonly token_kind?: MissionTokenKind | null;
+  readonly holder?: string | null;
 }
 
 /** The details of each event kind that has a writer. */
@@ -202,9 +230,27 @@ function isRequestClosedState(value: unknown): value is RequestClosedState {
   return isText(value) && (REQUEST_CLOSED_STATES as readonly string[]).includes(value);
 }
 
+/** A field added after the first stored events: absent, `null` or a text. */
+function isOptionalText(value: unknown): value is string | null | undefined {
+  return value === undefined || isTextOrNull(value);
+}
+
+function isOptionalTokenKind(value: unknown): value is MissionTokenKind | null | undefined {
+  return value === undefined || value === null || isMissionTokenKind(value);
+}
+
+function hasOptionalHolder(d: Fields): boolean {
+  return isOptionalTokenKind(d.token_kind) && isOptionalText(d.holder);
+}
+
 function isCallDetails(d: Fields): boolean {
   return (
-    isText(d.tool) && isText(d.fingerprint) && isTextList(d.risk_ids) && isTextOrNull(d.agent_label)
+    isText(d.tool) &&
+    isText(d.fingerprint) &&
+    isTextList(d.risk_ids) &&
+    isTextOrNull(d.agent_label) &&
+    isOptionalText(d.token_id) &&
+    hasOptionalHolder(d)
   );
 }
 
@@ -263,11 +309,11 @@ function isGateChanged(d: Fields): d is Fields & GateChangedEventDetails {
 }
 
 function isRotation(d: Fields): d is Fields & RotationEventDetails {
-  return isText(d.token_prefix);
+  return isText(d.token_prefix) && hasOptionalHolder(d) && isOptionalText(d.replaced_prefix);
 }
 
 function isRevocation(d: Fields): d is Fields & RevocationEventDetails {
-  return isCount(d.tokens_revoked);
+  return isCount(d.tokens_revoked) && hasOptionalHolder(d) && isOptionalText(d.token_prefix);
 }
 
 /**

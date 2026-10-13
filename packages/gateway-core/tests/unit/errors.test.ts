@@ -5,6 +5,8 @@ import { describe, expect, test } from 'vitest';
 import type { Slice } from '@vaubaan/shared';
 
 import {
+  AUTH_FAILURE_MESSAGES,
+  AUTH_FAILURE_REASONS,
   AUTH_REQUIRED_HTTP_STATUS,
   AUTH_REQUIRED_RPC_CODE,
   AuthError,
@@ -299,6 +301,34 @@ describe('transport errors', () => {
     expect(e.httpStatus).toBe(AUTH_REQUIRED_HTTP_STATUS);
     expect(e.httpStatus).toBe(401);
     expect(e.message).toBe('unknown bearer');
+  });
+});
+
+describe('a mission token that stopped working', () => {
+  test('is an authentication failure with its reason, never a refusal code', () => {
+    expect([...AUTH_FAILURE_REASONS]).toEqual([
+      'token-rotated',
+      'token-revoked',
+      'holder-removed',
+      'holder-deactivated',
+    ]);
+    for (const reason of AUTH_FAILURE_REASONS) {
+      const error = AuthError.tokenStopped(reason);
+      expect(error).toBeInstanceOf(AuthError);
+      expect(error.code).toBe(AUTH_REQUIRED_RPC_CODE);
+      expect(error.httpStatus).toBe(AUTH_REQUIRED_HTTP_STATUS);
+      expect(error.reason).toBe(reason);
+      expect(error.message).toBe(AUTH_FAILURE_MESSAGES[reason]);
+      // Each tells the agent to go back to a human, and none is a code of the closed set.
+      expect(error.message).toMatch(/human/);
+      expect((REFUSAL_CODES as readonly string[]).includes(reason)).toBe(false);
+    }
+    // The eight refusal codes are untouched.
+    expect(REFUSAL_CODES).toHaveLength(8);
+  });
+
+  test('an unknown bearer carries no reason: nothing is said about a token that was never proven', () => {
+    expect(new AuthError('unknown or revoked bearer.').reason).toBeNull();
   });
 });
 

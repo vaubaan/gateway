@@ -106,7 +106,7 @@ describe('migration runner', () => {
     );
   });
 
-  it('ships the nine migrations 0001 to 0009 in the default directory', () => {
+  it('ships the ten migrations 0001 to 0010 in the default directory', () => {
     const shipped = loadMigrations(DEFAULT_MIGRATIONS_DIR);
     expect(shipped.map((m) => [m.version, m.name])).toEqual([
       [1, 'schema'],
@@ -118,6 +118,7 @@ describe('migration runner', () => {
       [7, 'orphaned_not_stored'],
       [8, 'events_agent_label'],
       [9, 'user_sessions_ended_at'],
+      [10, 'mission_members_and_token_holders'],
     ]);
   });
 });

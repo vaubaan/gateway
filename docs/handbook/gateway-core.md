@@ -124,6 +124,19 @@ hint ([execution-door](execution-door.md), "What the agent receives").
 revoked bearer: nothing was identified, so there is no credential to
 refuse. `GatewayError` is its base.
 
+`AuthError.reason` is set when the secret of a mission token **was** proven
+and the token no longer authenticates — `AUTH_FAILURE_REASONS`:
+`token-rotated`, `token-revoked`, `holder-removed`, `holder-deactivated`, each
+with its sentence for the agent in `AUTH_FAILURE_MESSAGES` (keyed by reason, so
+a new one fails to compile until it has its sentence);
+`AuthError.tokenStopped(reason)` builds it. These are deliberately **not**
+refusal codes: a mission has several tokens, one per holder, and a token that
+stopped says nothing about the mission, which may be serving the others
+(`mission-inactive` would be false). The eight codes stay eight (ADR
+[mission-members-and-per-holder-tokens](../decisions/mission-members-and-per-holder-tokens.md),
+D6; the door's side is in [execution-door](execution-door.md), "Token
+holders").
+
 ## Audit (`audit.ts`)
 
 `AuditEntry = CallAuditEntry | AdminAuditEntry`, discriminated by `kind`.
@@ -214,7 +227,15 @@ JSON carries both as `0`, and it is accepted (ADR
 ## Mission context (`types.ts`)
 
 `MissionContext` is what the door loads once per call and the pipeline
-reads. Every member is a projection of a shared record, so the store (P0.3)
+reads. Its `token` is an `AuthenticatedToken` — `{ id, prefix, holder }`,
+`holder` a `TokenHolder`: `{ kind: 'member', user_id, display }` or `{ kind:
+'named', name }` (spec §0 "Mission token": one holder per token).
+`tokenAttributionOf(token)` is what the audit keeps of it (`token_id`,
+`token_kind`, and the user id or the name), `tokenHolderLabel(holder)` what a
+reader is shown. The pipeline writes the attribution on every call entry
+(`CallAuditEntry.token_id`, `token_kind`, `token_holder`; all three `null`
+only on an entry older than the holder model): it comes from the context, so
+nothing a call carries can change who called. Every member is a projection of a shared record, so the store (P0.3)
 maps its rows to it without translation:
 
 - `mission` — `MissionSummary = Pick<Mission, 'id' | 'name' | 'status' |

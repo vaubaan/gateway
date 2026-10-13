@@ -8,9 +8,16 @@
  *
  *   origin        a browser origin other than the instance's is refused (the door
  *                 answers no CORS preflight: agents are not browsers)
- *   bearer        `Authorization: Bearer <mission token>`; missing, unknown or
- *                 rotated → 401; a web session or a delegated token → 403
- *                 `wrong-credential-kind` (spec §6 "none crosses over")
+ *   bearer        `Authorization: Bearer <mission token>`; missing or unknown →
+ *                 401; a token that authenticated once and no longer does —
+ *                 rotated, revoked on its own, its member removed or
+ *                 deactivated — → 401 whose `data.reason` says which
+ *                 (`AUTH_FAILURE_REASONS`, gateway-core): the mission may be
+ *                 serving its other holders, so this is not `mission-inactive`;
+ *                 a web session or a delegated token → 403
+ *                 `wrong-credential-kind` (spec §6 "none crosses over").
+ *                 A verified token names its holder: every call is attributed
+ *                 to them in the audit and the session (spec §8)
  *   grounds       the creator's authority over the mission, re-read from the
  *                 store on every request (spec §2.3 "orphaned", §10): a mission
  *                 whose grounds are gone reads `orphaned` for this request and
@@ -67,6 +74,8 @@ import {
   refusalToRpcError,
   refuse,
   rpcError,
+  tokenHolderLabel,
+  type AuthFailureReason,
   type CallPipeline,
   type CallRequest,
   type ClientOrigin,
@@ -87,7 +96,7 @@ import type { RateLimiter } from '../compose/ports';
 import type { InstanceConfig } from '../config';
 import { UNKNOWN_CLIENT } from '../http/client-ip';
 import type { Logger } from '../logging';
-import { maskedToken, prefixOfBearer } from '../missions';
+import { maskedToken, prefixOfBearer, type TokenRetirement } from '../missions';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
 import type { MissionRecord } from '../store/types';
@@ -124,6 +133,8 @@ export interface ExecutionDoorDeps {
   readonly store: Pick<Store, 'connections' | 'users' | 'groups' | 'sessions'>;
   readonly registry: PluginRegistry;
   readonly tokens: TokenVerifier;
+  /** Records "last used" on the token a call authenticated with (to the minute). */
+  readonly tokenUse: TokenUseRecorder;
   /** Is the mission still grounded in its creator's current authority? Never optional. */
   readonly grounds: Pick<MissionGrounds, 'inspect'>;
   readonly webSessions: Pick<WebSessionService, 'read'>;
@@ -135,6 +146,26 @@ export interface ExecutionDoorDeps {
   readonly clock?: Clock;
   readonly delegations?: DelegatedTokenResolver;
 }
+
+/** `MissionsRepo.markTokenUsed`: the door's only write outside the pipeline. */
+export interface TokenUseRecorder {
+  markTokenUsed(tokenId: string, granularitySeconds: number): Promise<boolean>;
+}
+
+/** `mission_tokens.last_used_at` is written at most once per token in this many seconds. */
+export const TOKEN_LAST_USED_GRANULARITY_SECONDS = 60;
+
+/**
+ * What the door answers for a token whose secret matched and that no longer
+ * authenticates. A token revoked together with its mission is not here: that
+ * one still identifies the mission and is answered `mission-inactive`.
+ */
+const AUTH_FAILURE_OF: Readonly<Record<TokenRetirement, AuthFailureReason>> = {
+  rotated: 'token-rotated',
+  revoked: 'token-revoked',
+  'holder-removed': 'holder-removed',
+  'holder-deactivated': 'holder-deactivated',
+};
 
 /** What one authenticated request carries to the handlers. */
 interface RequestScope {
@@ -216,7 +247,13 @@ export class ExecutionDoor {
     const inactive = checkMissionActive(gate.ctx, now);
     if (inactive) return json(HTTP_FORBIDDEN, refusalToRpcError(null, inactive));
     const state = await this.deps.budget.stateOf(budgetMissionOf(gate.mission), now);
-    return json(200, buildCatalog(gate.ctx, this.deps.registry, state));
+    const creator = await this.deps.store.users.getById(gate.mission.creatorUserId);
+    return json(
+      200,
+      buildCatalog(gate.ctx, this.deps.registry, state, {
+        creator: creator?.email ?? null,
+      }),
+    );
   }
 
   // ───────────────────────────────────────────────────────────────────────────
@@ -244,7 +281,10 @@ export class ExecutionDoor {
     } catch (err) {
       if (err instanceof VerificationThrottled) return tooManyRequests(err.retryAfterMs);
       if (err instanceof AuthError) {
-        return json(AUTH_REQUIRED_HTTP_STATUS, rpcError(null, err.code, err.message), {
+        // `reason` is set only for a token whose secret was proven: the caller
+        // learns nothing they could not have learnt while the token worked.
+        const data = err.reason ? { reason: err.reason } : undefined;
+        return json(AUTH_REQUIRED_HTTP_STATUS, rpcError(null, err.code, err.message, data), {
           'WWW-Authenticate': `Bearer realm="${MCP_SERVER_INFO_NAME}"`,
         });
       }
@@ -264,7 +304,24 @@ export class ExecutionDoor {
 
     const mission = this.missionsByContext.get(ctx);
     if (!mission) throw new Error('execution door: mission context without its record');
+    await this.noteTokenUse(ctx);
     return { ctx, mission, client };
+  }
+
+  /**
+   * "Last used" of the token, for the creator's list of tokens. Informational:
+   * a failure to record it is logged and never refuses the request.
+   */
+  private async noteTokenUse(ctx: MissionContext): Promise<void> {
+    try {
+      await this.deps.tokenUse.markTokenUsed(ctx.token.id, TOKEN_LAST_USED_GRANULARITY_SECONDS);
+    } catch (err) {
+      this.deps.logger.warn('token use not recorded', {
+        mission_id: ctx.mission.id,
+        token_prefix: ctx.token.prefix,
+        error: err instanceof Error ? err.name : 'Error',
+      });
+    }
   }
 
   private async authenticate(
@@ -293,15 +350,28 @@ export class ExecutionDoor {
         if (verified.outcome === 'throttled')
           throw new VerificationThrottled(verified.retryAfterMs);
         if (verified.outcome !== 'unknown') {
-          // A token replaced by rotation no longer authenticates. A token retired
-          // by the revocation of its mission still identifies that mission, so the
-          // caller is told `mission-inactive` rather than "unknown bearer".
-          // The status read on the next line is the STORED one, on purpose: the
-          // question is whether the store still holds the mission active, asked
-          // before the derivation (`grounds.inspect`) below.
-          const dead = verified.outcome === 'retired' && verified.mission.status === 'active';
-          if (dead || (verified.outcome === 'retired' && verified.reason === 'rotated')) {
-            return null;
+          if (verified.outcome === 'retired') {
+            // A token retired by the revocation of its MISSION still identifies that
+            // mission, so the caller is told `mission-inactive`. Every other retired
+            // token no longer authenticates, and the 401 says why: replaced by its
+            // holder, revoked on its own, its member removed, its holder deactivated.
+            // In those cases the mission may be serving its other holders, so
+            // `mission-inactive` would be a lie about the mission.
+            // The status read here is the STORED one, on purpose: the question is
+            // whether the store still holds the mission active, asked before the
+            // derivation (`grounds.inspect`) below.
+            const withItsMission =
+              verified.reason === 'revoked' && verified.mission.status !== 'active';
+            if (!withItsMission) {
+              const reason = AUTH_FAILURE_OF[verified.reason];
+              this.deps.logger.warn('retired mission token presented at the execution door', {
+                mission_id: verified.mission.id,
+                token_prefix: verified.token.prefix,
+                token_kind: verified.token.holder.kind,
+                reason,
+              });
+              throw AuthError.tokenStopped(reason);
+            }
           }
           // Authority is never snapshotted in a mission, and `orphaned` is never
           // stored: the creator's authority is re-read here, and the mission is
@@ -405,6 +475,9 @@ export class ExecutionDoor {
       this.deps.logger.info('tools/call', {
         mission_id: ctx.mission.id,
         token_prefix: ctx.token.prefix,
+        token_kind: ctx.token.holder.kind,
+        // The holder as the instance names them (an email, or the token's name).
+        holder_label: tokenHolderLabel(ctx.token.holder),
         tool: name,
         outcome: outcome.kind,
         refusal_code: outcome.audit.refusal_code,

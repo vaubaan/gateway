@@ -770,13 +770,21 @@ What each answer contains (`views.ts`):
   env-scoped entry (`enumerateCatalog`), with label, reason, level,
   `fallback`, `deprecated`, `rate_ceiling_per_minute`; `presets` entry by
   entry. With `connection_id`, each risk carries `in_my_authority`.
-- **`list_my_missions`** — `state` (`active`, `expired`, `orphaned`,
+- **`list_my_missions`** — the missions the user created **and the ones
+  shared with them as a member**, each with `role` (`creator` | `member`) and
+  `creator_email` (spec §4.2; handbook [missions](missions.md), "Members and
+  tokens"). A member's mission is read here and changed by no tool:
+  `rotate_mission_token` and `revoke_mission` answer `mission-not-found` for
+  it, before any budget is spent. **No tool adds or removes a member, nor
+  creates a named token**: who may act under a person's authority is decided
+  by a human in the interface. `state` (`active`, `expired`, `orphaned`,
   `revoked`) and `orphan` (`cause`, `connection_id`, `uncovered`,
   `can_come_back`) exactly as `MissionService.list` derives them at this
   read; `policy` with `remaining` per risk; `session` (current period);
   `exhausted`; `issued_via` (`client_id`, `client_name`, `this_client`,
   `this_delegation` — true for the missions `rotate_mission_token` accepts);
-  the masked `token_prefix`. Revoked and expired missions are left out
+  the masked `token_prefix` (of the **user's own** token on that mission; `null`
+  for a member who has not generated theirs). Revoked and expired missions are left out
   unless `include_closed` (`hidden_closed` counts them). With `mission_id`: plus `connections` with the
   resources reached and `policy_details` (label, `gate_open_until`).
 - **`preview_policy`** — the mission preview: `ok`, `issues`, `notices`,

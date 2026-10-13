@@ -13,7 +13,7 @@
  * contract between the two and must stay stable.
  */
 
-import type { AuditDecision, RefusalCode, RiskId, Slice } from '@vaubaan/shared';
+import type { AuditDecision, MissionTokenKind, RefusalCode, RiskId, Slice } from '@vaubaan/shared';
 
 export type { AuditDecision } from '@vaubaan/shared';
 
@@ -26,6 +26,15 @@ export interface CallAuditEntry {
   /** ISO timestamp of the decision. */
   readonly ts: string;
   readonly mission_id: string;
+  /**
+   * The token the call presented and its holder (spec §8 "the token used and
+   * its holder"): the token row, its kind, and the member's user id (`member`)
+   * or the token's name (`named`). Authenticated, unlike `agent_label`. All
+   * three are null only on an entry written before tokens had a holder.
+   */
+  readonly token_id: string | null;
+  readonly token_kind: MissionTokenKind | null;
+  readonly token_holder: string | null;
   /** Null when the call was refused before the session was touched. */
   readonly session_id: string | null;
   /** Connection and resource the call targeted, when resolved. */
@@ -96,8 +105,21 @@ export type AdminAct =
   | 'share-created'
   | 'share-revoked'
   | 'mission-issued'
+  /** A holder replaced their own token of the mission; the previous one stops
+   *  working. `before` / `after` carry the prefixes, the kind and the holder. */
   | 'mission-rotated'
   | 'mission-revoked'
+  /** The creator gave a user access to the mission (spec §0 "Mission member").
+   *  Object: the mission; `after` names the member. */
+  | 'mission-member-added'
+  /** The creator removed a member; their token, if any, is revoked with them. */
+  | 'mission-member-removed'
+  /** A token of the mission was issued: a member generated their first one, or
+   *  the creator created a named token. Never the secret. */
+  | 'mission-token-issued'
+  /** One token was revoked on its own: by its holder, by the creator, or by an
+   *  operator deactivating its holder (`after.reason`). */
+  | 'mission-token-revoked'
   | 'mission-closed'
   /** The authority behind a mission went missing (spec §2.3 "orphaned", a state
    *  derived on every read and never stored). The entry names the human whose

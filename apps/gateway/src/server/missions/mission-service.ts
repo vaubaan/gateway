@@ -7,8 +7,10 @@
  * the `AuthorityService` what the creator may accept, and leaves the decision
  * to the pure `previewDraft`. A mission is persisted as an explicit
  * enumeration: explicit resource ids (even for "all"), explicit policy
- * entries (never a preset reference), one token whose secret is returned
- * once.
+ * entries (never a preset reference), and the creator's own token, whose
+ * secret is returned once. Members and the other tokens of a mission are the
+ * `MissionTeamService`'s (`team-service.ts`); this service says who may read a
+ * mission (`access`) and what a presented token is worth (`verifyToken`).
  *
  * One rule for what a mission reaches on a connection, shared with the
  * execution door (`execution/mission-context.ts`): exactly the resource ids
@@ -19,6 +21,7 @@
  * Store records are translated by `budget/mapping.ts` and
  * `connections/mapping.ts` only; no record is written into an audit payload.
  */
+import type { TokenHolder } from '@vaubaan/gateway-core';
 import type { PluginRegistry } from '@vaubaan/plugin-sdk';
 import {
   isGate,
@@ -59,6 +62,7 @@ import type {
   MissionConnection as MissionConnectionRecord,
   MissionRecord,
   MissionTokenRecord,
+  UserRecord,
 } from '../store/types';
 import { buildBootstrapKit, type BootstrapKit, type KitPolicyLine } from './bootstrap-kit';
 import { enumerateCatalog } from './catalog-view';
@@ -76,12 +80,12 @@ import type {
 } from './model';
 import { previewDraft } from './preview';
 import { bearerMatches, mintMissionToken, prefixOfBearer, type TokenMinter } from './token';
+import { issueTokenTo, type IssuedSecret } from './token-issuer';
 
-const MAX_MINT_ATTEMPTS = 5;
 const COPY_SUFFIX = ' (copy)';
 
 export interface MissionServiceDeps {
-  readonly store: Pick<Store, 'missions' | 'connections' | 'sessions' | 'auditWriter'>;
+  readonly store: Pick<Store, 'missions' | 'connections' | 'sessions' | 'users' | 'auditWriter'>;
   readonly registry: PluginRegistry;
   readonly authority: AuthorityService;
   /**
@@ -170,13 +174,28 @@ export type SetGateResult =
       readonly state: 'revoked' | 'orphaned';
     };
 
-/** The public part of a verified token: what the execution door needs, never the hash. */
-export type VerifiedToken = Pick<MissionTokenRecord, 'id' | 'prefix'>;
+/**
+ * The public part of a verified token: what the execution door needs — the row,
+ * the prefix and who it belongs to — never the hash.
+ */
+export interface VerifiedToken {
+  readonly id: string;
+  readonly prefix: string;
+  readonly holder: TokenHolder;
+}
+
+/**
+ * Why a token whose secret matched does not authenticate: `rotated` and
+ * `revoked` are the stored status; `holder-removed` and `holder-deactivated`
+ * are derived at every verification from the member's row and the user's
+ * status, so a member token stops at the very next call (spec §0).
+ */
+export type TokenRetirement = 'rotated' | 'revoked' | 'holder-removed' | 'holder-deactivated';
 
 /**
  * A presented Bearer, resolved. `retired` still names the mission: the
- * execution door answers `mission-inactive` for a revoked mission and a plain
- * authentication failure for a token replaced by rotation.
+ * execution door answers `mission-inactive` for a revoked mission and an
+ * authentication failure stating the reason for every other retirement.
  */
 export type TokenVerification =
   | {
@@ -186,11 +205,19 @@ export type TokenVerification =
     }
   | {
       readonly outcome: 'retired';
-      readonly reason: 'rotated' | 'revoked';
+      readonly reason: TokenRetirement;
       readonly mission: MissionRecord;
       readonly token: VerifiedToken;
     }
   | { readonly outcome: 'unknown' };
+
+/** What a user is to a mission they can read (spec §0 "Mission member"). */
+export type MissionRole = 'creator' | 'member';
+
+/** A mission as one user may read it: derived state, and their role on it. */
+export interface MissionAccess extends InspectedMission {
+  readonly role: MissionRole;
+}
 
 /** Why a mission reads `orphaned` right now (handbook authority, "Orphaned missions"). */
 export interface MissionOrphanReason {
@@ -204,10 +231,17 @@ export interface MissionOrphanReason {
 export interface MissionOverview {
   /** `status` is derived: `orphaned` while the creator's authority is missing. */
   readonly mission: MissionRecord;
+  /** What the reader is to this mission: its creator, or a member it is shared with. */
+  readonly role: MissionRole;
+  /** Who created it; `email` is `null` when the user row is gone. */
+  readonly creator: { readonly id: string; readonly email: string | null };
   readonly state: MissionState;
   /** Set while the mission is orphaned; `null` as soon as the authority is back. */
   readonly orphan: MissionOrphanReason | null;
-  /** The active token's public part; `null` once revoked. */
+  /**
+   * The public part of the reader's own active token of this mission; `null`
+   * when they have none (a member who has not generated theirs, a revoked token).
+   */
   readonly token: { readonly prefix: string; readonly createdAt: string } | null;
   /** The client that issued it by delegation; `null` for a mission issued in the interface. */
   readonly issuedVia: MissionIssuer | null;
@@ -247,7 +281,7 @@ export function gateEditBlockedBy(
 }
 
 export interface MissionDetail extends MissionOverview {
-  /** Whether `setGate` would take an edit now. */
+  /** Whether `setGate` would take an edit now, from this reader. A member edits nothing. */
   readonly gates_editable: boolean;
   readonly connections: readonly MissionDetailConnection[];
   readonly policy: readonly MissionDetailRisk[];
@@ -255,6 +289,9 @@ export interface MissionDetail extends MissionOverview {
   /** The kit with the masked prefix; `null` when no token is active. */
   readonly kit: BootstrapKit | null;
 }
+
+/** A user who may read the mission: `id`, and nothing else is trusted from the caller. */
+type Reader = AuthoritySubject;
 
 function toIssuanceResource(r: ConnectionResourceRecord): IssuanceResource {
   return {
@@ -406,7 +443,8 @@ export class MissionService {
       connections: preview.resolved.map(selectionRecordOf),
       policy: preview.policy.map(policyEntryRecordOf),
     });
-    const token = await this.issueToken(mission.id);
+    // The creator is a member by construction: the mission is born with their own token.
+    const token = await this.issueCreatorToken(mission);
 
     await this.deps.store.auditWriter.write({
       kind: 'admin',
@@ -430,8 +468,8 @@ export class MissionService {
     return {
       ok: true,
       mission,
-      token,
-      kit: await this.kitFor(mission, { secret: token.secret }),
+      token: { secret: token.secret, prefix: token.prefix },
+      kit: await this.kitOf(mission, { secret: token.secret }),
       preview,
     };
   }
@@ -502,25 +540,26 @@ export class MissionService {
   // Token: mint, rotate, revoke, verify
   // ───────────────────────────────────────────────────────────────────────────
 
-  /** Mints and stores a token; the previously active one, if any, becomes `rotated`. */
-  private async issueToken(missionId: string): Promise<RevealedToken> {
-    for (let attempt = 0; attempt < MAX_MINT_ATTEMPTS; attempt++) {
-      const minted = await this.mint();
-      // The prefix is the lookup key (unique column): a collision is re-drawn, never overwritten.
-      if (await this.deps.store.missions.findTokenByPrefix(minted.prefix)) continue;
-      await this.deps.store.missions.issueToken({
-        missionId,
-        prefix: minted.prefix,
-        hash: minted.hash,
-        hashAlg: minted.hashAlg,
-      });
-      return { secret: minted.secret, prefix: minted.prefix };
-    }
-    throw new Error(`could not draw an unused token prefix in ${MAX_MINT_ATTEMPTS} attempts`);
+  /**
+   * Mints and stores the creator's own member token; their previous active one,
+   * if any, becomes `rotated`. The tokens of the other holders are untouched.
+   */
+  private issueCreatorToken(mission: MissionRecord): Promise<IssuedSecret> {
+    return issueTokenTo(
+      { missions: this.deps.store.missions, mint: this.mint },
+      {
+        missionId: mission.id,
+        holder: { kind: 'member', userId: mission.creatorUserId },
+        createdBy: mission.creatorUserId,
+      },
+    );
   }
 
   /**
-   * New token, same mission, same session, same budget (spec §7.8).
+   * A new token for the creator, same mission, same session, same budget
+   * (spec §7.8): the creator's previous token stops working; every other
+   * holder's token is untouched. A member rotates their own token through
+   * `MissionTeamService.generateToken`, which the creator may use as well.
    *
    * Through a delegation (`options.delegation`, the management door) only a
    * mission that very delegation issued is rotated: the new token is handed to
@@ -542,8 +581,8 @@ export class MissionService {
     const state = await this.stateOf(mission);
     if (state.kind !== 'active') return { ok: false, reason: 'inactive', state: state.kind };
 
-    const previous = await this.activeToken(mission.id);
-    const token = await this.issueToken(mission.id);
+    const token = await this.issueCreatorToken(mission);
+    const previous = token.replaced;
     await this.deps.store.auditWriter.write({
       kind: 'admin',
       ts: toIso(this.deps.clock.now()),
@@ -551,23 +590,33 @@ export class MissionService {
       act: 'mission-rotated',
       object: { type: 'mission', id: mission.id },
       before: previous ? { token_prefix: previous.prefix } : null,
-      after: { token_prefix: token.prefix },
+      after: { token_prefix: token.prefix, token_kind: 'member', holder: user.id },
       delegated_client_id: options.delegation?.clientId ?? null,
     });
     await this.recordEvent(mission.id, user.id, {
       kind: 'rotation',
-      details: { token_prefix: token.prefix },
+      details: {
+        token_prefix: token.prefix,
+        token_kind: 'member',
+        holder: user.id,
+        replaced_prefix: previous?.prefix ?? null,
+      },
     });
     this.deps.logger.info('mission token rotated', {
       mission_id: mission.id,
       token_prefix: token.prefix,
       delegated_client_id: options.delegation?.clientId ?? null,
     });
-    return { ok: true, mission, token, kit: await this.kitFor(mission, { secret: token.secret }) };
+    return {
+      ok: true,
+      mission,
+      token: { secret: token.secret, prefix: token.prefix },
+      kit: await this.kitOf(mission, { secret: token.secret }),
+    };
   }
 
   /**
-   * The mission refuses everything from now on; its tokens are revoked.
+   * The mission refuses everything from now on; every token of every holder is revoked.
    * Idempotent. An orphaned mission is revoked like any other: this is how its
    * creator closes it for good (the stored status goes `active` → `revoked`).
    */
@@ -676,9 +725,9 @@ export class MissionService {
   }
 
   /**
-   * Resolves a presented Bearer: prefix lookup, then the argon2id check. A
-   * malformed Bearer, an unknown prefix and a wrong secret are the same
-   * answer (`unknown`).
+   * Resolves a presented Bearer: prefix lookup, the argon2id check, then what
+   * the token is worth at this instant (`standingOf`). A malformed Bearer, an
+   * unknown prefix and a wrong secret are the same answer (`unknown`).
    */
   async verifyToken(bearer: string): Promise<TokenVerification> {
     const prefix = prefixOfBearer(bearer);
@@ -686,39 +735,126 @@ export class MissionService {
     const found = await this.deps.store.missions.findTokenByPrefix(prefix);
     if (!found) return { outcome: 'unknown' };
     if (!(await bearerMatches(found.token.hash, bearer))) return { outcome: 'unknown' };
+    return this.standingOf(found);
+  }
+
+  /**
+   * What a token is worth now, for a Bearer whose secret was ALREADY proven to
+   * match the row `tokenId` (the execution door's verified-token cache keeps
+   * that proof, never the state). The row is re-read by prefix: a proof for a
+   * row that is gone, or whose prefix now names another row, is `unknown`.
+   * Never call this with a token id that did not come from a hash match.
+   */
+  async provenToken(prefix: string, tokenId: string): Promise<TokenVerification> {
+    const found = await this.deps.store.missions.findTokenByPrefix(prefix);
+    if (!found || found.token.id !== tokenId) return { outcome: 'unknown' };
+    return this.standingOf(found);
+  }
+
+  /**
+   * The one place that says whether a token whose secret matched authenticates
+   * (spec §0 "Mission token"), read from the store on every call:
+   *
+   *   - a member token must belong to someone who is, right now, an active user
+   *     and a current member of the mission. Nothing is cached and nothing needs
+   *     to have been written: a member removed, or a user deactivated, a
+   *     millisecond ago is refused;
+   *   - the row must be `active` (a holder's rotation and any revocation retire it).
+   *
+   * The creator is a member by construction and has no row. Their deactivation
+   * is not judged here: the mission then reads `orphaned` (derived by
+   * `MissionGrounds`), every holder is refused `mission-inactive`, and the
+   * same tokens serve again if the creator is reactivated.
+   *
+   * The record (and its hash) stops here: the door gets the id, the prefix and
+   * the holder.
+   */
+  private async standingOf(found: {
+    readonly token: MissionTokenRecord;
+    readonly mission: MissionRecord;
+  }): Promise<TokenVerification> {
     const { mission } = found;
-    // The record (and its hash) stops here: the door gets the id and the prefix.
-    const token: VerifiedToken = { id: found.token.id, prefix: found.token.prefix };
-    if (found.token.status === 'active') return { outcome: 'verified', mission, token };
-    return { outcome: 'retired', reason: found.token.status, mission, token };
+    const record = found.token;
+    const user =
+      record.holder.kind === 'member'
+        ? await this.deps.store.users.getById(record.holder.userId)
+        : null;
+    const token: VerifiedToken = {
+      id: record.id,
+      prefix: record.prefix,
+      holder: tokenHolderOf(record, user),
+    };
+    // The holder is judged first: a member who was removed is told so whatever
+    // became of their token or of the mission since (they are no longer told the
+    // mission's state).
+    if (record.holder.kind === 'member' && record.holder.userId !== mission.creatorUserId) {
+      if (user?.status !== 'active') {
+        return { outcome: 'retired', reason: 'holder-deactivated', mission, token };
+      }
+      const member = await this.deps.store.missions.getMember(mission.id, record.holder.userId);
+      if (!member || member.removedAt !== null) {
+        return { outcome: 'retired', reason: 'holder-removed', mission, token };
+      }
+    }
+    if (record.status !== 'active') {
+      return { outcome: 'retired', reason: record.status, mission, token };
+    }
+    return { outcome: 'verified', mission, token };
   }
 
   // ───────────────────────────────────────────────────────────────────────────
   // Reads for the Missions pages
   // ───────────────────────────────────────────────────────────────────────────
 
-  async list(user: AuthoritySubject): Promise<MissionOverview[]> {
-    const missions = await this.deps.store.missions.listForCreator(user.id);
-    const issuers = await this.issuersOf(missions);
+  /**
+   * The missions the user can read, newest first: the ones they created
+   * (`role: 'creator'`) and the ones shared with them as a member
+   * (`role: 'member'`, spec §4.2 "Missions").
+   */
+  async list(user: Reader): Promise<MissionOverview[]> {
+    const created = await this.deps.store.missions.listForCreator(user.id);
+    const shared = (await this.isActiveUser(user.id))
+      ? await this.deps.store.missions.listForMember(user.id)
+      : [];
+    const issuers = await this.issuersOf(created);
     const overviews: MissionOverview[] = [];
-    for (const mission of missions) {
-      overviews.push(
-        await this.overviewOf(
-          await this.deps.grounds.inspect(mission),
-          issuers.get(mission.id) ?? null,
-        ),
-      );
+    for (const [role, missions] of [
+      ['creator', created],
+      ['member', shared],
+    ] as const) {
+      for (const mission of missions) {
+        overviews.push(
+          await this.overviewOf(
+            { ...(await this.deps.grounds.inspect(mission)), role },
+            user,
+            issuers.get(mission.id) ?? null,
+          ),
+        );
+      }
     }
     // Newest first: the mission just issued is the one the creator looks for.
-    return overviews.reverse();
+    return overviews.sort((a, b) =>
+      a.mission.createdAt < b.mission.createdAt
+        ? 1
+        : a.mission.createdAt > b.mission.createdAt
+          ? -1
+          : 0,
+    );
   }
 
-  async get(user: AuthoritySubject, missionId: string): Promise<MissionDetail | null> {
-    const inspected = await this.ownInspected(user, missionId);
+  /**
+   * One mission, for its creator or for a current member (spec §0: a member
+   * "can read it"). A member reads the same policy, resources and counters,
+   * and the kit with their own token's prefix; they edit nothing
+   * (`gates_editable: false`, and every mutation of this service answers
+   * `not-found` to anyone but the creator).
+   */
+  async get(user: Reader, missionId: string): Promise<MissionDetail | null> {
+    const inspected = await this.access(user, missionId);
     if (!inspected) return null;
     const { mission } = inspected;
     const issuers = await this.issuersOf([mission]);
-    const overview = await this.overviewOf(inspected, issuers.get(mission.id) ?? null);
+    const overview = await this.overviewOf(inspected, user, issuers.get(mission.id) ?? null);
     const connections = await this.detailConnections(mission);
     const remaining = overview.state.kind === 'active' ? overview.state.remaining : null;
     const rows = this.catalogRowsOf(connections);
@@ -735,12 +871,12 @@ export class MissionService {
     });
     return {
       ...overview,
-      gates_editable: gateEditBlockedBy(overview.mission) === null,
+      gates_editable: inspected.role === 'creator' && gateEditBlockedBy(overview.mission) === null,
       connections,
       policy,
       period: statedPeriodOf(mission),
       kit: overview.token
-        ? await this.kitFor(mission, { prefix: overview.token.prefix }, connections)
+        ? await this.kitOf(mission, { prefix: overview.token.prefix }, connections)
         : null,
     };
   }
@@ -768,12 +904,16 @@ export class MissionService {
   }
 
   private async overviewOf(
-    { mission, orphan }: InspectedMission,
+    { mission, orphan, role }: MissionAccess,
+    reader: Reader,
     issuedVia: MissionIssuer | null,
   ): Promise<MissionOverview> {
-    const token = await this.activeToken(mission.id);
+    const token = await this.ownToken(mission.id, reader.id);
+    const creator = await this.deps.store.users.getById(mission.creatorUserId);
     return {
       mission,
+      role,
+      creator: { id: mission.creatorUserId, email: creator?.email ?? null },
       state: await this.stateOf(mission),
       orphan: orphan && {
         cause: orphan.cause,
@@ -804,13 +944,41 @@ export class MissionService {
     return issuers;
   }
 
-  private stateOf(mission: MissionRecord): Promise<MissionState> {
+  /** The mission's state at this instant (the budget's single derivation). */
+  stateOf(mission: MissionRecord): Promise<MissionState> {
     return this.budget.stateOf(budgetMissionOf(mission), this.deps.clock.now());
   }
 
-  private async activeToken(missionId: string): Promise<MissionTokenRecord | null> {
+  /** The active member token this user holds on the mission, if any. */
+  private async ownToken(missionId: string, userId: string): Promise<MissionTokenRecord | null> {
     const tokens = await this.deps.store.missions.listTokens(missionId);
-    return tokens.find((t) => t.status === 'active') ?? null;
+    return (
+      tokens.find(
+        (t) => t.status === 'active' && t.holder.kind === 'member' && t.holder.userId === userId,
+      ) ?? null
+    );
+  }
+
+  private async isActiveUser(userId: string): Promise<boolean> {
+    return (await this.deps.store.users.getById(userId))?.status === 'active';
+  }
+
+  /**
+   * Who may READ a mission, and as what: its creator, or a current member who
+   * is an active user. One answer (`null`) for "does not exist", "not yours"
+   * and "no longer shared with you". Every mutation of the mission itself goes
+   * through `ownMission` instead, which knows the creator only.
+   */
+  async access(user: Reader, missionId: string): Promise<MissionAccess | null> {
+    const mission = await this.deps.store.missions.getById(missionId);
+    if (!mission) return null;
+    if (mission.creatorUserId === user.id) {
+      return { ...(await this.deps.grounds.inspect(mission)), role: 'creator' };
+    }
+    const member = await this.deps.store.missions.getMember(mission.id, user.id);
+    if (!member || member.removedAt !== null) return null;
+    if (!(await this.isActiveUser(user.id))) return null;
+    return { ...(await this.deps.grounds.inspect(mission)), role: 'member' };
   }
 
   /**
@@ -868,7 +1036,13 @@ export class MissionService {
     );
   }
 
-  private async kitFor(
+  /**
+   * The bootstrap kit of the mission around one token: its secret (shown once,
+   * to the holder who just generated it) or its masked prefix. The same kit
+   * for every holder but for that token: same resources, same policy, same
+   * budget (spec §0 "Mission member").
+   */
+  async kitOf(
     mission: MissionRecord,
     token: { secret: string } | { prefix: string },
     known?: readonly MissionDetailConnection[],
@@ -895,4 +1069,20 @@ export class MissionService {
       token,
     });
   }
+}
+
+/**
+ * The holder of a token as the door and the audit name it. A member is shown
+ * by their email; a member whose user row is gone keeps their id.
+ */
+export function tokenHolderOf(
+  token: Pick<MissionTokenRecord, 'holder'>,
+  user: Pick<UserRecord, 'email'> | null,
+): TokenHolder {
+  if (token.holder.kind === 'named') return { kind: 'named', name: token.holder.name };
+  return {
+    kind: 'member',
+    user_id: token.holder.userId,
+    display: user?.email ?? token.holder.userId,
+  };
 }

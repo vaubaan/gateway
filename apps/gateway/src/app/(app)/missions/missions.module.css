@@ -787,3 +787,10 @@
 .nowrap {
   white-space: nowrap;
 }
+
+/* The two lists of /missions: created by me, shared with me. */
+.listTitle {
+  margin: var(--space-5) 0 var(--space-2);
+  font-size: var(--text-md, var(--text-sm));
+  font-weight: 600;
+}

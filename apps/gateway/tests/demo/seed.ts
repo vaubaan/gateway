@@ -61,6 +61,8 @@ export const SMALL_QUOTA = 3;
 /** The loopback redirect of the seeded delegated client (an agent on the user's machine). */
 const AGENT_REDIRECT = 'http://127.0.0.1:43210/callback';
 const AGENT_USER_AGENT = 'claude-code/2.1 (demo seed)';
+/** The named token of the seeded team mission: a machine with no account. */
+export const CI_TOKEN_NAME = 'CI runner';
 
 export interface SeedContext {
   readonly root: GatewayRoot;
@@ -93,6 +95,17 @@ export interface SeedSummary {
   };
   /** The GitHub connection Alice shares to Bob, for the share steps of the tour. */
   readonly sharedConnection: { readonly id: string; readonly name: string };
+  /**
+   * The team on the active mission (spec §7.9 bis): Bob is a member and has
+   * generated his own token; "CI runner" is a named token Alice created. Both
+   * made calls, so the session and the audit attribute them.
+   */
+  readonly team: {
+    readonly mission: { readonly id: string; readonly name: string };
+    readonly member: { readonly email: string };
+    /** The named token, shown once to Alice when she created it. */
+    readonly named: { readonly name: string; readonly token: string };
+  };
   readonly counts: { readonly connections: number; readonly missions: number };
 }
 
@@ -568,6 +581,26 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     repo: product.repositories[2]?.split('/')[1] ?? repo,
   });
 
+  // ── A team on that mission: Bob as a member, and a named token ────────────
+  // Alice adds Bob; Bob generates his own token (Alice never sees it); Alice creates a
+  // named token for the CI. All three draw from the mission's one budget, and each
+  // call below is attributed to its holder.
+  const { team } = root.missions;
+  const added = await team.addMember(alice.user, active.id, { email: bob.user.email });
+  if (!added.ok) fail('adding Bob to the active mission', added.reason);
+  const bobs = await team.generateToken(bob.user, active.id);
+  if (!bobs.ok) fail('Bob generating his token', bobs.reason);
+  const ci = await team.createNamedToken(alice.user, active.id, CI_TOKEN_NAME);
+  if (!ci.ok) fail('creating the named token', ci.reason);
+  const asBob = { ...active, token: bobs.token.secret };
+  const asCi = { ...active, token: ci.token.secret };
+  await seeder.call(asBob, 'reviewer', 'github__list_branches', repository);
+  await seeder.call(asBob, 'reviewer', 'github__get_file_contents', {
+    ...repository,
+    path: 'README.md',
+  });
+  await seeder.call(asCi, 'pipeline', 'github__list_branches', repository);
+
   // ── The quota spent, then one call too many: an open claim ────────────────
   let claim: Record<string, unknown> | null = null;
   for (let read = 0; read <= SMALL_QUOTA; read += 1) {
@@ -648,6 +681,11 @@ export async function seedDemo(ctx: SeedContext): Promise<SeedSummary> {
     openApprovalUrl: approval.approval_url,
     approval: { mission: gated, ...merge },
     sharedConnection: { id: github.id, name: github.displayName },
+    team: {
+      mission: { id: active.id, name: active.name },
+      member: { email: bob.user.email },
+      named: { name: CI_TOKEN_NAME, token: ci.token.secret },
+    },
     counts: {
       connections: (await root.connections.service.listFor(aliceActor)).length,
       missions: (await root.missions.service.list(alice.user)).length,

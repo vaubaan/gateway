@@ -1,5 +1,5 @@
 ---
-title: Missions — authority, issuance, presets, resources, tokens, bootstrap kit
+title: Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
 status: current
 date: 2026-10-13
 last_synced: 2026-10-13
@@ -14,12 +14,14 @@ tracks:
   - apps/gateway/src/server/providers/
   - apps/gateway/tests/integration/missions/
   - apps/gateway/tests/e2e/v5/issue-mission.spec.ts
+  - apps/gateway/tests/e2e/v5/team-mission.spec.ts
+  - apps/gateway/migrations/0010_mission_members_and_token_holders.sql
   - apps/gateway/tests/e2e/v5/browser.ts
   - apps/gateway/tests/e2e/v5/instance.ts
   - apps/gateway/tests/e2e/v5/ephemeral-instance.ts
 ---
 
-# Missions — authority, issuance, presets, resources, tokens, bootstrap kit
+# Missions — authority, issuance, presets, resources, members and tokens, bootstrap kit
 
 How a connection owner issues a mission — a per-`RiskId` `(budget, gate)`
 policy on selected resources — and receives its token once. Spec:
@@ -56,6 +58,11 @@ apps/gateway/src/server/missions/
   draft-schema.ts        missionDraftSchema, parseMissionDraft() — zod shape check of a JSON draft; the schema is
                          also the input of the management door's `preview_policy` and `issue_mission`
   token.ts               mintMissionToken(), prefixOfBearer(), bearerMatches(), maskedToken()
+  token-issuer.ts        issueTokenTo() — mints one token for one holder; the secret is in its return value only
+  token-name.ts          parseTokenName(), TOKEN_NAME_RULE — the name of a named token             (pure)
+  team-service.ts        MissionTeamService: team / addMember / removeMember / generateToken /
+                         createNamedToken / revokeToken / revokeTokensOfDeactivated
+  team-handlers.ts       Request → Response handlers of /api/missions/:id/{members,tokens}/**
   mission-service.ts     MissionService: issuanceContext / preview / issue / draftFrom / duplicate /
                          rotate / revoke / setGate / verifyToken / list / get
   orphan-reason.ts       explainOrphan() — the sentences of the orphaned banner on /missions/<id>          (pure)
@@ -77,11 +84,15 @@ apps/gateway/src/app/(app)/missions/
   [id]/session/page.tsx  /missions/<id>/session — counters, requests, timeline (handbook audit)
   [id]/mission-actions.tsx  Duplicate / Rotate / Revoke (client)
   [id]/gate-control.tsx  one button per policy row: Require approval / Set to auto (client)
+  [id]/team-section.tsx  "Members and tokens": the reader's own token, members, tokens, the creator's two forms (client)
+  [id]/team.module.css   styles of that section
   bootstrap-kit-view.tsx BootstrapKitView, RevealDialog (client)
   state-badge.tsx        StateBadge — the derived mission state (list and detail)
   new/labels.ts          GATE_LABELS
   missions.module.css    styles of the Missions pages
-apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [id]/revoke, [id]/gate — one-line adapters
+apps/gateway/src/app/api/missions/   route.ts, preview/route.ts, [id]/rotate, [id]/revoke, [id]/gate,
+                                     [id]/members, [id]/members/[userId]/remove, [id]/tokens, [id]/tokens/mine,
+                                     [id]/tokens/[tokenId]/revoke — one-line adapters
 ```
 
 `model`, `catalog-view`, `preview` and `summary` are **browser-safe** (values
@@ -416,7 +427,8 @@ preference of the owner); a stale one is dropped by all three.
   the copy is a new issuance and resolves "all" against the resources known when
   _it_ is issued, while the source keeps reaching none.
 - **`rotate`** — creator only; the mission must be `active` and unexpired
-  (`deriveMissionState`); the old token becomes `rotated`; audit
+  (`deriveMissionState`); the **creator's own** token becomes `rotated` and
+  every other holder's token is untouched ("Members and tokens" below); audit
   `mission-rotated`; a `rotation` session event when the session exists.
   Through a delegation (`options.delegation`, the management door) only a
   mission that very delegation issued is rotated: any other answers
@@ -425,21 +437,35 @@ preference of the owner); a stale one is dropped by all three.
   delegation issued"). The human rotates any of their missions; the HTTP
   handler, which passes no delegation, maps that reason to 404 like
   `not-found`.
-- **`revoke`** — creator only, idempotent; status `revoked`, active tokens
-  `revoked`; audit `mission-revoked`; `revocation` session event.
+- **`revoke`** — creator only, idempotent; status `revoked`, every active
+  token of every holder `revoked`; audit `mission-revoked`; `revocation`
+  session event.
 - **`verifyToken(bearer)`** — `prefixOfBearer` (a `vbn_live_` key only) →
   `missions.findTokenByPrefix` → `bearerMatches` (argon2 verify) →
-  `{ outcome: 'verified', mission, token }`, `{ outcome: 'retired', reason:
-'rotated' | 'revoked', mission, token }` or `{ outcome: 'unknown' }` (malformed,
+  `standingOf`: `{ outcome: 'verified', mission, token }`, `{ outcome:
+'retired', reason, mission, token }` or `{ outcome: 'unknown' }` (malformed,
   unknown prefix and wrong secret are one answer). `token` is a `VerifiedToken`
-  — `{ id, prefix }`: the token record and its hash do not leave the service.
-  The execution door
-  ([execution-door](execution-door.md)) calls it behind its verified-token
-  cache, turns `retired/rotated` into an authentication failure (401) and a
-  revoked mission into `mission-inactive` through gateway-core's
+  — `{ id, prefix, holder }`: the token record and its hash do not leave the
+  service. `reason` is a `TokenRetirement`: `rotated`, `revoked`,
+  `holder-removed` or `holder-deactivated` ("What a token is worth" below).
+  **`provenToken(prefix, tokenId)`** is the same judgement for a bearer whose
+  hash match the execution door already holds in its cache: it re-reads the
+  row and ends in the same `standingOf`.
+  The execution door ([execution-door](execution-door.md), "Token holders")
+  turns a retirement into a 401 that states the reason, and a token revoked
+  with its mission into `mission-inactive` through gateway-core's
   `checkMissionActive`.
-- **`list` / `get`** — the creator's missions with their state and the active
-  token's prefix; `get` adds connections, the resources the mission reaches,
+- **`access(user, missionId)`** — who may **read** a mission, and as what:
+  `role: 'creator'`, or `role: 'member'` for a current member who is an active
+  user; `null` otherwise (one answer for "does not exist", "not yours", "no
+  longer shared with you"). `get`, the session view and the team service read
+  through it. Every mutation above goes through `ownMission`, which knows the
+  creator only: a member gets `not-found`.
+- **`list` / `get`** — the missions the user created (`role: 'creator'`) and
+  the ones shared with them as a member (`role: 'member'`), newest first, each
+  with its state, its `creator` (`{ id, email }`) and the prefix of the
+  reader's **own** active token (`null` for a member who has not generated
+  theirs); `get` adds connections, the resources the mission reaches,
   labelled policy lines with what is left this period, and the kit with the
   masked prefix. The state comes from the budget's single "load counters,
   derive state" read (`SessionService.stateOf`, handbook
@@ -473,6 +499,87 @@ store's names are its contract, so consumers alias them (`…Record`).
 
 "Not found" and "not yours" are one answer everywhere (`not-found`).
 
+## Members and tokens — `MissionTeamService` (`team-service.ts`)
+
+Spec §0 "Mission member", "Mission token"; §7.9 bis "Work on a mission as a
+team". ADR
+[mission-members-and-per-holder-tokens](../decisions/mission-members-and-per-holder-tokens.md).
+Built by the module as `root.missions.team`.
+
+A mission has **one or more tokens, each with one holder**, so that every call
+through the execution door is attributed:
+
+| Kind     | Holder                                                            | Generated by           | The secret is shown, once, to |
+| -------- | ----------------------------------------------------------------- | ---------------------- | ----------------------------- |
+| `member` | a member of the mission: its creator, or a user the creator added | that member, signed in | that member only              |
+| `named`  | something with no account, identified by its name                 | the creator            | the creator                   |
+
+All tokens share the mission's resources, its policy and its **one** budget
+(spec §3.2). The creator is a member **by construction** and has no row in
+`mission_members`; the token a mission is issued with is the creator's own
+member token.
+
+| Method                                       | Who                 | What it does                                                                                                                               | Audit act                                                |
+| -------------------------------------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------- |
+| `team(user, id)`                             | creator, member     | members (creator first), the tokens that work now with holder, kind, created, last used, `mine`, `revocable`; `candidates` for the creator | —                                                        |
+| `addMember(user, id, { email })`             | creator             | the target must be an **active user** (`findActiveUserByEmail`); refused on a revoked mission; no authority is checked on the member       | `mission-member-added`                                   |
+| `removeMember(user, id, userId)`             | creator             | marks the row removed and revokes the member's token in **one store transaction**                                                          | `mission-member-removed`                                 |
+| `generateToken(user, id)`                    | creator, member     | a new member token for the **caller**; their previous one becomes `rotated`; the mission must serve calls; returns the secret and the kit  | `mission-token-issued` (first) / `mission-rotated`       |
+| `createNamedToken(user, id, name)`           | creator             | `parseTokenName`; one active token per name (`name-taken`); returns the secret and the kit                                                 | `mission-token-issued`                                   |
+| `revokeToken(user, id, tokenId)`             | its holder, creator | one token, on its own; idempotent (`already: true`)                                                                                        | `mission-token-revoked` (`by-holder` / `by-creator`)     |
+| `revokeTokensOfDeactivated(actorId, userId)` | the users module    | revokes the tokens a deactivated user holds on missions they did **not** create                                                            | `mission-token-revoked` (`holder-deactivated`), one each |
+
+Token issuance and revocation also leave a session event when the session
+exists: `rotation` (`{ token_prefix, token_kind, holder, replaced_prefix }`)
+and `revocation` (`{ tokens_revoked: 1, token_prefix, token_kind, holder }`);
+a mission-wide revocation keeps `{ tokens_revoked: n }` alone.
+
+**What a member can and cannot do.** A member reads the mission, its session
+and its team, and manages their own token. They cannot edit the mission, its
+gates, its members or its named tokens, nor see or answer its requests:
+`MissionService` mutations and `RequestService` (`own`, the inbox) know the
+creator only, and the team service answers `not-found` to a member for the
+creator's acts (`tests/integration/missions/team.test.ts` tries each and
+compares the store before and after). `MissionDetail.gates_editable` is
+`false` for a member.
+
+**Authority.** A member works under the creator's authority and needs no share
+of the mission's connections (spec §11.2). `orphaned` is still derived from
+the **creator** alone: it holds for every holder at once, and comes back for
+every holder at once, same tokens.
+
+**The creator never sees a member's secret.** `generateToken` returns it to
+the member who called, and `issueTokenTo` (`token-issuer.ts`) hands the store
+a prefix and an argon2id hash. No method of either service, no handler answer
+to the creator, no audit entry and no row carries it; a test reads everything
+the creator can read, and every column of every table, and looks for it.
+
+### What a token is worth — `standingOf`
+
+One private function of `MissionService`, reached by `verifyToken` and by
+`provenToken`, read from the store on every call:
+
+1. a **member** token (other than the creator's) whose holder is not an
+   active user → `retired / holder-deactivated`; whose holder has no current
+   membership row → `retired / holder-removed`;
+2. a token row that is not `active` → `retired / rotated` or `revoked`;
+3. otherwise `verified`, with the holder (`tokenHolderOf`: a member is shown
+   by their email, a named token by its name).
+
+Step 1 does not depend on any write having happened: removal and deactivation
+are effective at the next call. The writes exist too (`removeMember`,
+`revokeTokensOfDeactivated`) so that a member added again, or a user
+reactivated, starts with no token rather than with an old Bearer working
+again. The creator's own token is not judged on the creator's status: a
+deactivated creator orphans the mission instead, reversibly.
+
+### The name of a named token (`token-name.ts`)
+
+`parseTokenName`: trimmed, inner runs of spaces collapsed, 1 to 60 characters
+of letters, digits, spaces and `. _ -`, starting with a letter or a digit. No
+`@`: a holder shown with one is always a member's email. The name is what the
+session, the audit and the catalog show, and what a filter is typed with.
+
 ## HTTP surface
 
 | Route                           | Handler   | Answers                                                                                                                        |
@@ -482,6 +589,20 @@ store's names are its contract, so consumers alias them (`…Record`).
 | `POST /api/missions/:id/rotate` | `rotate`  | 200 `{ mission, token, kit }` · 404 · 409 `mission-inactive`                                                                   |
 | `POST /api/missions/:id/revoke` | `revoke`  | 200 `{ mission: { id, status } }` · 404                                                                                        |
 | `POST /api/missions/:id/gate`   | `setGate` | 200 `{ mission, risk_id, gate, previous }` · 400 `invalid-gate-edit` · 404 · 409 `mission-inactive` · 422 `risk-not-in-policy` |
+
+The team's routes (`team-handlers.ts`, same guard, merged into
+`root.missions.handlers`):
+
+| Route                                           | Handler            | Answers                                                                                                          |
+| ----------------------------------------------- | ------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| `POST /api/missions/:id/members`                | `addMember`        | 201 `{ member }` · 400 `invalid-member` · 404 · 409 `already-member` / `mission-inactive` · 422 `user-not-found` |
+| `POST /api/missions/:id/members/:userId/remove` | `removeMember`     | 200 `{ user_id, token_revoked }` · 404                                                                           |
+| `POST /api/missions/:id/tokens/mine`            | `generateToken`    | 200 `{ mission, token: { secret, prefix }, kit, rotated }` · 404 · 409 `mission-inactive`                        |
+| `POST /api/missions/:id/tokens`                 | `createNamedToken` | 201 `{ mission, token, kit, rotated: false }` · 400 `invalid-name` · 404 · 409 `name-taken` / `mission-inactive` |
+| `POST /api/missions/:id/tokens/:tokenId/revoke` | `revokeToken`      | 200 `{ token_id, already }` · 404                                                                                |
+
+`tokens/mine` answers the member who asked: it is the only response that ever
+carries a member token's secret.
 
 All five go through `guardMutation(request, deps, 'user')` (handbook
 [authentication](authentication.md)): origin check first (403
@@ -684,6 +805,29 @@ After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
 "I copied the token" goes to `/missions/<id>`, which only ever shows
 `vbn_live_<prefix>_…`. Rotation opens the same dialog.
 
+## The pages for a team
+
+- **`/missions`** — two lists: "Created by me" and "Shared with me" (the
+  creator's email, and "not generated yet" while the member has no token).
+  "Duplicate from…" on the creation screen offers the created ones only.
+- **`/missions/<id>`** — read by the creator and by members. A member gets a
+  "Shared with you" banner naming the creator and none of the creator's
+  controls (Duplicate, Rotate token, Revoke mission, the gate buttons). The
+  page was otherwise left as it is; the team lives in one self-contained
+  section, `TeamSection` (`team-section.tsx`), fed by
+  `root.missions.team.team()`:
+  - **Your token** — its masked prefix, when it was generated and last used;
+    "Generate my token" / "Rotate my token" (the reveal-once dialog with the
+    kit, as at issuance) and "Revoke my token";
+  - **Members** — email, role, added, whether they generated a token; for the
+    creator, "Remove" and a select of the active users not on the mission yet
+    ("Add member");
+  - **Tokens that work now** — holder, kind, masked prefix, created (and by
+    whom, for a named token), last used; for the creator, "Revoke" on each and
+    a name field ("Create named token").
+
+  No list of this section carries more than a prefix.
+
 ## Bootstrap kit (`bootstrap-kit.ts`)
 
 `buildBootstrapKit({ instanceUrl, mission, connections, policy, token })` →
@@ -694,7 +838,10 @@ After a 201 the **reveal-once dialog** shows the bootstrap kit with the secret;
 '<public_url>/mcp', headers: { Authorization: 'Bearer
 ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    secret;
-3. `agent_instructions` — a Markdown block: a section "Sub-agents and agent
+3. `agent_instructions` — a Markdown block: a section "Whose token this is"
+   (one holder per token, every call recorded under that holder, `GET
+/mcp/catalog` says who; the budget is one for every holder; requests are
+   the creator's), then a section "Sub-agents and agent
    labels" (`agentLabelGuidance`, spec §7.9) — an orchestrator hands its
    sub-agents this MCP configuration as is, same endpoint and same token,
    never a token per agent; each agent names itself with the header
@@ -708,7 +855,9 @@ ${VAUBAAN_MISSION_TOKEN}' } } } }`: the variable by reference, never the
    env labels), accepted risks with quota per period, rate limit and gate,
    reload and expiry, "the budget is shared, not multiplied", then one line per
    refusal code from `REFUSAL_GUIDANCE` (a `Record<RefusalCode, string>`, so a
-   new code fails to compile until it has its line), "Never work around a
+   new code fails to compile until it has its line), a section "When the token
+   itself stops working" with one line per `AUTH_FAILURE_REASONS` entry from
+   `TOKEN_STOPPED_GUIDANCE` (keyed the same way), "Never work around a
    refusal… give that URL to the human as is", and a closing section "The
    management door" (`managementDoorSection`): the URL of `/mcp/manage`, that
    the mission token does not open it, and that nothing behind it lifts a
@@ -745,13 +894,20 @@ and resources are read through the store repositories only
 
 Unit, beside the code (133): `authority/authority-service.test.ts` (20),
 `missions/preview.test.ts` (44), `catalog-view.test.ts` (12), `summary.test.ts`
-(8), `bootstrap-kit.test.ts` (13), `orphan-reason.test.ts` (4), `token.test.ts`
+(8), `bootstrap-kit.test.ts` (16), `orphan-reason.test.ts` (4), `token.test.ts`
 (8, with the draft schema), `app/(app)/missions/new/form-state.test.ts` (22),
 `app/(app)/missions/message-of.test.ts` (2: the sentence a mission page shows
 for a refusal of the mission API).
 
-Integration, `tests/integration/missions/` (54) on the real root over
-`:memory:`: `mission-lifecycle.test.ts` (28), `mission-handlers.test.ts` (8) and
+Also beside the code: `missions/token-name.test.ts` (23: what a name may be).
+
+Integration, `tests/integration/missions/` (81) on the real root over
+`:memory:`: `team.test.ts` (27: members added, offered, removed and added
+again; a member's own token generated, rotated, revoked; named tokens; the
+mission revoked; the session events; each thing a member cannot do, with the
+store compared before and after; requests not seen and not answered; the
+creator reading everything and every table without finding a member's secret;
+the handlers' statuses and guard), `mission-lifecycle.test.ts` (28), `mission-handlers.test.ts` (8) and
 `gate.test.ts` (18: both directions and what the next call answers, the audit entry and
 the session event, a no-op, `approval` asked on a gate open for the period closing the
 opening with one entry and one event, creator only, the refusals, `gate_open_until`, the
@@ -762,7 +918,10 @@ detail and the kit list what the door reaches (no resource at issuance then a
 discovery; every resource hidden; a resource turned stale).
 Scenarios in [integration-tests](../tests/integration-tests.md).
 
-Browser, `tests/e2e/v5/issue-mission.spec.ts` (2) and the gate edit at the end of
+Browser, `tests/e2e/v5/team-mission.spec.ts` (1: a member added, a named
+token, the member's own token in her browser only, three holders attributed in
+the session and the audit, each token stopping on its own),
+`tests/e2e/v5/issue-mission.spec.ts` (2) and the gate edit at the end of
 `approve-action.spec.ts`, `npm run test:e2e:v5`: see [e2e-tests](../tests/e2e-tests.md)
 for the ephemeral instance.
 
@@ -793,9 +952,17 @@ for the ephemeral instance.
   computed on that page load, so reload after the owner shared again or after a new
   sign-in. Nothing in the `missions` table says `orphaned`: the row is `active`.
   [authority](authority.md), "How to debug".
-- **A token is refused** — `verifyToken` → `retired/rotated`: an older token of
-  the mission; `retired/revoked`: the mission was revoked; `unknown`: wrong
-  instance, truncated secret, or not a `vbn_live_` key.
+- **A token is refused** — `verifyToken` → `retired/rotated`: its holder
+  generated a newer one; `retired/revoked`: it was revoked on its own, or the
+  mission was; `retired/holder-removed` / `holder-deactivated`: its member is
+  no longer a member, or no longer an active user; `unknown`: wrong instance,
+  truncated secret, or not a `vbn_live_` key. The mission page's "Members and
+  tokens" lists the tokens that work now.
+- **A member does not see the mission** — `access` wants a current row in
+  `mission_members` (`removed_at IS NULL`) and `users.status = 'active'`.
+- **"No token can be generated now"** — the mission does not serve calls
+  (revoked, expired, orphaned): `generateToken` and `createNamedToken` answer
+  `mission-inactive`. Revoking a token and removing a member still work.
 
 ## References
 

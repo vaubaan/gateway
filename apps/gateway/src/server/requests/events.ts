@@ -20,7 +20,9 @@ import {
   type GateOpenedEventDetails,
   type Iso8601,
   type RequestEventDetails,
+  type RevocationEventDetails,
   type RiskId,
+  type RotationEventDetails,
 } from '@vaubaan/shared';
 
 export interface SessionEventLike {
@@ -41,8 +43,25 @@ export interface SessionEventLine {
 }
 
 const RESET_LINE = 'The creator reset the period: every counter back to zero';
-const ROTATION_LINE = 'The mission token was rotated';
+const ROTATION_LINE = 'A mission token was rotated';
+const TOKEN_ISSUED_LINE = 'A mission token was issued';
 const REVOCATION_LINE = 'The mission was revoked';
+const TOKEN_REVOKED_LINE = 'One token of the mission was revoked';
+
+/**
+ * A `rotation` event is a token issued to one holder: a rotation when it replaced
+ * their previous one, a first token otherwise. An event stored before tokens had a
+ * holder (no `token_kind`) was always a rotation.
+ */
+function describeRotation(details: RotationEventDetails): string {
+  const first = details.token_kind && !details.replaced_prefix;
+  return first ? TOKEN_ISSUED_LINE : ROTATION_LINE;
+}
+
+/** One token revoked on its own names it; without a prefix the whole mission was revoked. */
+function describeRevocation(details: RevocationEventDetails): string {
+  return details.token_prefix ? TOKEN_REVOKED_LINE : REVOCATION_LINE;
+}
 
 function describeCall(
   verb: string,
@@ -142,9 +161,9 @@ export function describeEvent(event: SessionEventLike): string {
     case 'gate-changed':
       return describeGateChanged(parsed.details);
     case 'rotation':
-      return ROTATION_LINE;
+      return describeRotation(parsed.details);
     case 'revocation':
-      return REVOCATION_LINE;
+      return describeRevocation(parsed.details);
   }
 }
 

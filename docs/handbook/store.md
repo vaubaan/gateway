@@ -43,6 +43,9 @@ apps/gateway/migrations/
                                   and the index of the per-label timeline (schema version 8)
   0009_user_sessions_ended_at.sql users: `sessions_ended_at`, the instant of the user's last
                                   deactivation (schema version 9)
+  0010_mission_members_and_token_holders.sql
+                                  `mission_members`; `mission_tokens` rebuilt with one holder per
+                                  token; who called on `audit` and `events` (schema version 10)
 apps/gateway/src/server/store/
   index.ts                        openStore() / openMemoryStore(), Store type, re-exports
   db.ts                           openDb() — better-sqlite3 handle, pragmas, MIN_SQLITE_VERSION,
@@ -185,9 +188,9 @@ five-id catalog).
   with no resource…), driver errors (`SqliteError` with `code`) for constraint
   violations the schema catches (`UNIQUE`, `FOREIGN KEY`, `CHECK`).
 
-## Schema (`0001_schema.sql` … `0009_user_sessions_ended_at.sql`)
+## Schema (`0001_schema.sql` … `0010_mission_members_and_token_holders.sql`)
 
-Schema version 9. `0001` creates every table and trigger; `0002` only replaces the
+Schema version 10. `0001` creates every table and trigger; `0002` only replaces the
 `audit_risks` delete trigger (see Audit); `0003` adds `web_sessions`; `0004` adds the
 owner-curation columns of `connection_resources` (plain `ADD COLUMN`s); `0005` adds
 `approvals.tool` (`NOT NULL DEFAULT ''`: a row written before it matches no call) and
@@ -203,7 +206,8 @@ creates the index `events_session_label_ts` on `(session_id, agent_label, ts, id
 nullable `ADD COLUMN`, no default, no backfill): the instant of the user's last
 deactivation, kept after a reactivation — `removed_at` cannot carry it, since it is
 cleared when the user is active again (handbook [authentication](authentication.md),
-"Deactivating a user").
+"Deactivating a user"); `0010` adds mission members and gives every mission token one
+holder (see "Mission members and token holders" below).
 
 | Area        | Tables                                                                                                                     | Notes                                                                                                                                                                                                                                                                                                                                                                         |
 | ----------- | -------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -213,7 +217,7 @@ cleared when the user is active again (handbook [authentication](authentication.
 | Delegations | `oauth_clients`, `oauth_client_redirect_uris`, `delegations`, `oauth_codes`, `oauth_refresh_tokens`, `oauth_access_tokens` | all secrets stored as hashes by the caller; codes single-use; refresh tokens chain through `replaced_by_id`; `oauth_clients.operator_decision` (`approved`\|`disabled`, NULL while the registration policy decides), `registration` (`dynamic`\|`metadata-document`); `delegations.revoke_reason`; repository and its replay lookups in [management-door](management-door.md) |
 | Connections | `connections`, `connection_resources`                                                                                      | owner = `owner_kind` + `owner_user_id`/`owner_group_id` with a CHECK; status `active\|expired\|revoked\|unowned`; resources unique per `(connection_id, ref)` with an `env` label, its `env_source` (`owner`\|`plugin`), `metadata_json` (provider facts) and `owner_metadata_json` (owner edits), `display_name_edited`, `hidden`, `stale_since` (see Connections below)     |
 | Shares      | `shares`, `share_restrictions`                                                                                             | target principal like owner; one `risk_id` row per restriction entry                                                                                                                                                                                                                                                                                                          |
-| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`                                 | status `active\|expired\|revoked` (`orphaned` is derived, `0007` refuses it; `exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; partial unique index = one `active` token per mission                                                            |
+| Missions    | `missions`, `mission_connections`, `mission_resources`, `mission_policy`, `mission_tokens`, `mission_members`              | status `active\|expired\|revoked` (`orphaned` is derived, `0007` refuses it; `exhausted` is per risk, computed); `period_anchor` + nullable `period_seconds`; `resource_scope all\|selected`; policy row = `(quota, rate_limit, rate_window_seconds, gate)`; partial unique index = one `active` token per mission                                                            |
 | Sessions    | `sessions`, `session_counters`, `events`                                                                                   | one session per mission (`mission_id` unique); counters keyed `(session_id, risk_id, period_start)`; events are free-form `kind` + JSON details; `events.agent_label` (`0008`) is a copy of the label of a call event, made at insert, for the per-label timeline                                                                                                             |
 | Requests    | `requests`, `approvals`                                                                                                    | `kind claim\|approval`, `state open\|granted\|refused\|expired`; approval requests carry `tool`, `fingerprint`, encrypted `args_blob` (NULL on decision and on expiry); one approval per request, keyed `(mission, risk, tool, fingerprint)`, consumed via `consumed_at`                                                                                                      |
 | Audit       | `audit`, `audit_risks`, `audit_purge_guard`                                                                                | see below                                                                                                                                                                                                                                                                                                                                                                     |
@@ -344,6 +348,56 @@ unlabelled calls as `label: null`, busiest first. It is two prepared statements,
 bounded span (`ts < until`) and one for an open span (`until: null`), each a `GROUP BY` with
 `SUM(CASE …)`: no parameter is bound only to be compared with `NULL`, which Postgres cannot
 type. It serves the session page's "calls per agent label" and is never a budget.
+
+`tokenHolderActivity(missionId, { since, until | null })` is the same count per **token
+holder** — `(token_kind, token_holder)`, the calls written before tokens had a holder as
+`kind: null` — built the same way (two statements, index `audit_mission_holder_ts`). The
+search takes `tokenHolders: { kind, holders[] }` (calls only; an empty list matches
+nothing, and a kind is never crossed: a token named like a user's id is not that member).
+
+### Mission members and token holders (migration `0010`)
+
+Spec §0 "Mission member", "Mission token"; ADR
+[mission-members-and-per-holder-tokens](../decisions/mission-members-and-per-holder-tokens.md).
+
+- **`mission_members(mission_id, user_id, added_by, added_at, removed_at)`**, primary key
+  `(mission_id, user_id)`: the users the creator gave access to. The creator has **no row**
+  (`missions.creator_user_id` says it; `addMember` refuses them). Removing sets
+  `removed_at`; adding again clears it. Index `mission_members_user` serves "shared with me".
+- **`mission_tokens`** is rebuilt (a new table, the rows copied, the old one dropped, a
+  rename — the holder rule is a CHECK over three columns, which `ADD COLUMN` cannot
+  state). New columns: `kind` (`member` | `named`), `holder_user_id` (member tokens),
+  `name` (named tokens), `created_by`, `last_used_at`. CHECK: a member token has a holder
+  and no name, a named token a non-empty name and no holder. `mission_tokens_one_active`
+  ("one active token per mission") is replaced by two partial unique indexes:
+  `mission_tokens_one_active_per_member` on `(mission_id, holder_user_id)` and
+  `mission_tokens_one_active_per_name` on `(mission_id, name)`, each `WHERE status =
+'active'` and of its kind. **Every existing token becomes a member token of its
+  mission's creator, with the same id, prefix, hash and status**: a Bearer in use keeps
+  working.
+- **`audit.token_id`, `token_kind`, `token_holder`** and **`events.token_kind`,
+  `token_holder`**: who called. The holder is a user id (member) or a token name (named).
+  The `events` columns are copies of `details_json.token_kind` / `.holder` made at insert
+  (`holderColumns`, `repositories/sessions.ts`), as `agent_label` is, with the index
+  `events_session_holder_ts` for the timeline of one holder
+  (`listRecentEvents(…, { calls: { holder: { kind, holder } } })`). Rows written before
+  `0010` keep `NULL`: the audit triggers refuse the `UPDATE` a backfill would need, and
+  those calls were made with a token anybody on the mission could hold.
+
+`MissionTokenRecord` carries `kind`, `holder` (`TokenHolderRecord`: `{ kind: 'member',
+userId }` | `{ kind: 'named', name }`, so a holder is never half of each), `createdBy`,
+`lastUsedAt`. The secret is stored nowhere: `hash` is all there is.
+
+Repository (`MissionsRepo`): `issueToken({ …, holder, createdBy })` → `{ token, replaced }`
+retires the **same member's** active token in the transaction and leaves every other
+holder's alone; a named token whose name an active token carries is an `InvariantError`.
+`revokeToken(id)` revokes one active token (`null` otherwise); `revokeTokens(missionId)`
+all of a mission's; `revokeMemberTokensOf(userId)` every active member token the user
+holds on a mission they did **not** create (deactivation; their own missions follow the
+derived `orphaned` rule and keep their tokens). `markTokenUsed(id, granularitySeconds)`
+is one conditional `UPDATE` (written only when the stored instant is older).
+`addMember`, `removeMember` (the row and the member's token in one transaction; `null`
+when not a member), `getMember`, `listMembers`, `listForMember`.
 
 ### The timeline of one agent label
 
@@ -522,12 +576,12 @@ request or an approval is born inside a decision transaction and a share through
 | `groups` (`GroupsRepo`)           | `getOrCreate`, `createLocal`, `getById`, `getByName`, `list`, `setMembers`, `syncIdpMemberships`, `addMember`, `removeMember`, `removeAllMemberships`, `listMembers`, `memberCount`, `groupsOf`                                                                                                                                                                                                                                              |
 | `connections` (`ConnectionsRepo`) | `create`, `getById`, `list`, `listOwnedBy`, `getCredential`, `transferOwner`, `assignOwnerlessTo`, `markOwnerlessUnowned`, `listOwnerless`, `setMetadata`, `listResources`, `getResource`, `setResourceEnv`, `reconnect`, `refreshCredential`, `markExpired`, `revoke`, `syncDiscoveredResources`, `setResourceDisplayName`, `setResourceHidden`, `setResourceOwnerMetadata`                                                                 |
 | `shares` (`SharesRepo`)           | `create`, `getById`, `listForConnection`, `listActiveForTargets`, `replaceForTarget`, `revoke`                                                                                                                                                                                                                                                                                                                                               |
-| `missions` (`MissionsRepo`)       | `create`, `getById`, `listForCreator`, `listForConnection`, `issuersOf`, `setStatus`, `setExpiresAt`, `replacePolicy`, `setGate`, `issueToken`, `findTokenByPrefix`, `listTokens`, `revokeTokens`                                                                                                                                                                                                                                            |
+| `missions` (`MissionsRepo`)       | `create`, `getById`, `listForCreator`, `listForConnection`, `issuersOf`, `setStatus`, `setExpiresAt`, `replacePolicy`, `setGate`, `issueToken`, `findTokenByPrefix`, `getToken`, `listTokens`, `revokeTokens`, `revokeToken`, `revokeMemberTokensOf`, `markTokenUsed`, `listForMember`, `addMember`, `removeMember`, `getMember`, `listMembers`                                                                                              |
 | `sessions` (`SessionsRepo`)       | `getByMission`, `getOrCreate`, `decideAndDecrement`, `counters`, `recordEvent`, `listEvents`, `listRecentEvents`                                                                                                                                                                                                                                                                                                                             |
 | `requests` (`RequestsRepo`)       | `create`, `prepareArguments`, `getById`, `listOpenForCreator`, `listForMission`, `getArguments`, `decideClaim`, `decideApproval`, `sweepExpired`                                                                                                                                                                                                                                                                                             |
 | `approvals` (`ApprovalsRepo`)     | `create`, `getByRequest`, `listActive` (lookup and consumption exist only inside `decideAndDecrement`: `DecideContext.findApproval` / `consumeApproval`)                                                                                                                                                                                                                                                                                     |
 | `delegations` (`DelegationsRepo`) | `registerClient`, `getClient`, `getClientByClientId`, `listClients`, `updateClientDocument`, `decideClient`, `disableClient`, `deleteUnusedClients`, `create`, `getById`, `listForUser`, `listForClient`, `revoke`, `revokeIfActive`, `activityOf`, `createCode`, `findCode`, `redeemCode`, `findRefreshToken`, `rotateRefreshToken`, `rotateSuccessorOf`, `createAccessToken`, `findActiveAccessToken`, `revokeAccessToken`, `purgeExpired` |
-| `audit` (`AuditRepo`)             | `append`, `appendUnlessLatest`, `getById`, `list`, `search`, `latestCall`, `agentLabels`, `agentLabelActivity`, `countAllowedTouches`, `purgeOlderThan`, `purgeByRetention`                                                                                                                                                                                                                                                                  |
+| `audit` (`AuditRepo`)             | `append`, `appendUnlessLatest`, `getById`, `list`, `search`, `latestCall`, `agentLabels`, `agentLabelActivity`, `tokenHolderActivity`, `countAllowedTouches`, `purgeOlderThan`, `purgeByRetention`                                                                                                                                                                                                                                           |
 | `config` (`ConfigRepo`)           | `get`, `set`, `getSecret`, `setSecret`, `delete`, `apply`, `keys`                                                                                                                                                                                                                                                                                                                                                                            |
 | `webSessions` (`WebSessionsRepo`) | `get`, `set`, `delete`, `count`                                                                                                                                                                                                                                                                                                                                                                                                              |
 
@@ -555,7 +609,7 @@ capture both files atomically are also fine.
   failing file, downgrade refused (a recorded migration with no file), the nine shipped
   files.
 - `tests/unit/server/store/db.test.ts` — `isSqliteVersionAtLeast`.
-- `tests/integration/store/schema.test.ts` — all 29 tables, every table `STRICT`,
+- `tests/integration/store/schema.test.ts` — all 30 tables, every table `STRICT`,
   the composition `StoreLiveness` port (`kind`, `ping`, `close`), boot against an empty file
   (WAL, foreign keys, `NORMAL`), reopen without re-migrating, two writers on one file
   serialize (`SQLITE_BUSY` then success), `VACUUM INTO` backup.
@@ -576,6 +630,15 @@ capture both files atomically are also fine.
   does not bring back and `reactivate` does, `removeAllMemberships`. `decideClaim` and
   `sweepExpired` are exercised by `tests/integration/requests/request-service.test.ts`
   (handbook [requests](requests.md)).
+- `tests/integration/store/token-holders.test.ts` (4) — migration `0010` on a database an
+  earlier image wrote (every token a member token of its creator, unchanged otherwise; no
+  member row; the audit entry left without a holder; the new indexes), `holderColumns`,
+  the timeline of one holder by keyset with `tokenHolderActivity`, the search by holder.
+  `missions.test.ts` (15) holds the repository's side: one active token per member, a
+  rotation that retires its holder's token only, one token revoked on its own, a name
+  identifying one active token, the schema's CHECKs, the columns of a token row (a hash,
+  no secret), `markTokenUsed`, members added, removed with their token and added again,
+  `revokeMemberTokensOf`.
 - `tests/integration/store/approval-decisions.test.ts` (17) — migration 0005 (column and
   index), `decideApproval` (decision, erasure and approval in one transaction; a thrown
   apply writes nothing; already decided; overdue; a claim; unknown), `getArguments` on an

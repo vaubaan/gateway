@@ -126,6 +126,12 @@ const missionsAnswer = z.looseObject({
     z.looseObject({
       mission_id: z.string(),
       name: z.string(),
+      role: z
+        .string()
+        .describe(
+          '`creator`: the user issued it. `member`: its creator shared it with the user, who reads it and uses it as it is; no tool of this door changes a mission the user is only a member of.',
+        ),
+      creator_email: z.string().nullable(),
       state: z.string().describe('`active`, `expired`, `orphaned` or `revoked`.'),
       orphan: z
         .looseObject({
@@ -151,7 +157,12 @@ const missionsAnswer = z.looseObject({
             .describe('True for the missions `rotate_mission_token` accepts from this caller.'),
         })
         .nullable(),
-      token_prefix: z.string().nullable().describe('Masked; the secret is never shown again.'),
+      token_prefix: z
+        .string()
+        .nullable()
+        .describe(
+          'Masked prefix of the user’s own token of this mission; the secret is never shown again.',
+        ),
       connection_ids: z.array(z.string()),
       policy: z.array(
         z.looseObject({

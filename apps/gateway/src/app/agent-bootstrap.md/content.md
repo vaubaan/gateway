@@ -14,7 +14,10 @@
 
 A **mission token** (`vbn_live_<prefix>_<secret>`), normally in the
 environment variable `VAUBAAN_MISSION_TOKEN`. It identifies exactly one
-**mission**: a named objective a human issued for you. A mission carries:
+**mission** — a named objective a human issued — and exactly one **holder**:
+the person who generated the token for themselves (a _member_ of the mission),
+or a machine the mission creator named (a _named_ token). Every call you make
+is recorded under that holder's name. A mission carries:
 
 - **connections** — the cloud providers you may reach (GitHub, Supabase,
   Vercel…), authenticated by the company, never by you;
@@ -80,16 +83,22 @@ Tool names are prefixed by provider (`github__…`, `supabase__…`). Cite
 resources by the refs of your bootstrap kit (`owner/repo`, a project ref):
 they are the only refs the mission knows.
 
-## 4. One budget, however many agents
+## 4. One budget, however many agents or tokens
 
 Sub-agents use the **same** MCP configuration and the **same** token. Every
 allowed call decrements the same counters: multiplying agents does not
 multiply the budget. A refused call consumes nothing.
 
+**Other holders.** Several people, and machines the creator named, may work on
+one mission, each with their own token. They share the mission's resources,
+its accepted risks and its **one** budget: what another holder spends is spent
+for you too. Requests (claims, approvals) are answered by the mission creator
+alone, whoever holds the token that caused them.
+
 **Handing the mission to sub-agents.** An orchestrator gives each sub-agent
 the MCP configuration of §2 as is: same endpoint, same
-`VAUBAAN_MISSION_TOKEN`. There is no token per agent and nothing to request
-for a new one.
+`VAUBAAN_MISSION_TOKEN`. A token belongs to its holder, not to an agent: there
+is no token per agent and nothing to request for a new one.
 
 **Agent labels.** So that the mission's session and the audit tell who did
 what, each agent names itself:
@@ -113,12 +122,15 @@ A label is 1 to 64 characters: letters, digits and `.` `_` `-` `:` `/` `@`
 `+`, starting with a letter or a digit. Anything else is ignored: the call is
 served, unlabelled. A label is attribution only: it changes nothing about
 what is allowed or counted, it reserves no share of the budget, and it is not
-an identity — never put a secret in it.
+an identity — never put a secret in it. The identity of a call is the holder
+of its token, which nothing you send can change.
 
 `GET <instance URL>/mcp/catalog`, with the same `Authorization` header,
-returns the tools of the instance and which ones your mission can call, the
-resource refs and environment labels you may cite, and what is left of each
-risk's quota in the current period.
+returns whose token you are using (`token.holder`: an email, or the name of a
+named token) and who created the mission (`mission.creator`), the tools of the
+instance and which ones your mission can call, the resource refs and
+environment labels you may cite, and what is left of each risk's quota in the
+current period.
 
 ## 5. When a call is refused
 
@@ -146,6 +158,20 @@ answer it.
 A request opened before a mission was orphaned can be granted only until it
 expires. After that, your next refused call opens a new one: hand the new URL
 to the human.
+
+**When the token itself stops working.** An HTTP 401 whose `error.data.reason`
+is set means this token authenticated before and no longer does. It is not a
+refusal and says nothing about the mission, which may be running for its other
+holders:
+
+| Reason               | What happened                                    | What you do                                            |
+| -------------------- | ------------------------------------------------ | ------------------------------------------------------ |
+| `token-rotated`      | The holder generated a newer token.              | Ask the human who gave you this token for the new one. |
+| `token-revoked`      | The holder, or the mission creator, revoked it.  | Stop, and tell the human.                              |
+| `holder-removed`     | The holder is no longer a member of the mission. | Stop, and tell the human.                              |
+| `holder-deactivated` | The holder was deactivated on this instance.     | Stop, and tell the human.                              |
+
+Never look for another token to continue.
 
 ## 6. Proposing a mission
 

@@ -24,7 +24,8 @@ export default async function NewMissionPage({ searchParams }: Props) {
   const from = typeof params.from === 'string' ? params.from : null;
 
   const context = await service.issuanceContext(session.user);
-  const mine = await service.list(session.user);
+  // "Duplicate from…" offers what the user created: a mission shared with them is not theirs to copy.
+  const mine = (await service.list(session.user)).filter((m) => m.role === 'creator');
 
   let initial: InitialDraft | null = null;
   if (from) {

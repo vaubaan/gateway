@@ -98,7 +98,11 @@ const ctx: MissionContext = {
     expires_at: null,
     period: { kind: 'one-off' },
   },
-  token: { id: 'tok_1', prefix: 'vbn_live_abcd1234' },
+  token: {
+    id: 'tok_1',
+    prefix: 'vbn_live_abcd1234',
+    holder: { kind: 'member', user_id: 'usr_1', display: 'ada@example.com' },
+  },
   connections: [connection],
   resources: [resource],
   policy: [
@@ -279,6 +283,10 @@ describe('CallPipeline', () => {
       kind: 'call',
       ts: NOW.toISOString(),
       mission_id: 'mis_1',
+      // Spec §8 "the token used and its holder": from the authenticated context.
+      token_id: 'tok_1',
+      token_kind: 'member',
+      token_holder: 'usr_1',
       session_id: 'ses_1',
       connection_id: 'con_1',
       resource_ref: 'prj_x',

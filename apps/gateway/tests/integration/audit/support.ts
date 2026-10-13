@@ -7,7 +7,7 @@
  * the two halves `CallPipeline` runs for every call.
  */
 import { fingerprintArguments, type CallAuditEntry } from '@vaubaan/gateway-core';
-import type { RiskId } from '@vaubaan/shared';
+import type { RiskId, TokenAttribution } from '@vaubaan/shared';
 
 import {
   budgetMissionOf,
@@ -95,6 +95,12 @@ export interface SeedCall {
   readonly risks?: readonly RiskId[];
   readonly args?: Record<string, unknown>;
   readonly agentLabel?: string | null;
+  /**
+   * Whose token the call presented. Defaults to a member token of the mission's
+   * creator, as every mission is born with; `null` writes an entry and an event
+   * with no holder, as before tokens had one.
+   */
+  readonly token?: TokenAttribution | null;
   readonly now?: Date;
   /** Defaults to the mission's first connection. */
   readonly connectionId?: string | null;
@@ -118,12 +124,17 @@ export async function seedCall(
   const risks = call.risks ?? [READ];
   const args = call.args ?? { path: 'README.md', note: ARGUMENT_MARKER };
   const agentLabel = call.agentLabel ?? null;
+  const token =
+    call.token === undefined
+      ? { token_id: 'seeded-token', token_kind: 'member' as const, holder: mission.creatorUserId }
+      : call.token;
   const result = await rig.budget.recordCall({
     mission: budgetMissionOf(mission),
     tool,
     args,
     risks_touched: risks,
     agent_label: agentLabel,
+    token,
     now,
   });
   const allowed = result.outcome === 'allowed';
@@ -131,6 +142,9 @@ export async function seedCall(
     kind: 'call',
     ts: now.toISOString(),
     mission_id: mission.id,
+    token_id: token?.token_id ?? null,
+    token_kind: token?.token_kind ?? null,
+    token_holder: token?.holder ?? null,
     session_id: result.session_id,
     connection_id:
       call.connectionId === undefined
@@ -172,6 +186,7 @@ export const NO_FILTER = {
   tool: null,
   decision: null,
   agentLabel: null,
+  tokenHolder: null,
   kind: null,
   since: null,
   until: null,

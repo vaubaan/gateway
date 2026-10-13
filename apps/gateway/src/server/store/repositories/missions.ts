@@ -1,6 +1,8 @@
 import { assertKnownRiskIds } from '../catalog-index.ts';
 import { withImmediateTransaction } from '../db.ts';
 import { InvariantError, NotFoundError } from '../errors.ts';
+import { MISSION_TOKEN_KINDS } from '@vaubaan/shared';
+
 import {
   MISSION_TOKEN_STATUSES,
   RESOURCE_SCOPES,
@@ -8,12 +10,14 @@ import {
   type Iso,
   type MissionConnection,
   type MissionIssuerRecord,
+  type MissionMemberRecord,
   type MissionPolicyEntry,
   type MissionRecord,
   type MissionStatus,
   type MissionTokenRecord,
   type NewEvent,
   type RiskId,
+  type TokenHolderRecord,
 } from '../types.ts';
 import { nowIso, parseEnum, requireRow, type RepoContext } from './context.ts';
 import { GATES, STORED_MISSION_STATUSES } from './enums.ts';
@@ -38,6 +42,28 @@ export interface IssueTokenInput {
   readonly prefix: string;
   readonly hash: string;
   readonly hashAlg: string;
+  /** Who the token belongs to. */
+  readonly holder: TokenHolderRecord;
+  /** The user who generates or creates it. */
+  readonly createdBy: string;
+}
+
+export interface IssuedToken {
+  readonly token: MissionTokenRecord;
+  /** The holder's previous active token, now `rotated`; `null` for a first token. */
+  readonly replaced: MissionTokenRecord | null;
+}
+
+export interface AddMemberInput {
+  readonly missionId: string;
+  readonly userId: string;
+  readonly addedBy: string;
+}
+
+export interface RemovedMember {
+  readonly member: MissionMemberRecord;
+  /** The member's active token, revoked in the same transaction; `null` when they had none. */
+  readonly tokenRevoked: MissionTokenRecord | null;
 }
 
 /** What the `missions.status` column may hold: every `MissionStatus` but the derived one. */
@@ -47,6 +73,8 @@ export interface MissionsRepo {
   create(input: CreateMissionInput): Promise<MissionRecord>;
   getById(id: string): Promise<MissionRecord | null>;
   listForCreator(userId: string): Promise<MissionRecord[]>;
+  /** The missions this user is a current member of (never the ones they created). */
+  listForMember(userId: string): Promise<MissionRecord[]>;
   listForConnection(connectionId: string): Promise<MissionRecord[]>;
   /**
    * The client behind each of these missions that was issued through the
@@ -82,14 +110,54 @@ export interface MissionsRepo {
     /** A `gate-changed` event was recorded although the stored gate did not move. */
     readonly openingClosed: boolean;
   } | null>;
-  /** Issues a new token; the previously active one, if any, becomes `rotated`. */
-  issueToken(input: IssueTokenInput): Promise<MissionTokenRecord>;
+  /**
+   * Issues a token to one holder. A member's previous active token becomes `rotated`
+   * in the same transaction (at most one active token per member of a mission); the
+   * tokens of the other holders are untouched. A named token whose name an active
+   * token of the mission already carries is refused (`InvariantError`): a name
+   * identifies one token.
+   */
+  issueToken(input: IssueTokenInput): Promise<IssuedToken>;
   findTokenByPrefix(
     prefix: string,
   ): Promise<{ token: MissionTokenRecord; mission: MissionRecord } | null>;
+  getToken(tokenId: string): Promise<MissionTokenRecord | null>;
+  /** Every token of the mission, whatever its status, oldest first. */
   listTokens(missionId: string): Promise<MissionTokenRecord[]>;
   /** Revokes every non-retired token of the mission; returns how many were revoked. */
   revokeTokens(missionId: string): Promise<number>;
+  /** Revokes one active token; `null` (nothing written) when it is not active or unknown. */
+  revokeToken(tokenId: string): Promise<MissionTokenRecord | null>;
+  /**
+   * Revokes every active member token this user holds on a mission they did not
+   * create — the tokens of a deactivated member. Their tokens on their own missions
+   * are left alone: those missions read `orphaned` by the derived rule and serve
+   * again, same token, if the user is reactivated. Returns the revoked rows.
+   */
+  revokeMemberTokensOf(userId: string): Promise<MissionTokenRecord[]>;
+  /**
+   * Records that the door authenticated a call with this token. Written at most once
+   * per `granularitySeconds`: the column says "about when", not "exactly when", so a
+   * busy agent does not turn every call into a write. Returns whether a row was written.
+   */
+  markTokenUsed(tokenId: string, granularitySeconds: number): Promise<boolean>;
+
+  /**
+   * Gives a user access to the mission. Adding a removed member again clears
+   * `removed_at` (their old token stays revoked). The creator is never a row: adding
+   * them is refused (`InvariantError`).
+   */
+  addMember(input: AddMemberInput): Promise<MissionMemberRecord>;
+  /**
+   * Removes a current member and revokes their active token, in one transaction: there
+   * is no instant at which a removed member still holds a working token. `null` when
+   * the user is not a current member.
+   */
+  removeMember(missionId: string, userId: string): Promise<RemovedMember | null>;
+  /** The member's row, removed or not; `null` when the user was never a member. */
+  getMember(missionId: string, userId: string): Promise<MissionMemberRecord | null>;
+  /** The current members, in the order they were added. Never the creator. */
+  listMembers(missionId: string): Promise<MissionMemberRecord[]>;
 }
 
 export interface SetGateOptions {
@@ -143,15 +211,48 @@ interface TokenRow {
   hash: string;
   hash_alg: string;
   status: string;
+  kind: string;
+  holder_user_id: string | null;
+  name: string | null;
+  created_by: string;
   created_at: string;
   retired_at: string | null;
+  last_used_at: string | null;
 }
+
+interface MemberRow {
+  mission_id: string;
+  user_id: string;
+  added_by: string;
+  added_at: string;
+  removed_at: string | null;
+}
+
+const MS_PER_SECOND = 1000;
 
 const COLUMNS = `id, name, creator_user_id, status, period_anchor, period_seconds, expires_at,
   delegation_id, created_at, updated_at, closed_at`;
-const TOKEN_COLUMNS = 'id, mission_id, prefix, hash, hash_alg, status, created_at, retired_at';
+const TOKEN_COLUMNS = `id, mission_id, prefix, hash, hash_alg, status, kind, holder_user_id, name,
+  created_by, created_at, retired_at, last_used_at`;
+const MEMBER_COLUMNS = 'mission_id, user_id, added_by, added_at, removed_at';
+
+/** The holder of a row. The schema's CHECK guarantees the pairing; a row that breaks it is corrupt. */
+function holderOf(row: TokenRow): TokenHolderRecord {
+  const kind = parseEnum(MISSION_TOKEN_KINDS, row.kind, 'mission_tokens.kind');
+  if (kind === 'member') {
+    if (row.holder_user_id === null) {
+      throw new InvariantError(`mission_tokens ${row.id}: a member token without a holder`);
+    }
+    return { kind, userId: row.holder_user_id };
+  }
+  if (row.name === null) {
+    throw new InvariantError(`mission_tokens ${row.id}: a named token without a name`);
+  }
+  return { kind, name: row.name };
+}
 
 function tokenToRecord(row: TokenRow): MissionTokenRecord {
+  const holder = holderOf(row);
   return {
     id: row.id,
     missionId: row.mission_id,
@@ -159,8 +260,22 @@ function tokenToRecord(row: TokenRow): MissionTokenRecord {
     hash: row.hash,
     hashAlg: row.hash_alg,
     status: parseEnum(MISSION_TOKEN_STATUSES, row.status, 'mission_tokens.status'),
+    kind: holder.kind,
+    holder,
+    createdBy: row.created_by,
     createdAt: row.created_at,
     retiredAt: row.retired_at,
+    lastUsedAt: row.last_used_at,
+  };
+}
+
+function memberToRecord(row: MemberRow): MissionMemberRecord {
+  return {
+    missionId: row.mission_id,
+    userId: row.user_id,
+    addedBy: row.added_by,
+    addedAt: row.added_at,
+    removedAt: row.removed_at,
   };
 }
 
@@ -239,6 +354,12 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const byCreator = db.prepare<[string], MissionRow>(
     `SELECT ${COLUMNS} FROM missions WHERE creator_user_id = ? ORDER BY created_at`,
   );
+  const byMember = db.prepare<[string], MissionRow>(
+    `SELECT m.id, m.name, m.creator_user_id, m.status, m.period_anchor, m.period_seconds,
+       m.expires_at, m.delegation_id, m.created_at, m.updated_at, m.closed_at
+     FROM missions m JOIN mission_members mm ON mm.mission_id = m.id
+     WHERE mm.user_id = ? AND mm.removed_at IS NULL ORDER BY m.created_at`,
+  );
   const byConnection = db.prepare<[string], MissionRow>(
     `SELECT m.id, m.name, m.creator_user_id, m.status, m.period_anchor, m.period_seconds,
        m.expires_at, m.delegation_id, m.created_at, m.updated_at, m.closed_at
@@ -289,12 +410,24 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   // The session's events belong to the sessions repository: its primitives run here,
   // inside this repository's transaction.
   const sessions = createSessionPrimitives(ctx);
-  const retireActive = db.prepare<[string, string]>(
-    `UPDATE mission_tokens SET status = 'rotated', retired_at = ? WHERE mission_id = ? AND status = 'active'`,
+  // Rotation retires the token of ONE holder: the other holders keep working.
+  const activeOfMember = db.prepare<[string, string], TokenRow>(
+    `SELECT ${TOKEN_COLUMNS} FROM mission_tokens
+     WHERE mission_id = ? AND holder_user_id = ? AND kind = 'member' AND status = 'active'`,
   );
-  const insertToken = db.prepare<[string, string, string, string, string, string]>(
-    `INSERT INTO mission_tokens (id, mission_id, prefix, hash, hash_alg, status, created_at)
-     VALUES (?, ?, ?, ?, ?, 'active', ?)`,
+  const activeOfName = db.prepare<[string, string], TokenRow>(
+    `SELECT ${TOKEN_COLUMNS} FROM mission_tokens
+     WHERE mission_id = ? AND name = ? AND kind = 'named' AND status = 'active'`,
+  );
+  const retireOne = db.prepare<[string, string]>(
+    `UPDATE mission_tokens SET status = 'rotated', retired_at = ? WHERE id = ? AND status = 'active'`,
+  );
+  const insertToken = db.prepare<
+    [string, string, string, string, string, string, string | null, string | null, string, string]
+  >(
+    `INSERT INTO mission_tokens (id, mission_id, prefix, hash, hash_alg, status, kind,
+       holder_user_id, name, created_by, created_at)
+     VALUES (?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?)`,
   );
   const tokenById = db.prepare<[string], TokenRow>(
     `SELECT ${TOKEN_COLUMNS} FROM mission_tokens WHERE id = ?`,
@@ -308,6 +441,42 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
   const revokeTokensStmt = db.prepare<[string, string]>(
     `UPDATE mission_tokens SET status = 'revoked', retired_at = ? WHERE mission_id = ? AND status = 'active'`,
   );
+  const revokeOne = db.prepare<[string, string]>(
+    `UPDATE mission_tokens SET status = 'revoked', retired_at = ? WHERE id = ? AND status = 'active'`,
+  );
+  const activeHeldAsMember = db.prepare<[string, string], TokenRow>(
+    `SELECT ${TOKEN_COLUMNS} FROM mission_tokens
+     WHERE holder_user_id = ? AND kind = 'member' AND status = 'active'
+       AND mission_id NOT IN (SELECT id FROM missions WHERE creator_user_id = ?)
+     ORDER BY created_at`,
+  );
+  // Written only when the stored instant is older than the granularity: one statement,
+  // so two concurrent calls write once.
+  const markUsed = db.prepare<[string, string, string]>(
+    `UPDATE mission_tokens SET last_used_at = ?
+     WHERE id = ? AND (last_used_at IS NULL OR last_used_at < ?)`,
+  );
+  const memberOf = db.prepare<[string, string], MemberRow>(
+    `SELECT ${MEMBER_COLUMNS} FROM mission_members WHERE mission_id = ? AND user_id = ?`,
+  );
+  const membersOf = db.prepare<[string], MemberRow>(
+    `SELECT ${MEMBER_COLUMNS} FROM mission_members
+     WHERE mission_id = ? AND removed_at IS NULL ORDER BY added_at, user_id`,
+  );
+  const upsertMember = db.prepare<[string, string, string, string]>(
+    `INSERT INTO mission_members (mission_id, user_id, added_by, added_at, removed_at)
+     VALUES (?, ?, ?, ?, NULL)
+     ON CONFLICT (mission_id, user_id)
+     DO UPDATE SET added_by = excluded.added_by, added_at = excluded.added_at, removed_at = NULL`,
+  );
+  const markMemberRemoved = db.prepare<[string, string, string]>(
+    `UPDATE mission_members SET removed_at = ?
+     WHERE mission_id = ? AND user_id = ? AND removed_at IS NULL`,
+  );
+
+  function requireToken(id: string): MissionTokenRecord {
+    return tokenToRecord(requireRow(tokenById.get(id), 'mission_token', id));
+  }
 
   function toRecord(row: MissionRow): MissionRecord {
     return {
@@ -402,6 +571,9 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     async listForCreator(userId) {
       return byCreator.all(userId).map(toRecord);
     },
+    async listForMember(userId) {
+      return byMember.all(userId).map(toRecord);
+    },
     async listForConnection(connectionId) {
       return byConnection.all(connectionId).map(toRecord);
     },
@@ -462,12 +634,36 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     async issueToken(input) {
       const id = ctx.newId();
       const now = nowIso(ctx);
-      withImmediateTransaction(db, () => {
+      const { holder } = input;
+      const replacedId = withImmediateTransaction(db, () => {
         requireMission(input.missionId);
-        retireActive.run(now, input.missionId);
-        insertToken.run(id, input.missionId, input.prefix, input.hash, input.hashAlg, now);
+        let previous: TokenRow | undefined;
+        if (holder.kind === 'member') {
+          previous = activeOfMember.get(input.missionId, holder.userId);
+          if (previous) retireOne.run(now, previous.id);
+        } else if (activeOfName.get(input.missionId, holder.name)) {
+          throw new InvariantError(
+            `mission ${input.missionId}: an active named token already carries this name`,
+          );
+        }
+        insertToken.run(
+          id,
+          input.missionId,
+          input.prefix,
+          input.hash,
+          input.hashAlg,
+          holder.kind,
+          holder.kind === 'member' ? holder.userId : null,
+          holder.kind === 'named' ? holder.name : null,
+          input.createdBy,
+          now,
+        );
+        return previous?.id ?? null;
       });
-      return tokenToRecord(requireRow(tokenById.get(id), 'mission_token', id));
+      return {
+        token: requireToken(id),
+        replaced: replacedId === null ? null : requireToken(replacedId),
+      };
     },
     async findTokenByPrefix(prefix) {
       const row = tokenByPrefix.get(prefix);
@@ -477,8 +673,65 @@ export function createMissionsRepo(ctx: RepoContext): MissionsRepo {
     async listTokens(missionId) {
       return tokensOf.all(missionId).map(tokenToRecord);
     },
+    async getToken(tokenId) {
+      const row = tokenById.get(tokenId);
+      return row ? tokenToRecord(row) : null;
+    },
     async revokeTokens(missionId) {
       return revokeTokensStmt.run(nowIso(ctx), missionId).changes;
+    },
+    async revokeToken(tokenId) {
+      const changed = revokeOne.run(nowIso(ctx), tokenId).changes;
+      return changed === 1 ? requireToken(tokenId) : null;
+    },
+    async revokeMemberTokensOf(userId) {
+      const now = nowIso(ctx);
+      const ids = withImmediateTransaction(db, () => {
+        const held = activeHeldAsMember.all(userId, userId);
+        return held.filter((row) => revokeOne.run(now, row.id).changes === 1).map((row) => row.id);
+      });
+      return ids.map(requireToken);
+    },
+    async markTokenUsed(tokenId, granularitySeconds) {
+      const stale = new Date(ctx.clock.now().getTime() - granularitySeconds * MS_PER_SECOND);
+      return markUsed.run(nowIso(ctx), tokenId, stale.toISOString()).changes === 1;
+    },
+    async addMember(input) {
+      const now = nowIso(ctx);
+      withImmediateTransaction(db, () => {
+        const mission = requireMission(input.missionId);
+        if (mission.creatorUserId === input.userId) {
+          throw new InvariantError('the creator is a member by construction, never a member row');
+        }
+        upsertMember.run(input.missionId, input.userId, input.addedBy, now);
+      });
+      return memberToRecord(
+        requireRow(memberOf.get(input.missionId, input.userId), 'mission_member', input.userId),
+      );
+    },
+    async removeMember(missionId, userId) {
+      const now = nowIso(ctx);
+      const revokedId = withImmediateTransaction(db, () => {
+        if (markMemberRemoved.run(now, missionId, userId).changes === 0) return undefined;
+        const held = activeOfMember.get(missionId, userId);
+        if (!held) return null;
+        revokeOne.run(now, held.id);
+        return held.id;
+      });
+      if (revokedId === undefined) return null;
+      return {
+        member: memberToRecord(
+          requireRow(memberOf.get(missionId, userId), 'mission_member', userId),
+        ),
+        tokenRevoked: revokedId === null ? null : requireToken(revokedId),
+      };
+    },
+    async getMember(missionId, userId) {
+      const row = memberOf.get(missionId, userId);
+      return row ? memberToRecord(row) : null;
+    },
+    async listMembers(missionId) {
+      return membersOf.all(missionId).map(memberToRecord);
     },
   };
 }

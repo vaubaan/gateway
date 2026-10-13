@@ -18,9 +18,11 @@
  *      so no value can be derived from a call;
  *   3. none of the things spec §9 forbids appears anywhere on the wire:
  *      argument values, argument hashes, resource refs, mission, session,
- *      user and connection identifiers, the mission token, the agent label,
- *      the caller's address and user agent, the instance's host name, the
- *      provider's messages;
+ *      user and connection identifiers, the mission tokens and their
+ *      holders (a member's id and email, the name of a named token: who is
+ *      calling never leaves the instance), the agent label, the caller's
+ *      address and user agent, the instance's host name, the provider's
+ *      messages;
  *   4. one report per call that reached the plugin, none for a call the
  *      gateway refused before it, in order, with the expected outcome class.
  *
@@ -256,6 +258,34 @@ describe('structural: a telemetry report contains none of the forbidden fields (
       spaces: ['scratch', 'app-staging', 'app-prod'],
     });
 
+    // Three holders on the one mission: its creator, a member and a named token. Each
+    // call below is made with one of them, so the attribution the audit keeps (holder
+    // id, holder email, token name, token id) travels through every stage that could
+    // hand it to telemetry.
+    const memberEmail = `${rng.poison('member')}@holder.example`;
+    const member = await root.store.users.upsertFromIdp({
+      subject: rng.poison('subject'),
+      email: memberEmail,
+    });
+    const added = await root.missions.team.addMember(instance.ada, mission.mission.id, {
+      email: memberEmail,
+    });
+    if (!added.ok) throw new Error(`add refused: ${added.reason}`);
+    const memberToken = await root.missions.team.generateToken(member, mission.mission.id);
+    const tokenName = `runner ${rng.poison('named').replace(/[^A-Za-z0-9]/g, '')}`;
+    const namedToken = await root.missions.team.createNamedToken(
+      instance.ada,
+      mission.mission.id,
+      tokenName,
+    );
+    if (!memberToken.ok || !namedToken.ok) throw new Error('token refused');
+    const holders = [
+      mission,
+      { ...mission, token: memberToken.token.secret, prefix: memberToken.token.prefix },
+      { ...mission, token: namedToken.token.secret, prefix: namedToken.token.prefix },
+    ];
+    const callsPerHolder = holders.map(() => 0);
+
     // The universe of values a report may contain, fixed before any call.
     const declaredTools = depot.plugin.tools.map((t) => t.name);
     const allowedErrorClasses = new Set<string>(Object.values(ERROR_CLASSES_BY_OUTCOME).flat());
@@ -294,6 +324,13 @@ describe('structural: a telemetry report contains none of the forbidden fields (
       DEPOT_API_KEY,
       new URL(TEST_PUBLIC_URL).host,
       ...instance.resources.flatMap((r) => [r.id, r.ref]),
+      // Who holds the tokens, and the tokens themselves.
+      member.id,
+      member.subject,
+      memberEmail,
+      tokenName,
+      ...holders.flatMap((holder) => [holder.token, holder.prefix]),
+      ...(await root.store.missions.listTokens(mission.mission.id)).map((token) => token.id),
     ]);
 
     const expected: { tool: string; outcome: ReportOutcome; error_class: string | null }[] = [];
@@ -317,7 +354,7 @@ describe('structural: a telemetry report contains none of the forbidden fields (
         Object.values(args).forEach((value) => forbidden.add(value));
         forbidden.add(fingerprintArguments(args));
         depot.script(null);
-        const body = await instance.call(mission, rng.pick(SPACE_TOOLS), args, headers);
+        const body = await instance.call(rng.pick(holders), rng.pick(SPACE_TOOLS), args, headers);
         expect(body.error, 'a call outside the mission is refused').toBeDefined();
         refusedBeforeThePlugin += 1;
         continue;
@@ -344,7 +381,9 @@ describe('structural: a telemetry report contains none of the forbidden fields (
       drawn.poisons.forEach((value) => forbidden.add(value));
       depot.script(drawn.execute);
       const before = depot.calls.length;
-      const answer = await instance.call(mission, tool, args, headers);
+      const holder = rng.int(holders.length);
+      callsPerHolder[holder] = (callsPerHolder[holder] ?? 0) + 1;
+      const answer = await instance.call(holders[holder] ?? mission, tool, args, headers);
       expect(
         depot.calls.length,
         `iteration ${i}: ${tool} did not reach the plugin: ${answer.error?.message}`,
@@ -364,6 +403,17 @@ describe('structural: a telemetry report contains none of the forbidden fields (
     expect(overview.queue).toMatchObject({ queued: 0, dropped: 0, delivered: expected.length });
 
     const reports = wire.flatMap((request) => JSON.parse(request.body) as unknown[]);
+
+    // Every holder made calls, and the instance itself did record who: the property
+    // below is about what leaves it, not about attribution being absent.
+    expect(callsPerHolder.every((count) => count > 20)).toBe(true);
+    const attributed = await root.store.audit.tokenHolderActivity(mission.mission.id, {
+      since: mission.mission.createdAt,
+      until: null,
+    });
+    expect(attributed.map((a) => a.holder).sort()).toEqual(
+      [instance.ada.id, member.id, tokenName].sort(),
+    );
 
     // 4. One report per call that reached the plugin, in order, with the expected class.
     expect(refusedBeforeThePlugin).toBeGreaterThan(10);

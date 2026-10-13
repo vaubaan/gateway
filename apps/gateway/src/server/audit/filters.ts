@@ -1,7 +1,8 @@
 /**
  * The Audit page's filters, parsed from the query string (spec §4.2 "Audit —
  * search by mission, user, connection, tool, decision, period"; §7.9 "the
- * audit tells who did what": the agent label). Pure: no
+ * audit tells who did what": the agent label; §8 "the token used and its
+ * holder": the token holder). Pure: no
  * store, no `next`. A value that cannot be read is dropped and reported in
  * `problems`; it never widens the search.
  */
@@ -16,6 +17,7 @@ export const AUDIT_PARAMS = {
   tool: 'tool',
   decision: 'decision',
   agent: 'agent',
+  holder: 'holder',
   kind: 'kind',
   from: 'from',
   to: 'to',
@@ -38,6 +40,12 @@ export interface AuditFilters {
   readonly decision: AuditDecision | null;
   /** Exact agent label, as typed: what a caller declared, not an identity. */
   readonly agentLabel: string | null;
+  /**
+   * The holder of the token a call presented, as typed: a member's email, the
+   * name of a named token, or the exact form `member:<user id>` /
+   * `named:<name>` the session page links with. Authenticated, unlike the label.
+   */
+  readonly tokenHolder: string | null;
   readonly kind: AuditKind | null;
   /** Inclusive lower bound (ISO, UTC). */
   readonly since: string | null;
@@ -164,6 +172,7 @@ export function parseAuditQuery(query: RawQuery): ParsedAuditQuery {
       tool: read('tool'),
       decision,
       agentLabel: read('agent'),
+      tokenHolder: read('holder'),
       kind,
       since,
       until,

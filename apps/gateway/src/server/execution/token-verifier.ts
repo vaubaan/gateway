@@ -9,11 +9,18 @@
  *
  * What is cached is the PROOF, never the state: the key is the SHA-256 of the
  * bearer (the bearer itself is never a key, never logged) and the value is the
- * id of the token row whose hash it matched. On a hit the token and its
- * mission are re-read from the store by prefix, so a rotation or a revocation
- * takes effect on the very next call — the cache can only skip a hash
- * computation whose result cannot change (a token's hash is immutable). A hit
- * renews the proof, so an agent that keeps calling never verifies again.
+ * id of the token row whose hash it matched. On a hit the mission service says
+ * what that token is worth NOW (`MissionService.provenToken`: the row, its
+ * mission, and — for a member token — the holder's status and membership, all
+ * re-read from the store), so a rotation, a revocation, a member removed or a
+ * holder deactivated takes effect on the very next call. The cache can only
+ * skip a hash computation whose result cannot change (a token's hash is
+ * immutable). A hit renews the proof, so an agent that keeps calling never
+ * verifies again.
+ *
+ * One proof per token: a mission has several tokens (one per holder), each
+ * with its own cache key (its own bearer) and its own throttle window (its
+ * own prefix). Retiring one holder's token neither evicts nor slows another's.
  *
  * A miss is throttled before the hash is computed, so a client replaying wrong
  * secrets for a real prefix cannot make the instance spend its CPU on argon2.
@@ -28,7 +35,6 @@ import type { CacheClient } from '@vaubaan/gateway-core';
 import type { RateLimiter } from '../compose/ports';
 import { UNKNOWN_CLIENT } from '../http/client-ip';
 import { prefixOfBearer, type MissionService, type TokenVerification } from '../missions';
-import type { MissionsRepo } from '../store';
 
 /**
  * How long a proof is kept after its last use (each hit renews it). The proof never
@@ -47,8 +53,12 @@ export type VerifyOutcome =
   | { readonly outcome: 'throttled'; readonly retryAfterMs: number };
 
 export interface TokenVerifierDeps {
-  readonly missions: Pick<MissionService, 'verifyToken'>;
-  readonly tokens: Pick<MissionsRepo, 'findTokenByPrefix'>;
+  /**
+   * `verifyToken` computes the hash; `provenToken` answers for a bearer whose
+   * match is already cached. Both end in the same judgement of the token's
+   * standing, so a cache hit can never be more lenient than a miss.
+   */
+  readonly missions: Pick<MissionService, 'verifyToken' | 'provenToken'>;
   readonly cache: CacheClient;
   readonly rateLimiter: RateLimiter;
   readonly ttlSeconds?: number;
@@ -86,11 +96,11 @@ export class TokenVerifier {
 
     const provenTokenId = await this.deps.cache.get<string>(key);
     if (provenTokenId) {
-      const found = await this.deps.tokens.findTokenByPrefix(prefix);
-      if (found && found.token.id === provenTokenId) {
+      const standing = await this.deps.missions.provenToken(prefix, provenTokenId);
+      if (standing.outcome !== 'unknown') {
         // Slide the proof: a bearer in use never falls back to the throttled path.
         await this.deps.cache.set(key, provenTokenId, this.ttlSeconds);
-        return stateOf(found);
+        return standing;
       }
       // The row is gone or the prefix now names another token: the proof is void.
       await this.deps.cache.del(key);
@@ -123,10 +133,4 @@ export class TokenVerifier {
     }
     return result;
   }
-}
-
-function stateOf(found: NonNullable<Awaited<ReturnType<MissionsRepo['findTokenByPrefix']>>>) {
-  const { token, mission } = found;
-  if (token.status === 'active') return { outcome: 'verified', token, mission } as const;
-  return { outcome: 'retired', reason: token.status, token, mission } as const;
 }

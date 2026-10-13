@@ -7,6 +7,7 @@ import {
   parseAuditQuery,
   parseInstant,
 } from './filters';
+import { holderParam, parseHolderParam } from './session-view';
 import { scopeOf, withoutArguments } from './query-service';
 
 const EMPTY = {
@@ -16,6 +17,7 @@ const EMPTY = {
   tool: null,
   decision: null,
   agentLabel: null,
+  tokenHolder: null,
   kind: null,
   since: null,
   until: null,
@@ -36,6 +38,7 @@ describe('parseAuditQuery', () => {
         tool: 'github__get_file',
         decision: 'refused',
         agent: ' planner ',
+        holder: ' bob@example.com ',
         kind: 'call',
         from: '2026-10-01',
         to: '2026-10-13',
@@ -49,6 +52,7 @@ describe('parseAuditQuery', () => {
       tool: 'github__get_file',
       decision: 'refused',
       agentLabel: 'planner',
+      tokenHolder: 'bob@example.com',
       kind: 'call',
       since: '2026-10-01T00:00:00.000Z',
       until: '2026-10-14T00:00:00.000Z',
@@ -153,6 +157,33 @@ describe('cursor', () => {
     // Not the canonical form the store writes: it would compare wrongly as text.
     expect(decodeCursor(encode('2026-10-13T09:00:00Z|id'))).toBeNull();
     expect(decodeCursor('x'.repeat(201))).toBeNull();
+  });
+});
+
+describe('a token holder in a query string', () => {
+  it('round-trips a member and a named token', () => {
+    for (const holder of [
+      { kind: 'member', key: '01a135f1-6564-71f6-b1e2-3a4cd1988ce5' },
+      { kind: 'named', key: 'CI runner' },
+      { kind: 'named', key: 'build-box_2.eu' },
+    ] as const) {
+      expect(parseHolderParam(holderParam(holder))).toEqual(holder);
+    }
+    expect(holderParam({ kind: 'named', key: 'CI runner' })).toBe('named:CI runner');
+  });
+
+  it('names nobody for anything else', () => {
+    for (const value of [
+      '',
+      'member',
+      'member:',
+      ':x',
+      'robot:x',
+      'bob@example.com',
+      'CI runner',
+    ]) {
+      expect(parseHolderParam(value), value).toBeNull();
+    }
   });
 });
 

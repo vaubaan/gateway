@@ -434,6 +434,49 @@ describe('audit search: visibility, filters, paging', () => {
       expect(parseAuditQuery({ agent: 'planner' }).filters.agentLabel).toBe('planner');
     });
 
+    it('by token holder: an email names a member, anything else a named token; each call names its holder', async () => {
+      const { bob } = rig.seeded;
+      const seeded = (token: {
+        token_id: string;
+        token_kind: 'member' | 'named';
+        holder: string;
+      }) =>
+        seedCall(rig, other, {
+          now: day(12),
+          tool: 'supabase__list_tables',
+          risks: [other.policy[0]!.riskId],
+          resourceRef: 'stgprojectref',
+          token,
+        });
+      await seeded({ token_id: 't-bob', token_kind: 'member', holder: bob.id });
+      await seeded({ token_id: 't-ci', token_kind: 'named', holder: 'CI runner' });
+
+      const byBob = calls(await search(ada(), { tokenHolder: bob.email }));
+      expect(byBob.map((c) => [c.tool, c.token])).toEqual([
+        ['supabase__list_tables', { kind: 'member', key: bob.id, label: bob.email }],
+      ]);
+      const byCi = calls(await search(ada(), { tokenHolder: 'CI runner' }));
+      expect(byCi.map((c) => c.token)).toEqual([
+        { kind: 'named', key: 'CI runner', label: 'CI runner' },
+      ]);
+      // The exact form the session page links with.
+      expect(calls(await search(ada(), { tokenHolder: `member:${bob.id}` }))).toHaveLength(1);
+      expect(calls(await search(ada(), { tokenHolder: 'named:CI runner' }))).toHaveLength(1);
+      // The creator's own calls are hers, by her email.
+      const byAda = calls(await search(ada(), { tokenHolder: rig.seeded.ada.email }));
+      expect(byAda.length).toBeGreaterThan(0);
+      expect(byAda.every((c) => c.token?.label === rig.seeded.ada.email)).toBe(true);
+      // Nothing administrative, nothing for an unknown holder, and a kind is never crossed:
+      // a token named like a user's id is not that member.
+      expect(acts(await search(ada(), { tokenHolder: bob.email }))).toEqual([]);
+      expect(await search(ada(), { tokenHolder: 'nobody@example.com' })).toEqual([]);
+      expect(await search(ada(), { tokenHolder: 'ci runner' })).toEqual([]);
+      expect(await search(ada(), { tokenHolder: `named:${bob.id}` })).toEqual([]);
+      // A holder is not a way into someone else's audit: the scope comes first.
+      expect(await search(userViewer(bob), { tokenHolder: bob.email })).toEqual([]);
+      expect(parseAuditQuery({ holder: 'CI runner' }).filters.tokenHolder).toBe('CI runner');
+    });
+
     it('by decision', async () => {
       const refused = calls(await search(ada(), { decision: 'refused' }));
       expect(refused).toHaveLength(1);

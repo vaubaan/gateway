@@ -168,7 +168,7 @@ export const MANAGEMENT_TOOLS: readonly ManagementToolDefinition[] = [
     title: 'List my missions',
     kind: 'read',
     description: [
-      'Lists the missions of the user, newest first: state (`active`, `expired`, `orphaned`, `revoked`), `orphan` — why an orphaned mission lost its authority and whether it can come back —, policy with what is left of each quota this period, the current period of the session, the masked token prefix, and which client issued it when it was issued by delegation.',
+      'Lists the missions of the user, newest first — the ones they created (`role: creator`) and the ones another user shared with them as a member (`role: member`, read-only from this door) —: state (`active`, `expired`, `orphaned`, `revoked`), `orphan` — why an orphaned mission lost its authority and whether it can come back —, policy with what is left of each quota this period, the current period of the session, the masked token prefix, and which client issued it when it was issued by delegation.',
       'With `mission_id`, returns that mission with its connections and the resources it reaches.',
       'Reading only: a budget cannot be extended, a period reset or a gate changed from here — the user does that in the web interface, when the executing agent hands them the URL of a refusal.',
     ].join(' '),

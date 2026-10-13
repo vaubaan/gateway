@@ -25,7 +25,7 @@
  */
 
 import { refuse, type Refusal } from '@vaubaan/gateway-core';
-import type { CallAllowedEventDetails, Iso8601, RiskId } from '@vaubaan/shared';
+import type { CallAllowedEventDetails, Iso8601, RiskId, TokenAttribution } from '@vaubaan/shared';
 import { InvariantError } from '../store/errors.ts';
 import type {
   DecideContext,
@@ -63,6 +63,12 @@ export interface RecordCallInput {
   readonly risks_touched: readonly RiskId[];
   /** Free-form attribution; recorded on the event, no effect on the decision. */
   readonly agent_label?: string | null;
+  /**
+   * The token the call presented and its holder (spec §8). Recorded on the event; no
+   * effect on the decision: every token of a mission draws from the same counters
+   * (spec §3.2 "one budget per mission, however many agents or tokens").
+   */
+  readonly token?: TokenAttribution | null;
   readonly now: Date;
 }
 
@@ -402,7 +408,7 @@ function addSeconds(instant: Date, seconds: number): Iso8601 {
 /** What a call event carries whether the call is allowed or refused. */
 type CallDetails = Pick<
   CallAllowedEventDetails,
-  'tool' | 'fingerprint' | 'risk_ids' | 'agent_label'
+  'tool' | 'fingerprint' | 'risk_ids' | 'agent_label' | 'token_id' | 'token_kind' | 'holder'
 >;
 
 function callDetails(input: RecordCallInput, fingerprint: string): CallDetails {
@@ -411,5 +417,8 @@ function callDetails(input: RecordCallInput, fingerprint: string): CallDetails {
     fingerprint,
     risk_ids: distinctRisks(input.risks_touched),
     agent_label: input.agent_label ?? null,
+    token_id: input.token?.token_id ?? null,
+    token_kind: input.token?.token_kind ?? null,
+    holder: input.token?.holder ?? null,
   };
 }

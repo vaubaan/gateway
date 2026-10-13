@@ -125,11 +125,13 @@ describe('store rows with a value outside a closed set', () => {
   });
 
   it('refuses an unknown mission_tokens.status', async () => {
-    const token = await store.missions.issueToken({
+    const { token } = await store.missions.issueToken({
       missionId,
       prefix: 'vbn_abc',
       hash: 'h',
       hashAlg: 'sha256',
+      holder: { kind: 'named', name: 'CI runner' },
+      createdBy: userId,
     });
     corrupt('mission_tokens', 'status', 'id', token.id);
     await expectLoudFailure(() => store.missions.listTokens(missionId), 'mission_tokens.status');

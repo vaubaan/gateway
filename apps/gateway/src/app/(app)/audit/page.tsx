@@ -1,8 +1,13 @@
 /**
  * `/audit` — search the audit by mission, user, connection, tool, decision,
- * agent label and period (spec §4.2, §7.9, §8). A user sees the entries about their missions
- * and their connections; an operator sees the administrative entries too.
- * Arguments are never shown: an entry only holds their hash.
+ * token holder, agent label and period (spec §4.2, §7.9, §8). A user sees the
+ * entries about their missions and their connections; an operator sees the
+ * administrative entries too. Arguments are never shown: an entry only holds
+ * their hash.
+ *
+ * Two columns say who called. "Token holder" is authenticated: the member, or
+ * the named token, whose token the call presented. "Agent label" is what the
+ * caller declared about itself.
  */
 import Link from 'next/link';
 
@@ -130,6 +135,17 @@ export default async function AuditPage({ searchParams }: Props) {
           </Select>
         </label>
         <label className={styles.filter}>
+          <span title="Whose token the call presented: a member of the mission (their email) or a named token (its name). Authenticated by the token.">
+            Token holder
+          </span>
+          <Input
+            name={AUDIT_PARAMS.holder}
+            defaultValue={raw.holder ?? ''}
+            placeholder="email or name"
+            autoComplete="off"
+          />
+        </label>
+        <label className={styles.filter}>
           <span title="What the caller declared about itself; not verified, not an identity">
             Agent label
           </span>
@@ -177,7 +193,8 @@ export default async function AuditPage({ searchParams }: Props) {
                 <Tr>
                   <Th>When</Th>
                   <Th>Decision</Th>
-                  <Th>Mission, agent / actor</Th>
+                  <Th>Mission, agent label / actor</Th>
+                  <Th>Token holder</Th>
                   <Th>Call / act</Th>
                   <Th>Risks touched → left</Th>
                   <Th>Arguments (hash), detail</Th>
@@ -241,8 +258,24 @@ function CallRow({ entry }: { entry: AuditCallView }) {
         )}
         {entry.agent_label && <div className={styles.muted}>agent {entry.agent_label}</div>}
       </Td>
+      <Td className={styles.holder} data-testid="audit-holder">
+        {entry.token ? (
+          <>
+            {entry.token.label}
+            {entry.token.kind === 'named' && (
+              <div>
+                <Badge>named token</Badge>
+              </div>
+            )}
+          </>
+        ) : (
+          <span className={styles.muted} title="Written before tokens had a holder">
+            not attributed
+          </span>
+        )}
+      </Td>
       <Td>
-        <span className={`${styles.mono} ${styles.nowrap}`}>{entry.tool}</span>
+        <span className={`${styles.mono} ${styles.wraps}`}>{entry.tool}</span>
         {where.length > 0 && <div className={styles.muted}>{where.join(' · ')}</div>}
       </Td>
       <Td>
@@ -251,7 +284,7 @@ function CallRow({ entry }: { entry: AuditCallView }) {
         ) : (
           <div className={styles.risks}>
             {entry.risks_touched.map((risk) => (
-              <span key={risk} className={`${styles.mono} ${styles.nowrap}`}>
+              <span key={risk} className={`${styles.mono} ${styles.wraps}`}>
                 {risk}
                 {entry.remaining_budget?.[risk] !== undefined &&
                   ` → ${entry.remaining_budget[risk]}`}
@@ -301,6 +334,7 @@ function AdminRow({ entry }: { entry: AuditAdminView }) {
           <div className={styles.muted}>through client {entry.delegated_client_id}</div>
         )}
       </Td>
+      <Td>—</Td>
       <Td>
         <span className={`${styles.mono} ${styles.nowrap}`}>{entry.act}</span>
         <div className={styles.muted}>

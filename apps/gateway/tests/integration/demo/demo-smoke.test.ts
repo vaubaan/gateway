@@ -7,8 +7,10 @@
  * signs in as Alice through the demo identity provider — following the
  * redirects of `/auth/login` by hand, with a cookie jar, as a browser does —
  * fetches the cardinal pages and finds a seeded item on each, calls
- * `tools/list` on `/mcp` with the mission token the tour prints, and stops
- * the process: it must exit cleanly and leave no data behind.
+ * `tools/list` on `/mcp` with the mission token the tour prints, checks the
+ * seeded team (Bob, a member of a mission of Alice, and the named token "CI
+ * runner") from both sides, and stops the process: it must exit cleanly and
+ * leave no data behind.
  *
  * Skipped when `apps/gateway/.next` holds no build; `npm run ci` builds
  * before testing, so it runs there.
@@ -23,7 +25,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { SESSION_COOKIE } from '../../../src/server/auth';
 import { DEMO_IDP_PATH } from '../../demo/demo-idp';
 import { hasBuild } from '../../demo/demo-instance';
-import { ALICE, DEMO_PEOPLE } from '../../demo/people';
+import { ALICE, BOB, DEMO_PEOPLE, type DemoPerson } from '../../demo/people';
+import { CI_TOKEN_NAME } from '../../demo/seed';
 import { DEMO_BANNER } from '../../demo/tour';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +41,8 @@ interface StartedDemo {
   readonly output: () => string;
   readonly origin: string;
   readonly missionToken: string;
+  /** The named token of the seeded team mission. */
+  readonly ciToken: string;
   readonly directory: string;
   readonly exited: Promise<number | null>;
 }
@@ -67,11 +72,20 @@ function startDemoProcess(): Promise<StartedDemo> {
       const origin = /^Open\s+(http:\/\/localhost:\d+)$/m.exec(text)?.[1];
       const missionToken = /VAUBAAN_MISSION_TOKEN='([^']+)'/.exec(text)?.[1];
       const directory = /^Data\s+(\S+)$/m.exec(text)?.[1];
-      if (!origin || !missionToken || !directory) {
+      const ciToken = /VAUBAAN_CI_TOKEN='([^']+)'/.exec(text)?.[1];
+      if (!origin || !missionToken || !directory || !ciToken) {
         reject(new Error(`the tour does not say where the demo is:\n${text}`));
         return;
       }
-      resolveStarted({ child, output: () => text, origin, missionToken, directory, exited });
+      resolveStarted({
+        child,
+        output: () => text,
+        origin,
+        missionToken,
+        ciToken,
+        directory,
+        exited,
+      });
     };
     child.stdout?.on('data', onData);
     child.stderr?.on('data', onData);
@@ -107,6 +121,18 @@ class Browser {
       }
     }
     return response;
+  }
+}
+
+/** Signs a person in through the demo identity provider's account picker. */
+async function signIn(browser: Browser, person: DemoPerson): Promise<void> {
+  const started = await browser.get('/auth/login?return_to=/missions');
+  const authorization = new URL(locationOf(started));
+  authorization.searchParams.set('account', person.key);
+  const picked = await browser.get(authorization.href);
+  const finished = await browser.get(locationOf(picked));
+  if (finished.status !== 303 || !browser.has(SESSION_COOKIE)) {
+    throw new Error(`${person.name} was not signed in (${finished.status})`);
   }
 }
 
@@ -217,6 +243,64 @@ describe.skipIf(!hasBuild())('npm run demo', () => {
     const names = body.result.tools.map((tool) => tool.name);
     expect(names).toContain('github__list_branches');
     expect(names).toContain('upstash_redis__get');
+  });
+
+  it('attributes the seeded team: the named token says its name, and Alice finds both holders', async () => {
+    const catalog = await fetch(`${demo.origin}/mcp/catalog`, {
+      headers: { Authorization: `Bearer ${demo.ciToken}` },
+    });
+    expect(catalog.status).toBe(200);
+    const body = (await catalog.json()) as {
+      mission: { name: string; creator: string };
+      token: { kind: string; holder: string };
+    };
+    expect(body.token).toMatchObject({ kind: 'named', holder: CI_TOKEN_NAME });
+    expect(body.mission).toMatchObject({ name: 'Ship the billing page', creator: ALICE.email });
+    // The creator's own token on the same mission says who she is.
+    const own = await fetch(`${demo.origin}/mcp/catalog`, {
+      headers: { Authorization: `Bearer ${demo.missionToken}` },
+    });
+    expect(((await own.json()) as typeof body).token).toMatchObject({
+      kind: 'member',
+      holder: ALICE.email,
+    });
+
+    // The audit, filtered on each holder (Alice is signed in).
+    const byCi = await (
+      await browser.get(`/audit?holder=${encodeURIComponent(CI_TOKEN_NAME)}`)
+    ).text();
+    expect(byCi).toContain(CI_TOKEN_NAME);
+    expect(byCi).toContain('named token');
+    expect(byCi).toContain('github__list_branches');
+    const byBob = await (
+      await browser.get(`/audit?holder=${encodeURIComponent(BOB.email)}`)
+    ).text();
+    expect(byBob).toContain(BOB.email);
+    expect(byBob).toContain('github__get_file_contents');
+  });
+
+  it('shows Bob the mission Alice shared with him, read-only, with his own token', async () => {
+    const bob = new Browser(demo.origin);
+    await signIn(bob, BOB);
+    const list = await (await bob.get('/missions')).text();
+    expect(list).toContain('Shared with me');
+    expect(list).toContain('Ship the billing page');
+    expect(list).toContain(ALICE.email);
+    const href = /href="(\/missions\/[^"/]+)"[^>]*>Ship the billing page/.exec(list)?.[1];
+    expect(href).toBeDefined();
+    const page = await (await bob.get(href ?? '/missions')).text();
+    expect(page).toContain('Shared with you');
+    expect(page).toContain('Members and tokens');
+    expect(page).toContain('Rotate my token');
+    expect(page).toContain(CI_TOKEN_NAME);
+    // Nothing of the creator's controls.
+    expect(page).not.toContain('Revoke mission');
+    expect(page).not.toContain('Add member');
+    expect(page).not.toContain('Create named token');
+    // No secret on any page: the named token's and Alice's are shown nowhere to him.
+    for (const secret of [demo.ciToken, demo.missionToken]) {
+      expect(page).not.toContain(secret.slice(-32));
+    }
   });
 
   it('refuses /mcp without a token', async () => {

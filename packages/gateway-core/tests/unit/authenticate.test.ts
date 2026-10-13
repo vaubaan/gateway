@@ -26,7 +26,11 @@ const missionCtx: MissionContext = {
     expires_at: null,
     period: { kind: 'one-off' },
   },
-  token: { id: 'tok_1', prefix: 'vbn_live_abcd1234' },
+  token: {
+    id: 'tok_1',
+    prefix: 'vbn_live_abcd1234',
+    holder: { kind: 'member', user_id: 'usr_1', display: 'ada@example.com' },
+  },
   connections: [],
   resources: [],
   policy: [],

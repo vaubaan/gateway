@@ -3,10 +3,12 @@
  * "Mission session — event timeline, counters per risk and per period, gate
  * per risk, open requests"; §3.3 the session and the remaining budget).
  *
- * Read-only. The mission's creator only: "does not exist" and "not yours" are
- * the same answer, as on the mission detail page. Open requests are listed by
- * link to the creator's view of the request (`/requests/<id>`, P1.7): their
- * arguments stay there. An event shows the fields named below and nothing
+ * Read-only. The mission's creator, and its members (spec §11.2 "What a member
+ * sees": the whole session; arguments are never shown, and requests stay the
+ * creator's): "does not exist" and "not yours" are the same answer, as on the
+ * mission detail page. Open requests are listed by link to the creator's view
+ * of the request (`/requests/<id>`, P1.7): their arguments stay there, and a
+ * member is given no link (`path: null`) — only the creator answers. An event shows the fields named below and nothing
  * else of its details, read through `parseEventDetails` (`@vaubaan/shared`):
  * an event whose stored details do not have the shape of its kind is listed
  * with its kind, time, risk and actor, and no detail. What the Detail column
@@ -36,11 +38,21 @@
  *     and are left out of a filtered timeline. The repository filters on the
  *     `events.agent_label` column (migration 0008): a filtered page is one
  *     indexed read, paged by the same keyset as the whole timeline.
+ *
+ * Token holders (spec §8 "the token used and its holder"). Unlike a label, the
+ * holder of a call is authenticated: it is the member, or the named token,
+ * whose token the call presented. The same two reads exist per holder —
+ * `holder_activity` (calls of the current period per holder, NOT a budget: all
+ * the tokens of a mission draw from one) and a timeline filter on the
+ * `events.token_kind` / `events.token_holder` columns (migration 0010). A call
+ * stored before tokens had a holder is listed as unattributed.
  */
 import {
+  isMissionTokenKind,
   parseEventDetails,
   type Gate,
   type MissionPolicyEntry,
+  type MissionTokenKind,
   type RequestClosedState,
   type RequestKind,
   type RiskId,
@@ -49,10 +61,16 @@ import {
 
 import type { AuthoritySubject } from '../authority';
 import type { MissionState } from '../budget';
-import type { MissionDetail, MissionService, SeverityLevel } from '../missions';
+import type { MissionDetail, MissionRole, MissionService, SeverityLevel } from '../missions';
 import { isDecidable } from '../requests/state';
 import { inboxRequestPath } from '../requests/url';
-import type { AgentLabelActivity, AgentLabelSeen, AuditCursor, Store } from '../store';
+import type {
+  AgentLabelActivity,
+  AgentLabelSeen,
+  AuditCursor,
+  Store,
+  TokenHolderActivity,
+} from '../store';
 import type { Clock } from '../store/clock';
 import type { EventRecord, RequestRecord, SessionCounterRecord } from '../store/types';
 
@@ -66,7 +84,36 @@ export type SessionTimelineFilter =
   /** The calls that carried this agent label. */
   | { readonly kind: 'label'; readonly label: string }
   /** The calls that carried no label. */
-  | { readonly kind: 'unlabelled' };
+  | { readonly kind: 'unlabelled' }
+  /** The calls made with a token of this holder (a user id, or a token name). */
+  | { readonly kind: 'holder'; readonly holder: SessionHolderRef };
+
+/** A token holder as the store keeps it: the kind, and the user id or the token name. */
+export interface SessionHolderRef {
+  readonly kind: MissionTokenKind;
+  readonly key: string;
+}
+
+/** A holder with what a page shows: the member's email, or the token's name. */
+export interface SessionHolderView extends SessionHolderRef {
+  readonly label: string;
+}
+
+const HOLDER_PARAM_SEPARATOR = ':';
+
+/** `member:<user id>` / `named:<name>`: a holder in a query string. */
+export function holderParam(holder: SessionHolderRef): string {
+  return `${holder.kind}${HOLDER_PARAM_SEPARATOR}${holder.key}`;
+}
+
+/** The holder a query-string value names; `null` when it names none. */
+export function parseHolderParam(value: string): SessionHolderRef | null {
+  const at = value.indexOf(HOLDER_PARAM_SEPARATOR);
+  if (at <= 0) return null;
+  const kind = value.slice(0, at);
+  const key = value.slice(at + 1);
+  return isMissionTokenKind(kind) && key.length > 0 ? { kind, key } : null;
+}
 
 export const ALL_EVENTS: SessionTimelineFilter = { kind: 'all' };
 
@@ -107,6 +154,12 @@ export interface SessionEventView {
   readonly tool: string | null;
   readonly refusal_code: string | null;
   readonly agent_label: string | null;
+  /**
+   * Whose token it was: the holder of the token a call presented, or of the
+   * token a `rotation` / `revocation` is about. `null` for the other kinds, for
+   * a mission-wide revocation, and for a call stored before tokens had a holder.
+   */
+  readonly holder: SessionHolderView | null;
   /** Remaining quota per touched risk after an allowed call. */
   readonly remaining: Readonly<Record<RiskId, number>> | null;
   readonly request_id: string | null;
@@ -126,7 +179,10 @@ export interface SessionEventView {
   readonly gate_open_until: string | null;
   /** How many tokens a `revocation` retired. */
   readonly tokens_revoked: number | null;
+  /** The token a `rotation` issued, or the one token a `revocation` retired. */
   readonly token_prefix: string | null;
+  /** The token a `rotation` replaced; `null` for a holder's first token. */
+  readonly replaced_prefix: string | null;
   /** Actions a granted claim gave back, per risk (`reset`, quota `extension`). */
   readonly credits: Readonly<Record<RiskId, number>> | null;
   /** What an `extension` extended: `quota` or `expiry`. */
@@ -144,8 +200,11 @@ export interface SessionOpenRequest {
   readonly risk_id: RiskId;
   readonly created_at: string;
   readonly expires_at: string;
-  /** Where the creator reads and answers it (`/requests/<id>`). */
-  readonly path: string;
+  /**
+   * Where the creator reads and answers it (`/requests/<id>`); `null` for a
+   * member, who sees that a request is waiting and cannot answer it.
+   */
+  readonly path: string | null;
 }
 
 /** The calls of the current period under one label (`null`: no label). Not a budget. */
@@ -156,8 +215,21 @@ export interface SessionLabelActivity {
   readonly last_seen_at: string;
 }
 
+/**
+ * The calls of the current period made with the tokens of one holder; `holder:
+ * null` gathers the calls stored before tokens had a holder. Not a budget.
+ */
+export interface SessionHolderActivity {
+  readonly holder: SessionHolderView | null;
+  readonly allowed: number;
+  readonly refused: number;
+  readonly last_seen_at: string;
+}
+
 export interface MissionSessionView {
   readonly mission: { readonly id: string; readonly name: string };
+  /** What the reader is to the mission; a member answers no request. */
+  readonly viewer_role: MissionRole;
   readonly state: MissionState;
   /** `null` until the first call: the session is born with it (spec §3.3). */
   readonly session: { readonly id: string; readonly created_at: string } | null;
@@ -177,6 +249,12 @@ export interface MissionSessionView {
    * mission is not active (it has no current period). Informational.
    */
   readonly label_activity: readonly SessionLabelActivity[];
+  /**
+   * Calls of the current period per token holder, busiest first; empty when the
+   * mission is not active. Informational: one budget per mission, however many
+   * tokens (spec §3.2).
+   */
+  readonly holder_activity: readonly SessionHolderActivity[];
 }
 
 export interface MissionSessionDeps {
@@ -211,14 +289,23 @@ export class MissionSessionService {
     const activity = period
       ? await store.audit.agentLabelActivity(missionId, { since: period.start, until: period.end })
       : [];
+    const byHolder = period
+      ? await store.audit.tokenHolderActivity(missionId, { since: period.start, until: period.end })
+      : [];
+    const names = new HolderNames(store.users);
+    const holderActivity: SessionHolderActivity[] = [];
+    for (const row of byHolder) holderActivity.push(await holderActivityView(row, names));
+    holderActivity.sort(byActivityThenLabel);
+    const answers = detail.role === 'creator';
 
     return {
       mission: { id: detail.mission.id, name: detail.mission.name },
+      viewer_role: detail.role,
       state: detail.state,
       session: session ? { id: session.id, created_at: session.createdAt } : null,
       risks: riskRows(detail, counters),
       periods: periodRows(detail, counters),
-      events: await this.eventViews(timeline.shown),
+      events: await this.eventViews(timeline.shown, names),
       next_events: timeline.next,
       timeline_filter: filter,
       open_requests: requests
@@ -229,10 +316,11 @@ export class MissionSessionService {
           risk_id: r.riskId,
           created_at: r.createdAt,
           expires_at: r.expiresAt,
-          path: inboxRequestPath(r.id),
+          path: answers ? inboxRequestPath(r.id) : null,
         })),
       agent_labels: await store.audit.agentLabels(missionId),
       label_activity: activity.map(labelActivityView),
+      holder_activity: holderActivity,
     };
   }
 
@@ -246,9 +334,7 @@ export class MissionSessionService {
     const page = await this.deps.store.sessions.listRecentEvents(sessionId, {
       limit: SESSION_EVENTS_PAGE_SIZE + 1,
       ...(before ? { before } : {}),
-      ...(filter.kind === 'all'
-        ? {}
-        : { calls: { agentLabel: filter.kind === 'label' ? filter.label : null } }),
+      ...callsOf(filter),
     });
     const shown = page.slice(0, SESSION_EVENTS_PAGE_SIZE);
     const last = shown.at(-1);
@@ -258,22 +344,94 @@ export class MissionSessionService {
     };
   }
 
-  private async eventViews(events: readonly EventRecord[]): Promise<SessionEventView[]> {
-    const emails = new Map<string, string | null>();
+  private async eventViews(
+    events: readonly EventRecord[],
+    names: HolderNames,
+  ): Promise<SessionEventView[]> {
     const views: SessionEventView[] = [];
     for (const event of events) {
-      let actorEmail: string | null = null;
-      if (event.actorUserId) {
-        if (!emails.has(event.actorUserId)) {
-          const user = await this.deps.store.users.getById(event.actorUserId);
-          emails.set(event.actorUserId, user?.email ?? null);
-        }
-        actorEmail = emails.get(event.actorUserId) ?? null;
-      }
-      views.push(eventView(event, actorEmail));
+      const actorEmail = event.actorUserId ? await names.email(event.actorUserId) : null;
+      const parsed = parseEventDetails(event.kind, event.details);
+      const ref = holderRefOf(parsed);
+      views.push(eventView(event, actorEmail, ref && (await names.view(ref))));
     }
     return views;
   }
+}
+
+/** The repository's `calls` option of a timeline filter. */
+function callsOf(
+  filter: SessionTimelineFilter,
+): Pick<Parameters<Store['sessions']['listRecentEvents']>[1], 'calls'> {
+  switch (filter.kind) {
+    case 'all':
+      return {};
+    case 'label':
+      return { calls: { agentLabel: filter.label } };
+    case 'unlabelled':
+      return { calls: { agentLabel: null } };
+    case 'holder':
+      return { calls: { holder: { kind: filter.holder.kind, holder: filter.holder.key } } };
+  }
+}
+
+/** Emails behind the user ids of one view, read once each. */
+class HolderNames {
+  private readonly emails = new Map<string, string | null>();
+
+  constructor(private readonly users: Pick<Store['users'], 'getById'>) {}
+
+  async email(userId: string): Promise<string | null> {
+    if (!this.emails.has(userId)) {
+      this.emails.set(userId, (await this.users.getById(userId))?.email ?? null);
+    }
+    return this.emails.get(userId) ?? null;
+  }
+
+  /** A member is shown by their email (their id when the user row is gone); a named token by its name. */
+  async view(ref: SessionHolderRef): Promise<SessionHolderView> {
+    if (ref.kind === 'named') return { ...ref, label: ref.key };
+    return { ...ref, label: (await this.email(ref.key)) ?? ref.key };
+  }
+}
+
+/** The holder an event names, from its stored details. */
+function holderRefOf(parsed: SessionEventDetails | null): SessionHolderRef | null {
+  if (!parsed) return null;
+  switch (parsed.kind) {
+    case 'call-allowed':
+    case 'call-refused':
+    case 'rotation':
+    case 'revocation': {
+      const { token_kind: kind, holder } = parsed.details;
+      return kind && holder ? { kind, key: holder } : null;
+    }
+    default:
+      return null;
+  }
+}
+
+/** Busiest first; then by the name a reader sees, the unattributed calls last. */
+function byActivityThenLabel(a: SessionHolderActivity, b: SessionHolderActivity): number {
+  const busier = b.allowed + b.refused - (a.allowed + a.refused);
+  if (busier !== 0) return busier;
+  if (a.holder === null || b.holder === null) return a.holder === null ? 1 : -1;
+  return a.holder.label.localeCompare(b.holder.label);
+}
+
+async function holderActivityView(
+  activity: TokenHolderActivity,
+  names: HolderNames,
+): Promise<SessionHolderActivity> {
+  return {
+    holder:
+      activity.kind !== null && activity.holder !== null
+        ? await names.view({ kind: activity.kind, key: activity.holder })
+        : null,
+    allowed: activity.allowed,
+    refused: activity.refused,
+    last_seen_at: activity.lastSeenAt,
+  };
 }
 
 /** A page of timeline events and where the next (older) one starts. */
@@ -361,6 +519,7 @@ const NO_DETAIL = {
   gate_open_until: null,
   tokens_revoked: null,
   token_prefix: null,
+  replaced_prefix: null,
   credits: null,
   dimension: null,
   expires_at: null,
@@ -445,9 +604,17 @@ function detailFields(parsed: SessionEventDetails | null): EventDetailFields {
         gate_before: parsed.details.gate_before,
       };
     case 'rotation':
-      return { ...NO_DETAIL, token_prefix: parsed.details.token_prefix };
+      return {
+        ...NO_DETAIL,
+        token_prefix: parsed.details.token_prefix,
+        replaced_prefix: parsed.details.replaced_prefix ?? null,
+      };
     case 'revocation':
-      return { ...NO_DETAIL, tokens_revoked: parsed.details.tokens_revoked };
+      return {
+        ...NO_DETAIL,
+        tokens_revoked: parsed.details.tokens_revoked,
+        token_prefix: parsed.details.token_prefix ?? null,
+      };
   }
 }
 
@@ -472,8 +639,16 @@ function riskIdsOf(event: EventRecord, parsed: SessionEventDetails | null): Risk
   return ids;
 }
 
-/** The fields of an event the page shows; the rest of `details` is not surfaced. */
-export function eventView(event: EventRecord, actorEmail: string | null): SessionEventView {
+/**
+ * The fields of an event the page shows; the rest of `details` is not surfaced.
+ * `holder` is the event's token holder with its label resolved by the caller
+ * (`null`: the event names none).
+ */
+export function eventView(
+  event: EventRecord,
+  actorEmail: string | null,
+  holder: SessionHolderView | null = null,
+): SessionEventView {
   const parsed = parseEventDetails(event.kind, event.details);
   return {
     id: event.id,
@@ -481,6 +656,7 @@ export function eventView(event: EventRecord, actorEmail: string | null): Sessio
     kind: event.kind,
     risk_ids: riskIdsOf(event, parsed),
     actor_email: actorEmail,
+    holder,
     ...detailFields(parsed),
   };
 }

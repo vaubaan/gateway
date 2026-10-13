@@ -179,7 +179,7 @@ function draftRefusal(preview: PreviewView): ManagementRefusal {
 }
 
 const NOT_FOUND_HINT =
-  'Call `list_my_missions` for the ids of the user’s missions. A mission of another user reads the same as one that does not exist.';
+  'Call `list_my_missions` for the ids of the user’s missions. A mission of another user reads the same as one that does not exist, and so does, for a tool that changes a mission, one the user is only a member of (`role: member`): its creator alone changes it.';
 
 function missionNotFound(missionId: string): ManagementRefusal {
   return {
@@ -259,7 +259,11 @@ export class ManagementTools {
   /**
    * The user's missions, newest first: policy, state, session period and what
    * is left of each budget. With `mission_id`, that mission with its
-   * connections and resources.
+   * connections and resources. The missions the user created and the ones
+   * shared with them as a member, each marked with its `role`: a member's
+   * mission is read here and nothing else — `rotate_mission_token` and
+   * `revoke_mission` reach only what the user created (and no tool adds a
+   * member: a human does, in the interface).
    */
   async listMyMissions(
     actor: ManagementActor,
@@ -363,7 +367,8 @@ export class ManagementTools {
   ): Promise<ToolOutcome<RotatedTokenAnswer>> {
     const user = { id: actor.userId };
     const detail = await this.deps.missions.get(user, input.mission_id);
-    if (!detail) return refused(missionNotFound(input.mission_id));
+    // A mission the user is only a member of is read here, never changed.
+    if (!detail || detail.role !== 'creator') return refused(missionNotFound(input.mission_id));
     if (detail.mission.delegationId !== actor.delegationId) {
       this.log('rotate_mission_token', actor, 'mission-not-issued-here', detail.mission.id);
       return refused(notIssuedHere(detail.mission.id));
@@ -409,7 +414,8 @@ export class ManagementTools {
   ): Promise<ToolOutcome<RevokedMissionAnswer>> {
     const user = { id: actor.userId };
     const detail = await this.deps.missions.get(user, input.mission_id);
-    if (!detail) return refused(missionNotFound(input.mission_id));
+    // A mission the user is only a member of is read here, never changed.
+    if (!detail || detail.role !== 'creator') return refused(missionNotFound(input.mission_id));
     if (detail.state.kind === 'revoked') {
       return done({
         mission_id: detail.mission.id,

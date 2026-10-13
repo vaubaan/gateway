@@ -9,6 +9,7 @@ import type { MembershipSettler } from '../authority';
 import type { InstanceConfig } from '../config/types';
 import type { ConnectionsModule } from '../connections';
 import type { Logger } from '../logging';
+import type { MissionTeamService } from '../missions';
 import type { DelegationService } from '../oauth-as';
 import type { Store } from '../store';
 import { systemClock, type Clock } from '../store/clock';
@@ -20,6 +21,7 @@ export interface UsersModuleDeps {
   readonly store: Store;
   readonly membership: Pick<MembershipSettler, 'watch'>;
   readonly delegations: Pick<DelegationService, 'revokeAllOf'>;
+  readonly memberTokens: Pick<MissionTeamService, 'revokeTokensOfDeactivated'>;
   readonly connections: Pick<ConnectionsModule, 'notices'>;
   readonly authenticator: Authenticator;
   readonly logger: Logger;
@@ -37,6 +39,7 @@ export function createUsersModule(deps: UsersModuleDeps): UsersModule {
     store: deps.store,
     membership: deps.membership,
     delegations: deps.delegations,
+    memberTokens: deps.memberTokens,
     audit: deps.store.auditWriter,
     clock: deps.clock ?? systemClock,
     logger,
