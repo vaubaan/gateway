@@ -62,15 +62,15 @@ export interface Delegation {
 // Connections, resources, shares
 // ─────────────────────────────────────────────────────────────────────────────
 
-/** How a connection authenticates to its provider. Declared by the plugin. */
-export type CredentialKind = 'api-key' | 'oauth2' | 'app-install' | 'ssh-key';
+/** How a connection authenticates to its provider. Declared by the plugin.
+ *  The constant is the source ; the type derives from it so a new kind cannot
+ *  be added to one without the other. */
+export const CREDENTIAL_KINDS = ['api-key', 'oauth2', 'app-install', 'ssh-key'] as const;
+export type CredentialKind = (typeof CREDENTIAL_KINDS)[number];
 
-export const CREDENTIAL_KINDS: readonly CredentialKind[] = [
-  'api-key',
-  'oauth2',
-  'app-install',
-  'ssh-key',
-];
+export function isCredentialKind(raw: string): raw is CredentialKind {
+  return (CREDENTIAL_KINDS as readonly string[]).includes(raw);
+}
 
 /**
  * A connection's credential as the instance stores it : an opaque payload
@@ -148,9 +148,12 @@ export interface Share {
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** `auto` : passes within the budget ; `approval` : each action needs the creator's grant. */
-export type Gate = 'auto' | 'approval';
+export const GATES = ['auto', 'approval'] as const;
+export type Gate = (typeof GATES)[number];
 
-export const GATES: readonly Gate[] = ['auto', 'approval'];
+export function isGate(raw: string): raw is Gate {
+  return (GATES as readonly string[]).includes(raw);
+}
 
 /** Actions allowed per short sliding window. */
 export interface RateLimit {

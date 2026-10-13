@@ -222,9 +222,13 @@ describe('checkMissionActive', () => {
 });
 
 describe('checkConnectionAvailable', () => {
-  test('active passes; expired, revoked and unowned refuse naming the owner', () => {
+  test('active and unowned pass: an unowned connection keeps serving its missions (spec §2)', () => {
     expect(checkConnectionAvailable(connection)).toBeNull();
-    for (const status of ['expired', 'revoked', 'unowned'] as const) {
+    expect(checkConnectionAvailable({ ...connection, status: 'unowned' })).toBeNull();
+  });
+
+  test('expired and revoked refuse naming the owner', () => {
+    for (const status of ['expired', 'revoked'] as const) {
       const r = checkConnectionAvailable({ ...connection, status });
       expect(r?.code).toBe('connection-unavailable');
       if (r?.code === 'connection-unavailable') {
@@ -352,7 +356,10 @@ describe('CallPipeline', () => {
     expect(out.refusal.executed_slices).toHaveLength(1);
     expect(out.refusal.hint).toContain('supabase.bulk-row-write');
     expect(budgetCalled).toBe(false);
-    expect(audit.calls[0]).toMatchObject({ refusal_code: 'risk-not-accepted', risks_touched: [] });
+    expect(audit.calls[0]).toMatchObject({
+      refusal_code: 'risk-not-accepted',
+      risks_touched: ['supabase.bulk-row-write'],
+    });
     expect(audit.calls[0]!.slices_executed).toHaveLength(1);
   });
 

@@ -71,7 +71,7 @@ export function indexCatalog(catalog: RiskCatalog): IndexedRiskCatalog {
       } catch (e) {
         throw new Error(
           `Invalid 'matches' pattern in risk '${entry.id}' of provider '${catalog.provider}': ${
-            (e as Error).message
+            e instanceof Error ? e.message : String(e)
           }`,
         );
       }

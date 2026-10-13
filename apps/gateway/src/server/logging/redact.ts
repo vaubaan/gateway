@@ -6,7 +6,10 @@
  * - Every configured secret (master keys, client secrets, private keys,
  *   bootstrap token) is replaced wherever its exact value appears.
  */
-const TOKEN = /vbn_(live|test)_([A-Za-z0-9]{8})_[A-Za-z0-9]{32}/g;
+import { API_KEY_PATTERN } from '@vaubaan/shared/api-key';
+
+/** The token format is owned by `@vaubaan/shared` ; the redactor only adds the global flag. */
+const TOKEN = new RegExp(API_KEY_PATTERN.source, 'g');
 export const REDACTED = '[redacted]';
 
 export type Redactor = (text: string) => string;

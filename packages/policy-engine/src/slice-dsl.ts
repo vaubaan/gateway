@@ -27,9 +27,13 @@ import type { Slice, SliceSegment } from '@vaubaan/shared';
  *  like `sbw-vaubaan/gateway`). Excludes `.` (separator) and `*` (only
  *  bare wildcard `**`/`*` as full token). */
 const BARE_NAME_CHARS = /^[a-zA-Z0-9_/-]+$/;
-/** Inside-bracket ident-or-glob : ident chars (`a-zA-Z0-9_./~-`) plus `*`
- *  for glob patterns. Used for both single ident and list entries. */
-const BRACKET_IDENT_OR_GLOB = /^[a-zA-Z0-9_./*~-]+$/;
+/** Characters legal inside a bracket identifier (`[owner/repo]`, `[a.ts]`,
+ *  `[v1~2]`). The matcher expands the glob `*` over this same class, so a
+ *  pattern never accepts less than the parser does. */
+export const BRACKET_IDENT_CHAR_CLASS = '[a-zA-Z0-9_./~-]';
+/** Inside-bracket ident-or-glob : ident chars plus `*` for glob patterns.
+ *  Used for both single ident and list entries. */
+const BRACKET_IDENT_OR_GLOB = new RegExp(`^(?:${BRACKET_IDENT_CHAR_CLASS}|\\*)+$`);
 
 export class SliceParseError extends Error {
   constructor(

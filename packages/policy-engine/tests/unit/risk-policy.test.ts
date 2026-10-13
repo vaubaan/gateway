@@ -73,6 +73,12 @@ describe('checkAcceptableInEnv', () => {
     expect(checkAcceptableInEnv(free, 'prod')).toBeNull();
     expect(checkAcceptableInEnv(free, null)).toBeNull();
   });
+
+  test('an empty list is "not env-scoped", like isEnvScopedEntry says', () => {
+    const empty = { ...catalog.risks[0]!, acceptable_in_envs: [] };
+    expect(checkAcceptableInEnv(empty, 'prod')).toBeNull();
+    expect(checkAcceptableInEnv(empty, null)).toBeNull();
+  });
 });
 
 describe('prepareCatalog', () => {

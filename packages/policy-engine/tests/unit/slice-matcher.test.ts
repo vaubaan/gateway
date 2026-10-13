@@ -48,6 +48,13 @@ describe('matches — concrete slice against a pattern', () => {
     expect(matches(p('github.branch[main,develop].W'), p('github.branch[other].W'))).toBe(false);
   });
 
+  test('glob covers the dotted and tilde identifiers the parser accepts (release-* vs release-1.2)', () => {
+    expect(matches(p('github.branch[release-*].W'), p('github.branch[release-1.2].W'))).toBe(true);
+    expect(matches(p('github.file[*].W'), p('github.file[a.ts].W'))).toBe(true);
+    expect(matches(p('github.ref[v1~*].R'), p('github.ref[v1~2].R'))).toBe(true);
+    expect(matches(p('github.branch[release-*].W'), p('github.branch[main].W'))).toBe(false);
+  });
+
   test('feature/* glob matches feature/auth-bug', () => {
     expect(
       matches(
@@ -86,6 +93,14 @@ describe('covers — pattern partial order', () => {
     expect(covers(p('github.branch[main,develop].W'), p('github.branch[other].W'))).toBe(false);
   });
 
+  test('a glob covers itself and a narrower glob, not a wider one', () => {
+    expect(covers(p('k.b[a*].W'), p('k.b[a*].W'))).toBe(true);
+    expect(covers(p('k.b[a*].W'), p('k.b[ab*].W'))).toBe(true);
+    expect(covers(p('k.b[ab*].W'), p('k.b[a*].W'))).toBe(false);
+    expect(covers(p('k.b[x,a].W'), p('k.b[*,a].W'))).toBe(false);
+    expect(covers(p('k.b[*].W'), p('k.b[a*,b*].W'))).toBe(true);
+  });
+
   test('glob covers its concrete matches', () => {
     expect(
       covers(p('vercel.env-var[NEXT_PUBLIC_*].W'), p('vercel.env-var[NEXT_PUBLIC_URL].W')),
@@ -118,6 +133,14 @@ describe('intersects — symmetric overlap', () => {
     expect(intersects(p('vercel.env-var[NEXT_PUBLIC_*].W'), p('vercel.env-var[SECRET].W'))).toBe(
       false,
     );
+  });
+
+  test('glob × glob is exact for single-star globs and fails closed beyond', () => {
+    expect(intersects(p('k.b[a*].W'), p('k.b[*b].W'))).toBe(true);
+    expect(intersects(p('k.b[a*].W'), p('k.b[b*].W'))).toBe(false);
+    expect(intersects(p('k.b[a*b].W'), p('k.b[ab*c].W'))).toBe(false);
+    expect(intersects(p('k.b[ab*c].W'), p('k.b[a*bc].W'))).toBe(true);
+    expect(intersects(p('k.b[a*b*].W'), p('k.b[*c*].W'))).toBe(true);
   });
 
   test('different actions never intersect', () => {

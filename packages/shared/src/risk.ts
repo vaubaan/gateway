@@ -48,11 +48,12 @@ import type { RefusalCode } from './refusal.ts';
  *   provider ::= ident
  *   segment  ::= ident | '[' inner ']'
  *   inner    ::= '*' | '**' | ident (',' ident)*
- *   ident    ::= [a-zA-Z0-9_/-]+   (allows '/' for refs like 'owner/repo')
+ *   ident    ::= [a-zA-Z0-9_./~-]+ (allows '/' for refs like 'owner/repo',
+ *                                   '.' and '~' for file names and git refs)
  *   action   ::= 'R' | 'W'
  *
  * The asterisk in an `ident` segment (e.g. `[NEXT_PUBLIC_*]`) acts as a
- * glob over `[a-zA-Z0-9_/-]+`. The bare `[*]` matches any single segment ;
+ * glob over the same identifier characters. The bare `[*]` matches any single segment ;
  * `[**]` matches zero or more segments. No regex.
  */
 export interface Slice {
@@ -95,23 +96,18 @@ export type SliceSegment =
  *  - drive a visual ordering by severity in the issuance UI (the only
  *    derived signal — no functional gate is computed from this).
  */
-export interface RiskVector {
-  readonly reversibility: 'reversible' | 'costly' | 'irreversible';
-  readonly blast: 'single' | 'env' | 'account' | 'bulk';
-  readonly data: 'metadata' | 'data' | 'secret' | 'pii';
-  readonly cost: 'free' | 'moderate' | 'unbounded';
-  readonly visibility: 'internal' | 'team' | 'public';
-  readonly persistence: 'stateless' | 'session' | 'posture';
-}
-
-/** Allowed values per axis — one source for YAML validation and UI pickers. */
-export const RISK_VECTOR_AXES: { readonly [K in keyof RiskVector]: readonly RiskVector[K][] } = {
+/** Allowed values per axis — the one source for the type, YAML validation and UI pickers. */
+export const RISK_VECTOR_AXES = {
   reversibility: ['reversible', 'costly', 'irreversible'],
   blast: ['single', 'env', 'account', 'bulk'],
   data: ['metadata', 'data', 'secret', 'pii'],
   cost: ['free', 'moderate', 'unbounded'],
   visibility: ['internal', 'team', 'public'],
   persistence: ['stateless', 'session', 'posture'],
+} as const;
+
+export type RiskVector = {
+  readonly [K in keyof typeof RISK_VECTOR_AXES]: (typeof RISK_VECTOR_AXES)[K][number];
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,7 +285,7 @@ export type RiskDecision =
       /** The structured refusal code the gateway returns for this denial.
        *  The risk step only ever emits `risk-not-accepted` ; the field
        *  exists so the audit entry and the refusal body never guess. */
-      readonly code: RefusalCode;
+      readonly code: Extract<RefusalCode, 'risk-not-accepted'>;
       /** Risks the call touched but the mission did not accept. */
       readonly missing_risks: readonly RiskId[];
       /** Risks the call touched and the mission *did* accept (informational). */

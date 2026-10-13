@@ -14,6 +14,7 @@
 import type { RiskCatalog, RiskEntry } from '@vaubaan/shared';
 import { isRiskId } from '@vaubaan/shared/risk-id';
 
+import { isAcceptableInEnv, isEnvScopedEntry } from './qualify.ts';
 import { indexCatalog, type IndexedRiskCatalog } from './risk-evaluator.ts';
 
 /**
@@ -24,17 +25,18 @@ import { indexCatalog, type IndexedRiskCatalog } from './risk-evaluator.ts';
  * Returns `null` if OK to accept, or a denial reason string.
  */
 export function checkAcceptableInEnv(entry: RiskEntry, env: string | null): string | null {
-  if (!entry.acceptable_in_envs) return null;
+  if (!isEnvScopedEntry(entry)) return null;
+  const envs = entry.acceptable_in_envs ?? [];
   if (env === null) {
     return (
       `risk '${entry.id}' restricts acceptance to envs ` +
-      `[${entry.acceptable_in_envs.join(', ')}] but the resource has no environment label`
+      `[${envs.join(', ')}] but the resource has no environment label`
     );
   }
-  if (!entry.acceptable_in_envs.includes(env)) {
+  if (!isAcceptableInEnv(entry, env)) {
     return (
       `risk '${entry.id}' is not acceptable in env '${env}' ` +
-      `(catalog restricts to [${entry.acceptable_in_envs.join(', ')}])`
+      `(catalog restricts to [${envs.join(', ')}])`
     );
   }
   return null;
@@ -60,21 +62,16 @@ export function hasFallbackRisk(catalog: RiskCatalog): boolean {
   return catalog.risks.some((entry) => entry.id.startsWith(prefix));
 }
 
-/** One-call helper combining `indexCatalog` + sanity checks (ids unique,
- *  RiskId grammar, fallback risk present). Used at boot by the plugin SDK's
- *  catalog loader. */
+/** One-call helper combining `indexCatalog` (patterns parsed, ids unique)
+ *  + sanity checks (RiskId grammar, fallback risk present). Used at boot by
+ *  the plugin SDK's catalog loader and registry. */
 export function prepareCatalog(
   catalog: RiskCatalog,
   options: PrepareCatalogOptions = {},
 ): IndexedRiskCatalog {
   const warn = options.warn ?? ((message: string) => console.warn(message));
   const indexed = indexCatalog(catalog);
-  const ids = new Set<string>();
   for (const { entry } of indexed.entries) {
-    if (ids.has(entry.id)) {
-      throw new Error(`Duplicate risk id '${entry.id}' in catalog '${catalog.provider}'`);
-    }
-    ids.add(entry.id);
     if (!isRiskId(entry.id)) {
       throw new Error(
         `Risk id '${entry.id}' in catalog '${catalog.provider}' does not match expected format ` +

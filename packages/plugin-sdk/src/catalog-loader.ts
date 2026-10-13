@@ -20,7 +20,13 @@ import { fileURLToPath } from 'node:url';
 
 import { CORE_SCHEMA, YAMLException, load } from 'js-yaml';
 
-import { prepareCatalog, type IndexedRiskCatalog } from '@vaubaan/policy-engine';
+import {
+  hasFallbackRisk,
+  isAcceptableInEnv,
+  isEnvScopedEntry,
+  prepareCatalog,
+  type IndexedRiskCatalog,
+} from '@vaubaan/policy-engine';
 import {
   ENV_LABEL_PATTERN,
   GATES,
@@ -132,10 +138,7 @@ export function semanticIssues(catalog: RiskCatalog, options: LoadCatalogOptions
   const issues: string[] = [];
   const requireFallback = options.requireFallback ?? true;
   const requirePresets = options.requirePresets ?? true;
-  if (
-    requireFallback &&
-    !catalog.risks.some((r) => r.id.startsWith(`${catalog.provider}.uncategorized`))
-  ) {
+  if (requireFallback && !hasFallbackRisk(catalog)) {
     issues.push(
       `missing fallback risk: declare a '${catalog.provider}.uncategorized-*' entry matching '${catalog.provider}.**.W' (risk-model spec §4.3)`,
     );
@@ -208,13 +211,13 @@ export function presetIssues(
         return;
       }
       if (parsed.env !== null) {
-        if (!risk.acceptable_in_envs || risk.acceptable_in_envs.length === 0) {
+        if (!isEnvScopedEntry(risk)) {
           issues.push(
             `${where}.risk_id '${entry.risk_id}' qualifies an env on a risk that is not env-scoped`,
           );
-        } else if (!risk.acceptable_in_envs.includes(parsed.env)) {
+        } else if (!isAcceptableInEnv(risk, parsed.env)) {
           issues.push(
-            `${where}.risk_id '${entry.risk_id}' uses env '${parsed.env}' outside acceptable_in_envs [${risk.acceptable_in_envs.join(', ')}]`,
+            `${where}.risk_id '${entry.risk_id}' uses env '${parsed.env}' outside acceptable_in_envs [${(risk.acceptable_in_envs ?? []).join(', ')}]`,
           );
         }
       }

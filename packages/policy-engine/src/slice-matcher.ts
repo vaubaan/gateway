@@ -22,7 +22,8 @@
  * The matching is structural on the segment array. `[*]` matches any
  * single concrete segment ; `[**]` matches zero-or-more (recursive
  * wildcard like `**` in globs). Inside a bracket, the `*` glob character
- * matches `[a-zA-Z0-9_/-]+`.
+ * matches one or more identifier characters (`BRACKET_IDENT_CHAR_CLASS`,
+ * the class the parser accepts : a glob never covers less than an ident).
  *
  * Provider and action are matched by exact string equality (no wildcard on
  * those — a different provider or a different action is never the same
@@ -30,6 +31,8 @@
  */
 
 import type { Slice, SliceSegment } from '@vaubaan/shared';
+
+import { BRACKET_IDENT_CHAR_CLASS } from './slice-dsl.ts';
 
 /** True iff `pattern` accepts the concrete slice `concrete`.
  *  Assumes `concrete` has no wildcards on its path (no `wild-one`/`wild-rec`,
@@ -106,13 +109,16 @@ function matchOne(p: SliceSegment, c: SliceSegment): boolean {
   }
 }
 
-/** Glob matching inside a bracket : `*` matches `[a-zA-Z0-9_/-]+`. */
+/** Glob matching inside a bracket : `*` matches one or more identifier
+ *  characters (the parser's bracket class, so `release-*` accepts
+ *  `release-1.2`). */
 function identGlobMatches(pattern: string, value: string): boolean {
   if (!pattern.includes('*')) return pattern === value;
-  // Build a regex : `*` → `[a-zA-Z0-9_/-]+`. Escape regex metas (none in
-  // our ident charset, but defensive).
+  // Escape regex metas (`.` is a legal ident char), then expand `*`.
   const re = new RegExp(
-    '^' + pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[a-zA-Z0-9_/-]+') + '$',
+    '^' +
+      pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, `${BRACKET_IDENT_CHAR_CLASS}+`) +
+      '$',
   );
   return re.test(value);
 }
@@ -155,8 +161,8 @@ function coversOne(pa: SliceSegment, pb: SliceSegment): boolean {
     case 'ident':
       if (pa.value === '*') return pb.kind === 'ident' || pb.kind === 'list';
       if (pa.value.includes('*')) {
-        if (pb.kind === 'ident') return identGlobMatches(pa.value, pb.value);
-        if (pb.kind === 'list') return pb.values.every((v) => identGlobMatches(pa.value, v));
+        if (pb.kind === 'ident') return globCovers(pa.value, pb.value);
+        if (pb.kind === 'list') return pb.values.every((v) => globCovers(pa.value, v));
         return false;
       }
       // exact
@@ -164,11 +170,9 @@ function coversOne(pa: SliceSegment, pb: SliceSegment): boolean {
       if (pb.kind === 'list') return pb.values.length === 1 && pb.values[0] === pa.value;
       return false;
     case 'list':
-      if (pb.kind === 'ident') return pa.values.some((v) => identGlobMatches(v, pb.value));
+      if (pb.kind === 'ident') return pa.values.some((v) => globCovers(v, pb.value));
       if (pb.kind === 'list') {
-        return pb.values.every((bv) =>
-          pa.values.some((av) => identGlobMatches(av, expandGlob(bv))),
-        );
+        return pb.values.every((bv) => pa.values.some((av) => globCovers(av, bv)));
       }
       return false;
   }
@@ -221,21 +225,7 @@ function intersectOne(pa: SliceSegment, pb: SliceSegment): boolean {
   }
   if (pb.kind === 'name') return false;
   // Both are ident or list.
-  if (pa.kind === 'ident' && pb.kind === 'ident') {
-    if (pa.value === '*' || pb.value === '*') return true;
-    if (pa.value.includes('*') && pb.value.includes('*')) {
-      // Two globs — non-trivial. We check if the intersection of their
-      // languages is non-empty via a conservative heuristic : try plugging
-      // each glob's literal prefix into the other.
-      return (
-        identGlobMatches(pa.value, expandGlob(pb.value)) ||
-        identGlobMatches(pb.value, expandGlob(pa.value))
-      );
-    }
-    if (pa.value.includes('*')) return identGlobMatches(pa.value, pb.value);
-    if (pb.value.includes('*')) return identGlobMatches(pb.value, pa.value);
-    return pa.value === pb.value;
-  }
+  if (pa.kind === 'ident' && pb.kind === 'ident') return globsIntersect(pa.value, pb.value);
   if (pa.kind === 'list' && pb.kind === 'list') {
     return pa.values.some((av) => pb.values.some((bv) => globsIntersect(av, bv)));
   }
@@ -248,22 +238,53 @@ function intersectOne(pa: SliceSegment, pb: SliceSegment): boolean {
   return false;
 }
 
-/** Conservative glob × glob intersection : exact match, or one side is `*`,
- *  or one matches a sample expansion of the other. */
+/**
+ * Glob × glob intersection. Exact for globs with at most one `*` each (the
+ * catalog's `feature/*`, `NEXT_PUBLIC_*`, `release-*`) : two single-star
+ * globs share a value iff one literal prefix extends the other and one
+ * literal suffix extends the other (`<longer prefix>x<longer suffix>` is
+ * then accepted by both). With several `*` on both sides the exact test is
+ * not implemented and the function fails closed (`true`) : over-reporting
+ * an intersection makes `risksTouchedBy` require more risks, never fewer.
+ */
 function globsIntersect(a: string, b: string): boolean {
   if (a === b) return true;
   if (a === '*' || b === '*') return true;
-  if (a.includes('*') && b.includes('*')) {
-    return identGlobMatches(a, expandGlob(b)) || identGlobMatches(b, expandGlob(a));
+  const aGlob = a.includes('*');
+  const bGlob = b.includes('*');
+  if (aGlob && bGlob) {
+    const sa = splitSingleStar(a);
+    const sb = splitSingleStar(b);
+    if (!sa || !sb) return true;
+    return (
+      (sa.prefix.startsWith(sb.prefix) || sb.prefix.startsWith(sa.prefix)) &&
+      (sa.suffix.endsWith(sb.suffix) || sb.suffix.endsWith(sa.suffix))
+    );
   }
-  if (a.includes('*')) return identGlobMatches(a, b);
-  if (b.includes('*')) return identGlobMatches(b, a);
+  if (aGlob) return identGlobMatches(a, b);
+  if (bGlob) return identGlobMatches(b, a);
   return false;
 }
 
-/** Produce one concrete value from a glob pattern by replacing `*` with a
- *  representative sample. Used as a heuristic in intersect-glob-glob.
- *  Not exposed — internal. */
-function expandGlob(pattern: string): string {
-  return pattern.replace(/\*/g, 'x');
+/**
+ * Does glob `a` accept every value glob `b` accepts ? Exact for single-star
+ * globs (`b`'s literal prefix extends `a`'s and its suffix extends `a`'s) ;
+ * a multi-star `b` is covered only by an identical `a` or by `*`. A glob
+ * covers itself.
+ */
+function globCovers(a: string, b: string): boolean {
+  if (a === b || a === '*') return true;
+  if (!b.includes('*')) return identGlobMatches(a, b);
+  if (!a.includes('*')) return false;
+  const sa = splitSingleStar(a);
+  const sb = splitSingleStar(b);
+  if (!sa || !sb) return false;
+  return sb.prefix.startsWith(sa.prefix) && sb.suffix.endsWith(sa.suffix);
+}
+
+/** `prefix*suffix` of a glob with exactly one `*` ; `null` otherwise. */
+function splitSingleStar(glob: string): { prefix: string; suffix: string } | null {
+  const first = glob.indexOf('*');
+  if (first < 0 || glob.indexOf('*', first + 1) >= 0) return null;
+  return { prefix: glob.slice(0, first), suffix: glob.slice(first + 1) };
 }
