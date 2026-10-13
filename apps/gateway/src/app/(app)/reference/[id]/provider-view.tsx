@@ -273,11 +273,11 @@ export function ProviderView({ reference }: { reference: ProviderReference }) {
           </p>
         </section>
         <section>
-          <h2 className={styles.helpTitle}>What the colours mean</h2>
+          <h2 className={styles.helpTitle}>What the glyphs mean</h2>
           <p>
-            A colour says what kind of thing a tag names, on every page; a glyph says it too. It
-            never says how severe or in what state: read, write and irreversible, the gate and the
-            strip keep their own marks (<Badge tone="warning">approval</Badge>, an outlined word).
+            A glyph says what kind of thing a name is, on every page. It never says how severe or in
+            what state: read, write and irreversible, the gate and the strip keep their own marks (
+            <Badge tone="warning">approval</Badge>, an outlined word).
           </p>
           <KindLegend />
         </section>

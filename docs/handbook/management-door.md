@@ -971,7 +971,7 @@ administrative entries whose object is one of **their** delegations.
 
 ## Pages
 
-- **`/delegations`** (`APP_NAV` "Delegations"; `DelegationService.listFor`; the
+- **`/delegations`** ("Connected apps" in the local navigation of Settings; `DelegationService.listFor`; the
   status shown for each mission is the derived one — the composition root hands
   the service `derivedMissionReads(store.missions, authority.grounds)`, so an
   orphaned mission reads `orphaned` here as on its own page, [authority](authority.md)):
@@ -1255,7 +1255,8 @@ Browser (`tests/e2e/v5/delegate-agent.spec.ts`): consent in a real browser,
 then the agent reads the authority, previews, issues, uses the mission token
 on `/mcp`; the user sees the mission marked delegated on Missions, the
 mission page and the Delegations card, revokes the delegation, keeps the
-mission. A second test: the navigation shows Delegations, and an empty page
+mission. A second test: the page is part of Settings ("Connected apps" is current in its
+local navigation), and an empty page
 says how to authorize an agent.
 
 Not automated: a run with Claude Code itself against a deployed instance —

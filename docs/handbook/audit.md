@@ -5,7 +5,7 @@ date: 2026-10-13
 last_synced: 2026-10-13
 tracks:
   - apps/gateway/src/server/audit/
-  - apps/gateway/src/app/(app)/audit/
+  - apps/gateway/src/app/(app)/activity/
   - apps/gateway/src/app/(app)/missions/[id]/session/
   - apps/gateway/src/server/store/repositories/audit.ts
   - apps/gateway/src/server/store/repositories/sessions.ts
@@ -41,8 +41,8 @@ apps/gateway/src/server/audit/
   session-event-detail.ts  eventDetailLines(), isSessionEventKind()  (pure: the Detail column)
   retention.ts      AuditRetentionSweeper (start / stop / sweep)
 apps/gateway/src/app/(app)/
-  audit/page.tsx                  /audit
-  audit/audit.module.css          shared by both pages
+  audit/page.tsx                  /activity
+  activity/activity.module.css          shared by both pages
   missions/[id]/session/page.tsx  /missions/<id>/session
 ```
 
@@ -204,7 +204,7 @@ following pages, and entries with the same timestamp are neither repeated nor sk
 - Open requests are those `isDecidable` (`server/requests/state.ts`) says are still open
   as of now: the same rule as the inbox, not a second comparison of dates.
 - Open requests are listed **by link** to the creator's view of the request
-  (`inboxRequestPath(id)` of `server/requests/url.ts` = `/requests/<id>`): kind, risk,
+  (`inboxRequestPath(id)` of `server/requests/url.ts` = `/waiting/<id>`): kind, risk,
   opened, expires. The sealed arguments of an approval request stay with the requests
   feature ([requests](requests.md)).
 

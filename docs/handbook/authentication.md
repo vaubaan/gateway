@@ -15,7 +15,7 @@ tracks:
   - apps/gateway/src/app/api/auth/
   - apps/gateway/src/app/api/admin/identity-provider/route.ts
   - apps/gateway/src/app/(public)/login/page.tsx
-  - apps/gateway/src/app/page.tsx
+  - apps/gateway/src/app/(app)/page.tsx
   - apps/gateway/src/app/(public)/layout.tsx
   - apps/gateway/src/app/admin/
   - apps/gateway/src/components/auth/
@@ -83,7 +83,7 @@ apps/gateway/src/app/
   api/auth/bootstrap/route.ts            POST /api/auth/bootstrap
   api/admin/identity-provider/route.ts   POST /api/admin/identity-provider
   admin/bootstrap/page.tsx               /admin/bootstrap (outside the guard)
-  admin/(guarded)/layout.tsx             the Administration shell (bar, "Not an operator" page) — not the boundary
+  admin/(guarded)/layout.tsx             the shell with the local navigation of Settings, or the "Not an operator" page — not the boundary
   admin/(guarded)/page.tsx               /admin
   admin/(guarded)/identity-provider/page.tsx
   admin/(guarded)/users/page.tsx         /admin/users
@@ -583,14 +583,14 @@ millisecond of a deactivation is refused.
 ## Pages
 
 - **`/login`** (where `/` sends a visitor with no session; a signed-in one
-  goes to `/missions` — `app/page.tsx`) — one
+  stays on `/`, the home — `app/(app)/page.tsx`) — one
   button per configured IdP ("Continue with `<issuer host>`" → `GET
 /auth/login`), or "No identity provider is configured yet" with a link to
   the bootstrap page while the token is active. Signed in, it shows the
   `PrincipalCard`: email, groups, the **operator marker** (`OperatorBadge`:
-  `Operator` / `User` / `BOOTSTRAP_ACTOR_LABEL`, "Bootstrap operator"), the Connections link for a
+  `Operator` / `User` / `BOOTSTRAP_ACTOR_LABEL`, "Bootstrap operator"), an "Open the gateway" link to the home (`/`) for a
   signed-in user, the Administration link for operators, and the sign-out
-  form. The pages under `app/(app)/` get the application bar (`AppShell`) from the
+  form. The pages under `app/(app)/` get the shell and its side navigation (`AppShell`) from the
   same principal (handbook [connections](connections.md), "Pages").
 - **`/admin/bootstrap`** — the token form (`POST /api/auth/bootstrap`,
   field `token`), only while the state is `active`; otherwise says when it
@@ -599,20 +599,19 @@ millisecond of a deactivation is refused.
   bootstrap session is redirected to `/admin`. The page sits outside every
   layout and renders the build footer itself.
 - **`/admin`** — issuer, source (file or Admin page), admin rule, bootstrap
-  state, build. Administration is the application's shell with its own
-  entries (`AdminShell` and `ADMIN_NAV`, `components/shell/AppShell.tsx`): one
-  bar, the account menu and the build footer. The brand leads to
-  `/connections` for a user and to `/admin` for the bootstrap operator, who
-  has no application to go to; an "Administration" entry (`/admin`, current
-  on that path only) comes first, then Identity provider, Provider
-  apps (`/admin/provider-apps`, handbook [connections](connections.md)),
-  Users (`/admin/users`, below), Groups and Connections (`/admin/groups`,
+  state, build. Administration is part of Settings: the application's shell
+  and its global navigation, with the local navigation of Settings beside the
+  page (`AdminShell`, `SettingsFrame` and `settingsNav` in `components/shell/`,
+  handbook [web-app](web-app.md), "The shell"). Under "Administration" it lists
+  Setup (`/admin`), Sign-in (`/admin/identity-provider`), Company apps
+  (`/admin/provider-apps`, handbook [connections](connections.md)), People
+  (`/admin/users`, below), Teams and Accounts without owner (`/admin/groups`,
   `/admin/connections`: local groups and ownerless connections, handbook
-  [authority](authority.md)),
-  Telemetry (`/admin/telemetry`, handbook [telemetry](telemetry.md)) and
-  OAuth clients (`/admin/oauth-clients`, handbook
-  [management-door](management-door.md)). The "Not an operator" page has no
-  bar and keeps the build footer.
+  [authority](authority.md)), Telemetry (`/admin/telemetry`, handbook
+  [telemetry](telemetry.md)) and Registered apps (`/admin/oauth-clients`,
+  handbook [management-door](management-door.md)). The pages keep their
+  earlier titles until they are redesigned. The "Not an operator" page has no
+  navigation and keeps the build footer.
 - **`/admin/identity-provider`** — the settings form (`POST
 /api/admin/identity-provider`: `issuer`, `client_id`, `client_secret`,
   `claim_sub`, `claim_email`, `claim_groups`, `allowed_email_domains`),

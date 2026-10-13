@@ -291,7 +291,7 @@ GitHub returning the `state` the gateway put on the installation URL when
 "Request user authorization (OAuth) during installation" is on.
 
 - Do: connect GitHub on an account where the App is **not** installed yet.
-- Expect: back on `/connections/<id>` with "Connected" and the repositories.
+- Expect: back on `/accounts/<id>` with "Connected" and the repositories.
 - If not: "Not connected: this authorization attempt has expired, was already
   used…" (`state-invalid`) means GitHub dropped the `state`. Copy the callback
   URL from the address bar (it holds no secret that outlives a minute) and

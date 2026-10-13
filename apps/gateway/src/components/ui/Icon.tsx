@@ -82,7 +82,12 @@ const PATHS: Readonly<Record<IconName, React.ReactNode>> = {
   ),
   check: <path d="M5 12l5 5L20 7" />,
   cross: <path d="M6 6l12 12M18 6L6 18" />,
-  alert: <path d="M12 8v5M12 16h.01" />,
+  alert: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5v5.5M12 16.5h.01" />
+    </>
+  ),
   info: (
     <>
       <circle cx="12" cy="12" r="9" />
