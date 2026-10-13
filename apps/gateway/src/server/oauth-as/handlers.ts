@@ -41,6 +41,7 @@ import {
 } from '../auth';
 import type { RateLimiter } from '../compose/ports';
 import type { BuildInfo } from '../config/build-info';
+import { documentThemeOf } from '../http/document';
 import type { OAuthConfig } from '../config/types';
 import type { Logger } from '../logging';
 import { EXECUTION_DOOR_PATH } from '../missions';
@@ -275,11 +276,17 @@ export function executionResourceMetadataResponse(
 
 export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
   const { endpoints, logger } = deps;
-  // Every page of the authorization endpoint carries the build footer.
-  const messagePage = (status: number, title: string, message: string): Response =>
-    renderMessagePage(status, title, message, deps.build);
-  const consentPage = (view: ConsentView): Response =>
-    renderConsentPage({ ...view, build: deps.build });
+  // Every page of the authorization endpoint carries the build footer and is drawn in
+  // the theme the person chose in the application (the cookie of the request).
+  function pagesFor(request: Request) {
+    const look = { build: deps.build, theme: documentThemeOf(request.headers) };
+    return {
+      messagePage: (status: number, title: string, message: string): Response =>
+        renderMessagePage(status, title, message, look),
+      consentPage: (view: ConsentView): Response => renderConsentPage({ ...view, ...look }),
+    };
+  }
+  type MessagePage = ReturnType<typeof pagesFor>['messagePage'];
 
   /** `null` when the request may go on, else the 429 that stops it. */
   async function limited(key: string, limit: number, windowMs: number): Promise<Response | null> {
@@ -315,7 +322,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
     return oauthError('server_error', 'the request could not be processed', 500);
   }
 
-  function bootstrapCannotDelegate(): Response {
+  function bootstrapCannotDelegate(messagePage: MessagePage): Response {
     return messagePage(
       403,
       'Sign in as a user',
@@ -377,6 +384,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
     },
 
     async authorize(request) {
+      const { messagePage, consentPage } = pagesFor(request);
       if (request.method !== 'GET') return messagePage(405, 'Method not allowed', 'Use GET.');
       const params = new URL(request.url).searchParams;
       const principal = await deps.authenticator.authenticate(request.headers);
@@ -384,7 +392,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
       try {
         // A metadata document is only ever fetched for a signed-in user.
         if (deps.authorization.needsDocument(params) && !user) {
-          return principal ? bootstrapCannotDelegate() : signIn(request);
+          return principal ? bootstrapCannotDelegate(messagePage) : signIn(request);
         }
         const { view, redirectUri } = await deps.authorization.resolveClient(
           params,
@@ -395,7 +403,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
         // registered a minute ago must not turn this endpoint into a redirector
         // (RFC 9700 §4.11.2).
         if (!principal) return signIn(request);
-        if (!user) return bootstrapCannotDelegate();
+        if (!user) return bootstrapCannotDelegate(messagePage);
         if (view.status === 'disabled') {
           return messagePage(
             403,
@@ -449,6 +457,7 @@ export function createOAuthHandlers(deps: OAuthHandlerDeps): OAuthHandlers {
     },
 
     async decide(request) {
+      const { messagePage } = pagesFor(request);
       const guard = await guardMutation(request, deps, 'user');
       if (!guard.ok) return refusalResponse(guard, USER_REFUSALS);
       let form: FormData;

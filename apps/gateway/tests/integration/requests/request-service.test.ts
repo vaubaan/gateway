@@ -218,6 +218,16 @@ describe('RequestService', () => {
         name: 'm',
         state: 'active',
         expires_at: null,
+        period_seconds: DAY_SECONDS,
+      });
+      // Who asked is read from the refused call of the session: its label, its tool.
+      expect(view.asker).toEqual({
+        token_kind: null,
+        user_id: null,
+        holder: null,
+        agent_label: 'builder',
+        tool: 'github__push',
+        refused_calls: 1,
       });
       expect(view.period).toEqual({ index: 0, start: ANCHOR, end: DAY1 });
       expect(view.risk).toEqual({

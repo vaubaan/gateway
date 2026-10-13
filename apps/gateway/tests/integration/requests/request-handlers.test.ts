@@ -135,6 +135,13 @@ describe('requests: exhaust and claim over HTTP', () => {
     for (const detail of ['Read the billing code', RISK, mission.id, seeded.ada.email, 'acme']) {
       expect(page).not.toContain(detail);
     }
+    // Drawn in the theme of the system, or in the one the person chose in the application.
+    expect(page).toContain('<html lang="en">');
+    const themed = await sessionHeaders(root, seeded.bob);
+    themed.set('cookie', `${themed.get('cookie')}; vaubaan_theme=dark`);
+    const dark = await root.requests.handlers.open(get(claim.url, themed), claim.id);
+    expect(dark.status).toBe(403);
+    expect(await dark.text()).toContain('<html lang="en" data-theme="dark">');
 
     // The creator: on to the request in the inbox.
     const ada = await root.requests.handlers.open(

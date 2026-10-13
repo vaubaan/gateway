@@ -818,6 +818,8 @@ const RULES: Readonly<Record<string, Rule>> = {
   // ── requests ──────────────────────────────────────────────────────────────
   'RequestService.inbox': READ,
   'RequestService.openCount': READ,
+  'RequestService.waiting': READ,
+  'RequestService.answered': READ,
   'RequestService.view': READ,
   'RequestService.decide': {
     kind: 'mutation',

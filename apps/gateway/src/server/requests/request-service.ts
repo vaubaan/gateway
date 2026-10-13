@@ -269,6 +269,8 @@ export interface ApprovalView {
   readonly gates: readonly ApprovalGateLine[];
   /** Set once the request was granted with an approval. */
   readonly approval: GrantedApproval | null;
+  /** How long a yes stays usable (`approvals.expiry`), in seconds. */
+  readonly approval_valid_seconds: number;
   /** Last events of the mission's session, most recent first. */
   readonly events: readonly SessionEventLine[];
   /** The three actions with their consequence; empty once the request is not open. */
@@ -755,6 +757,7 @@ export class RequestService {
                 : 'usable',
           }
         : null,
+      approval_valid_seconds: this.deps.approvalValiditySeconds,
       events: events.map(eventLineOf),
       options: open
         ? approvalOptions(
