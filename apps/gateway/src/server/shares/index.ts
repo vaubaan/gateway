@@ -53,7 +53,13 @@ export function createSharesModule(deps: SharesModuleDeps): SharesModule {
   return { service, handlers };
 }
 
-export { SHARE_ERROR_CODES, SHARE_ERROR_MESSAGES, ShareError, type ShareErrorCode } from './errors';
+export {
+  isShareError,
+  SHARE_ERROR_CODES,
+  SHARE_ERROR_MESSAGES,
+  ShareError,
+  type ShareErrorCode,
+} from './errors';
 export { createShareHandlers, SHARE_FIELDS, sharePath, type ShareHandlers } from './handlers';
 export {
   envNotes,

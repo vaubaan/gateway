@@ -44,6 +44,16 @@ const STATUS_BY_CODE: Readonly<Record<ShareErrorCode, number>> = {
   'risk-unknown': 400,
 };
 
+/**
+ * Is this the `ShareError` of that code? By shape, not by `instanceof`: a page is
+ * bundled apart from the code that built the composition root, so the class a page
+ * imports is not the one a service threw (handbook web-app, "One root, several module
+ * graphs"). Services and handlers live in the root's own graph and may use `instanceof`.
+ */
+export function isShareError(err: unknown, code: ShareErrorCode): boolean {
+  return err instanceof Error && err.name === 'ShareError' && 'code' in err && err.code === code;
+}
+
 export class ShareError extends Error {
   readonly status: number;
 

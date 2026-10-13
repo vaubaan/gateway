@@ -19,7 +19,7 @@ import {
   type PageSearchParams,
 } from '@/lib/connections/session';
 import { connectionPath, CONNECTIONS_PATH } from '@/server/connections';
-import { ShareError, type ShareContext } from '@/server/shares';
+import { isShareError, type ShareContext } from '@/server/shares';
 
 import { ShareForm, type ShareFormInitial } from './share-form';
 
@@ -40,7 +40,7 @@ export default async function SharePage({
   try {
     context = await root.shares.service.contextFor(actor, id);
   } catch (err) {
-    if (err instanceof ShareError && err.code === 'not-found') notFound();
+    if (isShareError(err, 'not-found')) notFound();
     throw err;
   }
   const query = await searchParams;

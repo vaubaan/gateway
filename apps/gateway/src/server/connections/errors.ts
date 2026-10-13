@@ -92,6 +92,15 @@ const STATUS_BY_CODE: Readonly<Record<ConnectErrorCode, number>> = {
 
 const MAX_DETAIL_CHARS = 300;
 
+/**
+ * Is this the `ConnectError` of that code? By shape, not by `instanceof`, for the pages:
+ * a page is bundled apart from the code that built the composition root, so the class it
+ * imports is not the one the service threw.
+ */
+export function isConnectError(err: unknown, code: ConnectErrorCode): boolean {
+  return err instanceof Error && err.name === 'ConnectError' && 'code' in err && err.code === code;
+}
+
 export class ConnectError extends Error {
   readonly status: number;
   /** Shown to the user next to the code's sentence; truncated, single line. */

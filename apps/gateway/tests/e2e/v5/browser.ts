@@ -179,6 +179,22 @@ export async function issueDeveloperMission(
   return (await response.json()) as SmallMission;
 }
 
+/**
+ * A GitHub connection owned by the share spec's owner (an installation of the mocked
+ * GitHub, so calls go through), with the owner, the beneficiary and the operator known
+ * to the instance as if each had signed in once.
+ */
+export async function seedShareScenario(
+  request: APIRequestContext,
+  connectionName: string,
+): Promise<{ connection_id: string }> {
+  const response = await request.post(`${localOrigin()}${CONTROL_PREFIX}/share-scenario`, {
+    data: { name: connectionName },
+  });
+  if (!response.ok()) throw new Error(`share-scenario answered ${response.status()}`);
+  return (await response.json()) as { connection_id: string };
+}
+
 export interface UpstreamLog {
   /** The installation token the mocked GitHub minted for the gateway. */
   readonly installation_token: string;

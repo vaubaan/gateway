@@ -43,10 +43,10 @@ import {
 } from '@/components/ui';
 import { currentActor, takeNotice, type PageSearchParams } from '@/lib/connections/session';
 import {
-  ConnectError,
   connectionPath,
   CONNECTIONS_PATH,
   editableMetadataKeys,
+  isConnectError,
   METADATA_PREFIX,
   NEW_CONNECTION_PATH,
   type ConnectionDetail,
@@ -74,7 +74,7 @@ export default async function ConnectionPage({
   try {
     detail = await root.connections.service.get(actor, id);
   } catch (err) {
-    if (err instanceof ConnectError && err.code === 'not-found') notFound();
+    if (isConnectError(err, 'not-found')) notFound();
     throw err;
   }
   const notice = await takeNotice(root, principal.sessionId, await searchParams);

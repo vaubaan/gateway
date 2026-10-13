@@ -97,6 +97,7 @@ export {
   CONNECT_ERROR_MESSAGES,
   ConnectError,
   ConnectionUnavailableError,
+  isConnectError,
   ProviderUnreachableError,
   type ConnectErrorCode,
 } from './errors';
