@@ -1,58 +1,62 @@
 /**
- * RailwayAdapter — rewraps the official Railway MCP server (mcp.railway.com).
+ * RailwayAdapter — legacy v4 adapter, deleted in P1.6.
  *
- * Spec : docs/spec/vaubaan-gateway.md §5.1.
- * ADR  : docs/decisions/railway-rewrap-remote-mcp.md.
+ * Kept so the v4 gateway pipeline (`apps/gateway/src/lib/gateway/build.ts`,
+ * `lib/providers/state.ts`) keeps compiling until the execution door
+ * consumes `railwayPlugin` (`index.ts`). It owns no upstream logic of its
+ * own : forwarding and GraphQL live in `execute.ts`, classification in
+ * `classify.ts`. The hot-path refresh here reads the OAuth app from the
+ * constructor (v4 wiring) ; the v5 equivalent is `refreshRailwayCredential`
+ * in `credential.ts`, driven by the host.
  *
- * Auth model : OAuth Auth app "Vaubaan Gateway" (authorization_code + PKCE).
- * The stored `access_token` is short-lived (1h), so unlike Vercel we refresh
- * on the gateway hot-path : if the token is within 60s of expiry we exchange
- * the `refresh_token` for a fresh pair (Basic auth → backboard.railway.com,
- * with `resource=https://mcp.railway.com` audience binding) and re-persist it
- * via the injected `persistRefresh` callback.
- *
- * The actual tool execution is forwarded as JSON-RPC `tools/call` to
- * https://mcp.railway.com/ (cf. execute.ts).
+ * @deprecated legacy v4, deleted in P1.6 — use `railwayPlugin`.
  */
 
-import type { McpToolDeclaration, ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
-import { availableTools } from './tools.ts';
+import type { McpToolDeclaration } from '@vaubaan/plugin-sdk';
+// legacy v4, deleted in P1.6
+import type { ProviderAdmin, ProviderBinding } from '@vaubaan/shared';
+
+import {
+  RAILWAY_MCP_RESOURCE,
+  RAILWAY_REFRESH_THRESHOLD_MS,
+  RAILWAY_TOKEN_URL,
+} from './credential.ts';
 import { callGraphql, executeCall, type FetchImpl } from './execute.ts';
 import { classifyRailwayV4, type RailwayClassifyResult } from './risk-classifier.ts';
+import { railwayTools } from './tools.ts';
 
-const TOKEN_ENDPOINT = 'https://backboard.railway.com/oauth/token';
-/** RFC 8707 resource indicator binding the token to the MCP audience. */
-const MCP_RESOURCE = 'https://mcp.railway.com';
-/** Refresh when the access_token is within this window of expiry. */
-const REFRESH_THRESHOLD_MS = 60_000;
 /** Railway project ids are UUIDs. */
 const PROJECT_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface RailwayRefreshedTokens {
   accessToken: string;
   refreshToken: string;
   expiresAt: Date;
 }
 
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface RailwayAdapterConfig {
   /** Override fetch in tests. */
   fetchImpl?: FetchImpl;
-  /** OAuth Auth app credentials (env: RAILWAY_CLIENT_ID / RAILWAY_CLIENT_SECRET). */
+  /** OAuth Auth app credentials (v4 : env RAILWAY_CLIENT_ID / RAILWAY_CLIENT_SECRET). */
   clientId?: string;
   clientSecret?: string;
   /** Persist a refreshed token pair back to provider_admins (injected by the web layer). */
   persistRefresh?: (admin: ProviderAdmin, tokens: RailwayRefreshedTokens) => Promise<void>;
 }
 
+/** @deprecated legacy v4, deleted in P1.6. */
 export interface ValidateResult {
   ok: boolean;
   displayName?: string;
   error?: string;
 }
 
+/** @deprecated legacy v4, deleted in P1.6 — use `railwayPlugin`. */
 export class RailwayAdapter {
   readonly provider = 'railway' as const;
-  readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
+  readonly availableTools: ReadonlyArray<McpToolDeclaration> = railwayTools;
   private readonly fetchImpl: FetchImpl;
   private readonly clientId?: string;
   private readonly clientSecret?: string;
@@ -79,7 +83,7 @@ export class RailwayAdapter {
 
   /**
    * Return a usable Bearer for an MCP call. Refreshes pre-emptively when the
-   * stored access_token is within REFRESH_THRESHOLD_MS of expiry.
+   * stored access_token is within the refresh window of expiry.
    */
   async mintUpstreamToken(admin: ProviderAdmin): Promise<{ token: string; expiresAt: Date }> {
     if (!admin.access_token_encrypted) {
@@ -88,7 +92,7 @@ export class RailwayAdapter {
     const current = new TextDecoder().decode(admin.access_token_encrypted);
     const expiresAt = admin.expires_at ? new Date(admin.expires_at) : null;
     const needsRefresh =
-      expiresAt !== null && expiresAt.getTime() - Date.now() < REFRESH_THRESHOLD_MS;
+      expiresAt !== null && expiresAt.getTime() - Date.now() < RAILWAY_REFRESH_THRESHOLD_MS;
     if (needsRefresh) {
       const refreshed = await this.refresh(admin);
       if (refreshed) return { token: refreshed.accessToken, expiresAt: refreshed.expiresAt };
@@ -102,7 +106,7 @@ export class RailwayAdapter {
     if (!admin.refresh_token_encrypted) return null;
     const refreshToken = new TextDecoder().decode(admin.refresh_token_encrypted);
     const basicAuth = Buffer.from(`${this.clientId}:${this.clientSecret}`).toString('base64');
-    const res = await this.fetchImpl(TOKEN_ENDPOINT, {
+    const res = await this.fetchImpl(RAILWAY_TOKEN_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -111,7 +115,7 @@ export class RailwayAdapter {
       body: new URLSearchParams({
         grant_type: 'refresh_token',
         refresh_token: refreshToken,
-        resource: MCP_RESOURCE,
+        resource: RAILWAY_MCP_RESOURCE,
       }),
     });
     if (!res.ok) return null;
@@ -200,10 +204,7 @@ export class RailwayAdapter {
     }
   }
 
-  /**
-   * v4 classifier — emit the slice(s) the call touches. The provider plugin's
-   * sole authorization responsibility.
-   */
+  /** v4 classifier entry point — delegates to the v5 classifier through the bindings bridge. */
   classifyV4(
     tool: string,
     args: Record<string, unknown>,

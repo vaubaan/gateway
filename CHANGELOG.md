@@ -20,6 +20,16 @@ same work **v5** (see the pivot ADR). Tags are `v2.x.y`.
   (approval on live money-out and irreversible entries); the TypeScript
   catalog twin and its sync test are gone. v4 exports stay `@deprecated` until P1.6.
 - **Supabase plugin on the v5 SDK (P1.2c).** `@vaubaan/plugin-supabase` is a `definePlugin()` descriptor : `oauth2` credential against the Management API with refresh (the v4 connect/callback routes' logic moved into the spec), `discoverResources` over the account's organizations and projects, env-scoped write risks, three presets (`read-only-analyst`, `staging-developer`, `migration-operator`), `execute_sql` enforced read-only through the Management API read-only query endpoint, the `*_to_venv` tools removed, the TypeScript catalog twin and its sync test deleted ; v4 exports kept as `@deprecated` shims until P1.6.
+- **Railway plugin on the v5 SDK (P1.2d).** `@vaubaan/plugin-railway`
+  exports `railwayPlugin` (`definePlugin`): `oauth2` credential with PKCE,
+  RFC 8707 resource indicator and hot-path refresh (`railwayNeedsRefresh`,
+  `refreshRailwayCredential`); `discoverResources` lists projects with
+  their environments; the classifier runs on `Resource[]` and resolves
+  `accept-deploy` through the discovered environments; the YAML catalog is
+  loaded by the SDK (`catalog_version: 2`, English labels, `read-variables`
+  env-scoped) with presets `read-only`, `developer`, `operator`; the
+  `risk-catalog.ts` twin is gone. Legacy v4 exports stay `@deprecated`
+  until P1.6. Handbook `docs/handbook/providers/railway.md`.
 - **Instance configuration, crypto, composition root and Docker image
   (P0.4).** The gateway starts from `VAUBAAN_*` environment variables
   and/or a mounted YAML file (`VAUBAAN_CONFIG_FILE`, file wins key by

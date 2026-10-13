@@ -1,10 +1,10 @@
 /**
- * Tests — Railway risk catalog.
+ * Tests — Railway risk catalog (shape and runtime matching of the loaded YAML).
  *
- * Source : .vaubaan/research/providers/railway-ssh.md §1.4 + §1.5.
+ * Catalog : plugins/railway/src/risk-catalog.yaml (loaded by the SDK) ; handbook : docs/handbook/providers/railway.md.
  *
  * Verifies the catalog :
- *   - declares the 9 expected risks + 1 fallback (research §1.4).
+ *   - declares the 9 expected risks + 1 fallback (handbook, catalog section).
  *   - every entry has the required shape (`RiskEntry` invariants).
  *   - every `matches` pattern parses as a valid slice.
  *   - the catalog round-trips through `prepareCatalog` (RiskId regex,
@@ -17,7 +17,7 @@ import { describe, expect, test } from 'vitest';
 import { indexCatalog, prepareCatalog, risksTouchedBy } from '@vaubaan/policy-engine';
 import type { Slice } from '@vaubaan/shared';
 
-import { railwayRiskCatalog } from '../../src/risk-catalog.ts';
+import { railwayRiskCatalog } from '../../src/index.ts';
 
 // ─── Helpers ───────────────────────────────────────────────────────────────
 
@@ -109,7 +109,7 @@ describe('railwayRiskCatalog — shape', () => {
     expect(railwayRiskCatalog.provider).toBe('railway');
   });
 
-  test('declares the 9 risks + 1 fallback expected by the research doc (§1.4)', () => {
+  test('declares the 9 risks + 1 fallback of the handbook', () => {
     const ids = railwayRiskCatalog.risks.map((r) => r.id);
     expect(ids).toEqual([
       'railway.read-account',
@@ -214,12 +214,12 @@ describe('railwayRiskCatalog — runtime risksTouchedBy', () => {
   });
 });
 
-// ─── Lint coverage : every tool covered by ≥ 1 risk (research §1.5) ────────
+// ─── Lint coverage : every tool covered by ≥ 1 risk (handbook coverage matrix) ────────
 
 describe('railwayRiskCatalog — lint coverage', () => {
-  test('every Railway tool name (research §1.5) has a corresponding risk', () => {
+  test('every Railway tool surface has a corresponding risk', () => {
     // This test reads the catalog and checks that the union of ids covers
-    // the conceptual surface declared in research §1.5. We do NOT test the
+    // the conceptual surface of the handbook coverage matrix. We do NOT test the
     // classifier↔catalog round-trip here (that's risk-classifier.test.ts) ;
     // we only check that the catalog has the *names* the coverage matrix
     // references.
