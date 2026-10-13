@@ -1,30 +1,28 @@
 /**
- * GitHub provider — declarative data-model (Phase 0).
+ * Data model of the `github` provider.
  *
- * Spec  : docs/spec/gateway-risk-model.md §2.
- * Source : .vaubaan/research/providers/github.md §1.
+ * Spec : docs/spec/gateway-risk-model.md §2.
+ * Handbook : docs/handbook/providers/github.md.
  *
- * Single plane `repo`. The data-model declares every entity touched by
- * a tool's slice (the path leaves and intermediate containment nodes),
- * with its cardinalities and containment parent. The risk catalog's
- * `matches` patterns must reference only entities declared here ; this
- * makes catalog drift detectable at CI time.
+ * Single plane `repo`. The data model declares every entity a slice path
+ * can name (leaves and intermediate containment nodes), with cardinalities
+ * and containment parent. One `Resource` of a connection is one repository
+ * (`owner/name`) ; its `ref` is the first bracketed segment of every slice.
  *
- * Verbs derived from containment that appear in slices but are NOT entities :
- *   - `branch[X].merge-into`        : produced by `merge_pull_request`
- *   - `branch[X].propose-to[Y]`     : produced by `create_pull_request`
- *   - `branch[X].workflow-via-file` : produced when a `file[]` write
- *     targets a path under `.github/workflows/*.yml` — the slice has a
- *     "virtual" leaf that the catalog can target without a top-level
- *     `workflow` entity write surface.
+ * Virtual leaves derived from containment — they appear in slices and
+ * catalog patterns but are NOT entities :
+ *   - `branch[X].merge-into`        : emitted by `merge_pull_request`
+ *   - `branch[X].propose-to[Y]`     : emitted by `create_pull_request`
+ *   - `branch[X].workflow-via-file` : emitted when a `file[]` write targets
+ *     a path under `.github/workflows/*.yml`
+ *   - `branch[X].files-bulk`        : emitted by `push_files` with 2+ files
  *
- * Account-plane entities (`org`, organization-level collaborators, etc.) are
- * intentionally absent : the current MCP tool set does not touch them. Adding
- * a future `account` plane would be a parallel declaration here, not a
- * breaking change to the `repo` plane.
+ * Account-plane entities (`org`, organization-level collaborators…) are
+ * intentionally absent : the current tool set does not touch them. A future
+ * `account` plane is a parallel declaration, not a change to `repo`.
  */
 
-import type { DataModel } from '@vaubaan/shared';
+import type { DataModel } from '@vaubaan/plugin-sdk';
 
 export const githubDataModel: DataModel = {
   provider: 'github',
@@ -40,8 +38,8 @@ export const githubDataModel: DataModel = {
           parent: null,
           cardinalities: ['one'],
           description:
-            'The repository itself — root of the plane. One binding pins exactly one ' +
-            '`<owner>/<repo>`. Not creatable via Vaubaan tools (out of scope).',
+            'The repository itself — root of the plane and the resource a connection ' +
+            'exposes (`<owner>/<repo>`). Not creatable via Vaubaan tools (out of scope).',
         },
         {
           name: 'branch',
@@ -60,8 +58,8 @@ export const githubDataModel: DataModel = {
           cardinalities: ['one', 'unbounded'],
           description:
             'A file path, anchored to a specific branch (parent). Bulk writes ' +
-            'emit `file[*]` (cardinality `unbounded`) ; single-file writes ' +
-            'emit `file[<path>]` (cardinality `one`).',
+            'emit one `file[<path>]` slice per file plus the `files-bulk` virtual ' +
+            'leaf ; single-file writes emit `file[<path>]` (cardinality `one`).',
         },
         {
           name: 'commit',
@@ -103,7 +101,7 @@ export const githubDataModel: DataModel = {
           description:
             'A GitHub issue. The issue/PR number space is unified by GitHub, so ' +
             'issue-level comments cover PR comments as well (slice ' +
-            '`issue[N].comment[*].W`).',
+            '`issue[N].comment.W`).',
         },
         {
           name: 'comment',
@@ -125,9 +123,9 @@ export const githubDataModel: DataModel = {
           parent: 'workflow',
           cardinalities: ['one', 'unbounded'],
           description:
-            'A run instance of a workflow. Read-only via tools after spec v4 ' +
-            '§7.2 #1 retired `dispatch_workflow`, `cancel_workflow_run`, ' +
-            '`rerun_workflow_run`.',
+            'A run instance of a workflow. Read-only via tools since the ' +
+            'risk-model spec §7.2 #1 retired `dispatch_workflow`, ' +
+            '`cancel_workflow_run`, `rerun_workflow_run`.',
         },
         {
           name: 'branch-protection',
@@ -143,7 +141,7 @@ export const githubDataModel: DataModel = {
           parent: 'repo',
           cardinalities: ['one', 'unbounded'],
           description:
-            'A user with explicit access to the repo. Present in the data-model ' +
+            'A user with explicit access to the repo. Present in the data model ' +
             'for exhaustiveness ; no current MCP tool writes here.',
         },
         {
@@ -161,8 +159,8 @@ export const githubDataModel: DataModel = {
           description:
             'A short-lived GitHub App installation credential (1h TTL), minted ' +
             'with `purpose=clone` or `purpose=push`. Once minted, this token ' +
-            "leaves Vaubaan's gating perimeter — capability sensitivity is " +
-            'decided at mint time, by risk.',
+            "leaves Vaubaan's gating perimeter — sensitivity is decided at mint " +
+            'time, by risk.',
         },
         {
           name: 'repo-settings',

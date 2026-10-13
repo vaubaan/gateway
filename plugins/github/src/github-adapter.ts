@@ -1,12 +1,12 @@
 /**
- * GitHubAdapter — wraps Octokit + GitHub App install minting.
+ * @deprecated legacy v4 adapter, deleted in P1.6 — the v5 surface is
+ * `githubPlugin` (`index.ts`), built with `definePlugin`.
  *
- * Spec : docs/spec/vaubaan-gateway.md §5.1, §5.2.
- * Risk : docs/spec/gateway-risk-model.md §7 (classifier emits slices).
- *
- * The gateway calls `classifyV4(tool, args, bindings)` to obtain the
- * slices touched by a call (used to intersect with the risk catalog), then
- * calls `executeCall` to actually run it.
+ * Kept, unchanged in behaviour, so the v4 gateway
+ * (`apps/gateway/src/lib/gateway/build.ts`) and its tests keep compiling and
+ * passing until the execution door replaces it. Depends on the quarantined
+ * v4 row types (`ProviderAdmin`, `ProviderBinding`) and on the global fetch
+ * for its PAT fallback ; nothing here is part of the plugin contract.
  */
 
 import { Octokit } from '@octokit/rest';
@@ -17,9 +17,9 @@ import {
   type ProviderBinding,
 } from '@vaubaan/shared';
 import { mintInstallationToken } from './app-install.ts';
-import { availableTools } from './tools.ts';
+import { githubTools } from './tools.ts';
 import { classifyGithubV4, type ClassifyV4Result } from './risk-classifier.ts';
-import { executeCall, type OctokitFactory } from './execute.ts';
+import { executeCall, type OctokitFactory } from './octokit-dispatch.ts';
 
 export interface GitHubAdapterConfig {
   /** GitHub App ID. Required for the App-install path. */
@@ -68,9 +68,10 @@ const MINT_PERMISSIONS: Record<'clone' | 'push', Record<string, string>> = {
 
 const defaultOctokitFactory: OctokitFactory = (token) => new Octokit({ auth: token });
 
+/** @deprecated legacy v4, deleted in P1.6. */
 export class GitHubAdapter {
   readonly provider = 'github' as const;
-  readonly availableTools: ReadonlyArray<McpToolDeclaration> = availableTools;
+  readonly availableTools: ReadonlyArray<McpToolDeclaration> = githubTools;
 
   private readonly config: GitHubAdapterConfig;
 

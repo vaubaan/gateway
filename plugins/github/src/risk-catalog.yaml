@@ -1,20 +1,28 @@
-# GitHub provider — risk catalog (Phase 1, v4 risk-based model).
+# Risk catalog of the `github` provider.
 #
-# Spec   : docs/spec/gateway-risk-model.md §4.
-# Source : .vaubaan/research/providers/github.md §3.
+# Spec : docs/spec/gateway-risk-model.md §4 (schema), docs/spec/vaubaan-gateway.md §3.2 (presets).
+# Handbook : docs/handbook/providers/github.md.
 #
-# 14 fine-grained risks + 1 fallback `github.uncategorized-write` for a
-# total of 15 entries. Each entry's `matches` is a list of slice patterns
-# (the YAML loader accepts `string | string[]`) ; the entry matches a
-# concrete slice iff at least one pattern matches it.
+# 14 fine-grained risks + 1 fallback (`github.uncategorized-write`). Each
+# `matches` is one slice pattern or a list ; the risk is touched when at
+# least one pattern intersects the concrete slice the classifier emitted.
+# Bracket lists mix exact names and globs (`[main,master,release-*]`).
 #
-# Bracket lists may mix exact names and globs (`[main,master,release-*]`)
-# — the slice-dsl parser accepts them. We use that to keep individual
-# `matches` lines compact.
+# Loaded by `@vaubaan/plugin-sdk` at boot ; the loader refuses unknown keys,
+# malformed ids, patterns of another provider, a missing fallback, zero
+# presets, a preset entry that is not an explicit risk of this catalog.
+#
+# Adding a risk : append an entry, bump `catalog_version`, update `catalog_date`.
+# Renaming or removing a risk : forbidden — `deprecated: true` + `replaced_by`.
+#
+# Fallback note : `github.uncategorized-write` counts only when no specific
+# entry matched the write (a branch outside the feature/* and protected
+# conventions, a future tool without an entry). No preset offers it ; the
+# creator adds it explicitly when a mission needs unconventional branches.
 
 provider: github
-catalog_version: 1
-catalog_date: 2026-06-15
+catalog_version: 2
+catalog_date: 2026-10-13
 
 risks:
   # ---------------------------------------------------------------
@@ -65,12 +73,12 @@ risks:
       persistence: stateless
 
   - id: github.search-global
-    label: 'Global GitHub search (code / issues, out of bindings)'
+    label: 'Global GitHub search (code / issues, beyond the mission resources)'
     reason: >-
       Search traverses every public GitHub repo plus every repo the App
       installation has access to. Cross-org leakage is possible if the
       App is installed widely. Sensitivity is low by default but the
-      surface is account-shaped, not project-shaped.
+      surface is account-shaped, not resource-shaped.
     matches:
       - 'github.search.code.R'
       - 'github.search.issues.R'
@@ -128,14 +136,20 @@ risks:
   # ---------------------------------------------------------------
   # WRITES — workflow YAML files (privilege escalation vector)
   # ---------------------------------------------------------------
+  # Not env-scoped : GitHub resources are repositories and the owner's env
+  # label (prod, staging) says nothing about the branch. The v4 catalog
+  # restricted this risk to the pseudo-envs feature/fix/chore, which the v5
+  # resource-based env resolution would never produce — the risk would have
+  # silently vanished from `risks_touched`. Writing a workflow on a
+  # protected branch additionally touches `github.merge-protected`.
   - id: github.workflow-write-via-file
     label: 'Modify a GitHub Actions workflow (.github/workflows/*.yml)'
     reason: >-
       The CI YAML defines what runs with the repo's secrets. Modifying a
       workflow is a potential privilege-escalation vector (steal secrets
-      via curl to attacker-controlled domain). Spec v4 §7.2 #1 retired
-      `dispatch_workflow` for this reason — but the attack persists
-      through file writes on the YAML itself.
+      via curl to attacker-controlled domain, `pull_request_target`).
+      `dispatch_workflow` was retired for this reason — but the attack
+      persists through file writes on the YAML itself.
     matches:
       - 'github.repo[**].branch[**].workflow-via-file.W'
     vector:
@@ -145,12 +159,6 @@ risks:
       cost: free
       visibility: internal
       persistence: posture
-    # Acceptable only on feature/fix/chore branches, never directly on
-    # main (the merge path forces a PR + human review).
-    acceptable_in_envs:
-      - feature
-      - fix
-      - chore
 
   # ---------------------------------------------------------------
   # WRITES — bulk multi-file push (push_files)
@@ -160,7 +168,7 @@ risks:
     reason: >-
       A single commit touching many files. Harder to review manually
       than a single-file write. Kept distinct from file-by-file so the
-      manager can opt-in/out specifically — useful signal for spotting
+      creator can opt-in/out specifically — useful signal for spotting
       malicious or buggy agents. Emitted as a `files-bulk` virtual leaf
       alongside the per-file `file[<path>].W` slices.
     matches:
@@ -302,17 +310,17 @@ risks:
       persistence: posture
 
   # ---------------------------------------------------------------
-  # FALLBACK — catch-all (mandatory per spec §4)
+  # FALLBACK — catch-all (mandatory, risk-model spec §4.3)
   # ---------------------------------------------------------------
   - id: github.uncategorized-write
     label: 'Uncategorized GitHub write (fallback)'
     reason: >-
-      Catch-all for writes not explicitly categorized above. If observed
-      in production, it signals a missing catalog entry — add the
-      specific risk before the next release. Operators must opt in
-      explicitly (no implicit accept).
+      Catch-all for writes no fine-grained entry categorises — a branch
+      outside the feature/* and protected conventions, or a future tool
+      added without a catalog entry. Never offered by a preset ; the
+      creator opts in explicitly (no implicit accept).
     matches:
-      - 'github.repo[**].W'
+      - 'github.**.W'
     vector:
       reversibility: costly
       blast: env
@@ -320,3 +328,103 @@ risks:
       cost: free
       visibility: internal
       persistence: session
+
+# ---------------------------------------------------------------
+# PRESETS — UI sugar ; the persisted policy is always the explicit list.
+# Quotas are actions per period ; rate limits are per sliding window.
+# ---------------------------------------------------------------
+presets:
+  - id: read-only
+    label: Read-only
+    description: Read code and metadata of the selected repositories ; no write, no global search.
+    entries:
+      - risk_id: github.read-code
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.read-meta
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+
+  - id: developer
+    label: Developer
+    description: One token per code project — read everything, write on feature branches, open PRs and comment ; no merge on protected branches, no branch-protection changes.
+    entries:
+      - risk_id: github.read-code
+        quota: 10000
+        rate_limit: { max: 240, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.read-meta
+        quota: 10000
+        rate_limit: { max: 240, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.search-global
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.feature-branch-write
+        quota: 3000
+        rate_limit: { max: 60, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.bulk-file-write
+        quota: 1000
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.create-pr
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.comment-write
+        quota: 500
+        rate_limit: { max: 20, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.workflow-write-via-file
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: github.mint-install-token-clone
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.mint-install-token-push
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+
+  - id: release-manager
+    label: Release manager
+    description: Ship a release — merge into protected branches, create and delete releases, each under the creator's approval ; read everything.
+    entries:
+      - risk_id: github.read-code
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.read-meta
+        quota: 5000
+        rate_limit: { max: 120, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.feature-branch-write
+        quota: 500
+        rate_limit: { max: 30, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.create-pr
+        quota: 100
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.comment-write
+        quota: 200
+        rate_limit: { max: 10, window_seconds: 60 }
+        gate: auto
+      - risk_id: github.merge-protected
+        quota: 50
+        rate_limit: { max: 5, window_seconds: 60 }
+        gate: approval
+      - risk_id: github.create-release
+        quota: 20
+        rate_limit: { max: 2, window_seconds: 60 }
+        gate: approval
+      - risk_id: github.delete-release
+        quota: 5
+        rate_limit: { max: 1, window_seconds: 60 }
+        gate: approval
