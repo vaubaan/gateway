@@ -171,6 +171,8 @@ this table says where each requirement lives, and what is not written yet.
 | `apps/gateway/tests/integration/connections/connect-flow.test.ts`                        |        6 |
 | `apps/gateway/tests/integration/connections/reassign-and-settle.test.ts`                 |        5 |
 | `apps/gateway/tests/integration/connections/repository-status.test.ts`                   |        6 |
+| `apps/gateway/tests/integration/demo/demo-safety.test.ts`                                |       13 |
+| `apps/gateway/tests/integration/demo/demo-smoke.test.ts`                                 |       15 |
 | `apps/gateway/tests/integration/execution/agent-label.test.ts`                           |        6 |
 | `apps/gateway/tests/integration/execution/approval-door.test.ts`                         |        7 |
 | `apps/gateway/tests/integration/execution/counters-vs-audit.test.ts`                     |        4 |
@@ -314,12 +316,12 @@ this table says where each requirement lives, and what is not written yet.
 | `plugins/vercel/tests/unit/plugin.test.ts`                                               |       35 |
 | `plugins/vercel/tests/unit/risk-catalog.test.ts`                                         |       55 |
 | `plugins/vercel/tests/unit/team-pin.test.ts`                                             |       99 |
-| **TOTAL** (`npm run test`, 2026-10-13, after a build; 227 files; 5555 passed, 1 skipped) | **5556** |
+| **TOTAL** (`npm run test`, 2026-10-13, after a build; 229 files; 5583 passed, 1 skipped) | **5584** |
 
 The table is generated from the JSON report of one run of the whole suite
 (`npx vitest run --reporter=json`). A count is the number of tests the file
 declares, `it.each` expanded, **skipped tests included**: the TOTAL is the
-report's number of tests, of which 5555 passed and one was skipped.
+report's number of tests, of which 5583 passed and one was skipped.
 After a build that one skipped test is the latency measurement of the authority
 re-check (`door-latency.bench.test.ts`, run with `VAUBAAN_BENCH=1`). Without `.next/standalone` the six
 standalone tests (`standalone-native-addons` 3, `standalone-plugin-catalogs` 3) skip; `npm run ci` builds first, so they run there. Each plugin has one
