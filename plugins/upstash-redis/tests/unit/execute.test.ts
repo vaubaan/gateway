@@ -206,6 +206,67 @@ describe('executeUpstashRedis — data tools build the Redis command', () => {
       expect(fetch.calls).toHaveLength(1);
     }
   });
+
+  test.each([
+    ['another domain', { rest_url: 'https://collector.attacker.example' }],
+    ['a look-alike suffix', { rest_url: 'https://us1-app-cache.upstash.io.attacker.example' }],
+    ['a suffix without the dot', { rest_url: 'https://evilupstash.io' }],
+    ['the bare suffix', { rest_url: 'https://upstash.io' }],
+    ['a sub-domain chain', { rest_url: 'https://a.b.upstash.io' }],
+    ['plain http', { rest_url: 'http://us1-app-cache.upstash.io' }],
+    ['a port', { rest_url: 'https://us1-app-cache.upstash.io:8443' }],
+    ['credentials in the URL', { rest_url: 'https://x:y@us1-app-cache.upstash.io' }],
+    ['a host through userinfo', { rest_url: 'https://us1-app-cache.upstash.io@attacker.example' }],
+    ['a path', { rest_url: 'https://us1-app-cache.upstash.io/pipeline' }],
+    ['a query', { rest_url: 'https://us1-app-cache.upstash.io?x=1' }],
+    ['a URL of another scheme', { rest_url: 'ftp://us1-app-cache.upstash.io' }],
+    ['an empty label', { rest_url: 'https://.upstash.io' }],
+    ['an endpoint on another domain', { endpoint: 'collector.attacker.example' }],
+    ['an endpoint with a path', { endpoint: 'us1-app-cache.upstash.io/x' }],
+    ['an endpoint with userinfo', { endpoint: 'us1-app-cache.upstash.io@attacker.example' }],
+    ['an endpoint with a port', { endpoint: 'us1-app-cache.upstash.io:6379' }],
+    ['an IP address', { endpoint: '169.254.169.254' }],
+  ])(
+    'the database token is never posted to %s: the call fails before any request',
+    async (_what, where) => {
+      const fetch = mockFetch([
+        {
+          method: 'GET',
+          url: `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}`,
+          body: { database_id: DATABASE_ID, rest_token: 'tok-secret', ...where },
+          times: 1,
+        },
+      ]);
+      const attempt = upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get', { key: 'k' });
+      await expect(attempt).rejects.toThrow(/not an Upstash REST endpoint/);
+      // The answer of the Management API was read; nothing else left the gateway.
+      expect(fetch.calls).toHaveLength(1);
+      await attempt.catch((error: unknown) => {
+        expect(String(error)).not.toContain('tok-secret');
+      });
+    },
+  );
+
+  test.each([
+    ['rest_url', { rest_url: 'https://us1-app-cache.upstash.io' }],
+    ['rest_url in another case', { rest_url: 'https://US1-App-Cache.Upstash.IO/' }],
+    ['a host in `endpoint`', { endpoint: 'us1-app-cache.upstash.io' }],
+    ['a slug in `endpoint`', { endpoint: 'us1-app-cache' }],
+  ])('posts to the Upstash host given as %s', async (_what, where) => {
+    const fetch = mockFetch([
+      {
+        method: 'GET',
+        url: `${UPSTASH_MANAGEMENT_API}/redis/database/${DATABASE_ID}`,
+        body: { database_id: DATABASE_ID, rest_token: 'tok', ...where },
+        times: 1,
+      },
+      { method: 'POST', url: REST_URL, body: { result: 'v' }, times: 1 },
+    ]);
+    const result = await upstashRedisPlugin.execute(ctx(fetch), 'upstash_redis__get', { key: 'k' });
+    expect(result.isError).toBeUndefined();
+    expect(fetch.pending()).toEqual([]);
+    expect(fetch.calls[1]!.url).toBe(REST_URL);
+  });
 });
 
 describe('upstash-redis plugin — declared tools', () => {

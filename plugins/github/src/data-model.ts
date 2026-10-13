@@ -86,6 +86,14 @@ export const githubDataModel: DataModel = {
             'References a tag.',
         },
         {
+          name: 'delete',
+          parent: 'release',
+          cardinalities: ['one'],
+          description:
+            'Synthetic verb leaf — deletion of a release. Distinct from publishing one : ' +
+            'the notes and assets are lost, and consumers of their URLs get 404s.',
+        },
+        {
           name: 'pull_request',
           parent: 'repo',
           cardinalities: ['one', 'bounded'],

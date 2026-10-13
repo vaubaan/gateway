@@ -393,7 +393,8 @@ describe('supabase identifiers — legitimate shapes keep working, and the reque
   test('an email with dots, a plus tag and a subdomain is accepted ; a value without `@` is not', async () => {
     const email = 'first.last+tag@mail.example.co.uk';
     expect(slicesOf('supabase__generate_link', { email, type: 'magiclink' })).toEqual([
-      `supabase.project[${REF}].user[${email}].link[magiclink].W`,
+      // `@` and `+` are not slice characters : the address is sent, not written into the slice.
+      `supabase.project[${REF}].user[*].link[magiclink].W`,
     ]);
     expect((await sent('supabase__generate_link', { email, type: 'magiclink' })).json).toEqual({
       email,

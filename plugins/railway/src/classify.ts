@@ -53,7 +53,16 @@
  *      project.
  */
 
-import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
+import {
+  declaredArgumentsOf,
+  undeclaredArgumentDenial,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+  type SliceSegment,
+} from '@vaubaan/plugin-sdk';
+
+import { railwayTools } from './tools.ts';
 
 export const PROVIDER = 'railway';
 
@@ -159,13 +168,33 @@ export function isProjectScopedTool(tool: string): boolean {
 // Entry point
 // ─────────────────────────────────────────────────────────────────────────────
 
+const DECLARED_ARGUMENTS = declaredArgumentsOf(railwayTools);
+/** Checked by `resolveTarget` ; `execute` writes it again where the tool takes it and drops it elsewhere. */
+const ROUTING_ARGUMENTS: ReadonlySet<string> = new Set(['projectId']);
+
+/**
+ * The refusal for an argument `tool` does not declare, `null` when there is none :
+ * the one rule `classify` and `execute` both apply, so neither side sends what the
+ * other never read.
+ */
+export function undeclaredArgument(
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): string | null {
+  return undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args, ROUTING_ARGUMENTS);
+}
+
 export function classifyRailway(
   tool: string,
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): ClassifyOutcome {
-  const kind = TOOL_KIND[tool];
+  const kind = Object.hasOwn(TOOL_KIND, tool) ? TOOL_KIND[tool] : undefined;
   if (!kind) return { denied: `unknown railway tool '${tool}'.` };
+  // The rewrapped tools forward their arguments whole: one the schema does not
+  // declare is refused here rather than left to the upstream schema to reject.
+  const undeclared = undeclaredArgument(tool, args);
+  if (undeclared !== null) return { denied: undeclared };
 
   if (isAccountKind(kind)) return classifyAccountOnly(kind);
 

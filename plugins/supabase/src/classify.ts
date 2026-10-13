@@ -68,9 +68,17 @@
  * non-empty string is denied.
  */
 
-import type { ClassifyOutcome, Resource, Slice } from '@vaubaan/plugin-sdk';
+import {
+  declaredArgumentsOf,
+  isSliceIdent,
+  undeclaredArgumentDenial,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+} from '@vaubaan/plugin-sdk';
 
 import { readMigrationSql, type MigrationWriteClass } from './migration-sql.ts';
+import { supabaseTools } from './tools.ts';
 
 export type SupabasePlane = 'db' | 'storage' | 'auth' | 'functions';
 
@@ -191,6 +199,19 @@ function pageNumber(value: unknown, fallback: number): string | null {
     : null;
 }
 
+const BASE64_TEXT = /^[A-Za-z0-9+/]*={0,2}$/;
+
+/**
+ * A base64 payload : the content of an uploaded object, in the standard alphabet,
+ * padded or not, possibly empty. A length no encoding produces (one character over a
+ * multiple of four) is refused rather than decoded to whatever fits.
+ */
+export function base64Text(value: unknown): string | null {
+  if (typeof value !== 'string' || !BASE64_TEXT.test(value)) return null;
+  const symbols = value.replace(/=+$/, '').length;
+  return symbols % 4 === 1 ? null : value;
+}
+
 const MEDIA_TOKEN = '[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}';
 const MEDIA_TYPE = new RegExp(
   `^${MEDIA_TOKEN}/${MEDIA_TOKEN}(?:; ?[A-Za-z0-9_-]{1,64}=[A-Za-z0-9_.-]{1,64})*$`,
@@ -258,9 +279,17 @@ function arg(name: string, grammar: (value: unknown) => string | null): Record<s
 function n(value: string): Segment {
   return { kind: 'name', value };
 }
+/**
+ * An identifier segment. Bucket ids, object paths, secret names and e-mail addresses
+ * may hold characters the slice grammar has no place for (`@`, `+`, `:`) : such a value
+ * is emitted as "any identifier", so the slice the audit stores reads back as itself.
+ */
 function i(value: string): Segment {
-  return { kind: 'ident', value };
+  return { kind: 'ident', value: isSliceIdent(value) ? value : ANY };
 }
+
+/** The "any identifier" placeholder of an executed slice. */
+const ANY = '*';
 function slice(path: readonly Segment[], action: 'R' | 'W'): Slice {
   return { provider: PROVIDER, path: [...path], action };
 }
@@ -425,6 +454,9 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
       ...arg('path', objectPath),
       // The media type becomes a request header.
       content_type: (args) => mediaType(args.content_type),
+      // The bytes to store: absent or of another type, `String(undefined)` would be
+      // uploaded as six bytes of valid base64 over the object.
+      content_base64: (args) => base64Text(args.content_base64),
     },
     produce: (id, ref) => objectWrite(ref, id('bucket')),
   },
@@ -588,17 +620,17 @@ const TOOLS: Readonly<Record<string, ToolDescriptor>> = {
     plane: 'functions',
     ids: arg('slug', pathIdent),
     produce: (id, ref, args) => {
-      // Always the deployment ; also the body when the bundle re-uploads code.
-      const out = [
+      // A deployment replaces what runs : the code (`files`, in whatever shape the
+      // caller gave it) and how it is exposed (`verify_jwt`, the entrypoint). Both
+      // writes, always — `update_function` prices the same changes as a body write.
+      if (args.files !== undefined && !Array.isArray(args.files)) return missing('files');
+      return [
         slice(
           [...project(ref), n('edge-function'), i(id('slug')), n('function-deployment'), i('any')],
           'W',
         ),
+        slice([...project(ref), n('edge-function'), i(id('slug'))], 'W'),
       ];
-      if (Array.isArray(args.files) && args.files.length > 0) {
-        out.push(slice([...project(ref), n('edge-function'), i(id('slug'))], 'W'));
-      }
-      return out;
     },
   },
   supabase__create_function_secrets: {
@@ -639,7 +671,7 @@ export function readIdentifiers(
   tool: string,
   args: Args,
 ): { readonly id: ToolIdentifiers } | { readonly denied: string } {
-  const descriptor = TOOLS[tool];
+  const descriptor = descriptorOf(tool);
   if (!descriptor) return { denied: `unknown supabase tool '${tool}'.` };
   const values = new Map<string, string>();
   for (const [name, read] of Object.entries(descriptor.ids ?? {})) {
@@ -657,6 +689,13 @@ export function readIdentifiers(
     },
   };
 }
+
+/** The descriptor of a declared tool ; an inherited key (`constructor`) is no tool. */
+function descriptorOf(tool: string): ToolDescriptor | undefined {
+  return Object.hasOwn(TOOLS, tool) ? TOOLS[tool] : undefined;
+}
+
+const DECLARED_ARGUMENTS = declaredArgumentsOf(supabaseTools);
 
 /**
  * Which project the call targets — the **only** place that decides it, for
@@ -694,12 +733,16 @@ export function classifySupabase(
   args: Args,
   resources: readonly Resource[],
 ): ClassifyOutcome {
-  const descriptor = TOOLS[tool];
+  const descriptor = descriptorOf(tool);
   if (!descriptor) return { denied: `unknown supabase tool '${tool}'.` };
   const target = resolveProjectRef(args, resources);
   if ('denied' in target) return target;
   const read = readIdentifiers(tool, args);
   if ('denied' in read) return read;
+  // `execute` builds most request bodies from the arguments: one the schema does not
+  // declare is priced by no rule, and is refused rather than forwarded.
+  const undeclared = undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args);
+  if (undeclared !== null) return { denied: undeclared };
   const produced = descriptor.produce(read.id, target.ref, args);
   return typeof produced === 'string' ? { denied: produced } : { slices: produced };
 }

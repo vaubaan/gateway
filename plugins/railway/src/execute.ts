@@ -49,6 +49,7 @@ import {
   railwayId,
   readVariableWrite,
   resolveTarget,
+  undeclaredArgument,
 } from './classify.ts';
 import {
   CUSTOM_TOOL_NAMES,
@@ -464,6 +465,9 @@ function pinTarget(
   args: Readonly<Record<string, unknown>>,
   resources: readonly Resource[],
 ): { readonly args: Readonly<Record<string, unknown>> } | { readonly refused: string } {
+  // The arguments are forwarded as given, pinned ids aside : only what the tool declares.
+  const undeclared = undeclaredArgument(tool, args);
+  if (undeclared !== null) return { refused: undeclared };
   if (!isProjectScopedTool(tool)) return { args };
 
   const target = resolveTarget(tool, args, resources);
@@ -476,10 +480,11 @@ function pinTarget(
   const write = readVariableWrite(tool, args);
   if (write !== null && 'denied' in write) return { refused: write.denied };
 
-  const out: Record<string, unknown> = { ...args };
-  if (TOOLS_TAKING_PROJECT_ID.has(tool) || args.projectId !== undefined) {
-    out.projectId = target.project.ref;
-  }
+  // `projectId` is the mission's, written where the tool takes one and dropped where it
+  // does not (the upstream schema of `accept-deploy` is closed and has no such property).
+  const { projectId: _given, ...rest } = args;
+  const out: Record<string, unknown> = { ...rest };
+  if (TOOLS_TAKING_PROJECT_ID.has(tool)) out.projectId = target.project.ref;
   if (target.environmentId !== null) out.environmentId = target.environmentId;
   if (target.serviceId !== null) out.serviceId = target.serviceId;
   if (target.deploymentId !== null) out.deploymentId = target.deploymentId;

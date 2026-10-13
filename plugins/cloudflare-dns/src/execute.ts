@@ -37,6 +37,7 @@ import {
   type Resource,
 } from '@vaubaan/plugin-sdk';
 
+import { undeclaredArgument } from './classify.ts';
 import {
   CLOUDFLARE_DNS_PROVIDER,
   isCriticalRecord,
@@ -176,6 +177,11 @@ export async function executeCloudflareDns(
   }
 }
 
+function refuseUndeclared(tool: string, args: Args): void {
+  const undeclared = undeclaredArgument(tool, args);
+  if (undeclared !== null) throw new ExecutorRefusal(`cloudflare-dns: ${undeclared}`);
+}
+
 async function executeRoute(
   ctx: ExecuteContext,
   headers: Record<string, string>,
@@ -184,12 +190,16 @@ async function executeRoute(
   args: Args,
 ): Promise<McpToolResult> {
   if (tool === 'cloudflare_dns__list_zones') {
+    refuseUndeclared(tool, args);
     const payload = await callCloudflareApi(ctx.fetch, headers, route, '/zones', args, ctx.signal);
     return textResult(filterZonesToMission(payload, ctx.resources));
   }
 
   const target = resolveZoneResource(args, ctx.resources);
   if ('denied' in target) throw new ExecutorRefusal(`cloudflare-dns: ${target.denied}`);
+  // The query string and the JSON body below are built from the arguments: only what
+  // the tool declares — hence what the classifier read — may be in them.
+  refuseUndeclared(tool, args);
   const zone = target.resource;
   const { zone_id: _zone, record_id, ...rest } = args;
   const record = route.record ? recordIdArg(record_id) : '';

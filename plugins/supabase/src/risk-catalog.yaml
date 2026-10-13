@@ -43,7 +43,7 @@
 # Risk count : 24 named risks + 1 fallback.
 
 provider: supabase
-catalog_version: 2
+catalog_version: 3
 catalog_date: 2026-10-13
 
 risks:
@@ -71,11 +71,15 @@ risks:
       persistence: stateless
 
   - id: supabase.row-write-one
-    label: Write rows one by one (bounded target)
+    label: Write rows one by one (bounded target) — deprecated, no tool touches it
     reason: >-
-      Targeted INSERT/UPDATE/DELETE (by id, bounded WHERE). Reversible by
-      rewriting when the agent kept the previous value.
+      Deprecated : matches no call. No tool of this plugin writes rows one
+      by one (`execute_sql` runs on the read-only endpoint, and a migration
+      that writes rows is a bulk write). Accepting it grants nothing ; it
+      has no successor. Kept so the id stays resolvable in the shares and
+      missions that name it.
     matches: supabase.project[**].schema[**].table[**].row[one].W
+    deprecated: true
     vector:
       reversibility: costly
       blast: single

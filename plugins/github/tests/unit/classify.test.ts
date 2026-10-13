@@ -403,13 +403,13 @@ describe('classifyGithub — PRs, comments, releases', () => {
     ]);
   });
 
-  test('delete_release → release[id].W', () => {
+  test('delete_release → release[id].delete.W', () => {
     const r = classifyGithub(
       'github__delete_release',
       { ...baseArgs, release_id: 9001 },
       resources,
     );
-    expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].release[9001].W`]);
+    expect(expectSlices(r)).toEqual([`github.repo[${repoRef}].release[9001].delete.W`]);
   });
 });
 

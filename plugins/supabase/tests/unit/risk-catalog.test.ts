@@ -41,7 +41,7 @@ const patternsOf = (e: RiskEntry): readonly string[] =>
 describe('risk-catalog.yaml — loaded shape', () => {
   test('declares provider `supabase`, a version and a date', () => {
     expect(CATALOG.provider).toBe('supabase');
-    expect(CATALOG.catalog_version).toBe(2);
+    expect(CATALOG.catalog_version).toBe(3);
     expect(CATALOG.catalog_date).toBe('2026-10-13');
   });
 

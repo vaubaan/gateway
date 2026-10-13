@@ -163,7 +163,8 @@ function repoSlices(call: Extract<GithubCall, { target: unknown }>): Slice[] {
     case 'github__create_release':
       return [build(`${repo}.release.W`), build(`${repo}.tag[${asIdent(call.tagName)}].W`)];
     case 'github__delete_release':
-      return [build(`${repo}.release[${call.releaseId}].W`)];
+      // Its own verb leaf : deleting is not the risk of publishing.
+      return [build(`${repo}.release[${call.releaseId}].delete.W`)];
 
     // ── Writes — rules ─────────────────────────────────────────────────────
     case 'github__update_branch_protection':

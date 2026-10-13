@@ -34,7 +34,14 @@
  *      escaped.
  */
 
-import type { ClassifyOutcome, Resource, Slice, SliceSegment } from '@vaubaan/plugin-sdk';
+import {
+  declaredArgumentsOf,
+  undeclaredArgumentDenial,
+  type ClassifyOutcome,
+  type Resource,
+  type Slice,
+  type SliceSegment,
+} from '@vaubaan/plugin-sdk';
 
 import {
   CLOUDFLARE_DNS_PROVIDER,
@@ -47,6 +54,20 @@ import {
 import { cloudflareDnsTools } from './tools.ts';
 
 const KNOWN_TOOLS: ReadonlySet<string> = new Set(cloudflareDnsTools.map((t) => t.name));
+/** `execute` builds its query string and its JSON body from the arguments: the surface is closed here. */
+const DECLARED_ARGUMENTS = declaredArgumentsOf(cloudflareDnsTools);
+
+/**
+ * The refusal for an argument `tool` does not declare, `null` when there is none :
+ * the one rule `classify` and `execute` both apply, so neither side sends what the
+ * other never read.
+ */
+export function undeclaredArgument(
+  tool: string,
+  args: Readonly<Record<string, unknown>>,
+): string | null {
+  return undeclaredArgumentDenial(DECLARED_ARGUMENTS, tool, args);
+}
 
 function slice(action: 'R' | 'W', segments: readonly SliceSegment[]): Slice {
   return { provider: CLOUDFLARE_DNS_PROVIDER, path: segments, action };
@@ -89,6 +110,8 @@ export function classifyCloudflareDns(
   if (tool === 'cloudflare_dns__list_zones') {
     const own = resources.filter((r) => r.provider === CLOUDFLARE_DNS_PROVIDER);
     if (own.length === 0) return { denied: 'the mission touches no Cloudflare DNS zone' };
+    const undeclared = undeclaredArgument(tool, args);
+    if (undeclared !== null) return { denied: undeclared };
     const accounts = new Set(own.map((r) => accountIdOf(r)));
     const [only] = accounts;
     const account = accounts.size === 1 && only ? ident(only) : ANY_IDENT;
@@ -97,6 +120,8 @@ export function classifyCloudflareDns(
 
   const target = resolveZoneResource(args, resources);
   if ('denied' in target) return target;
+  const undeclared = undeclaredArgument(tool, args);
+  if (undeclared !== null) return { denied: undeclared };
   const zone = target.resource;
   const root: readonly SliceSegment[] = [
     name('account'),

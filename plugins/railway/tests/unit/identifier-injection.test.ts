@@ -411,3 +411,41 @@ describe('railway discovery — a project id the classifier would refuse', () =>
     );
   });
 });
+
+describe('railway arguments — a tool takes what its schema declares, nothing else', () => {
+  const refusal = (tool: string, name: string): string =>
+    `${name}: not an argument of '${tool}' — nothing classifies it, so it is not sent.`;
+
+  test.each<[string, Record<string, unknown>, string]>([
+    // The upstream schemas of the two account tools are open: anything was forwarded.
+    ['railway__whoami', { verbose: true }, 'verbose'],
+    ['railway__list-projects', { teamId: 'team_1' }, 'teamId'],
+    ['railway__list-services', { projectId: PROJECT, serviceId: SERVICE }, 'serviceId'],
+    ['railway__redeploy', { ...base, serviceId: SERVICE, force: true }, 'force'],
+    ['railway__upsert-variable', { ...base, name: 'K', value: 'v', sealed: true }, 'sealed'],
+    ['railway__railway-agent', { ...base, message: 'hi', model: 'x' }, 'model'],
+    // The camelCase / snake_case twin of an id names nothing.
+    ['railway__redeploy', { ...base, serviceId: SERVICE, service_id: SERVICE }, 'service_id'],
+  ])('%s %j is refused by classify and by execute, no request', async (tool, args, name) => {
+    expect(classifyRailway(tool, args, [project])).toEqual({ denied: refusal(tool, name) });
+    const fetch = mockFetch(upstream);
+    const result = await railwayPlugin.execute(execCtx(fetch), tool, args);
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as { text: string }).text).toBe(refusal(tool, name));
+    expect(fetch.calls).toHaveLength(0);
+  });
+
+  test('`projectId` on a tool that takes none is checked, then not sent', async () => {
+    // `accept-deploy` is addressed by its environment; its upstream schema is closed and
+    // has no `projectId`. Naming the mission's project is a correct hint, not an error.
+    const args = { projectId: PROJECT, environmentId: ENV };
+    expect(isDenied('railway__accept-deploy', args)).toBe(false);
+    const { payload } = await sent('railway__accept-deploy', args);
+    expect(payload).toEqual({ environmentId: ENV });
+    // A foreign project is still refused.
+    await expectRefusedWithoutCall('railway__accept-deploy', {
+      projectId: FOREIGN_PROJECT,
+      environmentId: ENV,
+    });
+  });
+});

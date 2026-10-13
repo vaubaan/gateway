@@ -512,7 +512,7 @@ async function executeDataPlane(
     case 'supabase__upload_object': {
       return data(`/storage/v1/object/${enc(id('bucket'))}/${encodePath(id('path'))}`, {
         method: 'POST',
-        body: Buffer.from(String(args.content_base64), 'base64'),
+        body: Buffer.from(id('content_base64'), 'base64'),
         headers: {
           'Content-Type': id('content_type'),
           'x-upsert': args.upsert === true ? 'true' : 'false',

@@ -21,7 +21,7 @@
 # creator adds it explicitly when a mission needs unconventional branches.
 
 provider: github
-catalog_version: 3
+catalog_version: 4
 catalog_date: 2026-10-13
 
 risks:
@@ -225,7 +225,7 @@ risks:
       Hard to "retract" — downstream consumers may already have pulled
       tarballs / asset URLs by the time you delete.
     matches:
-      - 'github.repo[**].release[**].W'
+      - 'github.repo[**].release.W'
       - 'github.repo[**].tag[**].W'
     vector:
       reversibility: costly
@@ -242,7 +242,7 @@ risks:
       persists, but the release body and assets vanish — downstream
       consumers may see 404s.
     matches:
-      - 'github.repo[**].release[**].W'
+      - 'github.repo[**].release[**].delete.W'
     vector:
       reversibility: irreversible
       blast: env
