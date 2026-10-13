@@ -222,8 +222,8 @@ function EventLine({ event }: { event: SessionEventLine }) {
       )}
       {words.until && (
         <>
-          {' '}
-          <LocalDate ts={words.until} />
+          {words.tool ? ', ' : ' '}
+          {words.untilWords} <LocalDate ts={words.until} />
         </>
       )}
       {words.code && (
@@ -260,10 +260,12 @@ function Context({ view, children }: { view: View; children: React.ReactNode }) 
           </Feed>
         )}
       </section>
-      <section aria-labelledby="agent-sees">
-        <SectionHeading title={REQUEST_WORDS.agentSees} id="agent-sees" />
-        {children}
-      </section>
+      {view.request.state === 'open' && (
+        <section aria-labelledby="agent-sees">
+          <SectionHeading title={REQUEST_WORDS.agentSees} id="agent-sees" />
+          {children}
+        </section>
+      )}
     </ContextColumns>
   );
 }
@@ -391,6 +393,15 @@ function RoomAfter({
       <span className={styles.quiet}> · {line.label}</span>
     </div>
   );
+}
+
+/** What the call counts against: the permissions that ask first, then the ones that run freely. */
+function roomLines(view: ApprovalView): readonly RiskBudgetLine[] {
+  const asked = new Set(view.gates.map((gate) => gate.risk_id));
+  return [
+    ...view.call.risks.filter((line) => asked.has(line.risk_id)),
+    ...view.call.risks.filter((line) => !asked.has(line.risk_id)),
+  ];
 }
 
 function approvalConsequence(option: ApprovalOption, view: ApprovalView): React.ReactNode {
@@ -615,7 +626,7 @@ function ApprovalBody({
             label:
               request.state === 'open' ? REQUEST_WORDS.roomLeftAfter : REQUEST_WORDS.roomLeftNow,
             testId: 'approval-room',
-            value: call.risks.map((line) => (
+            value: roomLines(view).map((line) => (
               <RoomAfter
                 key={line.risk_id}
                 line={line}

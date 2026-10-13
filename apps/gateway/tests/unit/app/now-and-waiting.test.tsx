@@ -351,7 +351,11 @@ describe('eventWords', () => {
     ).toBe('You gave back 1 call until the reset');
     expect(
       eventWords({ kind: 'gate-opened', details: { request_id: 'r', ...span } }),
-    ).toMatchObject({ text: 'You let this permission run freely until', until: PERIOD.end });
+    ).toMatchObject({
+      text: 'You let this permission run freely',
+      untilWords: 'until',
+      until: PERIOD.end,
+    });
     expect(
       eventWords({
         kind: 'request',
@@ -483,6 +487,9 @@ describe('the page of an approval', () => {
     expect(text(html)).toContain('The agent ran it on');
     expect(text(html)).toContain('only their fingerprint remains');
     expect(text(html)).toContain('Answer recorded');
+    // What the agent sees meanwhile is said while the request waits, not after.
+    expect(text(html)).not.toContain('What the agent sees meanwhile');
+    expect(text(html)).toContain('Room left now');
   });
 
   it('expired and refused have a state of their own', () => {

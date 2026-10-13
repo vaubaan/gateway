@@ -62,7 +62,7 @@ apps/gateway/src/server/oauth-as/        host-agnostic, never imports `next`
   delegations.ts              DelegationService: a user's delegations with client and missions; revoke, revokeAllOf. endDelegation(): the one revoke-and-audit; missionsToReview()
   verifier.ts                 DelegatedTokenVerifier: resolve(bearer)
   management-gate.ts          ManagementGate.admit(request): the resource-server check of /mcp/manage
-  pages.ts                    the consent screen and the message pages, as self-contained HTML, with the build footer
+  pages.ts                    the consent screen and the message pages: what they say and their headers; the document is server/http/document.ts
   handlers.ts                 Request → Response handlers of the nine endpoints; the execution door's discovery document
   errors.ts                   OAuthProtocolError (slowDown), AuthorizationPageError, AuthorizationRedirectError
   testing.ts                  openOAuthRig(): the services on the :memory: store (tests only)
@@ -356,7 +356,13 @@ into a redirect there (RFC 9700 §4.11.2). Under the `open` policy a signed-in
 user can still be bounced to the redirect URI of a self-registered client;
 that is what `open` means.
 
-The screen (`pages.ts`) is a self-contained document: no script, no external
+The screen (`pages.ts`) is a self-contained document, built by `htmlDocument`
+of `server/http/document.ts` ([web-app](web-app.md), "Self-contained
+documents"): the tokens of the interface in both themes, the brand and one
+column. `pagesFor(request)` in `handlers.ts` hands every page of the endpoint
+the running build and the theme the person chose in the application
+(`documentThemeOf`, the `vaubaan_theme` cookie); without it the page follows
+the system. No script, no external
 resource, a per-response style nonce, `Cache-Control: no-store`,
 `Content-Security-Policy: default-src 'none'; style-src 'nonce-…'; base-uri
 'none'; frame-ancestors 'none'`, `X-Frame-Options: DENY`, `Referrer-Policy:
@@ -365,10 +371,13 @@ document with `Origin: null`, which the mutation guard refuses — the browser
 test `delegate-agent.spec.ts` clicks the real button). Every client-supplied value goes through `escapeHtml`. It says
 who asks ("an application that calls itself …", not verified), for whom, the
 client id and how it registered, the scope `mgmt`, what the delegation can do
-— read the user's connections, shares and missions; preview and issue
-missions in their name; "rotate the token of the missions it issued, and
-revoke any of your missions" — and can never do (spec §4.1 bis), and where
-the access goes with a warning per kind. The form carries the consent id and nothing of the request; "Deny" is
+— read the user's accounts, what was shared with them and their missions
+with their limits; preview and create missions in their name; "replace the
+key of the missions it created, and stop any of your missions" — and can
+never do (answer what waits for the user, touch an account, call a tool of a
+service; spec §4.1 bis), and where the access goes with a warning per kind.
+The words are the interface's; what is granted is unchanged, and the scope is
+printed as the protocol spells it. The form carries the consent id and nothing of the request; "Deny" is
 the first button.
 
 Every page the authorization endpoint renders — the consent screen and the

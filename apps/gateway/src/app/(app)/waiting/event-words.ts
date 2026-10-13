@@ -33,8 +33,10 @@ export interface EventWords {
   readonly code: string | null;
   /** What the agent said about itself; never verified. */
   readonly agent: string | null;
-  /** An instant the sentence ends with ("valid until", "until"): the page renders it locally. */
+  /** An instant the sentence ends with: the page renders it locally, after `untilWords`. */
   readonly until: string | null;
+  /** The words before that instant: "until", "valid until". */
+  readonly untilWords: string | null;
 }
 
 export interface WordedEvent {
@@ -42,7 +44,14 @@ export interface WordedEvent {
   readonly details: Readonly<Record<string, unknown>> | null;
 }
 
-const PLAIN = { tool: null, code: null, agent: null, until: null, call: false } as const;
+const PLAIN = {
+  tool: null,
+  code: null,
+  agent: null,
+  until: null,
+  untilWords: null,
+  call: false,
+} as const;
 
 /** The refusals that ask something of the creator: the call waits, it did not fail. */
 const ASKING: readonly string[] = ['approval-required', 'budget-exhausted'];
@@ -99,8 +108,9 @@ function worded(parsed: SessionEventDetails): EventWords {
         return {
           ...PLAIN,
           tone: 'neutral',
-          text: 'You extended the mission until',
+          text: 'You extended the mission',
           until: parsed.details.expires_at,
+          untilWords: 'until',
         };
       }
       return {
@@ -115,16 +125,18 @@ function worded(parsed: SessionEventDetails): EventWords {
       return {
         ...PLAIN,
         tone: 'neutral',
-        text: 'You approved one call, valid until',
+        text: 'You approved one call of',
         tool: parsed.details.tool || null,
         until: parsed.details.expires_at,
+        untilWords: 'valid until',
       };
     case 'gate-opened':
       return {
         ...PLAIN,
         tone: 'neutral',
-        text: 'You let this permission run freely until',
+        text: 'You let this permission run freely',
         until: parsed.details.period_end,
+        untilWords: 'until',
       };
     case 'gate-changed':
       return {
