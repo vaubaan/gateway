@@ -60,6 +60,13 @@ export interface DepotPlugin {
   script(execute: DepotExecute | null): void;
   /** Replace what the plugin's `refresh` hook does (default: rejects — an api key cannot refresh). */
   scriptRefresh(refresh: (() => Promise<CredentialSecret>) | null): void;
+  /**
+   * Makes the classifier throw what `fault` returns for a call (a classifier is total
+   * by contract; this is the bug the pipeline must survive). `null` restores it.
+   */
+  breakClassifier(
+    fault: ((tool: string, args: Readonly<Record<string, unknown>>) => Error) | null,
+  ): void;
 }
 
 /**
@@ -71,6 +78,7 @@ export function depotPlugin(): DepotPlugin {
   const calls: DepotPlugin['calls'] = [];
   let scripted: DepotExecute | null = null;
   let scriptedRefresh: (() => Promise<CredentialSecret>) | null = null;
+  let classifierFault: Parameters<DepotPlugin['breakClassifier']>[0] = null;
 
   const tool = (name: string, description: string) => ({
     name: `${DEPOT}__${name}`,
@@ -174,6 +182,7 @@ export function depotPlugin(): DepotPlugin {
     },
     credential: { kind: 'api-key', fields: [{ name: 'token', label: 'Token', secret: true }] },
     classify(name, args, resources) {
+      if (classifierFault) throw classifierFault(name, args);
       if (name === `${DEPOT}__whoami`)
         return { slices: [parseSlice(`${DEPOT}.account.profile.R`)] };
       const refs = resources.filter((r) => r.provider === DEPOT).map((r) => r.ref);
@@ -215,6 +224,9 @@ export function depotPlugin(): DepotPlugin {
     },
     scriptRefresh: (refresh) => {
       scriptedRefresh = refresh;
+    },
+    breakClassifier: (fault) => {
+      classifierFault = fault;
     },
   };
 }

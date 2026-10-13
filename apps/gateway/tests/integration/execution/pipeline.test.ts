@@ -414,6 +414,74 @@ describe('execution door: the call pipeline', () => {
       expect(entries[0]?.refusal_reason).toContain('unknown tool');
       expect(instance.depot.calls).toHaveLength(0);
     });
+
+    it('a classifier that throws: the call is refused, AUDITED, counted nowhere, and its text reaches neither the audit nor the log', async () => {
+      const logs: string[] = [];
+      const logged = await executionInstance({
+        deps: { logWrite: (_level, text) => logs.push(text) },
+      });
+      try {
+        const mission = await logged.issue({ policy: [line(READ, 5)] });
+        const args = { space: 'scratch', item: 'payroll-2026.xlsx' };
+        logged.depot.breakClassifier((_tool, given) => {
+          // What a real bug looks like: the error quotes what it choked on.
+          return new TypeError(`cannot classify item '${String(given.item)}'`);
+        });
+
+        const body = await logged.call(mission, 'depot__read_item', args);
+
+        expect(body.result).toBeUndefined();
+        expect(body.error?.code).toBe(CALL_REJECTED_RPC_CODE);
+        expect(body.error?.message).toContain('the risk stage failed (TypeError)');
+        expect(JSON.stringify(body)).not.toContain('payroll');
+        expect(logged.depot.calls).toHaveLength(0);
+
+        const records = await logged.root.store.audit.list({
+          missionId: mission.mission.id,
+          kind: 'call',
+        });
+        const entries = records as unknown as CallAuditEntry[];
+        expect(entries).toHaveLength(1);
+        expect(entries[0]).toMatchObject({
+          decision: 'refused',
+          refusal_code: null,
+          tool: 'depot__read_item',
+          arguments_hash: fingerprintArguments(args),
+          token_holder: mission.mission.creatorUserId,
+          connection_id: logged.connection.id,
+          risks_touched: [],
+          remaining_budget: null,
+        });
+        expect(entries[0]?.refusal_reason).toContain('the risk stage failed (TypeError)');
+        expect(JSON.stringify(entries[0])).not.toContain('payroll');
+        // Nothing was counted: the next good call still has the whole quota.
+        logged.depot.breakClassifier(null);
+        const ok = await logged.call(mission, 'depot__read_item', args);
+        expect(ok.error).toBeUndefined();
+        const after = (await logged.root.store.audit.list({
+          missionId: mission.mission.id,
+          kind: 'call',
+        })) as unknown as CallAuditEntry[];
+        expect(after.find((e) => e.decision === 'allowed')?.remaining_budget).toEqual({
+          [READ]: 4,
+        });
+
+        const failure = logs
+          .map((text) => JSON.parse(text) as Record<string, unknown>)
+          .filter((entry) => entry.msg === 'call refused: a decision stage failed');
+        expect(failure).toHaveLength(1);
+        expect(failure[0]).toMatchObject({
+          level: 'error',
+          stage: 'risk',
+          tool: 'depot__read_item',
+          error_class: 'TypeError',
+        });
+        expect((failure[0]?.stack_frames as string[]).length).toBeGreaterThan(0);
+        expect(logs.join('')).not.toContain('payroll');
+      } finally {
+        await logged.close();
+      }
+    });
   });
 
   describe('upstream', () => {

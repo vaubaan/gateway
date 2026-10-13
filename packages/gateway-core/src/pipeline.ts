@@ -31,6 +31,12 @@
  * provider's text goes to the caller only, on the `failed` outcome. An
  * audit write that fails propagates: no call completes without its entry.
  *
+ * A decision stage that THROWS (resource, risk, budget: a classifier that is
+ * not total, a store failure) has decided nothing: the call is refused, and
+ * the refusal is audited like any other (`CallPipeline.attempt`) with a
+ * reason built from the stage and the error's class name alone. The thrown
+ * value goes to `onStageError` for the host's log, never to the audit.
+ *
  * Streaming (spec §4.1 "the decision is made before the stream starts"): a
  * call may carry `onPart`; the upstream stage hands it each part of a result
  * the provider delivers progressively. The order above is unchanged — the
@@ -444,6 +450,23 @@ export function auditReason(reason: string, args: unknown): string {
     : kept;
 }
 
+/** The stages that run before the decision is final; the upstream stage has its own failure path. */
+export const DECISION_STAGES = ['resource', 'risk', 'budget'] as const;
+export type DecisionStage = (typeof DECISION_STAGES)[number];
+
+/**
+ * The reason of a call refused because a decision stage threw. Built by the host
+ * from the stage and the class name of what was thrown, never from its message: a
+ * classifier's error text can quote the arguments it choked on, and this reason is
+ * stored in the audit.
+ */
+export function stageFailureReason(stage: DecisionStage, thrown: unknown): string {
+  return (
+    `Vaubaan could not decide this call: the ${stage} stage failed (${upstreamErrorClassName(thrown)}). ` +
+    `The call was refused and nothing was executed; the operator finds the error in the instance log.`
+  );
+}
+
 export interface CallPipelineDeps {
   readonly resources: ResourceStage;
   readonly risks: RiskStage;
@@ -452,6 +475,12 @@ export interface CallPipelineDeps {
   readonly audit: AuditWriter;
   /** Clock, injectable for tests. */
   readonly now?: () => Date;
+  /**
+   * Told when a decision stage throws (a classifier bug, a store failure), with
+   * the thrown value: the host logs it. The call is refused and audited whether
+   * or not an observer is given, and whatever the observer does.
+   */
+  readonly onStageError?: (stage: DecisionStage, error: unknown, call: CallRequest) => void;
 }
 
 export type CallOutcome =
@@ -549,7 +578,11 @@ export class CallPipeline {
     call: CallRequest,
     base: CallAuditEntry,
   ): Promise<CallOutcome | TargetedCall> {
-    const resolved = await this.deps.resources.resolve(ctx, call);
+    const attempt = await this.attempt('resource', call, base, () =>
+      this.deps.resources.resolve(ctx, call),
+    );
+    if (!attempt.ok) return attempt.outcome;
+    const resolved = attempt.value;
     if (!resolved.ok) {
       return 'refusal' in resolved
         ? this.refused(base, resolved.refusal)
@@ -574,7 +607,11 @@ export class CallPipeline {
     targeted: TargetedCall,
   ): Promise<CallOutcome | ClassifiedCall> {
     const { target, entry } = targeted;
-    const verdict = await this.deps.risks.evaluate(ctx, call, target);
+    const attempt = await this.attempt('risk', call, entry, () =>
+      this.deps.risks.evaluate(ctx, call, target),
+    );
+    if (!attempt.ok) return attempt.outcome;
+    const verdict = attempt.value;
     switch (verdict.kind) {
       case 'no-catalog':
         return this.rejected(
@@ -615,10 +652,11 @@ export class CallPipeline {
     classified: ClassifiedCall,
     now: Date,
   ): Promise<CallOutcome | CallAuditEntry> {
-    const budget = await this.deps.budget.decide(ctx, call, {
-      risks_touched: classified.risks_touched,
-      now,
-    });
+    const attempt = await this.attempt('budget', call, classified.entry, () =>
+      this.deps.budget.decide(ctx, call, { risks_touched: classified.risks_touched, now }),
+    );
+    if (!attempt.ok) return attempt.outcome;
+    const budget = attempt.value;
     if (budget.outcome === 'refused') return this.refused(classified.entry, budget.refusal);
     return {
       ...classified.entry,
@@ -627,6 +665,35 @@ export class CallPipeline {
       approval_id: budget.approval_id,
       remaining_budget: budget.remaining,
     };
+  }
+
+  /**
+   * Runs one decision stage. A stage that throws — a classifier that is not total,
+   * a store that fails under the budget — has decided nothing, so the call is
+   * refused; and since every refused call has its entry (spec §8), the refusal is
+   * written here, on the entry as far as the earlier stages filled it. Only the
+   * stage is guarded: a failure of that audit write propagates like any other.
+   */
+  private async attempt<T>(
+    stage: DecisionStage,
+    call: CallRequest,
+    entry: CallAuditEntry,
+    run: () => Promise<T>,
+  ): Promise<
+    { readonly ok: true; readonly value: T } | { readonly ok: false; readonly outcome: CallOutcome }
+  > {
+    let value: T;
+    try {
+      value = await run();
+    } catch (thrown) {
+      try {
+        this.deps.onStageError?.(stage, thrown, call);
+      } catch {
+        // The observer is a log line; the refusal and its entry do not depend on it.
+      }
+      return { ok: false, outcome: await this.rejected(entry, stageFailureReason(stage, thrown)) };
+    }
+    return { ok: true, value };
   }
 
   /**
