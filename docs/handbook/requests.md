@@ -410,8 +410,8 @@ tool, fingerprint)`.
 - `DecideContext.riskEvents({ kinds, riskIds, since })` and the same method on
   `SessionPrimitives`: the session's events about some risks, oldest first.
 - `AuditRepo.latestCall({ missionId, tool, argumentsHash, refusalCode? })`.
-- `RequestsRepo.sweepExpired()` → the expired `RequestRecord[]` (the older
-  `expireOpen()` still returns a bare count and records no event).
+- `RequestsRepo.sweepExpired()` → the expired `RequestRecord[]`, one `request`
+  event (`state: 'expired'`) recorded per request.
 - `SessionsRepo.listEvents(sessionId, { kinds?, order?: 'asc' | 'desc', since?, limit? })`.
 
 ## Approvals

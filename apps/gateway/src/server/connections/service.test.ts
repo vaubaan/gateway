@@ -8,6 +8,7 @@ import type { ConnectionContext, Resource } from '@vaubaan/plugin-sdk';
 import type { MockRoute } from '@vaubaan/plugin-sdk/testing';
 import { describe, expect, it } from 'vitest';
 
+import { makeUnowned } from '../store/testing';
 import { parseSecret } from './credential-codec';
 import { ConnectError, type ConnectErrorCode } from './errors';
 import { codeChallengeS256 } from './oauth2';
@@ -1007,10 +1008,15 @@ describe('ownership, reconnection, revocation', () => {
     const h = harness();
     const alice = await h.actor('alice@example.com');
     const { connection } = connectedOf(await h.service.start(alice, 'keyco', { fields }));
-    await h.store.connections.setStatus(connection.id, 'unowned');
+    // The owner group lost its last member, the connection became `unowned`, and a member
+    // joined afterwards: owning it again does not make it reconnectable, the operator
+    // reassigns first.
+    const group = await makeUnowned(h.store, connection.id);
+    await h.store.groups.addMember(group.id, alice.user.id);
+    const member = { ...alice, groups: [group] };
 
     await expectConnectError(
-      h.service.start(alice, 'keyco', {
+      h.service.start(member, 'keyco', {
         fields: { token: 'tok-2', team_id: 'team_a' },
         reconnectId: connection.id,
       }),

@@ -146,8 +146,6 @@ export interface DelegationsRepo {
   createCode(input: CreateCodeInput): Promise<OAuthCodeRecord>;
   /** The code row whatever its state (consumed, expired), with its delegation. */
   findCode(codeHash: string): Promise<WithDelegation<OAuthCodeRecord> | null>;
-  /** Single-use: returns the code once, when unexpired and unconsumed, null otherwise. */
-  consumeCode(codeHash: string): Promise<OAuthCodeRecord | null>;
   /**
    * The authorization-code grant as one transaction: the code is spent, `check` judges
    * the request against the spent code and its delegation, and the first refresh and
@@ -171,7 +169,6 @@ export interface DelegationsRepo {
     issue: { readonly refresh: TokenToIssue; readonly access: TokenToIssue },
   ): Promise<RedeemCodeResult>;
 
-  createRefreshToken(input: CreateTokenInput): Promise<RefreshTokenRecord>;
   /** The refresh token row whatever its state (rotated, revoked, expired), with its delegation. */
   findRefreshToken(tokenHash: string): Promise<WithDelegation<RefreshTokenRecord> | null>;
   /**
@@ -412,9 +409,6 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
   );
   const codeByHash = db.prepare<[string], CodeRow>(
     `SELECT ${CODE_COLUMNS} FROM oauth_codes WHERE code_hash = ?`,
-  );
-  const liveCodeByHash = db.prepare<[string, string], CodeRow>(
-    `SELECT ${CODE_COLUMNS} FROM oauth_codes WHERE code_hash = ? AND consumed_at IS NULL AND expires_at > ?`,
   );
   const consumeCodeStmt = db.prepare<[string, string]>(
     'UPDATE oauth_codes SET consumed_at = ? WHERE id = ? AND consumed_at IS NULL',
@@ -712,16 +706,6 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
       if (!row) return null;
       return { token: codeToRecord(row), delegation: requireDelegation(row.delegation_id) };
     },
-    async consumeCode(codeHash) {
-      const now = nowIso(ctx);
-      return withImmediateTransaction(db, () => {
-        const row = liveCodeByHash.get(codeHash, now);
-        if (!row) return null;
-        if (consumeCodeStmt.run(now, row.id).changes === 0) return null;
-        const consumed = codeById.get(row.id);
-        return consumed ? codeToRecord(consumed) : null;
-      });
-    },
     async redeemCode(codeHash, check, issue) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, (): RedeemCodeResult => {
@@ -758,14 +742,6 @@ export function createDelegationsRepo(ctx: RepoContext): DelegationsRepo {
       });
     },
 
-    async createRefreshToken(input) {
-      const id = ctx.newId();
-      withImmediateTransaction(db, () => {
-        requireActiveDelegation(input.delegationId);
-        insertRefresh.run(id, input.delegationId, input.tokenHash, nowIso(ctx), input.expiresAt);
-      });
-      return refreshToRecord(requireRow(refreshById.get(id), 'oauth_refresh_token', id));
-    },
     async findRefreshToken(tokenHash) {
       const row = refreshByHash.get(tokenHash);
       if (!row) return null;

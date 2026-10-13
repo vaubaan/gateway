@@ -188,7 +188,12 @@ describe('mission session view', () => {
       throw new Error('expected a claim');
     }
     expect((await view()).open_requests).toHaveLength(1);
-    await rig.root.store.requests.decide(claim.result.request_id, 'refused', rig.seeded.ada.id);
+    const refused = await rig.root.requests.service.decideClaim(
+      rig.seeded.ada,
+      claim.result.request_id,
+      { resolution: 'refuse' },
+    );
+    expect(refused.ok).toBe(true);
     expect((await view()).open_requests).toEqual([]);
   });
 

@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { UnknownRiskIdError, type Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { makeUnowned, openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
 
 describe('connections repository', () => {
   let t: TestStore;
@@ -83,9 +83,12 @@ describe('connections repository', () => {
     expect(c.owner).toEqual({ kind: 'group', id: group });
     const transferred = await store.connections.transferOwner(c.id, { kind: 'user', id: owner });
     expect(transferred.owner).toEqual({ kind: 'user', id: owner });
-    // `setStatus` is deprecated, but nothing else produces `unowned` yet (P2.2 names it).
-    const unowned = await store.connections.setStatus(c.id, 'unowned');
-    expect(unowned.status).toBe('unowned');
+    // `unowned` the way production reaches it: an owner group without member, then the sweep.
+    const emptied = await makeUnowned(store, c.id);
+    expect(await store.connections.getById(c.id)).toMatchObject({
+      status: 'unowned',
+      owner: { kind: 'group', id: emptied.id },
+    });
     const revoked = await store.connections.revoke(c.id);
     expect(revoked.status).toBe('revoked');
     expect(revoked.revokedAt).toBe(t.clock.now().toISOString());

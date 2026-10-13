@@ -14,6 +14,7 @@ import {
   type RecordCallRefused,
   type RecordCallResult,
 } from '../../../src/server/budget/index.ts';
+import { grantApprovalRequest, refuseRequest } from '../../../src/server/store/testing.ts';
 import {
   ANCHOR,
   APPROVAL_VALIDITY_SECONDS,
@@ -122,7 +123,7 @@ describe('SessionService.recordCall', () => {
     expect(second.request_id).toBe(first.request_id);
     expect(await f.store.requests.listOpenForCreator(f.creatorId)).toHaveLength(1);
     // Once the creator decided, a new refusal opens a new claim.
-    await f.store.requests.decide(first.request_id as string, 'refused', f.creatorId);
+    await refuseRequest(f.store, first.request_id as string, f.creatorId);
     const third = refused(await call([WRITE], { now: at('2026-10-13T09:10:00.000Z') }));
     expect(third.request_id).not.toBe(first.request_id);
   });
@@ -223,17 +224,10 @@ describe('SessionService.recordCall', () => {
     const args = { pr: 42, repo: 'acme/app' };
     const tool = 'github__merge_pull_request';
 
-    async function grant(requestId: string, fingerprint: string, expiresAt: string) {
-      await f.store.requests.decide(requestId, 'granted', f.creatorId);
-      return f.store.approvals.create({
-        missionId: f.mission.id,
-        requestId,
-        riskId: MERGE,
-        tool,
-        fingerprint,
-        expiresAt,
-      });
-    }
+    // The approval is bound to the request's own risk, tool and fingerprint: a grant
+    // cannot name another call.
+    const grant = (requestId: string, expiresAt: string) =>
+      grantApprovalRequest(f.store, requestId, f.creatorId, expiresAt);
 
     it('refuses with an approval request holding the sealed arguments and the fingerprint', async () => {
       const result = refused(await call([MERGE], { args, tool }));
@@ -259,18 +253,16 @@ describe('SessionService.recordCall', () => {
 
     it('a granted approval is consumed by the identical replay (any key order), once', async () => {
       const first = refused(await call([MERGE], { args, tool }));
-      const approval = await grant(
-        first.request_id as string,
-        first.fingerprint,
-        '2026-10-13T09:30:00.000Z',
-      );
+      const approval = await grant(first.request_id as string, '2026-10-13T09:30:00.000Z');
       const replay = allowed(
         await call([MERGE, READ], { args: { repo: 'acme/app', pr: 42 }, tool }),
       );
       expect(replay.approval_ids).toEqual([approval.id]);
       expect(replay.remaining).toEqual({ [MERGE]: 1, [READ]: 9 });
       expect(await countersOf(replay.session_id)).toEqual({ [READ]: 1, [MERGE]: 1 });
-      expect((await f.store.approvals.getById(approval.id))?.consumedAt).not.toBeNull();
+      expect(
+        (await f.store.approvals.getByRequest(first.request_id as string))?.consumedAt,
+      ).not.toBeNull();
 
       // Past MERGE's 1/60s window (otherwise the rate limit answers first).
       const again = refused(
@@ -282,7 +274,7 @@ describe('SessionService.recordCall', () => {
 
     it('an approval is bound to the exact fingerprint: one byte changed asks again', async () => {
       const first = refused(await call([MERGE], { args, tool }));
-      await grant(first.request_id as string, first.fingerprint, '2026-10-13T09:30:00.000Z');
+      await grant(first.request_id as string, '2026-10-13T09:30:00.000Z');
       const other = refused(await call([MERGE], { args: { ...args, pr: 43 }, tool }));
       expect(other.refusal).toMatchObject({
         code: 'approval-required',
@@ -293,7 +285,7 @@ describe('SessionService.recordCall', () => {
 
     it('an expired approval does not open the gate', async () => {
       const first = refused(await call([MERGE], { args, tool }));
-      await grant(first.request_id as string, first.fingerprint, '2026-10-13T09:00:00.000Z');
+      await grant(first.request_id as string, '2026-10-13T09:00:00.000Z');
       expect(refused(await call([MERGE], { args, tool })).refusal.code).toBe('approval-required');
     });
 
@@ -310,7 +302,7 @@ describe('SessionService.recordCall', () => {
       const next = () => at(`2026-10-13T09:0${minute++}:00.000Z`);
       for (const pr of [1, 2]) {
         const r = refused(await call([MERGE], { args: { pr }, tool, now: next() }));
-        await grant(r.request_id as string, r.fingerprint, '2026-10-13T09:30:00.000Z');
+        await grant(r.request_id as string, '2026-10-13T09:30:00.000Z');
         allowed(await call([MERGE], { args: { pr }, tool, now: next() }));
       }
       const third = refused(await call([MERGE], { args: { pr: 3 }, tool, now: next() }));

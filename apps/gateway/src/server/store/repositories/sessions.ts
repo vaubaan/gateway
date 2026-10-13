@@ -110,7 +110,6 @@ export interface DecideResult<R extends DecisionOutcome> {
 }
 
 export interface SessionsRepo {
-  getById(id: string): Promise<SessionRecord | null>;
   getByMission(missionId: string): Promise<SessionRecord | null>;
   /** "The session is born on the first call": idempotent creation. */
   getOrCreate(missionId: string): Promise<SessionRecord>;
@@ -124,8 +123,6 @@ export interface SessionsRepo {
     decide: (ctx: DecideContext) => R,
   ): Promise<DecideResult<R>>;
   counters(sessionId: string, periodStart?: Iso): Promise<SessionCounterRecord[]>;
-  /** A granted claim "reset": the counters of the period go back to zero. */
-  resetCounters(sessionId: string, periodStart: Iso, riskId?: RiskId): Promise<number>;
   recordEvent(sessionId: string, event: UntypedNewEvent): Promise<EventRecord>;
   listEvents(sessionId: string, options?: ListEventsOptions): Promise<EventRecord[]>;
   /**
@@ -314,9 +311,6 @@ export function createSessionPrimitives(ctx: RepoContext): SessionPrimitives {
 export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
   const { db } = ctx;
   const primitives = createSessionPrimitives(ctx);
-  const byId = db.prepare<[string], SessionRow>(
-    `SELECT ${SESSION_COLUMNS} FROM sessions WHERE id = ?`,
-  );
   const insertSession = db.prepare<[string, string, string]>(
     `INSERT INTO sessions (id, mission_id, created_at) VALUES (?, ?, ?)
      ON CONFLICT (mission_id) DO NOTHING`,
@@ -331,9 +325,6 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
   );
   const missionExists = db.prepare<[string], { one: number }>(
     'SELECT 1 AS one FROM missions WHERE id = ?',
-  );
-  const resetCounter = db.prepare<[string, string, string]>(
-    'UPDATE session_counters SET consumed = 0 WHERE session_id = ? AND period_start = ? AND risk_id = ?',
   );
   const eventsSince = db.prepare<[string, string, number], EventRow>(
     `SELECT ${EVENT_COLUMNS} FROM events WHERE session_id = ? AND ts >= ? ORDER BY ts, id LIMIT ?`,
@@ -411,10 +402,6 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
   }
 
   return {
-    async getById(id) {
-      const row = byId.get(id);
-      return row ? sessionToRecord(row) : null;
-    },
     async getByMission(missionId) {
       return primitives.sessionOfMission(missionId);
     },
@@ -460,11 +447,6 @@ export function createSessionsRepo(ctx: RepoContext): SessionsRepo {
       return periodStart
         ? primitives.countersOfPeriod(sessionId, periodStart)
         : countersAll.all(sessionId).map(counterToRecord);
-    },
-    async resetCounters(sessionId, periodStart, riskId) {
-      return riskId
-        ? resetCounter.run(sessionId, periodStart, riskId).changes
-        : primitives.resetPeriod(sessionId, periodStart);
     },
     async recordEvent(sessionId, event) {
       return primitives.recordEvent(sessionId, event, nowIso(ctx));

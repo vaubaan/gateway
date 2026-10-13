@@ -147,7 +147,7 @@ five-id catalog).
   `requireColumn` (a NOT NULL column of the row kind), `parseEnum` (above), `parseJson`
   returns `unknown` and `parseJsonObject` checks the shape; `openSealedColumn` (`encryptor.ts`) is the one null rule for encrypted
   column pairs. Prepared statements that share a name with a repository method carry the
-  `Stmt` suffix. Check-then-act writes (`requests.decide`, `shares.revoke`) are one
+  `Stmt` suffix. Check-then-act writes (the decision of a request, `shares.revoke`) are one
   conditional `UPDATE` whose `changes` decides, and `transferOwner` / `replacePolicy` /
   `issueToken` run inside the transaction, so they stay atomic on an asynchronous driver.
 - **Ids** are UUIDv7 text generated in the application (`newId()`); **timestamps** are
@@ -220,7 +220,7 @@ transaction that never yields.
 ## Connections and resources
 
 Beyond the P0.3 primitives (`create`, `getById`, `list`, `listOwnedBy`,
-`getCredential`, `setCredential`, `setStatus`, `transferOwner`, `setMetadata`,
+`getCredential`, `transferOwner`, `setMetadata`,
 `listResources`, `getResource`, `setResourceEnv`), the repository
 carries the operations the connect flows need (P1.4, handbook
 [connections](connections.md)). All are additive; the state changes are single
@@ -242,23 +242,23 @@ conditional `UPDATE`s whose `changes` is the answer:
 `ownerMetadata`, `displayNameEdited`, `hidden`, `staleSince`; `listResources` returns
 every row, hidden and stale included. `replaceResources`, the P0.3 sync that deleted the
 refs it was not given (cascading to `mission_resources`), was removed once its last
-callers (test fixtures) moved to `syncDiscoveredResources`. `setCredential` and
-`setStatus` remain, deprecated and used by fixtures only; both are exercised by
-`tests/integration/connections/repository-status.test.ts`.
+callers (test fixtures) moved to `syncDiscoveredResources`. `setCredential`,
+`setStatus` and `assignOwner`, which no production code called, were removed the same
+way: every writer left names its transition.
 
 Ownership and the stored state that follows from authority (P2.2, handbook
 [authority](authority.md)), all additive, covered by
 `tests/integration/store/ownership-and-orphans.test.ts`:
 
-| Method                                    | What                                                                                                 |
-| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `connections.markOwnerlessUnowned()`      | `active` → `unowned` for every connection whose owner group has no member; returns the ones changed  |
-| `connections.listOwnerless()`             | `unowned`, or not revoked with an empty owner group                                                  |
-| `connections.assignOwner(id, owner)`      | new owner, `unowned` → `active` in the same transaction; refuses `revoked`                           |
-| `connections.markExpired(id)`             | now from any serving status (`active` or `unowned`)                                                  |
-| `shares.replaceForTarget(input)`          | revokes the active share of the same `(connection, target)` and creates the new one, one transaction |
-| `shares.listActiveForTargets(p, connId?)` | optional connection filter; the statement is compiled once per SQL shape (the door asks it per call) |
-| `groups.createLocal(name)`                | a `local` group, or `null` when any group holds the name                                             |
+| Method                                     | What                                                                                                                                              |
+| ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `connections.markOwnerlessUnowned()`       | `active` → `unowned` for every connection whose owner group has no member; returns the ones changed                                               |
+| `connections.listOwnerless()`              | `unowned`, or not revoked with an empty owner group                                                                                               |
+| `connections.assignOwnerlessTo(id, owner)` | the connection must be ownerless and a new owner group must have a member, checked in the write transaction; then new owner, `unowned` → `active` |
+| `connections.markExpired(id)`              | now from any serving status (`active` or `unowned`)                                                                                               |
+| `shares.replaceForTarget(input)`           | revokes the active share of the same `(connection, target)` and creates the new one, one transaction                                              |
+| `shares.listActiveForTargets(p, connId?)`  | optional connection filter; the statement is compiled once per SQL shape (the door asks it per call)                                              |
+| `groups.createLocal(name)`                 | a `local` group, or `null` when any group holds the name                                                                                          |
 
 No migration for these: the tables and the status values exist since `0001_schema.sql`.
 
@@ -373,8 +373,9 @@ Additive, for the approval gate (handbook [requests](requests.md), "Approvals"):
   `recordEvent(event)`, then the conditional update that stores the decision and sets
   `args_blob` / `key_version` to NULL. A thrown `apply` writes nothing.
 - `store.requests.getArguments(id)` — `null` unless the request is `open` and unexpired.
-- `store.approvals` — `ApprovalKey { riskId, tool, fingerprint }` for `create`, `consume`
-  and the in-transaction lookups; `getByRequest(requestId)`; an approval with an empty
+- `store.approvals` — `ApprovalKey { riskId, tool, fingerprint }` for `create`
+  and the in-transaction lookup and consumption (`DecideContext.findApproval` /
+  `consumeApproval`); `getByRequest(requestId)`; an approval with an empty
   tool is never written and never matched.
 - `store.missions.issuersOf(missionIds)` — for the missions issued through the
   management door, the delegation and the client behind each (`MissionIssuerRecord`), by a
@@ -415,7 +416,7 @@ claim decision or the sweeper, and `recordEvent` always returns the stored row.
 
 `store.requests.sweepExpired()` flips every overdue open request to `expired`, erases
 its argument blob and records a `request` event (`state: 'expired'`) on the mission's
-session, returning the records; `expireOpen()` (count only, no event) remains.
+session, returning the records.
 `store.sessions.listEvents(sessionId, { since?, limit?, kinds?, order? })` filters by
 event kind and can return the tail of the timeline first (`order: 'desc'`).
 

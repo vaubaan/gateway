@@ -374,7 +374,7 @@ describe('approval gate: refusal, decision, replay', () => {
         }),
       );
       expect(replay.approval_ids).toEqual([approval?.id]);
-      expect((await f.store.approvals.getById(approval?.id ?? ''))?.consumedAt).toBe(
+      expect((await f.store.approvals.getByRequest(first.request_id))?.consumedAt).toBe(
         f.clock.now().toISOString(),
       );
 

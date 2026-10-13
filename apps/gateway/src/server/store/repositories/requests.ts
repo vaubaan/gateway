@@ -145,13 +145,6 @@ export interface RequestsRepo {
    * sweeper has not erased the blob yet.
    */
   getArguments(id: string): Promise<unknown>;
-  /** Grants or refuses an open request and erases the argument blob. */
-  decide(
-    id: string,
-    state: 'granted' | 'refused',
-    decidedByUserId: string,
-    decision?: Record<string, unknown> | null,
-  ): Promise<RequestRecord>;
   /**
    * Decides an open claim and applies the creator's resolution in one `BEGIN IMMEDIATE`
    * transaction: the state change, the counter / expiry effects done through the
@@ -175,11 +168,10 @@ export interface RequestsRepo {
     decidedByUserId: string,
     apply: (ctx: ApprovalDecisionContext) => R,
   ): Promise<RequestDecisionResult<R>>;
-  /** Sweeper: flips open requests past their expiry to `expired` and erases blobs. */
-  expireOpen(): Promise<number>;
   /**
-   * Same flip as `expireOpen`, returning the expired requests and recording one
-   * `request` event (`state: 'expired'`) per request on its mission's session.
+   * Sweeper: flips open requests past their expiry to `expired`, erases their sealed
+   * arguments, and records one `request` event (`state: 'expired'`) per request on its
+   * mission's session. Returns the expired requests.
    */
   sweepExpired(): Promise<RequestRecord[]>;
 }
@@ -352,11 +344,6 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
        args_blob = NULL, key_version = NULL
      WHERE id = ? AND state = 'open'`,
   );
-  const expire = db.prepare<[string]>(
-    `UPDATE requests SET state = 'expired', args_blob = NULL, key_version = NULL
-     WHERE state = 'open' AND expires_at <= ?`,
-  );
-
   const overdue = db.prepare<[string], RequestRow>(
     `SELECT ${COLUMNS} FROM requests r WHERE r.state = 'open' AND r.expires_at <= ? ORDER BY r.created_at`,
   );
@@ -539,17 +526,6 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
       );
       return text === null ? null : (JSON.parse(text) as unknown);
     },
-    async decide(id, state, decidedByUserId, decision = null) {
-      // One conditional UPDATE decides; the re-read only chooses the error. Atomic on any
-      // driver, not just the synchronous one.
-      const changed = decideOpen.run(state, nowIso(ctx), decidedByUserId, toJson(decision), id);
-      const current = getRequestRecord(ctx, id);
-      if (!current) throw new NotFoundError('request', id);
-      if (changed.changes === 0) {
-        throw new InvariantError(`request ${id} is already ${current.state}`);
-      }
-      return current;
-    },
     async decideClaim(id, decidedByUserId, apply) {
       const now = nowIso(ctx);
       return withImmediateTransaction(db, () =>
@@ -565,9 +541,6 @@ export function createRequestsRepo(ctx: RepoContext): RequestsRepo {
           apply(approvalContext(request, session, now)),
         ),
       );
-    },
-    async expireOpen() {
-      return expire.run(nowIso(ctx)).changes;
     },
     async sweepExpired() {
       const now = nowIso(ctx);

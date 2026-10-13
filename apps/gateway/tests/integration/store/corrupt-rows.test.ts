@@ -162,7 +162,11 @@ describe('store rows with a value outside a closed set', () => {
     });
     corrupt('oauth_codes', 'code_challenge_method', 'id', code.id);
     await expectLoudFailure(
-      () => store.delegations.consumeCode('code-hash'),
+      () =>
+        store.delegations.redeemCode('code-hash', () => null, {
+          refresh: { tokenHash: 'r1', expiresAt: LATER },
+          access: { tokenHash: 'a1', expiresAt: LATER },
+        }),
       'oauth_codes.code_challenge_method',
     );
     corrupt('delegations', 'status', 'id', delegation.id);

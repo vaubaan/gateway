@@ -1,12 +1,12 @@
 /**
  * Connection statuses at the repository (spec §2.3): `revoked` is terminal
- * whatever method is called, and an `unowned` connection keeps serving (its
+ * whatever writer is called, and an `unowned` connection keeps serving (its
  * refreshed credential is persisted) while it cannot be reconnected.
  */
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
 import type { Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import { makeUnowned, openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
 
 describe('connection statuses at the repository', () => {
   let t: TestStore;
@@ -32,10 +32,9 @@ describe('connection statuses at the repository', () => {
       await store.connections.revoke(connectionId);
     });
 
-    it('setCredential refuses a revoked connection and writes nothing', async () => {
-      await expect(store.connections.setCredential(connectionId, 'token-2')).rejects.toThrow(
-        /revoked/,
-      );
+    it('no credential writer touches a revoked connection: nothing is written', async () => {
+      expect(await store.connections.reconnect(connectionId, 'token-2')).toBe(false);
+      expect(await store.connections.refreshCredential(connectionId, 'token-2')).toBe(false);
       expect(await store.connections.getCredential(connectionId)).toBeNull();
       expect(await store.connections.getById(connectionId)).toMatchObject({
         status: 'revoked',
@@ -43,31 +42,27 @@ describe('connection statuses at the repository', () => {
       });
     });
 
-    it.each(['active', 'expired', 'unowned'] as const)(
-      'setStatus refuses to move a revoked connection to %s',
-      async (status) => {
-        await expect(store.connections.setStatus(connectionId, status)).rejects.toThrow(/revoked/);
-        expect((await store.connections.getById(connectionId))?.status).toBe('revoked');
-      },
-    );
-
-    it('setStatus to revoked stays idempotent and keeps the first revocation date', async () => {
-      const before = await store.connections.getById(connectionId);
-      t.clock.advance(60_000);
-      const after = await store.connections.setStatus(connectionId, 'revoked');
-      expect(after.status).toBe('revoked');
-      expect(after.revokedAt).toBe(before?.revokedAt);
+    it('no status writer moves a revoked connection', async () => {
+      expect(await store.connections.markExpired(connectionId)).toBe(false);
+      await expect(makeUnowned(store, connectionId)).rejects.toThrow(/revoked/);
+      expect(await store.connections.getById(connectionId)).toMatchObject({
+        status: 'revoked',
+        owner: { kind: 'user' },
+      });
     });
 
-    it('setCredential and setStatus still report a missing connection as not found', async () => {
-      await expect(store.connections.setCredential('missing', 'x')).rejects.toThrow(/not found/);
-      await expect(store.connections.setStatus('missing', 'expired')).rejects.toThrow(/not found/);
+    it('revoking again stays idempotent and keeps the first revocation date', async () => {
+      const before = await store.connections.getById(connectionId);
+      t.clock.advance(60_000);
+      const after = await store.connections.revoke(connectionId);
+      expect(after.status).toBe('revoked');
+      expect(after.revokedAt).toBe(before?.revokedAt);
     });
   });
 
   describe('unowned keeps serving and cannot be reconnected', () => {
     beforeEach(async () => {
-      await store.connections.setStatus(connectionId, 'unowned');
+      await makeUnowned(store, connectionId);
     });
 
     it('persists a refreshed credential and leaves the status alone', async () => {

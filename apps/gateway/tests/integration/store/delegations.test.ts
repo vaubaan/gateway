@@ -5,7 +5,11 @@
 
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Store } from '../../../src/server/store/index.ts';
-import { openTestStore, type TestStore } from '../../../src/server/store/testing.ts';
+import {
+  issueFirstRefreshToken,
+  openTestStore,
+  type TestStore,
+} from '../../../src/server/store/testing.ts';
 
 describe('delegations repository', () => {
   let t: TestStore;
@@ -54,37 +58,9 @@ describe('delegations repository', () => {
     expect(await store.delegations.getById(d.id)).toEqual(d);
   });
 
-  it('authorization codes are single-use and expire', async () => {
-    const d = await store.delegations.create({ userId: user, clientId, scope: 's' });
-    const code = await store.delegations.createCode({
-      delegationId: d.id,
-      codeHash: 'code-hash',
-      redirectUri: 'http://127.0.0.1/callback',
-      codeChallenge: 'challenge',
-      codeChallengeMethod: 'S256',
-      expiresAt: '2026-10-13T09:05:00.000Z',
-    });
-    const consumed = await store.delegations.consumeCode('code-hash');
-    expect(consumed?.id).toBe(code.id);
-    expect(consumed?.consumedAt).toBe(t.clock.now().toISOString());
-    expect(await store.delegations.consumeCode('code-hash')).toBeNull();
-
-    await store.delegations.createCode({
-      delegationId: d.id,
-      codeHash: 'late',
-      redirectUri: 'http://127.0.0.1/callback',
-      codeChallenge: 'c',
-      codeChallengeMethod: 'S256',
-      expiresAt: '2026-10-13T09:05:00.000Z',
-    });
-    t.clock.set('2026-10-13T09:05:00.000Z');
-    expect(await store.delegations.consumeCode('late')).toBeNull();
-  });
-
   it('refresh tokens rotate: the old one is revoked and linked to its successor', async () => {
     const d = await store.delegations.create({ userId: user, clientId, scope: 's' });
-    const first = await store.delegations.createRefreshToken({
-      delegationId: d.id,
+    const first = await issueFirstRefreshToken(store, d.id, {
       tokenHash: 'r1',
       expiresAt: '2026-11-13T09:00:00.000Z',
     });
@@ -230,8 +206,7 @@ describe('delegations repository', () => {
 
     it('rotateRefreshToken with an access token: both rows, or neither', async () => {
       const d = await store.delegations.create({ userId: user, clientId, scope: 's' });
-      await store.delegations.createRefreshToken({
-        delegationId: d.id,
+      await issueFirstRefreshToken(store, d.id, {
         tokenHash: 'r1',
         expiresAt: '2026-11-13T09:00:00.000Z',
       });
@@ -264,8 +239,7 @@ describe('delegations repository', () => {
 
     it('rotateSuccessorOf with an access token: both rows, or the head is left as it was', async () => {
       const d = await store.delegations.create({ userId: user, clientId, scope: 's' });
-      await store.delegations.createRefreshToken({
-        delegationId: d.id,
+      await issueFirstRefreshToken(store, d.id, {
         tokenHash: 'r1',
         expiresAt: '2026-11-13T09:00:00.000Z',
       });
@@ -388,8 +362,7 @@ describe('delegations repository', () => {
       tokenHash: 'a1',
       expiresAt: '2026-10-13T10:00:00.000Z',
     });
-    await store.delegations.createRefreshToken({
-      delegationId: d.id,
+    await issueFirstRefreshToken(store, d.id, {
       tokenHash: 'r1',
       expiresAt: '2026-11-13T09:00:00.000Z',
     });
@@ -453,8 +426,7 @@ describe('delegations repository', () => {
 
     async function rotatedOnce() {
       const d = await store.delegations.create({ userId: user, clientId, scope: 's' });
-      await store.delegations.createRefreshToken({
-        delegationId: d.id,
+      await issueFirstRefreshToken(store, d.id, {
         tokenHash: 'r1',
         expiresAt: '2026-11-13T09:00:00.000Z',
       });
@@ -524,8 +496,7 @@ describe('delegations repository', () => {
       ).toBeNull();
 
       const d = await store.delegations.create({ userId: user, clientId, scope: 's' });
-      await store.delegations.createRefreshToken({
-        delegationId: d.id,
+      await issueFirstRefreshToken(store, d.id, {
         tokenHash: 'e1',
         expiresAt: '2026-11-13T09:00:00.000Z',
       });

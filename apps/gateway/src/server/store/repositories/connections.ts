@@ -61,31 +61,7 @@ export interface ConnectionsRepo {
   listOwnedBy(principals: readonly Principal[]): Promise<ConnectionRecord[]>;
   /** Decrypts the credential in memory; the caller releases it after the upstream call. */
   getCredential(id: string): Promise<string | null>;
-  /**
-   * Seals the new credential and sets the status back to `active`. Refused
-   * (`InvariantError`) for a `revoked` connection: revocation is terminal.
-   * @deprecated No production caller. Use `reconnect` (an owner re-authenticates) or
-   * `refreshCredential` (token refresh), which state which transition they perform.
-   */
-  setCredential(id: string, credential: string, expiresAt?: Iso | null): Promise<ConnectionRecord>;
-  /**
-   * Sets the status as given. Refused (`InvariantError`) when the connection is `revoked`
-   * and the new status is anything else: revocation is terminal. Setting `revoked` does
-   * not erase the credential; `revoke` does.
-   * @deprecated No production caller; kept for test fixtures. Use `markExpired`,
-   * `markOwnerlessUnowned`, `assignOwner` and `revoke`.
-   */
-  setStatus(id: string, status: ConnectionStatus): Promise<ConnectionRecord>;
   transferOwner(id: string, owner: Principal): Promise<ConnectionRecord>;
-  /**
-   * The operator's reassignment (spec §2.3): gives the connection a new owner and, when it
-   * was `unowned`, makes it `active` again, in one transaction. An `expired` connection
-   * stays `expired` (its new owner reconnects it). Refused (`InvariantError`) for a
-   * `revoked` connection.
-   * @deprecated No production caller: it does not check that the connection is ownerless.
-   * Use `assignOwnerlessTo`.
-   */
-  assignOwner(id: string, owner: Principal): Promise<ConnectionRecord>;
   /**
    * The operator's reassignment (spec §2.3), with its rule inside the write: in one
    * transaction, the connection must be ownerless at that instant (`unowned`, or not
@@ -283,14 +259,6 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     [string],
     { credential_blob: Buffer | null; key_version: number | null }
   >('SELECT credential_blob, key_version FROM connections WHERE id = ?');
-  const setCredentialStmt = db.prepare<[Buffer, number, string | null, string, string]>(
-    `UPDATE connections SET credential_blob = ?, key_version = ?, credential_expires_at = ?,
-       status = 'active', updated_at = ? WHERE id = ? AND status <> 'revoked'`,
-  );
-  const setStatusStmt = db.prepare<[string, string | null, string, string, string]>(
-    `UPDATE connections SET status = ?, revoked_at = COALESCE(revoked_at, ?), updated_at = ?
-     WHERE id = ? AND (status <> 'revoked' OR ? = 'revoked')`,
-  );
   const setOwnerStmt = db.prepare<[string, string | null, string | null, string, string]>(
     `UPDATE connections SET owner_kind = ?, owner_user_id = ?, owner_group_id = ?, updated_at = ? WHERE id = ?`,
   );
@@ -450,30 +418,6 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
       if (!row) throw new NotFoundError('connection', id);
       return openSealedColumn(encryptor, id, row.credential_blob, row.key_version);
     },
-    async setCredential(id, plain, expiresAt = null) {
-      const sealed = await sealText(encryptor, id, plain);
-      const result = setCredentialStmt.run(
-        sealed.blob,
-        sealed.keyVersion,
-        expiresAt,
-        nowIso(ctx),
-        id,
-      );
-      if (result.changes === 0) {
-        requireConnection(id);
-        throw new InvariantError('a revoked connection cannot receive a credential');
-      }
-      return requireConnection(id);
-    },
-    async setStatus(id, status) {
-      const now = nowIso(ctx);
-      const result = setStatusStmt.run(status, status === 'revoked' ? now : null, now, id, status);
-      if (result.changes === 0) {
-        requireConnection(id);
-        throw new InvariantError(`a revoked connection cannot become '${status}'`);
-      }
-      return requireConnection(id);
-    },
     async transferOwner(id, owner) {
       const cols = principalColumns(owner);
       const now = nowIso(ctx);
@@ -530,18 +474,6 @@ export function createConnectionsRepo(ctx: RepoContext): ConnectionsRepo {
     },
     async markExpired(id) {
       return markExpiredStmt.run(nowIso(ctx), id, ...SERVING_STATUSES).changes > 0;
-    },
-    async assignOwner(id, owner) {
-      const cols = principalColumns(owner);
-      const now = nowIso(ctx);
-      return withImmediateTransaction(db, () => {
-        const current = requireConnection(id);
-        if (current.status === 'revoked') {
-          throw new InvariantError('a revoked connection cannot change owner');
-        }
-        assignOwnerStmt.run(cols.kind, cols.userId, cols.groupId, now, id);
-        return requireConnection(id);
-      });
     },
     async assignOwnerlessTo(id, owner) {
       const cols = principalColumns(owner);

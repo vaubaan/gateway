@@ -453,13 +453,12 @@ late callback racing a revocation never brings a revoked connection back. An
 other (ADR orphaned-missions-and-ownerless-connections §3); it stays in the
 operator's list of ownerless connections, and its new owner reconnects it.
 
-`setCredential` and `setStatus` are deprecated leftovers of P0.3 with no
-production caller; they refuse (`InvariantError`) to take a connection out
-of `revoked`. `setStatus` is what older test fixtures use to produce `unowned`;
-`setCredential` is only called by the test that proves this refusal.
-`assignOwner` is deprecated too: it writes the owner without checking that
-the connection is ownerless, and only a store test still calls it;
-production uses `assignOwnerlessTo`.
+The repository has no generic status or credential setter: every writer
+names its transition (`reconnect`, `refreshCredential`, `markExpired`,
+`markOwnerlessUnowned`, `assignOwnerlessTo`, `revoke`). A test that needs an
+`unowned` connection goes through `makeUnowned(store, id)` of
+`store/testing.ts`, which does what production does: an owner group without
+member, then `markOwnerlessUnowned()`.
 `ConnectionService.revoke` is idempotent and audited (`connection-revoked`);
 it watches the missions of the connection across the act
 (`grounds.watchConnection` → `settle`, handbook [authority](authority.md)).
@@ -690,10 +689,11 @@ a body that is not a form is 400 on `saveProviderApp`, `connect` and
 `updateResource` and writes nothing. The guard of every mutating handler is
 covered by `tests/unit/server/auth/mutation-guard.test.ts` (handbook
 [authentication](authentication.md)).
-`tests/integration/connections/repository-status.test.ts` (9): `revoked` is
-terminal through `setCredential` and `setStatus` too, and an `unowned`
-connection has its refreshed credential persisted, is not reconnected and
-can still be revoked.
+`tests/integration/connections/repository-status.test.ts` (6): `revoked` is
+terminal for every credential and status writer (`reconnect`,
+`refreshCredential`, `markExpired`, a transfer; revoking again keeps the first
+date), and an `unowned` connection has its refreshed credential persisted, is
+not reconnected and can still be revoked.
 `tests/integration/connections/reassign-and-settle.test.ts` (5), on the real
 root: a reassignment is refused `not-ownerless` when a member joined the
 owner group of an expired connection between the service's check and its

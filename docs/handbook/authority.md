@@ -267,7 +267,7 @@ The admin rule counts **IdP-claimed** groups only (`currentAuthority` in
   revoked with an empty owner group (an `unowned` connection whose credential
   died is `expired`, and still ownerless). `reassign` refuses a connection
   that has an owner (`not-ownerless`), an unknown user (`owner-unknown`) and a
-  group without member (`owner-group-empty`); `ConnectionsRepo.assignOwner`
+  group without member (`owner-group-empty`); `ConnectionsRepo.assignOwnerlessTo`
   sets the owner and turns `unowned` back to `active` (an `expired` one stays
   `expired` for its new owner to reconnect); entry `connection-reassigned`.
   The missions the emptied group had left orphaned serve again when their
