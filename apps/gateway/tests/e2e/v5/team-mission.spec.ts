@@ -293,7 +293,18 @@ test('a creator adds a member and a named token; each holder is attributed; each
   // ── Joan reads the session too; the requests stay the creator's ─────────
   await joan.getByRole('link', { name: 'Session', exact: true }).click();
   await expect(joan.getByTestId('holder-activity')).toContainText(E2E_SHARE_OWNER.email);
-  await expect(joan.getByRole('link', { name: 'Audit of this mission' })).toHaveCount(0);
+  // A member reads the audit of a mission shared with them (spec §4.2): every call of
+  // it, whoever made it, and never the fingerprint of the arguments.
+  await joan.getByRole('link', { name: 'Audit of this mission' }).click();
+  await expect(joan.getByRole('heading', { name: 'Audit', level: 1 })).toBeVisible();
+  const memberAudit = joan.getByTestId('audit-table');
+  await expect(memberAudit.getByTestId('audit-holder').first()).toBeVisible();
+  await expect(memberAudit).toContainText(CI);
+  await expect(memberAudit).toContainText('fingerprint not shown');
+  expect(await joan.content()).not.toMatch(/\b[0-9a-f]{64}\b/);
+  await snap(joan, 'audit-member');
+  await joan.goBack();
+  await expect(joan.getByTestId('holder-activity')).toBeVisible();
   await joan.goBack();
 
   // ── Each token stops on its own ─────────────────────────────────────────

@@ -606,9 +606,17 @@ test('the provider reference explains each plugin: model, risks, presets, tools'
   await mint.getByRole('link', { name: 'github.mint-install-token-push' }).click();
   const push = page.getByTestId('risk-github.mint-install-token-push');
   await expect(push).toBeInViewport();
-  await expect(push).toContainText('hands a token');
+  // The badge says what the token can do: a preset hands a write token after approval only.
+  await expect(push).toContainText('hands a write token');
   await expect(push.locator('[data-kind="tool"]')).toHaveText(/github__mint_install_token/);
-  await expect(page.getByTestId('risk-github.read-code')).not.toContainText('hands a token');
+  await expect(page.getByTestId('risk-github.mint-install-token-clone')).toContainText(
+    'hands a read-only token',
+  );
+  await expect(page.getByTestId('risk-github.read-code')).not.toContainText('hands a');
+  await snap(page, 'provider-token-handouts');
+  await expect(page.getByTestId('token-handout-note')).toContainText(
+    'a token that can write is handed only after the creator approves the call',
+  );
   // An unknown provider is not found.
   const missing = await page.goto('/providers/no-such-provider');
   expect(missing?.status()).toBe(404);

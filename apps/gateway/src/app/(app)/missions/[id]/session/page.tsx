@@ -138,7 +138,8 @@ export default async function MissionSessionPage({ params, searchParams }: Props
             Session <StateBadge state={state} />
           </h1>
         </div>
-        {isCreator && <Link href={auditOfMission}>Audit of this mission</Link>}
+        {/* The creator and the members both read it (spec §4.2); a member is shown no fingerprint. */}
+        <Link href={auditOfMission}>Audit of this mission</Link>
       </div>
 
       <Card>

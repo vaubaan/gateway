@@ -131,7 +131,9 @@ test('a gated action of the developer preset: refused, approved by its creator o
   await expect(hedy.getByTestId('approval-slices')).toContainText(
     `github.repo[${OWNER}/${REPO}].branch[feature/ci].file[.github/workflows/ci.yml].W`,
   );
-  await expect(hedy.getByTestId('approval-gate')).toHaveText('approval: each action asks you');
+  await expect(hedy.getByTestId('approval-gate')).toHaveText(
+    'Gate: approval: each action asks you',
+  );
   const gatedRow = hedy.getByTestId(`approval-risk-${GATED}`);
   await expect(gatedRow.locator('td').nth(1)).toHaveText('approval');
   await expect(gatedRow.locator('td').nth(2)).toHaveText('50');
@@ -306,5 +308,81 @@ test('a gated action of the developer preset: refused, approved by its creator o
   expect(await hedy.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(1280);
   await snap(hedy, 'session-timeline-details');
   expect(await hedy.content()).not.toContain(MARKER);
+  await hedy.context().close();
+});
+
+test('a call that touches two gated risks asks once: one request, one approval, one replay', async ({
+  browser,
+  request,
+}) => {
+  const issued = await issueDeveloperMission(request, 'Develop behind two gates');
+  const executor = (agent = await connectAgent(issued.token));
+  const workflowWrites = async () =>
+    (await upstreamLog(request)).calls.filter((call) => call.method === 'PUT');
+  const writesBefore = (await workflowWrites()).length;
+
+  // The creator also gates the ordinary write on a working branch: writing a workflow
+  // file there now touches two risks that wait for her.
+  await signInAs(request, E2E_APPROVER_USER);
+  const hedy = await freshPage(browser);
+  await hedy.goto(`/auth/login?return_to=/missions/${issued.mission_id}`);
+  const branchGate = hedy.getByTestId(`gate-${UNGATED}`);
+  await branchGate.getByRole('button', { name: `Require approval for ${UNGATED}` }).click();
+  await expect(
+    branchGate.getByRole('button', { name: `Set to auto for ${UNGATED}` }),
+  ).toBeVisible();
+
+  // ── One refusal, naming both risks, with one URL ────────────────────────
+  const refusal = approvalRequired(await executor.call(TOOL, WORKFLOW));
+  expect([...(refusal.risk_ids as string[])].sort()).toEqual([UNGATED, GATED].sort());
+  const approvalUrl = String(refusal.approval_url);
+  expect(approvalUrl).toMatch(REQUEST_URL);
+  expect(refusal.hint).toContain(approvalUrl);
+  // A replay before the decision points to the same request: there is only one.
+  expect(approvalRequired(await executor.call(TOOL, WORKFLOW)).approval_url).toBe(approvalUrl);
+  expect(await workflowWrites()).toHaveLength(writesBefore);
+
+  // ── The creator reads both risks on one page, and answers once ──────────
+  await hedy.goto(approvalUrl);
+  await expect(hedy).toHaveURL(/\/requests\/[0-9a-f-]{36}$/);
+  const gated = hedy.getByTestId('approval-gated-risks');
+  await expect(gated).toContainText('This call touches 2 risks that wait for your approval');
+  await expect(gated).toContainText('one decision for the call');
+  await expect(hedy.getByTestId('approval-gated-risk')).toHaveCount(2);
+  await expect(gated).toContainText(GATED);
+  await expect(gated).toContainText(UNGATED);
+  await expect(hedy.getByTestId(`approval-risk-${GATED}`).locator('td').nth(1)).toHaveText(
+    'approval',
+  );
+  await expect(hedy.getByTestId(`approval-risk-${UNGATED}`).locator('td').nth(1)).toHaveText(
+    'approval',
+  );
+  await expect(hedy.getByTestId('open-request-count')).toHaveText('1');
+  await snap(hedy, 'approval-two-gated-risks');
+
+  // The inbox holds one line for the call, with both risks.
+  await hedy.goto('/requests');
+  const inboxRow = hedy.getByRole('row', { name: /Develop behind two gates/ });
+  await expect(inboxRow).toHaveCount(1);
+  await expect(inboxRow).toContainText(GATED);
+  await expect(inboxRow).toContainText(UNGATED);
+  await snap(hedy, 'approval-inbox-two-gated-risks');
+
+  await hedy.goto(approvalUrl);
+  await hedy.getByRole('button', { name: 'Approve this action' }).click();
+  await expect(hedy.getByText('Decision recorded')).toBeVisible();
+  await expect(hedy.getByTestId('open-request-count')).toHaveCount(0);
+
+  // ── One replay passes; the approval was for that one call ───────────────
+  expect(await executor.call(TOOL, { ...WORKFLOW })).toMatchObject({ outcome: 'allowed' });
+  expect(await workflowWrites()).toHaveLength(writesBefore + 1);
+  const again = approvalRequired(await executor.call(TOOL, WORKFLOW));
+  expect(again.approval_url).not.toBe(approvalUrl);
+  expect(await workflowWrites()).toHaveLength(writesBefore + 1);
+  await hedy.reload();
+  await expect(hedy.getByTestId('approval-outcome')).toContainText(
+    'approval consumed by the replay',
+  );
+  await snap(hedy, 'approval-two-gated-risks-consumed');
   await hedy.context().close();
 });
